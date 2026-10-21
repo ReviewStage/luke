@@ -8,9 +8,10 @@ import {
   type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { StoredPullRequest } from "@luke/database/schemas/coding-agent";
-import type {
-  CodingAgentPullRequest,
-  CodingAgentPullRequestAnswer,
+import {
+  type CodingAgentPullRequest,
+  type CodingAgentPullRequestAnswer,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { type PullRequestArea, pullRequestAreasOf } from "@luke/features/pull-request-area";
 import { Cache, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
@@ -31,6 +32,7 @@ import {
 } from "../../github/pull-requests.js";
 import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
+import { settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -64,7 +66,11 @@ import { CODER } from "./bounds.js";
  * a held transcript asks GitHub a few times a minute at most, under a key
  * that says whether the agent had ended, so the first read after a turn
  * ends is a fresh one rather than the running turn's kept answer; a read
- * that failed is kept for no time, so the next ask tries again.
+ * that failed is kept for no time, so the next ask tries again. A read
+ * that first finds the pull request merged, the row having kept it
+ * unmerged or not at all, is one of the moments that may finish the
+ * agent's task, so the task is asked to settle once the row is written
+ * (`tasks/task-finish.ts`).
  */
 
 /** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
@@ -77,10 +83,11 @@ type PublishedReadFailure = StoreFailure | GitHubWorkspaceReadFailure | Reposito
 
 type PublishedServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-/** What one read found: the answer the wire carries, and the pull request as the agent's row keeps it, null where none was found. */
+/** What one read found: the answer the wire carries, the pull request as the agent's row keeps it, null where none was found, and whether the read is the first to find it merged. */
 interface Published {
   readonly answer: CodingAgentPullRequestAnswer;
   readonly stored: StoredPullRequest | null;
+  readonly merged: boolean;
 }
 
 /**
@@ -177,8 +184,17 @@ function withChecks(
       return {
         answer: { repository: agent.repository, branch: found.headRef, pullRequest },
         stored,
+        merged: firstSeenMerged(found, kept),
       };
     },
+  );
+}
+
+/** Whether the read is the first to find the pull request merged: GitHub says so, and the row kept it unmerged, or kept none. */
+function firstSeenMerged(found: GitHubPullRequest, kept: StoredPullRequest | null): boolean {
+  return (
+    found.state === PULL_REQUEST_STATE.MERGED &&
+    (kept === null || kept.number !== found.number || kept.state !== PULL_REQUEST_STATE.MERGED)
   );
 }
 
@@ -187,6 +203,7 @@ function nothing(agent: CodingAgent): Published {
   return {
     answer: { repository: agent.repository, branch: null, pullRequest: null },
     stored: null,
+    merged: false,
   };
 }
 
@@ -238,6 +255,7 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
     ? {
         answer: { repository: agent.repository, branch: agent.branch, pullRequest: null },
         stored: null,
+        merged: false,
       }
     : nothing(agent);
 });
@@ -252,8 +270,10 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
-  const { answer, stored } = yield* publishedOnGitHub(userId, agent);
+  const { answer, stored, merged } = yield* publishedOnGitHub(userId, agent);
   yield* recordCodingAgentPublished(userId, agent.id, stored);
+  // A merge first seen may have finished the task's work; the task is asked once the row says merged.
+  if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
   return answer;
 });
 

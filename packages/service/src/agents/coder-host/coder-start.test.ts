@@ -295,7 +295,7 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
   });
 
   it.effect(
-    "moves the task into progress from the backlog or to do, and leaves one done as it stood",
+    "moves the task into progress from the backlog or to do, and takes up one done again",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
@@ -319,7 +319,7 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
           Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.task.status);
         assert.equal(yield* statusOf(filed.id), TASK_STATUS.IN_PROGRESS);
         assert.equal(yield* statusOf(todo.id), TASK_STATUS.IN_PROGRESS);
-        assert.equal(yield* statusOf(done.id), TASK_STATUS.DONE);
+        assert.equal(yield* statusOf(done.id), TASK_STATUS.IN_PROGRESS);
       }),
   );
   it.effect(

@@ -33,7 +33,7 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
+import { BRAIN_RUN_EVENT, type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -46,6 +46,7 @@ import {
   readBodyBytesEffect,
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
+import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
@@ -182,6 +183,23 @@ export function sandboxAtRunnerEnd(
       ),
     ),
   );
+}
+
+/** Which of the batch's writes moved a turn: one started, one ended, or both, as the task follows them. */
+interface TurnsMoved {
+  readonly started: boolean;
+  readonly ended: boolean;
+}
+
+/** Whether the writes start a turn, and whether they end one, by the events they carry. */
+function turnsMovedBy(writes: readonly NativeWrite[]): TurnsMoved {
+  const kinds = new Set(
+    writes.flatMap((write) => (write.kind === NATIVE_WRITE.EVENT ? [write.event.kind] : [])),
+  );
+  return {
+    started: kinds.has(BRAIN_RUN_EVENT.TURN_STARTED),
+    ended: kinds.has(BRAIN_RUN_EVENT.TURN_ENDED),
+  };
 }
 
 /** The numbers of the events that end a launch, by the runner's own END. */
@@ -339,6 +357,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     const result = {
       applied: { applied: events.length, sequence: last ?? held.sequence } satisfies Applied,
       ends: endsOf(batch, held.sequence),
+      turns: turnsMovedBy(writes),
     };
     return last === undefined
       ? { result }
@@ -396,6 +415,15 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   );
   // Note that a conversation cleared, or a bearer retired, since the bearer was read takes nothing more.
   if (Option.isNone(applied)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  // The task follows the turns the batch moved, once their rows are written: a turn starting takes
+  // it up, and a turn's end may have finished its work (`tasks/task-finish.ts`).
+  const { taskId } = agent.value;
+  if (taskId !== null && applied.value.turns.started) {
+    yield* reopenTaskForWork(target.userId, taskId);
+  }
+  if (taskId !== null && applied.value.turns.ended) {
+    yield* settleTaskIfFinished(target.userId, taskId);
+  }
   if (ended !== undefined) {
     for (const sequence of applied.value.ends) {
       yield* ended({ target, sessionId: admitted.value.runtimeSessionId, sequence });

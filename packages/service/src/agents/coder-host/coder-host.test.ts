@@ -23,6 +23,7 @@ import {
   hasRepository,
   latestTurnsOf,
   readCodingAgent,
+  recordCodingAgentPublished,
   writeDelegation,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
@@ -38,7 +39,11 @@ import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabu
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -54,6 +59,7 @@ import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_HEADING } from "@luke/features/plan-template";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { TASK_STATUS } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
@@ -1007,6 +1013,45 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(Result.isFailure(refused));
         assert.match(refused.failure, /is no model Luke offers/u);
         assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
+      }),
+  );
+
+  it.effect(
+    "a turn starting takes up a task marked done, and its end, the agent's pull request merged and everyone idle, finishes the task again",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        assert.ok(agent.taskId !== null);
+        const taskId = agent.taskId;
+        yield* updateTask(userId, taskId, { status: TASK_STATUS.DONE });
+        yield* recordCodingAgentPublished(userId, agent.id, {
+          number: 42,
+          title: "Fix the refresh",
+          url: "https://github.com/acme/relay/pull/42",
+          state: PULL_REQUEST_STATE.MERGED,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 12,
+          deletions: 3,
+          changedFiles: 2,
+        });
+        const statusOf = Effect.map(
+          readTask(userId, taskId),
+          (read) => Option.getOrThrow(read).task.status,
+        );
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const [started, ...rest] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started);
+        // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+        yield* host.relay(started, admitted, session as never, state, {});
+        assert.equal(yield* statusOf, TASK_STATUS.IN_PROGRESS);
+        for (const event of rest) {
+          // SAFETY: as above.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        assert.equal(yield* statusOf, TASK_STATUS.DONE);
       }),
   );
 
