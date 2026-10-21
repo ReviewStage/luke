@@ -1,9 +1,6 @@
 import {
   TASK_BOUNDS,
-  TASK_PRIORITY,
-  TASK_PRIORITY_ORDER,
   TASK_STATUS,
-  TASK_STATUS_ORDER,
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
@@ -12,15 +9,11 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   CHIP_LOOK,
-  CHIP_SIZE,
   CHOICE_BAR_LOOK,
-  Chip,
-  ChipName,
   ChoiceBar,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
-  dropBelowStart,
   EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -38,9 +31,9 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  useMenu,
 } from "@luke/ui";
 import { creatorActor } from "@luke/ui/actor-model";
+import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import {
   TASK_PROPERTY,
@@ -57,13 +50,23 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useSettledWaiting } from "../tasks/inbox-settling.js";
+import { RelativeTime } from "../tasks/relative-time.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
-import { ActionMenu } from "./action-menu.js";
 import { useTaskMenu } from "./task-actions.js";
+import { taskCardOf } from "./task-card.js";
+import {
+  PriorityChip,
+  StatusChip,
+  standsAt,
+  TaskWorkMarks,
+  useStandingDoor,
+  WaitingBadge,
+} from "./task-row-parts.js";
 import type { TasksViewFrame } from "./tasks-page-options.js";
 import { useRowDrag } from "./use-row-drag.js";
 
@@ -74,11 +77,15 @@ import { useRowDrag } from "./use-row-drag.js";
  * in the plan's place beside the sidebar, as Factory does. A column is a quiet well headed by
  * its status's mark, its name, and how many tasks stand in it, and scrolls
  * its own cards, the most pressing first. A card is raised off the well:
- * its key and its creator's face over its whole name, and at its foot the
+ * its key, how many of its Inbox threads wait on the reader, when it last
+ * moved, and its creator's face over its whole name, and at its foot the
  * chips that change its priority and its status where it stands, its
- * repository, and a ⋯ dropping the task's own menu, the sidebar row's, which
- * a right-click drops too and whose Rename makes the card's name its field.
- * A press anywhere else opens the task. A card dragged onto another column
+ * repository, what its agents are doing and the pull requests they opened
+ * (`task-row-parts.tsx`), and a ⋯ dropping the task's own menu, the sidebar
+ * row's, which a right-click drops too and whose Rename makes the card's
+ * name its field. A press anywhere else opens the task, and resting on it
+ * hangs the task's card beside it, as its sidebar row does
+ * (`task-card.tsx`): its agents and pull requests in full, each opening. A card dragged onto another column
  * is sent that column's status, or its priority, as the task page's chips
  * send them, and stands where it was until the list read again says
  * otherwise; a change the service did not keep says so, whether dragged or
@@ -109,9 +116,6 @@ const NO_TASKS = "No tasks";
 /** What the Board says where the filter and the view leave no column standing. */
 const NONE_STANDING = "No tasks match this view";
 
-/** What a change the service did not keep says. */
-const UNCHANGED_LINE = "Couldn't change the task. Try again.";
-
 /** What the page stands: its read, or none of the workspace's tasks. */
 function boardState(tasks: TasksControl, empty: boolean): CollectionState {
   if (tasks.listFailed && empty) return COLLECTION_STATE.ERROR;
@@ -133,70 +137,15 @@ const FIRST_SHOWN: string = TASK_STATUS.TODO;
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Columns";
 
-/** A card's chip that names one of a task's standings by its mark and drops the menu that changes it, each value with its mark, the one standing checked. */
-function CardStandingChip<T extends string>({
-  label,
-  value,
-  order,
-  words,
-  mark,
-  named,
-  onPick,
-}: {
-  /** What it changes, Status or Priority, which its tooltip and its menu say before the value. */
-  label: string;
-  value: T;
-  order: readonly T[];
-  words: Readonly<Record<T, string>>;
-  mark: (value: T) => React.JSX.Element;
-  /** Whether it says its value in words beside its mark, as on a phone, where it is how a card moves. */
-  named: boolean;
-  onPick: (value: T) => void;
-}): React.JSX.Element {
-  const { drawn, close, trigger } = useMenu(true);
-  const name = `${label}: ${words[value]}`;
-  return (
-    <>
-      <Tooltip label={name}>
-        <Chip
-          look={CHIP_LOOK.FIELD}
-          size={CHIP_SIZE.COMPACT}
-          iconOnly={!named}
-          aria-label={name}
-          {...trigger(dropBelowStart)}
-        >
-          {mark(value)}
-          <ChipName>{words[value]}</ChipName>
-        </Chip>
-      </Tooltip>
-      {drawn === undefined ? null : (
-        <ActionMenu
-          label={label}
-          menu={drawn}
-          groups={[
-            order.map((each) => ({
-              label: words[each],
-              icon: mark(each),
-              checked: each === value,
-              onSelect: () => {
-                if (each !== value) onPick(each);
-              },
-            })),
-          ]}
-          onClose={close}
-        />
-      )}
-    </>
-  );
-}
-
 /**
- * One task's card: its key and its creator's face over its name, one press
- * that opens it, and at its foot the chips that change it where it stands,
- * its priority and its status, its repository, and the ⋯ dropping the
- * task's own menu, which a right-click opens too. Renamed from that menu,
- * its name is its field until the edit ends. On a phone the status chip
- * says its status in words, since it is how a card moves there.
+ * One task's card: its key, what waits on the reader, when it last moved,
+ * and its creator's face over its name, one press that opens it and hangs
+ * the task's card beside it while the pointer rests there, and at its foot
+ * the chips that change it where it stands, its priority and its status,
+ * its repository, its agents' work and pull requests, and the ⋯ dropping
+ * the task's own menu, which a right-click opens too. Renamed from that
+ * menu, its name is its field until the edit ends. On a phone the status
+ * chip says its status in words, since it is how a card moves there.
  */
 function TaskBoardCard({
   tasks,
@@ -204,6 +153,8 @@ function TaskBoardCard({
   workspaceName,
   narrow,
   properties,
+  waiting,
+  now,
   onOpen,
   onStanding,
 }: {
@@ -213,6 +164,9 @@ function TaskBoardCard({
   narrow: boolean;
   /** What the card draws beside its name. */
   properties: readonly TaskProperty[];
+  /** How many of its Inbox threads wait on the reader. */
+  waiting: number;
+  now: number;
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -224,6 +178,7 @@ function TaskBoardCard({
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
+  const item = useRef<HTMLLIElement | null>(null);
   const press = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   const drawn = (property: TaskProperty) => properties.includes(property);
@@ -237,15 +192,22 @@ function TaskBoardCard({
       {task.number === undefined || !drawn(TASK_PROPERTY.KEY) ? null : (
         <span className="tasks-board-key">{taskKey(workspaceName, task.number)}</span>
       )}
-      {drawn(TASK_PROPERTY.CREATOR) ? (
-        <span className="tasks-board-face">
-          <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
-        </span>
-      ) : null}
+      <span className="tasks-board-card-marks">
+        {drawn(TASK_PROPERTY.WAITING) ? <WaitingBadge count={waiting} /> : null}
+        {drawn(TASK_PROPERTY.UPDATED) ? (
+          <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
+        ) : null}
+        {drawn(TASK_PROPERTY.CREATOR) ? (
+          <span className="tasks-board-face">
+            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+          </span>
+        ) : null}
+      </span>
     </span>
   );
   return (
     <li
+      ref={item}
       className="tasks-board-card"
       data-task-id={task.id}
       data-menu-open={actions.open ? "true" : undefined}
@@ -268,21 +230,23 @@ function TaskBoardCard({
           </span>
         </div>
       ) : (
-        <button
-          ref={press}
-          type="button"
-          className="tasks-board-card-press"
-          disabled={actions.deletion.busy}
-          onClick={() => {
-            actions.close(false);
-            onOpen();
-          }}
-          onKeyDown={actions.keyMenu}
-          {...actions.contextMenu(press)}
-        >
-          {head}
-          <span className="tasks-board-name">{task.name}</span>
-        </button>
+        <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardBeside cardRegion={item}>
+          <button
+            ref={press}
+            type="button"
+            className="tasks-board-card-press"
+            disabled={actions.deletion.busy}
+            onClick={() => {
+              actions.close(false);
+              onOpen();
+            }}
+            onKeyDown={actions.keyMenu}
+            {...actions.contextMenu(press)}
+          >
+            {head}
+            <span className="tasks-board-name">{task.name}</span>
+          </button>
+        </Tooltip>
       )}
       {rename.refused ? (
         <span className="tasks-board-card-note" role="alert">
@@ -292,30 +256,15 @@ function TaskBoardCard({
       <div className="tasks-board-card-foot">
         {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
         {drawn(TASK_PROPERTY.PRIORITY) ? (
-          <CardStandingChip
-            label="Priority"
-            value={task.priority ?? TASK_PRIORITY.NONE}
-            order={TASK_PRIORITY_ORDER}
-            words={TASK_PRIORITY_WORDS}
-            mark={(priority) => <TaskPriorityMark priority={priority} />}
-            named={false}
-            onPick={(priority) => onStanding({ priority })}
-          />
+          <PriorityChip task={task} look={CHIP_LOOK.FIELD} onStanding={onStanding} />
         ) : null}
         {drawn(TASK_PROPERTY.STATUS) ? (
-          <CardStandingChip
-            label="Status"
-            value={task.status ?? TASK_STATUS.TODO}
-            order={TASK_STATUS_ORDER}
-            words={TASK_STATUS_WORDS}
-            mark={(status) => <TaskStatusMark status={status} />}
-            named={narrow}
-            onPick={(status) => onStanding({ status })}
-          />
+          <StatusChip task={task} look={CHIP_LOOK.FIELD} named={narrow} onStanding={onStanding} />
         ) : null}
         {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
           <span className="tasks-board-repository">{repositoryName(task.repository)}</span>
         )}
+        {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMarks task={task} /> : null}
         <span className="tasks-board-card-more">
           <Tooltip label="Task actions">
             <IconButton
@@ -361,12 +310,6 @@ function columnStanding(head: TasksGroupHead): TaskStanding | undefined {
   return undefined;
 }
 
-/** Whether a task already stands where a standing would send it. */
-function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
-  if (standing.status !== undefined) return (task.status ?? TASK_STATUS.TODO) === standing.status;
-  return (task.priority ?? TASK_PRIORITY.NONE) === standing.priority;
-}
-
 /** The value a column stands for, which names it among the Board's columns: a status, or a priority, as its grouping is. */
 function columnValue(head: TasksGroupHead): string {
   if (head.kind === TASKS_GROUP.STATUS) return head.status;
@@ -388,6 +331,8 @@ function TaskBoardColumnView({
   narrow,
   panelId,
   properties,
+  waitingOn,
+  now,
   onOpen,
   onStanding,
 }: {
@@ -400,6 +345,9 @@ function TaskBoardColumnView({
   narrow: boolean;
   panelId: string;
   properties: readonly TaskProperty[];
+  /** How many of a task's Inbox threads wait on the reader, by its id. */
+  waitingOn: ReadonlyMap<string, number>;
+  now: number;
   onOpen: (task: TaskSummary) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -455,6 +403,8 @@ function TaskBoardColumnView({
                   workspaceName={workspaceName}
                   narrow={narrow}
                   properties={properties}
+                  waiting={waitingOn.get(task.id) ?? 0}
+                  now={now}
                   onOpen={() => onOpen(task)}
                   onStanding={(standing) => onStanding(task, standing)}
                 />
@@ -482,7 +432,10 @@ export function TasksBoard({
   frame: TasksViewFrame;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
-  const toast = useToast();
+  const setStanding = useStandingDoor(tasks);
+  const now = useMinute();
+  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
+  const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
@@ -519,11 +472,6 @@ export function TasksBoard({
       </div>
     ) : null;
   const workspaceName = tasks.workspace?.name ?? "";
-  const setStanding = (task: TaskSummary, standing: TaskStanding) => {
-    void tasks.onSetTaskStanding(task.id, standing).then((kept) => {
-      if (!kept) toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-    });
-  };
   const filters =
     frame.chips === null && tabs === null ? null : (
       <>
@@ -565,6 +513,8 @@ export function TasksBoard({
               narrow={narrow}
               panelId={panelId}
               properties={display.properties}
+              waitingOn={waitingOn}
+              now={now}
               onOpen={(task) => tasks.onSelect(task.id)}
               onStanding={setStanding}
             />

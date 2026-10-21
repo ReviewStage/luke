@@ -101,8 +101,15 @@ export type TaskProperty = (typeof TASK_PROPERTY)[keyof typeof TASK_PROPERTY];
 /** Every property, in the order a row draws them and the menu lists them. */
 export const TASK_PROPERTY_ORDER: readonly TaskProperty[] = Object.values(TASK_PROPERTY);
 
-/** The properties a Board's card has a place for. */
-export const BOARD_PROPERTIES: readonly TaskProperty[] = [
+/** The properties a Board's card has a place for: every one a row has. */
+export const BOARD_PROPERTIES: readonly TaskProperty[] = TASK_PROPERTY_ORDER;
+
+/**
+ * The properties a Board's card offered before it offered every one, which a
+ * Board display kept by an earlier build was chosen among: whatever it has
+ * a place for since stands as the Board's own display draws it.
+ */
+export const EARLIER_BOARD_PROPERTIES: readonly TaskProperty[] = [
   TASK_PROPERTY.PRIORITY,
   TASK_PROPERTY.KEY,
   TASK_PROPERTY.STATUS,
@@ -137,7 +144,7 @@ export const DEFAULT_LIST_DISPLAY: TasksDisplay = {
   properties: TASK_PROPERTY_ORDER,
 };
 
-/** The Board until its reader changes it: a column for every status but Canceled, every one standing, the most pressing first. */
+/** The Board until its reader changes it: a column for every status but Canceled, every one standing, the most pressing first, each card drawing all but when it was last updated. */
 export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
   grouping: TASKS_GROUPING.STATUS,
   order: TASKS_ORDER.PRIORITY,
@@ -145,8 +152,24 @@ export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
   done: true,
   canceled: false,
   pinnedFirst: false,
-  properties: BOARD_PROPERTIES,
+  properties: TASK_PROPERTY_ORDER.filter((property) => property !== TASK_PROPERTY.UPDATED),
 };
+
+/**
+ * A display kept when its view offered only `offered`, read today: each
+ * property offered since stands as the view's own display, `initial`, draws
+ * it, so a property a card gained is drawn rather than read as one turned
+ * off; the rest stand as kept.
+ */
+export function withPropertiesOffered(
+  properties: readonly TaskProperty[],
+  offered: readonly TaskProperty[],
+  initial: readonly TaskProperty[],
+): readonly TaskProperty[] {
+  return TASK_PROPERTY_ORDER.filter((property) =>
+    offered.includes(property) ? properties.includes(property) : initial.includes(property),
+  );
+}
 
 /** What heads one group: a pin, a section, or a value of the grouping. */
 export const TASKS_GROUP = {
