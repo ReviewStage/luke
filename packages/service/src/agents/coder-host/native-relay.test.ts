@@ -65,12 +65,11 @@ import { type EveReach, stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
- * native-relay.test.ts -- the planner's and an eve agent's tools reach a native agent through the web's relay route, and nothing else does.
+ * native-relay.test.ts -- an eve agent's tools reach a native agent through the web's relay route, and nothing else does.
  *
- * The eve apps provide the relay where a web function provides the
- * harnesses themselves (`native-relay.ts`), so the router their tools
- * compose (`sessionsRouter`, which the planner's host and the agent doors
- * read) hands a Claude Code agent's calls to it, and the web's route
+ * The eve app provides the relay where a web function provides the
+ * harnesses themselves (`native-relay.ts`), so the router its tools
+ * compose (`sessionsRouter`, which the agent doors read) hands a Claude Code agent's calls to it, and the web's route
  * (`native-relay-app.ts`) makes them on the harness acting for the account
  * the router named. Both ends are the production code, joined by a fake
  * network (`testing/native-relay-fake.ts`), over a recording harness and a
@@ -246,10 +245,10 @@ const steerLine = (userId: string, text = "Also the emails.") => ({
 });
 
 it.layer(Layer.merge(getTestDB(), GITHUB))(
-  "the eve apps reach a native agent through the web's relay",
+  "the eve app reaches a native agent through the web's relay",
   (it) => {
     it.effect(
-      "the router the planner's and an eve agent's tools compose hands a Claude Code agent's every call to the web's harness, acting as the router names, and an eve agent's to eve with the relay hearing nothing",
+      "the router an eve agent's tools compose hands a Claude Code agent's every call to the web's harness, acting as the router names, and an eve agent's to eve with the relay hearing nothing",
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
@@ -331,7 +330,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const eve = recordingEve();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
 
-          // A teammate's message, which the planner's message_agent and an eve agent's send as this does.
+          // A teammate's message, which an eve agent's message_agent sends as this does.
           const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
             Effect.provide(relay.layer),
           );

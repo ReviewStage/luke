@@ -45,15 +45,14 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * An agent whose credential is its starter's own token reaches its pull
  * request and its checks over GitHub's REST API alone, as the firewall
  * carries that token on nothing else (`terminal/agent-sandbox.ts`).
- * The workspace's chat, where the agent talks with the plan's other agents,
- * its Luke, and the developer's team (`chat.ts`), is told of beside the
+ * The task's chat, where the agent talks with the plan's other agents and
+ * the developer's team (`chat.ts`), is told of beside the
  * developer's inbox, which stays where it asks the developer, only where
  * the agent's starter turned Chat on; where it is off, the instructions are
  * the same text as before Chat, naming no tool the agent is not offered.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
- * result the agent reads whole, in the spirit of the brain's worker's
- * (`brain-host/brain.ts`).
+ * result the agent reads whole.
  * An agent on a task keeps that task's status with `update_task`, since
  * nothing but a Start (`task-store.ts`'s `beginTask`) moves it; a helper on
  * its starter's task leaves it to the starter.
@@ -159,11 +158,13 @@ interface ToolWords {
  * What a coding agent is told of `browser`, the Chromium in its own sandbox
  * whose tabs the developer watches and may take over: for what the
  * developer should see or help with, while a throwaway check of its own
- * work stays on the sandbox's Playwright, which leaves no tab behind.
+ * work stays on the sandbox's Playwright, which leaves no tab behind; and
+ * of `on: "mac"`, the developer's own Mac's tabs, only for what only the Mac
+ * reaches, since there it acts as the developer.
  */
 const BROWSER_WORDS = `## Your browser
 
-\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab. With \`on: "mac"\` the same actions run on your task's Browser tabs in Luke on the developer's own Mac instead, where you act as the developer, signed in to whatever they are signed in to: use it only for the developer's own \`localhost\` or a site they are signed in to there, and keep your own dev server and anything they should watch or take over in your own browser.
 
 `;
 
@@ -326,7 +327,7 @@ interface EditPlanTold {
 const NOT_TOLD_EDIT_PLAN: EditPlanTold = { decided: "", updating: "" };
 
 /** How `edit_plan` takes notes and what for, said alike to every agent on a task. */
-const EDIT_PLAN_WORDS = `\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes, anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next call with Luke, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
+const EDIT_PLAN_WORDS = `\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes notes anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next call with Luke, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
 
 /**
  * What an agent is told of its plan: one handed the plan always, and one
@@ -421,20 +422,6 @@ function branchWords(startBranch: string | null): BranchWords {
   };
 }
 
-/** How the coder prompt's chat section names the task's Luke: by his link under the task's, or, for an agent on no task, as the Luke of whichever task it means. */
-function lukeWords(taskLink: string | null) {
-  if (taskLink === null) {
-    return {
-      named: "a task's Luke by that task's link with `/luke` after it",
-      ask: "a task's Luke's reading of its plan",
-    };
-  }
-  return {
-    named: `your task's Luke as [@Luke](${taskLink}/luke)`,
-    ask: "your task's Luke's reading of the plan",
-  };
-}
-
 /**
  * The section that tells the agent of its task's chat and when to use it
  * beside the inbox, worded for what it was handed; only an agent whose
@@ -445,15 +432,14 @@ function lukeWords(taskLink: string | null) {
  * than message them, to post at every moment a teammate would, to monitor
  * it regularly and answer what it reads, and to write as a coworker does.
  */
-function chatSection(brief: string, taskLink: string | null): string {
-  const luke = lukeWords(taskLink);
+function chatSection(brief: string): string {
   return `
 
 ## Your team's chat
 
-You are one engineer on a team working on this task, and the task's chat is your team's Slack. You are a member beside the other coding agents on this task, the task's Luke, and the developer's team. Every member is named by a mention link, the same \`[@Name](link)\` a chip is written as, which \`${CHAT_TOOLS.READ.name}\` lists for each member and which you copy rather than spell; ${luke.named}. It is one channel, scoped to the task: every post of yours goes there, and no one on another task reads or writes it. The developer watches it to see the agents on this task work together the way a real engineering team does, so your work must be visible there, as it happens.
+You are one engineer on a team working on this task, and the task's chat is your team's Slack. You are a member beside the other coding agents on this task and the developer's team. Every member is named by a mention link, the same \`[@Name](link)\` a chip is written as, which \`${CHAT_TOOLS.READ.name}\` lists for each member and which you copy rather than spell. It is one channel, scoped to the task: every post of yours goes there, and no one on another task reads or writes it. The developer watches it to see the agents on this task work together the way a real engineering team does, so your work must be visible there, as it happens.
 
-Use the chat heavily. A good engineer on a team lives in Slack: they say what they are doing, think out loud with their teammates, ask, answer, and react, all day. A quiet channel reads as a team that is not talking, which is the one thing the developer must never see. When you are unsure whether something is worth a post, post it. Even when you are the only agent on the task, keep the channel going: the developer and the task's Luke are reading it.
+Use the chat heavily. A good engineer on a team lives in Slack: they say what they are doing, think out loud with their teammates, ask, answer, and react, all day. A quiet channel reads as a team that is not talking, which is the one thing the developer must never see. When you are unsure whether something is worth a post, post it. Even when you are the only agent on the task, keep the channel going: the developer is reading it.
 
 Talk to the other agents on this task in the chat, and only there. Do not message them with \`${CODER_TOOL.MESSAGE_AGENT}\` or read their transcripts to coordinate: a direct message is invisible to the rest of the team and to the developer watching the channel.
 
@@ -475,7 +461,7 @@ A message to you arrives as a line opening \`${CHAT_NOTICE_LEAD} ·\`, naming wh
 
 A topic channel the developer's team opens says in a line what it is for; rename it, change its purpose, or archive it once its topic is done with \`${CHAT_TOOLS.EDIT_CHANNEL.name}\`.
 
-Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox as a post with \`${INBOX_TOOLS.POST.name}\` that ends with its ask, or, where another coding agent started you, to that agent as the inbox section says, never as a chat ask; say in the chat that you asked, so the team knows what you are waiting on. Chat is for talking with the other agents, the task's Luke, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or ${luke.ask}, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
+Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox as a post with \`${INBOX_TOOLS.POST.name}\` that ends with its ask, or, where another coding agent started you, to that agent as the inbox section says, never as a chat ask; say in the chat that you asked, so the team knows what you are waiting on. Chat is for talking with the other agents and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
 }
 
 /**
@@ -677,7 +663,7 @@ Where another coding agent started you, as your first message says, the develope
 
 One thread per thing you need, under a key of your own, its first post naming its title. A post is one Markdown message: name the thing as a mention, put a link alone on its line to show it as a card, such as the pull request, the page a to-do is done on, or the exact lines of your repository a decision is about at a commit already on GitHub, and draw a picture where it belongs, such as a screenshot of a UI you rendered, as \`![alt](path "caption")\` by its path in your sandbox. End it with the ask you need: \`decide\` among options, naming the one you recommend, or two short ones such as Approve and Request changes where you want their go-ahead; \`do\` for something only they can do by hand, with its steps; or \`answer\`, with typed fields where you need several values at once, or none for an answer in their own words. A post without an ask is something they should only know. An answer to \`decide\` or \`answer\` always reaches you; set \`waits\` on a \`do\` whose being done changes what you do next. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a \`do\` the developer does by hand, where they put it. Decide small things yourself.
 
-Keep the inbox current rather than repeating it. A thread holds one open ask, and a newer ask replaces it: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Where such a message, or an answer carrying their words, wants a reply, such as a question, a request, or something they want to hear back on, reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key, asking nothing unless what you need from them changed, as you follow up after an answer, such as saying what you did with it. They read your reply on the thread they wrote on, not in your transcript, so never answer them in your message alone: your message may say in a line that you replied on the thread, and nothing they should read stands only there.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief, taskLink) : ""}${place.pages}${place.comments}
+Keep the inbox current rather than repeating it. A thread holds one open ask, and a newer ask replaces it: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Where such a message, or an answer carrying their words, wants a reply, such as a question, a request, or something they want to hear back on, reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key, asking nothing unless what you need from them changed, as you follow up after an answer, such as saying what you did with it. They read your reply on the thread they wrote on, not in your transcript, so never answer them in your message alone: your message may say in a line that you replied on the thread, and nothing they should read stands only there.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief) : ""}${place.pages}${place.comments}
 
 ## Handing work to a worker
 

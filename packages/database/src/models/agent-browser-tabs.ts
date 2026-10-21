@@ -2,8 +2,8 @@
  * agent-browser-tabs.ts -- the Browser tabs open in agents' browsers: an agent's actions write them, and a task's members list them and take one over.
  *
  * An agent is named here by its own conversation, the one its sandbox is
- * kept for (`schemas/agent-browser-tab.ts`): a coding agent's, or the task's
- * for Luke, and a worker writes under its parent's. The agent's side, an
+ * kept for (`schemas/agent-browser-tab.ts`), and a worker writes under its
+ * parent's. The agent's side, an
  * upsert as it acts on a tab, a close, and the list of its own tabs, is the
  * service's and reads no account, as the sandbox's terminal lease reads
  * none. A member's side reads through the rules every agent route keeps: a
@@ -67,15 +67,15 @@ interface BrowserTabAgent {
   readonly githubAccess: GitHubAccess;
 }
 
-/** A tab a member reached: its row, and the coding agent whose browser holds it, null for the task's Luke. */
+/** A tab a member reached: its row, and the coding agent whose browser holds it. */
 export interface ReachedBrowserTab {
   readonly tab: AgentBrowserTabRow;
-  readonly agent: BrowserTabAgent | null;
+  readonly agent: BrowserTabAgent;
 }
 
 /** A tab as an agent's action on it reports it: whose browser, its task, the browser's own id for it, and how its page stands. */
 export interface BrowserTabAction {
-  /** The conversation of the agent whose browser holds it: a coding agent's, the task's for Luke, a worker's parent's. */
+  /** The conversation of the agent whose browser holds it: a coding agent's, or a worker's parent's. */
   readonly conversationId: string;
   readonly targetId: string;
   readonly address: string;
@@ -103,9 +103,9 @@ const tabColumns = {
 
 const ReachedTabSchema = Schema.Struct({
   ...BrowserTabSchema.fields,
-  agentId: Schema.NullOr(Schema.String),
-  agentUserId: Schema.NullOr(Schema.String),
-  agentGithubAccess: Schema.NullOr(Schema.Literals(GITHUB_ACCESSES)),
+  agentId: Schema.String,
+  agentUserId: Schema.String,
+  agentGithubAccess: Schema.Literals(GITHUB_ACCESSES),
 });
 
 /** An address or a title cut where the Browser tab cuts one, since it is only drawn. */
@@ -115,21 +115,19 @@ function shown(text: string): string {
 
 /**
  * The task of the agent whose conversation is named, read from the agent's
- * own row rather than taken from the caller: a coding agent's task, or the
- * task whose Luke the conversation is; null for an agent on none. So a tab
- * is never listed on a task its agent is not on.
+ * own row rather than taken from the caller; null for an agent on none. So a
+ * tab is never listed on a task its agent is not on.
  */
 function taskOfConversation(conversationId: string) {
-  return sql<string | null>`coalesce(
-  (select ${codingAgent.taskId} from ${codingAgent} where ${codingAgent.conversationId} = ${conversationId}),
-  (select ${task.id} from ${task} where ${task.conversationId} = ${conversationId})
-)`;
+  return sql<
+    string | null
+  >`(select ${codingAgent.taskId} from ${codingAgent} where ${codingAgent.conversationId} = ${conversationId})`;
 }
 
 /**
- * The tabs a member reaches: on a task they reach, and, for a coding
- * agent's, of an agent they see; the task's Luke has no agent row, and its
- * tabs are the task's.
+ * The tabs a member reaches: on a task they reach, of an agent they see. A
+ * tab no coding agent's conversation names, one a task's Luke opened while a
+ * task had one, is listed to no one.
  */
 function reachedTabs(userId: string, taskId: string, tabId?: string) {
   return Database.use((db) =>
@@ -142,13 +140,13 @@ function reachedTabs(userId: string, taskId: string, tabId?: string) {
       })
       .from(agentBrowserTab)
       .innerJoin(task, eq(task.id, agentBrowserTab.taskId))
-      .leftJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
+      .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
       .where(
         and(
           eq(agentBrowserTab.taskId, taskId),
           tabId === undefined ? undefined : eq(agentBrowserTab.id, tabId),
           taskReachableBy(userId),
-          or(isNull(codingAgent.id), agentReachableBy(userId)),
+          agentReachableBy(userId),
         ),
       )
       .orderBy(asc(agentBrowserTab.createdAt), asc(agentBrowserTab.id)),
@@ -324,11 +322,7 @@ const releaseTab = SqlSchema.findAll({
 /** A reached row split into its tab and its agent. */
 function reachedOf(row: typeof ReachedTabSchema.Type): ReachedBrowserTab {
   const { agentId, agentUserId, agentGithubAccess, ...tab } = row;
-  const agent =
-    agentId === null || agentUserId === null || agentGithubAccess === null
-      ? null
-      : { id: agentId, userId: agentUserId, githubAccess: agentGithubAccess };
-  return { tab, agent };
+  return { tab, agent: { id: agentId, userId: agentUserId, githubAccess: agentGithubAccess } };
 }
 
 /** The member driving the tab at the instant given; null where none does or their takeover lapsed. */

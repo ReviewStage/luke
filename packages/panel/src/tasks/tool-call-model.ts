@@ -177,6 +177,9 @@ const MAC_COMMAND_NOT_RUN = "not-run";
 /** The status `browser` answers with when it ran nothing. */
 const BROWSER_NOT_RUN = "not-run";
 
+/** Where a `browser` call says it acts when it acts on the developer's own Mac. */
+const BROWSER_ON_MAC = "mac";
+
 /** The actions a browser call named, by name, in the order its input lists them. */
 function browserActions(input: WireValue | undefined): readonly string[] {
   const actions = isRecord(input) && Array.isArray(input.actions) ? input.actions : [];
@@ -615,7 +618,7 @@ function knownToolView(
       const tab = browserTabName(input, output);
       const words = browserCallWords(browserActions(input), tab !== undefined);
       return {
-        kind: CALL_KIND.BROWSER,
+        kind: stringAt(input, "on") === BROWSER_ON_MAC ? CALL_KIND.MAC_BROWSER : CALL_KIND.BROWSER,
         subject: words === undefined ? "" : (tab ?? ""),
         ...(words === undefined ? undefined : { description: words }),
         input: input === undefined ? textBlock("") : jsonBlock(input),
@@ -737,13 +740,6 @@ function knownToolView(
     default:
       return undefined;
   }
-}
-
-/** A repository command's answer as the brain's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
-function repositoryOutput(output: WireValue): ToolBlock {
-  const reason = stringAt(output, "reason");
-  if (stringAt(output, "status") === "not-run" && reason !== undefined) return textBlock(reason);
-  return commandOutput(output);
 }
 
 /** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any, said as a code card says them. */
@@ -891,17 +887,6 @@ function tasksToolView(
   jobs: WorkerJobs | undefined,
 ): ToolCallView | undefined {
   switch (tool) {
-    case AGENT_TOOL.RUN_IN_REPOSITORY: {
-      const command = stringAt(input, "command") ?? "";
-      const description = commandDescription(stringAt(input, "description"));
-      return {
-        kind: CALL_KIND.COMMAND,
-        subject: command,
-        ...(description === undefined ? undefined : { description }),
-        input: { kind: TOOL_BLOCK.COMMAND, text: command },
-        output: output === undefined ? undefined : repositoryOutput(output),
-      };
-    }
     case AGENT_TOOL.SHOW_CODE:
       return {
         ...namedCall(CALL_KIND.SHOW_CODE, input, output, undefined),

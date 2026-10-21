@@ -10,9 +10,12 @@
  */
 
 import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
-import { codingAgentMessagesAnswerViewSchema } from "@luke/features/coding-agent-view";
 import {
   codeLinesSchema,
+  type TasksPagesAnswer,
+  type TasksRevisionsAnswer,
+  taskHistoryFollowSchema,
+  taskPagesFollowSchema,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksBrowserTabsParamsSchema,
@@ -27,7 +30,6 @@ import {
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
   tasksIssueSchema,
-  tasksMessagesParamsSchema,
   tasksMoveAnswerSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
@@ -60,6 +62,7 @@ import {
   tasksTreeParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import {
   COLOURED_CODE_MAX_CHARS,
@@ -167,21 +170,6 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksSetStandingParamsSchema))
     .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: actProcedure(
-    "Could not read that task's earlier work on this system.",
-  )
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER]: actProcedure(
-    "Could not read that task's earlier conversation on this system.",
-  )
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_MESSAGES]: actProcedure(
-    "Could not read that task's conversation on this system.",
-  )
-    .input(exactInput(tasksMessagesParamsSchema))
-    .output(EffectSchema.flip(codingAgentMessagesAnswerViewSchema)),
   [TASKS_ACT_KIND.TASKS_FILE]: actProcedure("Could not read that file on this system.")
     .input(exactInput(tasksFileParamsSchema))
     .output(EffectSchema.flip(tasksFileAnswerSchema)),
@@ -226,6 +214,16 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_PAGES]: actProcedure("Could not read that plan's pages on this system.")
     .input(exactInput(tasksPagesParamsSchema))
     .output(EffectSchema.flip(tasksPagesAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
+    "Could not follow that plan's pages on this system.",
+  )
+    .input(exactInput(taskPagesFollowSchema))
+    .output(eventIterator(type<TasksPagesAnswer>())),
+  [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
+    "Could not follow that plan's history on this system.",
+  )
+    .input(exactInput(taskHistoryFollowSchema))
+    .output(eventIterator(type<TasksRevisionsAnswer>())),
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: actProcedure("Could not read that picture on this system.")
     .input(exactInput(tasksPictureParamsSchema))
     .output(EffectSchema.flip(tasksPictureAnswerSchema)),

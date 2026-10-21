@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentChatAnswerView,
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -23,12 +26,10 @@ import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
-  TASK_WORK_STATE,
   TASKS_READ,
   type TaskCode,
   type TaskCodeShowing,
   type TasksView,
-  type TaskWorkTurn,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -50,6 +51,7 @@ import {
   type VoiceCommand,
   type VoiceView,
 } from "@luke/voice/voice-view";
+import { AsyncIteratorClass } from "@orpc/client";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
@@ -565,36 +567,6 @@ test("a task started opens with the side panel shown on its plan, a refused star
   assert.equal(panel().open, false, "the late answer leaves the panel the developer hid");
 });
 
-test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {
-  const asked: unknown[] = [];
-  const page = {
-    messages: [],
-    cursor: "3:1",
-    status: CODING_AGENT_STATUS.RUNNING,
-    title: null,
-  };
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_MESSAGES]: (payload) => {
-        asked.push(payload);
-        return Promise.resolve(page);
-      },
-    },
-  );
-
-  const read = await tab.control().work.readWorker({
-    agentId: "plan-1",
-    after: "0:0",
-    callId: "call-0-0",
-  });
-
-  assert.deepEqual(asked, [{ taskId: "plan-1", after: "0:0", callId: "call-0-0" }]);
-  assert.deepEqual(read, page);
-});
-
-const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
-
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
 function _drawnBoard(number: number): Board {
   return {
@@ -630,46 +602,6 @@ function panelOf(tab: ReturnType<typeof mount>) {
   return { open, tab: shown };
 }
 
-/** One turn of Luke's brain on the open task. */
-const TURN: TaskWorkTurn = {
-  turnId: "turn-1",
-  startedAt: 1,
-  state: TASK_WORK_STATE.DONE,
-  earlierOmitted: false,
-  journal: [],
-  workers: [],
-};
-
-/** The open task's calls read back: none, and one with a line said on it. */
-const NO_CALLS: TasksView["transcript"] = {
-  status: TASKS_READ.READY,
-  transcript: { calls: [], earlierOmitted: false },
-};
-const _ONE_CALL: TasksView["transcript"] = {
-  status: TASKS_READ.READY,
-  transcript: {
-    calls: [
-      {
-        id: "5d7f9b1c-3e5a-4c7e-9a1b-3c5e7f9b1d3f",
-        startedAt: 1,
-        messages: [
-          { id: "0", role: "user", parts: [{ type: "text", text: "Invites should expire." }] },
-        ],
-      },
-    ],
-    earlierOmitted: false,
-  },
-};
-
-/** The open task read with nothing on it yet: an empty board, no code, no call, no work. */
-const _NOTHING_YET: TasksView = {
-  ...OPEN,
-  board: EMPTY_BOARD,
-  shownCode: [],
-  transcript: NO_CALLS,
-  work: [],
-};
-
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 const RUNNING_AGENT: CodingAgentSummary = {
@@ -687,28 +619,6 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-}
-
-/** Luke's start of a coding agent in the open task's work, as its call stands: still running, or answered. */
-function _startedAgent(
-  state: typeof TASK_WORK_STATE.RUNNING | typeof TASK_WORK_STATE.DONE,
-): TaskWorkTurn {
-  return {
-    ...TURN,
-    journal: [
-      {
-        type: "tool-start_coding_agent",
-        toolCallId: "call-start-1",
-        state: state === TASK_WORK_STATE.DONE ? "output-available" : "input-available",
-        input: {},
-      },
-    ],
-  };
-}
-
-/** How many times the task's agents were read. */
-function _listReads(tab: ReturnType<typeof mount>): number {
-  return tab.agentActs.filter((kind) => kind === ACT_KIND.CODING_AGENTS_LIST).length;
 }
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {
@@ -2648,7 +2558,7 @@ test("a fixture run on the chat profile opens Chat at once and its staged chat l
     await settle();
     assert.ok(fixture.control().chatView.chat, "the staged chat landed");
   });
-  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 8);
+  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 7);
   const live = mount({ shown: true });
   await settle();
   assert.equal(live.control().chatView.open, false);
@@ -2668,18 +2578,47 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(tab.control().chatView.open, true);
 });
 
-test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {
+/** A chat's stream as the host opens one: each chat pushed is handed to the reader in turn. */
+function chatStream() {
+  const queued: CodingAgentChatAnswerView[] = [];
+  const waiting: ((read: IteratorResult<CodingAgentChatAnswerView, void>) => void)[] = [];
+  const iterator = new AsyncIteratorClass<CodingAgentChatAnswerView, void>(
+    () => {
+      const chat = queued.shift();
+      if (chat !== undefined) return Promise.resolve({ done: false, value: chat });
+      return new Promise((resolve) => waiting.push(resolve));
+    },
+    () => Promise.resolve(),
+  );
+  return {
+    /** The act's answer: the stream, opened. */
+    open: () => Promise.resolve(iterator),
+    push: (chat: CodingAgentChatAnswerView) => {
+      const reader = waiting.shift();
+      if (reader === undefined) queued.push(chat);
+      else reader({ done: false, value: chat });
+    },
+  };
+}
+
+test("a live run follows the listed workspace's chat only while the account has Chat on", async () => {
   handState({});
   const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
   await settle();
-  assert.ok(!off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat off reads no chat");
+  assert.ok(
+    !off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT_FOLLOW),
+    "Chat off follows no chat",
+  );
   assert.equal(off.control().chatView.available, false);
 
   handState(experimentsOn(EXPERIMENT.CHAT));
   const on = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
   await vi.waitFor(async () => {
     await settle();
-    assert.ok(on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat on reads its chat");
+    assert.ok(
+      on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT_FOLLOW),
+      "Chat on follows its chat",
+    );
   });
 });
 
@@ -2756,7 +2695,7 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
   const answer = {
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: [
       { id: channelId, kind: CHANNEL_KIND.TASK, name: "invites", archived: false, planId: TASK.id },
     ],
@@ -2772,16 +2711,14 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
         postedAt: 1,
       },
     ],
-    cursor: "4",
+    cursor: "",
   };
-  let reads = 0;
+  const stream = chatStream();
+  stream.push(answer);
   const tab = mount(
     { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
     {
-      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
-        reads += 1;
-        return reads === 1 ? Promise.resolve(answer) : new Promise(() => undefined);
-      },
+      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
       [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
     },
     AtomRegistryModule.make(),
@@ -2806,7 +2743,7 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   const answerAt = (seq: number) => ({
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: [{ id: channelId, kind: CHANNEL_KIND.GENERAL, name: "general", archived: false }],
     messages: [
       {
@@ -2820,19 +2757,15 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
         postedAt: seq,
       },
     ],
-    cursor: String(seq),
+    cursor: "",
   });
-  // The second read waits for the test to post a message, as the service's long read waits for one.
-  const later = Promise.withResolvers<ReturnType<typeof answerAt>>();
-  let reads = 0;
+  // The next push waits for the test to post a message, as the host pushes one when it lands.
+  const stream = chatStream();
+  stream.push(answerAt(4));
   const tab = mount(
     { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] }, room: SHELL_ROOM.NARROW },
     {
-      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
-        reads += 1;
-        if (reads === 1) return Promise.resolve(answerAt(4));
-        return reads === 2 ? later.promise : new Promise(() => undefined);
-      },
+      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
       [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
     },
     AtomRegistryModule.make(),
@@ -2852,7 +2785,7 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   assert.deepEqual(readTo(), [mark(4)], "the channel on screen is read");
 
   act(() => tab.control().chatView.onList());
-  later.resolve(answerAt(5));
+  stream.push(answerAt(5));
   await settle();
   assert.deepEqual(readTo(), [mark(4)], "a message landing behind the rail stays unread");
 
@@ -2873,25 +2806,17 @@ test("a channel link the chat held before it was opened does not hold stands unt
   const answerOf = (cursor: number, ids: readonly string[]) => ({
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: ids.map((id) => ({ id, kind: CHANNEL_KIND.TOPIC, name: id, archived: false })),
     messages: [],
     cursor: String(cursor),
   });
-  // Each later read waits for the test, as the service's long read waits for a change.
-  const second = Promise.withResolvers<ReturnType<typeof answerOf>>();
-  const third = Promise.withResolvers<ReturnType<typeof answerOf>>();
-  let reads = 0;
+  // Each later push waits for the test, as the host pushes one when the chat changes.
+  const stream = chatStream();
+  stream.push(answerOf(1, [held]));
   const tab = mount(
     { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
-    {
-      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
-        reads += 1;
-        if (reads === 1) return Promise.resolve(answerOf(1, [held]));
-        if (reads === 2) return second.promise;
-        return reads === 3 ? third.promise : new Promise(() => undefined);
-      },
-    },
+    { [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open },
     AtomRegistryModule.make(),
   );
   await vi.waitFor(async () => {
@@ -2909,14 +2834,14 @@ test("a channel link the chat held before it was opened does not hold stands unt
   linkTo(fresh);
   await settle();
   assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "made since the read");
-  second.resolve(answerOf(2, [held, fresh]));
+  stream.push(answerOf(2, [held, fresh]));
   await settle();
   assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "and held by the next");
 
   linkTo(gone);
   await settle();
   assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: gone });
-  third.resolve(answerOf(3, [held, fresh]));
+  stream.push(answerOf(3, [held, fresh]));
   await vi.waitFor(async () => {
     await settle();
     assert.deepEqual(place(), FOR_YOU, "a read since that holds it not puts Chat on For you");

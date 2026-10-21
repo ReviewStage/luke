@@ -79,7 +79,7 @@ it.layer(getTestDB())("eve reached as the deployment", (it) => {
         yield* Effect.gen(function* () {
           const eveAs = yield* deploymentEve<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
           yield* eveAs("user-a").open(MESSAGE);
-          const each = yield* deploymentEveForAccounts<EveTypedTurn>(ORIGIN, EVE_MOUNT.TASKS);
+          const each = yield* deploymentEveForAccounts<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
           yield* Effect.flatMap(each("user-b"), (sessions) => sessions.open(MESSAGE));
         }).pipe(
           Effect.provide(
@@ -93,7 +93,7 @@ it.layer(getTestDB())("eve reached as the deployment", (it) => {
             account: "user-a",
           },
           {
-            url: `${ORIGIN}/eve/v1/session`,
+            url: `${ORIGIN}/eve/coder/v1/session`,
             authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
             account: "user-b",
           },

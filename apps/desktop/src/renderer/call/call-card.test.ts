@@ -197,7 +197,7 @@ test("the card's Video off and Video on are the agent's tab's own toggle, and bo
   // Main's answer, the avatar down at the developer's word, reaches every view at once.
   act(() => deliver(onCall({ status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER }, 2)));
   await settle();
-  assert.equal(tileIn(callTab)?.dataset.status, AVATAR_STATUS.OFF);
+  assert.equal(tileIn(callTab), null, "the agent's tab puts its tile away");
   assert.equal(tileIn(card(page)), null, "the card falls back to itself");
   act(() => {
     const cardShown = card(page);

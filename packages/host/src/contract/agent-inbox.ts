@@ -2,7 +2,7 @@
  * agent-inbox.ts -- the Inbox's and the workspace chat's asks of the host, as procedures.
  *
  * What a task's coding agents need of the developer, and what they say in
- * the workspace: an Inbox read, one item answered, closed, messaged, or
+ * the workspace: a task's or an agent's inbox followed, one item answered, closed, messaged, or
  * marked, every item marked read, an item's image and an agent's picture,
  * and the workspace's chat read, written to, and a message's picture.
  *
@@ -18,42 +18,37 @@
  */
 
 import {
-  codingAgentAgentInboxParamsSchema,
-  codingAgentChatAnswerViewSchema,
+  type CodingAgentChatAnswerView,
+  type CodingAgentInboxChanged,
   codingAgentChatAttachmentParamsSchema,
-  codingAgentChatParamsSchema,
+  codingAgentChatFollowParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
-  codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
   codingAgentInboxCloseParamsSchema,
   codingAgentInboxMessagedViewSchema,
   codingAgentInboxMessageParamsSchema,
-  codingAgentInboxParamsSchema,
   codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxReadStateViewSchema,
+  codingAgentInboxScopeSchema,
   codingAgentPictureParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
 
 export const agentInboxActsContract = {
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX]: actProcedure(
-    "Could not read the task's inbox on this system.",
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actProcedure(
+    "Could not follow the inbox on this system.",
   )
-    .input(exactInput(codingAgentInboxParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxAnswerViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_AGENT_INBOX]: actProcedure(
-    "Could not read the agent's inbox on this system.",
-  )
-    .input(exactInput(codingAgentAgentInboxParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxAnswerViewSchema)),
+    .input(exactInput(codingAgentInboxScopeSchema))
+    .output(eventIterator(type<CodingAgentInboxChanged["inbox"]>())),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actProcedure(
     "Could not answer the inbox item on this system.",
   )
@@ -89,11 +84,6 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentPictureParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT]: actProcedure(
-    "Could not read the workspace's chat on this system.",
-  )
-    .input(exactInput(codingAgentChatParamsSchema))
-    .output(EffectSchema.toType(codingAgentChatAnswerViewSchema)),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST]: actProcedure(
     "Could not write to the workspace's chat on this system.",
   )
@@ -104,4 +94,9 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentChatAttachmentParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: actProcedure(
+    "Could not follow the workspace's chat on this system.",
+  )
+    .input(exactInput(codingAgentChatFollowParamsSchema))
+    .output(eventIterator(type<CodingAgentChatAnswerView>())),
 };

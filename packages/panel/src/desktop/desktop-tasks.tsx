@@ -84,7 +84,6 @@ import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/u
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { workRowsOf } from "../tasks/work-model.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
@@ -271,7 +270,6 @@ function TaskInboxTab({
     act,
     workspaceId: task.workspaceId,
     // Note that a task's own Inbox offers no Mark all as read.
-    onMarkedAll: () => undefined,
   });
   const closeItem = useInboxCloser({ act, onHeard: tasks.agents.onRetryList });
   // Note that the task's read draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
@@ -712,7 +710,6 @@ function PlanDocument({
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const listedCard = listedOpen ?? opened;
-  const conversation = tasks.work.conversation;
   const sideTab = sidePanel.tab;
   const { shownCode } = tasks;
   const cards = useMemo(
@@ -721,7 +718,6 @@ function PlanDocument({
         ? undefined
         : taskCards({
             agents,
-            workRows: workRowsOf(conversation),
             held: views.held,
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
@@ -732,7 +728,7 @@ function PlanDocument({
               card: taskCardOf(tasks, listedCard, now),
             },
           }),
-    [agents, conversation, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
+    [agents, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
   );
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
   // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
@@ -1068,9 +1064,8 @@ function PlanDocument({
                         repository={task.repository}
                         board={tasks.board}
                         shownCode={tasks.shownCode}
-                        codeFailed={tasks.workFailed ? { onRetry: tasks.onRetryWork } : undefined}
+                        codeFailed={tasks.codeFailed ? { onRetry: tasks.onRetryCode } : undefined}
                         pages={tasks.pages}
-                        work={tasks.work}
                         agents={agents}
                         openAgents={mainTabs.openAgents}
                         shownAgent={followedAgent(mainTabs.tab, {

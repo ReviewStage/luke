@@ -285,7 +285,7 @@ function InboxShown({
     agentId,
     url: opened.url,
   }));
-  const { pages, onRereadPages } = view;
+  const { pages } = view;
   // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws.
   const { onTaskAgents } = view;
   const taskAgents = agents.agents;
@@ -316,8 +316,7 @@ function InboxShown({
         return true;
       }
       case INBOX_PANEL_TARGET.PAGE:
-        // A page an agent showed since the pages were read, or whose read did not answer, stands once they are read again.
-        if (pages?.some((page) => page.id === target.pageId) !== true) onRereadPages();
+        // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move.
         sidePanel.onChoose({ page: target.pageId });
         return true;
       case INBOX_PANEL_TARGET.CHANGES:
@@ -546,11 +545,6 @@ function InboxSidePanel({
     }
     if (target.kind !== TOOL_TARGET.INBOX && taskId !== undefined) tasks.onShowTask(taskId);
   };
-  // The task's agents' workers are their delegations, read through their own transcripts, so the panel's work is none.
-  const work = {
-    conversation: undefined,
-    readWorker: agents.readTranscript,
-  };
   return (
     <SidePanel
       {...drawing}
@@ -562,7 +556,6 @@ function InboxSidePanel({
       shownCode={undefined}
       codeFailed={undefined}
       pages={pages}
-      work={work}
       agents={agents}
       openAgents={NO_OPEN_AGENTS}
       shownAgent={undefined}

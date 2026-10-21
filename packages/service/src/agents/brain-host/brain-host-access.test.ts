@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
-import { openTaskConversation } from "@luke/database/models/task-store";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
@@ -17,6 +16,7 @@ import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
+import { CODER_DEPLOYMENT_TURNS } from "../coder-host/channel.js";
 import {
   actedForAccount,
   DEPLOYMENT_PRESENCE,
@@ -33,7 +33,6 @@ import {
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "./bounds.js";
-import { DEPLOYMENT_TURNS } from "./channel.js";
 import {
   admitConversation,
   claimRuntimeSession,
@@ -237,7 +236,7 @@ test("who reaches the runtime session and the conversation reads from the rows",
 const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const DEPLOYMENT = {
   secret: Redacted.make(DEPLOYMENT_SECRET),
-  admits: DEPLOYMENT_TURNS,
+  admits: CODER_DEPLOYMENT_TURNS,
   presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
   streams: true,
 };
@@ -536,13 +535,12 @@ test("a session the deployment opened for an account admits that account's own b
   assert.deepEqual(forOther, Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
 });
 
-test("a member of a plan's workspace reaches the plan's conversation, its coding agent's, and a subagent's beside either, and is admitted to them; a stranger reaches none", async () => {
+test("a member of a plan's workspace reaches its coding agent's conversation and a subagent's beside it, and is admitted to them; a stranger reaches none", async () => {
   const userA = await database.createUser();
   const teammate = await database.createUser();
   const stranger = await database.createUser();
   const started = await database.run(startTask(userA, { name: "Teammate invitations" }));
   await database.run(joinWorkspace(started.workspaceId, teammate));
-  const task = Option.getOrThrow(await database.run(openTaskConversation(userA, started.id)));
   const agent = Option.getOrThrow(
     await database.run(
       createCodingAgent(userA, {
@@ -556,11 +554,6 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
       }),
     ),
   ).agent;
-  const taskChild = await insertConversation(database.run, {
-    userId: userA,
-    kind: CONVERSATION_KIND.CHILD,
-    parentConversationId: task.conversationId,
-  });
   const agentChild = await insertConversation(database.run, {
     userId: userA,
     kind: CONVERSATION_KIND.CHILD,
@@ -568,20 +561,20 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
   });
   const elsewhere = await ownedConversation(userA);
 
-  for (const conversationId of [task.conversationId, agent.conversationId, taskChild, agentChild]) {
+  for (const conversationId of [agent.conversationId, agentChild]) {
     assert.equal(await database.run(conversationReachableBy(teammate, conversationId)), true);
     assert.equal(await database.run(conversationReachableBy(stranger, conversationId)), false);
   }
   assert.equal(await database.run(conversationReachableBy(teammate, elsewhere)), false);
   assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
 
-  const opener = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: task.conversationId });
+  const opener = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: agent.conversationId });
   const spoken = await database.run(
     admitConversation({ current: principal(teammate), initiator: opener }, CLAIMING),
   );
   assert.ok(Result.isSuccess(spoken));
   assert.equal(spoken.success.caller, teammate);
-  assert.deepEqual(spoken.success.target, { userId: userA, conversationId: task.conversationId });
+  assert.deepEqual(spoken.success.target, { userId: userA, conversationId: agent.conversationId });
   assert.deepEqual(
     await database.run(
       admitConversation({ current: principal(stranger), initiator: opener }, CLAIMING),
@@ -589,21 +582,18 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
     Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR),
   );
 
-  // The opener who leaves the workspace leaves its task's conversations with it.
-  await database.run(leaveWorkspace(started.workspaceId, userA));
-  for (const conversationId of [task.conversationId, agent.conversationId, taskChild]) {
-    assert.equal(await database.run(conversationReachableBy(userA, conversationId)), false);
-  }
-  assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
-  // A cleared task conversation takes the workers' children delegated from it out of reach.
+  // A cleared agent conversation takes the workers' children delegated from it out of reach.
   await database.run(
     Database.use((db) =>
       db
         .update(conversations)
         .set({ deletedAt: new Date(0) })
-        .where(eq(conversations.id, task.conversationId)),
+        .where(eq(conversations.id, agent.conversationId)),
     ),
   );
-  assert.equal(await database.run(conversationReachableBy(teammate, taskChild)), false);
-  assert.equal(await database.run(conversationReachableBy(teammate, agentChild)), true);
+  assert.equal(await database.run(conversationReachableBy(teammate, agentChild)), false);
+  // The starter who leaves the workspace leaves its agents' conversations with it.
+  await database.run(leaveWorkspace(started.workspaceId, userA));
+  assert.equal(await database.run(conversationReachableBy(userA, agentChild)), false);
+  assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
 });

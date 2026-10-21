@@ -29,6 +29,8 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /**
    * Settings › Coding agents › Codex: Sign in with ChatGPT for Luke's hosted
    * runtime, run by the host through the developer's browser, and the one
@@ -78,6 +80,8 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** A workspace's automations, or one's runs, pushed to the window while it holds the stream open. */
+  AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
 /**
@@ -158,8 +162,12 @@ export const AGENT_ACT_KIND = {
  * window holds what it draws; nothing here does.
  */
 export const AGENT_INBOX_ACT_KIND = {
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * A task's inbox, or one agent's, followed while the window holds the
+   * stream open: what it holds, whole, each time it changes, or why there
+   * is none.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
@@ -172,9 +180,13 @@ export const AGENT_INBOX_ACT_KIND = {
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
-  CODING_AGENTS_CHAT: "codingAgents.chat",
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
+  /**
+   * A workspace's chat followed while the window holds the stream open: the
+   * chat whole each time it changes, or why there is none.
+   */
+  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
 } as const;
 
 /**
@@ -305,12 +317,6 @@ export const TASKS_ACT_KIND = {
   TASKS_BOARD_SAVE: "tasks.boardSave",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
-  /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
-  TASKS_WORK_EARLIER: "tasks.workEarlier",
-  /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
-  TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a task's conversation, or a brain worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
-  TASKS_MESSAGES: "tasks.messages",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   TASKS_FILE: "tasks.file",
   /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
@@ -335,6 +341,18 @@ export const TASKS_ACT_KIND = {
   TASKS_PAGE_SOURCE: "tasks.pageSource",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
   TASKS_PAGES: "tasks.pages",
+  /**
+   * One plan's pages, followed while the window holds the stream open for
+   * the Inbox's panel beside an item of that plan: each time they move, over
+   * Neon Realtime, never on the document.
+   */
+  TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /**
+   * One plan's newest page of history, followed while the window holds the
+   * stream open for its version history: each time a save lands, over Neon
+   * Realtime, never on the document.
+   */
+  TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
@@ -457,6 +475,18 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
+  /**
+   * A workspace's people, followed while the window holds the stream open:
+   * its members and who its work names but left as they first stand, then
+   * each time they move, or why there are none.
+   */
+  WORKSPACE_PEOPLE: "workspace.people",
+  /**
+   * A workspace's pending invitations, followed for an owner or an admin
+   * while the window holds the stream open: as they first stand, then each
+   * time they move, or why there are none.
+   */
+  WORKSPACE_INVITATIONS: "workspace.invitations",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",

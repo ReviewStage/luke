@@ -1,5 +1,5 @@
 /**
- * tasks-procedures.ts -- the account's plans: list, start, open, change, and delete, and each one's board, edit, history, transcript, work, and Luke's Stop.
+ * tasks-procedures.ts -- the account's plans: list, start, open, change, and delete, and each one's board, edit, and history.
  *
  * Every procedure resolves the caller before it touches a row, and every row
  * it touches is one the caller reaches: a plan id another account owns
@@ -26,11 +26,7 @@
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`@luke/database/models/board-store`). `/api/plans/{id}/transcript`
- * is what was said on the plan's calls, read and never written here
- * (`@luke/database/models/transcript-store`). `/api/plans/{id}/work` is what
- * Luke's brain wrote and ran on them, a page at a time, and every code he
- * showed (`tasks/task-work-store.ts`). `/api/plans/{id}/revisions` is the
+ * winning (`@luke/database/models/board-store`). `/api/plans/{id}/revisions` is the
  * plan's history for the History tab, a page at a time;
  * `/api/plans/{id}/revisions/{seq}` one revision's content beside the one
  * before it; and `/api/plans/{id}/revisions/{seq}/restore` puts that content
@@ -47,12 +43,10 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { askRecord } from "@luke/database/models/asks";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
-import { hostedStore } from "@luke/database/models/hosted-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
-import { conversationOwnerOf, standingSessionsNamed } from "@luke/database/models/recorded-session";
+import { standingSessionsNamed } from "@luke/database/models/recorded-session";
 import {
   linkTaskIssue,
   listTaskIssues,
@@ -68,7 +62,6 @@ import {
   type TaskHeader,
   updateTask,
 } from "@luke/database/models/task-store";
-import { readTranscript } from "@luke/database/models/transcript-store";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
@@ -86,8 +79,7 @@ import type { Task, TaskAgentStart, TaskStartAnswer } from "@luke/features/task-
 import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
@@ -127,7 +119,6 @@ import {
   linkViewOf,
   liveTaskIssues,
 } from "./task-issue-links.js";
-import { readTaskWork } from "./task-work-store.js";
 
 export interface TasksProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
@@ -700,28 +691,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       }
     }),
 
-    /** What was said on the plan's calls. */
-    transcript: plans.transcript.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
-      const transcript = yield* hostedStoreOrUnavailable(readTranscript(context.userId, taskId));
-      if (Option.isNone(transcript)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { transcript: transcript.value };
-    }),
-
-    /** A page of the plan's work, and on the newest page every code shown on it. */
-    work: plans.work.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
-      const work = yield* hostedStoreOrUnavailable(
-        readTaskWork(context.userId, taskId, input.before),
-      );
-      if (Option.isNone(work)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return work.value;
-    }),
-
     /**
      * A page of the plan's history, the newest first. A plan with no history
      * yet answers an empty page, and so does a plan id the account does not
-     * own, as `readTranscript` answers neither apart.
+     * own, which it answers no differently.
      */
     revisions: plans.revisions.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.id);
@@ -815,30 +788,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       if (!unlinked) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { unlinked: true as const };
-    }),
-
-    /** The turn Luke is running on the plan stopped, call or no call, under its conversation's owner, through eve as the request's own caller (`eveFor`). */
-    stop: plans.stop.effect(function* ({ input, context }) {
-      const { userId, request } = context;
-      const taskId = yield* taskIdOf(input.id);
-      const { conversationId } = yield* reachedTask(userId, taskId);
-      const owner = Option.getOrUndefined(
-        conversationId === undefined
-          ? Option.none()
-          : yield* hostedStoreOrUnavailable(conversationOwnerOf(conversationId)),
-      );
-      if (conversationId === undefined || owner === undefined) return {};
-      const eve = yield* eveFor(seams, request, userId, EVE_MOUNT.TASKS);
-      const stopSeams = { store: hostedStore(), asks: askRecord(), writer: yield* writer, eve };
-      const stopped = yield* hostedStoreOrUnavailable(
-        stopConversation(stopSeams, owner, conversationId),
-      );
-      const refused =
-        stopped !== undefined &&
-        Result.isFailure(stopped) &&
-        stopped.failure.refusal === STOP_REFUSAL.UPSTREAM;
-      if (refused) return yield* Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR);
-      return {};
     }),
   };
 }

@@ -136,7 +136,7 @@ import { WorkingTime } from "./working-time.js";
  * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on the Call tab and a coding agent's tab alike.
  *
  * Each tab decides what its rows say from its own wire
- * (`transcript-model.ts`, `work-model.ts`, `coding-agent-model.ts` with
+ * (`transcript-model.ts`, `coding-agent-model.ts` with
  * `tool-call-model.ts`); how a block of each kind looks is decided here
  * once, over the AI Elements components (`../ai-elements/`): words as
  * markdown at the panel's scale with a web link opening in the browser, reasoning folded under one quiet line
@@ -739,6 +739,7 @@ const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
   [CALL_KIND.BROWSER]: GlobeIcon,
+  [CALL_KIND.MAC_BROWSER]: GlobeIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
   [CALL_KIND.WRITE_FILE]: FilePenIcon,
   [CALL_KIND.EDIT]: FilePenIcon,
@@ -932,6 +933,12 @@ export function TranscriptTool({
           kind === CALL_KIND.MAC_COMMAND && macOwner !== undefined ? (
             <ActorLine>
               {"On "}
+              <ActorRef actor={macOwner} sentence possessive />
+              {" Mac"}
+            </ActorLine>
+          ) : kind === CALL_KIND.MAC_BROWSER && macOwner !== undefined ? (
+            <ActorLine>
+              {"Browser · on "}
               <ActorRef actor={macOwner} sentence possessive />
               {" Mac"}
             </ActorLine>

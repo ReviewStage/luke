@@ -77,16 +77,14 @@ import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
- * deployment's seams, on the same terms as the brain's
- * (`apps/luke/host.ts`): the seams are composed here, once, over the same
+ * deployment's seams: the seams are composed here, once, over the same
  * `HostedEnvironment` layer the web runtime builds, and run synchronously
  * because eve loads the authored files as modules and the environment read
  * is a `Config` over `process.env`, which suspends on nothing. The edge's
  * own runner is handed down too: eve's door holds a promise, and it runs on
  * it, so nothing under `server/hosted/` keeps a runner of its own. The
  * worker's authored files and the delegation tool run what they need
- * through the doors below rather than at edges of their own, as the
- * planning worker's do through `apps/luke/host.ts`.
+ * through the doors below rather than at edges of their own.
  */
 export const seams: CoderHostSeams = Effect.runSync(
   Effect.provide(productionCoderHostSeams(runAgent), hostedEnvironment),
@@ -586,9 +584,10 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
  * through the one door every agent's call goes through
  * (`packages/service/src/agents/browser/browser-tool.ts`): the Chromium in
  * the root's sandbox, which a worker shares, with its tabs kept under the
- * agent's own conversation, which a worker's admission names too. A session
- * the host does not admit runs nothing. Its screenshots reach the model as
- * images and the transcript keeps the rest.
+ * agent's own conversation, which a worker's admission names too; or, where
+ * the call says so, the Browser tabs of the agent's task on its starter's
+ * Mac. A session the host does not admit runs nothing. Its screenshots reach
+ * the model as images and the transcript keeps the rest.
  */
 export function browserFor(admit: CoderHost["admit"]) {
   return defineTool({
@@ -606,6 +605,13 @@ export function browserFor(admit: CoderHost["admit"]) {
             conversationId: admitted.success.target.conversationId,
             // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
             openSandbox: () => ctx.getSandbox(),
+            // The starter's Mac, as `run_on_mac` reaches it, on the agent's task, a worker's its parent's, read only for a call that asks for the Mac.
+            mac: {
+              userId: admitted.success.target.userId,
+              taskId: Effect.map(host.agent(admitted.success), (found) =>
+                Result.isSuccess(found) ? found.success.taskId : null,
+              ),
+            },
           };
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
           return yield* runBrowserTool(call, unparsedWire(input as WireBoundaryInput));

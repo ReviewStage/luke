@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -16,7 +16,6 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -24,14 +23,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
-import {
-  fakeActPort,
-  fakeActPortCalls,
-  fakeAppBridge,
-  refusedOnPort,
-} from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopFactory } from "./desktop-factory.js";
 
@@ -152,7 +147,6 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     factoryView: { open: true, onOpen: () => undefined, onClose: () => undefined },
@@ -583,16 +577,7 @@ test("a question a teammate's agent asks, which main does not count as the reade
     postedAt: NOW - HOUR,
     updatedAt: NOW - HOUR,
   };
-  fakeActPort({
-    ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      const value: CodingAgentInboxAnswerView = {
-        items: taskId === BILLING.id ? [asked] : [],
-        cursor: "1",
-      };
-      return Promise.resolve(value);
-    },
-  });
+  answerInbox((taskId) => (taskId === BILLING.id ? [asked] : []));
   const { page } = mount([SEARCH, BILLING], {
     // Main's own count holds nothing: the agent is a teammate's.
     inbox: [],
@@ -610,24 +595,38 @@ test("a question a teammate's agent asks, which main does not count as the reade
   ]);
 });
 
-/** The act port answering a plan's Inbox read as `answer` says, counting the reads. */
+/** The question main counts on Billing, answered since, as the task's inbox holds it. */
+const ANSWERED: InboxItem = {
+  id: "i1",
+  agentId: AGENT_ID,
+  key: "1",
+  revision: 2,
+  version: INBOX_WIRE_VERSION,
+  title: QUESTION,
+  blocks: [],
+  response: { type: INBOX_RESPONSE.APPROVAL },
+  needsReply: true,
+  status: INBOX_STATUS.ANSWERED,
+  postedAt: NOW - HOUR,
+  updatedAt: NOW - HOUR,
+};
+
+/** The host pushing a task's inbox as `answer` says once it is followed, or that it could not be read where it says nothing, counting the follows. */
 function answerInbox(answer: (taskId: string) => readonly InboxItem[] | undefined) {
-  const counted = { reads: 0 };
-  fakeActPort({
-    ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      counted.reads += 1;
-      const items = answer(taskId);
-      if (items === undefined) return Promise.reject(refusedOnPort("No service."));
-      const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
-      return Promise.resolve(value);
-    },
+  const host = followedInboxes(({ id }) => {
+    const items = answer(id);
+    return items === undefined ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { items };
   });
-  return counted;
+  fakeActPort({ ...fakeActPortCalls(), ...host.procedures });
+  return {
+    get reads() {
+      return host.asked.length;
+    },
+  };
 }
 
 test("a question answered since main last counted it leaves Build once the Inbox's read says so", async () => {
-  answerInbox(() => []);
+  answerInbox(() => [ANSWERED]);
   const { page } = mount([SEARCH, BILLING], {
     inbox: [
       {
@@ -677,7 +676,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
 });
 
 test("one plan's failed Inbox read keeps main's count for that plan alone: a question another plan's read shows answered stays gone", async () => {
-  const counted = answerInbox((taskId) => (taskId === BILLING.id ? [] : undefined));
+  const counted = answerInbox((taskId) => (taskId === BILLING.id ? [ANSWERED] : undefined));
   const other = task(7, "Invites", HOUR);
   const { page } = mount([SEARCH, BILLING, other], {
     inbox: [
@@ -723,9 +722,8 @@ test("a question read that fails says so even while a refresh of the task list h
   assert.ok(alerts.some((each) => /Your tasks could not be read\./u.test(each)));
 });
 
-test("a question main counts after a plan's last read stands while that plan's reread is out or failed", async () => {
-  let fail = false;
-  answerInbox(() => (fail ? undefined : []));
+test("a question main counts later than a plan's last push stands until the plan's push catches up", async () => {
+  answerInbox(() => [ANSWERED]);
   const listed = (updatedAt: number) => ({
     tasks: [SEARCH, BILLING],
     archived: [],
@@ -739,8 +737,7 @@ test("a question main counts after a plan's last read stands while that plan's r
   const { page, redraw } = mount([SEARCH, BILLING], { listed: listed(NOW - HOUR) });
   await settle();
   assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
-  // Main counts a new question on the plan; its reread fails.
-  fail = true;
+  // Main counts a new question on the plan before the plan's own push of it lands.
   redraw({ listed: listed(NOW), inbox: [asked] });
   await settle();
   assert.equal(rows(page, "build")[0], `${QUESTION} · Mercury payouts (waits)`);

@@ -1,8 +1,8 @@
 /**
  * native-relay-app.ts -- where an eve app's call to a native harness is answered, in the web function that launches the runner.
  *
- * The eve apps bundle no runner (`native-relay.ts`), so the planner's tools
- * and an eve agent's post each `open`, `send`, `cancel`, and `reset` the
+ * The eve app bundles no runner (`native-relay.ts`), so an eve agent's
+ * tools post each `open`, `send`, `cancel`, and `reset` the
  * router hands a native harness here, and this route makes it on the
  * function's own harnesses (`NativeAgentSessions`, provided beside the
  * deployment's services by `apps/web/server/native-agents.ts`), answering

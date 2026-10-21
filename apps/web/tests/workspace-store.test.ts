@@ -2,25 +2,37 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+  type GitHubInstallationStatus,
+} from "@luke/database/github-installation-vocabulary";
+import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import {
   ensurePersonalWorkspace,
   listWorkspaces,
   personalWorkspaceOf,
   readWorkspacePhoto,
+  workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
+import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
+import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   WORKSPACE_ROLE,
 } from "@luke/database/testing";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { workspacesLiveRowsSchema, workspacesOfLiveRows } from "@luke/features/workspace-live";
 import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
 import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
 import { eq } from "drizzle-orm";
-import { Cause, DateTime, Effect, Option } from "effect";
+import { Cause, DateTime, Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 
 /**
  * An account's workspaces over a real dialect: its first one is made the
@@ -83,6 +95,38 @@ const keepLogo = (organizationId: string, logo: string | null) =>
 /** The account's sign-in picture, as its provider handed it over. */
 const keepImage = (userId: string, image: string | null) =>
   Database.use((db) => db.update(user).set({ image }).where(eq(user.id, userId)));
+
+/** The account's workspaces as the desktop builds them from the live statements' rows, run as Realtime runs them. */
+const liveWorkspacesOf = (userId: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const statements = Option.getOrThrow(workspacesLiveStatements(userId));
+    const rows = yield* Effect.all({
+      workspaces: sql.unsafe(statements.workspaces.sql, [...statements.workspaces.params]),
+      installations: sql.unsafe(statements.installations.sql, [...statements.installations.params]),
+    });
+    return workspacesOfLiveRows(yield* Schema.decodeUnknownEffect(workspacesLiveRowsSchema)(rows));
+  });
+
+/** An installation connected to the workspace, linked at the instant given. */
+const connectInstallation = (
+  organizationId: string,
+  installationId: number,
+  status: GitHubInstallationStatus,
+  linkedAt: Date,
+) =>
+  Database.use((db) =>
+    db.insert(githubInstallation).values({
+      organizationId,
+      installationId,
+      accountId: installationId,
+      accountLogin: `account-${installationId}`,
+      accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+      status,
+      createdAt: linkedAt,
+      updatedAt: linkedAt,
+    }),
+  );
 
 /** What one listed workspace shows of its face: its photo's version and its picture's address, where it lists them. */
 const faceIn = (
@@ -186,6 +230,56 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(teammates, { photoVersion: undefined, pictureUrl: undefined });
         assert.match(photographed.photoVersion ?? "", /^[0-9a-f]{16}$/u);
         assert.equal(photographed.pictureUrl, undefined);
+      }),
+  );
+
+  it.effect(
+    "the live statements deliver the workspaces the held read lists, photos, installations, and Linear among them, to each member and none of them to an outsider",
+    () =>
+      Effect.gen(function* () {
+        const seams = yield* fakeWorkspaceSeams;
+        const owner = yield* openUser("Owner");
+        const teammate = yield* openUser("Teammate");
+        const outsider = yield* openUser("Outsider");
+        assert.ok(Option.isSome(yield* ensurePersonalWorkspace(owner, seams)));
+        assert.ok(Option.isSome(yield* ensurePersonalWorkspace(outsider, seams)));
+        yield* keepImage(owner, "https://avatars.githubusercontent.com/u/1");
+        const acme = yield* openSharedWorkspace(seams, "Acme", owner, [teammate]);
+        const beta = yield* openSharedWorkspace(seams, "Beta", teammate, [owner]);
+        yield* keepLogo(acme.id, photoUrl(WORKSPACE_PHOTO_TYPE.PNG, PNG_BYTES));
+        yield* keepLogo(beta.id, "https://example.test/beta.png");
+        const now = yield* DateTime.nowAsDate;
+        const later = new Date(now.getTime() + 1000);
+        yield* connectInstallation(acme.id, 902, GITHUB_INSTALLATION_STATUS.ACTIVE, later);
+        yield* connectInstallation(acme.id, 901, GITHUB_INSTALLATION_STATUS.SUSPENDED, now);
+        yield* Database.use((db) =>
+          db.insert(workspaceIntegrationConnection).values({
+            organizationId: beta.id,
+            provider: INTEGRATION_PROVIDER.LINEAR,
+            status: INTEGRATION_ROW_STATUS.EXPIRED,
+          }),
+        );
+
+        for (const reader of [owner, teammate, outsider]) {
+          assert.deepEqual(yield* liveWorkspacesOf(reader), yield* listWorkspaces(reader));
+        }
+        const theirs = (yield* liveWorkspacesOf(outsider)).map((workspace) => workspace.id);
+        assert.ok(!theirs.includes(acme.id) && !theirs.includes(beta.id));
+        const acmeListed = (yield* liveWorkspacesOf(teammate)).find((one) => one.id === acme.id);
+        assert.deepEqual(acmeListed?.github, { login: "account-902", active: true });
+
+        // A logo the held read refuses as a photo lists none live either, so the owner's own first workspace keeps the sign-in picture.
+        const own = Option.getOrThrow(yield* personalWorkspaceOf(owner));
+        for (const logo of [
+          photoUrl(WORKSPACE_PHOTO_TYPE.PNG, JPEG_BYTES),
+          "data:image/png;base64,not base64!",
+          photoUrl(WORKSPACE_PHOTO_TYPE.PNG, "iVBORw0KGg"),
+          photoUrl("image/svg+xml", "PHN2Zz48L3N2Zz4="),
+          photoUrl(WORKSPACE_PHOTO_TYPE.JPEG, JPEG_BYTES),
+        ]) {
+          yield* keepLogo(own, logo);
+          assert.deepEqual(yield* liveWorkspacesOf(owner), yield* listWorkspaces(owner), logo);
+        }
       }),
   );
 

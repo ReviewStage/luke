@@ -15,6 +15,7 @@ import {
   latestTurnsOf,
   lineSendersOf,
   readCodingAgent,
+  readCodingAgentRouting,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
@@ -979,6 +980,34 @@ test("start_agent with a title names the agent by it from the start, and a title
       reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
     });
   }
+});
+
+test("start_agent takes a payer for its one agent, which an account the plan is not offered to starts on eve as before with no payer recorded; a payer it does not know starts nothing", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt: "Pay for this one on the plan.", payer: "claude_plan" },
+    "call-payer",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const routing = Option.getOrThrow(
+    await database.run(readCodingAgentRouting(caller.userId, started.agent.id)),
+  );
+  assert.deepEqual([routing.runtime, routing.payer], ["eve", null]);
+
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.START_AGENT,
+      { prompt: "Pay for it.", payer: "chatgpt_plan" },
+      "call-gpt",
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.UNREADABLE },
+  );
 });
 
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {

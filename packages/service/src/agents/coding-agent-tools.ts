@@ -49,6 +49,7 @@ import {
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_PAYER,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
   type CodingAgentPullRequestAnswer,
@@ -604,8 +605,15 @@ const START_BRANCH = Schema.String.check(
   Schema.isPattern(/^[^\s~^:?*[\\]+$/u),
 );
 
+/** A payer a start may pick for its one agent: the Claude plan, or eve's payer by either name. */
+const START_PAYER = Schema.Literals([
+  CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  CODING_AGENT_PAYER.API_KEY,
+  CODING_AGENT_PAYER.LUKE,
+]);
+
 /**
- * A start names a prompt at most, a note at most, a branch at most, and a
+ * A start names a prompt at most, a note at most, a branch at most, a payer at most, and a
  * model with its effort or neither; the catalog decides whether the two
  * name anything, and GitHub whether the branch does. A
  * title it names is the agent's from the start, as an automation's run's
@@ -664,6 +672,15 @@ const START_AGENT_INPUT = Schema.Struct({
     describeWire(
       modelChoiceSchema.fields.effort,
       "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
+    ),
+  ),
+  payer: Schema.optionalKey(
+    describeWire(
+      START_PAYER,
+      "Who pays for this one agent: claude_plan for the member's Claude plan, which runs it on " +
+        "Claude Code, or api_key or luke, which run it as today on the member's own API key " +
+        "where they saved one and on Luke's key where they did not. Leave it out for the " +
+        "member's default; a plan is used only where it is connected and the model is Claude's.",
     ),
   ),
   from: Schema.optionalKey(
@@ -784,17 +801,6 @@ export const LIST_AGENTS_TOOL = {
     "still running long after its last activity may have lost its session; a message to it " +
     "refused as ended for good settles it as failed.",
   inputSchema: AGENT_LIST_INPUT,
-} as const;
-
-/** `read_agent` as Luke on a call is offered it, who says what he read aloud. */
-export const READ_AGENT_TOOL = {
-  name: AGENT_TOOL.READ_AGENT,
-  description:
-    "Read one coding agent's recent progress: its status, the branch it pushed and the pull " +
-    "request from it as GitHub holds them, and a short tail of what it last said and did, " +
-    "newest last, each entry with the messageId to fork the agent at. Summarise it in a " +
-    "sentence or two; never read it out.",
-  inputSchema: READ_AGENT_INPUT,
 } as const;
 
 /** `read_agent` as a coding agent is offered it, which reads the tail as text and may ask for more of it. */
@@ -1852,6 +1858,7 @@ export function runStartAgent(
         note,
         title: asked.success.title,
         branch: asked.success.branch,
+        payer: asked.success.payer,
         from,
         summaryModel: call.summaryModel,
         ...(byAgent ? { noteHeading: START_NOTE_HEADING.AGENT } : undefined),

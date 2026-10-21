@@ -49,7 +49,6 @@ import { createHash } from "node:crypto";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
-import { BRAIN_HOST } from "../brain-host/bounds.js";
 import { CODER } from "../coder-host/bounds.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 import { PREPARE_SCRIPT, prepareImage } from "./sandbox-image.js";
@@ -118,19 +117,10 @@ function retentionOf(bound: SnapshotBound): Retention {
  * The coding agent's sandbox lives the platform's maximum, so a long run is
  * never cut off mid-turn, and is stopped the moment a turn ends rather than
  * waiting that out. Its size is enough memory for the repository's own lint,
- * chosen at open, so a stopped sandbox resumes at it. A brain sandbox opens
- * at the defaults and is never stopped by Luke: Vercel stops it when eve's
- * default timeout of thirty minutes runs out, counted from its start or
- * resume whether it is busy or not, and it resumes from its snapshot with
- * the checkout intact. Every stop snapshots the sandbox, so each keeps its
- * newest snapshot alone.
+ * chosen at open, so a stopped sandbox resumes at it. Every stop snapshots
+ * the sandbox, so each keeps its newest snapshot alone.
  */
 const SANDBOX_LIFECYCLE = {
-  [SANDBOX_POLICY.READ_SHALLOW_LAZY]: {
-    open: { keepLastSnapshots: retentionOf(BRAIN_HOST.SANDBOX_SNAPSHOTS) },
-    renewsCredential: false,
-    stopsAtTurnEnd: false,
-  },
   [SANDBOX_POLICY.SHALLOW_THEN_DEEP]: {
     open: {
       timeout: CODER.SANDBOX_TIMEOUT_MS,

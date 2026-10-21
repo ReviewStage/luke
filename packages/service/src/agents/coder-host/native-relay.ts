@@ -3,13 +3,13 @@
  *
  * Only the web functions ship the runner's bundle (`apps/web/server/native-agents.ts`),
  * so only they provide `NativeAgentSessions` over the harnesses themselves.
- * The eve apps, the planner's tools in `apps/luke` and an eve agent's in
- * `apps/dev`, provide this one in its place (`nativeRelayLayer`): every
+ * The eve app, an eve agent's tools in `apps/dev`, provides this one in
+ * its place (`nativeRelayLayer`): every
  * `open`, `send`, `cancel`, and `reset` the router hands a native harness
  * (`runtime-sessions.ts`) is posted to the web's relay route
  * (`native-relay-app.ts`) as the deployment acting for the account the
  * router named, and the route answers it with the harness's own outcome. The
- * eve apps therefore bundle no runner, and the router, a Start's runtime
+ * eve app therefore bundles no runner, and the router, a Start's runtime
  * choice (`agent-runtime-choice.ts`), and every caller above them read a
  * harness here as they read one in a web function.
  *

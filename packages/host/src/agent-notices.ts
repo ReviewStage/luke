@@ -9,16 +9,12 @@ import {
   type AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { failedRunText } from "@luke/features/automation-list-model";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
-  type CodingAgentListAnswer,
-  type CodingAgentPageAnswerView,
-  type CodingAgentPullRequestAnswerView,
+import type {
+  CodingAgentAccountInboxAnswerView,
+  CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
   type TasklessAgent,
@@ -28,7 +24,6 @@ import { linkLabels } from "@luke/features/mention-link";
 import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TasksView } from "@luke/features/tasks-view";
-import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 import type { ChatShown } from "./contract/agents.js";
@@ -37,19 +32,17 @@ import type { ChatShown } from "./contract/agents.js";
 const UNANSWERED_LOOK = "unanswered";
 
 /**
- * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
+ * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, fed by the plan list followed live, the follow of what waits across the account, and the notification, toast, and badge they announce by.
  *
  * The panel reads an agent's status only while its tab is on screen, so
  * main keeps a ledger of its own, fed by every coding-agent answer that
  * passes through the acts (a list, a Start, a Stop, a transcript page) and
- * by one read of its own: while any agent in the ledger is starting or
- * running, its task's agents are listed again every `WATCH_INTERVAL`, the
- * panel's own list read on a clock rather than a second kind of read, so an
- * agent on a plan the developer has left is still watched. An agent an
- * automation started with no plan is held from the plan list, which carries
- * the account's own beside the plans, and from any answer naming it, and
- * while it works it is read again by itself on the same clock, as its page
- * reads it, having no plan to be listed with. The ledger
+ * by the plan list, followed live over Neon Realtime, which carries every
+ * agent on a plan and every one with no plan as each moves, so an agent on
+ * a plan the developer has left is still heard and nothing is read on a
+ * clock. An agent an automation started with no plan is held from the plan
+ * list, which carries the account's own beside the plans, and from any
+ * answer naming it. The ledger
  * keys an agent's run by the turn its status is read from (`turnId`): a
  * status that moves from still writing to ended under one turn is that
  * turn's end, announced once, and as the agent's unseen dot, until its tab
@@ -61,9 +54,8 @@ const UNANSWERED_LOOK = "unanswered";
  * notifications off, which leaves the dot and the toast. A message
  * to an agent that had ended reads it running under the ended turn's id
  * until eve opens the next turn, which is the old run read again and not
- * a new one: the ledger keeps the end it announced, and on the message's
- * own answer keeps the task watched until the new turn's id arrives, whose
- * own end is the next notice. A list that landed late, describing a turn
+ * a new one: the ledger keeps the end it announced until the new turn's id
+ * arrives, whose own end is the next notice. A list that landed late, describing a turn
  * the agent has left behind, says nothing newer. A Stop is the developer's
  * own and announces nothing. The ledger
  * is this launch's and this account's, so an agent that ended before Luke
@@ -86,16 +78,9 @@ const UNANSWERED_LOOK = "unanswered";
  * read found nothing, or could not be made, says finished as before. The
  * agent's unseen dot is set as the end is seen, ahead of the read.
  *
- * The sidebar's task rows say which tasks have an agent at work and which
- * a pull request, from the task list, which is read on no clock. So the
- * ledger asks for the list again whenever it sees an agent start or end,
- * and whenever a read of what an agent published, the panel's or the
- * notice's own, finds a pull request other than the one it last saw for
- * that agent, since that read is what the service keeps for the list.
- *
  * The notices hold one more read of their own: what waits on the developer
- * across the account's tasks, every open inbox item, on the service's held
- * read, for as long as an account is signed in, so an item an agent posts
+ * across the account's tasks, every open inbox item, followed over Neon
+ * Realtime for as long as an account is signed in, so an item an agent posts
  * is heard whichever task is open, or none, and whichever Mac started the
  * agent. Of those, only the items of agents the account started wait on
  * it, since an agent runs on its starter's keys and asks its starter: each
@@ -118,9 +103,8 @@ const UNANSWERED_LOOK = "unanswered";
  * Chat, and counted in the Dock's badge beside the items. A chat
  * announcement says who and why, "Invite emails messaged you", under the task of
  * the channel it stands in, and nothing of what was said. Another account, or nobody,
- * ends the read held for the last, and lets go of its items, its counts,
- * and its badge before anything of the next is read. A read that did not
- * answer is asked again on the watch's clock.
+ * ends the follow of the last, and lets go of its items, its counts,
+ * and its badge before anything of the next is read.
  *
  * The same read carries the newest run of each of the account's own
  * automations that failed to start lately, which is written for the
@@ -130,9 +114,6 @@ const UNANSWERED_LOOK = "unanswered";
  * under its automation's name, and its click or its toast's View opens that
  * run, in its automation's workspace; nothing is said while the account has Automations off.
  */
-
-/** How often a task with an agent still writing has its agents listed again. */
-const WATCH_INTERVAL = Duration.seconds(30);
 
 /**
  * How long before the last answer of what waits was read an item's change
@@ -155,6 +136,9 @@ const ENDED_WORD = {
   [CODING_AGENT_STATUS.COMPLETED]: "finished",
   [CODING_AGENT_STATUS.FAILED]: "failed",
 } as const;
+
+/** How many pushes of the followed list in a row may leave out an agent only a Start answered before the ledger lets it go. */
+const UNNAMED_PUSHES_KEPT = 2;
 
 /** What kind of event a notice tells of. */
 export const NOTICE_KIND = {
@@ -307,11 +291,10 @@ function guardedDoors(
   };
 }
 
+/** How long a read of what waits that went unanswered rests before it is asked again. */
+const INBOX_RETRY = Duration.seconds(30);
+
 export interface AgentNoticesDependencies {
-  /** The plan's agents with their status, as the host answers them: the watch's read of a plan's agents. */
-  listAgents: (taskId: string) => Effect.Effect<CodingAgentListAnswer>;
-  /** One agent as its own page reads it: the watch's read of an agent with no plan. */
-  readAgent: (agentId: string) => Effect.Effect<CodingAgentPageAnswerView>;
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
   readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
   /** The task as a notice's title names it (`noticeTaskTitle`), or nothing for a task main holds no name for. */
@@ -330,8 +313,6 @@ export interface AgentNoticesDependencies {
   accountId: () => string | undefined;
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
-  /** An agent started or ended, or a read found it published something new: the task list is read again, so its rows say so. */
-  onTaskAgentsMoved: () => void;
   /** What waits across the account past a cursor, as the host answers it: the inbox read's one read. */
   readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
@@ -353,7 +334,8 @@ export interface AgentNoticesDependencies {
   openChat: (workspaceId: string) => void;
   /** Whether the window offers Chat, without which nothing waiting in chat is counted or announced. */
   chatOn: () => boolean;
-  watchInterval?: Duration.Duration;
+  /** How long a read of what waits that went unanswered rests before it is asked again. */
+  inboxRetry?: Duration.Duration;
   report: (line: string) => void;
 }
 
@@ -366,14 +348,14 @@ export interface AgentNotices {
   observeStatus(agentId: string, status: CodingAgentStatus): void;
   /** One agent's title as a transcript page carried it, which the list that named the agent may have read before the title landed; said whatever the agent's standing. */
   observeTitle(agentId: string, title: string | null): void;
-  /** The agent as the answer to a message carried it: running, and with a line awaiting the turn it opens, which keeps its task watched for that turn. */
+  /** The agent as the answer to a message carried it: running, with a line awaiting the turn it opens. */
   observeMessaged(agent: CodingAgentSummary): void;
   /** The catalog as the panel last read it, for the model's name. */
   observeModels(models: readonly CatalogModel[]): void;
-  /** What one agent published, as a read of it answered: the pull request, or none. */
-  observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void;
   /** A task the host no longer holds: its agents are forgotten. */
   observeTaskGone(taskId: string): void;
+  /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan, or one of a held plan the list no longer names, as one archived, is forgotten. */
+  observeFollowed(agents: readonly CodingAgentSummary[], taskIds: readonly string[]): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
   /** The panel said which task's Inbox tab it shows, or none. */
@@ -382,7 +364,7 @@ export interface AgentNotices {
   shownChat(shown: ChatShown | null): void;
 }
 
-/** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
+/** What the ledger keeps of one agent: enough to name it, and to tell one turn's end from the next's. */
 interface HeldAgent {
   /** The plan it works on; null for one an automation started with no plan. */
   taskId: string | null;
@@ -394,8 +376,6 @@ interface HeldAgent {
   status: CodingAgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
-  /** Whether a message of the developer's awaits a turn not yet opened, which keeps the task watched past the end already announced. */
-  awaiting: boolean;
   /** The turns the agent has left behind, which a list that landed late may still describe. */
   pastTurns: ReadonlySet<string>;
 }
@@ -428,22 +408,6 @@ interface TurnEnd {
 
 function stillWriting(status: CodingAgentStatus): boolean {
   return WRITING_STATUSES.has(status);
-}
-
-/** Whether two reads of what an agent published say the same of it in a task's row: the same pull request, standing the same, of the same size. */
-function samePublished(
-  a: CodingAgentPullRequest | null,
-  b: CodingAgentPullRequest | null,
-): boolean {
-  if (a === null || b === null) return a === b;
-  return (
-    a.number === b.number &&
-    a.title === b.title &&
-    a.state === b.state &&
-    a.checks === b.checks &&
-    a.additions === b.additions &&
-    a.deletions === b.deletions
-  );
 }
 
 /**
@@ -641,24 +605,26 @@ function sameTasks(one: readonly AccountInboxTask[], other: readonly AccountInbo
 }
 
 /**
- * The notices, built on the ambient scope: the watch forks into it and the
- * focus subscription is given back when it closes, so both end with the
- * launch rather than with a handle a caller had to remember.
+ * The notices, built on the ambient scope: the inbox follow forks into it
+ * and the focus subscription is given back when it closes, so both end with
+ * the launch rather than with a handle a caller had to remember.
  */
 export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgentNotices")(
   function* (
     dependencies: AgentNoticesDependencies,
   ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
-    const { listAgents, readPullRequest, taskName, open, onUnseenChanged, report } = dependencies;
+    const { readPullRequest, taskName, open, onUnseenChanged, report } = dependencies;
+    const interval = dependencies.inboxRetry ?? INBOX_RETRY;
     const doors = guardedDoors(yield* AgentNoticeDoors, report);
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
     const tasklessSubjects = new Map<string, string>();
-    /** What each agent was last read to have published, by agent. */
-    const published = new Map<string, CodingAgentPullRequest | null>();
     const unseen = new Set<string>();
+    /** The agents on plans the followed list last named, so one it stops naming is known to have left it rather than not reached it yet. */
+    let followedAgents = new Set<string>();
+    /** How many pushes in a row have left out each agent the list has not named yet, as one only a Start answered. */
+    const unnamedPushes = new Map<string, number>();
     const ends = yield* Queue.unbounded<TurnEnd>();
-    const interval = dependencies.watchInterval ?? WATCH_INTERVAL;
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
     let focused = false;
@@ -697,13 +663,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Queue.offerUnsafe(ends, { agentId, agent, focused });
     }
 
-    /** A read of what the agent published answered: the list is read again where it found other than the last read did, or a pull request where none was read before. */
-    function observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void {
-      const was = published.get(agentId) ?? null;
-      published.set(agentId, pullRequest);
-      if (!samePublished(was, pullRequest)) dependencies.onTaskAgentsMoved();
-    }
-
     /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
     const pullRequestOf = (end: TurnEnd): Effect.Effect<number | undefined> =>
       end.agent.status !== CODING_AGENT_STATUS.COMPLETED
@@ -711,7 +670,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         : readPullRequest(end.agentId).pipe(
             Effect.map((answer) => {
               if (!("pullRequest" in answer)) return undefined;
-              observePublished(end.agentId, answer.pullRequest);
               return answer.pullRequest?.number;
             }),
             Effect.catchDefect((defect) =>
@@ -977,8 +935,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      * whatever the last account left is let go first, and nobody's is
      * nothing to read. Note that an answer is let go where the account it
      * was read for is no longer signed in, because the read may land in the
-     * tick before the change ends it, and the next read waits on the
-     * watch's clock rather than asking again at once for an account that
+     * tick before the change ends it, and the next read waits
+     * `INBOX_RETRY` rather than asking again at once for an account that
      * has left.
      */
     const waitingOf = (reader: string | undefined): Effect.Effect<void> =>
@@ -988,7 +946,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         publishWaiting({ items: [], plans: [] }, []);
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;
-        // A read left unanswered, or answered for an account that has since left, is no answer: it is asked again on the watch's clock.
+        // A read left unanswered, or answered for an account that has since left, is no answer: it is asked again after `INBOX_RETRY`.
         const look = Effect.gen(function* () {
           const answer = yield* dependencies.readAccountInbox(cursor);
           if (dependencies.signedInAs() !== reader || "failure" in answer) {
@@ -997,7 +955,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           cursor = answer.cursor;
           observeWaiting(answer);
         });
-        // A look that died is reported and asked again on the watch's clock, as a tick of the watch is.
+        // A look that died is reported and asked again after `INBOX_RETRY`.
         const reported = Effect.catchDefect(look, (defect) =>
           Effect.andThen(
             Effect.sync(() =>
@@ -1020,7 +978,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was === undefined) {
         if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);
-        if (stillWriting(next.status)) dependencies.onTaskAgentsMoved();
         return;
       }
       // The reads overlap, so a list can land after a newer read moved the
@@ -1035,7 +992,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
         if (stillWriting(next.status)) return;
         ended(agentId, next);
-        dependencies.onTaskAgentsMoved();
         return;
       }
       // A new turn: the one before it is left behind, and its own end is the next notice.
@@ -1043,7 +999,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was.turnId !== null) pastTurns.add(was.turnId);
       ledger.set(agentId, { ...next, pastTurns });
       if (!stillWriting(next.status)) ended(agentId, next);
-      dependencies.onTaskAgentsMoved();
     }
 
     /** Lets go of every agent `keep` refuses, their dots with them, as a plan or an agent deleted or an account left has no tab to clear one. */
@@ -1052,7 +1007,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       for (const [agentId, agent] of ledger) {
         if (keep(agent, agentId)) continue;
         ledger.delete(agentId);
-        published.delete(agentId);
         tasklessSubjects.delete(agentId);
         if (unseen.delete(agentId)) dotted = true;
       }
@@ -1062,27 +1016,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function seen(agentId: string | null): void {
       if (agentId === null || !unseen.delete(agentId)) return;
       publishUnseen();
-    }
-
-    /** Whether the agent is still writing, or awaits the turn a message opens, which keeps it watched. */
-    function watched(agent: HeldAgent): boolean {
-      return stillWriting(agent.status) || agent.awaiting;
-    }
-
-    /** The plans with an agent watched, each listed again on the watch's clock. */
-    function watchedTasks(): readonly string[] {
-      const tasks = new Set<string>();
-      for (const agent of ledger.values()) {
-        if (agent.taskId !== null && watched(agent)) tasks.add(agent.taskId);
-      }
-      return [...tasks];
-    }
-
-    /** The agents with no plan watched, each read again by itself on the watch's clock. */
-    function watchedTaskless(): readonly string[] {
-      return [...ledger]
-        .filter(([, agent]) => agent.taskId === null && watched(agent))
-        .map(([agentId]) => agentId);
     }
 
     /** The agent as the ledger holds it, on a plan or with none. */
@@ -1099,7 +1032,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         automationName: agent.automationName,
         status: agent.status,
         turnId: agent.turnId,
-        awaiting: false,
         pastTurns: new Set(),
       };
     }
@@ -1148,13 +1080,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (!heldHere(agent)) return;
         noteSubject(agent);
         observe(agent.id, heldOf(agent));
-        // The line awaits the turn it opens: the task is watched until that turn names itself.
-        const held = ledger.get(agent.id);
-        if (held !== undefined && !stillWriting(held.status) && !held.awaiting) {
-          ledger.set(agent.id, { ...held, awaiting: true });
-          // The service reads the agent running from the message on, so the list is read again now.
-          dependencies.onTaskAgentsMoved();
-        }
       },
       observeStatus: (agentId, status) => {
         const held = ledger.get(agentId);
@@ -1167,8 +1092,29 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeModels: (next) => {
         models = next;
       },
-      observePublished,
       observeTaskGone: (taskId) => forget((agent) => agent.taskId !== taskId),
+      observeFollowed: (agents, taskIds) => {
+        const held = new Set(taskIds);
+        // The list names every agent on its plans but the archived, so one it named and no longer
+        // does takes its dot with it. One only a Start answered is kept through a push or two that
+        // leave it out, since a push of the plans may carry agents from before that Start, and let go
+        // after that, as one archived before the list ever named it.
+        const named = new Set(agents.map((agent) => agent.id));
+        forget((agent, agentId) => {
+          if (agent.taskId === null) return true;
+          if (!held.has(agent.taskId)) return false;
+          if (named.has(agentId)) return true;
+          if (followedAgents.has(agentId)) return false;
+          const pushes = (unnamedPushes.get(agentId) ?? 0) + 1;
+          unnamedPushes.set(agentId, pushes);
+          return pushes <= UNNAMED_PUSHES_KEPT;
+        });
+        for (const agentId of unnamedPushes.keys()) {
+          if (named.has(agentId) || !ledger.has(agentId)) unnamedPushes.delete(agentId);
+        }
+        followedAgents = named;
+        notices.observeAgents(agents);
+      },
       shown: (agentId) => {
         shownAgent = agentId;
         seen(agentId);
@@ -1181,48 +1127,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       },
     };
 
-    /** One tick of the watch: each watched plan listed again, read as the panel's own list is, and each watched agent with no plan read as its page is. */
-    const tick = Effect.suspend(() =>
-      Effect.andThen(
-        Effect.forEach(
-          watchedTasks(),
-          (taskId) =>
-            Effect.map(listAgents(taskId), (answer) => {
-              if ("agents" in answer) notices.observeAgents(answer.agents);
-              else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-                notices.observeTaskGone(taskId);
-              }
-            }),
-          { discard: true },
-        ),
-        Effect.forEach(
-          watchedTaskless(),
-          (agentId) =>
-            Effect.map(dependencies.readAgent(agentId), (answer) => {
-              if ("agent" in answer) observe(agentId, heldOf(answer.agent));
-              else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-                forget((_agent, held) => held !== agentId);
-              }
-            }),
-          { discard: true },
-        ),
-      ),
-    );
-    // A tick that died is reported rather than left to end the watch: a
-    // repeat that failed once would never list again for the rest of the run.
-    const watch = Effect.catchDefect(tick, (defect) =>
-      Effect.sync(() => {
-        report(
-          `the coding-agent watch failed: ${defect instanceof Error ? defect.message : String(defect)}`,
-        );
-      }),
-    );
-    // The watch never fires at the fork itself: nothing is in the ledger at
-    // launch, so the first tick is one interval on, and each after it.
-    yield* scheduleOnce(
-      Duration.toMillis(interval),
-      Effect.repeat(watch, Schedule.spaced(interval)),
-    );
     // Each account's inbox read in turn, the read held for the last one
     // ended as the next is signed in, so nothing of one is read for another.
     yield* Effect.forkScoped(

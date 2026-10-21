@@ -16,7 +16,6 @@ import {
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
@@ -525,24 +524,14 @@ export class VoiceService {
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
-        // Code Luke is about to talk about, with its lines as the brain
-        // read them from the task's repository, sent the same way, so
-        // the Tasks tab's code pane draws it as he says it.
+        // Code Luke is about to talk about, with its lines as the agent
+        // read them from its checkout, sent the same way, so the Tasks
+        // tab's code pane draws it as he says it.
         onCode: (shown) => {
           const frame: TaskCodeFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CODE,
             planId: opened.taskId,
             ...shown,
-          };
-          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
-        },
-        // Each brain turn's work, sent the same way, so the Tasks tab's
-        // Work tab reads what Luke's brain wrote and ran as it goes.
-        onWork: (turn) => {
-          const frame: TaskWorkFrame = {
-            type: VOICE_SERVICE_FRAME.TASK_WORK,
-            planId: opened.taskId,
-            turn,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

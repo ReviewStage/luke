@@ -5,6 +5,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -13,7 +14,6 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_CURSOR_START,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -45,6 +45,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import "../file-tree/index.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
@@ -129,8 +130,8 @@ test("a task whose column shows no tab offers a new voice chat and a new agent b
   assert.deepEqual(pane(drawn(undefined)), ["New agent"]);
 });
 
-/** The Code tab as the task's page draws it over the code the task holds, and whether its work read did not land, as markup. */
-function codeTab(shownCode: readonly never[] | undefined, workFailed = false): HTMLElement {
+/** The Code tab as the task's page draws it over the code the task holds, and whether its code read did not land, as markup. */
+function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -141,7 +142,7 @@ function codeTab(shownCode: readonly never[] | undefined, workFailed = false): H
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
         sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
         shownCode,
-        workFailed,
+        codeFailed,
       }),
     }),
   );
@@ -165,7 +166,7 @@ test("the Code tab waits while the task's code is unread, and says there is none
   assert.equal(none.querySelector("[role=status]"), null);
 });
 
-test("the Code tab whose work read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
+test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
   let retries = 0;
   const container = document.createElement("div");
   document.body.append(container);
@@ -181,8 +182,8 @@ test("the Code tab whose work read did not land says so with Retry while it hold
           region: { kind: DOCUMENT_REGION.READY, task: TASK },
           sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
           shownCode: undefined,
-          workFailed: true,
-          onRetryWork: () => {
+          codeFailed: true,
+          onRetryCode: () => {
             retries += 1;
           },
         }),
@@ -241,10 +242,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
             },
             agents: codingAgentsControl({
               agentIds: [agentId],
-              readInbox: ({ after }) =>
-                after === INBOX_CURSOR_START
-                  ? Promise.resolve({ items: [], cursor: "1" })
-                  : new Promise(() => undefined),
+              inboxFollower: followedInboxes(() => ({ items: [] })).follower,
             }),
           }),
         }),
@@ -299,10 +297,10 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
 async function narrowTaskInbox(
   items: readonly InboxItem[],
   width = 700,
-  /** What the read held open past the first answers, where a test settles it; else it stays open. */
+  /** What is pushed after the first push, where a test settles it; else nothing is. */
   later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
-  /** What the first read answers, where a test holds it open; else the items given. */
-  first: Promise<CodingAgentInboxAnswerView> = Promise.resolve({ items, cursor: "1" }),
+  /** What the first push says, where a test holds it back until it settles; else the items given, once followed. */
+  first?: Promise<CodingAgentInboxAnswerView>,
   /** The account reading, none where a test does not say, and where its answers go. */
   reader: Pick<TasksControl, "me"> & Partial<Pick<TasksControl["agents"], "answerInbox">> = {
     me: undefined,
@@ -316,6 +314,16 @@ async function narrowTaskInbox(
       removeEventListener: () => undefined,
     }),
   });
+  // The inbox is pushed as `items` once followed, or as `first` says once it settles, and
+  // again as `later` says once it settles.
+  const main = followedInboxes(() => (first === undefined ? { items } : undefined));
+  const pushed = (answer: CodingAgentInboxAnswerView) =>
+    main.push(
+      { kind: INBOX_SCOPE_KIND.PLAN, id: TASK.id },
+      "failure" in answer ? { failure: answer.failure } : { items: answer.items },
+    );
+  void first?.then(pushed);
+  void later.then(pushed);
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -343,12 +351,7 @@ async function narrowTaskInbox(
               ...(reader.answerInbox === undefined
                 ? undefined
                 : { answerInbox: reader.answerInbox }),
-              readInbox: ({ after }) =>
-                after === INBOX_CURSOR_START
-                  ? first
-                  : after === "1"
-                    ? later
-                    : new Promise(() => undefined),
+              inboxFollower: main.follower,
             }),
           }),
         }),

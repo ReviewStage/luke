@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { hostTurnId } from "@luke/database/models/ids";
-import { openTaskConversation } from "@luke/database/models/task-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import {
@@ -28,16 +28,14 @@ import { Deferred, Effect, Exit, Option, Schema, Scope, Stream } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
-import { BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
 import {
   type AgentSessions,
   EVE_SEND_OUTCOME,
   type EveMessage,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { MESSAGE_ROLE } from "../core.js";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { delegated, heard, sessionStarted } from "../testing/live-events.js";
 import { settled } from "../testing/settle.js";
@@ -78,7 +76,7 @@ const ACKNOWLEDGMENT_OF: ReadonlyMap<LiveClientEvent["type"], LiveServerEventTyp
 
 const writer = await database.run(
   storeWriter({
-    tools: HOSTED_TOOL_SET,
+    tools: CODER_TOOL_SET,
   }),
 );
 const askEffects = askRecord();
@@ -114,10 +112,6 @@ function mintEveSession(): string {
 
 interface FakeEve extends AgentSessions {
   readonly opened: EveMessage[];
-  /** Every exploring a fresh session asked for, which eve declines unless `explores` is set. */
-  readonly explored: EveMessage[];
-  /** Whether eve takes a fresh session's exploring; off, so a test of the developer's asks finds their first ask opens the session. */
-  explores: boolean;
   /** The session each open was answered with, in order: eve's own record of what it took. */
   readonly sessions: string[];
   /** While set, an open has taken the message and answers only once this settles, as eve across the network does. */
@@ -127,18 +121,10 @@ interface FakeEve extends AgentSessions {
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
-    explored: [],
-    explores: false,
     sessions: [],
     answerWhen: undefined,
     open(message) {
       return Effect.gen(function* () {
-        if (message.message === BRAIN_EXPLORE_ASK) {
-          eve.explored.push(message);
-          if (!eve.explores) {
-            return { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY };
-          }
-        }
         const sessionId = mintEveSession();
         eve.opened.push(message);
         eve.sessions.push(sessionId);
@@ -166,18 +152,29 @@ function fakeEve(): FakeEve {
   return eve;
 }
 
-/** An account holding one task, and the task's conversation every call about it lands in. */
+/** An account holding one task with one agent on it, and the agent's conversation every call into it lands in. */
 interface TaskTarget extends ConversationTarget {
   readonly taskId: string;
+  readonly agentId: string;
 }
 
 async function account(): Promise<TaskTarget> {
   const userId = await database.createUser();
   const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
-  const conversationId = Option.getOrThrow(
-    await database.run(openTaskConversation(userId, task.id)),
-  ).conversationId;
-  return { userId, conversationId, taskId: task.id };
+  const { agent } = Option.getOrThrow(
+    await database.run(
+      createCodingAgent(userId, {
+        taskId: task.id,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: null,
+        planSnapshot: "# Teammate invitations",
+        prompt: null,
+      }),
+    ),
+  );
+  return { userId, conversationId: agent.conversationId, taskId: task.id, agentId: agent.id };
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
@@ -190,8 +187,6 @@ async function stand(
   options: {
     /** A session an earlier exchange stood on, attached to again as a device's re-attach finds it: already started. */
     readonly reattach?: string;
-    /** Whether eve takes the session's exploring as it starts. */
-    readonly explores?: boolean;
   } = {},
 ) {
   const liveSessionId = options.reattach ?? `sess_${randomUUID()}`;
@@ -201,6 +196,7 @@ async function stand(
         userId: target.userId,
         sessionId: liveSessionId,
         taskId: target.taskId,
+        agentId: target.agentId,
         attachId: randomUUID(),
         model: LIVE_DEFAULTS.MODEL,
       }),
@@ -231,7 +227,6 @@ async function stand(
     });
   });
   const eve = fakeEve();
-  eve.explores = options.explores ?? false;
   const reports: string[] = [];
   // The socket's own scope, as the attachment opens one: the exchange is built in it and the test's own stop closes it.
   const scope = await database.run(Scope.make());
@@ -241,7 +236,7 @@ async function stand(
         accountId: target.userId,
         liveSessionId,
         conversation: { userId: target.userId, conversationId: target.conversationId },
-        backend: CALL_BACKEND.TASK,
+        backend: CALL_BACKEND,
         writer,
         eve,
         createId: () => randomUUID(),

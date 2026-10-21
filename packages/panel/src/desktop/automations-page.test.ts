@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { codeReviewPreset } from "@luke/features/automation-code-review";
 import {
   AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
   type AutomationCreateParams,
   type AutomationListView,
 } from "@luke/features/automation-view";
@@ -29,6 +30,7 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -147,8 +149,74 @@ let root: Root | undefined;
 let standing: AutomationSummary[] = [];
 /** How the next reads of the list answer before the service's own, in order. */
 let lists: AutomationListView[] = [];
+/** A follow stream a page holds open, which a test pushes to as the host would. */
+interface Follower {
+  readonly kind: string;
+  readonly id: string;
+  readonly push: (view: unknown) => void;
+  closed: boolean;
+}
+
+/** Every follow stream a page opened, in order. */
+let followers: Follower[] = [];
+
+/** A stream that hands `first` and then each push, until the page closes it. */
+function pushable(
+  kind: string,
+  id: string,
+  first: readonly unknown[],
+): AsyncIterableIterator<unknown> {
+  const queue = [...first];
+  let wake: (() => void) | undefined;
+  const follower: Follower = {
+    kind,
+    id,
+    closed: false,
+    push: (view) => {
+      queue.push(view);
+      wake?.();
+    },
+  };
+  followers.push(follower);
+  const stream: AsyncIterableIterator<unknown> = {
+    [Symbol.asyncIterator]: () => stream,
+    next: async () => {
+      while (queue.length === 0 && !follower.closed) {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+      }
+      if (follower.closed) return { done: true, value: undefined };
+      return { done: false, value: queue.shift() };
+    },
+    return: async () => {
+      follower.closed = true;
+      wake?.();
+      return { done: true, value: undefined };
+    },
+  };
+  return stream;
+}
+
+/** A workspace's list as the host pushes it: the next scripted answer, or what stands in it. */
+function listOf(workspaceId: string): unknown {
+  return (
+    lists.shift() ?? { automations: standing.filter((each) => each.workspaceId === workspaceId) }
+  );
+}
+
+/** What stands pushed to every page still following a workspace or runs, as the host pushes a change. */
+function pushStanding(): void {
+  for (const follower of followers) {
+    if (follower.closed) continue;
+    follower.push(follower.kind === AUTOMATION_FOLLOW.WORKSPACE ? listOf(follower.id) : { runs });
+  }
+}
+
 /** Whether a read of the list is held unanswered, so only the writes' answers draw. */
 let listHeld = false;
+/** The creates held unanswered, each committed and answered by its resolver, where creates are held at all. */
+let heldCreates: (() => void)[] | undefined;
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
 /** Every workspace whose list was read, in order. */
@@ -206,9 +274,11 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   feedbackAbout = [];
   standing = [DIGEST, SWEEP, FAILING];
+  followers = [];
   lists = [];
   listHeld = false;
   heldChanges = undefined;
+  heldCreates = undefined;
   listed = [];
   changes = [];
   creates = [];
@@ -229,11 +299,19 @@ beforeEach(() => {
   integrationsRefusals = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        listed.push(request.payload.workspaceId);
-        if (listHeld) return new Promise(() => undefined);
-        const theirs = standing.filter((each) => each.workspaceId === request.payload.workspaceId);
-        const value = lists.shift() ?? { automations: theirs };
+      if (request.kind === ACT_KIND.AUTOMATIONS_FOLLOW) {
+        const { kind, id } = request.payload;
+        let first: unknown[] = [];
+        if (kind === AUTOMATION_FOLLOW.WORKSPACE) {
+          listed.push(id);
+          if (!listHeld) first = [listOf(id)];
+        } else if (!runsHeld) {
+          first = [{ runs }];
+        }
+        // SAFETY: the page reads oRPC's stream as an async iterator alone, which this is.
+        const value = pushable(kind, id, first) as unknown as PortActResult<
+          typeof ACT_KIND.AUTOMATIONS_FOLLOW
+        >;
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
@@ -270,11 +348,20 @@ beforeEach(() => {
             ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
             : undefined),
         });
-        standing = [made, ...standing];
         // A webhook's secret is answered once, by the write that minted it.
         const value = hooked
           ? { automation: made, webhookSecret: MADE_SECRET }
           : { automation: made };
+        if (heldCreates !== undefined) {
+          const held = heldCreates;
+          return new Promise((resolve) =>
+            held.push(() => {
+              standing = [made, ...standing];
+              resolve({ status: FAKE_ANSWER.DONE, value });
+            }),
+          );
+        }
+        standing = [made, ...standing];
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
@@ -297,10 +384,6 @@ beforeEach(() => {
           // SAFETY: every provider on the list is given a status above, which is the whole of the record.
           value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
         });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
-        if (runsHeld) return new Promise(() => undefined);
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { runs } });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
         runsAsked.push(request.payload.automationId);
@@ -515,7 +598,29 @@ test("an older switch's answer landing after a newer one's draws nothing over it
   );
 });
 
-test("once a switch settles the list is read again, so what changed elsewhere meanwhile is drawn", async () => {
+test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+  await settle();
+
+  // Another window renames it meanwhile, and the host pushes the list before the switch answers.
+  standing = standing.map((each) =>
+    each.id === SWEEP.id ? { ...each, name: "Sweep, as another window left it" } : each,
+  );
+  pushStanding();
+  await settle();
+  heldChanges[0]?.();
+  await settle();
+
+  assert.equal(
+    page.querySelector(".automation-row-name")?.textContent,
+    "Sweep, as another window left it",
+  );
+});
+
+test("what changed elsewhere is drawn as the host pushes it, and a switch reads nothing again", async () => {
   const page = mount();
   await settle();
   standing = standing.map((each) =>
@@ -528,6 +633,9 @@ test("once a switch settles the list is read again, so what changed elsewhere me
       ?.click(),
   );
   await settle();
+  assert.deepEqual(listed, [WORKSPACE.id], "the switch reads the list no more");
+  pushStanding();
+  await settle();
 
   assert.deepEqual(rows(page), [
     ["Nightly flaky-test sweep", "Acme"],
@@ -536,27 +644,25 @@ test("once a switch settles the list is read again, so what changed elsewhere me
   ]);
 });
 
-test("a switch that settles after the window moved to another workspace reads that workspace's list", async () => {
+test("a window moved to another workspace lets the list it followed go, and follows that workspace's", async () => {
   const beta: Workspace = { ...WORKSPACE, id: "workspace-beta", name: "Beta" };
   const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id });
   standing = [...standing, betaAutomation];
-  heldChanges = [];
   const page = mount();
   await settle();
 
-  act(() =>
-    rowOf(page, "Nightly flaky-test sweep")
-      .querySelector<HTMLButtonElement>("[role=switch]")
-      ?.click(),
-  );
-  await settle();
   render(tasksControl({ workspace: beta }));
-  await settle();
-  heldChanges[0]?.();
   await settle();
 
   assert.deepEqual(rows(page), [["Beta's digest", "Personal"]]);
-  assert.equal(listed.at(-1), beta.id);
+  assert.deepEqual(listed, [WORKSPACE.id, beta.id]);
+  assert.deepEqual(
+    followers.map((each) => [each.id, each.closed]),
+    [
+      [WORKSPACE.id, true],
+      [beta.id, false],
+    ],
+  );
 });
 
 test("a switch the service refuses stays where it was and says who may move it", async () => {
@@ -972,6 +1078,25 @@ test("a new automation is created only once it is named and told its task, and t
     archiveSuccessful: false,
     repositories: ["acme/ledger"],
   });
+  assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
+  assert.equal(crumbs(page), "AutomationsMorning triage");
+});
+
+test("a new automation whose answer lands after a list pushed before it was made still stands as its own page", async () => {
+  heldCreates = [];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  act(() => button("Create").click());
+  await settle();
+
+  // Something else moves the list while the create is out, before it is made.
+  pushStanding();
+  await settle();
+  heldCreates[0]?.();
+  await settle();
+
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
   assert.equal(crumbs(page), "AutomationsMorning triage");
 });
@@ -1723,7 +1848,7 @@ test("a refresh that fails while an automation's page stands keeps the page and 
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
 
   lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
-  act(() => page.querySelector<HTMLButtonElement>(".automations-view [role=switch]")?.click());
+  pushStanding();
   await settle();
 
   assert.equal(
@@ -1967,7 +2092,7 @@ test("an automation's runs stand as quiet rows under the panel's heading while t
   assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
 });
 
-test("Run now starts a run under a key of its own, and the run stands first once it settles", async () => {
+test("Run now starts a run under a key of its own, and the run stands first once it is pushed", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
@@ -1977,6 +2102,8 @@ test("Run now starts a run under a key of its own, and the run stands first once
   );
 
   act(() => button("Run now").click());
+  await settle();
+  pushStanding();
   await settle();
 
   assert.deepEqual(runsAsked, [SWEEP.id]);
@@ -2027,17 +2154,6 @@ test("opening a run's agent with unsaved changes asks first, and Leave opens it"
   await settle();
 
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
-});
-
-test("a Run now that settles reads the list again, so its newest run stands there too", async () => {
-  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  const before = listed.length;
-
-  act(() => button("Run now").click());
-  await settle();
-
-  assert.ok(listed.length > before);
 });
 
 test("a default model that could not be read is said as unknown, and a model can still be chosen", async () => {

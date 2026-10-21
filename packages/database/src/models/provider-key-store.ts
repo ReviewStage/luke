@@ -58,6 +58,7 @@ const SealedRowSchema = Schema.Struct({
   statusAt: InstantColumnSchema,
   fastAccess: Schema.NullOr(FastAccessSchema),
   accessExpiresAt: Schema.NullOr(InstantColumnSchema),
+  forAgents: Schema.Boolean,
   createdAt: InstantColumnSchema,
 });
 
@@ -84,6 +85,7 @@ const ROW_COLUMNS = {
   statusAt: accountProviderKey.statusAt,
   fastAccess: accountProviderKey.fastAccess,
   accessExpiresAt: accountProviderKey.accessExpiresAt,
+  forAgents: accountProviderKey.forAgents,
   createdAt: accountProviderKey.createdAt,
 } as const;
 
@@ -118,7 +120,12 @@ const findEveryRow = SqlSchema.findAll({
     ),
 });
 
-/** The row written, or written over the provider's row of the same kind. */
+/**
+ * The row written, or written over the provider's row of the same kind.
+ * Note that `forAgents` is left out of what is written, because a new row
+ * takes the column's default, on, and a replaced token keeps the choice the
+ * account made for the one before it.
+ */
 const upsertRow = SqlSchema.void({
   Request: Schema.Struct({
     ...KindKeySchema.fields,
@@ -300,6 +307,25 @@ const updateFastAccess = SqlSchema.void({
     ),
 });
 
+const updateForAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ ...KindKeySchema.fields, forAgents: Schema.Boolean }),
+  Result: Schema.Struct({ provider: ProviderSchema }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({ forAgents: write.forAgents })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.kind, write.kind),
+          ),
+        )
+        .returning({ provider: accountProviderKey.provider }),
+    ),
+});
+
 /** The wrap moved only where the row still holds the seal it was read with, so a key replaced meanwhile keeps its own. */
 const rewrapRow = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -422,6 +448,23 @@ export function removeProviderKey(
   kind: ProviderKeyKind,
 ): TaskStoreEffect<void> {
   return deleteRow({ userId, provider, kind });
+}
+
+/**
+ * Turns the account's default payer for its coding agents on or off for the
+ * provider's credential of this kind; whether a row held it, since a
+ * credential disconnected meanwhile has no default to turn.
+ */
+export function setProviderKeyForAgents(
+  userId: string,
+  provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
+  forAgents: boolean,
+): TaskStoreEffect<boolean> {
+  return Effect.map(
+    updateForAgents({ userId, provider, kind, forAgents }),
+    (rows) => rows.length > 0,
+  );
 }
 
 /** Writes how the provider last answered the key a step ran on, where the row still holds that key. */

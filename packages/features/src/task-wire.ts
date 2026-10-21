@@ -173,7 +173,7 @@ export const PLAN_FIELD = {
 export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
 
 /** The one saved document of a task, replaced whole by every save. */
-export const planDocumentSchema = EffectSchema.Struct({
+const planDocumentSchema = EffectSchema.Struct({
   /** The plan's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
   assumptions: EffectSchema.Array(planAssumptionSchema).check(
@@ -582,7 +582,7 @@ export const PLAN_SECTION_BOUNDS = {
  * heading's words, and a heading renamed with nothing beneath it changed
  * keeps the revision that last changed them.
  */
-export const planSectionEditSchema = EffectSchema.Struct({
+const planSectionEditSchema = EffectSchema.Struct({
   section: EffectSchema.String.check(
     EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
   ),
@@ -653,6 +653,9 @@ export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
 export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
+
+/** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
+export const UNKNOWN_AGENT_LABEL = "a coding agent";
 
 /** How a plan's history is read: the newest revisions first, a page at a time. */
 export const PLAN_HISTORY_BOUNDS = {

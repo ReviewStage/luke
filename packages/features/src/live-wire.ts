@@ -39,7 +39,16 @@ import {
   standingAsk,
 } from "./inbox-wire.js";
 import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
+import { type PageLine, pageLineSchema, pageShowerSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
+import {
+  PLAN_ACTOR,
+  PLAN_HISTORY_BOUNDS,
+  type PlanRevisionLine,
+  type PlanRevisionsAnswer,
+  planRevisionSeqSchema,
+  UNKNOWN_AGENT_LABEL,
+} from "./task-wire.js";
 
 /**
  * live-wire.ts -- a read the desktop follows over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
@@ -93,7 +102,7 @@ export function liveDigestOf(
 }
 
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
-const sealedLiveQuerySchema = EffectSchema.Struct({
+export const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
   queryFingerprint: EffectSchema.String,
   /** When the seal expires, in epoch milliseconds; the reader renews it before. */
@@ -494,42 +503,6 @@ export function macCommandsOfLiveRows(
 }
 
 /**
- * A plan's planning conversation sealed for following: the address, and
- * its mark as one statement, one row that moves whenever a read past the
- * cursor would answer something new. The desktop holds its read of the
- * conversation and asks it once, unheld, each time the mark moves, rather
- * than holding a read the service looks again for on a clock. The service
- * answers `not-found` for a plan the account does not reach, and
- * `unavailable` where its deployment's Realtime is misconfigured, which the
- * desktop answers by asking again.
- */
-export const taskConversationLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema, workers: sealedLiveQuerySchema }),
-});
-
-export type TaskConversationLiveAnswer = typeof taskConversationLiveAnswerSchema.Type;
-
-/**
- * Where the conversation stands as its row delivers it, keyed by the plan:
- * the highest message sequence and the journal revision, and the newest
- * turn and its status (null before the first).
- */
-const taskConversationMarkSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  seq: EffectSchema.Finite,
-  revision: EffectSchema.Finite,
-  turnId: EffectSchema.NullOr(EffectSchema.String),
-  turnStatus: EffectSchema.NullOr(EffectSchema.String),
-});
-
-/** The conversation's mark as Realtime delivers it, one row or none for a plan the account no longer reaches, and its running workers' turns, a row each by id, in no order. */
-export const taskConversationLiveRowsSchema = EffectSchema.Struct({
-  mark: EffectSchema.Array(taskConversationMarkSchema),
-  workers: EffectSchema.Array(EffectSchema.Struct({ id: EffectSchema.String })),
-});
-
-/**
  * One plan's inbox, or one agent's, sealed for following: the address, and
  * its open items and its latest settled ones as one statement, as the held
  * read reads them, so an item settling moves in one change, with their
@@ -750,11 +723,12 @@ export const workspaceChatLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
+export type WorkspaceChatLiveAnswer = typeof workspaceChatLiveAnswerSchema.Type;
+
 /** A member as its row delivers it: what it stands for and what it is called null where it has none, and the keys the roster is ordered by. */
 const chatMemberLiveRowSchema = EffectSchema.Struct({
   id: chatMemberSchema.fields.id,
   kind: chatMemberSchema.fields.kind,
-  handle: EffectSchema.String,
   name: EffectSchema.NullOr(EffectSchema.String),
   left: chatMemberSchema.fields.left,
   userId: EffectSchema.NullOr(EffectSchema.String),
@@ -823,7 +797,6 @@ function chatMemberOfLiveRow(row: typeof chatMemberLiveRowSchema.Type): ChatMemb
   return {
     id: row.id,
     kind: row.kind,
-    handle: row.handle,
     ...(row.name === null ? undefined : { name: row.name }),
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
@@ -919,4 +892,126 @@ export function workspaceChatOfLiveRows(rows: WorkspaceChatLiveRows): ChatAnswer
       .map(chatMessageOfLiveRow),
     cursor: "",
   };
+}
+
+/**
+ * One task's pages sealed for following: the address, and one statement
+ * that delivers each page at its newest version, as the task's held list
+ * of pages reads it. The window's Inbox shows the pages of whichever task
+ * its item is of, so the desktop follows them while that panel reads them.
+ * The service answers `not-found` for a task the account does not reach;
+ * asked with `?poll=true`, the rows inline at the poll address.
+ */
+export const taskPagesLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ pages: sealedLiveQuerySchema }),
+});
+
+export type TaskPagesLiveAnswer = typeof taskPagesLiveAnswerSchema.Type;
+
+/** One page as its row delivers it: the page's line, with who showed it null where none was kept. */
+const taskPagesLiveRowSchema = EffectSchema.Struct({
+  id: pageLineSchema.fields.id,
+  title: pageLineSchema.fields.title,
+  version: pageLineSchema.fields.version,
+  at: pageLineSchema.fields.at,
+  shownBy: EffectSchema.NullOr(pageShowerSchema),
+});
+
+/** A task's pages as Realtime delivers them: none for a task the account no longer reaches. */
+export const taskPagesLiveRowsSchema = EffectSchema.Struct({
+  pages: EffectSchema.Array(taskPagesLiveRowSchema),
+});
+
+/** The pages as the held list answers them, from their rows: the most recently written first, then by id. */
+export function pagesOfLiveRows(rows: typeof taskPagesLiveRowsSchema.Type): readonly PageLine[] {
+  return rows.pages
+    .map(({ shownBy, ...line }): PageLine => (shownBy === null ? line : { ...line, shownBy }))
+    .toSorted((one, other) =>
+      one.at !== other.at ? other.at - one.at : one.id < other.id ? -1 : one.id > other.id ? 1 : 0,
+    );
+}
+
+/**
+ * One task's newest page of plan history sealed for following: the address,
+ * and one statement that delivers the newest revisions as the history's
+ * held read of its newest page reads them, one past the page among them to
+ * say whether an older page stands. The desktop follows it while the task's
+ * version history stands. The service answers `not-found` for a task the
+ * account does not reach; asked with `?poll=true`, the rows inline at the
+ * poll address.
+ */
+export const taskHistoryLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ revisions: sealedLiveQuerySchema }),
+});
+
+export type TaskHistoryLiveAnswer = typeof taskHistoryLiveAnswerSchema.Type;
+
+/** One revision as its row delivers it: who wrote it, the member and the agent as their rows name them now, the call it was written on, and its instants in epoch milliseconds. */
+const taskHistoryLiveRowSchema = EffectSchema.Struct({
+  seq: planRevisionSeqSchema,
+  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+  editorId: EffectSchema.NullOr(EffectSchema.String),
+  editorName: EffectSchema.NullOr(EffectSchema.String),
+  liveSessionId: EffectSchema.NullOr(EffectSchema.String),
+  agentId: EffectSchema.NullOr(EffectSchema.String),
+  agentModel: EffectSchema.NullOr(EffectSchema.String),
+  agentTitle: EffectSchema.NullOr(EffectSchema.String),
+  callId: EffectSchema.NullOr(EffectSchema.String),
+  changes: countedNumber,
+  restoredFrom: EffectSchema.NullOr(planRevisionSeqSchema),
+  at: countedNumber,
+  startedAt: countedNumber,
+  restoredAt: EffectSchema.NullOr(countedNumber),
+});
+
+/** A task's newest revisions as Realtime delivers them: none for a task the account no longer reaches. */
+export const taskHistoryLiveRowsSchema = EffectSchema.Struct({
+  revisions: EffectSchema.Array(taskHistoryLiveRowSchema),
+});
+
+type TaskHistoryLiveRow = typeof taskHistoryLiveRowSchema.Type;
+
+/** A revision's line as the version history lists it, from its row, a coding agent named as its row names it now. */
+function revisionLineOf(row: TaskHistoryLiveRow): PlanRevisionLine {
+  return {
+    seq: row.seq,
+    lastEdit: {
+      actor: row.actor,
+      ...(row.editorId === null || row.editorName === null
+        ? undefined
+        : { by: { userId: row.editorId, name: row.editorName } }),
+      ...(row.actor === PLAN_ACTOR.AGENT
+        ? { label: row.agentTitle ?? row.agentModel ?? UNKNOWN_AGENT_LABEL }
+        : undefined),
+      ...(row.agentId === null ? undefined : { agentId: row.agentId }),
+      at: row.at,
+      duringCall: row.liveSessionId !== null,
+    },
+    ...(row.agentId === null ? undefined : { agentId: row.agentId }),
+    ...(row.callId === null ? undefined : { callId: row.callId }),
+    startedAt: row.startedAt,
+    changes: row.changes,
+    ...(row.restoredFrom === null || row.restoredAt === null
+      ? undefined
+      : { restoredFrom: { seq: row.restoredFrom, at: row.restoredAt } }),
+  };
+}
+
+/**
+ * The history's newest page as its held read answers it, from its rows:
+ * the newest revisions first, a page of them, and where the next older page
+ * is read before where one past the page was delivered.
+ */
+export function revisionsOfLiveRows(
+  rows: typeof taskHistoryLiveRowsSchema.Type,
+): PlanRevisionsAnswer {
+  const newest = rows.revisions.toSorted((one, other) => other.seq - one.seq);
+  const page = newest.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
+  const revisions = page.map(revisionLineOf);
+  const oldest = page.at(-1);
+  return newest.length > page.length && oldest !== undefined
+    ? { revisions, earlier: oldest.seq }
+    : { revisions };
 }

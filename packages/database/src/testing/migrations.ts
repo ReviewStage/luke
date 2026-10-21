@@ -41,9 +41,14 @@ const DROPPED_TABLES = [
   "conversation_attachment",
 ] as const;
 
-/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table since dropped, or an index or constraint named after one, left out. */
+/** The columns and indexes a later migration dropped, as an earlier statement names them: a planner member's task and its index (`20261021105816_per_task_luke_data_drop`). */
+const DROPPED_NAMES = [`"chat_member" RENAME COLUMN "plan_id"`, `"chat_member_plan"`] as const;
+
+/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table since dropped, or an index or constraint named after one, or a column or index since dropped, left out. */
 export function replayable(statements: readonly string[]): readonly string[] {
-  return statements.filter((statement) =>
-    DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)),
+  return statements.filter(
+    (statement) =>
+      DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)) &&
+      DROPPED_NAMES.every((name) => !statement.includes(name)),
   );
 }

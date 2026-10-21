@@ -83,7 +83,14 @@ async function settle(): Promise<void> {
 }
 
 /** The box on the composer's own control, its sends answered by `sender`. */
-function Box({ sender }: { sender: MessageSender }): ReactNode {
+function Box({
+  sender,
+  call,
+}: {
+  sender: MessageSender;
+  /** What stands in Call's place, and whether a call holds the microphone, as an agent's tab hands them. */
+  call?: { controls: ReactNode; onCall: boolean };
+}): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
     taskId: "plan-1",
@@ -91,7 +98,13 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
     send: sender,
     onStatus: ignore,
   });
-  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: reading });
+  return createElement(AgentComposer, {
+    ...QUIET_COMPOSER,
+    composer,
+    skills: reading,
+    call: call?.controls,
+    dictates: !(call?.onCall ?? false),
+  });
 }
 
 /** The box mounted, every message it sends written down and answered by `answer`. */
@@ -420,6 +433,102 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   assert.deepEqual(box.sent, [], "the Enter finished the dictation rather than sending");
   typeInComposer(box.container, " again");
   assert.equal(box.shown(), "Fix the bug in again this later", "the caret stands after the words");
+});
+
+/**
+ * The box at an agent's tab's foot with the microphone stubbed, its Call
+ * slot holding End call, every clip read as `transcribed` answers; `draw`
+ * puts a call up or takes it down.
+ */
+async function mountedForCall(transcribed: () => Promise<{ text: string }>) {
+  stubMicrophone();
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
+    [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
+    [ACT_KIND.DICTATION_TRANSCRIBE]: transcribed,
+  });
+  const sender: MessageSender = () => new Promise(ignore);
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const draw = async (onCall: boolean) => {
+    await act(async () =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(Box, {
+            sender,
+            call: {
+              onCall,
+              controls: createElement("button", { type: "button", "aria-label": "End call" }),
+            },
+          }),
+        ),
+      ),
+    );
+    await settle();
+  };
+  await draw(false);
+  const press = (label: string) => {
+    const found = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    assert.ok(found, `${label} is offered`);
+    act(() => found.click());
+  };
+  return { container, draw, press };
+}
+
+test("a call that begins mid-dictation ends it, keeping the words said, and the row holds the call rather than the dictation's strip", async () => {
+  const box = await mountedForCall(() => Promise.resolve({ text: "the invite page" }));
+  box.press("Dictate");
+  await settle();
+  assert.ok(box.container.querySelector(".dictation-strip"), "the dictation stands");
+
+  await box.draw(true);
+  assert.equal(box.container.querySelector(".dictation-strip"), null);
+  assert.ok(
+    box.container.querySelector('button[aria-label="End call"]'),
+    "the call's controls stand",
+  );
+  assert.equal(box.container.querySelector('button[aria-label="Dictate"]'), null);
+  assert.equal(composerEditor(box.container).textContent, "the invite page");
+});
+
+test("a clip still being read as a call begins keeps its strip and its Cancel beside the call's controls until its words land, then the row holds the call", async () => {
+  let land: (answer: { text: string }) => void = ignore;
+  const box = await mountedForCall(
+    () =>
+      new Promise((resolve) => {
+        land = resolve;
+      }),
+  );
+  box.press("Dictate");
+  await settle();
+  box.press("Done");
+  await settle();
+
+  await box.draw(true);
+  assert.ok(box.container.querySelector(".dictation-strip"), "the reading still shows");
+  assert.ok(box.container.querySelector('button[aria-label="Cancel"]'), "and can still be let go");
+  assert.ok(
+    box.container.querySelector('button[aria-label="End call"]'),
+    "while the call's controls stand beside it",
+  );
+
+  await act(async () => land({ text: "the members list" }));
+  await settle();
+  assert.equal(box.container.querySelector(".dictation-strip"), null);
+  assert.ok(
+    box.container.querySelector('button[aria-label="End call"]'),
+    "the call's controls stand",
+  );
+  assert.equal(composerEditor(box.container).textContent, "the members list");
 });
 
 /** The box under the window's repository doors, its one message refused for a repository its owner's other workspace reaches, and every later one taken. */

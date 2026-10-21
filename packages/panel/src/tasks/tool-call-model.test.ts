@@ -103,6 +103,34 @@ test("a browser call says what it did and in which tab, by the title its answer 
   });
 });
 
+test("a browser call on the developer's Mac reads as a browser call does, and says it ran on the Mac", () => {
+  const actions = [{ action: "open", url: "http://localhost:5173/" }, { action: "snapshot" }];
+  const onMac = toolCallView({
+    tool: "browser",
+    input: { actions, on: "mac" },
+    output: {
+      status: "ran",
+      steps: [],
+      skipped: 0,
+      tabs: [{ tab: "mac-7", url: "http://localhost:5173/", title: "My app" }],
+    },
+  });
+  const onSandbox = toolCallView({
+    tool: "browser",
+    input: { actions, on: "sandbox" },
+    output: undefined,
+  });
+
+  assert.equal(onMac.kind, CALL_KIND.MAC_BROWSER);
+  assert.deepEqual(callLine(onMac.kind, onMac.subject, onMac.description), {
+    verb: "Opened, read the page in",
+    subject: "My app",
+    code: false,
+  });
+  assert.equal(callPlace(onMac.kind), "Browser · on your Mac");
+  assert.equal(callPlace(onSandbox.kind), "Browser");
+});
+
 test("a command run on the Mac is the command it ran, described as a command is, and its answer says how it ended: its exit, its timeout, or why it was not run", () => {
   const ran = (output: Record<string, string | number | boolean | null>) =>
     toolCallView({
@@ -491,27 +519,7 @@ test("a coding agent's hosted public reads draw as the web reads they are: a sea
   });
 });
 
-test("the planning model's own calls draw from their parts as a coding agent's do: a repository command by its command and purpose, its answer or why it ran nothing, a shown range by its file and lines, a question by its words", () => {
-  const ran = toolCallView({
-    tool: "run_in_repository",
-    input: { command: "ls src", description: "List the sources" },
-    output: { status: "ran", exitCode: 0, stdout: "queue.ts\n", stderr: "" },
-  });
-  assert.equal(ran.kind, CALL_KIND.COMMAND);
-  assert.equal(ran.subject, "ls src");
-  assert.equal(ran.description, "List the sources");
-  assert.deepEqual(ran.output, { kind: TOOL_BLOCK.TEXT, text: "queue.ts" });
-  const refused = toolCallView({
-    tool: "run_in_repository",
-    input: { command: "ls" },
-    output: { status: "not-run", reason: "Not run: the plan names no repository." },
-  });
-  // The service's reason already says it was not run, so its words stand as they are.
-  assert.deepEqual(refused.output, {
-    kind: TOOL_BLOCK.TEXT,
-    text: "Not run: the plan names no repository.",
-  });
-
+test("an agent's task calls draw from their parts: a shown range by its file and lines, a question by its words", () => {
   const shown = toolCallView({
     tool: "show_code",
     input: { path: "src/invites.ts", startLine: 12, endLine: 30 },

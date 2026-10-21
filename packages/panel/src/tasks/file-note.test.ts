@@ -14,7 +14,7 @@ import { FileNoteAnnotation, type FileNotes, type NoteLines } from "./file-note.
 import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
- * file-note.test.ts -- Luke's note on lines of a file: folded, it is its head alone and previews none of its words,
+ * file-note.test.ts -- an agent's note on lines of a file: folded, it is its head alone and previews none of its words,
  * which a find still reaches once; a press on its head tells the tab; its
  * ⋯ opens the turn of his work that showed the lines and copies that turn's
  * link; and the pointer or the keyboard on it lights its lines.
@@ -29,6 +29,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const WORDS = "Retry the request before the first invite is sent";
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SHOWN_AT = 1_760_000_000_000;
+const AGENT_ID = "3f1c9e2a-6b7d-4e8f-a1b2-c3d4e5f60718";
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -43,10 +44,21 @@ function notes(
   lit: (NoteLines | undefined)[] = [],
 ): FileNotes {
   return {
-    notes: [{ callId: "call-1", shownAt: SHOWN_AT, startLine: 3, endLine: 5, note: WORDS }],
+    notes: [
+      {
+        callId: "call-1",
+        shownAt: SHOWN_AT,
+        turnId: "turn-1",
+        agentId: AGENT_ID,
+        startLine: 3,
+        endLine: 5,
+        note: WORDS,
+      },
+    ],
     folded,
     onFold: (callId, now) => heard.push([callId, now]),
     taskId: TASK_ID,
+    agentLabel: (agentId) => (agentId === AGENT_ID ? "Invite emails" : undefined),
     onLight: (lines) => lit.push(lines),
   };
 }
@@ -75,7 +87,7 @@ test("folded, a note is its head alone, and a find through the tab still finds i
   const heard: [string, boolean][] = [];
   const folded = draw(noteOf(notes(["call-1"], heard)));
   assert.equal(said(folded), 0, "no preview of its words");
-  assert.match(folded.querySelector(".annotation-card-head")?.textContent ?? "", /^Luke/u);
+  assert.match(folded.querySelector(".annotation-card-head")?.textContent ?? "", /^Invite emails/u);
   const finding = draw(
     createElement(DisclosureFind, {
       finding: true,
@@ -92,7 +104,7 @@ test("a press on a note's head tells the tab to unfold it", () => {
   assert.deepEqual(heard, [["call-1", false]]);
 });
 
-test("a note's ⋯ opens the turn of Luke's work that showed its lines, and copies that turn's link", () => {
+test("a note's ⋯ opens the agent's turn that showed its lines, and copies that turn's link", () => {
   const opened: ReadLink[] = [];
   const copied: string[] = [];
   fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
@@ -125,10 +137,12 @@ test("a note's ⋯ opens the turn of Luke's work that showed its lines, and copi
   press("View in conversation");
   assert.deepEqual(
     opened.map((link) => link.place),
-    [{ kind: LINK_PLACE.TURN, planId: TASK_ID, at: SHOWN_AT }],
+    [{ kind: LINK_PLACE.MESSAGE, planId: TASK_ID, agentId: AGENT_ID, messageId: "turn-1" }],
   );
   press("Copy link");
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${TASK_ID}/work/${SHOWN_AT}`]);
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}/message/turn-1`,
+  ]);
   assert.equal(
     container.querySelector("summary")?.getAttribute("aria-expanded"),
     "true",

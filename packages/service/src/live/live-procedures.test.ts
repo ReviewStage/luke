@@ -8,9 +8,8 @@ import { writeDrawing } from "@luke/database/models/board-store";
 import { ensureMember } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
-import { openTaskConversation } from "@luke/database/models/task-store";
+import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
-import { messages, turns } from "@luke/database/schemas/storage";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
@@ -25,19 +24,25 @@ import {
   scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
-  taskConversationLiveAnswerSchema,
+  taskHistoryLiveAnswerSchema,
+  taskPagesLiveAnswerSchema,
+  taskPagesLiveRowsSchema,
   taskRecordLiveAnswerSchema,
   workspaceChatLiveAnswerSchema,
 } from "@luke/features/live-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { sidebarLiveAnswerSchema } from "@luke/features/sidebar-live";
+import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
+import {
+  workspaceInvitationsLiveAnswerSchema,
+  workspaceMembersLiveAnswerSchema,
+  workspacesLiveAnswerSchema,
+} from "@luke/features/workspace-live";
 import { EXPERIMENT } from "@luke/settings";
-import { TURN_ORIGIN, type WireBoundaryInput, type WireRecord } from "@luke/wire";
-import type { StoredUIMessage } from "@luke/wire/ui-messages";
-import { eq } from "drizzle-orm";
+import type { WireBoundaryInput } from "@luke/wire";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { BRAIN_DELEGATE_TOOL } from "../agents/brain-host/brain.js";
-import { MESSAGE_AUTHOR, MESSAGE_ROLE, TOOL_PART_STATE, TURN_STATUS } from "../core.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
@@ -191,6 +196,24 @@ it.effect(
         Object.values(theirs.queries).every((sealed) => sealed.capability.includes('"user-eli"')),
       );
     }),
+);
+
+it.effect("the task list is sealed as its tasks and its agents for the bearer's own account", () =>
+  Effect.gen(function* () {
+    const dana = yield* ask({
+      bearer: "user-dana",
+      path: "/api/live/tasks",
+      sealing: Option.some(SCRIPTED),
+    });
+
+    assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
+    const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(dana.body);
+    assert.equal(answer.url, REALTIME_URL);
+    assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "plans"]);
+    for (const sealed of Object.values(answer.queries)) {
+      assert.ok(sealed.capability.includes('"user-dana"'), "read for the bearer");
+    }
+  }),
 );
 
 /** One box Luke drew, so the board has a row to read. */
@@ -349,6 +372,110 @@ it.layer(getTestDB())("the task board's live read", (it) => {
       }),
   );
 
+  it.effect(
+    "a task's pages are sealed for an account that reaches the task, not found for one that does not, and asked to poll answered with their rows inline",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            dana,
+            started.id,
+            { title: "Invite funnel", html: "<p>One</p>" },
+            { kind: PAGE_SHOWER.LUKE },
+          ),
+        );
+        const path = "/api/live/task-pages";
+
+        const sealed = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.ok(answer.queries.pages.capability.includes(`"${dana}"`), "read for the bearer");
+        assert.ok(answer.queries.pages.capability.includes(`"${started.id}"`), "read for the task");
+
+        assert.deepEqual(
+          yield* askBoard({
+            bearer: eli,
+            taskId: started.id,
+            path,
+            sealing: Option.some(SCRIPTED),
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+        assert.deepEqual(
+          yield* askBoard({
+            bearer: dana,
+            forUser: eli,
+            taskId: started.id,
+            path,
+            sealing: Option.some(SCRIPTED),
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+          "a read started for another account is signed out",
+        );
+
+        const polled = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          poll: true,
+          sealing: Option.some(SCRIPTED),
+        });
+        const rows = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(polled.body);
+        assert.equal(rows.url, LIVE_POLL_URL);
+        assert.deepEqual(
+          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+            pages: rows.queries.pages.rows,
+          }).pages.map((page) => [page.id, page.version]),
+          [[shown.id, 1]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's newest page of history is sealed for an account that reaches the task, and not found for one that does not",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const path = "/api/live/task-history";
+
+        const sealed = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskHistoryLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        const { capability } = answer.queries.revisions;
+        assert.ok(capability.includes(`"${dana}"`), "read for the bearer");
+        assert.ok(capability.includes(`"${started.id}"`), "read for the task");
+        assert.deepEqual(
+          yield* askBoard({
+            bearer: eli,
+            taskId: started.id,
+            path,
+            sealing: Option.some(SCRIPTED),
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
+  );
+
   it.effect("the account inbox Realtime is off for is answered with every part's rows inline", () =>
     Effect.gen(function* () {
       const dana = yield* openUser;
@@ -400,46 +527,6 @@ const askTranscript = (options: {
     return { status: response.status, body };
   });
 
-/**
- * The planner's journal as it stands once it delegated twice to one worker:
- * `call-0-0` started it, its receipt naming the task, and `call-2-0` sent
- * that task more work.
- */
-const journalDelegating = (userId: string, conversationId: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const delegate = (toolCallId: string, input: WireRecord, output: string) => ({
-      type: `tool-${BRAIN_DELEGATE_TOOL.name}`,
-      toolCallId,
-      state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-      input,
-      output,
-    });
-    yield* db.insert(messages).values({
-      userId,
-      conversationId,
-      seq: 1,
-      clientId: randomUUID(),
-      role: MESSAGE_ROLE.ASSISTANT,
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
-      // SAFETY: the parts are the delegate tool's calls and receipts as the relay stores them, which the store reads back through `readStoredUIMessages` rather than trusting.
-      parts: [
-        delegate(
-          "call-0-0",
-          { task: "Compare the two queue libraries." },
-          "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
-        ),
-        delegate(
-          "call-2-0",
-          { task: "Also read their licenses.", taskId: "delegate-7k2m9q" },
-          "Sent.",
-        ),
-      ] as StoredUIMessage["parts"],
-      createdAt: new Date(),
-      placedAt: new Date(),
-    });
-  });
-
 it.layer(getTestDB())("an agent transcript's live read", (it) => {
   it.effect(
     "an agent's transcript, or a worker's by its call, is sealed as what its pages are read from, for an account that reaches the agent and under the conversation the call opens, and not found otherwise",
@@ -616,104 +703,6 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
             signedOut,
           );
         }
-      }),
-  );
-
-  it.effect(
-    "a planning worker's transcript is sealed under the task's conversation as the worker's child once the planner's journal names its call, for a member of the task's workspace; a call the journal names no worker for yet, or a call sending more work to an earlier worker, waits on it, and anyone else or a task never planned on is not found",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openUser;
-        const stranger = yield* openUser;
-        const planned = yield* startTask(owner, { name: "Teammate invitations" });
-        const opened = yield* openTaskConversation(owner, planned.id);
-        assert.ok(Option.isSome(opened));
-        const unplanned = yield* startTask(owner, { name: "Billing" });
-        const askWorker = (bearer: string, taskId: string, sealing = Option.some(SCRIPTED)) =>
-          askTranscript({
-            bearer,
-            agentId: taskId,
-            call: "call-0-0",
-            sealing,
-            path: "/api/live/task-worker-transcript",
-          });
-
-        const db = yield* Database;
-        yield* db.insert(turns).values({
-          userId: owner,
-          conversationId: opened.value.conversationId,
-          origin: TURN_ORIGIN.SPOKEN,
-          status: TURN_STATUS.RUNNING,
-          queuedAt: new Date(),
-        });
-        // Before the journal names the call, nothing is sealed while the planning runs, since the call may reach an earlier worker.
-        assert.deepEqual(yield* askWorker(owner, planned.id), {
-          status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-          body: { error: HOSTED_API_ERROR.UNAVAILABLE },
-        });
-        yield* journalDelegating(owner, opened.value.conversationId);
-        const sealed = yield* askWorker(owner, planned.id);
-        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(sealed.body);
-        assert.equal(answer.url, REALTIME_URL);
-        const child = childConversationId(opened.value.conversationId, "call-0-0");
-        assert.ok(answer.queries.messages.capability.includes(`"${child}"`), "the worker's own");
-        assert.ok(answer.queries.messages.capability.includes(`"${planned.id}"`), "under the task");
-        for (const [bearer, taskId] of [
-          [stranger, planned.id],
-          [owner, unplanned.id],
-        ] as const) {
-          assert.deepEqual(yield* askWorker(bearer, taskId), {
-            status: HOSTED_HTTP_STATUS.NOT_FOUND,
-            body: { error: HOSTED_API_ERROR.NOT_FOUND },
-          });
-        }
-        // A later call sending the first worker more work is sealed on that worker's child.
-        const more = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
-          (yield* askTranscript({
-            bearer: owner,
-            agentId: planned.id,
-            call: "call-2-0",
-            sealing: Option.some(SCRIPTED),
-            path: "/api/live/task-worker-transcript",
-          })).body,
-        );
-        assert.ok(more.queries.messages.capability.includes(`"${child}"`), "the first worker's");
-        // Once the planning has ended, a call the journal never named is not found for good.
-        yield* db
-          .update(turns)
-          .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })
-          .where(eq(turns.conversationId, opened.value.conversationId));
-        assert.deepEqual(
-          yield* askTranscript({
-            bearer: owner,
-            agentId: planned.id,
-            call: "call-9-9",
-            sealing: Option.some(SCRIPTED),
-            path: "/api/live/task-worker-transcript",
-          }),
-          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
-        );
-        // A read naming another account than the bearer's, as one started before a switch does, is signed out.
-        assert.deepEqual(
-          yield* askTranscript({
-            bearer: owner,
-            forUser: stranger,
-            agentId: planned.id,
-            call: "call-0-0",
-            sealing: Option.some(SCRIPTED),
-            path: "/api/live/task-worker-transcript",
-          }),
-          {
-            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
-            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
-          },
-        );
-        const polled = yield* askWorker(owner, planned.id, Option.none());
-        assert.equal(
-          Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(polled.body).url,
-          LIVE_POLL_URL,
-        );
       }),
   );
 });
@@ -894,154 +883,6 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
             signedOut,
           );
         }
-      }),
-  );
-
-  it.effect(
-    "a task's planning conversation is sealed as its mark and its running workers for an account that reaches the task, not found for one that does not, and polled without Realtime",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openUser;
-        const stranger = yield* openUser;
-        const task = yield* startTask(owner, { name: "Teammate invitations" });
-        const askConversation = (bearer: string, sealing = Option.some(SCRIPTED)) =>
-          askTranscript({
-            bearer,
-            agentId: task.id,
-            sealing,
-            path: "/api/live/task-conversation",
-          });
-
-        const sealed = yield* askConversation(owner);
-        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(sealed.body);
-        assert.equal(answer.url, REALTIME_URL);
-        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["mark", "workers"]);
-        for (const query of Object.values(answer.queries)) {
-          assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
-          assert.ok(query.capability.includes(`"${task.id}"`), "read of the task");
-        }
-        assert.deepEqual(yield* askConversation(stranger), {
-          status: HOSTED_HTTP_STATUS.NOT_FOUND,
-          body: { error: HOSTED_API_ERROR.NOT_FOUND },
-        });
-        // A read naming another account than the bearer's, as one started before a switch does, is signed out.
-        assert.deepEqual(
-          yield* askTranscript({
-            bearer: owner,
-            forUser: stranger,
-            agentId: task.id,
-            sealing: Option.some(SCRIPTED),
-            path: "/api/live/task-conversation",
-          }),
-          {
-            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
-            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
-          },
-        );
-        const polled = yield* askConversation(owner, Option.none());
-        assert.equal(
-          Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(polled.body).url,
-          LIVE_POLL_URL,
-        );
-      }),
-  );
-
-  it.effect(
-    "a planning worker's transcript is sealed under the task's conversation as the worker's child once the planner's journal names its call, for a member of the task's workspace; a call the journal names no worker for yet, or a call sending more work to an earlier worker, waits on it, and anyone else or a task never planned on is not found",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openUser;
-        const stranger = yield* openUser;
-        const planned = yield* startTask(owner, { name: "Teammate invitations" });
-        const opened = yield* openTaskConversation(owner, planned.id);
-        assert.ok(Option.isSome(opened));
-        const unplanned = yield* startTask(owner, { name: "Billing" });
-        const askWorker = (bearer: string, taskId: string, sealing = Option.some(SCRIPTED)) =>
-          askTranscript({
-            bearer,
-            agentId: taskId,
-            call: "call-0-0",
-            sealing,
-            path: "/api/live/task-worker-transcript",
-          });
-
-        const db = yield* Database;
-        yield* db.insert(turns).values({
-          userId: owner,
-          conversationId: opened.value.conversationId,
-          origin: TURN_ORIGIN.SPOKEN,
-          status: TURN_STATUS.RUNNING,
-          queuedAt: new Date(),
-        });
-        // Before the journal names the call, nothing is sealed while the planning runs, since the call may reach an earlier worker.
-        assert.deepEqual(yield* askWorker(owner, planned.id), {
-          status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-          body: { error: HOSTED_API_ERROR.UNAVAILABLE },
-        });
-        yield* journalDelegating(owner, opened.value.conversationId);
-        const sealed = yield* askWorker(owner, planned.id);
-        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(sealed.body);
-        assert.equal(answer.url, REALTIME_URL);
-        const child = childConversationId(opened.value.conversationId, "call-0-0");
-        assert.ok(answer.queries.messages.capability.includes(`"${child}"`), "the worker's own");
-        assert.ok(answer.queries.messages.capability.includes(`"${planned.id}"`), "under the task");
-        for (const [bearer, taskId] of [
-          [stranger, planned.id],
-          [owner, unplanned.id],
-        ] as const) {
-          assert.deepEqual(yield* askWorker(bearer, taskId), {
-            status: HOSTED_HTTP_STATUS.NOT_FOUND,
-            body: { error: HOSTED_API_ERROR.NOT_FOUND },
-          });
-        }
-        // A later call sending the first worker more work is sealed on that worker's child.
-        const more = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
-          (yield* askTranscript({
-            bearer: owner,
-            agentId: planned.id,
-            call: "call-2-0",
-            sealing: Option.some(SCRIPTED),
-            path: "/api/live/task-worker-transcript",
-          })).body,
-        );
-        assert.ok(more.queries.messages.capability.includes(`"${child}"`), "the first worker's");
-        // Once the planning has ended, a call the journal never named is not found for good.
-        yield* db
-          .update(turns)
-          .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })
-          .where(eq(turns.conversationId, opened.value.conversationId));
-        assert.deepEqual(
-          yield* askTranscript({
-            bearer: owner,
-            agentId: planned.id,
-            call: "call-9-9",
-            sealing: Option.some(SCRIPTED),
-            path: "/api/live/task-worker-transcript",
-          }),
-          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
-        );
-        // A read naming another account than the bearer's, as one started before a switch does, is signed out.
-        assert.deepEqual(
-          yield* askTranscript({
-            bearer: owner,
-            forUser: stranger,
-            agentId: planned.id,
-            call: "call-0-0",
-            sealing: Option.some(SCRIPTED),
-            path: "/api/live/task-worker-transcript",
-          }),
-          {
-            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
-            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
-          },
-        );
-        const polled = yield* askWorker(owner, planned.id, Option.none());
-        assert.equal(
-          Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(polled.body).url,
-          LIVE_POLL_URL,
-        );
       }),
   );
 });
@@ -1238,3 +1079,131 @@ it.layer(getTestDB())("the workspace chat's live read", (it) => {
       }),
   );
 });
+
+it.effect(
+  "the account's workspaces are sealed as its workspaces and their installations for the bearer's own account",
+  () =>
+    Effect.gen(function* () {
+      const path = "/api/live/workspaces";
+      const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+      assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(sealed.body);
+      assert.equal(answer.url, REALTIME_URL);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["installations", "workspaces"]);
+      for (const query of Object.values(answer.queries)) {
+        assert.ok(query.capability.includes('"user-dana"'), "read for the bearer");
+      }
+      assert.deepEqual(yield* ask({ path, sealing: Option.some(SCRIPTED) }), {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      });
+      // A read started for another account, as a page left open under a changed session asks, is signed out.
+      assert.deepEqual(
+        yield* ask({
+          bearer: "user-dana",
+          forUser: "user-erin",
+          path,
+          sealing: Option.some(SCRIPTED),
+        }),
+        {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        },
+      );
+    }),
+);
+
+it.layer(getTestDB())("a workspace's people's live read", (it) => {
+  it.effect(
+    "a workspace's people are sealed as its members and former members for a member, and not found for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, outsider] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
+        for (const id of [owner, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        const path = `/api/live/workspace-members?workspaceId=${workspaceId}`;
+
+        const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(workspaceMembersLiveAnswerSchema)(sealed.body);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["former", "members"]);
+        for (const query of Object.values(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
+          assert.ok(query.capability.includes(`"${workspaceId}"`), "read of the workspace");
+        }
+        assert.deepEqual(yield* ask({ bearer: outsider, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        // A read started for another account is signed out, before the workspace is looked at.
+        assert.equal(
+          (yield* ask({ bearer: owner, forUser: outsider, path, sealing: Option.some(SCRIPTED) }))
+            .status,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's invitations are sealed with the service's origin for its owner, refused to a member, and not found for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = `user-${randomUUID()}`;
+        const teammate = `user-${randomUUID()}`;
+        const outsider = `user-${randomUUID()}`;
+        for (const id of [owner, teammate, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, teammate);
+        const path = `/api/live/workspace-invitations?workspaceId=${workspaceId}`;
+
+        const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(workspaceInvitationsLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.origin, ORIGIN);
+        assert.ok(answer.queries.invitations.capability.includes(`"${owner}"`));
+        assert.deepEqual(yield* ask({ bearer: teammate, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        });
+        assert.deepEqual(yield* ask({ bearer: outsider, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        assert.equal(
+          (yield* ask({ bearer: owner, forUser: outsider, path, sealing: Option.some(SCRIPTED) }))
+            .status,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+});
+
+it.effect(
+  "the account's sidebar is sealed as its sections, the tasks in them, and its pins, for the bearer's own account",
+  () =>
+    Effect.gen(function* () {
+      const path = "/api/live/sidebar";
+      const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+      assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(sidebarLiveAnswerSchema)(sealed.body);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["entries", "pins", "sections"]);
+      for (const query of Object.values(answer.queries)) {
+        assert.ok(query.capability.includes('"user-dana"'), "read for the bearer");
+      }
+      assert.equal(
+        (yield* ask({
+          bearer: "user-dana",
+          forUser: "user-erin",
+          path,
+          sealing: Option.some(SCRIPTED),
+        })).status,
+        HOSTED_HTTP_STATUS.UNAUTHORIZED,
+      );
+    }),
+);

@@ -54,8 +54,8 @@ import {
  * answered with the thread as it now stands. Every member of the plan's
  * workspace reads and writes every thread; a plan the account does not reach,
  * or an archived one for a write, answers as not found, and a thread the plan
- * does not hold as not found too. A member's comment that mentions Luke or
- * one of the task's agents with \`@\` hands each the thread (\`mentionsHandedOver\`).
+ * does not hold as not found too. A member's comment that mentions one of
+ * the task's agents with \`@\` hands each the thread (\`mentionsHandedOver\`).
  *
  * The read stays a long-held JSON answer: the hold is the route's own,
  * `heldUntilMoved` under the coding agents' hold, and nothing the handler
@@ -138,10 +138,9 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The thread handed to each one a member's words mention with \`@\`: Luke,
- * where they mention this task's, and each of the task's standing agents;
- * an agent of another task, or an archived one, is a reference, which asks
- * no one. Each ask is written under a key drawn from the words' own, so the
+ * The thread handed to each of the task's standing agents a member's words
+ * mention with \`@\`; an agent of another task, or an archived one, is a
+ * reference, which asks no one, and so is Luke, whom no task has any more. Each ask is written under a key drawn from the words' own, so the
  * words sent again ask no one twice. A hand-over that does not land is taken
  * back, the words posted all the same. Answers the ones asked who could not
  * take it.
@@ -153,16 +152,15 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   comment: MentioningComment,
 ) {
   const { userId, taskId } = comment;
-  const asked = askedInWords(comment.words, taskId);
-  const tos: readonly PlanCommentAsked[] = [
-    ...(asked.luke ? [{ actor: PLAN_COMMENT_ACTOR.LUKE }] : []),
-    ...asked.agentIds.map((agentId) => ({ actor: PLAN_COMMENT_ACTOR.AGENT, agentId })),
-  ];
+  const tos: readonly PlanCommentAsked[] = askedInWords(comment.words).map((agentId) => ({
+    actor: PLAN_COMMENT_ACTOR.AGENT,
+    agentId,
+  }));
   const unsent: PlanCommentAsked[] = [];
   for (const to of tos) {
     const landed = yield* Effect.gen(function* () {
       const agent = yield* askableAgent(userId, taskId, to);
-      if (to.actor === PLAN_COMMENT_ACTOR.AGENT && agent === undefined) return true;
+      if (agent === undefined) return true;
       const ask = {
         action: PLAN_COMMENT_ACTION.ASK,
         clientKey: mentionKey(comment.clientKey, to),
@@ -185,10 +183,7 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
         thread: outcome.answer.thread,
         clientKey: ask.clientKey,
         words: comment.words,
-        to:
-          agent === undefined
-            ? { actor: PLAN_COMMENT_ACTOR.LUKE }
-            : { actor: PLAN_COMMENT_ACTOR.AGENT, agent },
+        to: agent,
       });
       return true;
     }).pipe(
@@ -238,9 +233,8 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     taskName: task.value.name,
     thread,
     sender: asked?.writer.by?.name ?? "A member",
-    toLuke: to.actor === PLAN_COMMENT_ACTOR.LUKE,
   });
-  yield* handCommentAskOver(seams, request, { userId, taskId, to, clientKey, text, words }).pipe(
+  yield* handCommentAskOver(seams, request, { userId, to, clientKey, text, words }).pipe(
     Effect.onError(() =>
       withdrawPlanCommentAsk(taskId, clientKey).pipe(
         Effect.tapError(logStoreFailure),

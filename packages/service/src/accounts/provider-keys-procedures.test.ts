@@ -282,6 +282,16 @@ const remove = (userId: string, provider: string, kind?: string) =>
     query: kind === undefined ? `provider=${provider}` : `provider=${provider}&kind=${kind}`,
   });
 
+const turnForAgents = (
+  userId: string,
+  forAgents: boolean,
+  kind: string = PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+) =>
+  request(userId, {
+    method: "PATCH",
+    body: { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind, forAgents },
+  });
+
 /** A Claude setup-token as `claude setup-token` prints one: an OAuth token's prefix, synthetic throughout. */
 const SETUP_TOKEN = "sk-ant-oat01-test-setup-token-000000000000000000000000tokn";
 
@@ -682,6 +692,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           addedAt: savedAt,
           status: PROVIDER_KEY_STATUS.UNVERIFIED,
           statusAt: savedAt,
+          forAgents: true,
         };
         assert.deepEqual(keysOf(saved), { keys: [], subscriptions: [subscription] });
         assert.deepEqual(othersRead, { keys: [] }, "another account reads none of it");
@@ -758,6 +769,36 @@ it.layer(getTestDB())("the provider keys route", (it) => {
       }),
   );
 
+  it.effect(
+    "a connected plan's default for coding agents is turned by its bearer's account alone and answered on its subscription; a plan the account does not hold, or an API key, changes nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts({ ring: KEK.ONE });
+        keysOf(yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
+        keysOf(yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
+        const defaults = (answer: ReturnType<typeof keysOf>) =>
+          answer.subscriptions?.map(({ kind, forAgents }) => [kind, forAgents]);
+
+        const off = keysOf(yield* ask(turnForAgents(owner, false)));
+        const othersRead = keysOf(yield* ask(request(other)));
+        const backOn = keysOf(yield* ask(turnForAgents(owner, true)));
+        keysOf(
+          yield* ask(
+            remove(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+        const noPlan = keysOf(yield* ask(turnForAgents(other, false)));
+        const apiKey = yield* ask(turnForAgents(owner, false, PROVIDER_KEY_KIND.API_KEY));
+
+        const token = PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN;
+        assert.deepEqual(defaults(off), [[token, false]]);
+        assert.deepEqual(defaults(othersRead), [[token, true]], "another account's stands");
+        assert.deepEqual(defaults(backOn), [[token, true]]);
+        assert.deepEqual(noPlan, { keys: [] }, "a plan not held is turned nowhere");
+        assert.equal(apiKey.status, 400, "an API key carries no default");
+      }),
+  );
+
   it.effect("setup-token saves are braked with key saves, ten an hour per account", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts({ ring: KEK.ONE });
@@ -799,6 +840,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
               addedAt: savedAt,
               status: PROVIDER_KEY_STATUS.UNVERIFIED,
               statusAt: savedAt,
+              forAgents: true,
             },
           ],
         });

@@ -196,16 +196,15 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "billing-export",
     "teammate-invitations •",
     "# Direct messages",
-    "Luke",
-    "Invite emails",
     "Add teammate invitations",
+    "Invite emails",
     "Maria Chen",
   ]);
   assert.deepEqual(stream(page), [
     "Add teammate invitations in #teammate-invitations",
     "Invite emails in #teammate-invitations",
     "Invite emails in #teammate-invitations",
-    "Luke in #teammate-invitations",
+    "Add teammate invitations in #teammate-invitations",
   ]);
 });
 
@@ -220,7 +219,7 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Invite emails",
     "Add teammate invitations",
     "Invite emails",
-    "Luke",
+    "Add teammate invitations",
     "Invite emails",
     "Dean Stratakos",
   ]);

@@ -18,7 +18,6 @@ import {
 } from "@luke/database/integration-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   type IntegrationProvider,
@@ -316,19 +315,6 @@ export function deleteWorkspaceIntegration(
 
 const OrganizationSchema = Schema.Struct({ organizationId: Schema.String });
 
-const findTaskWorkspace = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: OrganizationSchema,
-  execute: (conversationId) =>
-    Database.use((db) =>
-      db
-        .select({ organizationId: task.organizationId })
-        .from(task)
-        .where(eq(task.conversationId, conversationId))
-        .limit(1),
-    ),
-});
-
 const findAgentWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OrganizationSchema,
@@ -342,17 +328,11 @@ const findAgentWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The workspace a conversation's work belongs to: its plan's, or its
- * coding agent's; nothing for a conversation that is neither's.
- */
+/** The workspace a conversation's work belongs to: its coding agent's; nothing for a conversation no agent names. */
 export function readConversationWorkspace(
   conversationId: string,
 ): IntegrationStoreEffect<string | undefined> {
-  return Effect.gen(function* () {
-    const planned = yield* findTaskWorkspace(conversationId);
-    if (Option.isSome(planned)) return planned.value.organizationId;
-    const agent = yield* findAgentWorkspace(conversationId);
-    return Option.isSome(agent) ? agent.value.organizationId : undefined;
-  });
+  return Effect.map(findAgentWorkspace(conversationId), (agent) =>
+    Option.isSome(agent) ? agent.value.organizationId : undefined,
+  );
 }

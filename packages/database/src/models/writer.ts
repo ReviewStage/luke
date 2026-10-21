@@ -2202,8 +2202,8 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
 /**
  * The developer's lines of the conversation awaiting a turn, oldest first:
  * the user rows no turn owns, of a coding agent's conversation, which is
- * the one kind whose developer lines are written ahead of their turn; a
- * task conversation's turnless user rows are its spoken asks, attached
+ * the one kind whose developer lines are written ahead of their turn; an
+ * old task conversation's turnless user rows are its spoken asks, attached
  * by their own writer, and never match here. A line a turn already received
  * under another row awaits nothing and is not offered (`noReceiptOfLine`).
  */

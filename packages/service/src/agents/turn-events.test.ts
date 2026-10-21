@@ -10,13 +10,11 @@ import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { BRAIN_RUN_EVENT, SLOW_STEP_KIND, TURN_STATUS } from "../core.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "./brain-host/relay.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import { projectTurnEvents } from "./turn-events.js";
 
 /**
@@ -34,7 +32,7 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
+const writer = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 const relay = new StreamRelay({
   writer,
   asks: { binding: askRecord(), stopTurn: () => Effect.void },
@@ -53,10 +51,10 @@ const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =
 
 const EVE_TURN = "turn_0";
 
-/** One spoken ask's turn as eve emits it: a shell command (the brain's repository read, unless another tool is named), then a two-sentence answer. */
+/** One spoken ask's turn as eve emits it: a shell command, then a two-sentence answer. */
 function spokenTurn(
   turnId: string,
-  shell: string = RUN_IN_REPOSITORY_TOOL.name,
+  shell: string = AGENT_TOOL.BASH,
 ): readonly MessageStreamEvent[] {
   const sequence = 0;
   return [
@@ -91,7 +89,6 @@ function spokenTurn(
           callId: "call-1",
           toolName: shell,
           output: {
-            status: REPOSITORY_SHELL_STATUS.RAN,
             exitCode: 0,
             stdout: "README.md\n",
             stderr: "",
@@ -149,7 +146,7 @@ function untilRequested(events: readonly MessageStreamEvent[]): number {
 async function projected(
   userId: string,
   turnId: string,
-  tools: ToolSet = HOSTED_TOOL_SET,
+  tools: ToolSet = CODER_TOOL_SET,
   joinedAfterStep?: number,
 ): Promise<readonly TurnEvent[]> {
   const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
@@ -238,33 +235,6 @@ test("mid-turn the slow step is told at once, then the settled mark, the sentenc
     "Another is waiting on you.",
   );
   assert.deepEqual(end, { turnId, seq: 5, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED });
-});
-
-test("an agent's turn a call follows is projected under the agent's tools, its shell command the slow step as the brain's repository read is", async () => {
-  const agentRelay = new StreamRelay({
-    writer: await database.run(storeWriter({ tools: CODER_TOOL_SET })),
-    asks: { binding: askRecord(), stopTurn: () => Effect.void },
-    now: () => NOW,
-    report: () => undefined,
-  });
-  const target = await conversation();
-  const standing = standingFor(target);
-  const events = spokenTurn(EVE_TURN, AGENT_TOOL.BASH);
-  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
-  await play(events.slice(0, untilRequested(events)), standing, agentRelay);
-
-  assert.deepEqual(await projected(target.userId, turnId, CODER_TOOL_SET), [
-    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.REPOSITORY_READ },
-  ]);
-
-  await play(events.slice(untilRequested(events)), standing, agentRelay);
-  assert.deepEqual(kinds(await projected(target.userId, turnId, CODER_TOOL_SET)), [
-    TURN_EVENT_KIND.SLOW_STEP,
-    TURN_EVENT_KIND.ACTIONS_SETTLED,
-    TURN_EVENT_KIND.REPLY_SENTENCE,
-    TURN_EVENT_KIND.REPLY_SENTENCE,
-    TURN_EVENT_KIND.ENDED,
-  ]);
 });
 
 test("a spoken ask that joined an agent's typed turn after its first step hears that turn from the next step on alone: the answer's words, never the turn's earlier ones nor the work it goes back to, and its run ends once the step after the answer began, the turn still running", async () => {

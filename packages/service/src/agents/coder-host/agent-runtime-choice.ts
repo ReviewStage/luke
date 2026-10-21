@@ -2,29 +2,37 @@
  * agent-runtime-choice.ts -- the runtime a new coding agent runs on and who pays for it, decided once as it starts.
  *
  * An agent runs on a native harness when, and only when, that provider's
- * plan pays for it. For Release 1's cohort that is:
+ * plan pays for it. For Release 1's cohort the plan is offered:
  *
  * - Claude Code, paid for by the account's Claude plan, for an account in
  *   `LUKE_NATIVE_AGENT_ACCOUNTS`, on a Claude model Claude Code runs (no
  *   fast variant), where the account keeps a Claude setup-token and this
  *   function reaches a harness (`NativeAgentSessions`: a web function's own,
- *   or the eve apps' relay to one, so a Start from the planner or an eve
- *   agent decides as the panel's does).
+ *   or the eve app's relay to one, so a Start from an eve agent decides as
+ *   the panel's does).
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
  *   GPT model (no fast variant), where the account keeps a ChatGPT sign-in
  *   (`chatgpt_oauth`) that OpenAI has not signed out and the deployment can
  *   still open.
- * - eve, exactly as today, for everything else, with no payer recorded.
+ *
+ * Where the Claude plan is offered, the payer is the one Start picked for
+ * this agent, else the account's default: the plan where its row's "Use my
+ * Claude plan for coding agents" is on, eve's payer where it is off. eve's
+ * payer is the account's own Anthropic API key where it saved one, and
+ * Luke's key where it did not, since that is the key eve's steps run on
+ * (`account-keys.ts`), so a pick of either names eve and the payer recorded
+ * is the one eve bills. The ChatGPT plan, where offered, pays as before
+ * (P25 brings it the same pick). Where no plan is offered, the agent runs on
+ * eve exactly as before, with no payer recorded, whatever was picked.
  *
  * The choice is written on the agent as it is made and never changes: a
  * plan that later runs out or is disconnected pauses the agent, and never
- * moves it to another payer. P14 lets Start pick the API key or Luke's key
- * in place of the plan.
+ * moves it to another payer.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
-import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
+import { listProviderKeyRows, type ProviderKeyRow } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -39,7 +47,7 @@ import type { StoreFailure } from "../../http/store-failure.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
-/** What a new agent runs on, and who pays for it; no payer for an agent on eve, as before payers were recorded. */
+/** What a new agent runs on, and who pays for it; no payer for an agent on eve outside a plan's offer, as before payers were recorded. */
 export interface AgentRuntimeChoice {
   readonly runtime: ConversationRuntime;
   readonly payer: CodingAgentPayer | undefined;
@@ -64,25 +72,29 @@ const UNUSABLE_SIGN_IN: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Whether the account keeps the plan credential its provider's harness
- * launches on, as above. A ChatGPT sign-in must also open under the
+ * The plan credential the provider's harness launches on, as the account
+ * keeps it, or none, as above. A ChatGPT sign-in must also open under the
  * deployment's ring as it stands, since a row sealed under a key since
  * rotated out still reads as its last stored status.
  */
-const keepsPlan = (userId: string, provider: string, ring: Redacted.Redacted | undefined) =>
+const keptPlan = (
+  userId: string,
+  provider: string,
+  ring: Redacted.Redacted | undefined,
+): Effect.Effect<ProviderKeyRow | undefined, StoreFailure, DatabaseServices> =>
   provider === MODEL_PROVIDER.ANTHROPIC
     ? Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN), (rows) =>
-        rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC),
+        rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC),
       )
     : Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH), (rows) => {
         const parsed = ring === undefined ? undefined : parseKeyRing(ring);
-        if (parsed === undefined || Result.isFailure(parsed)) return false;
+        if (parsed === undefined || Result.isFailure(parsed)) return undefined;
         const owner = {
           userId,
           provider: PROVIDER_KEY_PROVIDER.OPENAI,
           kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
         };
-        return rows.some(
+        return rows.find(
           (row) =>
             row.provider === PROVIDER_KEY_PROVIDER.OPENAI &&
             !UNUSABLE_SIGN_IN.has(row.status) &&
@@ -90,10 +102,23 @@ const keepsPlan = (userId: string, provider: string, ring: Redacted.Redacted | u
         );
       });
 
-/** The runtime and payer of a new agent of the account's on the model given, as above. */
+/** eve's payer for the account's Claude agents: its own Anthropic API key where it saved one, Luke's where it did not. */
+const evePayer = Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<AgentRuntimeChoice, StoreFailure, DatabaseServices> {
+  const keys = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
+  const own = keys.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
+  return {
+    runtime: CONVERSATION_RUNTIME.EVE,
+    payer: own ? CODING_AGENT_PAYER.API_KEY : CODING_AGENT_PAYER.LUKE,
+  };
+});
+
+/** The runtime and payer of a new agent of the account's on the model given, the payer Start picked honoured where the Claude plan is offered, as above. */
 export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   model: string,
+  picked?: CodingAgentPayer,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure, DatabaseServices> {
   const environment = yield* Effect.serviceOption(HostedEnvironment);
   const cohort =
@@ -103,6 +128,10 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (provider === undefined || provider.fast) return ON_EVE;
   if (Option.isNone(yield* Effect.serviceOption(NativeAgentSessions))) return ON_EVE;
   const ring = environment.value.providerKeyEncryptionKeys;
-  if (!(yield* keepsPlan(userId, provider.provider, ring))) return ON_EVE;
-  return provider.provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
+  const plan = yield* keptPlan(userId, provider.provider, ring);
+  if (plan === undefined) return ON_EVE;
+  if (provider.provider !== MODEL_PROVIDER.ANTHROPIC) return ON_CODEX;
+  const onPlan =
+    picked === undefined ? plan.forAgents : picked === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+  return onPlan ? ON_CLAUDE_CODE : yield* evePayer(userId);
 });

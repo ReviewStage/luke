@@ -5,21 +5,23 @@ import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-sto
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
+import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
+import { workspacesLiveStatements } from "@luke/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
-import {
-  agentFollowedBy,
-  taskFollowedBy,
-  transcriptLiveStatements,
-} from "../agents/coder-host/transcript-live.js";
+import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
+import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
-import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
+import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
+import { taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
@@ -66,15 +68,7 @@ function liveStatements() {
     ),
   );
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
-  const conversation = Option.getOrThrow(taskConversationLiveStatements(USER_ID, randomUUID()));
   const chat = Option.getOrThrow(workspaceChatLiveStatements(USER_ID, READER));
-  const taskWorker = Option.getOrThrow(
-    transcriptLiveStatements(
-      { userId: USER_ID, conversationId: randomUUID() },
-      parent,
-      taskFollowedBy(randomUUID(), USER_ID),
-    ),
-  );
   const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
   const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
   return {
@@ -83,6 +77,8 @@ function liveStatements() {
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
+    "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
+    "task.history": Option.getOrThrow(taskHistoryLiveStatements(USER_ID, randomUUID())).revisions,
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
     ),
@@ -94,15 +90,29 @@ function liveStatements() {
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
     ),
-    ...Object.fromEntries(
-      Object.entries(conversation).map(([part, query]) => [`conversation.${part}`, query]),
-    ),
     ...Object.fromEntries(Object.entries(chat).map(([part, query]) => [`chat.${part}`, query])),
-    ...Object.fromEntries(
-      Object.entries(taskWorker).map(([part, query]) => [`taskWorker.${part}`, query]),
-    ),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(workspacesLiveStatements(USER_ID))).map(([part, query]) => [
+        `workspaces.${part}`,
+        query,
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(workspaceMembersLiveStatements(USER_ID, randomUUID()))).map(
+        ([part, query]) => [`workspace-members.${part}`, query],
+      ),
+    ),
+    "workspace-invitations.invitations": Option.getOrThrow(
+      workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
+    ),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(
+        ([part, query]) => [`sidebar.${part}`, query],
+      ),
+    ),
+    "sidebar.pins": Option.getOrThrow(repositoryPinsLiveStatement(USER_ID)),
   };
 }
 

@@ -31,6 +31,7 @@ const developer = {
 const part = { type: "input_text", text: "What needs me?" };
 const user = { type: "message", role: "user", content: [part] };
 const TASK_ID = "1a000000-0000-4000-8000-000000000001";
+const AGENT_ID = "2b000000-0000-4000-8000-000000000002";
 
 const assistant = {
   type: "message",
@@ -45,6 +46,7 @@ function createFrame(overrides: { [field: string]: UnparsedWireValue } = {}) {
     voice: LIVE_VOICE.MARIN,
     input: [developer, user, assistant],
     planId: TASK_ID,
+    agentId: AGENT_ID,
     ...overrides,
   };
 }
@@ -74,6 +76,10 @@ test("an opening frame is either a create or an attach, told apart by type", () 
   const { planId: _named, ...taskless } = createFrame();
   assert.equal(sessionOpeningFrameFromWire(taskless), undefined);
   assert.equal(sessionOpeningFrameFromWire(createFrame({ planId: "plan-1" })), undefined);
+  // And every call speaks into one of the task's agents: a create that names none is no request at all.
+  const { agentId: _agent, ...agentless } = createFrame();
+  assert.equal(sessionOpeningFrameFromWire(agentless), undefined);
+  assert.equal(sessionOpeningFrameFromWire(createFrame({ agentId: "agent-1" })), undefined);
   assert.equal(
     sessionOpeningFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "x" }),
     undefined,

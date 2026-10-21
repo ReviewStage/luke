@@ -4,9 +4,8 @@ import { Schema } from "effect";
 /**
  * command-description.ts -- the few plain words a model gives each command it runs, which the developer's transcript names the call by.
  *
- * Both shells a model is handed, the brain's `run_in_repository`
- * (`repository-shell.ts`) and a coding agent's `bash` (`coder-host/shell.ts`),
- * take one beside the command, as Claude Code's shell does, so a row reads
+ * A coding agent's shell, `bash` (`coder-host/shell.ts`), takes one beside
+ * the command, as Claude Code's shell does, so a row reads
  * "Find where invites are sent" rather than a pipeline of `grep`s. It is
  * optional, so a call without one still runs, and it is never run nor handed
  * to the sandbox: it rides in the call's stored input, where the desktop reads

@@ -1,5 +1,5 @@
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { type CodingAgentTranscriptKey, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
+import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -70,7 +70,13 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { AgentCallButton, type AgentCallDoors, AgentCallFoot } from "./agent-call.js";
+import {
+  AgentCallControls,
+  type AgentCallDoors,
+  AgentCallFoot,
+  takesCalls,
+  useAgentOnCall,
+} from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -116,6 +122,8 @@ import {
   providerOf,
   settledPlanEdits,
   sidebarCallIds,
+  spokenMessages,
+  type TurnRead,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -225,7 +233,13 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * last line and then one quiet line saying how long it worked and when it
  * ended; a
  * turn that was stopped or failed ends on one quiet line saying so, with
- * why where the service said. The list
+ * why where the service said. A call into the agent stands between a
+ * plain divider saying when it began and a line saying it ended, and on it
+ * each exchange reads as a conversation: the developer's line, what the
+ * voice said, and the turn whose words it read aloud folded closed under
+ * that, its reasoning, calls, written answer, and how long it worked one
+ * press away (`spokenMessages`), so an answer is not read twice; on a call
+ * into a busy agent, only the work after the ask joined its turn. The list
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
@@ -1132,7 +1146,7 @@ export function AgentMessage({
   delegation,
   todos = NO_TODOS,
   briefTitle,
-  said = false,
+  said,
   sender,
   origin,
   arrived = NO_ARRIVED,
@@ -1158,8 +1172,8 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so its words stay inside its work's fold, with how long it worked, once it has finished. */
-  said?: boolean;
+  /** How much of it the voice read aloud on a call (`spokenMessages`): all of it, its lines drawn ahead of it, or the work after a call's ask joined it, its lines drawn where the ask arrived; once it has finished that much folds closed under them, its words and how long it worked inside the fold. None where the voice read nothing of it. */
+  said?: TurnRead | undefined;
   /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
@@ -1244,7 +1258,24 @@ export function AgentMessage({
   // Note that Copy waits for whole words, while Fork takes a turn of no words, or one still running, as it stands.
   const copyable = words !== "" && !moving;
   const forks = forkable && forkCut?.messageSteps !== 0;
-  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
+  const foot = (
+    <TurnFoot
+      workedFor={workedFor}
+      copy={
+        copyable || (forks && forkOffered) ? (
+          <CopyMessageAction
+            words={words}
+            copyable={copyable}
+            messageId={message.id}
+            forkable={forks}
+            forkCut={forkCut}
+            placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
+          />
+        ) : null
+      }
+    />
+  );
+  // A spoken turn's foot, how long it worked with its Copy and Fork, stays inside its fold, under the words it holds.
   return stretches.map((stretch, index) => {
     if (stretch.line !== undefined) {
       const line = stretch.line;
@@ -1270,27 +1301,14 @@ export function AgentMessage({
       >
         {index === 0 ? named : null}
         <MessageContent>
-          <TranscriptRows rows={stretch.rows} trailer={said && ends ? workedFor : undefined}>
+          <TranscriptRows
+            rows={stretch.rows}
+            trailer={said !== undefined && ends ? foot : undefined}
+          >
             {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
           </TranscriptRows>
         </MessageContent>
-        {said || !ends ? null : (
-          <TurnFoot
-            workedFor={workedFor}
-            copy={
-              copyable || (forks && forkOffered) ? (
-                <CopyMessageAction
-                  words={words}
-                  copyable={copyable}
-                  messageId={message.id}
-                  forkable={forks}
-                  forkCut={forkCut}
-                  placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
-                />
-              ) : null
-            }
-          />
-        )}
+        {said !== undefined || !ends ? null : foot}
         {ends ? <ForkedToLine messageId={message.id} /> : null}
       </Message>
     );
@@ -1509,8 +1527,9 @@ function transcriptPlacing(
   );
   // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
   const opening = !replayed || first === undefined ? undefined : replayOpening(first);
-  // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
-  const placed = placedMessages(messages);
+  // A line that reached a turn while it ran is drawn inside that turn, where it arrived, and the
+  // voice's line reading a turn aloud on a call ahead of it, the turn folded behind it.
+  const placed = spokenMessages(placedMessages(messages));
   const open = openReply(messages, working);
   return { todos, first, opening, placed, open };
 }
@@ -1619,7 +1638,10 @@ function AgentTranscriptView({
   const places = useMemo(
     () =>
       callPlaces(
-        placing.placed.map(({ message, arrived }) => ({ ...message, arrived })),
+        placing.placed.map(({ message, arrived, said }) => ({
+          ...message,
+          arrived: [...arrived, ...said],
+        })),
         calls,
       ),
     [placing, calls],
@@ -1644,10 +1666,22 @@ function AgentTranscriptView({
         <Conversation>
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
-            {placed.map(({ message }, index) => (
+            {placed.map(({ message, said, read }, index) => (
               <Fragment key={message.id}>
                 {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
                   <CallOpen key={call.key} call={call} now={now} />
+                ))}
+                {said.map((line) => (
+                  <SteadyAgentMessage
+                    key={line.id}
+                    message={line}
+                    plan={false}
+                    lead={lead}
+                    moving={false}
+                    forkCut={forkCutOf(line, open)}
+                    delegation={delegation}
+                    sender={lineSender(line.sentBy, readerId, members, former)}
+                  />
                 ))}
                 <SteadyAgentMessage
                   message={message === first && opening !== undefined ? opening.brief : message}
@@ -1655,6 +1689,7 @@ function AgentTranscriptView({
                   taskId={message === plan ? taskId : undefined}
                   lead={lead}
                   moving={working && index === placed.length - 1}
+                  said={working && index === placed.length - 1 ? undefined : read}
                   forkCut={forkCutOf(message, open)}
                   delegation={delegation}
                   todos={todos}
@@ -1806,7 +1841,7 @@ function AgentTabView({
   continuedNote,
   continuable = false,
   calls,
-  call,
+  call: offeredCall,
 }: {
   agent: CodingAgentSummary;
   /** The calls into the agent, which its transcript places among its rows (`useAgentCalls`). */
@@ -1863,6 +1898,9 @@ function AgentTabView({
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
+  // Note that an agent on a provider's own harness takes no call, so its tab draws neither the button nor the foot.
+  const call = takesCalls(agent) ? offeredCall : undefined;
+  const onCall = useAgentOnCall(agent.id) && call !== undefined;
   const lines = useMemo(
     () => agentLines(transcript.messages, composer.sent),
     [transcript.messages, composer.sent],
@@ -1962,9 +2000,7 @@ function AgentTabView({
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
-        {call === undefined ? null : (
-          <AgentCallFoot agentId={agent.id} archived={onUnarchive !== undefined} doors={call} />
-        )}
+        {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (
@@ -2003,13 +2039,15 @@ function AgentTabView({
             closedRemedy={closedRemedy}
             call={
               call === undefined ? undefined : (
-                <AgentCallButton
+                <AgentCallControls
                   agentId={agent.id}
                   archived={onUnarchive !== undefined}
                   doors={call}
                 />
               )
             }
+            // Note that a call holds the microphone, so its own mute stands where Dictate would.
+            dictates={!onCall}
           />
         )}
       </footer>
@@ -2284,13 +2322,10 @@ export function AgentSubagentTab({
   onStatus,
   onHeld,
   sender,
-  transcriptKey,
 }: {
   agentId: string;
   callId: string;
   task: string;
-  /** The transcript the tab follows, where it is a task's planning worker's rather than the agent's worker's under `agentId` and `callId`. */
-  transcriptKey?: CodingAgentTranscriptKey | undefined;
   /** Who handed the worker its task, named under its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
   sender?: ReactNode;
   status: CodingAgentStatus;
@@ -2302,7 +2337,7 @@ export function AgentSubagentTab({
   onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const transcript = useAgentTranscript({
-    transcript: transcriptKey ?? { kind: TRANSCRIPT_KIND.AGENT, agentId, callId },
+    transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId, callId },
     shown,
     follower: control.transcripts,
     onStatus: (_agentId, next) => onStatus(next.status),

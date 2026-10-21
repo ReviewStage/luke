@@ -76,6 +76,15 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     case ACT_KIND.PROVIDER_KEYS_REMOVE:
       held = { keys: [] };
       return Promise.resolve(done(held));
+    case ACT_KIND.PROVIDER_KEYS_FOR_AGENTS:
+      held = {
+        keys: [],
+        subscriptions: (held.subscriptions ?? []).map((one) => ({
+          ...one,
+          forAgents: request.payload.forAgents,
+        })),
+      };
+      return Promise.resolve(done(held));
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
@@ -251,4 +260,39 @@ test("a token Anthropic rejected says so and offers to replace it", async () => 
   const group = claudeGroup(page) ?? assert.fail("no Claude Code group");
   assert.match(group.textContent ?? "", /Anthropic rejected this token\./u);
   assert.ok(button(group, "Replace token"));
+});
+
+const planSwitch = (within: Element) =>
+  within.querySelector<HTMLButtonElement>(
+    '[role="switch"][aria-label="Use my Claude plan for coding agents"]',
+  );
+
+test("a connected plan's switch stands on, as connecting turns it, and turning it off sends the change by the plan's kind and draws the service's word; no plan, no switch", async () => {
+  const empty = claudeGroup(await mount()) ?? assert.fail("no Claude Code group");
+  assert.equal(planSwitch(empty), null, "nothing to turn before a plan is connected");
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  held = { keys: [], subscriptions: [CONNECTED] };
+  const group = claudeGroup(await mount()) ?? assert.fail("no Claude Code group");
+  const toggle = planSwitch(group) ?? assert.fail("no plan switch");
+  assert.equal(toggle.getAttribute("aria-checked"), "true");
+
+  act(() => toggle.click());
+  await settle();
+
+  assert.deepEqual(
+    sent
+      .filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_FOR_AGENTS)
+      .map((each) => each.payload),
+    [
+      {
+        provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+        kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        forAgents: false,
+      },
+    ],
+  );
+  assert.equal(planSwitch(group)?.getAttribute("aria-checked"), "false");
 });

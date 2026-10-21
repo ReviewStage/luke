@@ -1,18 +1,28 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  NATIVE_CODING_AGENT_RUNTIMES,
+} from "@luke/features/coding-agent-wire";
+import { IDLE_TASKS_VIEW, type TaskActivity } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
+import { EXPERIMENT } from "@luke/settings";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
+import { WaveformIcon } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
+import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
-import { handState, stateWith } from "../testing/app-state.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -20,10 +30,14 @@ import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
- * An agent's tab takes calls where the platform has a voice: a Call button
- * beside Dictate, which calls the agent, and while a call into it stands, the
- * call bar at its foot in the button's place, its glyph wearing the live
- * mark. A platform with no voice hands the tab no doors, and it draws none.
+ * An agent's tab takes calls where the platform has a voice: a Call button,
+ * a waveform, beside Dictate, which calls the agent, and while a call into
+ * it stands, the call's own controls in the composer's row in the button's
+ * place, with no call bar and no line saying what Luke is doing, Luke's
+ * video as a small tile whose size is kept, and its glyph wearing the live
+ * mark. A platform with no voice hands the tab no doors, and it draws none,
+ * and nor does the tab of an agent on Claude Code or Codex, since calls run
+ * on eve alone.
  * Synthetic task and agent.
  */
 
@@ -44,6 +58,7 @@ beforeEach(installScrollIntoView);
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  window.localStorage.clear();
   document.body.innerHTML = "";
 });
 
@@ -51,12 +66,23 @@ afterEach(() => {
 async function mountOn(
   calls: AgentCallDoors | undefined,
   voice: VoiceView = IDLE_VOICE_VIEW,
+  agent: CodingAgentSummary = AGENT,
+  call: { avatar?: AvatarState; activity?: TaskActivity } = {},
 ): Promise<HTMLElement> {
   handState(
     {},
     {
-      settings: appSettingsWire(settingsView({ voiceAvailable: true })),
-      voice: { ...stateWith({}, {}).voice, view: voice },
+      settings: appSettingsWire(
+        settingsView({
+          voiceAvailable: true,
+          experiments: experimentsOn(EXPERIMENT.VIDEO_CALLS),
+        }),
+      ),
+      voice: { view: voice, avatar: call.avatar ?? AVATAR_OFF },
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        ...(call.activity === undefined ? {} : { activity: call.activity }),
+      },
     },
   );
   const base = tasksControl();
@@ -66,11 +92,11 @@ async function mountOn(
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [{ agent: AGENT.id }],
-      tab: { agent: AGENT.id },
-      openAgents: [AGENT.id],
+      tabs: [{ agent: agent.id }],
+      tab: { agent: agent.id },
+      openAgents: [agent.id],
     },
-    agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id] }),
     calls,
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -114,21 +140,139 @@ test("an agent's tab offers a Call button beside Dictate where the platform has 
   assert.equal(web.querySelector(".agent-call-foot"), null);
 });
 
-test("while a call into the agent stands, its tab's foot draws the call bar in the Call button's place and its glyph wears the live mark", async () => {
-  const listening: VoiceView = {
-    ...IDLE_VOICE_VIEW,
-    voiceStatus: LIVE_STATUS.LISTENING,
-    listening: true,
-    call: { taskId: DOCUMENT_TASK.id, agentId: AGENT.id },
-  };
-  const page = await mountOn({ onPress: () => undefined }, listening);
+/** A call into the agent, listening. */
+const ON_CALL: VoiceView = {
+  ...IDLE_VOICE_VIEW,
+  voiceStatus: LIVE_STATUS.LISTENING,
+  listening: true,
+  call: { taskId: DOCUMENT_TASK.id, agentId: AGENT.id },
+};
 
-  assert.equal(callButton(page), null, "the call bar's own microphone stands in its place");
-  const foot = page.querySelector(".agent-call-foot");
-  assert.ok(foot, "the call bar stands at the tab's foot");
-  assert.ok(foot.querySelector('button[aria-label="End call"]'));
+/** The names of the buttons the agent's composer offers, in its row's order. */
+function composerButtons(page: HTMLElement): (string | null)[] {
+  return [...page.querySelectorAll(".agent-composer-actions button")].map((each) =>
+    each.getAttribute("aria-label"),
+  );
+}
+
+/** The agent tab's video tile, where it stands. */
+function videoTile(page: HTMLElement): HTMLElement | null {
+  return page.querySelector<HTMLElement>(`section[aria-label="${CALL_VIDEO_LABEL.TILE}"]`);
+}
+
+/** The tile's resize edge, which it must have. */
+function tileEdge(page: HTMLElement): HTMLElement {
+  const edge = videoTile(page)?.querySelector<HTMLElement>('[role="separator"]');
+  assert.ok(edge, "the tile has a resize edge");
+  return edge;
+}
+
+test("the Call button is a waveform, not a phone", async () => {
+  const page = await mountOn({ onPress: () => undefined });
+  const glyph = callButton(page)?.querySelector("svg");
+  assert.ok(glyph);
+  assert.equal(glyph.outerHTML, renderToStaticMarkup(createElement(WaveformIcon)));
+});
+
+test("on a call into the agent, its composer holds the call's four controls in the Call button's place, and no call bar stands", async () => {
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
+    avatar: { status: AVATAR_STATUS.LIVE },
+  });
+
+  assert.equal(callButton(page), null, "the call's controls stand in its place");
+  const controls = page.querySelector('.agent-composer fieldset[aria-label="Call with Luke"]');
+  assert.ok(controls, "the call's controls stand in the composer");
+  assert.deepEqual(
+    [...controls.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["Mute speaker", "Mute microphone", CALL_VIDEO_LABEL.VIDEO_OFF, "End call"],
+  );
+  assert.equal(
+    composerButtons(page).includes("Dictate"),
+    false,
+    "the call's microphone stands where Dictate would",
+  );
+  assert.equal(page.querySelector(".call-bar"), null, "no call bar stands over the composer");
   assert.ok(
     page.querySelector('.main-tabs [role="tab"] .agent-calling-glyph'),
     "the agent's tab wears the live mark",
   );
+});
+
+test("on a call no line says what Luke is doing: no Listening, no Thinking, and no dots", async () => {
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
+    activity: { planner: {}, notes: true },
+  });
+  const tab = page.querySelector(".agent-tab");
+  assert.ok(tab);
+  assert.doesNotMatch(tab.textContent ?? "", /Thinking|Listening|Writing notes/u);
+  assert.equal(tab.querySelector(".thinking-dots"), null);
+  assert.equal(tab.querySelector(".call-status"), null);
+});
+
+test("with video off the tile goes and the composer's video button turns it on again; with video on it stands at the transcript's foot", async () => {
+  const off = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
+    avatar: AVATAR_OFF,
+  });
+  assert.equal(videoTile(off), null);
+  assert.ok(composerButtons(off).includes(CALL_VIDEO_LABEL.VIDEO_ON));
+  act(() => roots.pop()?.unmount());
+
+  const on = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
+    avatar: { status: AVATAR_STATUS.LIVE },
+  });
+  const tile = videoTile(on);
+  assert.ok(tile, "the tile stands");
+  assert.ok(tile.closest(".agent-call-foot"), "at the tab's foot");
+  assert.equal(tile.closest(".agent-composer"), null, "over the composer, not in it");
+  assert.equal(
+    tile.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_OFF}"]`),
+    null,
+    "its Video off is the composer's",
+  );
+});
+
+test("the video tile's size is held between its bounds and kept for the next call", async () => {
+  // A width kept by hand, or by an older build, past the greatest.
+  window.localStorage.setItem("luke.callTileWidth", "9999");
+  const live = { avatar: { status: AVATAR_STATUS.LIVE } } as const;
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
+  const size = () => videoTile(page)?.style.getPropertyValue("--call-tile-width");
+  assert.equal(size(), "360px", "a kept width past the greatest is held to it");
+
+  act(() =>
+    tileEdge(page).dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })),
+  );
+  assert.equal(size(), "360px");
+  act(() =>
+    tileEdge(page).dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })),
+  );
+  assert.equal(size(), "120px", "no smaller than the least");
+  act(() =>
+    tileEdge(page).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })),
+  );
+  assert.equal(size(), "136px", "its left edge widens it, as the tile is anchored at its right");
+  act(() => roots.pop()?.unmount());
+
+  const next = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
+  assert.equal(
+    videoTile(next)?.style.getPropertyValue("--call-tile-width"),
+    "136px",
+    "the next call opens on the size it was left at",
+  );
+});
+
+test("an agent on Claude Code or Codex draws no Call button and no call foot, even where the platform has a voice", async () => {
+  for (const runtime of NATIVE_CODING_AGENT_RUNTIMES) {
+    const pressed: string[] = [];
+    const page = await mountOn({ onPress: (agentId) => pressed.push(agentId) }, IDLE_VOICE_VIEW, {
+      ...AGENT,
+      runtime,
+    });
+    assert.ok(page.querySelector(".dictate-button"), `${runtime}: the composer stands`);
+    assert.equal(callButton(page), null, `${runtime}: no Call button`);
+    assert.equal(page.querySelector(".agent-call-foot"), null, `${runtime}: no call foot`);
+    assert.deepEqual(pressed, []);
+    act(() => roots.pop()?.unmount());
+    document.body.innerHTML = "";
+  }
 });

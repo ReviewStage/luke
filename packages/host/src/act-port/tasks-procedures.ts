@@ -9,10 +9,13 @@
  */
 
 import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
-import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
+  type TaskHistoryFollow,
+  type TaskHistoryFollowed,
+  type TaskPagesFollow,
+  type TaskPagesFollowed,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
   type TasksBrowserTabsAnswer,
@@ -30,7 +33,6 @@ import {
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
   type TasksIssueParams,
-  type TasksMessagesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -65,10 +67,11 @@ import {
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
 import type { VoiceCallAbout } from "@luke/voice/voice-view";
-import { Effect } from "effect";
+import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
+import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /** What the task procedures are handed: the host, and the doors of the window's process they open or read. */
 export interface TasksProceduresDependencies {
@@ -91,9 +94,6 @@ export interface TasksProceduresDependencies {
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
     tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
-    tasksWorkEarlier(): Effect.Effect<void>;
-    tasksConversationEarlier(): Effect.Effect<void>;
-    tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
     tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
     tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
     tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
@@ -105,6 +105,14 @@ export interface TasksProceduresDependencies {
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
     tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
     tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
+    /** A plan's pages followed at the host, their changes heard through `onTaskPagesChanged`. */
+    tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
+    tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
+    onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+    /** A plan's newest page of history followed at the host, its changes heard through `onTaskHistoryChanged`. */
+    tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+    tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+    onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
     tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
@@ -154,6 +162,10 @@ function adminPage(serviceBaseUrl: string): string | undefined {
 
 export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
+  /** How many streams stand open of each plan's pages. */
+  const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
+  /** How many streams stand open of each plan's history. */
+  const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
   return {
     [TASKS_ACT_KIND.TASKS_REFRESH]: actPort[TASKS_ACT_KIND.TASKS_REFRESH].effect(function* ({
       context,
@@ -356,26 +368,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksSetStanding(input);
       },
     ),
-    [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: actPort[TASKS_ACT_KIND.TASKS_WORK_EARLIER].effect(
-      function* ({ context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        yield* host.tasksWorkEarlier();
-      },
-    ),
-    [TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER]: actPort[
-      TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.tasksConversationEarlier();
-    }),
-    [TASKS_ACT_KIND.TASKS_MESSAGES]: actPort[TASKS_ACT_KIND.TASKS_MESSAGES].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.tasksMessages(input);
-    }),
     [TASKS_ACT_KIND.TASKS_FILE]: actPort[TASKS_ACT_KIND.TASKS_FILE].effect(function* ({
       input,
       context,
@@ -468,6 +460,42 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         if (!("page" in answer)) return answer;
         const lines = pageSourceLines(answer.page.html);
         return { lines } satisfies TasksPageSourceAnswer;
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const pages = followedStream(
+          {
+            keyOf: (scope: TaskPagesFollow) => scope.taskId,
+            follow: host.tasksPagesFollow,
+            unfollow: host.tasksPagesUnfollow,
+            onChanged: host.onTaskPagesChanged,
+            valueOf: (changed: TaskPagesFollowed, scope: TaskPagesFollow) =>
+              changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+          },
+          openPages,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const pages = followedStream(
+          {
+            keyOf: (scope: TaskHistoryFollow) => scope.taskId,
+            follow: host.tasksHistoryFollow,
+            unfollow: host.tasksHistoryUnfollow,
+            onChanged: host.onTaskHistoryChanged,
+            valueOf: (changed: TaskHistoryFollowed, scope: TaskHistoryFollow) =>
+              changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+          },
+          openHistories,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(pages));
       },
     ),
     [TASKS_ACT_KIND.TASKS_PAGES]: actPort[TASKS_ACT_KIND.TASKS_PAGES].effect(function* ({

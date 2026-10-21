@@ -100,18 +100,3 @@ export function childTitlesOf(
     (rows) => new Map(rows.map((row) => [row.id, row.title])),
   );
 }
-
-/** The title of each child named that has one, by the call the caller names its child by, since several calls may share one child. */
-export function childTitlesByCall(
-  parent: ConversationTarget,
-  childByCall: ReadonlyMap<string, string>,
-): ChildTitleEffect<ReadonlyMap<string, string>> {
-  return Effect.map(childTitlesOf(parent, [...new Set(childByCall.values())]), (titles) => {
-    const byCall = new Map<string, string>();
-    for (const [callId, child] of childByCall) {
-      const title = titles.get(child);
-      if (title !== undefined) byCall.set(callId, title);
-    }
-    return byCall;
-  });
-}

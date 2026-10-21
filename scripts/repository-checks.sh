@@ -175,9 +175,9 @@ fi
 # without declaring resolves in a developer's hoisted tree, typechecks, and
 # fails the deploy's bundle step, or, for the Vite client, ships a bundle that
 # happened to resolve through another package's link. Declare what is named.
-# The two eve services (apps/luke and apps/dev) are workspaces of their own,
-# each a Vercel service root installed from its own manifest, so each is held
-# to what it declares on the same terms.
+# The eve service (apps/dev) is a workspace of its own, a Vercel service
+# root installed from its own manifest, so it is held to what it declares on
+# the same terms.
 undeclared_packages() {
     local manifest=$1
     shift
@@ -197,7 +197,7 @@ undeclared_packages() {
 }
 undeclared_web_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/package.json" \
     "$LUKE_REPO_ROOT/apps/web/server" "$LUKE_REPO_ROOT/apps/web/src" "$LUKE_REPO_ROOT/apps/web/scripts")
-for service in apps/luke apps/dev; do
+for service in apps/dev; do
     undeclared_service_packages=$(undeclared_packages "$LUKE_REPO_ROOT/$service/package.json" \
         "$LUKE_REPO_ROOT/$service")
     if [[ -n "$undeclared_service_packages" ]]; then

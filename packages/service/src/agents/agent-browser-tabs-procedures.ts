@@ -2,8 +2,7 @@
  * agent-browser-tabs-procedures.ts -- the Browser tabs open in a task's agents' browsers, for a member's window: list them, and take one over and hand it back.
  *
  * `GET /api/plans/{id}/browser-tabs` lists the task's tabs, each with the
- * coding agent whose browser holds it, null for the task's Luke, and the
- * member driving it while their takeover stands. `POST
+ * coding agent whose browser holds it, and the member driving it while their takeover stands. `POST
  * /api/plans/{id}/browser-tabs/{tab}/driver` takes the tab over for
  * `BROWSER_TAKEOVER_HOLD_MS`, or moves the member's own takeover on by as
  * much, so a window that went away leaves the tab to its agent once that
@@ -54,7 +53,7 @@ function browserTabOf({ tab, agent }: ReachedBrowserTab, now: Date): AgentBrowse
   const driver = browserTabDriver(tab, now);
   return {
     id: tab.id,
-    agentId: agent?.id ?? null,
+    agentId: agent.id,
     address: tab.address,
     title: tab.title,
     openedBy:
@@ -102,7 +101,7 @@ export function agentBrowserTabsProcedures(seams: AgentBrowserTabsProcedureSeams
     }),
     takeOver: member.takeOver.effect(function* ({ input, context }) {
       const { tab, agent } = yield* reachedTab(context.userId, input);
-      if (agent !== null && !controlsAgent(context.userId, agent)) {
+      if (!controlsAgent(context.userId, agent)) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
       }
       const now = yield* DateTime.nowAsDate;

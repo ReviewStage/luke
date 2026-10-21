@@ -54,6 +54,7 @@ import {
   listProviderKeyRows,
   removeProviderKey,
   saveProviderKey,
+  setProviderKeyForAgents,
 } from "@luke/database/models/provider-key-store";
 import {
   PROVIDER_KEY_KIND,
@@ -134,17 +135,18 @@ const summariesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   ring: KeyRing,
 ) {
   const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId, kind));
-  return rows.map((row): ProviderKeySummary => {
+  return rows.map((row) => {
     const readable = Result.isSuccess(
       openProviderKey(ring, { userId, provider: row.provider, kind }, row),
     );
-    return {
+    const summary: ProviderKeySummary = {
       provider: row.provider,
       hint: row.hint,
       addedAt: row.createdAt.getTime(),
       status: readable ? row.status : PROVIDER_KEY_STATUS.UNREADABLE,
       statusAt: row.statusAt.getTime(),
     };
+    return { summary, forAgents: row.forAgents };
   });
 });
 
@@ -154,11 +156,13 @@ const keysAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   rejected?: ProviderKeyRejection,
   revocationUnconfirmed = false,
 ) {
-  const keys = yield* summariesOf(userId, PROVIDER_KEY_KIND.API_KEY, ring);
+  const keys = (yield* summariesOf(userId, PROVIDER_KEY_KIND.API_KEY, ring)).map(
+    (read) => read.summary,
+  );
   const subscriptions: SubscriptionKeySummary[] = [];
   for (const kind of SUBSCRIPTION_KINDS) {
-    for (const summary of yield* summariesOf(userId, kind, ring)) {
-      subscriptions.push({ ...summary, kind });
+    for (const { summary, forAgents } of yield* summariesOf(userId, kind, ring)) {
+      subscriptions.push({ ...summary, kind, forAgents });
     }
   }
   return {
@@ -256,6 +260,15 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
         return yield* keysAnswer(userId, ring, undefined, !confirmed);
       }
       yield* hostedStoreOrUnavailable(removeProviderKey(userId, input.query.provider, kind));
+      return yield* keysAnswer(userId, ring);
+    }),
+
+    /** A connected plan's default for the account's coding agents turned on or off; a plan the account does not hold changes nothing. */
+    setProviderKeyForAgents: keyed.setProviderKeyForAgents.effect(function* ({ context, input }) {
+      const { userId, ring } = context;
+      yield* hostedStoreOrUnavailable(
+        setProviderKeyForAgents(userId, input.provider, input.kind, input.forAgents),
+      );
       return yield* keysAnswer(userId, ring);
     }),
 

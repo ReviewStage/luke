@@ -6,8 +6,8 @@
  * network between them is a fake client that hands each post to the route,
  * and the harness behind the route writes down every call it takes and
  * whom it acts for. A suite provides `layer` where an eve app's runtime
- * provides the relay, so whatever reaches a native agent from the planner's
- * or an eve agent's tools is seen arriving at the harness, or not.
+ * provides the relay, so whatever reaches a native agent from an eve
+ * agent's tools is seen arriving at the harness, or not.
  * Synthetic secrets and ids throughout.
  */
 

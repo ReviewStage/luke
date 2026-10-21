@@ -29,7 +29,7 @@ export const pageTitleSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(PAGE_BOUNDS.MAX_TITLE_CHARS),
 );
 
-export const pageHtmlSchema = EffectSchema.String.check(
+const pageHtmlSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(PAGE_BOUNDS.MAX_HTML_CHARS),
 );

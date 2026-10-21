@@ -239,13 +239,6 @@
         }
       ]
     },
-    "luke": {
-      "root": "apps/luke",
-      "framework": "eve",
-      "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
-      "buildCommand": "pnpm exec eve build && pnpm exec bash ../../scripts/eve-source-maps.sh",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json :/scripts/eve-source-maps.sh"
-    },
     "dev": {
       "root": "apps/dev",
       "framework": "eve",
@@ -277,12 +270,6 @@
       "source": "/eve/coder/v1/(.*)",
       "destination": {
         "service": "dev"
-      }
-    },
-    {
-      "source": "/eve/v1/(.*)",
-      "destination": {
-        "service": "luke"
       }
     },
     {

@@ -4,12 +4,8 @@ import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  codingAgentCallIdSchema,
-  codingAgentMessagesAnswerSchema,
-  storedObjectSchema,
+  codingAgentSummarySchema,
   tasklessAgentSchema,
-  turnRecordFields,
 } from "./coding-agent-wire.js";
 import {
   GITHUB_ISSUES_BOUNDS,
@@ -71,7 +67,6 @@ import {
   taskTreeRequestSchema,
   workspaceIdSchema,
 } from "./task-wire.js";
-import { taskTranscriptSchema } from "./transcript-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import {
   workspaceInvitationCancelSchema,
@@ -139,17 +134,6 @@ const tasksDocumentSchema = EffectSchema.Struct({
 export type TasksDocument = typeof tasksDocumentSchema.Type;
 
 /**
- * What was said on the active task's calls as last read, kept through a
- * later read that failed, as the document is. The call standing now is not
- * in it until the call ends and the transcript is read again: its words so
- * far are the voice window's to report.
- */
-const tasksTranscriptSchema = EffectSchema.Struct({
-  status: tasksReadSchema,
-  transcript: EffectSchema.optionalKey(taskTranscriptSchema),
-});
-
-/**
  * The two waits on the voice side that no live status names: the voice model
  * delegated an ask the brain has not yet taken, or words are queued
  * for Luke that his voice has not begun to say.
@@ -185,130 +169,6 @@ export const taskActivitySchema = EffectSchema.Struct({
 });
 
 export type TaskActivity = typeof taskActivitySchema.Type;
-
-/** How far a brain turn, or one call inside it, has got. */
-export const TASK_WORK_STATE = {
-  RUNNING: "running",
-  DONE: "done",
-  FAILED: "failed",
-} as const;
-
-export type TaskWorkState = (typeof TASK_WORK_STATE)[keyof typeof TASK_WORK_STATE];
-
-/**
- * How much of a turn one `task.work` frame carries. The newest parts are
- * kept, and every string in them is cut to its bound, so a turn that read
- * a large file still travels in a frame of tens of kilobytes.
- */
-export const TASK_WORK_BOUNDS = {
-  /** The most turns one read of a task's work carries, the newest before where it began; older ones are read a page at a time. */
-  TURNS: 20,
-  PARTS: 60,
-  TEXT_CHARS: 4_000,
-  NAME_CHARS: 64,
-  /** The most spoken lines one turn names as its ask. */
-  ASKED_LINES: 20,
-  /** The most characters of a spoken line's id, which the voice's ledger mints. */
-  LINE_ID_CHARS: 128,
-} as const;
-
-const workText = EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.TEXT_CHARS));
-
-/**
- * A journal as the agent tab reads one: its parts as the AI SDK stored them
- * (the model's words, its reasoning, and each tool call with its input and
- * answer, under the tool's own name), the newest kept and every string in
- * them cut to the text bound, so a turn that read a large file still travels
- * small. The desktop reads each call by its tool's name
- * (`@luke/features/agent-tools`), as it reads a coding agent's.
- */
-const taskWorkJournalSchema = EffectSchema.Array(storedObjectSchema).check(
-  EffectSchema.isMaxLength(TASK_WORK_BOUNDS.PARTS),
-);
-
-/**
- * One worker a turn handed work to, by the call that started it: the job it
- * was handed, the task eve runs it as, where it stands as its own session
- * reads (running while it works, though its call answered the moment it
- * started), and its session as a journal, with when its newest task began
- * and ended, its title, and what that task ran on and spent.
- */
-const taskWorkWorkerSchema = EffectSchema.Struct({
-  callId: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.LINE_ID_CHARS)),
-  taskId: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.NAME_CHARS)),
-  ),
-  task: workText,
-  state: EffectSchema.Literals(Object.values(TASK_WORK_STATE)),
-  earlierOmitted: EffectSchema.Boolean,
-  journal: taskWorkJournalSchema,
-  startedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  title: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
-  ),
-  ...turnRecordFields,
-});
-
-export type TaskWorkWorker = typeof taskWorkWorkerSchema.Type;
-
-/**
- * One brain turn as the Work tab draws it: the turn, when it started and
- * ended, how far it has got, its journal and the workers it handed work to,
- * and what it ran on and spent. Unlike `task.activity`, this carries each
- * call's output: the text a command answered in the task's repository
- * sandbox, and pages read from the public web, shown back to the developer
- * on their own Mac.
- */
-export const taskWorkTurnSchema = EffectSchema.Struct({
-  turnId: EffectSchema.String,
-  /** Epoch milliseconds the turn started. */
-  startedAt: EffectSchema.Finite,
-  /** Epoch milliseconds the turn ended; absent while it runs, and from a service older than it. */
-  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  state: EffectSchema.Literals(Object.values(TASK_WORK_STATE)),
-  /** Whether older parts than the journal's were left out. */
-  earlierOmitted: EffectSchema.Boolean,
-  /** The turn's own journal, as the agent tab reads one. */
-  journal: taskWorkJournalSchema,
-  /** The workers the turn handed work to, in the order it started them. */
-  workers: EffectSchema.Array(taskWorkWorkerSchema).check(
-    EffectSchema.isMaxLength(TASK_WORK_BOUNDS.PARTS),
-  ),
-  /**
-   * The developer's spoken lines the turn took as its ask, by the ids the
-   * Transcript names them by, in the order they were said: those of the asks
-   * that opened it, never a follow-up the running turn was steered with;
-   * absent for a turn no spoken line opened, before its lines are taken into
-   * it, and from a service older than it.
-   */
-  asked: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.LINE_ID_CHARS)),
-    ).check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.ASKED_LINES)),
-  ),
-  /**
-   * Where each of those lines began: the store's id for the call it was said
-   * on, and the milliseconds into that call, as the Live API's transcript
-   * deltas count them. A line heard on the call standing now carries the
-   * voice window's own row id, which no turn names, and is matched by where
-   * it began instead. Absent where `asked` is, for a line written before it
-   * was recorded, and from a service older than it.
-   */
-  askedAt: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.Struct({
-        voiceSessionId: EffectSchema.String.check(
-          EffectSchema.isMaxLength(TASK_WORK_BOUNDS.LINE_ID_CHARS),
-        ),
-        fromMs: EffectSchema.Finite,
-      }),
-    ).check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.ASKED_LINES)),
-  ),
-  ...turnRecordFields,
-});
-
-export type TaskWorkTurn = typeof taskWorkTurnSchema.Type;
 
 /** One run of a line in one colour per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
@@ -358,27 +218,6 @@ export type TaskCodeShowing = TaskShownCode;
 /** The code of one showing as the Code tab draws it: what Luke named, where it was read, its lines, and his note on them. */
 export type TaskCode = TaskCodeShowing["code"];
 
-/**
- * A task's work as the service keeps it (GET `/api/plans/{id}/work`, with
- * `before` naming a turn for an older page): a page of the brain turns of
- * its calls, the newest before where the read began, oldest first, each as
- * a `task.work` frame would tell it, and the turn to read before for the
- * page older than this one. The newest page also carries every code Luke
- * showed on the task, oldest first, with the lines each `show_code` call
- * answered, several of one file included. It is what the Work and Code tabs
- * draw when a task opens, after a restart or a switch from another task,
- * before any call about it tells more.
- */
-export const taskWorkAnswerSchema = EffectSchema.Struct({
-  turns: EffectSchema.Array(taskWorkTurnSchema),
-  /** The turn the next older page is read before; absent where no older turn stands. */
-  earlier: EffectSchema.optionalKey(EffectSchema.String),
-  /** Every code shown on the task, oldest first; carried on the newest page alone. */
-  code: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
-});
-
-export type TaskWorkAnswer = typeof taskWorkAnswerSchema.Type;
-
 /** Every code Luke showed on one task, oldest first, as the Code tab draws it: the plan-work page's `code`, read on its own. */
 export const taskCodeAnswerSchema = EffectSchema.Struct({
   code: EffectSchema.Array(taskShownCodeSchema),
@@ -403,6 +242,13 @@ export const tasksViewSchema = EffectSchema.Struct({
   tasks: EffectSchema.Array(taskSummarySchema),
   /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
+  /**
+   * Every agent on a plan, the archived ones left out, each as its plan's
+   * own list names it, the first started first: present only while the list
+   * is followed live over Neon Realtime, when it is what the notices' ledger
+   * reads in place of listing each plan's agents again on a clock.
+   */
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
   listStatus: tasksReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
@@ -428,39 +274,16 @@ export const tasksViewSchema = EffectSchema.Struct({
   callActivity: EffectSchema.optionalKey(taskActivitySchema),
   /** The active task's whiteboard as last read or saved; absent with no task open or before its first read lands. */
   board: EffectSchema.optionalKey(boardSchema),
-  /** What was said on the active task's calls as last read; absent with no task open. */
-  transcript: EffectSchema.optionalKey(tasksTranscriptSchema),
   /**
-   * Every code Luke showed on the active task, oldest first, several of one
-   * file included: what the task's work holds, read with the newest page,
-   * and each code a call shows since, by its call, so a call's code and
-   * the record's copy of it stand once; absent with none, and cleared with
-   * the activity. A call's end keeps them.
+   * Every code the active task's agents showed, oldest first, several of one
+   * file included: what the record holds, read with the task, and each code
+   * a call shows since, by its call, so a call's code and the record's copy
+   * of it stand once; absent with none, and cleared with the activity. A
+   * call's end keeps them.
    */
   shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
-  /**
-   * The brain turns of the active task's calls, oldest first: the newest
-   * page read from the service when the task opens, each older page read as
-   * the Work tab scrolls back, and each turn a call tells since as last
-   * told; absent before the first, and cleared with the activity. A call's
-   * end keeps them.
-   */
-  work: EffectSchema.optionalKey(EffectSchema.Array(taskWorkTurnSchema)),
-  /** The turn the active task's next older page of work is read before; absent where none stands or before the first read. */
-  workEarlier: EffectSchema.optionalKey(EffectSchema.String),
-  /** Where the read of the active task's newest work and code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
-  workStatus: EffectSchema.optionalKey(tasksReadSchema),
-  /**
-   * The active task's conversation as an agent's transcript is
-   * read: the newest page read when the task opens, each page the held read
-   * hears since joined by message id, and each older page read as the Call
-   * tab scrolls back, before the rest. Its cursor is where the held read goes
-   * on from, its `earlier` the turn the next older page is read before, and
-   * its status and workers are the newest held page's. Absent before the
-   * first read lands, and cleared with the activity; a reader that does not
-   * know it draws `work` as before.
-   */
-  conversation: EffectSchema.optionalKey(codingAgentMessagesAnswerSchema),
+  /** Where the read of the active task's code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
+  codeStatus: EffectSchema.optionalKey(tasksReadSchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with
@@ -471,21 +294,6 @@ export const tasksViewSchema = EffectSchema.Struct({
 });
 
 export type TasksView = typeof tasksViewSchema.Type;
-
-/**
- * One page of a task's conversation, as a window asks it: past a
- * cursor, before a turn, or the newest where it names neither; or, naming
- * the call that started one, a brain worker's transcript under the task,
- * past a cursor, as an agent's worker tab reads it.
- */
-export const tasksMessagesParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  after: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  before: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
-});
-
-export type TasksMessagesParams = typeof tasksMessagesParamsSchema.Type;
 
 /** The view before anything is asked: no tasks read, none active. */
 export const IDLE_TASKS_VIEW: TasksView = {
@@ -935,6 +743,22 @@ export const tasksRevisionsAnswerSchema = EffectSchema.Union([
 
 export type TasksRevisionsAnswer = typeof tasksRevisionsAnswerSchema.Type;
 
+/** One plan's newest page of history, followed by a window while its version history stands. */
+export const taskHistoryFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
+
+export type TaskHistoryFollow = typeof taskHistoryFollowSchema.Type;
+
+/**
+ * A followed plan's newest page of history as it now stands, told each time
+ * a save lands while followed, or why there is none.
+ */
+export const taskHistoryFollowedSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  view: tasksRevisionsAnswerSchema,
+});
+
+export type TaskHistoryFollowed = typeof taskHistoryFollowedSchema.Type;
+
 /** One revision of a plan, as the version history names it to read it or to restore it: the task and the revision's number. */
 export const tasksRevisionParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -1034,6 +858,22 @@ export const tasksPagesAnswerSchema = EffectSchema.Union([
 
 export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
 
+/** One plan's pages, followed by a window while its Inbox draws an item of that plan. */
+export const taskPagesFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
+
+export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
+
+/**
+ * A followed plan's pages as they now stand, each by its newest version,
+ * told each time they move while followed, or why there are none.
+ */
+export const taskPagesFollowedSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  view: tasksPagesAnswerSchema,
+});
+
+export type TaskPagesFollowed = typeof taskPagesFollowedSchema.Type;
+
 /** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ lines: codeLinesSchema }),
@@ -1127,6 +967,23 @@ export const tasksWorkspaceMembersAnswerSchema = EffectSchema.Union([
 
 export type TasksWorkspaceMembersAnswer = typeof tasksWorkspaceMembersAnswerSchema.Type;
 
+/** A workspace's people, followed by a window while it draws them. */
+export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
+
+/**
+ * A followed workspace's people as they now stand, told by the host each
+ * time they move: its members and who its work names but left, or why there
+ * are none.
+ */
+export const workspacePeopleFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: tasksWorkspaceMembersAnswerSchema,
+});
+
+export type WorkspacePeopleFollowed = typeof workspacePeopleFollowedSchema.Type;
+
 /** A workspace's photo, as a window's tile asks for it: the workspace. */
 export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
 
@@ -1206,6 +1063,19 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
+
+/**
+ * A followed workspace's pending invitations as they now stand, told by the
+ * host to an owner's or an admin's windows each time they move, or why
+ * there are none. A follow names the workspace as a people's follow does
+ * (`workspacePeopleFollowSchema`).
+ */
+export const workspaceInvitationsFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: tasksWorkspaceInvitationsAnswerSchema,
+});
+
+export type WorkspaceInvitationsFollowed = typeof workspaceInvitationsFollowedSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
 export const tasksGitHubPageAnswerSchema = EffectSchema.Union([

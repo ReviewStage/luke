@@ -29,7 +29,6 @@ import {
   CODING_AGENT_BOUNDS,
   codingAgentAnswerSchema,
   codingAgentMessageRequestSchema,
-  codingAgentMessagesAnswerSchema,
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
 } from "../coding-agent-wire.js";
 import { transcriptNowAnswerSchema } from "../live-wire.js";
@@ -52,7 +51,7 @@ const ACCEPTED = 202;
 /** A query value as the handler reads it, checked there rather than here. */
 const queryValue = EffectSchema.optionalKey(EffectSchema.String);
 
-/** One agent, or one task, by the id its path names. */
+/** One agent, by the id its path names. */
 const byId = { id: EffectSchema.String };
 
 /** One worker, by its parent's id and the delegation call that started it. */
@@ -61,7 +60,7 @@ const byCall = { id: EffectSchema.String, call: EffectSchema.String };
 /** A transcript read past a cursor. */
 const transcriptQuery = { after: queryValue };
 
-/** An agent's or a worker's transcript, or a planning worker's, read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
+/** An agent's or a worker's transcript, read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
 const agentTranscriptQuery = { ...transcriptQuery, wait: queryValue };
 
 /** A page of an agent's or a worker's transcript, with whether the held read would have held on it, and how soon the clock alone may end that, where it was read at once (`transcriptNowAnswerSchema`). */
@@ -97,18 +96,6 @@ export const messagesContract = {
   /** One agent's worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   agentWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
-    .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
-    .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
-  /** One task's conversation, past the cursor and held while a turn runs, or in one look where `hold=none` asks, or a page of its turns. */
-  task: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/messages" }))
-    .input(
-      EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue, hold: queryValue }),
-    )
-    .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
-  /** One task's brain worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
-  taskWorker: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/subagents/{call}/messages" }))
     .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
     .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
   /** A workspace's chat past the cursor, held while nothing moved. */

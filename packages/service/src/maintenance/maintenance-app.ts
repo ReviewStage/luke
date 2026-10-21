@@ -9,6 +9,7 @@ import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
@@ -21,7 +22,6 @@ import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { createLiveUpstream } from "../voice/openai.js";
 import {
   NOTHING_ORPHANED,
@@ -92,7 +92,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     purgeDeletedTaskCalls: (now) =>
       hostedStore().retention.purgeDeletedTaskCalls(new Date(now - VOICE_SESSION_LIMIT_MS)),
     sweepAbandonedTurns: (now) =>
-      Effect.flatMap(storeWriter({ tools: HOSTED_TOOL_SET }), (writer) =>
+      Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),

@@ -3,18 +3,17 @@ import {
   type CodingAgentCallFailure,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
-  type CodingAgentInboxParams,
+  type CodingAgentInboxScope,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_BLOCK,
-  INBOX_CURSOR_START,
   INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
@@ -48,19 +47,19 @@ import {
   inboxThreadSend,
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
+import { type InboxFollower, useFollowedInboxes } from "./use-followed-inboxes.js";
 
 /**
- * use-task-inbox.ts -- the open task's inbox as one control: its items, read on the service's held long-poll while the window shows the tasks, and the answers on their way back.
+ * use-task-inbox.ts -- the open task's inbox as one control: its items, followed while the window shows the tasks and pushed as they change, and the answers on their way back.
  *
- * The service holds a read open while nothing changed past the cursor and
- * lets it go at its own hold, so the loop is one read after another with no
- * clock of its own, as an agent's transcript is read (`use-agent-transcript.ts`);
- * each answer is the inbox whole, which replaces what was held. The loop
- * runs while the window shows the tasks and a task with an agent, or one
- * main says an item waits on, is open, so the tab's
- * count stands whichever tab is chosen, and another task starts from
- * nothing of this one's. A read that did not answer ends the loop and says
- * so, with Try again, rather than asking again at once.
+ * The inbox is followed (`use-followed-inboxes.ts`) while the window shows
+ * the tasks and a task with an agent, or one main says an item waits on,
+ * is open, so the tab's count stands whichever tab is chosen, and another
+ * task starts from nothing of this one's. Each push is the inbox whole,
+ * which replaces what was held; nothing here asks again or holds a cursor.
+ * An item marked read or unread is pushed as any change is, so nothing
+ * reads it again. An inbox that could not be read is let go and says so,
+ * with Try again, rather than following it again at once.
  *
  * An answer goes under a key minted here and kept with its words, so the
  * same answer sent again after a lost reply is taken once. It stands over
@@ -117,9 +116,6 @@ import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
  * lets go of the drafts of items it no longer holds at their revision, and
  * an answer taken or a message written lets go of its own.
  */
-
-/** How one read is asked: the task and the cursor to read past, answered as the view hears it. */
-export type InboxReader = (params: CodingAgentInboxParams) => Promise<CodingAgentInboxAnswerView>;
 
 /** How one answer is sent: the item, its revision, the answer, and the key the send is known by. */
 export type InboxAnswerer = (
@@ -309,10 +305,10 @@ function holdsNothing(draft: Draft): boolean {
 }
 
 export function useTaskInbox(input: {
-  /** The task whose inbox is held, or, with `reader`, the agent with no task whose inbox is. */
+  /** The task whose inbox is held, or, with `kind` an agent's, the agent with no task whose inbox is. */
   taskId: string | undefined;
-  /** How the inbox is read where it is one agent's with no task rather than a task's. */
-  reader?: ((after: string) => Promise<CodingAgentInboxAnswerView>) | undefined;
+  /** Whose inbox `taskId` names: a task's, unless it is one agent's with no task. */
+  kind?: CodingAgentInboxScope["kind"] | undefined;
   /** Whether the window shows the tasks. */
   shown: boolean;
   /** Whether main's read of what waits across the account says an item waits on the task. */
@@ -320,7 +316,8 @@ export function useTaskInbox(input: {
   agents: {
     /** Every agent of the task by id, an archived one among them, whose items still stand. */
     readonly heldIds: readonly string[] | undefined;
-    readonly readInbox: InboxReader;
+    /** How the inbox is followed and heard pushed. */
+    readonly inboxFollower: InboxFollower;
     readonly answerInbox: InboxAnswerer;
     readonly messageInbox: InboxMessenger;
     readonly readInboxImage: InboxImageReader;
@@ -329,6 +326,7 @@ export function useTaskInbox(input: {
   };
 }): TaskInboxControl {
   const { taskId, shown, waiting, agents } = input;
+  const kind = input.kind ?? INBOX_SCOPE_KIND.PLAN;
   const [held, setHeld] = useState<Held>(() => fresh(taskId));
   if (held.taskId !== taskId) setHeld(fresh(taskId));
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
@@ -343,15 +341,14 @@ export function useTaskInbox(input: {
   useEffect(() => {
     setImages((standing) => imagesNamed(standing, named));
   }, [named]);
-  const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [notes, setNotes] = useState<ReadonlyMap<string, InboxNote>>(new Map());
   // The cards' drafts, kept apart from the hook so another tab's or page's reading of the inbox
   // shares them, under the plan, or under none where the inbox is an agent's with no plan.
-  const ownTask = input.reader === undefined ? taskId : undefined;
+  const ownTask = kind === INBOX_SCOPE_KIND.PLAN ? taskId : undefined;
   const draftsOn = ownTask ?? null;
   // Note that an agent with no plan is the planId its inbox is read by.
-  const readAgent = input.reader === undefined ? undefined : taskId;
+  const readAgent = kind === INBOX_SCOPE_KIND.AGENT ? taskId : undefined;
   const drafts = useInboxDrafts(draftsOn);
   // The drafts as last drawn, which a refusal landing later reads.
   const draftsNow = useRef(drafts);
@@ -362,42 +359,34 @@ export function useTaskInbox(input: {
   // The items whose send is out, as `sending` holds them but at once, so a second press before
   // the render that draws the first sends nothing again.
   const out = useRef(new Set<string>());
-  const latest = useRef({ ...agents, taskId, reader: input.reader });
-  latest.current = { ...agents, taskId, reader: input.reader };
+  const latest = useRef({ ...agents, taskId });
+  latest.current = { ...agents, taskId };
 
   // A task with no agent, standing or archived, has no Inbox tab and nothing
-  // to read, so it holds no read open, unless an item waits on it, which an
-  // agent this window has not listed, one started on another Mac, posted.
+  // to follow, unless an item waits on it, which an agent this window has not
+  // listed, one started on another Mac, posted.
   const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
-  const active = shown && taskId !== undefined && readable && !held.failed;
+  const active = shown && taskId !== undefined && readable;
+  const followed = useFollowedInboxes(
+    kind,
+    useMemo(() => (active && taskId !== undefined ? [taskId] : []), [active, taskId]),
+    agents.inboxFollower,
+  );
+  const pushed = taskId === undefined ? undefined : followed.items.get(taskId);
+  const notRead = taskId !== undefined && followed.failed.has(taskId);
+  // Each push is the inbox whole, which replaces what was held, an answer's own patch among it.
   useEffect(() => {
-    if (!active || taskId === undefined) return;
-    let live = true;
-    const loop = async () => {
-      let after = INBOX_CURSOR_START;
-      while (live) {
-        const { reader, readInbox } = latest.current;
-        const read = reader === undefined ? readInbox({ taskId: taskId, after }) : reader(after);
-        const answer = await read.catch((): CodingAgentInboxAnswerView => UNANSWERED);
-        if (!live) return;
-        if ("failure" in answer) {
-          setHeld((was) => ({ ...was, failed: true }));
-          return;
-        }
-        after = answer.cursor;
-        setHeld((was) => ({ ...was, items: answer.items, read: true }));
-      }
-    };
-    void loop();
-    return () => {
-      live = false;
-    };
-  }, [active, taskId, attempt]);
+    if (pushed !== undefined) setHeld((was) => ({ ...was, items: pushed, read: true }));
+  }, [pushed]);
+  useEffect(() => {
+    setHeld((was) => (was.failed === notRead ? was : { ...was, failed: notRead }));
+  }, [notRead]);
 
+  const { onRetry: retryFollow } = followed;
   const onRetry = useCallback(() => {
     setHeld((was) => ({ ...was, failed: false }));
-    setAttempt((count) => count + 1);
-  }, []);
+    retryFollow();
+  }, [retryFollow]);
 
   const note = useCallback((itemId: string, said: InboxNote | undefined) => {
     setNotes((was) => {
@@ -706,7 +695,7 @@ export function useTaskInbox(input: {
     drafted,
     onDraft,
     onAttachments,
-    reading: active && !held.read,
+    reading: active && !held.read && !held.failed,
     read: held.read,
     failed: held.failed,
     onRetry,

@@ -1,4 +1,4 @@
-import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
+import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
@@ -432,7 +432,11 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * agent nothing at all, neither the plan nor a prompt, so it names no
  * prompt, files, source, or note; its first words come later, typed or
  * spoken, and it may start on a task with no repository, where it works in
- * none.
+ * none. A `payer` is who the developer picked to pay for this one agent,
+ * where Start offered the choice: its plan, which runs the provider's own
+ * harness, or the API key or Luke's key, which run on eve; with none the
+ * account's default decides, and the service honours a pick only where
+ * the account could have been offered it.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -445,6 +449,7 @@ export const codingAgentStartRequestFields = {
   from: EffectSchema.optionalKey(codingAgentStartFromSchema),
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -1597,7 +1602,7 @@ export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary
  * and not this wire's to spell. The node shown for it says only that much.
  */
-export const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
+const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
 });
@@ -1641,7 +1646,7 @@ const recordedChoice = EffectSchema.String.check(
  * absent where the row recorded none and from a service older than it; the
  * tokens and the ending, too, until the turn has ended.
  */
-export const turnRecordFields = {
+const turnRecordFields = {
   /** The catalog id of the model the turn ran on, such as `openai/gpt-6.1-sol`. */
   model: EffectSchema.optionalKey(recordedChoice),
   effort: EffectSchema.optionalKey(recordedChoice),
@@ -1717,10 +1722,10 @@ export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
 const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
-   * The turn the message is the journal of, on a task conversation's
-   * page, so the Call tab knows which of the developer's lines asked for it;
-   * absent on a coding agent's page, on any other row, and from a service
-   * older than it.
+   * The turn the message is the journal of, so the Call tab knows which of
+   * the developer's lines asked for it and an agent's tab which turn a line
+   * said on a call answers (`readFrom`); absent on any other row, and from
+   * a service older than it.
    */
   turnId: EffectSchema.optionalKey(EffectSchema.String),
   /**
@@ -1783,6 +1788,21 @@ const codingAgentMessageSchema = EffectSchema.Struct({
    */
   arrivedIn: EffectSchema.optionalKey(
     EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
+  ),
+  /**
+   * The turn whose work a line the agent said on a call answers: the turn
+   * the ask it followed ran in, by the turn's id as its journal names it
+   * (`turnId`), and where that ask joined a typed turn under way, how many
+   * of the turn's steps had begun before it, so the tab folds only the work
+   * after them under the line. Absent on a line that followed no ask, or
+   * one whose ask has learned no turn, on every other row, and from a
+   * service older than it.
+   */
+  readFrom: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      turnId: EffectSchema.String,
+      afterStep: EffectSchema.optionalKey(countedNumber),
+    }),
   ),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
@@ -1960,34 +1980,15 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
 
 export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;
 
-/** Whether two JSON values, as a page decodes them, say the same. */
-function sameJson(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return (
-      Array.isArray(a) &&
-      Array.isArray(b) &&
-      a.length === b.length &&
-      a.every((each, index) => sameJson(each, b[index]))
-    );
-  }
-  const theirs = new Map(Object.entries(b));
-  const ours = Object.entries(a);
-  return (
-    ours.length === theirs.size &&
-    ours.every(([key, value]) => theirs.has(key) && sameJson(value, theirs.get(key)))
-  );
-}
-
 /**
  * A page of an agent's messages joined to the ones held: a message heard
  * again that says something new replaces the one held under its id, in
  * place, and a new one joins at the end, so a journal that grows in place is
- * redrawn where it stands. A message heard again as it was held is kept as
- * held, and a page that changes nothing answers what was held, because a
- * transcript followed afresh is heard again whole, and what draws a message
- * by its identity then draws only what changed. The agent's tab and the
+ * redrawn where it stands. A message heard again keeps every part of it that
+ * is unchanged, the whole message where nothing is (`keepIdentity`), and a
+ * page that changes nothing answers what was held, because a transcript
+ * followed afresh is heard again whole, and what draws a message by its
+ * identity then draws only what changed. The agent's tab and the
  * host's read of a task's conversation join pages the same way, so both
  * draw one transcript from the same answers.
  */
@@ -1999,7 +2000,7 @@ export function applyMessagesPage(
   const heard = new Map(page.map((message) => [message.id, message]));
   const joined = held.map((message) => {
     const again = heard.get(message.id);
-    return again === undefined || sameJson(message, again) ? message : again;
+    return again === undefined ? message : keepIdentity(message, again);
   });
   const known = new Set(held.map((message) => message.id));
   const appended = page.filter((message) => !known.has(message.id));

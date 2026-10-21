@@ -39,6 +39,8 @@ import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   type TaskBoardLiveAnswer,
+  type TaskHistoryLiveAnswer,
+  type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
@@ -57,7 +59,9 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
+import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSections,
   type TaskSectionWrite,
@@ -106,9 +110,7 @@ import {
   type TasksIssueUnlinkAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
-  type TaskWorkAnswer,
 } from "./tasks-view.js";
-import type { TaskTranscript } from "./transcript-wire.js";
 
 /**
  * task-client.ts -- the Tasks tab's side of the named tasks, as the host asks the service for them.
@@ -325,6 +327,26 @@ export class HostedTaskClient {
     );
   }
 
+  /**
+   * The task list sealed for following over Neon Realtime, answered at
+   * once; unanswered for anything that went wrong, which the caller answers
+   * by asking again.
+   */
+  listLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskListLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.tasks, { [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
   /** One task with its saved document; opening it moves no row of the list. */
   open(
     taskId: string,
@@ -469,32 +491,50 @@ export class HostedTaskClient {
     );
   }
 
-  /** What was said on one task's calls; nothing where the service did not answer it. */
-  readTranscript(
+  /**
+   * One task's pages, each at its newest version, sealed for following over
+   * Neon Realtime, or with `poll` their rows inline at the poll address, on
+   * the terms its record's is.
+   */
+  pagesLive(
     taskId: string,
-  ): Effect.Effect<TaskTranscript | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      Effect.map(
-        askHosted(this.#hosted.plans.transcript, { id: taskId }),
-        (answer) => answer.transcript,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskPagesLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskPages, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /** One task's newest page of plan history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
+  historyLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskHistoryLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskHistory,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
       ),
+      LIVE_REFUSALS,
     );
   }
 
-  /** A page of one task's work as the service keeps it, the newest or the one before a turn, with every code shown on the newest; nothing where the service did not answer it. */
-  readWork(
-    taskId: string,
-    before?: string,
-  ): Effect.Effect<TaskWorkAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.plans.work, {
-        id: taskId,
-        ...(before === undefined ? undefined : { before }),
-      }),
-    );
-  }
-
-  /** Every code Luke showed on one task, oldest first; nothing where the service did not answer it. */
+  /** Every code the task's agents showed on it, oldest first; nothing where the service did not answer it. */
   readCode(
     taskId: string,
   ): Effect.Effect<TaskCodeAnswer | undefined, never, HttpClient.HttpClient> {
@@ -780,11 +820,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** Stops the turn Luke is running on a task. */
-  stopWork(taskId: string): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.ignore(askHosted(this.#hosted.plans.stop, { id: taskId }));
-  }
-
   /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
   restore(
     taskId: string,
@@ -816,7 +851,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** Deletes one task with its document and its conversation; whether the service deleted it. */
+  /** Deletes one task with its document and its agents' conversations; whether the service deleted it. */
   delete(taskId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return Effect.match(askHosted(this.#hosted.plans.delete, { id: taskId }), {
       onFailure: () => false,
@@ -877,18 +912,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** The repositories the account pinned in the sidebar, newest pinned first; nothing where the service did not answer. */
-  repositoryPins(): Effect.Effect<
-    readonly RepositoryPin[] | undefined,
-    never,
-    HttpClient.HttpClient
-  > {
-    return Effect.map(
-      orNothing(askHosted(this.#hosted.repositoryPins.list, undefined)),
-      (answer) => answer?.pins,
-    );
-  }
-
   /**
    * Pins one repository or unpins it, answering the account's pins as they
    * then stand; nothing where the service refused or did not answer. A
@@ -908,9 +931,24 @@ export class HostedTaskClient {
     );
   }
 
-  /** The sections the account made in its sidebars and the tasks in them; nothing where the service did not answer. */
-  taskSections(): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.taskSections.list, undefined));
+  /**
+   * The account's sidebar sealed for following over Neon Realtime, for the
+   * account named, or with each part's rows inline where `poll` asks for
+   * them; signed out where the session is another account's.
+   */
+  sidebarLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<SidebarLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.sidebar, { [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
   }
 
   /**
