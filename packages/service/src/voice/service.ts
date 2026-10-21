@@ -536,8 +536,8 @@ export class VoiceService {
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
-        // Each brain turn's work, sent the same way, so the Tasks tab's
-        // Work tab reads what Luke's brain wrote and ran as it goes.
+        // Each spoken turn's work, sent the same way, so the window can draw
+        // what the agent wrote and ran as it goes.
         onWork: (turn) => {
           const frame: TaskWorkFrame = {
             type: VOICE_SERVICE_FRAME.TASK_WORK,

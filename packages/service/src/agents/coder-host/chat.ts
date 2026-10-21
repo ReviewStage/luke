@@ -22,10 +22,8 @@ import {
   history,
   homeRoster,
   openAsksOf,
-  peekUnread,
   postAsk,
   postMessage,
-  readThrough,
   resolveAsk,
   roster,
   seqsOf,
@@ -1006,55 +1004,6 @@ export function readAsAgent(
   );
 }
 
-/**
- * What the agent has not read, as lines, marking nothing: at most the
- * bound, oldest change first, whether more wait past them, and the place
- * `readThroughAsAgent` moves its cursor to once they are taken in. What a
- * turn opens with, where its tools would read the same; nothing where the
- * agent has no seat.
- */
-export function peekAsAgent(
-  agent: ChatReader,
-  limit: number,
-): ChatStoreEffect<
-  Option.Option<{
-    readonly messages: readonly MessageLine[];
-    readonly more: boolean;
-    readonly through: number;
-  }>
-> {
-  return Effect.gen(function* () {
-    const { userId } = agent;
-    const found = yield* seatOf(agent);
-    if (Option.isNone(found)) return Option.none();
-    const { organizationId, self } = found.value;
-    const unread = yield* peekUnread(userId, organizationId, self.id, limit);
-    if (Option.isNone(unread)) return Option.none();
-    const { messages, more, through } = unread.value;
-    const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
-    const chat = yield* chatNamesOf(userId, organizationId, members.values());
-    const names = channelNames(yield* channelsOf(userId, organizationId), self, members, chat);
-    const roots = yield* seqsOf(
-      userId,
-      organizationId,
-      messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
-    );
-    const named = { names, members, roots, chat };
-    const lines = messages.map((message) => lineOf(message, named));
-    return Option.some({ messages: lines, more, through });
-  });
-}
-
-/** Marks what the agent has not read as read through the place a peek named, never back; nothing where the agent has no seat. */
-export function readThroughAsAgent(agent: ChatReader, through: number): ChatStoreEffect<void> {
-  return Effect.gen(function* () {
-    const found = yield* seatOf(agent);
-    if (Option.isNone(found)) return;
-    const { organizationId, self } = found.value;
-    yield* readThrough(agent.userId, organizationId, self.id, through);
-  });
-}
-
 /** One message as a turn's digest carries it: its place, who said it where, the thread it replies in, what it asks, and its words, bounded. */
 function digestLine(message: ChatMessageRow, line: MessageLine): string {
   const thread = line.thread === undefined ? "" : ` (thread m ${line.thread})`;
@@ -1077,8 +1026,7 @@ function digestLine(message: ChatMessageRow, line: MessageLine): string {
  * digest is a read, so the next turn carries none of it again, and a
  * message cut short names the read that carries it whole; a turn that
  * fails after its digest leaves what it carried to the chat's history,
- * where a read of its channel finds it, as the planning brain's standing
- * context leaves a turn's edits. Note that
+ * where a read of its channel finds it. Note that
  * the message an outstanding notice told is left out, because the notice is
  * already a line of the agent's conversation. Nothing where the store
  * cannot be reached, since the turn runs as well without it.

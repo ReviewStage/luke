@@ -11,8 +11,6 @@ import {
   updateTask,
 } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
-import { conversations } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   getTestDB,
   joinWorkspace,

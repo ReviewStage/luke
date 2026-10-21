@@ -7,7 +7,7 @@ import {
 } from "@luke/database/models/asks";
 import type { HostedStore } from "@luke/database/models/hosted-store";
 import { hostTurnId } from "@luke/database/models/ids";
-import { latestTurnsOf, type StoredTurnRecord } from "@luke/database/models/message-reads";
+import type { StoredTurnRecord } from "@luke/database/models/message-reads";
 import {
   conversationReachableBy,
   recordedRuntimeSession,

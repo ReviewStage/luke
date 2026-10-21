@@ -1482,4 +1482,3 @@ export function deleteTask<R = never>(
     ),
   );
 }
-

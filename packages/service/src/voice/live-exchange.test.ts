@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
-import { hostTurnId } from "@luke/database/models/ids";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { hostTurnId } from "@luke/database/models/ids";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import {
@@ -34,9 +34,8 @@ import {
   type EveMessage,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
-import { MESSAGE_ROLE } from "../core.js";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { MESSAGE_ROLE } from "../core.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { delegated, heard, sessionStarted } from "../testing/live-events.js";
 import { settled } from "../testing/settle.js";

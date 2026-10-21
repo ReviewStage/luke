@@ -20,7 +20,7 @@ import { attachment } from "../../schemas/attachment.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, insertFormerLuke } from "../../testing/index.js";
 import {
   agentMembersOf,
   agentWorkspace,
@@ -539,6 +539,16 @@ const subjectsIn = (text: string) =>
  * A workspace with its owner, a teammate, a plan with two agents, and their
  * members, each minted as the chat mints them, and the plan's channel.
  */
+/** A task's Luke minted while a task had one, as its row stands in the workspace's roster. */
+const formerLuke = (owner: string, workspace: string, taskId: string) =>
+  Effect.gen(function* () {
+    const id = yield* insertFormerLuke(workspace, taskId);
+    const row = (yield* roster(owner, workspace)).find((member) => member.id === id);
+    if (row === undefined)
+      return yield* Effect.die(new Error("the former Luke is not in the roster"));
+    return row;
+  });
+
 const openRoom = Effect.gen(function* () {
   const owner = yield* openAccount("Ada Lovelace");
   const teammate = yield* openAccount("Grace Hopper");
@@ -1045,7 +1055,7 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   );
 
   it.effect(
-    "an agent and a planner talk in their own task's channel alone: another task's, the general one, and a topic take no post of theirs and read as nothing, and naming one of another task names no one",
+    "an agent and a planner minted while a task had one talk in their own task's channel alone: another task's, the general one, and a topic take no post of theirs and read as nothing, and naming one of another task names no one",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -1057,12 +1067,7 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
             agentId: yield* openAgent(room.owner, other),
           }),
         );
-        const luke = Option.getOrThrow(
-          yield* ensureMember(room.owner, room.workspace, {
-            kind: MEMBER_KIND.LUKE,
-            taskId: room.plan,
-          }),
-        );
+        const luke = yield* formerLuke(room.owner, room.workspace, room.plan);
         const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
         const topic = Result.getOrThrow(
           yield* openTopicChannel(room.owner, room.workspace, "release", room.ada.id),
@@ -1109,14 +1114,14 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   );
 
   it.effect(
-    "a channel's roster is its people and the members it is home to: its plan's Luke and agents, an archived one among them, or for the general channel the agents on no plan",
+    "a channel's roster is its people and the members it is home to: its plan's former Luke and agents, an archived one among them, or for the general channel the agents on no plan",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
         const db = yield* Database;
         const mint = (subject: Parameters<typeof ensureMember>[2]) =>
           Effect.map(ensureMember(room.owner, room.workspace, subject), Option.getOrThrow);
-        const luke = yield* mint({ kind: MEMBER_KIND.LUKE, taskId: room.plan });
+        const luke = yield* formerLuke(room.owner, room.workspace, room.plan);
         const archived = yield* openAgent(room.owner, room.plan);
         const gone = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: archived });
         yield* db

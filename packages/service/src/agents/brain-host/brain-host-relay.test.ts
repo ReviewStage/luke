@@ -27,10 +27,10 @@ import {
 } from "../../core.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { spokenTurn } from "../../testing/eve-turns.js";
+import { AGENT_TOOL } from "../agent-runtime/tools.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 import { foldedQuietly, memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";
-import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
-import { AGENT_TOOL } from "../agent-runtime/tools.js";
 
 /**
  * The relay from eve's stream into the store writer, over the real

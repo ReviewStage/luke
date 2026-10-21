@@ -115,7 +115,7 @@ const transcriptCallSchema = EffectSchema.Struct({
 export type TranscriptCall = typeof transcriptCallSchema.Type;
 
 /** A task's transcript: its calls oldest first, and whether older words were left out of the read. */
-export const taskTranscriptSchema = EffectSchema.Struct({
+const taskTranscriptSchema = EffectSchema.Struct({
   calls: EffectSchema.Array(transcriptCallSchema),
   earlierOmitted: EffectSchema.Boolean,
 });

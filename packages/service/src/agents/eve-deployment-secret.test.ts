@@ -176,17 +176,15 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a bare Bearer opens no door, whether the deployment's eve secret is set or blank",
-  () =>
-    Effect.gen(function* () {
-      for (const eve of [EVE_DEPLOYMENT_SECRET, "", "   "]) {
-        const door = yield* doorFrom({ cron: CRON_SECRET, eve });
-        for (const bare of ["Bearer ", "Bearer", "Bearer    "]) {
-          assert.deepEqual(yield* verdictsUnder(door, bare), REFUSED_EVERYWHERE);
-        }
+it.effect("a bare Bearer opens no door, whether the deployment's eve secret is set or blank", () =>
+  Effect.gen(function* () {
+    for (const eve of [EVE_DEPLOYMENT_SECRET, "", "   "]) {
+      const door = yield* doorFrom({ cron: CRON_SECRET, eve });
+      for (const bare of ["Bearer ", "Bearer", "Bearer    "]) {
+        assert.deepEqual(yield* verdictsUnder(door, bare), REFUSED_EVERYWHERE);
       }
-    }),
+    }
+  }),
 );
 
 it.effect(

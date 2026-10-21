@@ -519,27 +519,25 @@ it.effect("a socket that closes hands back the takeover it took", () =>
   }),
 );
 
-it.effect(
-  "a watched coding agent's sandbox is held, and moved on as the panel acts",
-  () =>
-    Effect.gen(function* () {
-      const coder = yield* liveBrowser();
-      const panel = yield* scriptedViewer;
-      const store = world(coder.browser);
-      const { fiber } = yield* started(
-        coder.peer,
-        coder.commands,
-        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
-      );
-      assert.equal(store.holds.length, 1, "connecting holds the sandbox");
-      assert.ok((store.holds[0] ?? 0) > Duration.toMillis(BROWSER_LIVE_BOUNDS.IDLE));
-      yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY);
-      yield* panel.push(VIEWPORT);
-      yield* until(() => store.holds.length === 2);
-      assert.ok((store.holds[1] ?? 0) > (store.holds[0] ?? 0));
-      yield* panel.leave;
-      yield* Fiber.join(fiber);
-    }),
+it.effect("a watched coding agent's sandbox is held, and moved on as the panel acts", () =>
+  Effect.gen(function* () {
+    const coder = yield* liveBrowser();
+    const panel = yield* scriptedViewer;
+    const store = world(coder.browser);
+    const { fiber } = yield* started(
+      coder.peer,
+      coder.commands,
+      Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+    );
+    assert.equal(store.holds.length, 1, "connecting holds the sandbox");
+    assert.ok((store.holds[0] ?? 0) > Duration.toMillis(BROWSER_LIVE_BOUNDS.IDLE));
+    yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY);
+    yield* panel.push(VIEWPORT);
+    yield* until(() => store.holds.length === 2);
+    assert.ok((store.holds[1] ?? 0) > (store.holds[0] ?? 0));
+    yield* panel.leave;
+    yield* Fiber.join(fiber);
+  }),
 );
 
 it.effect(

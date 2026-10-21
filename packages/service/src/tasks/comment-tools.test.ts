@@ -83,7 +83,11 @@ it.layer(getTestDB())("the comment tools", (it) => {
           unparsedWire({ thread: thread.id, words: "Not in v1; the page does not exist yet." }),
         );
         const read = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, writer, unparsedWire({}));
-        yield* runCommentTool(AGENT_TOOL.RESOLVE_THREAD, writer, unparsedWire({ thread: thread.id }));
+        yield* runCommentTool(
+          AGENT_TOOL.RESOLVE_THREAD,
+          writer,
+          unparsedWire({ thread: thread.id }),
+        );
         const openAfter = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, writer, unparsedWire({}));
         const resolved = yield* runCommentTool(
           AGENT_TOOL.READ_COMMENTS,
@@ -125,14 +129,22 @@ it.layer(getTestDB())("the comment tools", (it) => {
         const { owner, taskId, thread } = yield* openThreadedTask;
         const other = yield* openThreadedTask;
         const writer = asOwner(owner, taskId);
-        yield* runCommentTool(AGENT_TOOL.RESOLVE_THREAD, writer, unparsedWire({ thread: thread.id }));
+        yield* runCommentTool(
+          AGENT_TOOL.RESOLVE_THREAD,
+          writer,
+          unparsedWire({ thread: thread.id }),
+        );
 
         const refused = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
           writer,
           unparsedWire({ thread: thread.id, words: "Still here." }),
         );
-        yield* runCommentTool(AGENT_TOOL.REOPEN_THREAD, writer, unparsedWire({ thread: thread.id }));
+        yield* runCommentTool(
+          AGENT_TOOL.REOPEN_THREAD,
+          writer,
+          unparsedWire({ thread: thread.id }),
+        );
         const taken = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
           writer,

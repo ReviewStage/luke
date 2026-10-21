@@ -52,11 +52,7 @@ import { listMessagesPast, sentLineStands } from "@luke/database/models/message-
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import {
-  readTask,
-  savePlanText,
-  updateTask,
-} from "@luke/database/models/task-store";
+import { readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
@@ -71,7 +67,6 @@ import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabu
 import {
   fakeWorkspaceSeams,
   getTestDB,
-  insertFormerLuke,
   joinWorkspace,
   openWorkspace,
   startTask,

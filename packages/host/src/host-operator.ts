@@ -129,7 +129,6 @@ import {
   planTemplateRevisionAnswerViewSchema,
   planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
-  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   FACTORY_WORLD_CALL_FAILURE,

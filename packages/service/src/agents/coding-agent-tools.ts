@@ -786,17 +786,6 @@ export const LIST_AGENTS_TOOL = {
   inputSchema: AGENT_LIST_INPUT,
 } as const;
 
-/** `read_agent` as Luke on a call is offered it, who says what he read aloud. */
-export const READ_AGENT_TOOL = {
-  name: AGENT_TOOL.READ_AGENT,
-  description:
-    "Read one coding agent's recent progress: its status, the branch it pushed and the pull " +
-    "request from it as GitHub holds them, and a short tail of what it last said and did, " +
-    "newest last, each entry with the messageId to fork the agent at. Summarise it in a " +
-    "sentence or two; never read it out.",
-  inputSchema: READ_AGENT_INPUT,
-} as const;
-
 /** `read_agent` as a coding agent is offered it, which reads the tail as text and may ask for more of it. */
 export const CODER_READ_AGENT_TOOL = {
   name: AGENT_TOOL.READ_AGENT,

@@ -253,7 +253,7 @@ export function standingSessionsOf(
 /**
  * The eve sessions the standing conversations named run in, whichever
  * member opened each: only for ids a gate already read, such as a shared
- * task's conversations as its delete gathers them.
+ * task's agents' conversations as its delete gathers them.
  */
 export function standingSessionsNamed(
   conversationIds: readonly string[],

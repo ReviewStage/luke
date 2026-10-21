@@ -20,8 +20,8 @@ import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@luke/live";
 import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { heard, said } from "../testing/live-events.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { heard, said } from "../testing/live-events.js";
 
 /**
  * The voice writer over the real migrations on PGlite, fed a synthetic Live

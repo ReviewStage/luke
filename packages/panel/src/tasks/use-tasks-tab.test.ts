@@ -23,12 +23,10 @@ import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
-  TASK_WORK_STATE,
   TASKS_READ,
   type TaskCode,
   type TaskCodeShowing,
   type TasksView,
-  type TaskWorkTurn,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -564,8 +562,6 @@ test("a task started opens with the side panel shown on its plan, a refused star
   });
   assert.equal(panel().open, false, "the late answer leaves the panel the developer hid");
 });
-
-const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
 
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
 function _drawnBoard(number: number): Board {

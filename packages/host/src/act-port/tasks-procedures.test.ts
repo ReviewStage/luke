@@ -14,7 +14,6 @@
 
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";

@@ -9,7 +9,7 @@ import type { EveChannelInput } from "eve/channels/eve";
 import type { SessionAuthContext } from "eve/context";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
-import { actedForAccount, DEPLOYMENT_PRESENCE } from "../brain-host/auth.js";
+import { actedForAccount } from "../brain-host/auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_AUTHENTICATOR,
@@ -25,7 +25,6 @@ import {
   EVE_MOUNT,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
-  type EveMount,
   type EveTypedTurn,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
@@ -181,14 +180,6 @@ function identityOf(principal: SessionAuthContext | undefined) {
   const { authenticator, issuer, principalType, principalId } = principal;
   return [authenticator, issuer ?? null, principalType, principalId];
 }
-
-/** The deployment's own identity, which the voice's spoken asks run under. */
-const DEPLOYMENT_IDENTITY = [
-  BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
-  null,
-  BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-];
 
 /** A message of the kind given on one of the accounts' conversations. */
 function messageOn<Turn extends BrainHostTurn>(conversationId: string, turn: Turn) {

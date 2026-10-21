@@ -411,13 +411,10 @@ export function placeChannel(chat: ChatAnswer, place: ChatPlace): ChatChannel | 
   return chat.channels.find((channel) => channel.id === place.channelId);
 }
 
-/** The mention a chip writes a member as: a person by their account, an agent by its id, and a Luke by his task; none for a member whose account, agent, or task is gone. */
+/** The mention a chip writes a member as: a person by their account, an agent by its id; none for a member whose account or agent is gone, or for a task's Luke, whom no post names any more. */
 function mentionOf(member: ChatMember): ChatMemberMention | undefined {
   if (member.kind === MEMBER_KIND.HUMAN && member.userId !== undefined) {
     return { kind: MENTION_KIND.PERSON, userId: member.userId };
-  }
-  if (member.kind === MEMBER_KIND.LUKE && member.planId !== undefined) {
-    return { kind: MENTION_KIND.LUKE, taskId: member.planId };
   }
   if (member.kind === MEMBER_KIND.AGENT && member.agentId !== undefined) {
     // An agent on a task is linked under it, so its chip opens the task's tab for it rather than the agent alone.
@@ -431,7 +428,7 @@ function mentionOf(member: ChatMember): ChatMemberMention | undefined {
 /**
  * Whether a post in the channel reaches the member, as the service holds
  * the chat to its tasks (`chat-store.ts`): a person in any channel; a
- * task's Luke and its agents in that task's own channel alone, and an
+ * task's agents in that task's own channel alone, and an
  * agent on no task in the general channel; and in a DM, its own two. A
  * member a post cannot reach hears nothing of it, so naming them there
  * names no one.

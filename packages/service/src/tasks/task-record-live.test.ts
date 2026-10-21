@@ -18,7 +18,7 @@ import {
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@luke/features/live-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";

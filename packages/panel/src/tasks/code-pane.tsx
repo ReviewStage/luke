@@ -25,15 +25,15 @@ import { callHeading } from "./task-time.js";
 import { WORKED_SEPARATOR } from "./working-time.js";
 
 /**
- * code-pane.tsx -- the code Luke put on screen on a task's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
+ * code-pane.tsx -- the code a task's agents put on screen: the side panel's Code tab, every snippet they showed, one card each, in the order they showed them.
  *
- * Luke names a file of the task's repository and the lines that matter as he
- * starts to speak about them; the service reads them from its checkout of
- * the repository, and the host keeps the lines pointed at with a few of the
+ * An agent names a file of the task's repository and the lines that matter
+ * as it starts to speak about them; the service reads them from the agent's
+ * checkout of the repository, and the host keeps the lines pointed at with a few of the
  * file around them (`task-code.ts`). The tab draws each as a card: the
  * file's path and a copy of the lines pointed at over those lines, drawn
  * and coloured by the diff bundle as View settings draws code, numbered from
- * where they sit in the file, with Luke's note on why he showed them under
+ * where they sit in the file, with the agent's note on why it showed them under
  * the last of them (`code-snippet.tsx`), so the feed reads as a
  * walkthrough, a step a card. Two
  * snippets of one file are two cards. Code an agent showed on a turn of its
@@ -113,7 +113,7 @@ export function CodeCardHeader({
   onOpen,
 }: {
   codeRef: CodeRef;
-  /** Luke's note on the lines, which the file's card says; none where the card has none. */
+  /** The agent's note on the lines, which the file's card says; none where the card has none. */
   note: string | undefined;
   /** The lines a copy carries; none where the card holds no lines yet. */
   copied: string | undefined;
@@ -139,7 +139,7 @@ export function CodeCardHeader({
   );
 }
 
-/** One snippet: its header, then the lines themselves with Luke's note under the last he pointed at, where code shown before notes were asked for has none. */
+/** One snippet: its header, then the lines themselves with the agent's note under the last it pointed at, where code shown before notes were asked for has none. */
 function CodeCardContent({
   showing,
   taskId,

@@ -197,17 +197,8 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
     "a member lists the tabs they see on the task, each naming whose browser holds it",
     () =>
       Effect.gen(function* () {
-        const {
-          starter,
-          teammate,
-          reader,
-          taskId,
-          coder,
-          tokenCoder,
-          coderTab,
-          tokenTab,
-          ask,
-        } = yield* openTask;
+        const { starter, teammate, reader, taskId, coder, tokenCoder, coderTab, tokenTab, ask } =
+          yield* openTask;
         const listed = (member: string) =>
           Effect.map(ask(request(member, tabsPath(taskId))), (answered) =>
             tabsOf(answered).map((tab) => [tab.id, tab.agentId]),

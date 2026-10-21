@@ -11,19 +11,10 @@ import {
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
-import { AGENT_TOOL } from "@luke/features/agent-tools";
 import type { Board } from "@luke/features/board-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-  TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentMessagesAnswer,
-  type CodingAgentStatus,
   PULL_REQUEST_STATE,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
@@ -34,13 +25,7 @@ import {
   type RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import {
-  type AgentTranscriptLiveAnswer,
-  LIVE_POLL_URL,
-  type TaskBoardLiveAnswer,
-  type TaskRecordLiveAnswer,
-  type TranscriptNowAnswer,
-} from "@luke/features/live-wire";
+import type { TaskBoardLiveAnswer, TaskRecordLiveAnswer } from "@luke/features/live-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import {
@@ -88,7 +73,6 @@ import {
   type TasksView,
   tasksViewSchema,
 } from "@luke/features/tasks-view";
-import type { TaskTranscript } from "@luke/features/transcript-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   type FormerMember,
@@ -104,10 +88,10 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@luke/gateway";
-import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
+import type { WireRecord, WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
-import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
 import type { LiveClient } from "./live-follow.js";
@@ -911,9 +895,6 @@ function fakeService(tasks: Task[]): FakeService {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** The host's clock, which a seal's renewal is timed by. */
-const NOW = 1_800_000_100_000;
-
 /** Realtime as a script: each subscription by its capability, and a way to deliver rows to one or stop it for good. */
 function fakeRealtime() {
   const listeners = new Map<
@@ -956,64 +937,6 @@ function fakeRealtime() {
       listener({ status: "error", data: [] }),
     ),
   };
-}
-
-/** The parts a transcript is followed by. */
-const TRANSCRIPT_PARTS = ["messages", "turns", "conversation", "agent", "workers"] as const;
-
-/** A planning worker's transcript sealed as the service answers it, each part named by its capability. */
-const SEALED_WORKER: AgentTranscriptLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: {
-    messages: sealedPart("messages"),
-    turns: sealedPart("turns"),
-    conversation: sealedPart("conversation"),
-    agent: sealedPart("agent"),
-    workers: sealedPart("workers"),
-  },
-};
-
-function sealedPart(part: string) {
-  return { capability: part, queryFingerprint: part, expiresAt: 3_600_000 };
-}
-
-/** Realtime as a script: each subscription by its capability, and a way to deliver every part's rows once the host subscribed. */
-function fakeTranscriptRealtime() {
-  const listeners = new Map<
-    string,
-    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
-  >();
-  const open = (_url: string): LiveClient => ({
-    subscribe: (query) => ({
-      onChange: (listener) => {
-        listeners.set(query.capability, listener);
-        return () => listeners.delete(query.capability);
-      },
-      renew: () => Promise.resolve(),
-      unsubscribe: () => void listeners.delete(query.capability),
-    }),
-    close: () => undefined,
-  });
-  /** A transcript's rows, at the messages' count, delivered to every part once each is subscribed. */
-  const deliver = (rows: number) =>
-    Effect.gen(function* () {
-      for (let turn = 0; turn < 100 && listeners.size < TRANSCRIPT_PARTS.length; turn += 1) {
-        yield* Effect.yieldNow;
-      }
-      const data = {
-        messages: [{ rows, seq: rows }],
-        turns: [],
-        conversation: [{ id: "worker-conversation", title: null, revision: 0 }],
-        agent: [],
-        workers: [],
-      };
-      for (const part of TRANSCRIPT_PARTS) {
-        const listener = listeners.get(part);
-        assert.ok(listener, `no subscription to ${part}`);
-        listener({ status: "live", data: data[part] });
-      }
-    });
-  return { open, deliver };
 }
 
 /** The one voice call as the live composer holds it: about a task, about the desk, or none. */

@@ -9,7 +9,6 @@ import { ensureMember } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { user } from "@luke/database/schemas/auth";
-import { messages, turns } from "@luke/database/schemas/storage";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
@@ -28,13 +27,10 @@ import {
   workspaceChatLiveAnswerSchema,
 } from "@luke/features/live-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { TURN_ORIGIN, type WireBoundaryInput, type WireRecord } from "@luke/wire";
-import type { StoredUIMessage } from "@luke/wire/ui-messages";
-import { eq } from "drizzle-orm";
+import type { WireBoundaryInput } from "@luke/wire";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { MESSAGE_AUTHOR, MESSAGE_ROLE, TOOL_PART_STATE, TURN_STATUS } from "../core.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
@@ -575,7 +571,6 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         }
       }),
   );
-
 });
 
 it.layer(getTestDB())("an agent transcript's live read", (it) => {
@@ -756,7 +751,6 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         }
       }),
   );
-
 });
 
 /** The procedures answering a plan's or an agent's inbox read as `bearer`, over the store and the deployment's Realtime. */

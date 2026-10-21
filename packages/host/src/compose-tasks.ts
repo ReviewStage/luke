@@ -1,5 +1,4 @@
 import {
-  type HostedCodingAgentClient,
   type HostedGitHubConnectionClient,
   type HostedTaskClient,
   type HostedWorkspaceClient,
@@ -1424,7 +1423,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             if (!deleted) return { deleted: false };
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
-                    yield* FiberHandle.clear(boardFollow);
+              yield* FiberHandle.clear(boardFollow);
               yield* FiberHandle.clear(recordFollow);
               const { activeTaskId: _deleted, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
@@ -1906,7 +1905,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           yield* serial(
             Effect.gen(function* () {
               if (view.activeTaskId !== openTaskId) return;
-                    yield* FiberHandle.clear(boardFollow);
+              yield* FiberHandle.clear(boardFollow);
               yield* FiberHandle.clear(recordFollow);
               const { activeTaskId: _left, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };

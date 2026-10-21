@@ -142,17 +142,6 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
   for (const event of events) await database.run(relay.handle(event, standing));
 }
 
-/** Lines a `show_code` call answered with, as its journal keeps them. */
-function shownAt(path: string, line: string) {
-  return {
-    ref: { path, startLine: 1, endLine: 1 },
-    repository: "acme/web",
-    firstLine: 1,
-    lineCount: 1,
-    lines: [line],
-  };
-}
-
 async function conversation(): Promise<ConversationTarget> {
   const userId = await database.createUser();
   const conversationId = await insertConversation(database.run, { userId });
@@ -165,12 +154,7 @@ async function worked(target: ConversationTarget, standing: RelayStanding): Prom
   const [turn] = await database.run(database.store.turns.named(target.userId, [turnId]));
   assert.ok(turn);
   const journal = await database.run(
-    database.store.messages.byClientId(
-      target.userId,
-      turn.conversationId,
-      CODER_TOOL_SET,
-      turn.id,
-    ),
+    database.store.messages.byClientId(target.userId, turn.conversationId, CODER_TOOL_SET, turn.id),
   );
   assert.ok(journal.ok);
   return taskWorkOf(turn, journal.value[0]?.message);
@@ -250,9 +234,7 @@ test("a turn carries its own journal as the agent tab reads one, and each worker
   assert.equal(worker?.taskId, "delegate-7k2m9q");
   assert.equal(worker?.task, task);
   assert.equal(worker?.state, TASK_WORK_STATE.RUNNING);
-  assert.deepEqual(typed(worker?.journal), [
-    [`tool-${AGENT_TOOL.BASH}`, "input-available"],
-  ]);
+  assert.deepEqual(typed(worker?.journal), [[`tool-${AGENT_TOOL.BASH}`, "input-available"]]);
   // A turn that failed after its receipt leaves its worker standing as its own session does.
   const [outlived] = (await work(new Map(), true)).workers ?? [];
   assert.equal(outlived?.state, TASK_WORK_STATE.RUNNING);

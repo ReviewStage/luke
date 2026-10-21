@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
-import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { WindowPushes } from "../act-port/push-procedures.js";
 import { type AppState, type AppStateSnapshot, sessionReplayBootstrap } from "../app-state.js";

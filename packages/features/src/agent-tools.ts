@@ -67,7 +67,7 @@ export const AGENT_TOOL = {
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_INBOX: INBOX_TOOL.READ,
   OPEN_PULL_REQUEST: "open_pull_request",
-  // The workspace's chat, the planner's and every coding agent's.
+  // The workspace's chat, every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,
   READ_CHAT: CHAT_TOOL.READ,
   RESOLVE_ASK: CHAT_TOOL.RESOLVE,

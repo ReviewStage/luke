@@ -44,7 +44,7 @@ export const delegationJournalsOf = Effect.fnUntraced(function* (
  * The rows of the conversation's journals that delegate to the worker, as
  * `delegationJournalsOf` reads them, each with the turn it is the journal of.
  */
-export const delegationRowsOf = Effect.fnUntraced(function* (
+const delegationRowsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
   tools: ToolSet,

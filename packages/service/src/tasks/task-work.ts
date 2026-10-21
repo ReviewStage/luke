@@ -61,7 +61,10 @@ export const SUBAGENT_JOURNALS = 10;
 const EVE_WORKER_TOOL = "worker";
 
 /** An agent's delegations by every name one was made under: its own \`delegate\`, and eve's \`worker\`. */
-export const DELEGATION_TOOLS: ReadonlySet<string> = new Set([AGENT_TOOL.DELEGATE, EVE_WORKER_TOOL]);
+export const DELEGATION_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.DELEGATE,
+  EVE_WORKER_TOOL,
+]);
 
 /** What eve's \`worker\` call carries: the message, and the task of the child to continue or steer. */
 const WORKER_CALL_INPUT = Schema.Struct({

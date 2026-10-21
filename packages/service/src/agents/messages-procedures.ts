@@ -28,7 +28,6 @@
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
-import { readTaskHeader } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -44,7 +43,7 @@ import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
 import { readEither } from "@luke/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import {
@@ -60,7 +59,6 @@ import { steerCodingAgent } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
-  CURSOR_START,
   cursorOfWire,
   cursorToWire,
   delegationNow,
@@ -127,28 +125,6 @@ const cursorNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readEither(codingAgentCursorSchema)(unparsedWire(after));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
-});
-
-/** The turn an older page is read before, or none for the newest; one that is no UUID names no turn, refused as a request that does not read. */
-const turnNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
-  before: string | undefined,
-): Effect.fn.Return<string | undefined, HostedRefusal> {
-  if (before === undefined) return undefined;
-  const read = readEither(wireUuidSchema)(unparsedWire(before));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return read.success;
-});
-
-/** The one word a task's read takes for `hold`: past the cursor in one look, never held. */
-const HOLD_NONE = "none";
-
-/** Whether a read past the cursor asks for one look rather than a hold; refused where `hold` names anything else. */
-const unheldNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
-  hold: string | undefined,
-): Effect.fn.Return<boolean, HostedRefusal> {
-  if (hold === undefined) return false;
-  if (hold !== HOLD_NONE) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return true;
 });
 
 /**

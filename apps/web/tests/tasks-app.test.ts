@@ -5,12 +5,10 @@ import { Database } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { planRevision } from "@luke/database/schemas/plan-revision";
-import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   fakeWorkspaceSeams,
@@ -18,18 +16,8 @@ import {
   joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import {
-  VOICE_CLOSE_REASON,
-  VOICE_DELEGATION_MODE,
-  VOICE_SEGMENT_ROLE,
-  type VoiceSegmentRole,
-} from "@luke/database/voice-vocabulary";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { boardAnswerSchema } from "@luke/features/board-wire";
-import {
-  CODING_AGENT_STATUS,
-  codingAgentMessagesAnswerSchema,
-} from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -62,12 +50,6 @@ import {
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
-import {
-  TRANSCRIPT_PART_TYPE,
-  type TranscriptMessage,
-  taskTranscriptAnswerSchema,
-} from "@luke/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import {
   type AgentSessions,
   EVE_RESET_OUTCOME,
@@ -468,65 +450,6 @@ const NOTE = {
   text: "Rate limit invites",
   fontFamily: 5,
 } as const;
-
-/** One fragment said on a call: who, the words as the delta carried them, and the span on the call's clock. */
-type Said = readonly [role: VoiceSegmentRole, text: string, startMs: number];
-
-/** What a call's row recorded of its end, as the record writes it; an earlier build's row holds none of it. */
-type Recorded = Pick<
-  typeof voiceSessions.$inferInsert,
-  "closedAt" | "closeReason" | "usage" | "model"
->;
-
-/** A call about the task, started at the instant given, with the fragments said on it in the order they were written. */
-const callAbout = (
-  input: { userId: string; taskId: string; startedAt: number; recorded?: Recorded },
-  said: readonly Said[],
-) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const [row] = yield* db
-      .insert(voiceSessions)
-      .values({
-        userId: input.userId,
-        taskId: input.taskId,
-        liveSessionId: `live_t_${randomUUID()}`,
-        delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-        startedAt: new Date(input.startedAt),
-        ...input.recorded,
-      })
-      .returning({ id: voiceSessions.id });
-    assert.ok(row);
-    if (said.length > 0) {
-      yield* db.insert(voiceTranscriptSegments).values(
-        said.map(([role, text, startMs], seq) => ({
-          voiceSessionId: row.id,
-          seq,
-          role,
-          text,
-          startMs,
-          endMs: startMs + 500,
-        })),
-      );
-    }
-    return row.id;
-  });
-
-/** One line as the transcript answers it: its place on the call, the speaker as the role, the words as one text part, and where on the call it began and ended. */
-function spoken(
-  index: number,
-  role: TranscriptMessage["role"],
-  text: string,
-  span: readonly [startMs: number, endMs: number],
-): TranscriptMessage {
-  const [startMs, endMs] = span;
-  return {
-    id: String(index),
-    role,
-    parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
-    metadata: { span: { startMs, endMs } },
-  };
-}
 
 /** Luke's drawing of one labelled box. */
 const DRAW_API = {

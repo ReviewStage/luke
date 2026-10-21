@@ -10,7 +10,6 @@
  */
 
 import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
-import { codingAgentMessagesAnswerViewSchema } from "@luke/features/coding-agent-view";
 import {
   codeLinesSchema,
   tasksArchiveParamsSchema,

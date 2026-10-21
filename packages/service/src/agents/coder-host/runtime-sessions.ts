@@ -25,9 +25,9 @@
  * a native conversation is refused by name (`RUNTIME_REFUSAL.NOT_HERE`):
  * nothing falls through to eve, which would run it on another payer.
  *
- * TODO(P11b): the eve apps (the planner's tools in `apps/luke`, an eve
- * agent's in `apps/dev`) provide no `NativeAgentSessions`, so from there a
- * native agent is refused as `not_here` and a Start decides eve
+ * TODO(P11b): the eve app (an eve agent's tools in `apps/dev`) provides
+ * no `NativeAgentSessions`, so from there a native agent is refused as
+ * `not_here` and a Start decides eve
  * (`agent-runtime-choice.ts`). P11b, `feat(agents): native agents reachable
  * from the planner and eve agents`, gives them a way to reach one.
  */

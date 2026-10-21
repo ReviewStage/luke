@@ -29,7 +29,7 @@ import type { OpenFile } from "./use-side-panel.js";
 /**
  * file-tab.test.ts -- a File tab as the developer meets it, its file drawn by
  * the real diff bundle: read whole, at the head's commit or the one the tab
- * is pinned to; Luke's note under the last line of its range, lighting its
+ * is pinned to; an agent's note under the last line of its range, lighting its
  * lines under the pointer, or put away behind a chip while Minimize inline
  * comments is on, which I turns; and ⌘F counting every match in the file and
  * in the notes' words. Synthetic repository.
@@ -98,8 +98,18 @@ function service(asked: TaskFileRequest[]): ReadFileWindow {
   };
 }
 
+const AGENT_ID = "3f1c9e2a-6b7d-4e8f-a1b2-c3d4e5f60718";
+
 const NOTES = [
-  { callId: "call-1", shownAt: 1_760_000_000_000, startLine: 3, endLine: 4, note: NOTE },
+  {
+    callId: "call-1",
+    shownAt: 1_760_000_000_000,
+    turnId: "turn-1",
+    agentId: AGENT_ID,
+    startLine: 3,
+    endLine: 4,
+    note: NOTE,
+  },
 ];
 
 function notes(shown: FileNotes["notes"] = NOTES): FileNotes {
@@ -108,10 +118,11 @@ function notes(shown: FileNotes["notes"] = NOTES): FileNotes {
     folded: [],
     onFold: () => undefined,
     taskId: "task-1",
+    agentLabel: (agentId) => (agentId === AGENT_ID ? "Invite emails" : undefined),
   };
 }
 
-/** Draws the latest tab mounted again with Luke's notes as `shown`, as a note he adds does. */
+/** Draws the latest tab mounted again with the agents' notes as `shown`, as a note one adds does. */
 let draw: (shown: FileNotes["notes"]) => void = () => undefined;
 
 /** A File tab opened on `file`, in a find's scope, drawn once its file is. */
@@ -193,7 +204,7 @@ test("a File tab pinned to a commit reads the whole text there in one read", asy
   assert.deepEqual(asked, [{ path: PATH, firstLine: 1, lastLine: 1, raw: true, ref: PINNED }]);
 });
 
-test("the lines a File tab was opened on are lit, and Luke's note stands under the last line of its range, lighting its own lines under the pointer", async () => {
+test("the lines a File tab was opened on are lit, and an agent's note stands under the last line of its range, lighting its own lines under the pointer", async () => {
   const container = await tab(
     { path: PATH, range: { startLine: 1, endLine: 1 }, opened: 1 },
     service([]),
@@ -215,15 +226,15 @@ test("the lines a File tab was opened on are lit, and Luke's note stands under t
   await vi.waitFor(() => assert.deepEqual(litLines(container), ["1"]));
 });
 
-test("with Minimize inline comments on, Luke's note stands behind a chip with his mark, which shows it, and I in the tab turns the setting", async () => {
+test("with Minimize inline comments on, an agent's note stands behind a chip with the mark, which shows it, and I in the tab turns the setting", async () => {
   handSettings({ diffMinimizeComments: true });
   const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
   const chip = () => noteSlot(container).querySelector<HTMLElement>(".diff-thread-chip");
 
-  assert.equal(chip()?.getAttribute("aria-label"), "Luke's note on lines 3–4, show");
+  assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, show");
   assert.ok(chip()?.querySelector(".transcript-luke-mark"));
   act(() => chip()?.click());
-  assert.equal(chip()?.getAttribute("aria-label"), "Luke's note on lines 3–4, hide");
+  assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, hide");
 
   const section = container.querySelector<HTMLElement>(".file-tab") ?? assert.fail();
   await act(async () => {
@@ -234,7 +245,7 @@ test("with Minimize inline comments on, Luke's note stands behind a chip with hi
   await act(async () => {
     section.dispatchEvent(new KeyboardEvent("keydown", { key: "i", code: "KeyI", bubbles: true }));
   });
-  assert.equal(chip()?.getAttribute("aria-label"), "Luke's note on lines 3–4, show");
+  assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, show");
 });
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
@@ -254,7 +265,7 @@ function findTally(): string | null | undefined {
   return document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent;
 }
 
-test("⌘F over a File tab counts every match in the file and in Luke's notes, from its text, and steps through them", async () => {
+test("⌘F over a File tab counts every match in the file and in its agents' notes, from its text, and steps through them", async () => {
   await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
   act(() => {
     runAppCommand(APP_COMMAND.FIND);
@@ -269,7 +280,7 @@ test("⌘F over a File tab counts every match in the file and in Luke's notes, f
   assert.equal(findTally(), "2 of 5");
 });
 
-test("a note Luke adds while ⌘F stands open over a File tab joins the count at once, the find kept at its match", async () => {
+test("a note an agent adds while ⌘F stands open over a File tab joins the count at once, the find kept at its match", async () => {
   const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
   act(() => {
     runAppCommand(APP_COMMAND.FIND);

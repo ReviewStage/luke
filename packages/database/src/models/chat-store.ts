@@ -1838,7 +1838,7 @@ function placePost(
     if (Option.isNone(channel)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (!(yield* postsIn(author.value, channelId))) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
-    // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
+    // Mentions are resolved before the sequence is locked, because minting a person takes the workspace's lock.
     const found = yield* Effect.forEach(post.subjects ?? [], ({ subject, label }) =>
       Effect.map(subjectMember(userId, organizationId, subject), (found) => ({ label, found })),
     );
@@ -3509,7 +3509,7 @@ export function moveTaskChat(taskId: string, organizationId: string): ChatStoreE
       const channel = yield* findTaskChannel(taskId);
       if (Option.isNone(channel) || channel.value.organizationId === organizationId) return;
       const from = channel.value.organizationId;
-      // Note that both workspaces are locked before both sequences, each pair in one order, because a post that mints a planner takes a workspace's lock before its sequence's, and two moves the other way at once would each wait on the other.
+      // Note that both workspaces are locked before both sequences, each pair in one order, because a post that mints a person takes a workspace's lock before its sequence's, and two moves the other way at once would each wait on the other.
       const pair = [from, organizationId].toSorted();
       for (const held of pair) yield* lockWorkspace(held);
       for (const held of pair) yield* holdSequence(held);

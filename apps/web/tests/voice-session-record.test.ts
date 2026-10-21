@@ -182,9 +182,10 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         const taskId = task.id;
         const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
         // Registered newest first, so the order read back is the calls' and not the rows'.
-        const second = yield* callWith({ userId: owner, taskId, agentId, startedAt: NOW - 60_000 }, [
-          [USER, "Seven days."],
-        ]);
+        const second = yield* callWith(
+          { userId: owner, taskId, agentId, startedAt: NOW - 60_000 },
+          [[USER, "Seven days."]],
+        );
         const first = yield* callWith(
           { userId: owner, taskId, agentId, startedAt: NOW - 3_600_000 },
           [

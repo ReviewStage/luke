@@ -286,7 +286,7 @@ function generateAgentTitle(
  * for a conversation past those turns, one with no words in it yet, and a
  * call that answered nothing, so the next turn asks again.
  */
-export function titleOfConversation(
+function titleOfConversation(
   model: LanguageModel,
   target: ConversationTarget,
   tools: ToolSet,

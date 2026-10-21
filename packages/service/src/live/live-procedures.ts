@@ -55,7 +55,7 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
-import { CODING_AGENT_STATUS, codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
+import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
   LIVE_USER_QUERY,

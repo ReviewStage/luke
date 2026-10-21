@@ -194,10 +194,6 @@ function sent(path: string, method: string, headers: Record<string, string>): Re
   return new Request(new URL(path, ORIGIN), { method, headers });
 }
 
-/** Each retire as eve heard it, in an order of its own, since the deletion retires a few at a time. */
-const inOrder = (retired: readonly (readonly [string, string])[]) =>
-  retired.map(([caller, sessionId]) => `${caller} ${sessionId}`).toSorted();
-
 it.layer(getTestDB())("an account's deletion", (it) => {
   it.effect(
     "over a browser's session cookie erases the account the cookie names alone, retiring every session of that account's standing agents' conversations as the deployment acting for it, none of another account's, and none of an old task's own Luke's",

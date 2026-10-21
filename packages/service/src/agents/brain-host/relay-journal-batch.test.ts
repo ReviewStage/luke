@@ -13,6 +13,8 @@ import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import { TOOL_PART_STATE, UNKNOWN_ACTION_STATUS } from "../../core.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
+import { AGENT_TOOL } from "../agent-runtime/tools.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import {
   foldedQuietly,
@@ -21,8 +23,6 @@ import {
   type RelayStanding,
   StreamRelay,
 } from "./relay.js";
-import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
-import { AGENT_TOOL } from "../agent-runtime/tools.js";
 
 /**
  * A running turn's journal written in batches: what only grows it, told

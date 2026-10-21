@@ -264,10 +264,7 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
  * on an open row, and a detach only from the connection that holds the row.
  */
 export function fakeSessionRecord(): FakeSessionRecord {
-  const owners = new Map<
-    string,
-    { userId: string; taskId: string; agentId: string | undefined }
-  >();
+  const owners = new Map<string, { userId: string; taskId: string; agentId: string | undefined }>();
   /** Which connection holds each open row, by live session id. */
   const holders = new Map<string, string>();
   const openRow = (sessionId: string) => {

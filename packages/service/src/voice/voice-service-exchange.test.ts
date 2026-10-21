@@ -42,9 +42,8 @@ import {
   type EveMount,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, StreamRelay } from "../agents/brain-host/relay.js";
-import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../core.js";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../core.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import {
   appended,
@@ -238,7 +237,6 @@ async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClien
 /** The service's own word about the task, sent beside the relayed frames as the call goes. */
 const TASK_FRAMES: readonly unknown[] = [
   VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-  VOICE_SERVICE_FRAME.PLAN_DRAFT,
   VOICE_SERVICE_FRAME.TASK_WORK,
 ];
 
@@ -617,7 +615,10 @@ it.effect(
       assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
       const create = context.openAi.creates[0];
       assert.ok(create && isRecord(create.body.session));
-      assert.equal(create.body.session.instructions, sessionInstructions(backendToolsOf(CALL_BACKEND)));
+      assert.equal(
+        create.body.session.instructions,
+        sessionInstructions(backendToolsOf(CALL_BACKEND)),
+      );
 
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
@@ -823,7 +824,7 @@ it.effect(
           authorization: BEARER,
         });
         assert.ok("reader" in refused);
-        await send(refused.reader.socket, createFrame(context.taskId, [], undefined, native.id));
+        await send(refused.reader.socket, createFrame(context.taskId, native.id));
         assert.equal(
           record(await refused.reader.next()).error,
           HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
@@ -847,7 +848,7 @@ it.effect(
         authorization: BEARER,
       });
       assert.ok("reader" in opened);
-      await send(opened.reader.socket, createFrame(context.taskId, [], undefined, agent.id));
+      await send(opened.reader.socket, createFrame(context.taskId, agent.id));
       await until(
         () => context.offered.length === 1,
         () => "the attachment to be offered the session",

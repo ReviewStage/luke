@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { HeldVoiceAgent } from "@luke/database/models/voice-session-record";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import {
@@ -101,6 +102,7 @@ const AGENT: HeldVoiceAgent = {
   agentId: "3b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d",
   taskId: TASK.id,
   archived: false,
+  runtime: CONVERSATION_RUNTIME.EVE,
   conversation: { userId: FAKE_USER_ID, conversationId: "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d" },
 };
 

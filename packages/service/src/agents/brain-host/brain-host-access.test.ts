@@ -16,6 +16,7 @@ import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
+import { CODER_DEPLOYMENT_TURNS } from "../coder-host/channel.js";
 import {
   actedForAccount,
   DEPLOYMENT_PRESENCE,
@@ -39,7 +40,6 @@ import {
   runtimeSessionReachableBy,
   SESSION_STANDING,
 } from "./conversation.js";
-import { CODER_DEPLOYMENT_TURNS } from "../coder-host/channel.js";
 import { ownedAuth, type SessionOwnership } from "./door.js";
 
 /**

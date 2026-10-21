@@ -245,7 +245,7 @@ function refused(
 }
 
 /** A note that missed, in the words the model reads: its kind and where it was aimed, a long find cut. */
-export function missedNote(note: PlanNote): string {
+function missedNote(note: PlanNote): string {
   if (note.kind === NOTE_KIND.ADD) return `${note.kind} under ${note.section}`;
   const find =
     note.find.length > MISSED_FIND_CHARS ? `${note.find.slice(0, MISSED_FIND_CHARS)}…` : note.find;

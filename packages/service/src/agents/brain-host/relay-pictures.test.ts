@@ -21,9 +21,9 @@ import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { stampedEveEvent } from "../../testing/eve-events.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";
-import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 
 /**
  * The pictures an integration's tool answers, relayed into the record over

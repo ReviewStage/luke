@@ -2,16 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
-import { childConversationId } from "@luke/database/models/ids";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import {
-  insertConversation,
-  joinWorkspace,
-  openHostedStoreTestDatabase,
-  startTask,
-} from "@luke/database/testing";
-import type { TaskWorkTurn } from "@luke/features/tasks-view";
+import { insertConversation, openHostedStoreTestDatabase } from "@luke/database/testing";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -30,7 +23,6 @@ import {
   Effect,
   Exit,
   Layer,
-  Option,
   Queue,
   Redacted,
   Scope,
@@ -42,9 +34,8 @@ import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { deploymentActor } from "../agents/brain-host/auth.js";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../agents/brain-host/bounds.js";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import { askStanding } from "../agents/brain-host/brain-ask.js";
-import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { ownedAuth } from "../agents/brain-host/door.js";
 import {
   type AgentSessions,
@@ -62,11 +53,6 @@ import {
   CODER_DEPLOYMENT_TURNS,
 } from "../agents/coder-host/channel.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import {
-  SEARCH_WEB_REFUSAL,
-  SEARCH_WEB_STATUS,
-  SEARCH_WEB_TOOL,
-} from "../agents/public-research.js";
 import { ASK_ORIGIN, TURN_SLOW_STEP, TURN_STATUS } from "../core.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
@@ -94,10 +80,6 @@ afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
 
-/** A task the account starts, as the Tasks tab's new-task form saves one. */
-const TASK = {
-  name: "Teammate invitations",
-} as const;
 /**
  * The follow's bounds narrowed so a poll is milliseconds, with the bound left
  * wide: a turn's events land through the store, and the store on CI is one
@@ -894,85 +876,6 @@ it.live(
       yield* Effect.promise(() => f.stop());
     }),
 );
-
-/** The one call a brain turn makes, as eve names its input and its result. */
-interface BrainCall {
-  readonly toolName: string;
-  readonly input: unknown;
-  readonly output: unknown;
-}
-
-const SEARCH_WEB_CALL: BrainCall = {
-  toolName: SEARCH_WEB_TOOL.name,
-  input: { query: "invite link expiry best practice" },
-  output: {
-    status: SEARCH_WEB_STATUS.NO_RESULTS,
-    reason: SEARCH_WEB_REFUSAL.NO_RESULTS,
-    query: "invite link expiry best practice",
-  },
-};
-
-/** A brain turn as eve streams it: the spoken ask, one call and its result, and the reply. */
-function brainTurn(
-  turnId: string,
-  now: number,
-  call: BrainCall = SEARCH_WEB_CALL,
-): readonly MessageStreamEvent[] {
-  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-    stampedEveEvent(event, now);
-  const sequence = 0;
-  return [
-    stamped({ type: "turn.started", data: { turnId, sequence } }),
-    stamped({ type: "message.received", data: { turnId, sequence, message: "q" } }),
-    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
-    stamped({
-      type: "actions.requested",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        actions: [
-          { kind: "tool-call", callId: "call-1", toolName: call.toolName, input: call.input },
-        ],
-      },
-    }),
-    stamped({
-      type: "action.result",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        status: "completed",
-        result: {
-          kind: "tool-result",
-          callId: "call-1",
-          toolName: call.toolName,
-          output: call.output,
-        },
-      },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
-    }),
-    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
-    stamped({
-      type: "message.completed",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 1,
-        finishReason: "stop",
-        message: "Nothing public settles it. Who can withdraw an invite?",
-      },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
-    }),
-    stamped({ type: "turn.completed", data: { turnId, sequence } }),
-  ];
-}
 
 /** The relay's standing for an accepted ask's turn, as eve would stream it. */
 async function turnStanding(target: ConversationTarget, askId: string): Promise<RelayStanding> {

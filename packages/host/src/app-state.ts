@@ -31,7 +31,7 @@ export const RUN_PROFILE = {
   TASKS_BOARD: "tasks-board",
   /** The same task mid-call, opened at launch on the transcript of what was said on its calls. */
   TASKS_TRANSCRIPT: "tasks-transcript",
-  /** The same task mid-call, opened at launch on the work Luke's brain did on its calls. */
+  /** The same task mid-call, opened at launch on the work its agent did on its calls. */
   TASKS_WORK: "tasks-work",
   /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
   CHAT: "chat",

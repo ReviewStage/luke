@@ -745,11 +745,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * earlier turn started was started; none where they could not be read.
    */
   const workerJournalsOf = (conversationId: string) =>
-    delegationJournalsOf(
-      options.conversation.userId,
-      conversationId,
-      options.backend.tools,
-    ).pipe(
+    delegationJournalsOf(options.conversation.userId, conversationId, options.backend.tools).pipe(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed((): StoredUIMessage[] => []),
     );

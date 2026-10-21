@@ -3,7 +3,6 @@ import type { Board } from "@luke/features/board-wire";
 import type { BrowserPage } from "@luke/features/browser-acts";
 import {
   CODING_AGENT_STATUS,
-  type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -74,7 +73,7 @@ import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { SpinnerRegion } from "../spinner.js";
-import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph.js";
+import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
@@ -115,7 +114,6 @@ import {
   readWholeTranscript,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { TranscriptReader } from "../tasks/use-agent-transcript.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import {
@@ -580,14 +578,7 @@ export function panelEntries(input: {
             onPick: onNewBrowser,
           },
         ];
-  return [
-    ...kinds,
-    ...fileRows,
-    ...changesRows,
-    ...pageRows,
-    ...terminalRows,
-    ...browserRows,
-  ];
+  return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */

@@ -7,12 +7,12 @@ import {
   type AskRow,
   newestSession,
 } from "@luke/database/models/asks";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { hostTurnId } from "@luke/database/models/ids";
 import {
   conversationReachableBy,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
@@ -24,13 +24,7 @@ import { Effect, Option, PartitionedSemaphore, Result, Schema, Stream } from "ef
 import { afterAll, test } from "vitest";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
-import {
-  ASK_REFUSAL,
-  type AskInput,
-  acceptAsk,
-  STOP_REFUSAL,
-  stopAsk,
-} from "./brain-ask.js";
+import { ASK_REFUSAL, type AskInput, acceptAsk, STOP_REFUSAL, stopAsk } from "./brain-ask.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,

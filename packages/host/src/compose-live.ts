@@ -51,7 +51,7 @@ export interface LiveDependencies {
   showTaskActivity: (activity: TaskActivityFrame) => void;
   /** Where code Luke puts on screen during a task's call goes. */
   showTaskCode: (code: TaskCodeFrame) => void;
-  /** Where each brain turn's work during a task's call goes. */
+  /** Where each spoken turn's work during a task's call goes. */
   showTaskWork: (work: TaskWorkFrame) => void;
   /** Where a task's call's end goes, so the code it put on screen is cleared with it. */
   taskCallEnded: (taskId: string) => void;

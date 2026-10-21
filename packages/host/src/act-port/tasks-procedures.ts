@@ -9,7 +9,6 @@
  */
 
 import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
-import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
