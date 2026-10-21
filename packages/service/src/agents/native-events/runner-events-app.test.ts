@@ -9,6 +9,7 @@ import {
   readCodingAgent,
   readCodingAgentContext,
   readCodingAgentRouting,
+  recordCodingAgentPublished,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
@@ -17,17 +18,24 @@ import {
   type ProviderKeyRow,
   saveProviderKey,
 } from "@luke/database/models/provider-key-store";
+import { readTask, updateTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_PAYER,
+  type CodingAgentPayer,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { TASK_STATUS } from "@luke/features/task-wire";
 import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { asc, eq } from "drizzle-orm";
@@ -148,10 +156,26 @@ const agentOn = (
       lineIds.push(sentLineId(clientKey));
     }
     const [lineId = ""] = lineIds;
-    return { userId, agentId: agent.id, target, bearer, lineId, lineIds };
+    return { userId, agentId: agent.id, taskId: task.id, target, bearer, lineId, lineIds };
   });
 
+/** The task's status as the account reads it. */
+const taskStatusOf = (userId: string, taskId: string) =>
+  Effect.map(readTask(userId, taskId), (read) => Option.getOrThrow(read).task.status);
+
 const agentWithBearer = agentOn(HARNESS.CLAUDE_CODE, ["Run the probe."]);
+
+/** The agent's pull request as its row keeps it once merged. */
+const MERGED = {
+  number: 42,
+  title: "Fix the refresh",
+  url: "https://github.com/acme/relay/pull/42",
+  state: PULL_REQUEST_STATE.MERGED,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 12,
+  deletions: 3,
+  changedFiles: 2,
+};
 
 /** The SDK messages of P00's workflow turn, in the pinned SDK's shapes, as the runner numbers and posts them. */
 function workflowTurn(lineId: string): readonly RunnerEvent[] {
@@ -266,14 +290,21 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const post = yield* standing;
         const agent = yield* agentWithBearer;
         const events = workflowTurn(agent.lineId);
+        // The task was marked done, and the agent's pull request merged: its turn takes the task
+        // up again, and the turn's end, everyone then idle, finishes it (`tasks/task-finish.ts`).
+        yield* updateTask(agent.userId, agent.taskId, { status: TASK_STATUS.DONE });
+        yield* recordCodingAgentPublished(agent.userId, agent.agentId, MERGED);
 
         const first = yield* post(agent.bearer, events.slice(0, 11));
         const midway = yield* transcriptOf(agent.target.conversationId);
+        const reopened = yield* taskStatusOf(agent.userId, agent.taskId);
         const last = yield* post(agent.bearer, events.slice(11));
         const { rows, turns: settled } = yield* transcriptOf(agent.target.conversationId);
 
         assert.deepEqual(first.body, { applied: 11, sequence: 10 });
         assert.deepEqual(last.body, { applied: 4, sequence: 14 });
+        assert.equal(reopened, TASK_STATUS.IN_PROGRESS);
+        assert.equal(yield* taskStatusOf(agent.userId, agent.taskId), TASK_STATUS.DONE);
         // A model turn that ends with work still in flight leaves the agent's turn running,
         // and the words forming after it are told through their last finished sentence.
         assert.deepEqual(

@@ -56,6 +56,7 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
 import {
   answerInboxAsk,
   answerInboxItem,
@@ -179,6 +180,7 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer, taken.answerFiles)) {
     yield* counted;
+    yield* settleAgentTaskIfFinished(userId, taken.agentId);
     return { item: taken, taken: true };
   }
   const answer = taken.answer;
@@ -204,6 +206,9 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted only once the hand-off stands, since a failed one withdraws the answer above.
   yield* counted;
+  // The question settled may have finished the task's work, asked once the agent was told, so one
+  // woken by the answer reads as running (`tasks/task-finish.ts`).
+  yield* settleAgentTaskIfFinished(userId, taken.agentId);
   return { item: taken, taken: true };
 });
 
@@ -259,6 +264,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   const reply = inboxAnswersReply(answers, text);
   if (!inboxAnswerHeard(item, reply, attachments)) {
     yield* counted;
+    yield* settleAgentTaskIfFinished(userId, item.agentId);
     return { item };
   }
   const handedOver = Effect.gen(function* () {
@@ -283,6 +289,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted only once the hand-off stands, since a failed one withdraws the answer above.
   yield* counted;
+  yield* settleAgentTaskIfFinished(userId, item.agentId);
   return { item };
 });
 
@@ -338,7 +345,10 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return { item: now.value.item, taken: false };
   }
-  if (!taken.needsReply) return { item: taken, taken: true };
+  if (!taken.needsReply) {
+    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    return { item: taken, taken: true };
+  }
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
@@ -359,6 +369,7 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     ),
   );
+  yield* settleAgentTaskIfFinished(userId, taken.agentId);
   return { item: taken, taken: true };
 });
 

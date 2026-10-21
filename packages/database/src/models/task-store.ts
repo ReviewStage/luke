@@ -1,6 +1,7 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
-import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -20,7 +21,18 @@ import {
   UNKNOWN_AGENT_LABEL,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
-import { and, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notInArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -127,6 +139,13 @@ export interface TaskArchivedAgent {
 export type TaskArchiveGuard<R> = (
   agent: TaskArchivedAgent,
 ) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
+
+/**
+ * What a finish of a task's work runs under the task's lock: whether each
+ * of its standing agents stands idle, neither starting nor running, read
+ * under its conversation's lock, the same reading an archive's guard makes.
+ */
+export type TaskFinishGuard<R> = TaskArchiveGuard<R>;
 
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
@@ -1427,9 +1446,6 @@ export function assignUnassignedTask(userId: string, taskId: string): TaskStoreE
   return Effect.map(assignUnassigned({ userId, taskId }), Option.isSome);
 }
 
-/** The statuses work on a task has not yet begun in, which an agent started on it moves it out of. */
-const NOT_BEGUN: readonly TaskStatus[] = [TASK_STATUS.BACKLOG, TASK_STATUS.TODO];
-
 const beginTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TaskIdRowSchema,
@@ -1438,21 +1454,130 @@ const beginTask = SqlSchema.findOneOption({
       db
         .update(task)
         .set({ status: TASK_STATUS.IN_PROGRESS })
-        .where(and(reachableTask(userId, taskId), inArray(task.status, [...NOT_BEGUN])))
+        .where(and(reachableTask(userId, taskId), ne(task.status, TASK_STATUS.IN_PROGRESS)))
         .returning({ id: task.id }),
     ),
 });
 
 /**
- * Moves a task whose work has not begun, in the backlog or to do, to in
- * progress, as a coding agent started on it does, and answers whether it
- * moved. A task already in progress, done, or canceled, and one the account
- * does not reach, stand as they were, so asking again moves nothing and
- * nothing ever moves a task back. Like any change it is not a save, so the
- * list's order stands; the check and the write are one statement.
+ * Moves a task to in progress, as a coding agent started on it or a turn of
+ * one starting on it does, and answers whether it moved: one whose work has
+ * not begun, in the backlog or to do, and one settled, done or canceled,
+ * which the work reopens. A task already in progress, and one the account
+ * does not reach, stand as they were, so asking again moves nothing. Like
+ * any change it is not a save, so the list's order stands; the check and
+ * the write are one statement.
  */
 export function beginTaskWork(userId: string, taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(beginTask({ userId, taskId }), Option.isSome);
+}
+
+/** The statuses a task's work is settled in, which a finish leaves as they are and a start or a turn reopens. */
+const SETTLED: readonly TaskStatus[] = [TASK_STATUS.DONE, TASK_STATUS.CANCELED];
+
+/** The pull request states under which an agent's pull request still waits on review or on being marked ready. */
+const OPEN_PULL_REQUEST_STATES: readonly string[] = [
+  PULL_REQUEST_STATE.OPEN,
+  PULL_REQUEST_STATE.DRAFT,
+];
+
+/** Where the pull requests of the task's standing agents stand, as their rows keep them; an agent whose row keeps none has no line here. */
+const findStandingPullRequestStates = SqlSchema.findAll({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ state: Schema.String }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ state: sql<string>`${codingAgent.published} ->> 'state'` })
+        .from(codingAgent)
+        .where(
+          and(
+            eq(codingAgent.taskId, taskId),
+            isNull(codingAgent.archivedAt),
+            isNotNull(codingAgent.published),
+          ),
+        ),
+    ),
+});
+
+/**
+ * One inbox item of the task holding a question open for the developer:
+ * open, and asking something, which a notice, a post that asked nothing and
+ * waits on their nod alone, never does (the inbox store's own `ASKING`,
+ * `packages/service/src/inbox/inbox-store.ts`).
+ */
+const findOpenQuestion = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: TaskIdRowSchema,
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: inboxItem.id })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.taskId, taskId),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+            sql`${inboxItem.response} ->> 'type' <> ${INBOX_RESPONSE.NONE}`,
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/** The one write that settles a task done: the status alone, under the lock the finish holds, on a task not settled already. */
+const finishTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: TaskIdRowSchema,
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .update(task)
+        .set({ status: TASK_STATUS.DONE })
+        .where(and(eq(task.id, taskId), notInArray(task.status, [...SETTLED])))
+        .returning({ id: task.id }),
+    ),
+});
+
+/**
+ * Moves a task whose work is finished to done, and answers whether it moved.
+ * The work is finished where every standing agent of the task, the archived
+ * left out, stands idle by the caller's guard, none of them has a pull
+ * request still open or a draft, at least one of them has a merged one, and
+ * no inbox item of the task holds a question open for the developer. A task
+ * already done or canceled, one the account does not reach, and one whose
+ * work is not finished stand as they were, so asking at every moment that
+ * may have finished it is safe: a turn's end, a pull request first seen
+ * merged, an inbox question settled. Everything is read under the task's
+ * row lock, each agent under its conversation's, as an archive reads them,
+ * so a start or a turn racing the finish either landed before the read,
+ * which then refuses, or waits on the lock and reopens the task after.
+ * Like any change it is not a save, so the list's order stands.
+ */
+export function finishTaskWork<R = never>(
+  userId: string,
+  taskId: string,
+  idle: TaskFinishGuard<R>,
+): Effect.Effect<boolean, TaskStoreFailure, DatabaseServices | R> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockTask({ userId, taskId });
+        if (Option.isNone(locked)) return false;
+        if (SETTLED.includes(locked.value.status)) return false;
+        const pullRequests = yield* findStandingPullRequestStates({ taskId });
+        if (pullRequests.some(({ state }) => OPEN_PULL_REQUEST_STATES.includes(state)))
+          return false;
+        if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
+        if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
+        const agents = yield* lockStandingAgents({ taskId });
+        const standings = yield* Effect.forEach(agents, idle);
+        if (standings.includes(false)) return false;
+        const finished = yield* finishTask({ taskId });
+        return Option.isSome(finished);
+      }),
+    ),
+  );
 }
 
 /**
