@@ -7,19 +7,16 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
+import { ensureMember, unreadFor } from "@luke/database/models/chat-store";
 import {
   archiveCodingAgent,
   createCodingAgent,
   fillCodingAgentTitle,
   hasRepository,
   latestTurnsOf,
-  lineSendersOf,
   readCodingAgent,
   recordCodingAgentPublished,
-  takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
-import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
@@ -34,7 +31,7 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
   leaveWorkspace,
@@ -44,6 +41,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
+import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
@@ -61,7 +59,6 @@ import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -127,7 +124,6 @@ import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
-import { STEER_OUTCOME } from "./steer.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -190,8 +186,6 @@ const CATALOG: readonly OfferedModel[] = [
 /** The branch of the repository a stacked agent starts on, and the commit GitHub says it stands at. */
 const STACKED_BRANCH = "luke/invitation-expiry";
 const BRANCH_COMMIT = "89abcdef0123456789abcdef0123456789abcdef";
-/** The most characters of its own an agent's message may carry: a member's bound less its heading's room. */
-const LONGEST_PEER_WORDS = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - 1_000;
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
@@ -447,6 +441,41 @@ async function peerCaller(
     );
 }
 
+/** The words a message eve was sent opens with: the message where it is words alone, or its first part's where it carries what its words mention. */
+function sentWords(body: string | undefined): string {
+  const message: unknown = JSON.parse(body ?? "").message;
+  if (typeof message === "string") return message;
+  const [first] = Array.isArray(message) ? message : [];
+  return isRecord(first) && typeof first.text === "string" ? first.text : "";
+}
+
+/**
+ * The agent's own `post_chat` as a direct message to another agent, run
+ * through the host's chat door as eve's tool file runs it, which is how one
+ * agent messages another; answers the post's receipt.
+ */
+async function directMessage(
+  host: CoderHost,
+  from: StartedAgent,
+  to: { readonly id: string },
+  services: Awaited<ReturnType<typeof fakeCoderEve>>["services"] | Layer.Layer<never>,
+  callId = "call-1",
+): Promise<WireRecord> {
+  const admitted = await database.run(host.admit(seat(from), from.sessionId));
+  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
+  return database.run(
+    host
+      .chat(admitted.success, {
+        tool: CHAT_TOOL.POST,
+        input: unparsedWire({ text: NOTE, to: `[@Agent](https://tryluke.dev/w/agent/${to.id})` }),
+        clientKey: callId,
+        postsInTurn: 0,
+        sandbox: () => Promise.reject(new Error("a post with words alone opens no sandbox")),
+      })
+      .pipe(Effect.provide(Layer.mergeAll(services, ANALYTICS.layer))),
+  );
+}
+
 /** A turn of the agent's, begun as eve begins one and ended where `ended` says, so the agent reads as working or as idle; answers the turn's id. */
 async function turnOn(agent: StartedAgent, ended: boolean): Promise<string> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
@@ -492,19 +521,6 @@ async function cancelledTurnEnds(agent: StartedAgent, turnId: string): Promise<v
     }),
   );
 }
-
-/** What sent the line standing under a send's key in the agent's conversation, as its page names it. */
-const lineSenderUnder = (target: ConversationTarget, clientKey: string) =>
-  Effect.gen(function* () {
-    const read = yield* readMessageByClientId(
-      target.userId,
-      target.conversationId,
-      {},
-      sentLineId(clientKey),
-    );
-    const id = read.ok ? read.value[0]?.id : undefined;
-    return id === undefined ? undefined : (yield* lineSendersOf(target, [id])).get(id);
-  });
 
 /** A turn of the agent's that ended on the answer given, journaled as the relay journals one. */
 async function answeredTurnOn(agent: StartedAgent, answer: AssistantMessageBuilder): Promise<void> {
@@ -724,133 +740,6 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   assert.equal(eve.sent.length, 0, "a read sends nothing");
 });
 
-test("message_agent reaches a teammate's agent on another plan as the deployment acting for the caller's starter, opening with who sent it, kept under the sending agent, its name, and its model, and sent once under the call's key", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
-  const { caller, teammates } = agents;
-  const eve = await fakeCoderEve(workspaceId);
-  const call = await peerCaller(hostOf(true), caller, eve.services);
-
-  const sent = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: teammates.id, text: NOTE });
-  assert.deepEqual(sent, {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    delivery: STEER_OUTCOME.SENT,
-    agent: {
-      id: teammates.id,
-      name: teammates.personaName,
-      title: OPUS,
-      model: OPUS,
-      status: CODING_AGENT_STATUS.RUNNING,
-      onYourTask: false,
-    },
-  });
-  assert.equal(eve.sent.length, 1);
-  const [request] = eve.sent;
-  assert.equal(request?.path, `/eve/coder/v1/session/${teammates.sessionId}`);
-  assert.equal(request?.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
-  assert.equal(request?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), caller.userId);
-  assert.equal(request?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), teammates.conversationId);
-  // The words open with the sending agent, named and by the id it is answered by, then its own.
-  const message: string = JSON.parse(request?.body ?? "").message;
-  assert.ok(message.startsWith("A message from another coding agent"), message);
-  assert.ok(message.includes(`"${caller.personaName}"`) && message.includes(caller.id), message);
-  assert.ok(message.includes("not the developer's or Luke's"), message);
-  assert.ok(message.endsWith(`\n\n${NOTE}`), message);
-  // The line stands in the teammate's agent's conversation, under its starter, named for the agent that sent it.
-  assert.equal(
-    await database.run(
-      sentLineStands(teammates.userId, teammates.conversationId, sentLineId("call-1")),
-    ),
-    true,
-  );
-  // And by the model the sending agent runs on, which the window draws its harness by, and the agent itself on its task, which a reader opens.
-  assert.deepEqual(await database.run(lineSenderUnder(teammates, "call-1")), {
-    kind: MESSAGE_SENDER.AGENT,
-    name: caller.personaName,
-    model: OPUS,
-    agent: { id: caller.id, taskId: tasks.invitations },
-  });
-
-  const again = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: teammates.id, text: NOTE });
-  assert.equal(again.delivery, STEER_OUTCOME.REPEATED);
-  assert.equal(eve.sent.length, 1, "the same call run again sends nothing more");
-
-  // The longest message an agent may send arrives, heading and all, no longer than a member's may be.
-  const longest = await call(
-    CODER_TOOL.MESSAGE_AGENT,
-    { agentId: teammates.id, text: "a".repeat(LONGEST_PEER_WORDS) },
-    "call-longest",
-  );
-  assert.equal(longest.delivery, STEER_OUTCOME.SENT, JSON.stringify(longest));
-  const delivered: string = JSON.parse(eve.sent[1]?.body ?? "").message;
-  assert.ok(delivered.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, String(delivered.length));
-});
-
-test("an MCP server or a Linear page another coding agent's message mentions is not handed to the agent it reaches, whose servers are its developer's to switch", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const { caller, teammates } = agents;
-  const eve = await fakeCoderEve(workspaceId);
-  const call = await peerCaller(hostOf(true), caller, eve.services);
-
-  const sent = await call(CODER_TOOL.MESSAGE_AGENT, {
-    agentId: teammates.id,
-    text: "See [@Linear](luke://mcp/linear) and [@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142).",
-  });
-
-  assert.equal(sent.delivery, STEER_OUTCOME.SENT, JSON.stringify(sent));
-  assert.deepEqual(
-    await database.run(takeCodingAgentMentionedServers(teammates.userId, teammates.conversationId)),
-    [],
-  );
-});
-
-test("message_agent sends nothing to an archived agent, an agent of another workspace, or the caller itself, and a deployment with no secret sends nothing", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const eve = await fakeCoderEve(workspaceId);
-  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  const message = (agentId: string) => call(CODER_TOOL.MESSAGE_AGENT, { agentId, text: NOTE });
-
-  assert.deepEqual(await message(agents.archived.id), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED,
-  });
-  // The starter is a member of the other workspace too, but the caller is not of it.
-  assert.deepEqual(await message(agents.otherWorkspaces.id), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
-  });
-  assert.deepEqual(await message(agents.strangers.id), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
-  });
-  assert.deepEqual(await message(agents.caller.id), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.SELF,
-  });
-  // A coding agent's words that leave its heading no room within a member's bound are refused whole.
-  assert.deepEqual(
-    await call(CODER_TOOL.MESSAGE_AGENT, {
-      agentId: agents.teammates.id,
-      text: "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
-    }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.TOO_LONG },
-  );
-  assert.equal(eve.sent.length, 0);
-  assert.equal(
-    await database.run(
-      sentLineStands(agents.archived.userId, agents.archived.conversationId, sentLineId("call-1")),
-    ),
-    false,
-    "an archived agent is written nothing",
-  );
-
-  const unsecured = await peerCaller(hostOf(false), agents.caller, eve.services);
-  assert.deepEqual(
-    await unsecured(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.NO_SERVICE },
-  );
-  assert.equal(eve.sent.length, 0);
-});
-
 test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, answering the mention it is named by, telling it which agent started it, how to report back, and that the developer's inbox is that agent's, leaves the starter's default as it stood, and starts once under the call's key", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller } = agents;
@@ -880,7 +769,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const [opening] = eve.sent;
   assert.equal(opening?.path, "/eve/coder/v1/session");
   assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), caller.userId);
-  const message: string = JSON.parse(opening?.body ?? "").message;
+  const message = sentWords(opening?.body);
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
   assert.ok(message.includes(`"${caller.personaName}"`) && message.includes(caller.id), message);
@@ -895,21 +784,15 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
 });
 
-test("an agent started on its starter's own task with Chat on reports back in the task's chat to the starter's mention link, while one started elsewhere or with Chat off reports by message", async () => {
+test("an agent started on its starter's own task reports back in the task's chat to the starter's mention link, whatever the starter's Chat setting, and one started elsewhere in a direct message to that link", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
   const prompt = "Write the migration that adds the invitation's expiry.";
-  const byMessage = `To report back to it, call ${CODER_TOOL.MESSAGE_AGENT} with that id.`;
+  const byMessage = "To report back to it, send it a direct message";
   const opened = (): string => JSON.stringify(JSON.parse(eve.sent.at(-1)?.body ?? "").message);
 
-  await call(CODER_TOOL.START_AGENT, { prompt }, "call-off");
-  assert.ok(opened().includes(byMessage), opened());
-
-  await database.run(
-    writeAccountPreferences(caller.userId, { experiments: { [EXPERIMENT.CHAT]: true } }),
-  );
   await call(CODER_TOOL.START_AGENT, { prompt }, "call-on");
   const inChat = opened();
   assert.match(
@@ -923,9 +806,14 @@ test("an agent started on its starter's own task with Chat on reports back in th
   assert.ok(!inChat.includes(byMessage), inChat);
 
   await call(CODER_TOOL.START_AGENT, { prompt, taskId: tasks.billing }, "call-elsewhere");
-  assert.ok(
-    opened().includes(byMessage),
-    "an agent on another task shares no chat with its starter",
+  const elsewhere = opened();
+  assert.match(
+    elsewhere,
+    new RegExp(
+      `${byMessage}: call post_chat with to set to \\[@[^\\]]+\\]\\(https://tryluke\\.dev/[^)]+/agent/${caller.id}\\)`,
+      "u",
+    ),
+    "an agent on another task shares no chat with its starter, so it reports in a direct message",
   );
 });
 
@@ -951,7 +839,7 @@ test("start_agent hands over a prompt and a note each as long as a start allows,
   const started = await call(CODER_TOOL.START_AGENT, { prompt, note }, "call-longest");
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   assert.equal(eve.sent.length, 1);
-  const message: string = JSON.parse(eve.sent[0]?.body ?? "").message;
+  const message = sentWords(eve.sent[0]?.body);
   assert.ok(message.startsWith(prompt), "the prompt opens the first message whole");
   assert.ok(message.includes(`\n\n${note}`), "the note follows it whole");
 });
@@ -1932,10 +1820,10 @@ test("an agent whose starter has left the workspace reaches no other agent", asy
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: CODER_REFUSAL.NO_AGENT,
   });
-  assert.deepEqual(
-    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.caller.id, text: NOTE }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODER_REFUSAL.NO_AGENT },
-  );
+  assert.deepEqual(await call(CODER_TOOL.READ_AGENT, { agentId: agents.caller.id }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODER_REFUSAL.NO_AGENT,
+  });
   assert.equal(eve.sent.length, 0);
 });
 
@@ -1968,10 +1856,6 @@ test("update_agent archives a teammate's idle agent on another task for the call
   assert.deepEqual((await row()).archivedBy, record);
   assert.equal(archivedAs(await archive({ archived: true, reason: "Again." }, "call-2")), true);
   assert.deepEqual((await row()).archivedBy, record, "a second archive keeps the first record");
-  assert.deepEqual(
-    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED },
-  );
 
   // An unarchive, here beside a rename, brings it back with the record cleared, and again is done.
   assert.equal(archivedAs(await archive({ archived: false, title: "Billing" }, "call-3")), false);
@@ -2285,10 +2169,10 @@ function openingsOf(
 test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId, [], undefined, "no_active_turn", true);
-  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const host = hostOf(true);
   const turnId = await turnOn(agents.teammates, false);
 
-  const sent = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE });
+  const sent = await directMessage(host, agents.caller, agents.teammates, eve.services);
 
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
   const opened = openingsOf(eve);
@@ -2301,11 +2185,17 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   const settled = [turnId, TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
 
-  const again = await call(
-    CODER_TOOL.MESSAGE_AGENT,
-    { agentId: agents.teammates.id, text: NOTE },
-    "call-2",
+  // The first message read, so the second is told rather than held behind it.
+  await database.run(
+    Effect.flatMap(
+      ensureMember(agents.teammates.userId, workspaceId, {
+        kind: MEMBER_KIND.AGENT,
+        agentId: agents.teammates.id,
+      }),
+      (member) => unreadFor(agents.teammates.userId, workspaceId, Option.getOrThrow(member).id),
+    ),
   );
+  const again = await directMessage(host, agents.caller, agents.teammates, eve.services, "call-2");
   assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(again));
   const followUps = eve.sent
     .map((each) => each.path)
@@ -2401,10 +2291,9 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
 test("a message to an agent whose turn had already ended before its session did opens a fresh session and leaves that turn as it ended", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId, [], undefined, "accepted", true);
-  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
   const turnId = await turnOn(agents.teammates, true);
 
-  const sent = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE });
+  const sent = await directMessage(hostOf(true), agents.caller, agents.teammates, eve.services);
 
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
   assert.equal(openingsOf(eve).length, 1);
@@ -2521,7 +2410,7 @@ test("an agent whose starter has left the workspace archives no agent of it", as
   assert.equal(Option.getOrThrow(read).archivedAt, null);
 });
 
-test("message_agent and stop_agent reach a teammate's Claude Code agent through the web's relay, as an eve app's tools reach one, acting for its starter and the caller, and eve hears nothing of it", async () => {
+test("a direct message and stop_agent reach a teammate's Claude Code agent through the web's relay, as an eve app's tools reach one, acting for its starter and the caller, and eve hears nothing of it", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const started = await database.run(
     createCodingAgent(agents.teammates.userId, {
@@ -2548,14 +2437,16 @@ test("message_agent and stop_agent reach a teammate's Claude Code agent through 
   );
   const eve = await fakeCoderEve(workspaceId);
   const relay = await database.run(nativeRelayFake());
-  const call = await peerCaller(
-    hostOf(true),
+  const host = hostOf(true);
+  const call = await peerCaller(host, agents.caller, Layer.merge(eve.services, relay.layer));
+
+  const sent = await directMessage(
+    host,
     agents.caller,
+    native,
     Layer.merge(eve.services, relay.layer),
   );
-
-  const sent = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: native.id, text: NOTE });
-  assert.equal(sent.delivery, STEER_OUTCOME.SENT, JSON.stringify(sent));
+  assert.ok(Array.isArray(sent.told) && sent.told.length === 1, JSON.stringify(sent));
   await turnOn(native, false);
   const stopped = await call(CODER_TOOL.STOP_AGENT, { agentId: native.id }, "call-2");
   assert.equal(stopped.stopped, true, JSON.stringify(stopped));

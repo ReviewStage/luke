@@ -1,5 +1,6 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   handedMentionsIn,
@@ -67,7 +68,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
  * send did not find there, of another workspace or gone, is named as not
  * found. An agent is handed as its task and where its work stands on
  * GitHub, its branch and its pull request, which the agent reads with `gh`
- * and `git`, and as the id `message_agent` reaches it by, and never its
+ * and `git`, and as the link a direct message reaches it by, and never its
  * conversation, which is its starter's. A page is handed as its title, its
  * id, and its version, which `read_page` reads it by and `show_page` writes
  * its next version under, and never its HTML, which the agent reads when it
@@ -256,7 +257,7 @@ function agentNoteOf(
     ? ""
     : agent.task?.archived === true
       ? " Its task is archived, so it takes no message."
-      : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
+      : ` To message it, send it a direct message: \`${CHAT_TOOL.POST}\` with \`to\` set to the link the developer pointed you at.`;
   return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived}${working}${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 

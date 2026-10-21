@@ -31,7 +31,6 @@ export const AGENT_TOOL = {
   // The tools about the workspace's coding agents, named for any agent offered them.
   LIST_AGENTS: "list_agents",
   READ_AGENT: "read_agent",
-  MESSAGE_AGENT: "message_agent",
   START_AGENT: "start_agent",
   STOP_AGENT: "stop_agent",
   UPDATE_AGENT: "update_agent",
@@ -118,8 +117,9 @@ export const CONNECTION_TOOL = {
  * Tools no agent is offered now whose calls a transcript written then still
  * names: eve's provider-run web reads, which coding agents ran before they
  * had the public reads, the planning model's four tools about the
- * task's coding agents, since named as `AGENT_TOOL`'s agent tools, and the
- * four about the workspace's own issues, gone with them.
+ * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
+ * four about the workspace's own issues, gone with them, and
+ * `message_agent`, since folded into `post_chat`.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -140,6 +140,8 @@ export const RETIRED_TOOL = {
   READ_ISSUE: "read_issue",
   CREATE_ISSUE: "create_issue",
   UPDATE_ISSUE: "update_issue",
+  // Folded into `post_chat`, whose `to` names an agent's mention link for a direct message.
+  MESSAGE_AGENT: "message_agent",
 } as const;
 
 /**
