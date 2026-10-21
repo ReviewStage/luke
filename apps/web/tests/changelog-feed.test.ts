@@ -62,8 +62,8 @@ test("an item carries the release's whole notes, its screenshots and links at th
     description,
     /href="https:\/\/github\.com\/ReviewStage\/luke\/blob\/main\/PRIVACY\.md"/,
   );
-  const body = new DOMParser().parseFromString(description, "text/html");
-  assert.equal(body.querySelector("code")?.textContent, "]]>");
+  // The literal CDATA terminator survives the feed's split into adjacent CDATA sections.
+  assert.match(description, /<code>\]\]><\/code>/);
 });
 
 test("the feed is dated by its newest release, not by when it was built", () => {
@@ -75,31 +75,31 @@ test("the feed is dated by its newest release, not by when it was built", () => 
   assert.equal(feed.querySelector("channel > link")?.textContent, "https://tryluke.dev/changelog");
 });
 
-test("reference screenshots stay clickable and lazy with escaped captions and titles in the feed", () => {
-  const feed = parsedFeed(
-    [
-      "# Changelog",
-      "",
-      "## 1.0.0 — 2026-10-01",
-      "",
-      "### Pictures",
-      "",
-      "![A &quot;quote&quot; & more][shot]",
-      "",
-      "Read the [policy][policy].",
-      "",
-      '[shot]: apps/web/public/changelog/1.0.0/shot.png "Full &quot;size&quot;"',
-      "[policy]: PRIVACY.md",
-      "",
-    ].join("\n"),
-  );
-  const page = new DOMParser().parseFromString(
-    feed.querySelector("description:last-child")?.textContent ?? "",
-    "text/html",
-  );
+test("reference screenshots stay clickable and lazy on the page and have absolute feed URLs", () => {
+  const markdown = [
+    "# Changelog",
+    "",
+    "## 1.0.0 — 2026-10-01",
+    "",
+    "### Pictures",
+    "",
+    "![A &quot;quote&quot; & more][shot]",
+    "",
+    "Read the [policy][policy].",
+    "",
+    '[shot]: apps/web/public/changelog/1.0.0/shot.png "Full &quot;size&quot;"',
+    "[policy]: PRIVACY.md",
+    "",
+  ].join("\n");
+  const [release] = parseReleases(markdown);
+  assert.ok(release);
+  const page = new DOMParser().parseFromString(release.html, "text/html");
+  const description = parsedFeed(markdown).querySelector("item description")?.textContent ?? "";
+  assert.match(description, /src="https:\/\/tryluke\.dev\/changelog\/1\.0\.0\/shot\.png"/);
+  assert.match(description, /href="https:\/\/tryluke\.dev\/changelog\/1\.0\.0\/shot\.png"/);
   const image = page.querySelector("img");
   assert.ok(image);
-  assert.equal(image.getAttribute("src"), "https://tryluke.dev/changelog/1.0.0/shot.png");
+  assert.equal(image.getAttribute("src"), "/changelog/1.0.0/shot.png");
   assert.equal(image.getAttribute("alt"), 'A "quote" & more');
   assert.equal(image.getAttribute("title"), 'Full "size"');
   assert.equal(image.getAttribute("loading"), "lazy");
