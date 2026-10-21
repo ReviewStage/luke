@@ -596,6 +596,7 @@ function fakeService(tasks: Task[]): FakeService {
       peopleLive: (workspaceId, _userId) =>
         Effect.sync(() => {
           service.reads.push(`people-live:${workspaceId}`);
+          if (service.workspacesFail) return UNANSWERED_WORKSPACE;
           return service.members[workspaceId] === undefined
             ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
             : ({ ok: true, answer: PEOPLE_SEALED } as const);
@@ -4600,6 +4601,28 @@ it.effect(
       assert.ok(service.realtime.subscribed().includes("capability-members"));
       yield* tasks.reset;
       assert.ok(!service.realtime.subscribed().includes("capability-members"));
+    }),
+);
+
+it.effect(
+  "a people seal that fails for now is asked again without telling the window, so it keeps the people it holds",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.members[ACME.id] = [ADA];
+      service.workspacesFail = true;
+      const { call, events, settled } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* settled;
+
+      assert.deepEqual(events, [], "no refusal reaches the window");
+      assert.ok(
+        service.reads.filter((read) => read === `people-live:${ACME.id}`).length > 1,
+        "the seal is asked again",
+      );
     }),
 );
 
