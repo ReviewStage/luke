@@ -19,9 +19,7 @@ import {
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
-import { Duration, Effect, Layer, Queue, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect, Layer, Queue, Stream } from "effect";
 import {
   type AgentEndToast,
   type AgentNotice,
@@ -35,8 +33,6 @@ import {
 import type { AppInboxSlice, AppInboxTask, AppInboxTaskHolding } from "./app-state.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-/** How long an unanswered read of what waits rests before it is asked again. */
-const WATCH = Duration.seconds(30);
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const TASK_NAME = "Teammate invitations";
 const MODEL = "anthropic/claude-opus-5.5";
@@ -102,7 +98,8 @@ function fixture() {
     toastChat: (message) => chatToasted.push(message),
     badge: (count) => badges.push(count),
   });
-  const inboxReads: string[] = [];
+  /** How many times the account's inbox was followed. */
+  let inboxFollows = 0;
   const waiting: (readonly AppInboxTask[])[] = [];
   const holding: (readonly AppInboxTaskHolding[])[] = [];
   const taskless: AppInboxSlice["taskless"][] = [];
@@ -151,11 +148,11 @@ function fixture() {
           accountChanged = undefined;
         };
       },
-      readAccountInbox: (after) =>
-        Effect.suspend(() => {
-          inboxReads.push(after);
+      followAccountInbox: () =>
+        Stream.suspend(() => {
+          inboxFollows += 1;
           assert.ok(inboxAnswers);
-          return Queue.take(inboxAnswers);
+          return Stream.fromQueue(inboxAnswers);
         }),
       accounts: Stream.fromQueue(accounts),
       onInboxChanged: (next) => {
@@ -195,12 +192,12 @@ function fixture() {
       accountChanged(next);
       Queue.offerUnsafe(accounts, next);
     },
-    /** The account's inbox read answered, as the host answers the one standing; no task holds an item but where the answer says. */
+    /** The account's inbox as the host tells it next; no task holds an item but where the answer says. */
     answerInbox: (answer: InboxAnswerGiven) => {
       assert.ok(inboxAnswers);
       Queue.offerUnsafe(inboxAnswers, "failure" in answer ? answer : { plans: [], ...answer });
     },
-    inboxReads,
+    inboxFollows: () => inboxFollows,
     waiting,
     holding,
     taskless,
@@ -367,7 +364,7 @@ const ITEM_A = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
 const ITEM_B = "6f3e8d4b-2c5a-4f7b-9d0e-1a2b3c4d5e6f";
 const ITEM_C = "7a4f9e5c-3d6b-4a8c-8e1f-2b3c4d5e6f7a";
 it.effect(
-  "another account ends the read held for the last and lets go of its items, its counts, and its badge, and its first answer is where it stands; nobody signed in reads nothing",
+  "another account ends the follow of the last and lets go of its items, its counts, and its badge, and its first answer is where it stands; nobody signed in follows nothing",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -376,13 +373,14 @@ it.effect(
       f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
       yield* settled;
       assert.equal(f.badges.at(-1), 1);
+      assert.equal(f.inboxFollows(), 1);
 
       f.changeAccount(OTHER_ACCOUNT);
       yield* settled;
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
-      // The read held for the last account is let go: the next account reads from the start.
-      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START]);
+      // The follow of the last account is let go: the next account's is followed anew.
+      assert.equal(f.inboxFollows(), 2);
 
       // The next answer is the new account's first, which announces nothing it holds.
       f.answerInbox({
@@ -398,11 +396,11 @@ it.effect(
       yield* settled;
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
-      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START, "7"]);
+      assert.equal(f.inboxFollows(), 2);
     }),
 );
 it.effect(
-  "an unanswered inbox read is asked again from the same cursor only once the watch's interval has passed, and an answer after it is read at once",
+  "an answer telling why there is none moves nothing, and each answer told after it is observed at once, with no read of its own",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -410,21 +408,11 @@ it.effect(
       f.focus(false);
       f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
       yield* settled;
-      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1"]);
+      assert.equal(f.badges.at(-1), 1);
 
       f.answerInbox({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       yield* settled;
-      yield* TestClock.adjust(Duration.subtract(WATCH, Duration.seconds(1)));
-      yield* settled;
-      assert.deepEqual(
-        f.inboxReads,
-        [INBOX_CURSOR_START, "1"],
-        "nothing is asked before the interval",
-      );
-
-      yield* TestClock.adjust(Duration.seconds(1));
-      yield* settled;
-      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", "1"]);
+      assert.equal(f.badges.at(-1), 1);
 
       f.answerInbox({
         items: [waitingItem(ITEM_A), waitingItem(ITEM_B)],
@@ -433,7 +421,10 @@ it.effect(
       });
       yield* settled;
       assert.equal(f.badges.at(-1), 2);
-      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", "1", "2"]);
+      f.answerInbox({ items: [waitingItem(ITEM_B)], cursor: "3", readAt: READ_AT });
+      yield* settled;
+      assert.equal(f.badges.at(-1), 1);
+      assert.equal(f.inboxFollows(), 1);
     }),
 );
 it.effect(

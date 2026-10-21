@@ -17,7 +17,6 @@ import {
 import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
 import { GITHUB_TOKEN_REJECTION } from "@luke/features/github-token-wire";
 import {
-  INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
@@ -61,7 +60,7 @@ import {
 } from "@luke/gateway";
 import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Effect, Fiber } from "effect";
+import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 import type { LiveClient } from "./live-follow.js";
@@ -735,6 +734,11 @@ function subject(
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
       realtime,
+      /** Every answer of the followed account inbox the host told, in order. */
+      accountInboxes: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED ? [event.payload] : [],
+        ),
       /** Every followed plan's or agent's inbox the host told, in order. */
       told: () =>
         events.flatMap((event) =>
@@ -1729,30 +1733,21 @@ function deliverAccount(
   }
 }
 
-/** Main's read of what waits across the account past `after`, forked, as its loop holds it. */
-const readAccount = (
-  call: (
-    method: GatewayMethod,
-    params?: WireRecord,
-  ) => Effect.Effect<WireValue | undefined, unknown>,
-  after: string,
-) => Effect.forkChild(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after }));
-
 it.effect(
-  "what waits across the account is answered from its Realtime subscription as the held read answered it, a read at the answer's cursor held until the rows move, and a failed run ageing out of the week wakes it",
+  "what waits across the account is told from its Realtime subscription each time it moves, whole and never a sealed statement, and a failed run ageing out of the week tells it again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW);
-      const { call, asked, sealAccount, realtime } = yield* subject();
+      const { call, asked, sealAccount, realtime, accountInboxes } = yield* subject();
       sealAccount(SEALED_ACCOUNT);
 
-      const first = yield* readAccount(call, INBOX_CURSOR_START);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
       assert.deepEqual(realtime.opened, [SEALED_ACCOUNT.url]);
       deliverAccount(realtime, { items: [WAITING], failedRuns: [FAILED_RUN] });
-      const answered = yield* Fiber.join(first);
+      yield* settled;
+      const [answered] = accountInboxes();
       assert.ok(isRecord(answered) && typeof answered.cursor === "string");
-      assert.notEqual(answered.cursor, "");
       assert.deepEqual(
         { ...answered, cursor: "" },
         {
@@ -1768,80 +1763,57 @@ it.effect(
       );
       assert.ok(!JSON.stringify(answered).includes("capability"));
 
-      // Held at its cursor until a row moves.
-      const held = yield* readAccount(call, answered.cursor);
-      yield* settled;
-      assert.equal(held.pollUnsafe(), undefined);
       deliverAccount(realtime, {
         items: [{ ...WAITING, revision: 3, updatedAt: NOW }],
         failedRuns: [FAILED_RUN],
       });
-      const moved = yield* Fiber.join(held);
-      assert.ok(isRecord(moved) && Array.isArray(moved.items) && typeof moved.cursor === "string");
+      yield* settled;
+      const moved = accountInboxes().at(-1);
+      assert.ok(isRecord(moved) && typeof moved.cursor === "string");
       assert.notEqual(moved.cursor, answered.cursor);
       assert.deepEqual(moved.items, [{ ...WAITING, revision: 3, updatedAt: NOW }]);
 
-      // No row moves as the run ages out of the week, and the read is woken all the same.
-      const ageing = yield* readAccount(call, moved.cursor);
-      yield* settled;
-      assert.equal(ageing.pollUnsafe(), undefined);
+      // No row moves as the run ages out of the week, and it is told all the same.
       yield* TestClock.adjust("2 seconds");
-      const aged = yield* Fiber.join(ageing);
+      yield* settled;
+      const aged = accountInboxes().at(-1);
       assert.ok(isRecord(aged));
       assert.deepEqual(aged.failedRuns, []);
       assert.notEqual(aged.cursor, moved.cursor);
       assert.deepEqual(asked, ["account-inbox-live:user-dana"]);
+
+      // Let go, nothing more is told.
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
+      const told = accountInboxes().length;
+      deliverAccount(realtime, { items: [] });
+      yield* settled;
+      assert.equal(accountInboxes().length, told);
     }),
 );
 
 it.effect(
-  "a read at the account inbox's cursor that nothing moves is answered unchanged once the hold passes",
-  () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(NOW);
-      const { call, sealAccount, realtime } = yield* subject();
-      sealAccount(SEALED_ACCOUNT);
-      const first = yield* readAccount(call, INBOX_CURSOR_START);
-      yield* settled;
-      deliverAccount(realtime, { items: [WAITING] });
-      const answered = yield* Fiber.join(first);
-      assert.ok(isRecord(answered) && typeof answered.cursor === "string");
-
-      const held = yield* readAccount(call, answered.cursor);
-      yield* settled;
-      yield* TestClock.adjust("24 seconds");
-      assert.equal(held.pollUnsafe(), undefined);
-      yield* TestClock.adjust("1 second");
-      assert.deepEqual(yield* Fiber.join(held), answered);
-    }),
-);
-
-it.effect(
-  "the account inbox is unanswered with nobody signed in, and a session the service signs out is unanswered and sealed again on the next read",
+  "the account inbox is told unanswered with nobody signed in, and a session the service signs out is sealed again after a rest, telling nothing meanwhile",
   () =>
     Effect.gen(function* () {
       const nobody = yield* subject({ accountId: () => undefined });
       nobody.sealAccount(SEALED_ACCOUNT);
-      assert.deepEqual(
-        yield* nobody.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, {
-          after: INBOX_CURSOR_START,
-        }),
+      yield* nobody.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      assert.deepEqual(nobody.accountInboxes(), [
         { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-      );
+      ]);
       assert.deepEqual(nobody.asked, []);
 
-      const { call, asked, sealAccount, realtime } = yield* subject();
+      const { call, asked, sealAccount, realtime, accountInboxes } = yield* subject();
       sealAccount(LIVE_SIGNED_OUT);
-      const unanswered = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
-        unanswered,
-      );
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
-        unanswered,
-      );
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      assert.deepEqual(asked, ["account-inbox-live:user-dana"]);
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
       assert.deepEqual(asked, ["account-inbox-live:user-dana", "account-inbox-live:user-dana"]);
+      assert.deepEqual(accountInboxes(), []);
       assert.deepEqual(realtime.opened, []);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
     }),
 );

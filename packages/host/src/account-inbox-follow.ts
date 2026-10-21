@@ -1,5 +1,4 @@
 import type { AccountInboxAnswer } from "@luke/features/account-inbox-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   type AccountInboxLiveAnswer,
   type AccountInboxLiveRows,
@@ -21,29 +20,23 @@ import {
 import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /**
- * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and answered to main's held read of it past a cursor.
+ * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and told to main each time it moves.
  *
  * The host subscribes to the account's sealed statements (`live-follow.ts`,
- * which polls them while Realtime fails or is off) the first time main reads
- * the account inbox, builds the answer the held read answered from each
- * delivery (`accountInboxOfLiveRows`), and lets the subscription go a while
- * after the last read let go of it. A read past a cursor is held until the
- * answer moves, or `HOLD` passes, as the service held it, so main's notices,
- * the Dock badge, and the Inbox tab read it as they read the held route. A
- * failed run ages out of the last week with no row moving, so the answer is
- * built again as it does. A seal refused as signed out ends the follow, and
- * the read is answered unanswered; the next read seals it again for whoever
- * is signed in then. The sealed statements stay here, where the account's
+ * which polls them while Realtime fails or is off) once main follows the
+ * account inbox, builds the answer the held read answered from each delivery
+ * (`accountInboxOfLiveRows`), and tells main each one, which its notices, the
+ * Dock badge, and the Inbox tab observe. A failed run ages out of the last
+ * week with no row moving, so the answer is built again as it does. A seal
+ * refused as signed out ends the subscription, which is sealed again after
+ * `LIVE_RESTART`. The sealed statements stay here, where the account's
  * own bearer is; only the answer built from the rows leaves.
  */
 
-/** How long a subscription no read holds is kept, so main's next read finds it standing. */
+/** How long a subscription no follow holds is kept, so a follow started again soon finds it standing. */
 const IDLE = Duration.seconds(30);
-/** How long a read whose cursor is the answer's is held, as the service held the account's read. */
-const HOLD = Duration.seconds(25);
-
-/** A read answered with nothing to say, which main asks again later. */
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+/** How long a subscription that stopped, or a seal refused, waits before it is sealed again. */
+const LIVE_RESTART = Duration.seconds(5);
 
 /** A seal the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
@@ -133,39 +126,31 @@ export function accountInboxes(
 }
 
 /**
- * What waits across the account for `userId`, past `after`: answered once
- * the answer's cursor is not `after`, or once the answer moves at all while
- * the read is held, or as it stands once `HOLD` passes, as the service's
- * held read answered. Unanswered where the service sealed nothing or the
- * subscription stopped, each let go so the next read seals it again, and
- * where nothing was delivered within the hold.
+ * What waits across the account for `userId`, told whole each time it moves,
+ * until the fiber is let go. A seal the service refused, or a subscription
+ * that stopped, is let go and sealed again after `LIVE_RESTART`, for whoever
+ * the caller follows then.
  */
-export function accountInboxPast(
+export function followAccountInbox(
   inboxes: AccountInboxes,
   userId: string,
-  after: string,
-): Effect.Effect<AccountInboxAnswer | typeof UNANSWERED> {
-  const read = Effect.scoped(
+  tell: (answer: AccountInboxAnswer) => Effect.Effect<void>,
+): Effect.Effect<never> {
+  const attempt = Effect.scoped(
     Effect.gen(function* () {
       const standing = yield* RcMap.get(inboxes, userId);
-      if (standing.kind === "broken") return standing;
-      const moved = yield* SubscriptionRef.changes(standing.inbox).pipe(
-        Stream.filter((state) => state.kind !== "waiting"),
-        Stream.zipWithIndex,
-        // The first answer seen is the one standing as the read lands; any after it moved something.
-        Stream.filter(
-          ([state, seen]) => state.kind === "broken" || seen > 0 || state.answer.cursor !== after,
-        ),
-        Stream.runHead,
-        Effect.timeoutOption(HOLD),
+      if (standing.kind === "broken") return;
+      yield* SubscriptionRef.changes(standing.inbox).pipe(
+        Stream.takeWhile((state) => state.kind !== "broken"),
+        Stream.filter((state) => state.kind === "standing"),
+        Stream.runForEach((state) => tell(state.answer)),
       );
-      if (Option.isSome(moved) && Option.isSome(moved.value)) return moved.value.value[0];
-      return yield* SubscriptionRef.get(standing.inbox);
     }),
   );
-  return Effect.flatMap(read, (state): Effect.Effect<AccountInboxAnswer | typeof UNANSWERED> => {
-    if (state.kind === "standing") return Effect.succeed(state.answer);
-    if (state.kind === "waiting") return Effect.succeed(UNANSWERED);
-    return Effect.as(RcMap.invalidate(inboxes, userId), UNANSWERED);
-  });
+  return Effect.forever(
+    attempt.pipe(
+      Effect.andThen(RcMap.invalidate(inboxes, userId)),
+      Effect.andThen(Effect.sleep(LIVE_RESTART)),
+    ),
+  );
 }

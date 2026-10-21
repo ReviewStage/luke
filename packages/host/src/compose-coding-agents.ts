@@ -26,7 +26,6 @@ import {
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
-  codingAgentAccountInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
@@ -90,9 +89,9 @@ import {
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberHandle, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { type AccountInboxes, accountInboxes, accountInboxPast } from "./account-inbox-follow.js";
+import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -125,9 +124,10 @@ import {
  * the service answered whole. The transcript read is held open here while
  * the agent runs and nothing new stands, on a Neon Realtime subscription to
  * what its pages are read from (`transcript-follow.ts`), which a sign-out
- * lets go. What waits across the account is held the same way, on the
- * account's own subscription (`account-inbox-follow.ts`), and asked by
- * main's own loop rather than a window's (`agent-notices.ts`). Behind a
+ * lets go. What waits across the account is followed the same way, on the
+ * account's own subscription (`account-inbox-follow.ts`), heard as
+ * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
+ * (`agent-notices.ts`). Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -275,6 +275,7 @@ export function composeCodingAgents(
     });
     const chats = yield* FiberMap.make<string>();
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
+    const accountFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
       http,
@@ -282,7 +283,7 @@ export function composeCodingAgents(
       followed,
       { inboxes, followed: inboxFollows },
       chats,
-      accounts,
+      { accounts, followed: accountFollow },
     );
   });
 }
@@ -291,6 +292,12 @@ export function composeCodingAgents(
 interface ScopeFollows {
   readonly inboxes: ScopeInboxes;
   readonly followed: FiberMap.FiberMap<InboxScopeKey>;
+}
+
+/** The account's subscriptions, and the one follow main asked for. */
+interface AccountFollow {
+  readonly accounts: AccountInboxes;
+  readonly followed: FiberHandle.FiberHandle;
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
@@ -303,8 +310,8 @@ function composed(
   { inboxes, followed: inboxFollows }: ScopeFollows,
   /** Each workspace's chat main follows for its windows, one fiber each. */
   chats: FiberMap.FiberMap<string>,
-  /** What waits across the account, followed for main's read of it. */
-  accounts: AccountInboxes,
+  /** What waits across the account, and main's one follow of it. */
+  { accounts, followed: accountFollow }: AccountFollow,
 ): CodingAgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
@@ -922,24 +929,27 @@ function composed(
         const answer = yield* asked(client.chatAttachment(workspaceId, messageId, attachmentId));
         return carried<CodingAgentInboxAttachmentView>(answer);
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX]: (params) =>
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
       Effect.gen(function* () {
-        const { after } = yield* read(
-          codingAgentAccountInboxParamsSchema,
-          params,
-          "reading what waits across the account names a cursor",
-        );
+        const tell = (answer: CodingAgentAccountInboxAnswerView) =>
+          Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED, carried(answer)));
         const userId = dependencies.accountId();
-        if (!gate() || userId === undefined) return UNANSWERED;
-        const answer = yield* accountInboxPast(accounts, userId, after);
-        return carried<CodingAgentAccountInboxAnswerView>(answer);
+        const follow =
+          gate() && userId !== undefined
+            ? followAccountInbox(accounts, userId, tell)
+            : tell(UNANSWERED);
+        yield* FiberHandle.run(accountFollow, follow);
+        return {};
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW]: () =>
+      Effect.as(FiberHandle.clear(accountFollow), {}),
   };
 
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     yield* FiberMap.clear(chats);
     yield* FiberMap.clear(inboxFollows);
+    yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
