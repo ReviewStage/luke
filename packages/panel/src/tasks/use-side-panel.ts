@@ -1963,14 +1963,16 @@ export function useSidePanel(
       }),
     [update, drawn, taskId],
   );
+  // Note that a tab on the drawn task goes as a tab's own close takes it, the one viewed before it chosen in its place; main's page is gone already.
   const onBrowserGone = useCallback(
     (browserId: string) =>
-      update((held) =>
-        held.browsers.some((each) => each.tab.browser === browserId)
-          ? { ...held, browsers: held.browsers.filter((each) => each.tab.browser !== browserId) }
-          : held,
-      ),
-    [update],
+      update((held) => {
+        const standing = held.browsers.find((each) => each.tab.browser === browserId);
+        if (standing === undefined) return held;
+        if (standing.task === drawn.task.id) return withoutTab(held, standing.tab, drawn);
+        return { ...held, browsers: held.browsers.filter((each) => each !== standing) };
+      }),
+    [update, drawn],
   );
   // Note that a Browser tab chosen goes too, and the plan shows its first tab in its place.
   const onCloseBrowsers = useCallback(

@@ -400,6 +400,23 @@ it.effect(
     }),
 );
 
+it.effect("a run of many long lists has each address cut to fit the output a result carries", () =>
+  Effect.gen(function* () {
+    const long = `https://example.com/${"path/".repeat(1_600)}`;
+    const tabs = Array.from({ length: 5 }, (_, at) => fakeTab(`tab-${at}`, long));
+    const lists = Array.from({ length: 10 }, () => ({ action: BROWSER_AGENT_ACTION.LIST }));
+    const result = yield* run(desk(new Map([[TASK, taskTabs(tabs).own]])), lists);
+
+    const { output } = outputOf(result);
+    assert.ok(JSON.stringify(output).length <= MAC_COMMAND_BOUNDS.MAX_BROWSER_OUTPUT_CHARS);
+    assert.equal(output.steps.length, 10);
+    const [first] = output.steps;
+    assert.ok(first !== undefined && "tabs" in first);
+    assert.equal(first.tabs.length, 5);
+    assert.ok(first.tabs.every((tab) => tab.url.length <= 200 && tab.url.startsWith("https://")));
+  }),
+);
+
 it.effect(
   "a run of many long snapshots is held under the output a result carries, the latest snapshot whole",
   () =>

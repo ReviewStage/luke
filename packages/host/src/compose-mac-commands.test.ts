@@ -210,3 +210,43 @@ it.effect(
       assert.deepEqual(spawner.spawned, []);
     }),
 );
+
+it.effect(
+  "a browser run stops within a moment of commands on this Mac being switched off, before the held read answers",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = yield* scriptedService([OPEN]);
+      const macSwitch = yield* Ref.make(true);
+      let interrupted = false;
+      const composer = yield* composeMacCommands({
+        kernel: { runMode: { sendsNetwork: true } },
+        account: { capabilitiesActive: () => true },
+        enabled: Ref.get(macSwitch),
+        client: service.client,
+        browser: {
+          enabled: Effect.succeed(true),
+          run: () =>
+            Effect.onInterrupt(Effect.never, () =>
+              Effect.sync(() => {
+                interrupted = true;
+              }),
+            ),
+        },
+      }).pipe(Effect.provide(machine(spawner)));
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* composer.lifetime;
+          yield* TestClock.adjust("3 seconds");
+          yield* Ref.set(macSwitch, false);
+          yield* TestClock.adjust("2 seconds");
+          const settled = yield* Ref.get(service.settled);
+          const result = settled.get(OPEN.id);
+          assert.ok(result !== undefined && "refused" in result);
+          assert.match(result.refused, /switched off while the browser actions ran/u);
+          assert.ok(interrupted, "the run on the tabs was cut off");
+        }),
+      );
+    }),
+);

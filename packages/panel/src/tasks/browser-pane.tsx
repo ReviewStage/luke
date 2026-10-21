@@ -36,7 +36,7 @@ import {
 import { useAct } from "../act.js";
 import { appBridge } from "../app-bridge.js";
 import { Tooltip } from "../tooltip.js";
-import type { OpenBrowser } from "./use-side-panel.js";
+import type { OpenBrowser, SidePanelControl } from "./use-side-panel.js";
 
 /**
  * browser-pane.tsx -- one Browser tab in the side panel: a bar to type an address and step the page, and the page itself, a view main lays over the tab's body.
@@ -165,6 +165,29 @@ export function useBrowserPages(hearing = true): ReadonlyMap<string, BrowserPage
   const read = () => pages;
   // Note that a server render, as a test draws one, reads the pages as they stand too.
   return useSyncExternalStore(hearing ? hearPages : hearNothing, read, read);
+}
+
+/**
+ * Holds a Browser tab an agent opened in main, and lets go of one an agent
+ * closed, as the "+" and a tab's own close do, while `hearing`, the Browser
+ * tab experiment on. Note that its owner stands whether the side panel is
+ * drawn or not, because main tells of each tab once and a tab opened while
+ * the panel is shut must still be there when it opens.
+ */
+export function useAgentBrowserTabs(
+  control: Pick<SidePanelControl, "onAgentBrowser" | "onBrowserGone">,
+  hearing: boolean,
+): void {
+  const { onAgentBrowser, onBrowserGone } = control;
+  useEffect(() => {
+    if (!hearing) return;
+    const unhearOpened = appBridge().onBrowserOpened(onAgentBrowser);
+    const unhearClosed = appBridge().onBrowserClosed(({ browserId }) => onBrowserGone(browserId));
+    return () => {
+      unhearOpened();
+      unhearClosed();
+    };
+  }, [hearing, onAgentBrowser, onBrowserGone]);
 }
 
 /** What a Browser tab is called: its page's title, its address's host until it has one, and none before a page is opened. */

@@ -3,6 +3,7 @@ import {
   BROWSER_STEP_STATUS,
   type BrowserAgentRun,
   type BrowserAgentStep,
+  cutBrowserText,
 } from "@luke/features/browser-agent-actions";
 import { runBrowserActions } from "@luke/features/browser-agent-cdp";
 import {
@@ -98,6 +99,16 @@ const DEFAULT_QUALITY = 70;
 
 /** What a capture of a tab that draws nothing answers. */
 const NOTHING_DRAWN_WORDS = "the tab draws nothing to capture yet";
+
+/** The longest address or title a list carries where the run would be too long with them whole. */
+const LIST_CUT_CHARS = 200;
+
+/** What a run answers whose text stays over the output a result carries, even with its page texts let go. */
+const TOO_LONG: MacCommandRefusal = {
+  refused:
+    "The browser actions ran, but what they answered was too long to send back; " +
+    "take fewer actions in one call.",
+};
 
 /** What an open the window could not draw answers. */
 const NOT_OPENED_WORDS = "the Browser tab could not be opened in Luke's window on the Mac";
@@ -387,14 +398,28 @@ function emptied(step: BrowserAgentStep): BrowserAgentStep {
  * Note that the service refuses a result over the bound whole, so a run of
  * several snapshots would otherwise answer nothing at all.
  */
-function heldToOutput(run: BrowserAgentRun): BrowserAgentRun {
+function heldToOutput(run: BrowserAgentRun): BrowserAgentRun | undefined {
   const max = MAC_COMMAND_BOUNDS.MAX_BROWSER_OUTPUT_CHARS;
   let held = run;
   for (let at = 0; at < held.steps.length && textLength(held) > max; at += 1) {
     const steps = held.steps.map((step, index) => (index === at ? emptied(step) : step));
     held = { ...held, steps };
   }
-  return held;
+  if (textLength(held) > max) held = { ...held, steps: held.steps.map(listCut) };
+  return textLength(held) > max ? undefined : held;
+}
+
+/** A list's tabs with each address and title cut to the length a list is held to where it is too long whole. */
+function listCut(step: BrowserAgentStep): BrowserAgentStep {
+  if (step.action !== BROWSER_AGENT_ACTION.LIST || step.status === BROWSER_STEP_STATUS.FAILED) {
+    return step;
+  }
+  const tabs = step.tabs.map((tab) => ({
+    tab: tab.tab,
+    url: cutBrowserText(tab.url, LIST_CUT_CHARS),
+    title: cutBrowserText(tab.title, LIST_CUT_CHARS),
+  }));
+  return { ...step, tabs };
 }
 
 /** The last screenshot a run took, as a command's result carries an image. */
@@ -427,6 +452,7 @@ export function runMacBrowserCommand(
     ).pipe(
       Effect.map((run): MacCommandResult => {
         const output = heldToOutput({ steps: run.steps.map(textStep), skipped: run.skipped });
+        if (output === undefined) return TOO_LONG;
         const image = lastScreenshot(run);
         return image === undefined ? { output } : { output, image };
       }),

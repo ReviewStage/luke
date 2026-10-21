@@ -13,7 +13,7 @@ import {
   type MacShellResult,
   macBrowserParamsSchema,
 } from "@luke/features/mac-command-wire";
-import { Config, Duration, Effect, FiberSet, Option, Result, Schema } from "effect";
+import { Config, Duration, Effect, FiberSet, Option, Result, Schedule, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
@@ -97,6 +97,16 @@ const CANNOT_RUN: MacCommandRefusal = {
     "may let it.",
 };
 
+/** How often a browser run asks whether it may go on. */
+const GATE_POLL = Duration.seconds(1);
+
+/** What a browser run answers once commands on this Mac, or the experiment, were switched off while it ran. */
+const BROWSER_SWITCHED_OFF: MacCommandRefusal = {
+  refused:
+    "Stopped: commands on this Mac, or the Browser tab experiment, were switched off while the " +
+    "browser actions ran.",
+};
+
 /** What a browser command answers once the Browser tab experiment went off. */
 const BROWSER_OFF: MacCommandRefusal = {
   refused:
@@ -155,6 +165,23 @@ export function composeMacCommands(
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideService(call, HttpClient.HttpClient, http);
 
+    /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting on. */
+    const gateOpen = Effect.map(
+      enabled,
+      (on) => on && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
+    );
+
+    /**
+     * Answers once the gate shuts or the experiment goes off, asked every
+     * `GATE_POLL`, so a browser run stops acting on the tabs within a moment
+     * of the developer withdrawing the permission, rather than once the held
+     * read answers.
+     */
+    const browserGateShut = Effect.repeat(
+      Effect.zipWith(gateOpen, browser.enabled, (open, on) => open && on),
+      { schedule: Schedule.spaced(GATE_POLL), while: (open) => open },
+    ).pipe(Effect.as<MacCommandResult>(BROWSER_SWITCHED_OFF));
+
     /**
      * A browser command's actions run on the task's tabs within its time,
      * once its params read and while the experiment is still on; refused in
@@ -170,6 +197,7 @@ export function composeMacCommands(
             duration: Duration.seconds(command.timeoutSeconds),
             orElse: () => Effect.succeed(outran(command.timeoutSeconds)),
           }),
+          Effect.raceFirst(browserGateShut),
         );
       });
 
@@ -188,12 +216,6 @@ export function composeMacCommands(
       Effect.flatMap(ran(command), (result) =>
         Effect.asVoid(asked(settleMacCommandResult(client, command.id, result))),
       );
-
-    /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting on. */
-    const gateOpen = Effect.map(
-      enabled,
-      (on) => on && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
-    );
 
     /**
      * One turn of the loop: a held read and a fiber per command it took, or,
