@@ -181,6 +181,8 @@ function InboxShown({
     steps,
     chosen,
     filteredOut,
+    search,
+    searched,
     missing,
     reading,
     choose,
@@ -364,6 +366,7 @@ function InboxShown({
                         unread: anyUnread(standing),
                         onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
                       },
+                      search,
                     }}
                     models={named.models}
                     readerId={tasks.me}
@@ -377,6 +380,7 @@ function InboxShown({
                         counts={counts}
                         onList={columns.onList}
                         onRetry={onRetry}
+                        searched={searched}
                       />
                     }
                     onChoose={open}
@@ -407,8 +411,8 @@ function InboxShown({
                             : { label: BACK_TO_INBOX, onClick: columns.onBack }
                         }
                       />
-                    ) : reading || filteredOut ? null : (
-                      // Note that the list says what the filter left out, so the pane beside it stands bare.
+                    ) : reading || filteredOut || searched !== undefined ? null : (
+                      // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
                       <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
                     )}
                   </section>

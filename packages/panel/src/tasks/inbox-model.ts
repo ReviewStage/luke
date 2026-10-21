@@ -47,6 +47,7 @@ import { insideCode, linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import { matchesTokens } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header.js";
 import type { SnippetLines } from "./code-snippet-model.js";
@@ -1666,6 +1667,13 @@ export function inboxItemWords(item: InboxItem): readonly string[] {
   );
 }
 
+/** Whether an item answers a list's search: every word of it somewhere in the item's words (`inboxItemWords`) or its holder's name; any item answers none. */
+function searchedItem(holder: InboxHolder, item: InboxItem, search: readonly string[]): boolean {
+  return (
+    search.length === 0 || matchesTokens([holderName(holder), ...inboxItemWords(item)], search)
+  );
+}
+
 /** What one group of agents no readable automation started is keyed by. */
 const NO_AUTOMATION_KEY = "no-automation";
 
@@ -2003,6 +2011,9 @@ function statusGroups(
   });
 }
 
+/** No search: every item answers it. */
+const NO_SEARCH: readonly string[] = [];
+
 /** Whether an item is one the Whose choice lists: anyone's, the reader's own (`readersItem`), or one the teammate's agent asks. */
 function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefined): boolean {
   switch (whose.kind) {
@@ -2021,7 +2032,7 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
  * under the person whose agent asks it, under where it stands, or in one
  * run, the tasks and the people in the order their first item stands and
  * the statuses in theirs. The scope shown lists only the items it takes
- * (`showsItem`) of the people Whose names, and the item chosen where one is given. Note that the rows a list draws are given
+ * (`showsItem`) of the people Whose names that its search finds (`searchedItem`), and the item chosen where one is given. Note that the rows a list draws are given
  * only the chosen item they drew already, kept while it stays chosen
  * (`use-held-inbox-list.ts`), so a settled item leaves a list filtered to
  * exclude it once another is chosen, while the steps through the list are
@@ -2041,16 +2052,26 @@ export function inboxList(
     readonly sort?: InboxSort | undefined;
     /** Whose items are listed; everyone's where none is given. */
     readonly whose?: InboxWhose | undefined;
+    /** The words of the list's search (`searchTokens`), each somewhere in every item listed; none narrows nothing. */
+    readonly search?: readonly string[] | undefined;
     /** Where the items held still stand (`inboxPlaces`), each other item where it is now; none holds every item where it is now. */
     readonly places?: ReadonlyMap<string, InboxPlace> | undefined;
   },
 ): InboxListView {
-  const { readerId, sort = INBOX_SORT.LATEST, whose = EVERYONES, places = NO_PLACES } = view;
+  const {
+    readerId,
+    sort = INBOX_SORT.LATEST,
+    whose = EVERYONES,
+    search = NO_SEARCH,
+    places = NO_PLACES,
+  } = view;
   const placed = (item: InboxItem): InboxPlace =>
     places.get(item.id) ?? { at: item.updatedAt, status: statusOf(item, readerId) };
   const order = (a: InboxItem, b: InboxItem) => SORT_ORDER[sort](placed(a).at, placed(b).at);
   const shows = (holder: InboxHolder) => (item: InboxItem) =>
-    (showsItem(view.show, { holder, item }, readerId) && whoseItem(whose, item, readerId)) ||
+    (showsItem(view.show, { holder, item }, readerId) &&
+      whoseItem(whose, item, readerId) &&
+      searchedItem(holder, item, search)) ||
     item.id === view.chosen;
   const groups = tasks
     .map(({ holder, items }) => ({ holder, items: items.filter(shows(holder)).toSorted(order) }))

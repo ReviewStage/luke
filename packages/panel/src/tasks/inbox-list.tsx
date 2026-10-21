@@ -29,6 +29,8 @@ import {
   ListRow,
   SCROLL_FADE,
   ScrollArea,
+  SearchField,
+  SearchIcon,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -69,7 +71,7 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -1406,6 +1408,72 @@ export function InboxListSkeleton({
   );
 }
 
+/** The words naming the list's search, on its magnifier and its field alike. */
+const SEARCH_INBOX = "Search inbox";
+
+/**
+ * The list's search as its head draws it: a magnifier beside the view's
+ * menu, which a press opens into a field standing in the head's name, the
+ * caret in it. The field narrows the list as it is typed in, standing open
+ * while it holds words; Escape empties and folds it, and so does the focus
+ * leaving it empty, the keyboard then handed back to the magnifier where
+ * Escape folded it.
+ */
+function useListSearch(search: InboxSearchHead | undefined) {
+  const [asked, setAsked] = useState(false);
+  const open = search !== undefined && (asked || search.query !== "");
+  const field = useRef<HTMLInputElement | null>(null);
+  const magnifier = useRef<HTMLButtonElement | null>(null);
+  const backToMagnifier = useRef(false);
+  useEffect(() => {
+    if (open) {
+      field.current?.focus();
+      return;
+    }
+    if (!backToMagnifier.current) return;
+    backToMagnifier.current = false;
+    magnifier.current?.focus();
+  }, [open]);
+  const fold = (handBack: boolean) => {
+    backToMagnifier.current = handBack;
+    search?.onQuery("");
+    setAsked(false);
+  };
+  const button =
+    search === undefined || open ? null : (
+      <Tooltip label={SEARCH_INBOX}>
+        <IconButton
+          ref={magnifier}
+          icon={<SearchIcon />}
+          label={SEARCH_INBOX}
+          onClick={() => setAsked(true)}
+        />
+      </Tooltip>
+    );
+  const fieldDrawn =
+    search === undefined || !open ? null : (
+      <search
+        className="inbox-search"
+        onBlur={(event) => {
+          // Note that a press on the field's own clear moves the focus within it, which folds nothing.
+          if (event.currentTarget.contains(event.relatedTarget)) return;
+          if (search.query === "") fold(false);
+        }}
+      >
+        <SearchField
+          ref={field}
+          label={SEARCH_INBOX}
+          placeholder={SEARCH_INBOX}
+          value={search.query}
+          onChange={search.onQuery}
+          onClear={() => search.onQuery("")}
+          onEscape={() => fold(true)}
+        />
+      </search>
+    );
+  return { button, field: fieldDrawn };
+}
+
 /**
  * The list's head: the Inbox's name, the scope after it where that is not
  * To do, and the view's menu at the list's top right, which chooses the
@@ -1413,7 +1481,10 @@ export function InboxListSkeleton({
  * Inbox lists one task's items in one run, so its menu offers its scopes
  * alone. On the window's Inbox its heading and its button glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
- * sidebar's toggle, and the button keeping to the list's edge.
+ * sidebar's toggle, and the button keeping to the list's edge. Where the
+ * list offers a search, its magnifier stands before the menu, and its field
+ * in the name's place while it is open (`useListSearch`), in the sidebar's
+ * head as on the page.
  */
 function ListHead({
   head,
@@ -1426,25 +1497,35 @@ function ListHead({
 }): React.JSX.Element {
   const { shown, show, scopes, view } = head;
   const title = inboxTitle(show.show);
+  const search = useListSearch(head.search);
   const options = (
-    <ViewOptions
-      shown={shown}
-      show={show}
-      scopes={scopes}
-      choices={view?.choices}
-      readerId={readerId}
-      readAll={head.readAll}
-    />
+    <>
+      {search.button}
+      <ViewOptions
+        shown={shown}
+        show={show}
+        scopes={scopes}
+        choices={view?.choices}
+        readerId={readerId}
+        readAll={head.readAll}
+      />
+    </>
   );
+  const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   return (
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
-      {placement === INBOX_LIST_PLACEMENT.SIDEBAR ? (
+      {sidebar && search.field !== null ? (
+        <div className="sidebar-section-head">
+          {search.field}
+          {options}
+        </div>
+      ) : sidebar ? (
         <SidebarSectionHead name={title}>{options}</SidebarSectionHead>
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">{title}</h1>
+            {search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
           </div>
           <div className="desktop-toolbar-actions">{options}</div>
         </header>
@@ -1452,6 +1533,11 @@ function ListHead({
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
+}
+
+/** What a list its search left empty says. */
+function noMatch(searched: string): string {
+  return `No items match “${searched.trim()}”.`;
 }
 
 /** What the list says where a task's read did not answer. */
@@ -1467,6 +1553,7 @@ export function InboxListNote({
   counts,
   onList,
   onRetry,
+  searched,
 }: {
   failed: boolean;
   reading: boolean;
@@ -1480,6 +1567,8 @@ export function InboxListNote({
   /** Asks for the list, so the scope its empty state shows leaves it standing. */
   onList: () => void;
   onRetry: () => void;
+  /** The words the list's search narrows it by, where it narrows it, which an empty list says found nothing. */
+  searched?: string | undefined;
 }): React.JSX.Element | null {
   if (failed) {
     return (
@@ -1490,6 +1579,7 @@ export function InboxListNote({
   }
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
+  if (searched !== undefined) return <p className="sidebar-note">{noMatch(searched)}</p>;
   if (filteredOut !== undefined)
     return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
@@ -1517,6 +1607,14 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
+  /** The list's search, which its head's magnifier opens; none where the list offers none, as a task's own Inbox does. */
+  readonly search?: InboxSearchHead | undefined;
+}
+
+/** The words a list's search holds, and the change that narrows the list to them. */
+interface InboxSearchHead {
+  readonly query: string;
+  readonly onQuery: (query: string) => void;
 }
 
 /** Mark all as read as the view's menu offers it: whether any item is unread, filtered out or not, and the mark. */
