@@ -14,6 +14,7 @@ import { getTestDB } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import type { CdpSession } from "@luke/features/browser-cdp";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { agentBrowserTestLayer, fakeCdpPeer } from "../../testing/agent-browser-fake.js";
 import { AgentBrowser } from "./agent-browser.js";
 import { connectRestoring, restoreBrowserTabs } from "./restore-tabs.js";
@@ -23,7 +24,8 @@ import { connectRestoring, restoreBrowserTabs } from "./restore-tabs.js";
  * the real CDP session to a fake Chromium and the real tab store on a
  * migrated database: whoever connects reopens what the browser lost, though
  * another connection started the browser; of two reopening one tab, one page
- * stands; and Chromium's own blank page is never reopened. Synthetic
+ * stands; a page whose row did not move is closed again; and a browser
+ * that cannot list its pages is left as it is. Synthetic
  * accounts and pages throughout.
  */
 
@@ -124,20 +126,63 @@ it.layer(getTestDB())("restoring an agent's Browser tabs", (it) => {
       }),
   );
 
+  it.effect("a kept tab at the blank address is reopened like any other", () =>
+    Effect.gen(function* () {
+      const conversationId = yield* openConversation;
+      const kept = yield* keep(conversationId, "blank-before", "about:blank");
+      const peer = yield* fakeCdpPeer();
+
+      yield* Effect.scoped(connectRestoring(SESSION, conversationId)).pipe(
+        Effect.provide(agentBrowserTestLayer(peer, SESSION)),
+      );
+
+      const [row] = yield* listAgentBrowserTabs(conversationId);
+      assert.equal(row?.id, kept.id);
+      assert.ok((yield* peer.pages).some((page) => page.targetId === row?.targetId));
+    }),
+  );
+
   it.effect(
-    "a kept blank page, Chromium's own first page kept before the tool left it out, is dropped rather than reopened",
+    "a browser that could not say which pages it holds is left as it is, its kept tabs unmoved",
     () =>
       Effect.gen(function* () {
         const conversationId = yield* openConversation;
-        yield* keep(conversationId, "start-before", "about:blank");
-        const peer = yield* fakeCdpPeer();
+        yield* keep(conversationId, "before-1", "https://shop.test/cart");
+        const peer = yield* fakeCdpPeer({
+          answer: (command) =>
+            command.method === "Target.getTargets"
+              ? { error: { code: -32000, message: "Not available" } }
+              : undefined,
+        });
 
         yield* Effect.scoped(connectRestoring(SESSION, conversationId)).pipe(
           Effect.provide(agentBrowserTestLayer(peer, SESSION)),
         );
 
-        assert.equal((yield* peer.pages).length, 1);
-        assert.deepEqual(yield* listAgentBrowserTabs(conversationId), []);
+        assert.equal((yield* peer.pages).length, 1, "no tab was opened");
+        const [row] = yield* listAgentBrowserTabs(conversationId);
+        assert.equal(row?.targetId, "before-1");
       }),
+  );
+
+  it.effect("a page reopened for a tab whose row the store would not move is closed again", () =>
+    Effect.gen(function* () {
+      const conversationId = yield* openConversation;
+      yield* keep(conversationId, "before-1", "https://shop.test/cart");
+      yield* TestClock.adjust("1 second");
+      // A second kept tab, opened later, already names the target the browser opens next, so the first move is refused.
+      yield* keep(conversationId, "page-1", "https://shop.test/");
+      const peer = yield* fakeCdpPeer();
+
+      yield* Effect.scoped(connectRestoring(SESSION, conversationId)).pipe(
+        Effect.provide(agentBrowserTestLayer(peer, SESSION)),
+      );
+
+      assert.deepEqual(
+        (yield* peer.pages).map((page) => page.url),
+        ["about:blank"],
+        "the page opened for the unmoved tab is closed",
+      );
+    }),
   );
 });

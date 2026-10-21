@@ -71,7 +71,7 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { askMac, MAC_COMMAND_STATUS } from "../mac-command.js";
 import type { AgentBrowser } from "./agent-browser.js";
-import { BLANK_ADDRESS, connectRestoring } from "./restore-tabs.js";
+import { connectRestoring } from "./restore-tabs.js";
 
 /** Where a call acts: the Chromium in the agent's own sandbox, or the Browser tabs on the developer's own Mac. */
 export const BROWSER_PLACE = {
@@ -137,6 +137,9 @@ export type BrowserToolResult =
         readonly tabs: readonly ShownTab[];
       })
   | { readonly status: typeof BROWSER_TOOL_STATUS.NOT_RUN; readonly reason: string };
+
+/** The address of a page that holds nothing: Chromium's own first page, which a call never sees. */
+const BLANK_ADDRESS = "about:blank";
 
 /** The actions that may move a tab's page, whose title is settled before the call ends. */
 const MOVING_ACTIONS: ReadonlySet<string> = new Set([
@@ -366,6 +369,31 @@ function settleTitles(cdp: CdpSession, steps: readonly BrowserAgentStep[]) {
   );
 }
 
+/**
+ * The steps with each tab a `list` named that the call moved, and that still
+ * stands at the address listed, titled as its page settled
+ * (`settleTitles`), so a step never names a tab by the title it showed while
+ * loading where the result's `tabs` names it by its own.
+ */
+function withSettledTitles(
+  steps: readonly BrowserAgentStep[],
+  byId: ReadonlyMap<string, PageTarget>,
+): readonly BrowserAgentStep[] {
+  const moved = new Set(tabsMoved(steps));
+  return steps.map((step) => {
+    if (step.action !== BROWSER_AGENT_ACTION.LIST || step.status !== BROWSER_STEP_STATUS.DONE) {
+      return step;
+    }
+    const tabs = step.tabs.map((listed) => {
+      const page = byId.get(listed.tab);
+      if (!moved.has(listed.tab) || page === undefined) return listed;
+      const settled = shownTab(page);
+      return settled.url === listed.url ? { ...listed, title: settled.title } : listed;
+    });
+    return { ...step, tabs };
+  });
+}
+
 /** Runs the actions on the browser, the store kept in step after; a failure to keep it is logged and leaves the run as it ran. */
 function runOn(cdp: CdpSession, call: BrowserCall, actions: readonly BrowserAgentAction[]) {
   return Effect.gen(function* () {
@@ -384,7 +412,7 @@ function runOn(cdp: CdpSession, call: BrowserCall, actions: readonly BrowserAgen
       const page = byId.get(tab);
       return page === undefined ? [] : [shownTab(page)];
     });
-    return { run, tabs };
+    return { run: { ...run, steps: withSettledTitles(run.steps, byId) }, tabs };
   });
 }
 

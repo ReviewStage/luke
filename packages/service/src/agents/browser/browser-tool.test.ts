@@ -532,7 +532,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
   );
 
   it.effect(
-    "a tab is kept with the title its page settles on, not the address it shows while it loads",
+    "a tab is kept, listed, and shown with the title its page settles on, not the address it shows while it loads",
     () =>
       Effect.gen(function* () {
         const { conversationId } = yield* openConversation;
@@ -544,7 +544,12 @@ it.layer(getTestDB())("the browser tool", (it) => {
         const pending = yield* Effect.forkChild(
           call(
             conversationId,
-            { actions: [{ action: BROWSER_AGENT_ACTION.OPEN, url }] },
+            {
+              actions: [
+                { action: BROWSER_AGENT_ACTION.OPEN, url },
+                { action: BROWSER_AGENT_ACTION.LIST },
+              ],
+            },
             agentBrowserTestLayer(peer, SESSION),
           ),
         );
@@ -556,6 +561,11 @@ it.layer(getTestDB())("the browser tool", (it) => {
         const opened = ran(yield* Fiber.join(pending));
 
         assert.deepEqual(opened.tabs, [{ tab: "tab-1", url, title: titleAt(url) }]);
+        assert.deepEqual(opened.steps.at(-1), {
+          action: BROWSER_AGENT_ACTION.LIST,
+          status: BROWSER_STEP_STATUS.DONE,
+          tabs: [{ tab: "tab-1", url, title: titleAt(url) }],
+        });
         assert.deepEqual(yield* keptTabs(conversationId), [
           { targetId: "tab-1", address: url, title: titleAt(url) },
         ]);
