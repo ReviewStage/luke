@@ -173,6 +173,8 @@ interface FakeService extends TasksClient {
   readonly images: Record<string, string | undefined>;
   /** The transaction the next board save answers, as one that moved the board's live row; none answers no txid. */
   boardSaveTxid: string | undefined;
+  /** Where set, a board save is held until it settles, as one still in flight. */
+  boardSaveHeld: Deferred.Deferred<void> | undefined;
   /** Every code shown on each task as the service keeps it, by task id; a task with none answers nothing, as a service that did not answer. */
   codes: Record<string, readonly TaskShownCode[]>;
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
@@ -480,6 +482,7 @@ function fakeService(tasks: Task[]): FakeService {
     recordReads: [],
     images: {},
     boardSaveTxid: undefined,
+    boardSaveHeld: undefined,
     codes: {},
     files: {},
     folders: {},
@@ -995,13 +998,16 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     // The service keeps the last scene written, beside whatever drawing it holds.
     saveBoard: (taskId, elements, appliedDrawing, image) =>
-      Effect.sync(() => {
-        service.images[taskId] = image;
-        const board = { ...service.boards[taskId], elements, appliedDrawing };
-        service.boards[taskId] = board;
-        const txid = service.boardSaveTxid;
-        return txid === undefined ? { board } : { board, txid };
-      }),
+      Effect.andThen(
+        service.boardSaveHeld === undefined ? Effect.void : Deferred.await(service.boardSaveHeld),
+        Effect.sync(() => {
+          service.images[taskId] = image;
+          const board = { ...service.boards[taskId], elements, appliedDrawing };
+          service.boards[taskId] = board;
+          const txid = service.boardSaveTxid;
+          return txid === undefined ? { board } : { board, txid };
+        }),
+      ),
     listLive: () =>
       Effect.sync(() => {
         service.liveListReads += 1;
@@ -3420,6 +3426,23 @@ it.effect(
       // A save that answers no transaction has nothing to wait for.
       service.boardSaveTxid = undefined;
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
+
+      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once.
+      service.boardSaveTxid = "44";
+      service.boardSaveHeld = yield* Deferred.make<void>();
+      const inFlight = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
+      yield* boardSettled;
+      realtime.fail("board");
+      yield* TestClock.adjust(Duration.seconds(15));
+      yield* boardSettled;
+      realtime.deliver("board", [
+        { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },
+      ]);
+      yield* boardSettled;
+      yield* Deferred.succeed(service.boardSaveHeld, undefined);
+      service.boardSaveHeld = undefined;
+      assert.deepEqual(yield* Fiber.join(inFlight), { saved: true });
+      assert.deepEqual(realtime.awaitingTxids(), []);
 
       // A follow Realtime stopped is polled, which hands out no wait, so a save answers at once.
       delete service.boardSeals[INVITES];
