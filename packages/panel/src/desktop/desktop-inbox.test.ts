@@ -7854,3 +7854,77 @@ test("with the inbox-first sidebar the item shown stands alone for the window's 
   assert.match(place.textContent ?? "", /Not found/u);
   assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
+
+/** Types `words` into the list's search, as a reader's keys put them in its field. */
+function searchList(page: HTMLElement, words: string): void {
+  const input = page.querySelector<HTMLInputElement>(
+    '.inbox-tasks input[aria-label="Search inbox"]',
+  );
+  assert.ok(input, "the search stands open");
+  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(input, words);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The magnifier in the list's head that opens its search. */
+function magnifier(page: HTMLElement): HTMLButtonElement | null {
+  return page.querySelector<HTMLButtonElement>('.inbox-tasks button[aria-label="Search inbox"]');
+}
+
+/** The title of the item the pane shows. */
+function paneTitle(page: HTMLElement): string | null | undefined {
+  return page.querySelector(".inbox-view-items .inbox-subject-title")?.textContent;
+}
+
+test("the list's magnifier opens a search in the Inbox's name that narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties and folds it, handing the keyboard back to the magnifier", async () => {
+  const { page } = mount();
+  await settle();
+  const title = headTitle(page);
+  const button = magnifier(page);
+  assert.ok(button, "the head offers the search");
+
+  act(() => button.click());
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Search inbox");
+  assert.equal(headTitle(page), undefined, "the field stands in the name");
+
+  // Note that the retry question is found by its answer's note, which only its thread holds.
+  searchList(page, "on-call");
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "How is a failed email retried?"]);
+  assert.equal(paneTitle(page), "Alert at 80%?", "the pane keeps the item open");
+
+  searchList(page, "zzz");
+  assert.deepEqual(listed(page), []);
+  assert.ok(page.querySelector(".inbox-tasks")?.textContent?.includes("No items match “zzz”."));
+
+  const input = document.activeElement;
+  assert.ok(input instanceof HTMLInputElement);
+  act(() => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(headTitle(page), title);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+  assert.equal(document.activeElement, magnifier(page));
+});
+
+test("with the inbox-first sidebar, the sidebar's list head offers the same search, which narrows the sidebar's list", async () => {
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  const button = page.querySelector<HTMLButtonElement>(
+    '.desktop-sidebar .sidebar-section-head button[aria-label="Search inbox"]',
+  );
+  assert.ok(button, "the sidebar's head offers the search");
+
+  act(() => button.click());
+  searchList(page, "expire");
+
+  assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
+});

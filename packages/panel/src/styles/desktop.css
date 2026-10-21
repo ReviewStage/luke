@@ -3080,6 +3080,13 @@ ul.actor-stack {
   border-right: 1px solid var(--luke-color-border);
 }
 
+/* The list's search, open, stands in its head's name and takes the room the
+   name had, on the page's bar and in the sidebar's head alike. */
+.inbox-search {
+  min-width: 0;
+  flex: 1;
+}
+
 /* Its buttons end as far in from the list's edge as the side panel's toggle
    stands from the window's. */
 .inbox-tasks-bar {
