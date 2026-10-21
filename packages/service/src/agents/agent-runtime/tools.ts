@@ -34,12 +34,13 @@ const { BRAIN, BRAIN_WORKER, CODER, CODER_WORKER } = AGENT_ROLE;
  * coding agent's worker only the reads of the checkout and the web, so
  * workers run in parallel without colliding and the agent alone edits. A
  * coding agent is offered the call's own tools, `queue_question`,
- * `withdraw_question`, and `end_call`, on a spoken turn alone
- * (`../coder-host/tool-set.ts`'s `turnToolsOf`), since they mean something
- * only while someone is listening; the brain on every turn. `show_code` is
- * every agent's on every turn, a coding agent's where it has a repository
- * to read (`repositoryToolsOf`), and the board's two every agent's on a
- * task (`taskToolsOf`).
+ * `withdraw_question`, and `end_call`, on every turn as the brain is, so its
+ * tools are the same whatever kind of turn it runs, and refused off a call
+ * (`../coder-host/tool-set.ts`'s `runCallTool`), since they mean something
+ * only while someone is listening. `show_code` is every agent's on every
+ * turn, a coding agent's where it has a repository to read
+ * (`repositoryToolsOf`), and the board's two every agent's on a task
+ * (`taskToolsOf`).
  */
 const TOOL_ROLES = {
   [AGENT_TOOL.QUEUE_QUESTION]: [BRAIN, CODER],

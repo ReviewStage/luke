@@ -1,24 +1,20 @@
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
-import { host, readStepStarted, stepTurnId } from "../host.js";
+import { host } from "../host.js";
 import { runAgent } from "../runtime.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**
  * The instructions a session runs under, set once at its start and standing
  * for the session's life, with the content address kept in the session's
- * state so every turn row names the prompt the model actually reads, and
- * what each turn opens with as its own instruction, replaced each turn and
- * remembered by none, as the planning brain's standing context is
- * (`../../luke/instructions/prompt.ts`): on a spoken turn the call's words
- * and the task as it stands, on a typed one the task only where someone
- * else saved the plan since the agent's last step, and on either what the
- * agent has not read in its workspace's chat
- * (`packages/service/src/agents/coder-host/turn-context.ts`).
- * The plan itself is the session's first message and no instruction. A
- * session the host does not admit, or whose conversation is no agent's,
- * runs under nothing.
+ * state so every turn row names the prompt the model actually reads. No
+ * turn adds to them: what changes from turn to turn, the call's words, the
+ * task as it stands, and the chat, rides after the history instead
+ * (`turn-message.ts`), so the system message stays the provider's cached
+ * prefix whatever kind of turn each is. The plan itself is the session's first message
+ * and no instruction. A session the host does not admit, or whose
+ * conversation is no agent's, runs under nothing.
  */
 export default defineDynamic({
   events: {
@@ -45,16 +41,5 @@ export default defineDynamic({
         }),
       );
     },
-    "turn.started": (event, ctx) =>
-      runAgent(
-        Effect.gen(function* () {
-          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-          if (Result.isFailure(admitted)) return null;
-          const turn = host.turnKind(ctx.session.auth);
-          const turnId = stepTurnId(ctx.session.id, readStepStarted(event));
-          const content = yield* host.turnInstructions(admitted.success, turn, turnId);
-          return content === undefined ? null : defineInstructions({ content });
-        }),
-      ),
   },
 });

@@ -138,9 +138,10 @@ export const CODER_DEPLOYMENT_TURNS = {
  * agent's typed turn under way at its next step, as a typed line does, and
  * a line typed to the agent joins a call's spoken turn: a call on an agent
  * an hour into a pull request is answered within a step rather than when
- * the hour ends. A turn keeps the tools and words it opened with
- * (`tool-set.ts`'s `turnToolsOf`, `turn-context.ts`), since eve resolves
- * them as the turn starts, so a spoken line joining a typed turn carries
+ * the hour ends. A turn keeps the words it opened with (`turn-context.ts`),
+ * since eve resolves them as the turn starts, and the call's own tools
+ * answer by the kind it opened as (`tool-set.ts`'s `runCallTool`), so a
+ * spoken line joining a typed turn carries
  * its own short note instead (`SPOKEN_LINE_NOTE`), and the relay tells
  * each line it receives apart from the turn's kind (`brain-host/relay.ts`).
  * A cancel and a reset are minted as the account's too, which eve's cancel
@@ -155,7 +156,7 @@ export const CODER_DEPLOYMENT_STREAMS = true;
  * What a spoken line carries ahead of it into the agent's history, as eve
  * hands a message's `context`: that it was said on a call and its answer is
  * heard. A spoken turn of its own opens with the call's whole words
- * (`turn-context.ts`'s `spokenTurnWords`), but a line that joins a typed turn
+ * (`turn-context.ts`'s `turnKindWords`), but a line that joins a typed turn
  * under way keeps that turn's tools and words, so this is what it has, and
  * it says that the first words after the line are its whole answer, since
  * the voice follows such a line to the first step that says something

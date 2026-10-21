@@ -13,6 +13,7 @@ import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-h
 import { deepensSandbox } from "@luke/service/agents/coder-host/deepen";
 import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
+import { handedAfterCompaction } from "@luke/service/agents/coder-host/turn-context";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
 import { Effect, Result } from "effect";
@@ -21,7 +22,7 @@ import { defineHook, type HookContext } from "eve/hooks";
 import { host, seams } from "../host.js";
 import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
-import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
+import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
 
 /**
  * The relay from eve's stream into the store, and the two things the
@@ -187,6 +188,10 @@ export default defineHook({
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
       const sandbox = pinnedState(sandboxRecord);
+      // A compaction may summarise away what the turns' messages handed, so the next turn hands it again.
+      if (event.type === "compaction.completed") {
+        pinnedState(turnHanded).update(handedAfterCompaction);
+      }
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
         const openedAt = seams.now();
         const memberToken = await onMemberToken(ctx);
