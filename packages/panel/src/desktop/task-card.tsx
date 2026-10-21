@@ -148,7 +148,8 @@ function CreatorDetail({
 }): React.JSX.Element {
   const creator = useCreator(task, readerId);
   const maker = useTaskMaker(task);
-  const door = useActorDoor(maker?.actor ?? creator);
+  // Note that the line opens the member it names, whoever made the task for them, since Luke and an agent have no page.
+  const door = useActorDoor(creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
   const by = `${actorName(creator, { sentence: true })}${left ? ", who left" : ""}`;
   return (

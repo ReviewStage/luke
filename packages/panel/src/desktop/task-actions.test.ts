@@ -567,8 +567,8 @@ test("a task's card's creator line opens the creator's page in the window, and i
   const opened: string[] = [];
   const tasks = tasksControl({ me: DEAN.userId, workspaces: [STAGE] });
   const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
-  const drawn = (inWindow: boolean) => {
-    const card = taskCardOf(tasks, { ...charles, workspaceId: STAGE.id }, charles.updatedAt);
+  const drawn = (inWindow: boolean, task: TaskSummary = charles) => {
+    const card = taskCardOf(tasks, { ...task, workspaceId: STAGE.id }, task.updatedAt);
     const view = mount(
       createElement(MemberDirectory, {
         workspace: undefined,
@@ -589,6 +589,15 @@ test("a task's card's creator line opens the creator's page in the window, and i
   assert.deepEqual(opened, [CHARLES.userId]);
   unmountAll();
   assert.equal(drawn(false)?.tagName, "SPAN");
+  // A task an agent made for Charles still opens Charles's page, the member it names.
+  const byAgent = drawn(true, {
+    ...charles,
+    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+  });
+  assert.equal(byAgent?.tagName, "BUTTON");
+  act(() => byAgent?.click());
+  assert.deepEqual(opened, [CHARLES.userId, CHARLES.userId]);
+  unmountAll();
 });
 
 test("a task's card says you of the reader's own task outside a member directory, and, where the service counts no members, says who created it only once the members read lists someone else", async () => {

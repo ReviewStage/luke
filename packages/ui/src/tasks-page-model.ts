@@ -273,7 +273,7 @@ function creatorOf(task: TaskSummary): string | null {
   return task.createdBy?.userId ?? task.ownerId ?? null;
 }
 
-/** Who made a task: a person by hand, read so for a task from a service before origins; a coding agent; or Luke on a call. */
+/** Who made a task: a person by hand, read so for a task from a service before origins; a coding agent, one an automation's run started among them, whose task names the automation; or Luke on a call. */
 function makerOf(task: Pick<TaskSummary, "origin">): TaskMaker {
   switch (task.origin?.actor) {
     case undefined:
