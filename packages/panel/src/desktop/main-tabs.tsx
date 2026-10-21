@@ -171,7 +171,7 @@ function AgentMenuTab({
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenOnMac">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, { label: look.label, shown, terminals });
   return (
@@ -383,7 +383,6 @@ export function MainTabStrip({
   keys,
   shown,
   onOpenTerminal,
-  onOpenOnMac,
   onNewVoiceChat,
   calling,
 }: {
@@ -405,8 +404,6 @@ export function MainTabStrip({
   shown: boolean;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
-  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository or the platform has no Mac terminal. */
-  onOpenOnMac?: ((agentId: string) => void) | undefined;
   /** Starts a new voice chat on the task, which the "+" menu offers first; none where the window has no voice. */
   onNewVoiceChat: (() => void) | undefined;
   /** The agent a call is in progress into, whose tab's glyph wears the live mark; none while no call stands. */
@@ -477,7 +474,7 @@ export function MainTabStrip({
               look={entry.look}
               doors={doorsOf(entry)}
               shown={shown}
-              terminals={{ onOpenTerminal, onOpenOnMac }}
+              terminals={{ onOpenTerminal }}
             />
           ),
         )}

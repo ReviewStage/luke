@@ -499,7 +499,7 @@ function PlanDocument({
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  // Open terminal and Run open an agent's terminals as on every surface that draws it (`agent-actions.tsx`).
+  // Open terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
   const terminalDoors = useAgentTerminalDoors(
     tasks.sidePanel,
     region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
@@ -946,7 +946,6 @@ function PlanDocument({
                             keys={tasks.shown && !sideFocused}
                             shown={tasks.shown}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
-                            onOpenOnMac={terminalDoors.onOpenOnMac}
                             onNewVoiceChat={tasks.onNewVoiceChat}
                             calling={calling}
                           />
