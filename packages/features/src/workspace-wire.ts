@@ -380,6 +380,8 @@ export const workspaceMembersAnswerSchema = EffectSchema.Struct({
   former: EffectSchema.optionalKey(EffectSchema.Array(formerMemberSchema)),
 });
 
+export type WorkspaceMembersAnswer = typeof workspaceMembersAnswerSchema.Type;
+
 /** The query a members read names its workspace under. */
 export const WORKSPACE_MEMBERS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
 

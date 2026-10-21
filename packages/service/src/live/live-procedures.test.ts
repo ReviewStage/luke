@@ -35,7 +35,10 @@ import {
 } from "@luke/features/live-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
-import { workspacesLiveAnswerSchema } from "@luke/features/workspace-live";
+import {
+  workspaceMembersLiveAnswerSchema,
+  workspacesLiveAnswerSchema,
+} from "@luke/features/workspace-live";
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
@@ -1400,3 +1403,38 @@ it.effect(
       );
     }),
 );
+
+it.layer(getTestDB())("a workspace's people's live read", (it) => {
+  it.effect(
+    "a workspace's people are sealed as its members and former members for a member, and not found for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, outsider] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
+        for (const id of [owner, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        const path = `/api/live/workspace-members?workspaceId=${workspaceId}`;
+
+        const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(workspaceMembersLiveAnswerSchema)(sealed.body);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["former", "members"]);
+        for (const query of Object.values(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
+          assert.ok(query.capability.includes(`"${workspaceId}"`), "read of the workspace");
+        }
+        assert.deepEqual(yield* ask({ bearer: outsider, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        // A read started for another account is signed out, before the workspace is looked at.
+        assert.equal(
+          (yield* ask({ bearer: owner, forUser: outsider, path, sealing: Option.some(SCRIPTED) }))
+            .status,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+});

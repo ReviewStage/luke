@@ -32,7 +32,10 @@
  *
  * `GET /api/live/workspaces` answers the account's workspaces the same way,
  * as two statements: the workspaces, and the GitHub installations connected
- * to them.
+ * to them. `GET /api/live/workspace-members?workspaceId=` answers one
+ * workspace's people as two, its members and who its work names but left,
+ * after the account is read as a member of it, so a workspace it is not in
+ * is not found, as its held read answers.
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
@@ -63,7 +66,7 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
-import { workspacesLiveStatements } from "@luke/database/models/workspace-store";
+import { isWorkspaceMember, workspacesLiveStatements } from "@luke/database/models/workspace-store";
 import { CODING_AGENT_STATUS, codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -75,6 +78,7 @@ import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { joinedMember } from "../agents/coder-host/chat-page.js";
 import {
@@ -390,6 +394,16 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const statements = workspacesLiveStatements(context.userId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    workspaceMembers: signedIn.workspaceMembers.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = workspaceMembersLiveStatements(context.userId, input.workspaceId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),
