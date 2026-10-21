@@ -208,8 +208,7 @@ export const AVATAR_ACT_KIND = {
  * (`browser-views.ts`): opened on an address and answered how its page
  * stands, sent to another, stepped back, forward, reloaded or stopped,
  * placed over the tab's body or put out of sight, caught as a still while
- * something covers it, closed with its tab, and kept from an agent by the
- * bar's Stop until the developer clicks into the page. How the page goes on to
+ * something covers it, and closed with its tab. How the page goes on to
  * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
  * and only while the account has the Browser tab experiment on.
  */
@@ -220,7 +219,6 @@ export const BROWSER_ACT_KIND = {
   BROWSER_PLACE: "browser.place",
   BROWSER_CAPTURE: "browser.capture",
   BROWSER_CLOSE: "browser.close",
-  BROWSER_STOP: "browser.stop",
 } as const;
 
 /**
