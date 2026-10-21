@@ -128,10 +128,12 @@ export interface AppInboxTask {
   items: readonly AppInboxWaitingItem[];
 }
 
-/** One task holding inbox items, waiting or settled: the task, how many, and when the latest changed, by the service's clock. */
+/** One task holding inbox items, waiting or settled: the task, how many, how many are the reader's to do, and when the latest changed, by the service's clock. */
 export interface AppInboxTaskHolding {
   taskId: string;
   items: number;
+  /** How many of its items the Inbox's To do lists for the reader: their own, open or unread; absent from a service before it, which the sidebar counts by the open items alone. */
+  toDo?: number;
   updatedAt: number;
 }
 

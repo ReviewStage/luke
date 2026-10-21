@@ -84,10 +84,17 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
 
-/** One task the account's read lists as holding inbox items: the task, how many it holds, open and settled alike, and when the latest of them changed. */
+/** One task the account's read lists as holding inbox items: the task, how many it holds, open and settled alike, how many of them are the reader's to do, and when the latest of them changed. */
 export const accountInboxTaskSchema = EffectSchema.Struct({
   planId: wireUuidSchema,
   items: countedNumber,
+  /**
+   * How many of the task's items the Inbox's To do lists for the reader:
+   * their own (their agent's), open or unread for them; none on an archived
+   * task. Absent from a service before it, which the desktop counts as it
+   * did before, by the open items alone.
+   */
+  toDo: EffectSchema.optionalKey(countedNumber),
   updatedAt: countedNumber,
 });
 

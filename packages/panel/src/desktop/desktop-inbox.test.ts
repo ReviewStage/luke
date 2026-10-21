@@ -92,6 +92,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -100,6 +101,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
+import { DesktopSidebar } from "./desktop-sidebar.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -468,6 +470,8 @@ function mount(
     room,
     sidebar = false,
     panel,
+    holding: firstHolding = HOLDING,
+    withSidebar = false,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -477,6 +481,10 @@ function mount(
     sidebar?: boolean;
     /** The side panel the Inbox opens what its item names in, where the test records what it opened. */
     panel?: SidePanelControl;
+    /** Main's first word of the tasks holding items. */
+    holding?: readonly AppInboxTaskHolding[];
+    /** Whether the window's sidebar stands beside the Inbox page, its Inbox row counting. */
+    withSidebar?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -496,7 +504,7 @@ function mount(
     const [inboxOpen, setOpen] = useState(true);
     setInboxOpen = setOpen;
     chooseFromOutside = setChosen;
-    const [holding, setHeld] = useState(HOLDING);
+    const [holding, setHeld] = useState(firstHolding);
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
     const [listRead, setRead] = useState(!listUnread);
     setListRead = setRead;
@@ -556,9 +564,11 @@ function mount(
         onClose: () => undefined,
       },
     });
-    return sidebar
-      ? createElement(SharedListing, { tasks: control })
-      : createElement(DesktopInbox, { tasks: control });
+    if (sidebar) return createElement(SharedListing, { tasks: control });
+    const inbox = createElement(DesktopInbox, { tasks: control });
+    return withSidebar
+      ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
+      : inbox;
   }
   function Panelled({ at }: { at: ShellRoom }) {
     const sidePanel = useSidePanel(
@@ -2554,6 +2564,134 @@ test("To do lists what needs you and anything of yours unread: a thread you answ
     "# Invites",
     "▸ *Expire after 7 days?",
   ]);
+});
+
+/** The number the window's sidebar draws on its Inbox row; none where it draws none. */
+function sidebarInboxCount(page: HTMLElement): number | undefined {
+  const row =
+    [...page.querySelectorAll<HTMLElement>(".sidebar-places .luke-nav-item")].find(
+      (each) => each.querySelector(".luke-nav-item-name")?.textContent === "Inbox",
+    ) ?? assert.fail("the sidebar draws its Inbox row");
+  const count = row.textContent?.match(/\d+/u)?.[0];
+  return count === undefined ? undefined : Number(count);
+}
+
+/** How many rows To do lists, whoever's. */
+function toDoRows(page: HTMLElement): number {
+  return listed(page).filter((row) => !row.startsWith("# ")).length;
+}
+
+test("the sidebar's Inbox counts what To do lists, as main counts each task's to do: an open ask, an unread notice, and a thread you answered written on again, never a read settled item, a teammate's ask, or an archived task's; reading or answering one drops it at once", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  const NOTE: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000011", "Preview is up", 3_500),
+    response: { type: INBOX_RESPONSE.NONE },
+    unread: true,
+  };
+  const SEEN: InboxItem = {
+    ...RETRY,
+    id: "a1b2c3d4-0000-4000-8000-000000000012",
+    key: "seen",
+    title: "Which region?",
+    updatedAt: 4_500,
+    unread: false,
+  };
+  const THEIRS: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000013", "Rotate the key?", 3_800),
+    startedBy: TEAMMATE,
+  };
+  // Note that the thread written on again changed before the open ask, so the item chosen as the Inbox opens is one opening never reads out of To do.
+  const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
+  const SHELVED: TaskSummary = {
+    ...INVITES,
+    id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c40",
+    name: "Shelved",
+    archivedAt: 7_000,
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }, NOTE, THEIRS]);
+  inboxes.set(SHELVED.id, [
+    { ...item("a1b2c3d4-0000-4000-8000-000000000014", "Old?", 2_000), unread: true },
+  ]);
+  const holding = (billing: number): readonly AppInboxTaskHolding[] => [
+    { taskId: BILLING.id, items: 3, toDo: billing, updatedAt: 4_500 },
+    { taskId: INVITES.id, items: 3, toDo: 2, updatedAt: 4_000 },
+    { taskId: SHELVED.id, items: 1, toDo: 0, updatedAt: 2_000 },
+  ];
+  const { page } = mount([], { holding: holding(2), archived: [SHELVED], withSidebar: true });
+  await settle();
+  assert.equal(toDoRows(page), 4);
+  assert.equal(sidebarInboxCount(page), 4, "the sidebar counts what To do lists");
+  assert.deepEqual(readMarks, [`read:${EXPIRY.id}`], "opening an open ask leaves it to do");
+  readMarks = [];
+
+  // Opening the thread written on again reads it, and the count drops before main hears of it.
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  assert.deepEqual(readMarks, [`read:${followed.id}`]);
+  assert.equal(sidebarInboxCount(page), 3);
+  // Main's word catching up counts it no longer either, and the mark adds nothing to it.
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, { ...followed, unread: false }, SEEN]);
+  act(() => setHolding(holding(1)));
+  await settle();
+  assert.equal(sidebarInboxCount(page), 3);
+
+  // Answering the open ask drops it the moment it is sent.
+  const { sent } = gatedAnswers();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  answerWithNote(page, "Use 90%");
+  await settle();
+  assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
+  assert.equal(sidebarInboxCount(page), 2);
+});
+
+test("a read mark stops moving the sidebar's Inbox once main hands the window a read after the service took it, even where another window's mark leaves main's count as it stood", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  // Note that the thread written on again changed before the open asks, so opening the Inbox reads none out of To do.
+  const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
+  const SEEN: InboxItem = {
+    ...RETRY,
+    id: "a1b2c3d4-0000-4000-8000-000000000012",
+    key: "seen",
+    title: "Which region?",
+    updatedAt: 2_000,
+    unread: false,
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
+  const holding = (): readonly AppInboxTaskHolding[] => [
+    { taskId: BILLING.id, items: 3, toDo: 2, updatedAt: 3_000 },
+    { taskId: INVITES.id, items: 1, toDo: 1, updatedAt: 4_000 },
+  ];
+  const { page } = mount([], { holding: holding(), withSidebar: true });
+  await settle();
+  assert.equal(sidebarInboxCount(page), 3);
+
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  assert.equal(sidebarInboxCount(page), 2, "reading the thread drops it at once");
+
+  // Another window marks the read item unread as main hears of this read, so main counts the billing task's two as before.
+  inboxes.set(BILLING.id, [
+    { ...THRESHOLD, unread: true },
+    { ...followed, unread: false },
+    { ...SEEN, unread: true },
+  ]);
+  act(() => setHolding(holding()));
+  await settle();
+  assert.equal(sidebarInboxCount(page), 3, "main's newer read stands, the mark in it");
+});
+
+test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, updatedAt: 6_000, unread: true }]);
+  const { page } = mount([], { withSidebar: true });
+  await settle();
+  assert.equal(
+    sidebarInboxCount(page),
+    2,
+    "the threshold and expiry questions, which main lists open",
+  );
 });
 
 test("an archived task's items stand under Archived alone, which the view's menu offers beside To do and All and the head then names: each drawn as it stood, needing nobody, read but not answered, the box giving way to Unarchive, which brings the task back; Archived is never where a relaunch opens", async () => {

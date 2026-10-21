@@ -88,7 +88,7 @@ import {
   ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -105,7 +105,7 @@ import { Shortcut } from "../shortcut.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model.js";
-import { type SettledWaiting, useSettledWaiting } from "../tasks/inbox-settling.js";
+import { type SettledWaiting, useSettledToDo, useSettledWaiting } from "../tasks/inbox-settling.js";
 import { useMinute } from "../tasks/task-time.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
@@ -1068,18 +1068,23 @@ function ListSkeleton(): React.JSX.Element {
 }
 
 /**
- * How many items wait on the developer: those of the listed workspace's
- * tasks, the sum of the Inbox's row counts, and every one from an agent
- * with no task that the developer started (`waitsOnReader`), which names no
- * workspace to be counted in; a teammate's is listed in the Inbox, and waits
- * on the teammate. An item the window answered is counted no longer from the
- * moment it was sent (`inbox-settling.ts`).
+ * How many items the Inbox's To do lists: main's count of each standing
+ * task's of the listed workspace (`toDo`), the reader's own open or unread,
+ * and every open one from an agent with no task that the developer started
+ * (`waitsOnReader`), which names no workspace to be counted in; a
+ * teammate's is listed in the Inbox, and waits on the teammate. An item the
+ * window answered or marked is counted as it now stands from the moment it
+ * was sent (`inbox-settling.ts`). Where main carries no count of the tasks'
+ * to do, from a service before it, their open items are counted, as
+ * before.
  */
-function waitingItems({ waiting, taskless }: SettledWaiting, readerId: string | undefined): number {
-  return waiting.reduce(
-    (sum, task) => sum + task.items.length,
-    taskless.filter((each) => waitsOnReader(each, readerId)).length,
-  );
+function waitingItems(
+  { waiting, taskless }: SettledWaiting,
+  toDo: number | undefined,
+  readerId: string | undefined,
+): number {
+  const tasks = toDo ?? waiting.reduce((sum, task) => sum + task.items.length, 0);
+  return tasks + taskless.filter((each) => waitsOnReader(each, readerId)).length;
 }
 
 /**
@@ -1515,6 +1520,18 @@ function SidebarColumn({
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
   const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
+  // Note that only the standing tasks are counted, as To do lists them, so an archived task's or one not listed yet counts nowhere.
+  const { inboxTasks, tasks: standingTasks } = tasks.listed;
+  const standingHoldings = useMemo(
+    () => inboxTasks.filter((holding) => standingTasks.some((task) => task.id === holding.taskId)),
+    [inboxTasks, standingTasks],
+  );
+  const toDo = useSettledToDo(
+    standingHoldings,
+    tasks.listed.inbox,
+    settledWaiting.waiting,
+    tasks.inboxTasks,
+  );
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1816,7 +1833,7 @@ function SidebarColumn({
         </NavItem>
         {listsInbox ? null : (
           <SidebarInboxRow
-            waiting={tasks.signedIn ? waitingItems(settledWaiting, tasks.me) : 0}
+            waiting={tasks.signedIn ? waitingItems(settledWaiting, toDo, tasks.me) : 0}
             current={inInbox}
             disabled={!tasks.signedIn}
             onOpen={chosen(openInbox)}
