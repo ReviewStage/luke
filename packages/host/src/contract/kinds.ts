@@ -29,6 +29,8 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /**
    * Settings › Coding agents › Codex: Sign in with ChatGPT for Luke's hosted
    * runtime, run by the host through the developer's browser, and the one
@@ -172,7 +174,6 @@ export const AGENT_INBOX_ACT_KIND = {
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
-  CODING_AGENTS_CHAT: "codingAgents.chat",
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   /**

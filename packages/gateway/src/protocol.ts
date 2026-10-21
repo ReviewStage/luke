@@ -211,6 +211,8 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /** A ChatGPT sign-in for Luke's hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
   CHATGPT_SIGN_IN: "chatGpt.signIn",
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
@@ -246,8 +248,6 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
-  /** A workspace's chat past a cursor: what a person in it sees of it, held open by the service while nothing moved. */
-  CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   /**

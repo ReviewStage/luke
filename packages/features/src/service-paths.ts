@@ -20,7 +20,8 @@ export const HOSTED_SERVICE_PATH = {
   ACCOUNT_ACCESS: "/api/account/access",
   /**
    * The account's own Anthropic and OpenAI API keys: read what they are
-   * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
+   * (GET), save one (PUT), remove one (DELETE), or turn a connected plan's
+   * default for coding agents (PATCH). No answer carries a key.
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",

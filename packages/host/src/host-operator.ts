@@ -35,10 +35,8 @@ import {
   type CodingAgentArchiveParams,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatAnswerView,
   type CodingAgentChatAttachmentParams,
   type CodingAgentChatChanged,
-  type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
@@ -89,7 +87,6 @@ import {
   codingAgentAgentAnswerSchema,
   codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
-  codingAgentChatAnswerViewSchema,
   codingAgentChatChangedSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
@@ -124,6 +121,7 @@ import {
   type PlanTemplateRevisionsAnswerView,
   type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
+  type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -682,6 +680,8 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
+  providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
   /** A ChatGPT sign-in run through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
   chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
@@ -752,8 +752,6 @@ export interface HostOperator {
   codingAgentPicture(
     params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
-  /** A workspace's chat past a cursor, held by the service while nothing moved; or why there is none. */
-  codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
   /** A workspace's chat, followed from now until let go or signed out, heard through `onChatChanged`; following again starts over. */
   codingAgentChatFollow(workspaceId: string): Effect.Effect<void>;
   /** A workspace's chat let go: nothing more is heard of it until it is followed again. */
@@ -1744,6 +1742,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : undefined),
           ...("from" in params ? { from: params.from } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
+          ...("payer" in params ? { payer: params.payer } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -1962,6 +1961,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
       ),
+    providerKeyForAgents: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS, {
+          provider: params.provider,
+          kind: params.kind,
+          forAgents: params.forAgents,
+        }),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
     chatGptSignIn: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN),
@@ -2121,14 +2129,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
-      ),
-    codingAgentChat: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
-          workspaceId: params.workspaceId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentChatAnswerViewSchema),
       ),
     codingAgentChatFollow: (workspaceId) =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),

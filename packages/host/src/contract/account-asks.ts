@@ -10,6 +10,7 @@ import {
   planTemplateRevisionsAnswerViewSchema,
   planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
+  providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
@@ -41,6 +42,11 @@ export const accountAskActsContract = {
     "Could not remove your API key on this system.",
   )
     .input(exactInput(providerKeyRemoveParamsSchema))
+    .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]: actProcedure(
+    "Could not change your plan's default on this system.",
+  )
+    .input(exactInput(providerKeyForAgentsParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actProcedure(
     "Could not sign in with ChatGPT on this system.",

@@ -57,7 +57,7 @@ import type { SkillSource } from "./skill-picker.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
- * inbox-answer-box.tsx -- the box at the end of every Inbox item's thread, the reader's draft reply: while a question waits the box is the question, its controls the card's body, and its foot one row of +, the note line, the microphone, and Send; otherwise the line alone, a reply.
+ * inbox-answer-box.tsx -- the box at the end of every Inbox item's thread, the reader's draft reply: while a question waits the box is the question, its controls the card's body, the note line under them, and under that the foot's row of + at the left and the microphone and Send at the right; otherwise the line and the foot alone, a reply.
  *
  * The box is the agent composer's card (`ai-elements/prompt-input.tsx`)
  * around the agent composer's field (`composer-field.tsx`), and takes what
@@ -66,8 +66,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * mentions, the plan's own on a plan's Inbox and the item's repository's
  * in the window's, each written in as its link and drawn as its chip; a `/`
  * opens the repository's skills; and the microphone left of the send
- * records words into the line at the caret, the strip standing under it in
- * place of the foot's presses until ✓ or Enter, or ✕ or Escape. The note
+ * records words into the line at the caret, the strip standing in the foot
+ * in place of its presses until ✓ or Enter, or ✕ or Escape. The note
  * goes to the agent as it was written, links and all, so what a mention
  * names reaches the agent as a message's does.
  *
@@ -75,11 +75,13 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * body, with no card, border, or head of their own, since the agent's
  * message says what it asks: an ask's options, steps and presses, or
  * fields, or an older item's choice, cards, or fields, each numbered and
- * pressed as before. Under them the foot is one row, and its field is the
- * note itself, "Add a note", one line that grows as it is written. Where
- * no controls stand, an ask of words alone, a notice, or a settled item,
- * the box is that row alone and its line asks for a "Reply", the words of
- * which answer an ask of words alone (`inbox-model.ts`'s `attachedAnswers`).
+ * pressed as before. Under them stands the note line, "Add a note", a
+ * full-width line that grows as it is written, and under it the foot's row
+ * of presses, laid as the agent's and the chat's boxes lay theirs. Where no
+ * controls stand, an ask of words alone, a notice, or a settled item, the
+ * box is that line and that row alone and its line asks for a "Reply", the
+ * words of which answer an ask of words alone (`inbox-model.ts`'s
+ * `attachedAnswers`).
  *
  * The box says nothing of its own about what a send does: Send stands held
  * until the box holds something to send, a pick, a tick, a field filled,
@@ -382,68 +384,66 @@ function AnswerCard({
               control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
             }}
           />
-          {/* The foot is one row, the note line its own field: +, the line, the microphone, and Send. */}
-          <PromptInputFooter
-            className="inbox-answer-foot"
-            data-dictating={dictating ? "" : undefined}
-          >
-            {dictating ? null : (
-              <PromptInputTools className="inbox-answer-tools">
-                <AttachFilesButton onFiles={attach} />
-              </PromptInputTools>
-            )}
-            <ComposerField
-              module={module}
-              editor={editor}
-              room={room}
-              draft={draft.note}
-              setDraft={(text) => control.onDraft(item, { ...draft, note: text })}
-              placeholder={placeholder}
-              label={placeholder}
-              input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
-              maxLength={answering ? INBOX_BOUNDS.MAX_NOTE_CHARS : INBOX_BOUNDS.MAX_MESSAGE_CHARS}
-              takesFocus={false}
-              {...pickers.field}
-              onEnter={() => {
-                if (room.current === null) return;
-                // Note that an older item's Enter goes to its own send, which takes the keyboard to what an answer lacks.
-                if (answering) room.current.closest("form")?.requestSubmit();
-                else submitPromptInput(room.current);
-              }}
-              onPasteFiles={(files) => {
-                // Only images are taken from the clipboard; text pastes as it always does.
-                const pasted = imageFiles(files);
-                if (pasted.length === 0) return false;
-                attach(pasted);
-                return true;
-              }}
-              quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
-            />
+          {/* The note line stands on its own over the foot, as the agent's box's field does. */}
+          <ComposerField
+            module={module}
+            editor={editor}
+            room={room}
+            draft={draft.note}
+            setDraft={(text) => control.onDraft(item, { ...draft, note: text })}
+            placeholder={placeholder}
+            label={placeholder}
+            input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
+            maxLength={answering ? INBOX_BOUNDS.MAX_NOTE_CHARS : INBOX_BOUNDS.MAX_MESSAGE_CHARS}
+            takesFocus={false}
+            {...pickers.field}
+            onEnter={() => {
+              if (room.current === null) return;
+              // Note that an older item's Enter goes to its own send, which takes the keyboard to what an answer lacks.
+              if (answering) room.current.closest("form")?.requestSubmit();
+              else submitPromptInput(room.current);
+            }}
+            onPasteFiles={(files) => {
+              // Only images are taken from the clipboard; text pastes as it always does.
+              const pasted = imageFiles(files);
+              if (pasted.length === 0) return false;
+              attach(pasted);
+              return true;
+            }}
+            quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
+          />
+          {/* The foot is the agent box's: the + at its left, the microphone and Send at its right, a dictation's strip in their place. */}
+          <PromptInputFooter className="inbox-answer-foot">
             {dictating ? (
               <DictationStrip dictation={dictation} />
             ) : (
-              <div className="inbox-answer-actions">
-                <DictateButton dictation={dictation} disabled={module === undefined} />
-                {nod ? (
-                  <Button
-                    type={BUTTON_TYPE.SUBMIT}
-                    variant={BUTTON_VARIANT.INK}
-                    busy={sending}
-                    busyLabel="Sending"
-                    disabled={held}
-                  >
-                    {GOT_IT}
-                  </Button>
-                ) : (
-                  <Tooltip label={SEND}>
-                    <PromptInputSubmit
-                      label={SEND}
-                      status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                      disabled={held || !sendable}
-                    />
-                  </Tooltip>
-                )}
-              </div>
+              <>
+                <PromptInputTools>
+                  <AttachFilesButton onFiles={attach} />
+                </PromptInputTools>
+                <div className="inbox-answer-actions">
+                  <DictateButton dictation={dictation} disabled={module === undefined} />
+                  {nod ? (
+                    <Button
+                      type={BUTTON_TYPE.SUBMIT}
+                      variant={BUTTON_VARIANT.INK}
+                      busy={sending}
+                      busyLabel="Sending"
+                      disabled={held}
+                    >
+                      {GOT_IT}
+                    </Button>
+                  ) : (
+                    <Tooltip label={SEND}>
+                      <PromptInputSubmit
+                        label={SEND}
+                        status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+                        disabled={held || !sendable}
+                      />
+                    </Tooltip>
+                  )}
+                </div>
+              </>
             )}
           </PromptInputFooter>
         </PromptInput>

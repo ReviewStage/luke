@@ -31,7 +31,6 @@ import {
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
-  codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -69,6 +68,7 @@ import {
   planTemplateRevisionParamsSchema,
   planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
+  providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
@@ -168,6 +168,7 @@ export type CodingAgentClient = Pick<
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
+  | "setProviderKeyForAgents"
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
@@ -188,7 +189,6 @@ export type CodingAgentClient = Pick<
   | "accountInbox"
   | "inboxAttachment"
   | "agentPicture"
-  | "chat"
   | "chatPost"
   | "chatJoin"
   | "workspaceChatLive"
@@ -432,6 +432,16 @@ function composed(
           "a removal names a provider",
         );
         const answer = yield* asked(client.removeProviderKey(removal));
+        return carried<ProviderKeysAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: (params) =>
+      Effect.gen(function* () {
+        const change = yield* read(
+          providerKeyForAgentsParamsSchema,
+          params,
+          "a default names a provider, a plan, and on or off",
+        );
+        const answer = yield* asked(client.setProviderKeyForAgents(change));
         return carried<ProviderKeysAnswerView>(answer);
       }),
     [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>
@@ -842,16 +852,6 @@ function composed(
         );
         const answer = yield* asked(client.markInboxRead(request));
         return carried<CodingAgentInboxReadAllView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_CHAT]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, after } = yield* read(
-          codingAgentChatParamsSchema,
-          params,
-          "reading a workspace's chat names the workspace and a cursor",
-        );
-        const answer = yield* asked(client.chat(workspaceId, after));
-        return carried<CodingAgentChatAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_POST]: (params) =>
       Effect.gen(function* () {

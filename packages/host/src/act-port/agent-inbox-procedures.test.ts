@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
-import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChatChanged,
@@ -97,7 +97,6 @@ const REFUSAL = {
     "Could not read the inbox item's image on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE]:
     "Could not read the agent's picture on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT]: "Could not read the workspace's chat on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST]:
     "Could not write to the workspace's chat on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT]:
@@ -156,11 +155,6 @@ const ACTS: readonly {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE,
     payload: { agentId: AGENT_ID, pictureId: PICTURE_ID },
     ask: "codingAgentPicture",
-  },
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT,
-    payload: { workspaceId: WORKSPACE_ID, after: CHAT_CURSOR_START },
-    ask: "codingAgentChat",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST,
@@ -375,20 +369,17 @@ it("a panel's read of an inbox image, an agent's or a worker's picture, or a cha
   ]);
 });
 
-it("a panel's chat read and write reach the host with the workspace, the cursor, and the write as sent, and hear the answer; a write naming two places is refused before the host", async () => {
+it("a panel's chat write reaches the host with the workspace and the write as sent, and hears the answer; a write naming two places is refused before the host", async () => {
   const { call, asked } = windowPort(PANEL, {
     answers: {
-      codingAgentChat: () => Effect.succeed(CHAT),
       codingAgentChatPost: () => Effect.succeed({ readSeq: 4 }),
     },
   });
-  const read = { workspaceId: WORKSPACE_ID, after: CHAT_CURSOR_START };
   const write = {
     workspaceId: WORKSPACE_ID,
     write: { text: "Morning, @agent-2.", to: "#general", clientKey: "send-1" },
   };
 
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT, read), { answer: CHAT });
   assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST, write), {
     answer: { readSeq: 4 },
   });
@@ -399,10 +390,7 @@ it("a panel's chat read and write reach the host with the workspace, the cursor,
     }),
     { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST] },
   );
-  assert.deepEqual(asked, [
-    ["codingAgentChat", read],
-    ["codingAgentChatPost", write],
-  ]);
+  assert.deepEqual(asked, [["codingAgentChatPost", write]]);
 });
 
 it("a host that dies, or answers what the kind cannot carry, is refused in the kind's own words", async () => {

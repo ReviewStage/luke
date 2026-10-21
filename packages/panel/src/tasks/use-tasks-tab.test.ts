@@ -2620,7 +2620,6 @@ test("a live run follows the listed workspace's chat only while the account has 
       "Chat on follows its chat",
     );
   });
-  assert.ok(!on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "nothing reads the held chat");
 });
 
 test("a channel chosen in Chat is the listed workspace's, so another workspace listed puts Chat back on For you", () => {

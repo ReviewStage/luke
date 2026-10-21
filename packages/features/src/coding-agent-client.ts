@@ -30,7 +30,6 @@ import {
   type CodingAgentCallFailure,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
@@ -62,6 +61,7 @@ import {
   type PlanTemplateRevisionsAnswerView,
   type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
+  type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -125,6 +125,7 @@ import {
   type ChatGptHostAnswer,
   chatGptCredentialsSaveRequestSchema,
   PROVIDER_KEY_QUERY,
+  providerKeyForAgentsRequestSchema,
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
 import {
@@ -547,6 +548,19 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
   }
 
+  /**
+   * A connected plan's default for the account's coding agents turned on or
+   * off, answering the keys as they then stand; a request the service would
+   * refuse by shape never travels.
+   */
+  setProviderKeyForAgents(
+    params: ProviderKeyForAgentsParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(providerKeyForAgentsRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.setProviderKeyForAgents, admitted), {});
+  }
+
   /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
   removeProviderKey(
     params: ProviderKeyRemoveParams,
@@ -934,17 +948,6 @@ export class HostedCodingAgentClient {
         this.#hosted.agentPullRequests.overviewConversation,
         pullRequestRead(agentId, number),
       ),
-      ROW_REFUSALS,
-    );
-  }
-
-  /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
-  chat(
-    workspaceId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentChatAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.messages.chat, { workspaceId, after }, HOSTED_DEADLINE.HELD),
       ROW_REFUSALS,
     );
   }

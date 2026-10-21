@@ -39,6 +39,7 @@ import {
   CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
+  type CodingAgentPayer,
   type CodingAgentStartFrom,
   type CodingAgentStartRequest,
   type CodingAgentSummary,
@@ -389,6 +390,8 @@ export type StartAsk = StartPlace & {
   readonly serverWords?: string | undefined;
   /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
   readonly branch?: string | undefined;
+  /** Who Start picked to pay for this one agent; none for the account's default (`agentRuntimeChoice`). */
+  readonly payer?: CodingAgentPayer | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -830,7 +833,8 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
  * chat starts blank, its first words are spoken, and a call reaches eve
  * alone (`voice/opening.ts` refuses an agent on any other runtime). Every
  * other Start is decided by the account's routing (`agentRuntimeChoice`),
- * with its payer, after the blank case.
+ * with its payer, after the blank case: the payer the ask picked where it
+ * picked one, the account's default otherwise, a continue and a fork alike.
  */
 function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
   if (ask.blank === true) {
@@ -839,7 +843,7 @@ function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
       payer: undefined,
     });
   }
-  return agentRuntimeChoice(userId, model);
+  return agentRuntimeChoice(userId, model, ask.payer);
 }
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
@@ -1102,6 +1106,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     from: request.from,
     note: note === "" ? undefined : note,
     blank: request.blank,
+    payer: request.payer,
     summaryModel,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };

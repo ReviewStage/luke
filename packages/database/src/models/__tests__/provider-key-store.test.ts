@@ -17,6 +17,7 @@ import {
   removeProviderKey,
   resealProviderKey,
   saveProviderKey,
+  setProviderKeyForAgents,
   withProviderKeyLocked,
 } from "../provider-key-store.js";
 
@@ -206,6 +207,51 @@ it.layer(getTestDB())("the provider key store", (it) => {
         );
         assert.deepEqual(yield* listProviderKeyRows(owner, API_KEY), []);
         assert.deepEqual(yield* listProviderKeyRows(other, CHATGPT_OAUTH), []);
+      }),
+  );
+
+  it.effect(
+    "a plan connected pays for the account's agents by default; the default is turned for that account alone, kept across a replaced token, and back on once the plan is connected again",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const { ANTHROPIC } = PROVIDER_KEY_PROVIDER;
+        const { CLAUDE_SETUP_TOKEN } = PROVIDER_KEY_KIND;
+        const connect = (account: string, seal: string) =>
+          saveProviderKey(
+            account,
+            ANTHROPIC,
+            CLAUDE_SETUP_TOKEN,
+            sealed(seal),
+            "sk-ant-oat…",
+            null,
+            new Date(0),
+          );
+        const forAgents = (account: string) =>
+          Effect.map(listProviderKeyRows(account, CLAUDE_SETUP_TOKEN), (rows) =>
+            rows.map((row) => row.forAgents),
+          );
+        yield* connect(owner, "first");
+        yield* connect(other, "theirs");
+        assert.deepEqual(yield* forAgents(owner), [true]);
+
+        assert.equal(
+          yield* setProviderKeyForAgents(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN, false),
+          true,
+        );
+        assert.deepEqual(yield* forAgents(owner), [false]);
+        assert.deepEqual(yield* forAgents(other), [true]);
+
+        yield* connect(owner, "replaced");
+        assert.deepEqual(yield* forAgents(owner), [false]);
+
+        yield* removeProviderKey(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN);
+        assert.equal(
+          yield* setProviderKeyForAgents(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN, false),
+          false,
+        );
+        yield* connect(owner, "again");
+        assert.deepEqual(yield* forAgents(owner), [true]);
       }),
   );
 

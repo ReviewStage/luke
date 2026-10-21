@@ -61,6 +61,7 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type ChatNoticeMetadata,
@@ -864,6 +865,11 @@ function baseIdOf(id: string): string | undefined {
   return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
 }
 
+/** Whether a catalog id names a model's fast version. */
+export function isFastModelId(id: string): boolean {
+  return baseIdOf(id) !== undefined;
+}
+
 /**
  * The catalog folded to its base models, each with its fast version, in the
  * menus' order. The signal is the id: a model whose id is another offered
@@ -1586,6 +1592,75 @@ export function placedMessages(messages: readonly CodingAgentMessage[]): readonl
     const journal = message.arrivedIn?.journalId;
     if (journal !== undefined && journals.has(journal)) return [];
     return [{ message, arrived: arrived.get(message.id) ?? [] }];
+  });
+}
+
+/**
+ * What a line the voice said on a call into the agent names of the turn it
+ * read aloud: the turn's journal, by its message id (`read_from`), which the
+ * service writes on a reply said within moments of the turn settling.
+ */
+const ReadAloudSchema = Schema.Struct({
+  author: Schema.Literal(MESSAGE_AUTHOR.VOICE_MODEL),
+  channel: Schema.Literal(MESSAGE_CHANNEL.VOICE),
+  read_from: Schema.String,
+});
+
+const readAloud = Schema.decodeUnknownOption(ReadAloudSchema);
+
+/** The journal of the turn a line the voice said read aloud; none for any other row. */
+function readFromOf(message: CodingAgentMessage): string | undefined {
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+  return Option.getOrUndefined(Option.map(readAloud(message.metadata), (said) => said.read_from));
+}
+
+/** A row the voice read nothing aloud of. */
+const NOTHING_SAID: readonly CodingAgentMessage[] = [];
+
+/** One of a transcript's rows as the tab draws it, with what the voice said of it on a call. */
+export interface SpokenMessage extends PlacedMessage {
+  /** The lines the voice said on a call reading this turn aloud, in the order the transcript holds them, which the tab draws ahead of the turn, its work folded behind them; none on any other row. */
+  readonly said: readonly CodingAgentMessage[];
+}
+
+/**
+ * A transcript's rows with each line the voice said reading a turn aloud
+ * moved to that turn, so on a call the tab reads as a conversation: what
+ * was said, then the work behind it folded under it, rather than the
+ * turn's own answer and then the voice saying it again. The lines said or
+ * typed on the call that reached such a turn while it ran are drawn ahead
+ * of what the voice said, each a row of its own, since the voice answered
+ * them too, so no question stands under its answer; any other line that
+ * reached it, as GitHub's, stays where it arrived among the turn's work. A line whose turn is not among the
+ * rows, and a line the service names no turn for, stand where the order
+ * puts them, so a transcript with no call reads as it did.
+ */
+export function spokenMessages(placed: readonly PlacedMessage[]): readonly SpokenMessage[] {
+  const turns = new Set(
+    placed.flatMap(({ message }) =>
+      message.role === MESSAGE_ROLE.ASSISTANT && readFromOf(message) === undefined
+        ? [message.id]
+        : [],
+    ),
+  );
+  const said = new Map<string, CodingAgentMessage[]>();
+  for (const { message } of placed) {
+    const turn = readFromOf(message);
+    if (turn === undefined || !turns.has(turn)) continue;
+    said.set(turn, [...(said.get(turn) ?? []), message]);
+  }
+  return placed.flatMap((row) => {
+    const turn = readFromOf(row.message);
+    if (turn !== undefined && turns.has(turn)) return [];
+    const lines = said.get(row.message.id);
+    if (lines === undefined) return [{ ...row, said: NOTHING_SAID }];
+    // Note that only a line said or typed on a call is lifted, because a line from anywhere else, as GitHub's, is no ask the voice answered.
+    const asked = row.arrived.filter((line) => callOfLine(line) !== undefined);
+    const kept = row.arrived.filter((line) => !asked.includes(line));
+    return [
+      ...asked.map((line) => ({ message: line, arrived: NOTHING_SAID, said: NOTHING_SAID })),
+      { message: row.message, arrived: kept, said: lines },
+    ];
   });
 }
 

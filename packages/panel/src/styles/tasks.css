@@ -1128,21 +1128,28 @@
 
 /* A divider across a log (../ai-elements/checkpoint.tsx): its words at the
    left in the muted ink, a hairline running on from them, and what the
-   caller puts at the right, stuck to the log's top on the well's own ground
-   so nothing shows through. A standing call's "Live" stands at the right in
-   the developer's colour beside the voice mark (../tasks/call-card.tsx). */
+   caller puts at the right, on no ground of its own, so in an agent's
+   transcript a call's divider is the plain rule the transcript's other
+   lines are drawn on. A standing call's "Live" stands at the right in the
+   developer's colour beside the voice mark (../tasks/call-card.tsx). */
 .checkpoint {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-12) 0 var(--luke-space-8);
-  background: var(--luke-color-well);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
+}
+
+/* In the Code tab's feed, a divider sticks to the log's top as its cards
+   scroll under it, on the well's own ground, which is the feed's, so
+   nothing shows through. */
+.checkpoint-log .checkpoint {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--luke-color-well);
 }
 
 .checkpoint-rule {
@@ -5714,54 +5721,15 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   }
 }
 
-/* The Inbox's answer box draws the same card and field
-   (`inbox-answer-box.tsx`), but its foot is one row and its field is in it:
-   the +, the note line, one line that grows as it is written, the
-   microphone, and Send, each press standing at the line's last row. While
-   a dictation holds the line, its strip stands under it in the presses'
-   place. */
-.inbox-answer-foot {
-  align-items: flex-end;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-6) var(--luke-space-8) var(--luke-space-8);
-}
-
-.inbox-answer-foot[data-dictating] {
-  flex-wrap: wrap;
-}
-
-.inbox-answer-tools,
+/* The Inbox's answer box draws the same card, field, and foot
+   (`inbox-answer-box.tsx`): the note line on its own over the foot, the +
+   at the foot's left, and the microphone and Send at its right, which
+   never give way, since nothing else stands in the row. */
 .inbox-answer-actions {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--luke-space-4);
-}
-
-.inbox-answer-foot > .agent-composer-field {
-  flex: 1;
-  min-width: 0;
-  --agent-composer-field-block: calc(2 * var(--luke-space-6));
-}
-
-.inbox-answer-foot[data-dictating] > .agent-composer-field {
-  flex-basis: 100%;
-}
-
-.inbox-answer-foot .agent-composer-input {
-  padding: var(--luke-space-6) var(--luke-space-4);
-}
-
-.inbox-answer-foot .agent-composer-placeholder {
-  padding: var(--luke-space-6) var(--luke-space-4) 0;
-}
-
-/* Only on the narrowest card does the microphone go, so the line keeps its
-   room beside the + and Send. */
-@container composer (max-width: 239px) {
-  .inbox-answer .dictate-button {
-    display: none;
-  }
 }
 
 /* A dictation standing in place of the card's foot: the voice's bars

@@ -10,11 +10,13 @@ import type { ReactNode } from "react";
  * whatever the caller puts at the right, because what it marks in Luke is
  * the start of one call or one turn, which nothing restores to. The words
  * are the caller's: the call's day and time, and whether it stands now or
- * how far it got. It sticks to the top of the log as the lines under it
- * scroll, on the well's own ground so nothing shows through, which is why
- * a log that holds one has no top padding of its own. The log
- * (`.checkpoint-log` in planning.css) holds it at one height, which its
- * fade starts beneath. Its look is `.checkpoint`'s (tasks.css).
+ * how far it got. It has no ground of its own, so in an agent's
+ * transcript it is a plain rule among the lines. In the Code tab's feed
+ * (`.checkpoint-log` in tasks.css) it sticks to the top of the log as the
+ * cards under it scroll, on the well's own ground so nothing shows
+ * through, which is why that log has no top padding of its own, and is
+ * held at one height, which its fade starts beneath. Its look is
+ * `.checkpoint`'s (tasks.css).
  */
 
 export interface CheckpointProps {

@@ -44,6 +44,7 @@ import {
 } from "./plan-document-template.js";
 import {
   PROVIDER_KEY_PROVIDER,
+  providerKeyForAgentsRequestSchema,
   providerKeyKindSchema,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
@@ -182,6 +183,11 @@ export const providerKeyRemoveParamsSchema = EffectSchema.Struct({
 });
 
 export type ProviderKeyRemoveParams = typeof providerKeyRemoveParamsSchema.Type;
+
+/** Turning a plan's default for the account's coding agents, as the window asks it: the provider, the plan's kind, and on or off. */
+export const providerKeyForAgentsParamsSchema = providerKeyForAgentsRequestSchema;
+
+export type ProviderKeyForAgentsParams = typeof providerKeyForAgentsParamsSchema.Type;
 
 /** The member's own GitHub token, as the window hears it read, saved, or removed: what it is, or why there is no answer. */
 export const githubTokenAnswerViewSchema = EffectSchema.Union([githubTokenAnswerSchema, failed]);
@@ -690,16 +696,8 @@ export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
 
 export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;
 
-/** A workspace's chat past a cursor, as the window asks it: the workspace, and the cursor the service last handed back or the start. */
-export const codingAgentChatParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentChatParams = typeof codingAgentChatParamsSchema.Type;
-
 /** A workspace's chat past a cursor, as the window hears it: the roster, the channels, the messages past it, and the cursor to read on from, or why there is none. */
-export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
+const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
 
 export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
 
