@@ -308,23 +308,23 @@ function fakeService() {
         cursor = "2:1";
         return page ?? { ...SAID, cursor, holds: false };
       }),
-    messagesNewest: (agentId, callId) =>
+    messagesNewest: (agentId, callId, cut) =>
       Effect.sync(() => {
         asked.push(
-          callId === undefined
+          (callId === undefined
             ? `messages-newest:${agentId}`
-            : `worker-newest:${agentId}:${callId}`,
+            : `worker-newest:${agentId}:${callId}`) + (cut === true ? ":cut" : ""),
         );
         // Note that the service answers an agent the account does not reach not found on every read alike.
         if (transcript !== undefined && "failure" in transcript) return transcript;
         return newestPage ?? { ...SAID, cursor: "1:0" };
       }),
-    messagesBefore: (agentId, before, callId) =>
+    messagesBefore: (agentId, before, callId, cut) =>
       Effect.sync(() => {
         asked.push(
-          callId === undefined
+          (callId === undefined
             ? `messages-before:${agentId}:${before}`
-            : `worker-before:${agentId}:${callId}:${before}`,
+            : `worker-before:${agentId}:${callId}:${before}`) + (cut === true ? ":cut" : ""),
         );
         return { messages: SAID.messages, before: "3" };
       }),
@@ -1309,7 +1309,7 @@ it.effect(
         { transcript: FOLLOWED, page: { ...newest, newest: true, caughtUp: false } },
       ]);
       assert.deepEqual(asked.toSorted(), [
-        `messages-newest:${AGENT_ID}`,
+        `messages-newest:${AGENT_ID}:cut`,
         `transcript-live:${AGENT_ID}`,
       ]);
 
@@ -1319,7 +1319,7 @@ it.effect(
       assert.deepEqual(pages()[1], { transcript: FOLLOWED, page: windowPage(between) });
       assert.equal(caughtUpOf(pages()[1]), true);
       const reads = asked.filter((ask) => ask.startsWith("messages-"));
-      assert.deepEqual(reads, [`messages-newest:${AGENT_ID}`, `messages-now:${AGENT_ID}:1:0`]);
+      assert.deepEqual(reads, [`messages-newest:${AGENT_ID}:cut`, `messages-now:${AGENT_ID}:1:0`]);
 
       // Note that a short page is caught up, so nothing is read again until the clock reaches the edge the service named.
       yield* TestClock.adjust("2 seconds");
@@ -1406,7 +1406,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
-      assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}`).length, 2);
+      assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length, 2);
     }),
 );
 
@@ -1421,7 +1421,7 @@ it.effect(
       yield* settled;
       yield* TestClock.adjust("1 minute");
       yield* settled;
-      const newest = () => asked.filter((ask) => ask === `messages-newest:${AGENT_ID}`).length;
+      const newest = () => asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length;
       const read = newest();
       assert.ok(read > 1 && read < 60, `read the newest page ${read} times`);
       assert.deepEqual(pages().at(-1), {
@@ -1452,8 +1452,8 @@ it.effect("an older page is read below the place the window names, the agent's o
     );
     assert.equal(refused._tag, "InvalidParamsRefusal");
     assert.deepEqual(asked, [
-      `messages-before:${AGENT_ID}:40`,
-      `worker-before:${AGENT_ID}:call-7:40`,
+      `messages-before:${AGENT_ID}:40:cut`,
+      `worker-before:${AGENT_ID}:call-7:40:cut`,
     ]);
   }),
 );
