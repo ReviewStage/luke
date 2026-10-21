@@ -143,9 +143,9 @@ function githubHolding(pull: PullRequestOnGitHub) {
   return { layer: reaching.layer, answered, sent: reaching.sent };
 }
 
-/** A member's agent on their own token, on a branch of its own with an open pull request numbered for the test, its session opened, its last turn run over the window given; in the repository given, the relay's where none is. */
+/** A member's agent on their own token, on a branch of its own with an open pull request numbered for the test, its session opened, its last turn run over the window given, or still running where it has no end; in the repository given, the relay's where none is. */
 const openTokenAgent = (
-  turn: { readonly startedAt: number; readonly settledAt: number },
+  turn: { readonly startedAt: number; readonly settledAt?: number },
   repository: string | null = RELAY_FULL_NAME,
 ) =>
   Effect.gen(function* () {
@@ -188,10 +188,10 @@ const openTokenAgent = (
       userId: owner,
       conversationId: agent.conversationId,
       origin: TURN_ORIGIN.TYPED,
-      status: TURN_STATUS.SETTLED,
+      status: turn.settledAt === undefined ? TURN_STATUS.RUNNING : TURN_STATUS.SETTLED,
       queuedAt: new Date(turn.startedAt),
       startedAt: new Date(turn.startedAt),
-      settledAt: new Date(turn.settledAt),
+      settledAt: turn.settledAt === undefined ? null : new Date(turn.settledAt),
     });
     const pull: PullRequestOnGitHub = {
       number,
@@ -352,6 +352,41 @@ it.layer(getTestDB())("the poll of a token agent's pull request", (it) => {
       assert.ok(texts[0]?.startsWith(`A check failed on your branch \`${pull.ref}\``));
       assert.ok(texts[0]?.includes(`/commit/${HEAD}/checks`));
     }),
+  );
+
+  it.effect(
+    "every check on the head finished ends the wait of the agent at work once, and checks still running end none",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { pull } = yield* openTokenAgent({ startedAt: MADE_AT - 10 * MINUTE });
+        const github = githubHolding(pull);
+        pull.checkRuns = [
+          {
+            status: "completed",
+            conclusion: "success",
+            completed_at: new Date(MADE_AT).toISOString(),
+            app: { slug: "github-actions" },
+          },
+          { status: "in_progress", conclusion: null, completed_at: null },
+        ];
+
+        yield* sweepAt(MADE_AT + MINUTE, github, eve);
+        const whileRunning = eve.sent.length;
+        pull.checkRuns = pull.checkRuns.map(() => ({
+          status: "completed",
+          conclusion: "success",
+          completed_at: new Date(MADE_AT + MINUTE).toISOString(),
+        }));
+        yield* sweepAt(MADE_AT + 2 * MINUTE, github, eve);
+        yield* sweepAt(MADE_AT + 3 * MINUTE, github, eve);
+
+        const texts = eve.sent.map((sent) => sentText(sent.message));
+        assert.equal(whileRunning, 0);
+        assert.equal(texts.length, 1);
+        assert.ok(texts[0]?.startsWith("Every check finished on `0123abc`"));
+        assert.ok(texts[0]?.endsWith("None failed."));
+      }),
   );
 
   it.effect("a token GitHub refuses is marked invalid, and its agent is polled no further", () =>

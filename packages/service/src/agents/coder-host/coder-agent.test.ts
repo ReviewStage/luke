@@ -313,7 +313,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
       false,
       CODER_HARNESS.CLAUDE_CODE,
     );
-    assert.ok(watching.includes("run_in_background") && watching.includes("Monitor"), brief);
+    assert.ok(watching.includes("wait with ScheduleWakeup"), brief);
   }
 });
 
@@ -582,10 +582,27 @@ test("an agent on its starter's own token reads its checks and its pull request 
   }
 });
 
-test("an agent whose credential reads its checks waits on them with sleep, which it is offered and its read-only worker is not", () => {
+test("an agent whose credential reads its checks waits on them with sleep until GitHub tells it they finished, never on a watch of CI, which it is offered and its read-only worker is not", () => {
   const WAIT = `wait with \`${CODER_TOOL.SLEEP}\``;
+  const TOLD = "GitHub tells you so in a message, which ends the wait early";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    assert.ok(coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS).includes(WAIT), brief);
+    for (const memberToken of [false, true]) {
+      const reads = coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        TASK_ADDRESS,
+        undefined,
+        false,
+        null,
+        memberToken,
+      );
+      assert.ok(reads.includes(WAIT) && reads.includes(TOLD), brief);
+      assert.ok(
+        !reads.includes("--fail-fast") && reads.includes("command that waits on CI"),
+        brief,
+      );
+    }
     assert.ok(!coderInstructions("Acme/Relay", brief, false, TASK_ADDRESS).includes(WAIT), brief);
   }
   assert.deepEqual(

@@ -104,7 +104,24 @@ const CHECKS_STOP =
   "Stop as soon as every check passes, or where the repository runs no checks; GitHub registers checks a moment after a push, so where none are reported yet, wait a little and ask once more before you take it as running none. Say plainly in your final message when you stopped with a check still failing. Watching the checks never marks the pull request ready, merges it, or closes it.";
 
 /**
- * What the agent does about its pull request's checks: watches them and
+ * How the agent waits on its pull request's checks, whichever way it reads
+ * them: never on a command that watches CI, which holds its sandbox up for
+ * the whole run, but in a pause that GitHub's message saying every check on
+ * its head finished ends (`github/agent-wakes.ts`), read once after.
+ */
+const CHECKS_WAIT = {
+  /** Never on a watch, which a pause cannot end: by `gh pr`, or, where the agent reads its checks over REST alone, by anything. */
+  NEVER_WATCH: "never run `gh pr checks --watch` or any other command that waits on CI",
+  NEVER_WAIT: "never run a command that waits on CI",
+  /** What ends Claude Code's wait: GitHub's message, which its CLI takes as its next turn, or the wakeup. */
+  TOLD_AS_TURN:
+    "Once every check on the commit you pushed has finished, GitHub tells you so in a message, which comes to you as your next turn without waiting on the wakeup; where that message has already come, do not wait.",
+  /** What ends the wait: GitHub's message, or the wait running out without it. */
+  TOLD: "Once every check on the commit you pushed has finished, GitHub tells you so in a message, which ends the wait early as any message does; where that message has already come, do not wait.",
+} as const;
+
+/**
+ * What the agent does about its pull request's checks: waits on them and
  * fixes what fails, for at most `CODER.CI_FIX_ROUNDS` rounds, where its
  * token reads them, with `gh pr`, or over GitHub's REST API alone where its
  * credential is its starter's own token, which the firewall sets on the
@@ -113,8 +130,8 @@ const CHECKS_STOP =
  * read (`github-app.ts`'s `CI_READ_PERMISSIONS`).
  */
 const CHECKS_WORDS = {
-  readable: `After you push and open or update a pull request, watch its checks with \`gh pr checks <number> --watch --fail-fast\`. \`bash\` keeps a command still running after a while in the background and answers "running" with how to check on it, so wait with \`${CODER_TOOL.SLEEP}\` for about as long as the checks usually take, then check on it, rather than checking every few seconds or polling in a loop of your own. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and watch again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
-  rest: `After you push and open or update a pull request, read its checks on the commit you pushed with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, waiting with \`${CODER_TOOL.SLEEP}\` for about as long as the checks usually take between reads rather than checking every few seconds. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and read again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+  readable: `After you push and open or update a pull request, wait on its checks rather than watching them, which keeps your sandbox up for the whole run: ${CHECKS_WAIT.NEVER_WATCH}, and wait with \`${CODER_TOOL.SLEEP}\` for the longest one wait may be. ${CHECKS_WAIT.TOLD} Then, or once a wait runs out without that message, read them once with \`gh pr checks <number>\`, and where some are still running, wait again. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+  rest: `After you push and open or update a pull request, wait on its checks rather than watching them, which keeps your sandbox up for the whole run: ${CHECKS_WAIT.NEVER_WAIT}, and wait with \`${CODER_TOOL.SLEEP}\` for the longest one wait may be. ${CHECKS_WAIT.TOLD} Then, or once a wait runs out without that message, read its checks on the commit you pushed once with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, and where some are still running, wait again. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
   unreadable:
     "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
 } as const;
@@ -208,8 +225,8 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     todos:
       "For work of more than a couple of steps, keep your to-dos with TodoWrite, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
     checks: {
-      readable: `After you push and open or update a pull request, watch its checks with \`gh pr checks <number> --watch --fail-fast\`, run with Bash in the background (\`run_in_background\`), and wait on it with Monitor, or with ScheduleWakeup for about as long as the checks usually take, rather than checking every few seconds or polling in a loop of your own. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and watch again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
-      rest: `After you push and open or update a pull request, read its checks on the commit you pushed with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, waiting with ScheduleWakeup for about as long as the checks usually take between reads rather than checking every few seconds. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and read again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+      readable: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WATCH}, and wait with ScheduleWakeup for about as long as the checks usually take. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read them once with \`gh pr checks <number>\`, and where some are still running, wait again. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+      rest: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WAIT}, and wait with ScheduleWakeup for about as long as the checks usually take. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read its checks on the commit you pushed once with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, and where some are still running, wait again. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
     },
     worker: () =>
       "Claude Code's Agent tool hands a scoped task to a subagent, which runs on a Claude model and answers you once it is done; several run at once. Hand it broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A subagent knows only what its task says, and the developer reads it too, so write the task as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",

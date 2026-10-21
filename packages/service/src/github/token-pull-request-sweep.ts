@@ -17,7 +17,9 @@
  * request read again onto the agent's row (`agentPublished`), and each new
  * review, comment, and failed check told to the agent (`wakeAgents`) under a
  * key of its own in place of a delivery's id, so a poll that reads it again
- * tells it once. The agent writes on GitHub as its member, so a review or a
+ * tells it once; and where the head's check runs or statuses moved, that
+ * its checks may all have finished, which `wakeAgents` tells the agent at
+ * work only where GitHub says they did, as a check delivery is told. The agent writes on GitHub as its member, so a review or a
  * comment by the member's login is told only where the agent was not at work
  * when it was made, as one by the App's login is on the webhook path. A 401
  * marks the member's token invalid, which leaves the agent unpolled until a
@@ -92,6 +94,7 @@ const WAKE_KEY = {
   COMMENT: "comment",
   CHECK: "check",
   STATUS: "status",
+  CHECKS_MOVED: "checks-moved",
 } as const;
 
 /** A review its author has not submitted, which no one else sees. */
@@ -99,6 +102,9 @@ const PENDING_REVIEW = "PENDING";
 
 /** Who GitHub names for an account since deleted. */
 const GHOST = "ghost";
+
+/** Who a head's checks finishing is drawn by, where no one check is its cause: GitHub, as the webhook path names a check whose App it does not know. */
+const GITHUB_BOT = "github[bot]";
 
 /** GitHub refused the member's token. */
 class TokenRefused extends Data.TaggedError("TokenRefused") {}
@@ -273,19 +279,26 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
   sha: string,
   kept: { readonly etag: string | undefined; readonly conclusion: string | null },
 ): Effect.fn.Return<
-  { readonly etag: string | undefined; readonly conclusion: string | null; readonly told: number },
+  {
+    readonly etag: string | undefined;
+    readonly conclusion: string | null;
+    readonly told: number;
+    readonly changed: boolean;
+  },
   PollFailure,
   PollServices
 > {
   const path = `${repositoryPath(poll.agent.repository)}/commits/${sha}/check-runs`;
   const changed = yield* readIfChanged(poll, path, kept.etag, CheckRunsSchema, FIRST_HUNDRED);
-  if (Option.isNone(changed)) return { ...kept, told: 0 };
+  if (Option.isNone(changed)) return { ...kept, told: 0, changed: false };
   const failed = changed.value.body.check_runs.find(
     (run) => run.status === GITHUB_CHECK.COMPLETED && FAILED_CONCLUSIONS.has(run.conclusion ?? ""),
   );
   const conclusion = failed?.conclusion ?? null;
   const etag = changed.value.etag;
-  if (failed === undefined || conclusion === kept.conclusion) return { etag, conclusion, told: 0 };
+  if (failed === undefined || conclusion === kept.conclusion) {
+    return { etag, conclusion, told: 0, changed: true };
+  }
   const told = yield* tell(
     poll,
     {
@@ -296,7 +309,7 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
     },
     wakeKey(WAKE_KEY.CHECK, sha, failed.conclusion ?? ""),
   );
-  return { etag, conclusion, told };
+  return { etag, conclusion, told, changed: true };
 });
 
 /** The head's commit statuses, read where they changed, each failed one told; answers the ETag and how many agents were told. */
@@ -305,13 +318,13 @@ const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
   sha: string,
   etag: string | undefined,
 ): Effect.fn.Return<
-  { readonly etag: string | undefined; readonly told: number },
+  { readonly etag: string | undefined; readonly told: number; readonly changed: boolean },
   PollFailure,
   PollServices
 > {
   const path = `${repositoryPath(poll.agent.repository)}/commits/${sha}/status`;
   const changed = yield* readIfChanged(poll, path, etag, StatusSchema, FIRST_HUNDRED);
-  if (Option.isNone(changed)) return { etag, told: 0 };
+  if (Option.isNone(changed)) return { etag, told: 0, changed: false };
   const failed = changed.value.body.statuses.filter((status) => FAILED_STATES.has(status.state));
   const counts = yield* Effect.forEach(failed, (status) =>
     tell(
@@ -325,8 +338,31 @@ const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
       wakeKey(WAKE_KEY.STATUS, sha, status.context, status.state),
     ),
   );
-  return { etag: changed.value.etag, told: counts.reduce((sum, count) => sum + count, 0) };
+  return {
+    etag: changed.value.etag,
+    told: counts.reduce((sum, count) => sum + count, 0),
+    changed: true,
+  };
 });
+
+/**
+ * That the head's checks may all have finished, where its check runs or
+ * statuses moved since the last poll, told as a check delivery is: to the
+ * agent at work, only where GitHub says every one finished (`wakeAgents`).
+ */
+function tellChecksMoved(poll: Poll, sha: string) {
+  return tell(
+    poll,
+    {
+      kind: AGENT_WAKE.CHECKS_COMPLETED,
+      url: checksUrl(poll, sha),
+      by: GITHUB_BOT,
+      at: poll.now,
+      sha,
+    },
+    wakeKey(WAKE_KEY.CHECKS_MOVED, sha),
+  );
+}
 
 /** The pull request read again onto the agent's row, as a delivery about its branch reads it; a failure is logged by its kind and the poll goes on. */
 function republish(poll: Poll) {
@@ -393,15 +429,19 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
   const sameHead = headSha !== null && headSha === kept?.headSha;
   const checkRuns =
     headSha === null
-      ? { etag: undefined, conclusion: null, told: 0 }
+      ? { etag: undefined, conclusion: null, told: 0, changed: false }
       : yield* pollCheckRuns(poll, headSha, {
           etag: sameHead ? etags.checkRuns : undefined,
           conclusion: sameHead ? (kept?.checkConclusion ?? null) : null,
         });
   const statuses =
     headSha === null
-      ? { etag: undefined, told: 0 }
+      ? { etag: undefined, told: 0, changed: false }
       : yield* pollStatuses(poll, headSha, sameHead ? etags.statuses : undefined);
+  const checksMoved =
+    headSha !== null && (checkRuns.changed || statuses.changed)
+      ? yield* tellChecksMoved(poll, headSha)
+      : 0;
   yield* recordTokenPullRequestPoll(agent.id, number, {
     etags: {
       pullRequest: Option.isSome(pull) ? pull.value.etag : etags.pullRequest,
@@ -415,7 +455,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
     headSha,
     checkConclusion: checkRuns.conclusion,
   });
-  return reviews.told + comments.told + checkRuns.told + statuses.told;
+  return reviews.told + comments.told + checkRuns.told + statuses.told + checksMoved;
 });
 
 /**

@@ -17,6 +17,7 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { turns } from "@luke/database/schemas/storage";
 import { fakeWorkspaceSeams, getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -31,7 +32,7 @@ import {
   PULL_REQUEST_MOMENT,
 } from "@luke/features/automation-wire";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+import { TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@luke/wire";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
@@ -863,6 +864,53 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
               account: sent.headers.get(BRAIN_HOST_HEADER.ACCOUNT),
             })),
           [{ method: "POST", authorization: "Bearer eve-deployment-secret-1", account: owner }],
+        );
+      }),
+  );
+  it.effect(
+    "a check suite completing on the head of an agent at work reads its pull request again, then wakes the agent once every check on that head finished",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.sync(() => vi.stubEnv(BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
+        const pull = { state: "open", merged: false, conclusion: "success" } as const;
+        const { github, ref, owner, agent } = yield* openAgent({ ...pull });
+        const now = yield* DateTime.nowAsDate;
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          `wrun_${randomUUID()}`,
+          now,
+        );
+        yield* Database.use((db) =>
+          db.insert(turns).values({
+            userId: owner,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.RUNNING,
+            queuedAt: now,
+            startedAt: now,
+          }),
+        );
+        const suite = {
+          action: "completed",
+          repository: { ...repository, html_url: `https://github.com/${RELAY_FULL_NAME}` },
+          check_suite: {
+            head_branch: ref,
+            head_sha: HEAD_SHA,
+            conclusion: "success",
+            updated_at: "2026-10-16T12:00:00Z",
+            app: { slug: "github-actions" },
+            pull_requests: [{ number: 41, head: { ref } }],
+          },
+        };
+
+        const answered = yield* answer(github, SECRET, delivery("check_suite", suite), {
+          eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
+        });
+
+        assert.deepEqual(answered, { status: 200, body: { read: 1, queued: 0, told: 1 } });
+        assert.equal(
+          github.sent.filter((sent) => new URL(sent.url).origin === EVE_ORIGIN).length,
+          1,
         );
       }),
   );
