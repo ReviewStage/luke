@@ -37,6 +37,7 @@ import {
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Tooltip } from "../tooltip.js";
+import { CloudBrowserCursor } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
   type CloudBrowserFrame,
@@ -64,7 +65,9 @@ import { CLOUD_BROWSER_AGENT_RECENT } from "./cloud-browser-tabs.js";
  * is sent as Control, since the page runs on Linux. What the page shows is
  * the agent's and its members', so the pane is left out of the screen
  * recording (`ph-no-capture`), whose canvas recording is off in any case,
- * and no frame, address, or title is kept past the drawn tab.
+ * and no frame, address, or title is kept past the drawn tab. The agent's
+ * pointer is drawn over the canvas, never in its frame, while the agent has
+ * the tab (`cloud-browser-cursor.tsx`).
  */
 
 /** The most characters one text message carries; a longer paste goes in pieces. */
@@ -315,6 +318,7 @@ export function CloudBrowserPane({
   const notice = noticeOf(view);
   const standing = standingOf({ view, tab, owner, memberName });
   const address = view.page?.address ?? tab.address;
+  const driven = (view.driver?.driver ?? tab.driver) !== null;
   return (
     <section
       className="browser-view cloud-browser-view file-view ph-no-capture"
@@ -371,26 +375,34 @@ export function CloudBrowserPane({
         </Text>
       ) : null}
       <div ref={body} className="browser-view-body cloud-browser-body">
-        <canvas
-          ref={canvas}
-          className="cloud-browser-canvas"
-          aria-label="The page"
-          data-driving={yours ? "" : undefined}
-          tabIndex={yours ? 0 : -1}
-          width={Math.round(size.width * (window.devicePixelRatio || 1))}
-          height={Math.round(size.height * (window.devicePixelRatio || 1))}
-          style={{ width: size.width, height: size.height }}
-          onMouseDown={mouse(BROWSER_LIVE_MOUSE_ACTION.DOWN)}
-          onMouseUp={mouse(BROWSER_LIVE_MOUSE_ACTION.UP)}
-          onMouseMove={mouse(BROWSER_LIVE_MOUSE_ACTION.MOVE)}
-          onContextMenu={(event) => {
-            if (yours) event.preventDefault();
-          }}
-          onWheel={wheel}
-          onKeyDown={key(BROWSER_LIVE_KEY_ACTION.DOWN)}
-          onKeyUp={key(BROWSER_LIVE_KEY_ACTION.UP)}
-          onPaste={paste}
-        />
+        <div className="cloud-browser-stage" style={{ width: size.width, height: size.height }}>
+          <canvas
+            ref={canvas}
+            className="cloud-browser-canvas"
+            aria-label="The page"
+            data-driving={yours ? "" : undefined}
+            tabIndex={yours ? 0 : -1}
+            width={Math.round(size.width * (window.devicePixelRatio || 1))}
+            height={Math.round(size.height * (window.devicePixelRatio || 1))}
+            style={{ width: size.width, height: size.height }}
+            onMouseDown={mouse(BROWSER_LIVE_MOUSE_ACTION.DOWN)}
+            onMouseUp={mouse(BROWSER_LIVE_MOUSE_ACTION.UP)}
+            onMouseMove={mouse(BROWSER_LIVE_MOUSE_ACTION.MOVE)}
+            onContextMenu={(event) => {
+              if (yours) event.preventDefault();
+            }}
+            onWheel={wheel}
+            onKeyDown={key(BROWSER_LIVE_KEY_ACTION.DOWN)}
+            onKeyUp={key(BROWSER_LIVE_KEY_ACTION.UP)}
+            onPaste={paste}
+          />
+          <CloudBrowserCursor
+            cursor={tab.cursor}
+            lastActedAt={tab.lastActedAt}
+            frame={size}
+            hidden={driven || notice !== undefined}
+          />
+        </div>
         {notice === undefined ? null : (
           <div className="cloud-browser-notice" role="status">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>

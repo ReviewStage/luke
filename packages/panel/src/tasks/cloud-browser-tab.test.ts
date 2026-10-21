@@ -137,15 +137,18 @@ test("the task's cloud Browser tabs are read once and then followed live, the ag
   const panel = draw(createElement(Probe, { listing: false }));
   await settle();
   assert.deepEqual(read, []);
-  assert.deepEqual(asked, []);
+  assert.deepEqual([...asked], []);
 
   panel.rerender(createElement(Probe, { listing: true }));
   await settle();
   assert.deepEqual(read, [LISTED]);
-  assert.deepEqual(asked, [
-    { kind: ACT_KIND.TASKS_BROWSER_TABS, payload: { taskId: TASK } },
-    { kind: ACT_KIND.TASKS_BROWSER_TABS_FOLLOW, payload: { taskId: TASK } },
-  ]);
+  assert.deepEqual(
+    [...asked],
+    [
+      { kind: ACT_KIND.TASKS_BROWSER_TABS, payload: { taskId: TASK } },
+      { kind: ACT_KIND.TASKS_BROWSER_TABS_FOLLOW, payload: { taskId: TASK } },
+    ],
+  );
 
   const pointed: AgentBrowserTab = {
     ...LISTED,
