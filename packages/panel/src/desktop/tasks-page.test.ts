@@ -613,6 +613,7 @@ test("a row dragged into a section is kept there, and one dragged out of its sec
   sections = {
     sections: [{ id: LAUNCH, workspaceId: ACME.id, title: "Launch week", createdAt: 1 }],
     entries: [{ taskId: "t-42", sectionId: LAUNCH, addedAt: 1 }],
+    agentEntries: [],
   };
   const page = await mountPage();
   layRowsOut(page);
@@ -664,6 +665,7 @@ test("a row dragged out of its section onto a status the service refuses stays i
   sections = {
     sections: [{ id: LAUNCH, workspaceId: ACME.id, title: "Launch week", createdAt: 1 }],
     entries: [{ taskId: "t-42", sectionId: LAUNCH, addedAt: 1 }],
+    agentEntries: [],
   };
   keeps = false;
   const page = await mountPage();
@@ -687,6 +689,7 @@ test("a section holding no task stands in the List, empty, and a row dragged int
   sections = {
     sections: [{ id: LATER, workspaceId: ACME.id, title: "Later", createdAt: 1 }],
     entries: [],
+    agentEntries: [],
   };
   const page = await mountPage();
   layRowsOut(page);
@@ -709,6 +712,7 @@ test("a view that leaves no task standing says so, though an empty section still
       },
     ],
     entries: [],
+    agentEntries: [],
   };
   window.localStorage.setItem(
     "luke.tasksFilter",
