@@ -97,3 +97,57 @@ test("the picture is drawn whole, and a blurred copy fills the tile under it", (
     );
   }
 });
+
+/** An agent's tab's call row: its captions, then its tile, as `agent-call.tsx` draws them. */
+function callRow() {
+  laid = layContainersAt({});
+  document.documentElement.dataset.lukeProfile = "desktop";
+  const row = document.body
+    .appendChild(document.createElement("div"))
+    .appendChild(document.createElement("div"));
+  row.parentElement?.classList.add("agent-call-foot");
+  row.className = "agent-call-float";
+  const caption = row.appendChild(document.createElement("div"));
+  caption.className = "voice-caption";
+  const { tile } = liveTile(row);
+  return { row, caption, tile };
+}
+
+test("an agent's tab's tile is small, square, and as wide as the developer left it, never wider than its row", () => {
+  const { tile } = callRow();
+  const drawn = getComputedStyle(tile);
+  assert.equal(drawn.aspectRatio, "1 / 1");
+  assert.equal(drawn.width, "min(var(--call-tile-width), 100%)");
+  assert.equal(drawn.maxHeight, "none");
+});
+
+test("an agent's tab's captions stand beside its tile while the row has room for a readable line, and wrap onto a line of their own over it where it has not", () => {
+  const { row, caption } = callRow();
+  assert.equal(getComputedStyle(row).flexWrap, "wrap");
+  const drawn = getComputedStyle(caption);
+  assert.equal(drawn.position, "relative", "in the row's flow, not over the window");
+  assert.equal(drawn.flexBasis, "var(--caption-width-min)");
+  assert.equal(drawn.maxWidth, "var(--caption-width-max)");
+});
+
+test("a clip still being read beside a call's controls wraps them onto a line of their own where the card is too narrow for both", () => {
+  laid = layContainersAt({});
+  const foot = document.body.appendChild(document.createElement("div"));
+  foot.className = "prompt-input-footer";
+  const strip = foot.appendChild(document.createElement("div"));
+  strip.className = "dictation-strip";
+  const controls = foot.appendChild(document.createElement("fieldset"));
+  controls.className = "agent-call-controls";
+  assert.equal(getComputedStyle(foot).flexWrap, "wrap");
+  assert.equal(
+    getComputedStyle(strip).flexBasis,
+    "160px",
+    "the strip keeps room for its word and Cancel",
+  );
+  controls.remove();
+  assert.equal(
+    getComputedStyle(foot).flexWrap,
+    "nowrap",
+    "a dictation off a call keeps its one row",
+  );
+});

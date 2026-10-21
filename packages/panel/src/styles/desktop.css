@@ -127,6 +127,8 @@ body,
      width they are drawn at over it: no wider than the call bar draws them. */
   --work-left: var(--sidebar-width);
   --caption-width-max: 560px;
+  /* The narrowest the captions stand beside a call's video tile before they take a line of their own over it. */
+  --caption-width-min: 240px;
   --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
   /* The stage stands over what is seen of the window: from where a phone
@@ -2273,40 +2275,98 @@ ul.actor-stack {
 
 /* The call bar ------------------------------------------------------------- */
 
-/* A call into an agent stands at its tab's foot, over its composer: the
-   avatar's video, the captions, and the call bar, which answers the tab's
-   width, so a narrow tab stacks the bar's status over its controls. */
+/* A call into an agent floats over the foot of its tab's transcript, above
+   the composer that holds the call's controls: one row taking none of the
+   tab's height, so the transcript never moves as the call or its video
+   comes and goes. The captions stand in the room at the row's left, centred
+   there, and Luke's video tile at its right, so the two never meet. The row
+   takes no pointer but what it draws, so the transcript under it scrolls. */
 .agent-call-foot {
-  container: plan-call-bar / inline-size;
   position: relative;
+  height: 0;
+}
+
+.agent-call-float {
+  container: plan-call-bar / inline-size;
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  padding-bottom: var(--luke-space-8);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: var(--luke-space-12);
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
+  pointer-events: none;
 }
 
-/* The bar spans the tab's measure, as it spanned the column, so the call's
-   two lines keep their room at its left beside the controls. */
-.agent-call-foot > .call-bar {
-  width: 100%;
+/* The captions in the row rather than over the window: a box in its flow,
+   rising into place as they do wherever they float, and filling the room the
+   tile leaves, up to their own measure and centred there. Where that room is
+   narrower than a readable line, a narrow tab's, they wrap onto a line of
+   their own over the tile, spanning the tab. */
+.agent-call-float > .voice-caption {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: var(--caption-width-min);
+  min-width: 0;
+  max-width: var(--caption-width-max);
+  margin-inline: auto;
+  transform: translateY(var(--luke-space-6));
 }
 
-/* The live captions stand just above the call bar, centred on the tab, so
-   they cover neither the call's controls nor the composer under them. */
-.agent-call-foot .voice-caption {
-  bottom: calc(100% + var(--luke-space-12));
-  left: 50%;
-  width: min(var(--caption-width-max), 100% - 2 * var(--luke-page-inset));
+.agent-call-float > .voice-caption[data-shown="true"] {
+  transform: none;
 }
 
-/* Too narrow a tab: the captions span it to its insets, their volume hint
-   wrapping rather than cut. */
+/* The tile is small at the row's right, as wide as the developer left it
+   (`use-call-tile-width.ts`) and never wider than the tab leaves, square as
+   the stock avatars' picture is, and raised off the transcript under it. */
+.agent-call-float > .call-video-tile {
+  width: min(var(--call-tile-width), 100%);
+  max-height: none;
+  margin: 0;
+  box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
+  pointer-events: auto;
+}
+
+.agent-call-float > .call-video-tile .call-video-face {
+  width: 40%;
+  max-width: 56px;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+/* The tile's left edge, dragged or stepped from the keyboard to resize it,
+   since the tile is anchored at its right. Inside the tile, which clips at
+   its corner, and lit as the window's other resize edges are. */
+.call-video-resize {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  cursor: col-resize;
+  outline: none; /* no ring: the edge fills in the focus colour */
+  transition: background-color var(--duration-hover) ease;
+}
+
+.call-video-resize:hover,
+.call-video-resize:active,
+.call-video-resize:focus-visible {
+  background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
+}
+
+/* Too narrow a tab: the captions span the room the tile leaves, their
+   volume hint wrapping rather than cut. */
 @container plan-call-bar (max-width: 359px) {
-  .agent-call-foot .voice-caption {
-    width: calc(100% - 2 * var(--column-inset));
-  }
-
-  .agent-call-foot .volume-hint-text {
+  .agent-call-float .volume-hint-text {
     white-space: normal;
   }
 }

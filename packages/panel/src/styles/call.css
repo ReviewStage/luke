@@ -239,10 +239,8 @@ html.call-window[data-pointer-stale="true"]
    never wider than 16:9 at that height, and 240px is as narrow as its
    still frame stays readable, so on a stage too short for that (a phone
    with its keyboard up) it keeps 240px's 16:9 height, 135px, rather than
-   flattening into a band.
-   The strip shares the width, so the toggle stays put when video goes off. */
-.call-video-tile,
-.call-video-strip {
+   flattening into a band. */
+.call-video-tile {
   width: min(
     100% -
     2 *
@@ -350,21 +348,4 @@ html.call-window[data-pointer-stale="true"]
    no taller than its button. */
 .call-video-toggle {
   display: flex;
-}
-
-/* The strip the tile collapses to once the developer turns video off: one
-   line on the tile's ground, border, and margins, saying so beside the
-   button that turns it on again, so the call keeps its video's place
-   without a picture's height. */
-.call-video-strip {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  box-sizing: border-box;
-  padding: var(--luke-space-4) var(--luke-space-4) var(--luke-space-4) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-overlay);
-  color: var(--luke-color-text);
 }
