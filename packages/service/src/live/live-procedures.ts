@@ -14,7 +14,8 @@
  * `GET /api/live/task-board?id=` answers one task's whiteboard the same way,
  * as one statement that marks where it stands, after the task is read as
  * the account, so one it does not reach is not found, as its board read
- * answers.
+ * answers; and `GET /api/live/task-record?id=` its pages and calls, one
+ * statement a part (`task-record-live.ts`), on the same terms.
  *
  * Either read asked with `?poll=true`, or one Realtime is off for or could
  * not seal, is answered with each statement's rows inline at the poll
@@ -57,6 +58,7 @@ import {
 } from "../http/http-effect.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
 
 export interface LiveProcedureSeams {
@@ -189,6 +191,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statement = boardLiveStatement(context.userId, taskId);
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts({ board: statement.value }, input);
+    }),
+    taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const taskId = yield* rowIdOf(input.id);
+      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = taskRecordLiveStatements(context.userId, taskId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
     }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

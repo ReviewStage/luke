@@ -7,6 +7,7 @@ import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
+import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
 /**
@@ -42,6 +43,11 @@ function liveStatements() {
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(taskRecordLiveStatements(USER_ID, randomUUID()))).map(
+        ([part, query]) => [`task.${part}`, query],
+      ),
+    ),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
     ),

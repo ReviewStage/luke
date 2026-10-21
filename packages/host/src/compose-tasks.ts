@@ -5,6 +5,7 @@ import {
   type HostedWorkspaceClient,
   type PlanDraftFrame,
   type TaskActivityFrame,
+  type TaskCallResult,
   type TaskMarks,
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallResult,
@@ -25,13 +26,13 @@ import {
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
 import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASK_WORK_STATE,
   TASKS_READ,
+  type TaskCallFailure,
   type TaskCodeShowing,
   type TaskShownCode,
   type TasksCommentAnswer,
@@ -155,9 +156,10 @@ import { boardMoves } from "./board-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type LiveClient, openRealtimeClient } from "./live-follow.js";
+import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
+import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
@@ -213,21 +215,22 @@ import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
  */
 
 /**
- * How long after a call's end its transcript and work are read a second time. Note
- * that the first read can land before the service has written the call's
- * last words, because the service closes the device's socket first and only
- * then waits on the writes it already started, and says nothing once they
- * land; this is that wait's margin.
- */
-const TRANSCRIPT_SETTLE = Duration.seconds(5);
-
-/**
  * How long after the open Untitled task's brain settles a turn the list is
  * read again, for the name the service may give it as one of its first
  * turns completes (`brain-host/task-title.ts`): the naming call is made once
  * the turn is recorded settled and usually answers in a second or two.
  */
 const NAME_SETTLE = Duration.seconds(5);
+
+/**
+ * How long after a call's end its work is read, and the open plan's parked
+ * conversation read woken, a second time. Note that the turn's last work and
+ * journal can land after the call's end, because the service closes the
+ * device's socket first and only then waits on the writes it already
+ * started; this is that wait's margin. The transcript is read as the call's
+ * live mark moves instead (`followRecord`).
+ */
+const TRANSCRIPT_SETTLE = Duration.seconds(5);
 
 /**
  * How long after a turn that wrote the plan stops writing the plan is read
@@ -399,6 +402,7 @@ export type TasksClient = Pick<
   | "writeTaskSection"
   | "readBoard"
   | "boardLive"
+  | "recordLive"
   | "saveBoard"
   | "readTranscript"
   | "readWork"
@@ -542,8 +546,16 @@ const BOARD_BACKOFF = Schedule.exponential(BOARD_RESEAL.FIRST).pipe(
   ),
 );
 
-/** Why a board follow is not sealed again: the task is no longer the open one, or the gate closed. */
+/** Why a live follow is not sealed again: the task is no longer the open one, or the gate closed. */
 const BOARD_FOLLOW_ENDED = "ended";
+
+/** A live read the service did not seal, `gone` where the task is no longer the account's. */
+type Unsealed = { readonly failure: string; readonly gone?: boolean };
+
+/** Whether a seal is one the service did not answer. */
+function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is Unsealed {
+  return "failure" in sealed;
+}
 
 /**
  * The panel's tasks as one concern. The view is told to every client whole
@@ -659,17 +671,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The tasks whose board's mark moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
 
-  /** The tasks whose pages a settled `show_page` may have moved, read one at a time by the loop below. */
+  /** The one live follow of the open task's pages and calls; running another interrupts it. */
+  const recordFollow = yield* FiberHandle.make<void>();
+
+  /** The tasks whose pages' mark moved, read one at a time by the loop below. */
   const pageReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks a call just ended about, whose work the loop below reads and whose parked conversation read it wakes, and both again once the call's last writes have had time to land. */
+  const callEndWakes = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose ended calls' marks moved, whose transcript is read once by the loop below. */
+  const callRecordReads = yield* Queue.sliding<string>(1);
 
   /** The tasks whose plan one of Luke's plan edits may have moved, read one at a time by the loop below. */
   const documentReads = yield* Queue.sliding<string>(1);
 
   /** The tasks whose turn stopped writing after a plan edit, whose plan the loop below reads again once a save cut off with it has had time to land. */
   const editUnwindReads = yield* Queue.sliding<string>(1);
-
-  /** The tasks a call just ended about, whose transcript and work are read again by the loop below. */
-  const callEndReads = yield* Queue.sliding<string>(1);
 
   /** The tasks whose brain just settled a turn, whose new name the loop below reads the list again for. */
   const nameReads = yield* Queue.sliding<string>(1);
@@ -1139,28 +1157,51 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Follows `taskId`'s board live while it is the open task: the board read
-   * again once its mark moves, and on each seal's first delivery. A seal
-   * the service did not answer, or a follow that stops before it delivered,
-   * is sealed again on `BOARD_BACKOFF`; a follow that delivered and then
+   * Follows one of `taskId`'s live reads while it is the open task, each
+   * move handed to `moved`, the first delivery among them. A seal the
+   * service did not answer, or a follow that stops before it delivered, is
+   * sealed again on `BOARD_BACKOFF`; a follow that delivered and then
    * stopped is sealed again after `BOARD_RESEAL.FIRST`, its backoff started
    * over. A task the service no longer holds, or a gate that closed, ends it.
    */
-  function followBoard(taskId: string) {
+  function followLive<Answer extends object, Moved>(
+    taskId: string,
+    read: {
+      readonly seal: (
+        userId: string,
+        poll: boolean,
+        after: string | undefined,
+      ) => Effect.Effect<
+        TaskCallResult<Answer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+        never,
+        HttpClient.HttpClient
+      >;
+      readonly moves: (
+        sealing: {
+          readonly seal: () => Effect.Effect<Answer | Unsealed>;
+          readonly poll: (after: string | undefined) => Effect.Effect<Answer | Unsealed>;
+          readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
+          readonly now: () => number;
+        },
+        first: Answer,
+      ) => Stream.Stream<Moved, LiveBroken>;
+      readonly moved: (moved: Moved) => void;
+    },
+  ) {
     const following = () => gate() && view.activeTaskId === taskId;
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
-    const seal = (poll = false, after?: string) =>
+    const seal = (poll = false, after?: string): Effect.Effect<Answer | Unsealed> =>
       userId === undefined
         ? Effect.succeed(LIVE_SIGNED_OUT)
-        : Effect.map(served(client.boardLive(taskId, userId, poll, after)), (sealed) =>
+        : Effect.map(served(read.seal(userId, poll, after)), (sealed) =>
             sealed.ok ? sealed.answer : { failure: sealed.failure },
           );
     // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing or polling it.
-    const sealedFor = (poll: boolean, after?: string) =>
+    const sealedFor = (poll: boolean, after?: string): Effect.Effect<Answer | Unsealed> =>
       following()
         ? Effect.map(seal(poll, after), (renewed) =>
-            "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
+            isUnsealed(renewed) && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
               ? { ...renewed, gone: true }
               : renewed,
           )
@@ -1169,9 +1210,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const attempt = Effect.gen(function* () {
       if (!following()) return yield* Effect.fail(BOARD_FOLLOW_ENDED);
       const sealed = yield* seal();
-      if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
+      if (isUnsealed(sealed)) return yield* Effect.fail(sealed.failure);
       let delivered = false;
-      const moves = boardMoves(
+      const moves = read.moves(
         {
           seal: () => sealedFor(false),
           poll: (after) => sealedFor(true, after),
@@ -1180,10 +1221,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         },
         sealed,
       );
-      yield* Stream.runForEach(moves, () =>
+      yield* Stream.runForEach(moves, (moved) =>
         Effect.sync(() => {
           delivered = true;
-          if (view.activeTaskId === taskId) Queue.offerUnsafe(boardReads, taskId);
+          if (view.activeTaskId === taskId) read.moved(moved);
         }),
       ).pipe(Effect.ignore);
       if (!delivered) return yield* Effect.fail(TASK_CALL_FAILURE.UNANSWERED);
@@ -1206,6 +1247,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         while: (delivered) => Option.isSome(delivered) && following(),
       }),
     );
+  }
+
+  /** Follows `taskId`'s board live while it is the open task: the board read again once its mark moves, and on each seal's first delivery. */
+  function followBoard(taskId: string) {
+    return followLive(taskId, {
+      seal: (userId, poll, after) => client.boardLive(taskId, userId, poll, after),
+      moves: boardMoves,
+      moved: () => Queue.offerUnsafe(boardReads, taskId),
+    });
+  }
+
+  /**
+   * Follows `taskId`'s pages and calls live while it is the open task: the
+   * pages read again once theirs move, and the transcript once an ended
+   * call's do, every part on each seal's first delivery.
+   */
+  function followRecord(taskId: string) {
+    return followLive(taskId, {
+      seal: (userId, poll, after) => client.recordLive(taskId, userId, poll, after),
+      moves: taskRecordMoves,
+      moved: (parts: readonly TaskRecordPart[]) => {
+        if (parts.includes(TASK_RECORD_PART.PAGES)) Queue.offerUnsafe(pageReads, taskId);
+        if (parts.includes(TASK_RECORD_PART.CALLS)) Queue.offerUnsafe(callRecordReads, taskId);
+      },
+    });
+  }
+
+  /** Follows `taskId`'s pages and calls live, in place of any follow standing; with `standing`, only where none stands. */
+  function openRecord(taskId: string, standing?: { readonly onlyIfMissing: true }) {
+    return Effect.asVoid(FiberHandle.run(recordFollow, followRecord(taskId), standing));
   }
 
   /** Follows `taskId`'s board live, in place of any follow standing; with `standing`, only where none stands. */
@@ -1260,12 +1331,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       return;
     }
     wakeConversation(taskId);
-    const was = view.activity?.planner;
-    const stopped = was !== undefined && activity.planner === undefined;
     write({ activity, callActivity: activity });
-    // A page shown settles once the brain's pending call is not the show any more.
-    const paged = was?.action === SHOW_PAGE_TOOL_NAME && activity.planner?.action !== was.action;
-    if (paged || stopped) Queue.offerUnsafe(pageReads, taskId);
   }
 
   /** Whether code shown about a task is still for the screen: the task is open and the call's code is not drawn already, since a call's code told again is the showing already drawn. */
@@ -1309,8 +1375,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     view = rest;
     publish();
     if (view.activeTaskId !== taskId) return;
-    Queue.offerUnsafe(callEndReads, taskId);
-    wakeConversation(taskId);
+    Queue.offerUnsafe(callEndWakes, taskId);
   }
 
   /** The open document of `taskId` given the name its row of the list now reads, where the two differ. */
@@ -1486,6 +1551,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const open = view.activeTaskId;
         if (open !== undefined) yield* openConversation(open);
         if (open !== undefined) yield* openBoard(open, { onlyIfMissing: true });
+        if (open !== undefined) yield* openRecord(open, { onlyIfMissing: true });
         const tasks = serial(
           Effect.gen(function* () {
             yield* readList;
@@ -1528,6 +1594,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         yield* openConversation(taskId);
         yield* openBoard(taskId);
+        yield* openRecord(taskId);
         yield* serial(
           Effect.gen(function* () {
             yield* readDocument(taskId);
@@ -1896,6 +1963,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.gen(function* () {
         yield* FiberHandle.clear(conversationRead);
         yield* FiberHandle.clear(boardFollow);
+        yield* FiberHandle.clear(recordFollow);
         yield* serial(
           Effect.sync(() => {
             const { activeTaskId: _closed, ...rest } = withoutActivity(view);
@@ -1929,6 +1997,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             publish();
             yield* openConversation(task.id);
             yield* openBoard(task.id);
+            yield* openRecord(task.id);
             yield* readList;
             return carried<TasksStartAnswer>({
               planId: task.id,
@@ -1954,6 +2023,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(conversationRead);
               yield* FiberHandle.clear(boardFollow);
+              yield* FiberHandle.clear(recordFollow);
               const { activeTaskId: _deleted, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
             }
@@ -2437,6 +2507,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               if (view.activeTaskId !== openTaskId) return;
               yield* FiberHandle.clear(conversationRead);
               yield* FiberHandle.clear(boardFollow);
+              yield* FiberHandle.clear(recordFollow);
               const { activeTaskId: _left, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
               publish();
@@ -2531,6 +2602,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(conversationRead);
       yield* FiberHandle.clear(boardFollow);
       yield* FiberMap.clear(followedWorkers);
+      yield* FiberHandle.clear(recordFollow);
       yield* serial(
         Effect.sync(() => {
           workspacesAskedAt = undefined;
@@ -2597,17 +2669,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       );
       yield* Effect.forkScoped(
         Effect.forever(
-          Effect.flatMap(Queue.take(callEndReads), (taskId) => {
-            // The conversation's parked read is woken with each read too, since its last journal may land after the call's end.
+          Effect.flatMap(Queue.take(callEndWakes), (taskId) => {
+            // Note that the turn's last work and journal may land after the call's end, so both are read again after a wait.
             const read = Effect.suspend(() =>
               gate() && view.activeTaskId === taskId
-                ? serial(Effect.andThen(readTranscript(taskId), readWork(taskId))).pipe(
+                ? serial(readWork(taskId)).pipe(
                     Effect.andThen(Effect.sync(() => wakeConversation(taskId))),
                   )
                 : Effect.void,
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(callRecordReads), (taskId) =>
+            Effect.suspend(() =>
+              gate() && view.activeTaskId === taskId ? serial(readTranscript(taskId)) : Effect.void,
+            ),
+          ),
         ),
       );
       yield* Effect.forkScoped(

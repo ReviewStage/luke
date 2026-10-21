@@ -4,7 +4,7 @@
  * What waits on the developer across the account, as the address to
  * subscribe at and one sealed statement per part of the account inbox's
  * answer; and one task's whiteboard, named by `?id=`, as the statement that
- * marks where it stands; and one coding agent's transcript, or one of its
+ * marks where it stands, and its pages and calls the same way; and one coding agent's transcript, or one of its
  * workers' under `&call=`, as the statements its pages are read from. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
@@ -23,6 +23,7 @@ import {
   LIVE_POLL,
   LIVE_USER_QUERY,
   taskBoardLiveAnswerSchema,
+  taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { hostedProcedure } from "./base.js";
@@ -69,6 +70,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BOARD }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskBoardLiveAnswerSchema)),
+  taskRecord: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskRecordLiveAnswerSchema)),
   agentTranscript: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)

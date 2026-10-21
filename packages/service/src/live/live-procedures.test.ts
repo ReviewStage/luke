@@ -18,6 +18,7 @@ import {
   liveDigestOf,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
+  taskRecordLiveAnswerSchema,
 } from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
@@ -152,12 +153,13 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** The procedures answering a task board's live read as `bearer`, over the store and the deployment's Realtime. */
+/** The procedures answering a task's live read as `bearer`, its board's unless `path` names another, over the store and the deployment's Realtime. */
 const askBoard = (options: {
   readonly bearer: string;
   /** The account the read names; the bearer's own where left out. */
   readonly forUser?: string;
   readonly taskId?: string;
+  readonly path?: string;
   readonly poll?: boolean;
   /** The digest the reader last saw, which holds the poll until the rows move past it. */
   readonly after?: string;
@@ -175,7 +177,7 @@ const askBoard = (options: {
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
     const url = readOf(
-      options.taskId === undefined ? LIVE_INBOX : "/api/live/task-board",
+      options.taskId === undefined ? LIVE_INBOX : (options.path ?? "/api/live/task-board"),
       options.forUser ?? options.bearer,
     );
     if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
@@ -263,6 +265,36 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(sealed.body);
         assert.equal(answer.url, REALTIME_URL, "sealed where Realtime seals and nobody polls");
         assert.equal(answer.queries.board.rows, undefined);
+      }),
+  );
+
+  it.effect(
+    "a task's pages and calls are sealed a part each for an account that reaches it, and not found for one that does not",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const ask = (bearer: string) =>
+          askBoard({
+            bearer,
+            taskId: started.id,
+            path: "/api/live/task-record",
+            sealing: Option.some(SCRIPTED),
+          });
+
+        const own = yield* ask(dana);
+        assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskRecordLiveAnswerSchema)(own.body);
+        assert.equal(answer.url, REALTIME_URL);
+        for (const query of [answer.queries.pages, answer.queries.calls]) {
+          assert.ok(query.capability.includes(`"${dana}"`), "read for the bearer");
+          assert.ok(query.capability.includes(`"${started.id}"`), "read for the task");
+        }
+        assert.deepEqual(yield* ask(eli), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
       }),
   );
 
@@ -473,6 +505,16 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           }
           assert.deepEqual(
             yield* askBoard({ bearer: dana, forUser, sealing: Option.none() }),
+            signedOut,
+          );
+          assert.deepEqual(
+            yield* askBoard({
+              bearer: dana,
+              forUser,
+              taskId: started.id,
+              path: "/api/live/task-record",
+              sealing: Option.none(),
+            }),
             signedOut,
           );
         }
