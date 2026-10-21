@@ -708,16 +708,8 @@ export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
 
 export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;
 
-/** A workspace's chat past a cursor, as the window asks it: the workspace, and the cursor the service last handed back or the start. */
-export const codingAgentChatParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentChatParams = typeof codingAgentChatParamsSchema.Type;
-
 /** A workspace's chat past a cursor, as the window hears it: the roster, the channels, the messages past it, and the cursor to read on from, or why there is none. */
-export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
+const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
 
 export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
 

@@ -30,7 +30,6 @@ import {
   type CodingAgentCallFailure,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
@@ -1062,17 +1061,6 @@ export class HostedCodingAgentClient {
         this.#hosted.agentPullRequests.overviewConversation,
         pullRequestRead(agentId, number),
       ),
-      ROW_REFUSALS,
-    );
-  }
-
-  /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
-  chat(
-    workspaceId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentChatAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.messages.chat, { workspaceId, after }, HOSTED_DEADLINE.HELD),
       ROW_REFUSALS,
     );
   }

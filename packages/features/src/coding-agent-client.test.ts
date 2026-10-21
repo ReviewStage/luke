@@ -4,7 +4,6 @@ import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
-import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
@@ -442,41 +441,6 @@ it.effect(
       assert.deepEqual(read, { contentType: "image/png", base64: "iVBORw==" });
       assert.deepEqual(worker, read);
       assert.deepEqual(unexpected, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-    }),
-);
-
-it.effect(
-  "reads a workspace's chat past the cursor it names, and a workspace the account is not in as not found",
-  () =>
-    Effect.gen(function* () {
-      const self = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
-      const chat = {
-        self,
-        readSeq: 0,
-        members: [
-          { id: self, kind: MEMBER_KIND.HUMAN, name: "Ada", userId: "user-1", left: false },
-        ],
-        channels: [],
-        messages: [],
-        cursor: "12",
-      };
-      const api = fakeCloudApi({ "GET /api/workspaces/chat": { answer: () => chat } });
-      const refusing = fakeCloudApi({
-        "GET /api/workspaces/chat": {
-          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-          status: HTTP_STATUS.NOT_FOUND,
-        },
-      });
-
-      const read = yield* Effect.provide(client().chat(WORKSPACE_ID, "7"), api.layer);
-      const refused = yield* Effect.provide(client().chat(WORKSPACE_ID, "0"), refusing.layer);
-
-      assert.deepEqual(read, chat);
-      assert.equal(
-        api.requests()[0]?.url,
-        `https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}&after=7`,
-      );
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
 
