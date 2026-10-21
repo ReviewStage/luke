@@ -20,6 +20,12 @@ import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@luke/database/testing";
 import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
 import {
+  ADMIN_FAILURE_KIND,
+  ADMIN_PULL_REQUEST,
+  ADMIN_WORKSPACE_KIND,
+} from "@luke/features/admin-account-wire";
+import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
@@ -47,12 +53,6 @@ import { Effect } from "effect";
 import { BRAIN_REQUEST_FAILURE, DAY_MS } from "../core.js";
 import { buildAdminAccountSupport } from "./admin-account.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
-import {
-  ADMIN_FAILURE_KIND,
-  ADMIN_PULL_REQUEST,
-  ADMIN_WORKSPACE_KIND,
-} from "./admin-account-wire.js";
-import { ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * admin-account.test.ts -- one account's support sections, read over a real

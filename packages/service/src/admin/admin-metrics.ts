@@ -1,15 +1,20 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { utcDayKey } from "@luke/database/models/quota";
-import { Clock, Effect } from "effect";
-import { DAY_MS } from "../core.js";
-import type { AdminOverview } from "./admin-overview.js";
+import type {
+  AdminMetrics,
+  AdminRetentionCohort,
+  AdminSignInMethods,
+  AdminTrend,
+} from "@luke/features/admin-answer-wire";
 import {
   type AdminMetricsScope,
   type AdminMetricsWindow,
   type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
+import { DAY_MS } from "../core.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
@@ -50,46 +55,11 @@ const WEEK_MS = 7 * DAY_MS;
  */
 export const ADMIN_RETENTION_WEEKS = 8;
 
-export interface AdminDailyUsage {
-  /** The UTC day the count covers, as YYYY-MM-DD. */
-  day: string;
-  calls: number;
-}
-
-export interface AdminDailySignups {
-  day: string;
-  count: number;
-}
-
-/**
- * A trailing run of days beside the run before it — the one thing a count on
- * its own cannot say, which is whether it is going up. Both runs are folded
- * from the same zero-filled series the page draws, so the comparison can never
- * disagree with the bars above it.
- */
-export interface AdminTrend {
-  /** The length of each run, in whole UTC days. */
-  days: number;
-  recent: number;
-  prior: number;
-}
-
 /** The provider ids the dashboard names; every other linked provider pools into `other`. */
 const SIGN_IN_PROVIDER_ID = {
   GOOGLE: "google",
   GITHUB: "github",
 } as const;
-
-/**
- * How many accounts linked each sign-in method. An account that linked more
- * than one method counts once under each, so the methods can legitimately sum
- * past the account total — never past it per method.
- */
-export interface AdminSignInMethods {
-  google: number;
-  github: number;
-  other: number;
-}
 
 /**
  * Folds the linked (account, provider) pairs the query reads into per-method
@@ -110,50 +80,6 @@ export function countSignInMethods(
     else other.add(link.userId);
   }
   return { google: google.size, github: github.size, other: other.size };
-}
-
-/**
- * One cell of the retention grid: of the accounts created in the cohort's
- * week, how many were retained — by the grid's basis, a hosted-tier call or
- * a meaningful action — during the week `offset` weeks after it.
- * `share` is null for a cohort with nobody to take a share of — a percentage
- * of nothing would pose as precision — and a week the calendar has not
- * reached is no cell at all rather than a zero.
- */
-export interface AdminRetentionCell {
-  offset: number;
-  activeAccounts: number;
-  share: number | null;
-  /** The cell's week is the one `generatedAt` falls in, still accruing. */
-  inProgress: boolean;
-}
-
-export interface AdminRetentionCohort {
-  /** The cohort's UTC week, named by its Monday as YYYY-MM-DD. */
-  weekStart: string;
-  /** Accounts created during this week. */
-  size: number;
-  cells: AdminRetentionCell[];
-}
-
-export interface AdminMetrics {
-  generatedAt: number;
-  windowDays: number;
-  users: {
-    total: number;
-    /** Accounts created inside the window, the same rows the signup series draws. */
-    newInWindow: number;
-    signupTrend: AdminTrend;
-    dailySignups: AdminDailySignups[];
-  };
-  /** Tasks, agents, pull requests, calls, and who is active, as `admin-overview.ts` shapes them. */
-  overview: AdminOverview;
-  /** Signup cohorts retained by any hosted-tier call; the overview carries the meaningful basis. */
-  retention: {
-    weeks: number;
-    /** Oldest cohort first; each row's cells stop at the current week. */
-    cohorts: AdminRetentionCohort[];
-  };
 }
 
 /**

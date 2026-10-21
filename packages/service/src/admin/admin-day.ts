@@ -1,11 +1,16 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { Clock, Effect } from "effect";
+import type {
+  AdminDayAccount,
+  AdminDayDetail,
+  AdminDayTotals,
+} from "@luke/features/admin-answer-wire";
 import {
   type AdminDayQuery,
   type AdminMetricsScope,
   adminDayKey,
   adminMetricsScope,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
@@ -25,23 +30,6 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
  */
 export const ADMIN_DAY_ACCOUNTS_LIMIT = 50;
 
-/** One account's share of the day, the same account fields the tables draw. */
-export interface AdminDayAccount {
-  id: string;
-  name: string;
-  email: string;
-  /** The avatar URL the sign-in provider gave the account, when it gave one. */
-  image: string | null;
-  admin: boolean;
-  calls: number;
-}
-
-/** The whole day's counts, over every account the scope keeps, past the row bound. */
-interface AdminDayTotals {
-  accounts: number;
-  calls: number;
-}
-
 /**
  * The raw shape the queries produce for one day. The rows arrive bounded and
  * ordered, so the totals ride their own aggregate read — folding them from
@@ -50,17 +38,6 @@ interface AdminDayTotals {
 export interface AdminDaySource {
   accounts: readonly AdminDayAccount[];
   totals: AdminDayTotals;
-}
-
-export interface AdminDayDetail {
-  generatedAt: number;
-  /** The UTC day the counts cover, as YYYY-MM-DD. */
-  day: string;
-  /** The bound `accounts` was read under, so the page can word a truncation. */
-  limit: number;
-  totals: AdminDayTotals;
-  /** The day's active accounts, busiest first, cut at the stated bound. */
-  accounts: AdminDayAccount[];
 }
 
 /** Stamps one day's queried source with the day it covers and the bound it was read under. */

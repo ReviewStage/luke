@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AdminDailyUsage } from "@luke/service/admin/admin-metrics";
+import type { AdminDailyUsage } from "@luke/features/admin-answer-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";

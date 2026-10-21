@@ -9,7 +9,7 @@
  * set. The plot itself stays the chart's own.
  */
 
-import type { AdminTrend } from "@luke/service/admin/admin-metrics";
+import type { AdminTrend } from "@luke/features/admin-answer-wire";
 import {
   ALIGN,
   Card,

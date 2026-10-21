@@ -2,7 +2,7 @@ import type {
   AdminDailySignups,
   AdminSignInMethods,
   AdminTrend,
-} from "@luke/service/admin/admin-metrics";
+} from "@luke/features/admin-answer-wire";
 import {
   formatDayTick,
   formatNumber,
