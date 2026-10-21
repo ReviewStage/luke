@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import type { AdminUserList, AdminUserListRow } from "@luke/features/admin-answer-wire";
 import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
+import { UsersScreen } from "@luke/panel/admin/screens/users";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { UsersScreen } from "../src/admin/screens/users";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-users.test.ts -- the roster names itself and its search before its
@@ -111,16 +112,18 @@ async function mount(): Promise<HTMLElement> {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(UsersScreen, {
-        hideAdmins: false,
-        onHideAdminsChange: () => undefined,
-        windowDays: 30,
-        onWindowDaysChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onOpenAccount: () => undefined,
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(UsersScreen, {
+          hideAdmins: false,
+          onHideAdminsChange: () => undefined,
+          windowDays: 30,
+          onWindowDaysChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onOpenAccount: () => undefined,
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return page;

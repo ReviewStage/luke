@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import "@luke/panel/testing/resize-observer";
 import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
+import { DayScreen } from "@luke/panel/admin/screens/day";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { DayScreen } from "../src/admin/screens/day";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-day.test.ts -- one day's page names the day it covers and whether it
@@ -85,16 +86,18 @@ async function openDay(body: AdminDayDetail | undefined): Promise<Opened> {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(DayScreen, {
-        day: DAY,
-        hideAdmins: false,
-        onHideAdminsChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onBack: () => backs.push(backs.length),
-        onOpenAccount: (id) => opened.push(id),
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(DayScreen, {
+          day: DAY,
+          hideAdmins: false,
+          onHideAdminsChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onBack: () => backs.push(backs.length),
+          onOpenAccount: (id) => opened.push(id),
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return { page, opened, backs };
