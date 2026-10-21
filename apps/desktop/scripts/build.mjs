@@ -6,6 +6,7 @@ import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import {
   EXCALIDRAW_UNUSED,
   EXCALIDRAW_UNUSED_MODULE,
+  excalidrawFontsLocal,
   excalidrawLeftOut,
   HIGHLIGHT_WORKER_BUILD,
   LUCIDE_WHOLE,
@@ -259,6 +260,7 @@ const rendererBuild = build({
     panelRedirects,
     lucideWholeOnDemand,
     excalidrawTrim,
+    excalidrawFontsLocal,
     sideStylesheetsLinked,
     ...sentryPlugins(),
   ],

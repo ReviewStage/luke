@@ -6,6 +6,7 @@
 // reaches both builds and neither restates it. Nothing here imports a bundler.
 
 import { readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -75,6 +76,51 @@ export function excalidrawLeftOut(specifier, importer) {
     !EXCALIDRAW_KEPT_LOCALE.test(specifier)
   );
 }
+
+// Excalidraw names each font face at two addresses: its copy under the asset
+// path (`src/whiteboard/asset-path.ts`), and the same file on esm.sh after it,
+// for a page that serves none. The panel's policy admits fonts from its own
+// origin alone, and Chromium checks every address of a face against it as the
+// face is made, whether or not the first one serves it, so every face
+// Excalidraw registers (some 230, the Chinese font's slices among them) is
+// refused and reported the moment a board opens, and nothing is gained: the
+// policy never lets the second address load. So the line that adds esm.sh is
+// taken out of Excalidraw's code and each face names its own copy alone. The
+// Chinese font is the one left out of the copies (`panelStaticDirectories`),
+// so its text draws in the next font, as it always has under the policy.
+
+/** Excalidraw's own scripts, for a bundler that filters before it asks. */
+export const EXCALIDRAW_SCRIPT = /[\\/]@excalidraw[\\/]excalidraw[\\/]dist[\\/].+\.js$/;
+// The call that adds the esm.sh address to a face, as both of Excalidraw's builds spell it.
+const FONT_FALLBACK_PUSH =
+  /[\w$]+\.push\(\s*new URL\(\s*[\w$]+\s*,\s*[\w$]+\.ASSETS_FALLBACK_URL\s*\)\s*\)/g;
+
+/**
+ * An Excalidraw script with its fonts' esm.sh address taken out, or undefined
+ * where the script names none. A script that names the address in a shape this
+ * does not know fails the build, so an upgrade cannot bring the address back unseen.
+ */
+export function excalidrawWithoutFontFallback(code) {
+  if (!code.includes("ASSETS_FALLBACK_URL")) return undefined;
+  const without = code.replace(FONT_FALLBACK_PUSH, "void 0");
+  if (without === code || /\.ASSETS_FALLBACK_URL\b/.test(without)) {
+    throw new Error(
+      "Excalidraw's font fallback is no longer where the panel's build table takes it out (build-table.mjs).",
+    );
+  }
+  return without;
+}
+
+/** The same in esbuild's shape, for the desktop's build and for Vite's prebundling of Excalidraw in development. */
+export const excalidrawFontsLocal = {
+  name: "excalidraw-fonts-local",
+  setup(build) {
+    build.onLoad({ filter: EXCALIDRAW_SCRIPT }, async (args) => {
+      const contents = excalidrawWithoutFontFallback(await readFile(args.path, "utf8"));
+      return contents === undefined ? undefined : { contents, loader: "js" };
+    });
+  },
+};
 
 // The whole of Lucide's icons, which a section's icon picker draws every one
 // of (`src/desktop/section-icon-picker.tsx`), loaded on demand: its

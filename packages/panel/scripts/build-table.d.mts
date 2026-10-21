@@ -11,6 +11,18 @@ export function redirectOf(specifier: string, importer: string | undefined): str
 export const EXCALIDRAW_UNUSED: RegExp;
 export const EXCALIDRAW_UNUSED_MODULE: string;
 export function excalidrawLeftOut(specifier: string, importer: string | undefined): boolean;
+export const EXCALIDRAW_SCRIPT: RegExp;
+export function excalidrawWithoutFontFallback(code: string): string | undefined;
+/** The fonts' fix as an esbuild plugin, typed by the part of esbuild's build object it calls. */
+export const excalidrawFontsLocal: {
+  readonly name: string;
+  setup(build: {
+    onLoad(
+      options: { filter: RegExp },
+      callback: (args: { path: string }) => Promise<{ contents: string; loader: "js" } | undefined>,
+    ): void;
+  }): void;
+};
 export const LUCIDE_WHOLE: string;
 export function lucideWholeModule(file: string): string;
 /**
