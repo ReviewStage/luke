@@ -724,7 +724,10 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
 /**
  * The task's fixed tabs in the strip's order: each it holds something of and
  * was not closed on, and each opened on it. The Inbox stands only opened, and
- * only on a task that may draw one.
+ * only on a task that may draw one; the Chat stands opened, or once its
+ * channel is held, and never where the task is known to hold none, so a
+ * Chat opened while Chat was on stands nowhere once it is off, and stands
+ * again, as it was left, once it is back on.
  */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
   if (task.bare === true) return [];
@@ -732,7 +735,11 @@ function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab
   const open = held.tabs.filter((tab) =>
     tab === SIDE_PANEL_TAB.INBOX
       ? chosen.opened.includes(tab) && task.holds[tab] === true
-      : chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && task.holds[tab] === true),
+      : tab === SIDE_PANEL_TAB.CHAT
+        ? task.holds[tab] !== false &&
+          (chosen.opened.includes(tab) ||
+            (!chosen.closed.includes(tab) && task.holds[tab] === true))
+        : chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && task.holds[tab] === true),
   );
   return inTaskOrder(open, orderOn(held, task.id), (tab) => tab);
 }

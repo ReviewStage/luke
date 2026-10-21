@@ -75,6 +75,39 @@ function launch(stood: Stood) {
   };
 }
 
+test("the Chat stands in the strip only while the task holds its channel, as Chat on draws it, and stands again as it was left once it does", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ chat }: { chat: boolean }) {
+    control = useSidePanel(
+      undefined,
+      { id: TASK, holds: { ...usedTask(TASK).holds, [SIDE_PANEL_TAB.CHAT]: chat } },
+      [],
+      [],
+      [],
+      [],
+      [],
+    );
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (chat: boolean) => act(() => root.render(createElement(Probe, { chat })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(true);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CHAT));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(false);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat off draws no Chat tab");
+  assert.notEqual(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
+  assert.ok(panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat back on draws it again");
+});
+
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
