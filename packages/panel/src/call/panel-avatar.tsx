@@ -15,12 +15,12 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { CHOICE_BAR_LOOK, CHOICE_BAR_SIZE, ChoiceBar, cssCustomProperties } from "@luke/ui";
+import { cssCustomProperties } from "@luke/ui";
 import { agentCallVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
@@ -36,12 +36,7 @@ import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card.j
 import { AvatarVoice, CallVideoTile } from "./call-video-tile.js";
 import {
   CALL_VIDEO_HEIGHT,
-  CALL_VIDEO_SIZE,
-  CALL_VIDEO_SIZE_HEIGHT,
-  type CallVideoSize,
-  callVideoSizeOf,
   clampCallVideoHeight,
-  snapCallVideoHeight,
   useCallVideoHeight,
 } from "./use-call-video-size.js";
 
@@ -108,20 +103,7 @@ type VideoCorner = (typeof VIDEO_CORNER)[keyof typeof VIDEO_CORNER];
 const CALL_VIDEO_RESIZE_LABEL = {
   [VIDEO_CORNER.LEFT]: "Resize video from its top-left corner",
   [VIDEO_CORNER.RIGHT]: "Resize video from its top-right corner",
-  SIZES: "Video size",
 } as const;
-
-/** What each size is called on its control: a letter, as a video app's size picker says it. */
-const SIZE_LABEL = {
-  [CALL_VIDEO_SIZE.SMALL]: "S",
-  [CALL_VIDEO_SIZE.MEDIUM]: "M",
-  [CALL_VIDEO_SIZE.LARGE]: "L",
-} as const satisfies Record<CallVideoSize, string>;
-
-const SIZE_ITEMS = Object.values(CALL_VIDEO_SIZE).map((size) => ({
-  value: size,
-  label: SIZE_LABEL[size],
-}));
 
 /** How far one arrow press on a corner grows or shrinks the video, in CSS pixels. */
 const KEY_STEP = 16;
@@ -185,7 +167,7 @@ function VideoCornerHandle({
     const held = drag.current;
     if (held === undefined || held.pointerId !== event.pointerId) return;
     const growth = cornerGrowth(held, corner, aspect, { x: event.clientX, y: event.clientY });
-    onResize(snapCallVideoHeight(held.from + growth));
+    onResize(held.from + growth);
   };
   const onPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
     if (drag.current?.pointerId !== event.pointerId) return;
@@ -232,10 +214,9 @@ function VideoCornerHandle({
  * the agent's transcript and its composer (desktop.css), so the transcript
  * ends above it and nothing is ever drawn over the words. It stands centred
  * in that room, a rectangle at the picture's own aspect that the picture
- * fills, as tall as the developer left it (`use-call-video-size.ts`), S on
+ * fills, as tall as the developer left it (`use-call-video-size.ts`), 120 px on
  * a first call. Hovering it, or a drag or a key on its controls, brings out
- * how it resizes: a handle on each top corner, since it grows upward, and
- * S, M and L. Nothing at all once video is off, so the room goes with it.
+ * how it resizes: a handle on each top corner, since it grows upward. Nothing at all once video is off, so the room goes with it.
  * Video on and off are the composer's (`agent-call.tsx`), so the video
  * offers neither.
  */
@@ -275,16 +256,6 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
             onDragging={setDragging}
           />
         ))}
-        <div className="agent-call-video-sizes">
-          <ChoiceBar
-            label={CALL_VIDEO_RESIZE_LABEL.SIZES}
-            items={SIZE_ITEMS}
-            value={callVideoSizeOf(height)}
-            onChange={(size) => onResize(CALL_VIDEO_SIZE_HEIGHT[size])}
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            size={CHOICE_BAR_SIZE.COMPACT}
-          />
-        </div>
       </div>
     </div>
   );
@@ -297,5 +268,7 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
  */
 export function useCallCardVideo(): CallCardVideo | undefined {
   const { tell } = useAct();
-  return cardVideo(useCardVideoStatus(), useAvatarTracks().video, tell);
+  const status = useCardVideoStatus();
+  const track = useAvatarTracks().video;
+  return useMemo(() => cardVideo(status, track, tell), [status, track, tell]);
 }

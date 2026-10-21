@@ -20,6 +20,11 @@ const LinkWorkspaceContext = createContext<string | undefined>(undefined);
 /** Hands the workspace a surface's links are written under, by slug, or by id until the workspaces are read. */
 export const LinkWorkspaceProvider = LinkWorkspaceContext.Provider;
 
+/** The workspace the surface hands down for its links; none where it hands down none. */
+export function useLinkWorkspace(): string | undefined {
+  return useContext(LinkWorkspaceContext);
+}
+
 /** Copy link, copying a place's link under `workspace` through `copy`, the window's menu copy (`useCopyToast`). */
 function copyLinkItem(
   copy: (words: string, label: string) => void,

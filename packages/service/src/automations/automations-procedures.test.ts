@@ -33,6 +33,7 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   automationAnswerSchema,
+  automationDeletedAnswerSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
@@ -51,7 +52,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   Clock,
   type Context,
@@ -919,6 +920,67 @@ it.layer(getTestDB())("the automation routes", (it) => {
           history.runs.map((run) => run.id),
           [first.run.id],
         );
+      }),
+  );
+
+  it.effect(
+    "each write answers the transaction it committed in, and a Run now answered again, which changed nothing, answers none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openAccounts;
+        /** The transaction that last wrote the automation's row, as Postgres keeps it. */
+        const writtenIn = (id: string) =>
+          Effect.map(
+            Database.use((db) =>
+              db
+                .select({ xmin: sql<string>`${automationTable}.xmin::text` })
+                .from(automationTable)
+                .where(eq(automationTable.id, id)),
+            ),
+            (rows) => rows[0]?.xmin,
+          );
+
+        const made = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: weekdays(task.id),
+          }),
+        );
+        const { id } = made.automation;
+        assert.equal(made.txid, yield* writtenIn(id), "a make answers the row's transaction");
+
+        const renamed = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(id), owner, { method: "PATCH", body: { name: "Renamed" } }),
+        );
+        assert.equal(renamed.txid, yield* writtenIn(id), "a change answers the row's transaction");
+        assert.notEqual(renamed.txid, made.txid);
+
+        const key = randomUUID();
+        const run = { method: "POST", body: { idempotencyKey: key } } as const;
+        const first = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(automationRunPath(id), owner, run),
+        );
+        assert.ok(first.txid !== undefined, "a Run now that records a run answers its transaction");
+        const again = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationRunPath(id), owner, run),
+        );
+        assert.equal(again.txid, undefined, "one that records nothing answers none");
+
+        const deleted = readAnswer(
+          automationDeletedAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(id), owner, { method: "DELETE" }),
+        );
+        assert.ok(deleted.txid !== undefined, "a delete answers its transaction");
+        assert.notEqual(deleted.txid, renamed.txid);
       }),
   );
 

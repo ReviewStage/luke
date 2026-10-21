@@ -13,7 +13,7 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { Board, BoardElement } from "./board-wire.js";
+import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
 import { CODING_AGENT_ATTACHMENT_TYPE } from "./coding-agent-wire.js";
@@ -39,6 +39,7 @@ import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   type TaskBoardLiveAnswer,
+  type TaskBrowserTabsLiveAnswer,
   type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
@@ -63,14 +64,14 @@ import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
-  type TaskSections,
+  type TaskSectionsWritten,
   type TaskSectionWrite,
   taskSectionWriteSchema,
 } from "./task-section-wire.js";
 import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
-  type RepositoryPin,
+  type RepositoryPinsWritten,
   repositoryPinRequestSchema,
   TASK_LIST_ARCHIVED,
   type Task,
@@ -126,6 +127,14 @@ import {
 export interface TaskStarted {
   readonly task: Task;
   readonly agent?: CodingAgentAgentAnswer;
+  /** The transaction the task was written in, which the task list followed live carries once it lands. */
+  readonly txid?: string;
+}
+
+/** A task as a write answered it, and the transaction the write committed in where it changed a row. */
+export interface TaskWritten {
+  readonly task: Task;
+  readonly txid?: string;
 }
 
 /** One call's answer, or why there is none. */
@@ -416,7 +425,11 @@ export class HostedTaskClient {
   setRepository(
     taskId: string,
     repository: string | null,
-  ): Effect.Effect<TaskCallResult<Task, RepositoryCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    TaskCallResult<TaskWritten, RepositoryCallFailure>,
+    never,
+    HttpClient.HttpClient
+  > {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ repository }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(this.#update(taskId, admitted), REPOSITORY_REFUSALS);
@@ -431,7 +444,7 @@ export class HostedTaskClient {
   move(
     taskId: string,
     workspaceId: string,
-  ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskCallResult<TaskWritten, TaskCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ workspaceId }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
@@ -508,6 +521,28 @@ export class HostedTaskClient {
   > {
     return hostedResult(
       askLive(this.#hosted.live.taskPages, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /** One task's Browser tabs, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
+  browserTabsLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskBrowserTabsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskBrowserTabs,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
       LIVE_REFUSALS,
     );
   }
@@ -820,42 +855,45 @@ export class HostedTaskClient {
     );
   }
 
-  /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
+  /** Puts one revision of a plan back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */
   restore(
     taskId: string,
     seq: number,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    { readonly task: Task; readonly txid: string | undefined } | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
     return orNothing(
       Effect.map(
         askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
-        (answer) => answer.plan,
+        (answer) => ({ task: answer.plan, txid: answer.txid }),
       ),
     );
   }
 
-  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written, or nothing where the service did not answer. */
+  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written and, where the write moved the board's live row, the id of its transaction, or nothing where the service did not answer. */
   saveBoard(
     taskId: string,
     elements: readonly BoardElement[],
     appliedDrawing: number,
     image?: string,
-  ): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<BoardSaveAnswer | undefined, never, HttpClient.HttpClient> {
     return orNothing(
-      Effect.map(
-        askHosted(this.#hosted.plans.saveBoard, {
-          params: { id: taskId },
-          body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
-        }),
-        (answer) => answer.board,
-      ),
+      askHosted(this.#hosted.plans.saveBoard, {
+        params: { id: taskId },
+        body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
+      }),
     );
   }
 
-  /** Deletes one task with its document and its agents' conversations; whether the service deleted it. */
-  delete(taskId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+  /** Deletes one task with its document and its agents' conversations; the transaction it went in, or nothing where the service deleted nothing. */
+  delete(
+    taskId: string,
+  ): Effect.Effect<{ readonly txid?: string } | undefined, never, HttpClient.HttpClient> {
     return Effect.match(askHosted(this.#hosted.plans.delete, { id: taskId }), {
-      onFailure: () => false,
-      onSuccess: (answer) => answer.deleted,
+      onFailure: () => undefined,
+      onSuccess: (answer) => (answer.txid === undefined ? {} : { txid: answer.txid }),
     });
   }
 
@@ -867,7 +905,7 @@ export class HostedTaskClient {
   rename(
     taskId: string,
     request: TaskRenameRequest,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(undefined);
     return orNothing(this.#update(taskId, admitted));
@@ -881,7 +919,7 @@ export class HostedTaskClient {
   setStanding(
     taskId: string,
     standing: TaskStanding,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(standing));
     if (admitted === undefined) return Effect.succeed(undefined);
     return orNothing(this.#update(taskId, admitted));
@@ -895,7 +933,7 @@ export class HostedTaskClient {
   mark(
     taskId: string,
     marks: TaskMarks,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(marks));
     if (admitted === undefined) return Effect.succeed(undefined);
     return orNothing(this.#update(taskId, admitted));
@@ -905,30 +943,31 @@ export class HostedTaskClient {
   #update(
     taskId: string,
     changes: TaskUpdateRequest,
-  ): Effect.Effect<Task, HostedFailure, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten, HostedFailure, HttpClient.HttpClient> {
     return Effect.map(
       askHosted(this.#hosted.plans.update, { params: { id: taskId }, body: changes }),
-      (changed) => changed.plan,
+      (changed) =>
+        changed.txid === undefined
+          ? { task: changed.plan }
+          : { task: changed.plan, txid: changed.txid },
     );
   }
 
   /**
    * Pins one repository or unpins it, answering the account's pins as they
-   * then stand; nothing where the service refused or did not answer. A
+   * then stand and the transaction the pin was written in, none where it
+   * changed nothing; nothing where the service refused or did not answer. A
    * repository the wire would refuse by shape never travels.
    */
   pinRepository(
     repository: string,
     pinned: boolean,
-  ): Effect.Effect<readonly RepositoryPin[] | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<RepositoryPinsWritten | undefined, never, HttpClient.HttpClient> {
     const asked = Result.getOrUndefined(
       readEither(repositoryPinRequestSchema)({ repository, pinned }),
     );
     if (asked === undefined) return Effect.succeed(undefined);
-    return Effect.map(
-      orNothing(askHosted(this.#hosted.repositoryPins.set, asked)),
-      (answer) => answer?.pins,
-    );
+    return orNothing(askHosted(this.#hosted.repositoryPins.set, asked));
   }
 
   /**
@@ -953,12 +992,13 @@ export class HostedTaskClient {
 
   /**
    * Writes one change to the account's sections, answering them all as they
-   * then stand; nothing where the service refused or did not answer. A
+   * then stand and the transaction the change was written in, none where it
+   * changed nothing; nothing where the service refused or did not answer. A
    * write the wire would refuse by shape never travels.
    */
   writeTaskSection(
     write: TaskSectionWrite,
-  ): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskSectionsWritten | undefined, never, HttpClient.HttpClient> {
     const asked = Result.getOrUndefined(readEither(taskSectionWriteSchema)(write));
     if (asked === undefined) return Effect.succeed(undefined);
     return orNothing(askHosted(this.#hosted.taskSections.write, asked));
@@ -990,11 +1030,14 @@ export class HostedTaskClient {
 
 /** A started task as the service answered it, with the agent started on it, or why it was not, where one was asked for. */
 function taskStartedOf(started: TaskStartAnswer): TaskStarted {
-  if (started.agent !== undefined) return { task: started.plan, agent: { agent: started.agent } };
-  if (started.agentRefusal !== undefined) {
-    return { task: started.plan, agent: startRefusedAs(started.agentRefusal) };
+  const written = started.txid === undefined ? {} : { txid: started.txid };
+  if (started.agent !== undefined) {
+    return { task: started.plan, agent: { agent: started.agent }, ...written };
   }
-  return { task: started.plan };
+  if (started.agentRefusal !== undefined) {
+    return { task: started.plan, agent: startRefusedAs(started.agentRefusal), ...written };
+  }
+  return { task: started.plan, ...written };
 }
 
 /** A comment call's answer, or why there was none: not found where the service said so, unanswered for anything else. */

@@ -32,21 +32,21 @@ export function linearTokenOf(userId: string): string {
 }
 
 /** A connector this deployment set up, issuing every account its token. */
-export const ISSUING: ConnectorService = {
+const ISSUING: ConnectorService = {
   ...CONNECTOR_ASKED_NOTHING,
   token: (subject) =>
     Effect.succeed({ token: Redacted.make(linearTokenOf(subject)), expiresAt: Infinity }),
 };
 
 /** A provider this deployment never set up. */
-export const UNCONFIGURED: ConnectorService = { ...CONNECTOR_ASKED_NOTHING, configured: false };
+const UNCONFIGURED: ConnectorService = { ...CONNECTOR_ASKED_NOTHING, configured: false };
 
 export const LINEAR_AND_NOTION_CONNECT = integrationConnectOf((provider: IntegrationProvider) =>
   provider === LINEAR || provider === NOTION ? ISSUING : UNCONFIGURED,
 );
 
 /** Linear's tools, as its server lists them. */
-export const LINEAR_TOOLS = [
+const LINEAR_TOOLS = [
   {
     name: "list_issues",
     description: "List issues in the workspace.",

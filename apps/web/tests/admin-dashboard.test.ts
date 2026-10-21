@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
-import type { AdminMetrics } from "@luke/service/admin/admin-metrics";
-import type { AdminOverview } from "@luke/service/admin/admin-overview";
+import type { AdminMetrics, AdminOverview } from "@luke/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
   FUNNEL_STEP,
   REACH_FEATURE,
-} from "@luke/service/admin/admin-overview-vocabulary";
+} from "@luke/features/admin-overview-vocabulary";
+import { DashboardScreen } from "@luke/panel/admin/screens/dashboard";
+import { ADMIN_READ, type AdminRead } from "@luke/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { DashboardScreen } from "../src/admin/screens/dashboard";
-import { ADMIN_READ, type AdminRead } from "../src/admin/use-admin-read";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-dashboard.test.ts -- the Overview states its sections under their
@@ -155,24 +155,26 @@ function render(
   root = createRoot(container);
   act(() =>
     root?.render(
-      createElement(DashboardScreen, {
-        read: {
-          state,
-          refreshing,
-          reload: () => heard.push("reload"),
-          withdraw: async () => undefined,
-          revise: () => undefined,
-        },
-        hideAdmins: false,
-        onHideAdminsChange: (hide) => heard.push(`hide ${hide}`),
-        windowDays: 7,
-        onWindowDaysChange: (windowDays) => heard.push(`window ${windowDays}`),
-        account: undefined,
-        onSignOut: async () => undefined,
-        onOpenAccount: () => undefined,
-        onOpenDay: () => undefined,
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(DashboardScreen, {
+          read: {
+            state,
+            refreshing,
+            reload: () => heard.push("reload"),
+            withdraw: async () => undefined,
+            revise: () => undefined,
+          },
+          hideAdmins: false,
+          onHideAdminsChange: (hide) => heard.push(`hide ${hide}`),
+          windowDays: 7,
+          onWindowDaysChange: (windowDays) => heard.push(`window ${windowDays}`),
+          account: undefined,
+          onSignOut: async () => undefined,
+          onOpenAccount: () => undefined,
+          onOpenDay: () => undefined,
+          frame: (content) => content,
+        }),
+      ),
     ),
   );
   return container;

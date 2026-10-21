@@ -226,6 +226,8 @@ export interface TasklessCodingAgent extends CodingAgentLine {
 export interface CodingAgentStarted {
   readonly agent: CodingAgent;
   readonly created: boolean;
+  /** The transaction the agent's row was written in, where this Start wrote it. */
+  readonly txid?: string;
 }
 
 /** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`message-reads.ts`), re-exported here beside the agents it is read for. */
@@ -604,6 +606,23 @@ const insertAgentConversation = SqlSchema.findOne({
     ),
 });
 
+/**
+ * The id of the transaction a write committed in, read in the write's own
+ * `RETURNING`, as Neon's mutations guide says, so a client following the
+ * task list waits for that transaction to arrive before it confirms the
+ * write.
+ */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
+/** An agent's row as a write returned it, with the transaction it committed in. */
+const CommittedAgentRowSchema = Schema.Struct({
+  ...CodingAgentRowSchema.fields,
+  txid: Schema.String,
+});
+
+/** The transaction a pin's write committed in; none where the pin stood as asked already. */
+const TxidRowSchema = Schema.Struct({ txid: Schema.String });
+
 const insertAgent = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -629,7 +648,7 @@ const insertAgent = SqlSchema.findOne({
     payer: Schema.NullOr(PayerColumnSchema),
     now: Schema.Date,
   }),
-  Result: CodingAgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: (write) =>
     Database.use((db) =>
       db
@@ -659,7 +678,7 @@ const insertAgent = SqlSchema.findOne({
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
-        .returning(CODING_AGENT_COLUMNS),
+        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -683,8 +702,8 @@ function newPersonaName(taskId: string | null) {
       taskId === null
         ? []
         : (yield* findTaskPersonaNames({ taskId })).flatMap((row) => row.personaName ?? []);
-    const draws = [yield* Random.next, yield* Random.next];
-    return pickPersonaName(taken, () => draws.shift() ?? 0);
+    const draw = yield* Random.next;
+    return pickPersonaName(taken, () => draw);
   });
 }
 
@@ -793,14 +812,14 @@ const updateAgentTitle = SqlSchema.findOneOption({
     agentId: Schema.String,
     title: Schema.NullOr(Schema.String),
   }),
-  Result: CodingAgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: ({ userId, agentId, title }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
         .set({ title })
         .where(reachableAgent(userId, agentId))
-        .returning(CODING_AGENT_COLUMNS),
+        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -851,14 +870,14 @@ const updateAgentArchived = SqlSchema.findOneOption({
     archivedAt: Schema.NullOr(Schema.Date),
     archivedBy: ArchivedByColumnSchema,
   }),
-  Result: CodingAgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: ({ userId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
         .set({ archivedAt, archivedBy })
         .where(reachableAgent(userId, agentId))
-        .returning(CODING_AGENT_COLUMNS),
+        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -1555,25 +1574,28 @@ const findAgent = SqlSchema.findOneOption({
 });
 
 /** The account's pin of the agent, from now; one already standing keeps its instant. */
-const insertAgentPin = SqlSchema.void({
+const insertAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
+  Result: TxidRowSchema,
   execute: ({ userId, agentId, now }) =>
     Database.use((db) =>
       db
         .insert(agentPin)
         .values({ userId, codingAgentId: agentId, pinnedAt: now })
-        .onConflictDoNothing(),
+        .onConflictDoNothing()
+        .returning({ txid: TXID }),
     ),
 });
 
 /** The account's pin of the agent at the position given, from now where it was not pinned; one already standing keeps its instant and moves. */
-const placeAgentPin = SqlSchema.void({
+const placeAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
     position: Schema.String,
     now: Schema.Date,
   }),
+  Result: TxidRowSchema,
   execute: ({ userId, agentId, position, now }) =>
     Database.use((db) =>
       db
@@ -1582,18 +1604,21 @@ const placeAgentPin = SqlSchema.void({
         .onConflictDoUpdate({
           target: [agentPin.userId, agentPin.codingAgentId],
           set: { position },
-        }),
+        })
+        .returning({ txid: TXID }),
     ),
 });
 
 /** The account's pin of the agent taken away; every other member's stands. */
-const deleteAgentPin = SqlSchema.void({
+const deleteAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: TxidRowSchema,
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
         .delete(agentPin)
-        .where(and(eq(agentPin.userId, userId), eq(agentPin.codingAgentId, agentId))),
+        .where(and(eq(agentPin.userId, userId), eq(agentPin.codingAgentId, agentId)))
+        .returning({ txid: TXID }),
     ),
 });
 
@@ -1707,7 +1732,7 @@ export function createCodingAgent(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
-        const row = yield* insertAgent({
+        const { txid, ...row } = yield* insertAgent({
           userId,
           conversationId: conversation.id,
           taskId: started.taskId,
@@ -1731,7 +1756,7 @@ export function createCodingAgent(
           payer: started.payer ?? null,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
-        return Option.some({ agent: row, created: true });
+        return Option.some({ agent: row, created: true, txid });
       }),
     ),
   );
@@ -2155,7 +2180,30 @@ export function renameCodingAgent(
   agentId: string,
   title: string | null,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return updateAgentTitle({ userId, agentId, title });
+  return Effect.map(renameCodingAgentCommitted(userId, agentId, title), Option.map(agentOf));
+}
+
+/** An agent as a write left it, and the transaction it committed in; none where it changed no row. */
+export interface CodingAgentCommitted {
+  readonly agent: CodingAgent;
+  readonly txid?: string;
+}
+
+/** The agent's row without the transaction it was returned with. */
+function agentOf({ agent }: CodingAgentCommitted): CodingAgent {
+  return agent;
+}
+
+/** The agent renamed, as `renameCodingAgent` renames it, and the transaction its row was written in. */
+export function renameCodingAgentCommitted(
+  userId: string,
+  agentId: string,
+  title: string | null,
+): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
+  return Effect.map(
+    updateAgentTitle({ userId, agentId, title }),
+    Option.map(({ txid, ...agent }) => ({ agent, txid })),
+  );
 }
 
 /** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. Nothing for an agent of a workspace the account is not in. */
@@ -2165,13 +2213,29 @@ export function archiveCodingAgent(
   archived: boolean,
   archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.map(
+    archiveCodingAgentCommitted(userId, agentId, archived, archivedBy),
+    Option.map(agentOf),
+  );
+}
+
+/** The agent archived or brought back, as `archiveCodingAgent` does it, and the transaction its row was written in. */
+export function archiveCodingAgentCommitted(
+  userId: string,
+  agentId: string,
+  archived: boolean,
+  archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    updateAgentArchived({
-      userId,
-      agentId,
-      archivedAt: archived ? now : null,
-      archivedBy: archived ? archivedBy : null,
-    }),
+    Effect.map(
+      updateAgentArchived({
+        userId,
+        agentId,
+        archivedAt: archived ? now : null,
+        archivedBy: archived ? archivedBy : null,
+      }),
+      Option.map(({ txid, ...agent }) => ({ agent, txid })),
+    ),
   );
 }
 
@@ -2293,14 +2357,30 @@ export function pinCodingAgent(
   pinned: boolean,
   position?: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.map(
+    pinCodingAgentCommitted(userId, agentId, pinned, position),
+    Option.map(agentOf),
+  );
+}
+
+/** The account's pin of the agent set, as `pinCodingAgent` sets it, and the transaction the pin was written in; none where it stood as asked. */
+export function pinCodingAgentCommitted(
+  userId: string,
+  agentId: string,
+  pinned: boolean,
+  position?: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
   return Effect.gen(function* () {
     const found = yield* findAgent({ userId, agentId });
     if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
     const now = yield* DateTime.nowAsDate;
-    if (!pinned) yield* deleteAgentPin({ userId, agentId });
-    else if (position === undefined) yield* insertAgentPin({ userId, agentId, now });
-    else yield* placeAgentPin({ userId, agentId, position, now });
-    return found;
+    const written = !pinned
+      ? yield* deleteAgentPin({ userId, agentId })
+      : position === undefined
+        ? yield* insertAgentPin({ userId, agentId, now })
+        : yield* placeAgentPin({ userId, agentId, position, now });
+    const txid = Option.getOrUndefined(written)?.txid;
+    return Option.some(txid === undefined ? { agent: found.value } : { agent: found.value, txid });
   });
 }
 

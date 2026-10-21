@@ -19,7 +19,7 @@ import {
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn } from "@luke/settings";
+import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
@@ -61,7 +61,6 @@ import {
   unavailableConcern,
 } from "./host-concerns.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
-import { macBrowserParamsWire, macBrowserResultOf } from "./mac-browser-tabs.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
@@ -190,6 +189,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       accountId,
       client: codingAgentClient,
       typeIntoCall: (agentId, text, clientKey) => live.service.typeLine(agentId, text, clientKey),
+      listed: tasks.listed,
     });
     const automations = yield* composeAutomations({
       kernel,
@@ -235,18 +235,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
           }),
-          browser: {
-            // Note that a settings file that cannot be read runs no browser command, as the experiment off would.
-            enabled: settings.store.snapshot().pipe(
-              Effect.map(({ experiments }) => experimentOn(experiments, EXPERIMENT.BROWSER)),
-              Effect.orElseSucceed(() => false),
-            ),
-            run: (params) =>
-              Effect.map(
-                kernel.nodes.invoke(HOST_NODE_CAPABILITY.BROWSER_ACT, macBrowserParamsWire(params)),
-                macBrowserResultOf,
-              ),
-          },
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
     const macTerminal = platform.has(HOST_PLATFORM_CONCERN.MAC_TERMINAL)
@@ -275,7 +263,10 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     agentTaskOf = codingAgents.agentTaskOf;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
-    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => tasks.showCode(taskId, shown);
+    // Note that code a call into an agent with no task shows names no task, so no task's Code tab takes it.
+    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => {
+      if (taskId !== undefined) tasks.showCode(taskId, shown);
+    };
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch

@@ -171,7 +171,7 @@ interface FoundTool {
 }
 
 /** A refusal: the words eve's tool would have failed the call with, and, for a connection the member must connect, which and that it must. */
-export interface ConnectionRefusal {
+interface ConnectionRefusal {
   readonly status: typeof ACTION_RESULT_STATUS.REJECTED;
   readonly error: string;
   readonly connection?: string;

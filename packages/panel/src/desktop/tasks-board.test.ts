@@ -44,7 +44,8 @@ import { TasksBoard } from "./tasks-board.js";
  * once the view asks for it. A card is changed where it stands: its
  * Priority and Status chips send what is picked, and its ⋯ and a
  * right-click drop the task's own menu, whose Rename makes its name a
- * field. In a narrow room, a phone's, one column stands at a time, chosen
+ * field, and its foot draws its agents at work and their pull requests,
+ * each its mark and its number. In a narrow room, a phone's, one column stands at a time, chosen
  * by its tab, and a card's Status chip, which says its status there, moves it.
  */
 
@@ -215,7 +216,7 @@ async function mountBoard(
 function columns(board: HTMLElement): [string, string[]][] {
   return [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map((column) => [
     column.getAttribute("aria-label") ?? "",
-    [...column.querySelectorAll(".tasks-board-key")].map((key) => key.textContent ?? ""),
+    [...column.querySelectorAll("[data-task-key]")].map((key) => key.textContent ?? ""),
   ]);
 }
 
@@ -565,6 +566,53 @@ test("a task from a service before priorities offers No priority on its card, an
   pick("High");
 
   assert.deepEqual(sent, [["t-30", { priority: TASK_PRIORITY.HIGH }]]);
+});
+
+test("a card draws what its agents are doing and the pull requests they opened, those still open first, each its mark and its number", async () => {
+  const working: TaskSummary = {
+    ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 2,
+      working: 1,
+      agents: [],
+      pullRequestTotal: 2,
+      pullRequests: [
+        {
+          number: 4101,
+          title: "First try",
+          state: "merged",
+          checks: "passing",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          number: 4120,
+          title: "Safari",
+          state: "open",
+          checks: "passing",
+          additions: 9,
+          deletions: 3,
+        },
+      ],
+    },
+  };
+  const board = await mountBoard([working]);
+  const foot = board.querySelector('li[data-task-id="t-42"] .tasks-board-card-foot');
+  const marks = [...(foot?.querySelectorAll("[data-pull-request-state]") ?? [])].filter((mark) =>
+    mark.matches(".task-work-pull-request"),
+  );
+
+  assert.deepEqual(
+    marks.map((mark) => [mark.getAttribute("data-pull-request-state"), mark.textContent]),
+    [
+      ["open", "#4120"],
+      ["merged", "#4101"],
+    ],
+  );
+  assert.ok(
+    foot?.querySelector(".task-work-marks [data-state='working']"),
+    "an agent at work is marked",
+  );
 });
 
 test("a card draws a tag for each issue its task links, oldest first, a GitHub issue of its own repository by its number, and a press on a tag opens the issue", async () => {

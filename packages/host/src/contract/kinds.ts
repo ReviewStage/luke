@@ -115,6 +115,10 @@ export const AGENT_ACT_KIND = {
    * from the start and each later one what moved past the last.
    */
   CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
+  /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
+  CODING_AGENTS_PART: "codingAgents.part",
+  /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
+  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",
@@ -128,6 +132,8 @@ export const AGENT_ACT_KIND = {
    * is held back by, and what clears an agent's tab's unseen dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
+  /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
+  CODING_AGENTS_SEEN: "codingAgents.seen",
   CODING_AGENTS_PAGE: "codingAgents.page",
   /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
   CODING_AGENTS_CALLS: "codingAgents.calls",
@@ -206,8 +212,7 @@ export const AVATAR_ACT_KIND = {
  * (`browser-views.ts`): opened on an address and answered how its page
  * stands, sent to another, stepped back, forward, reloaded or stopped,
  * placed over the tab's body or put out of sight, caught as a still while
- * something covers it, closed with its tab, and kept from an agent by the
- * bar's Stop until the developer clicks into the page. How the page goes on to
+ * something covers it, and closed with its tab. How the page goes on to
  * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
  * and only while the account has the Browser tab experiment on.
  */
@@ -218,7 +223,6 @@ export const BROWSER_ACT_KIND = {
   BROWSER_PLACE: "browser.place",
   BROWSER_CAPTURE: "browser.capture",
   BROWSER_CLOSE: "browser.close",
-  BROWSER_STOP: "browser.stop",
 } as const;
 
 /**
@@ -329,6 +333,13 @@ export const TASKS_ACT_KIND = {
   TASKS_ISSUE: "tasks.issue",
   /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /**
+   * A task's agents' Browser tabs, followed while the window holds the
+   * stream open for the side panel's cloud Browser tabs: each time one
+   * moves, the agent's pointer among it, or a takeover lapses, over Neon
+   * Realtime, never on the document.
+   */
+  TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   TASKS_COLOUR_CODE: "tasks.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -522,6 +533,11 @@ export const WINDOW_SURFACE_ACT_KIND = {
   /** A picture put on the clipboard as a PNG, as a copy from Preview puts one. */
   WINDOW_COPY_IMAGE: "window.copyImage",
   WINDOW_SAVE_FILE: "window.saveFile",
+  /**
+   * A downscaled still of part of the asking panel, as ⌃Tab's card previews a
+   * tab it left: answered to that panel alone and kept nowhere else.
+   */
+  WINDOW_CAPTURE: "window.capture",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 

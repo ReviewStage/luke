@@ -23,7 +23,7 @@ export const PANEL_SPAN = {
   /** A transcript followed to the page that left nothing more to read. */
   TRANSCRIPT_CAUGHT_UP: "transcript.caught_up",
 } as const;
-export type PanelSpanName = (typeof PANEL_SPAN)[keyof typeof PANEL_SPAN];
+type PanelSpanName = (typeof PANEL_SPAN)[keyof typeof PANEL_SPAN];
 
 /** What a span says of what it waited on, by Sentry's attribute names. */
 export const PANEL_SPAN_ATTRIBUTE = {
@@ -31,10 +31,12 @@ export const PANEL_SPAN_ATTRIBUTE = {
   MESSAGE_COUNT: "transcript.message_count",
   /** The size of the page that ended the span, as its JSON. */
   PAGE_BYTES: "transcript.page_bytes",
+  /** Whether the follow's first page was the window the host held from the last time it was followed, 1, or read from the service, 0. */
+  CACHE_HIT: "transcript.cache_hit",
   /** The size of the plan the task opened on, in characters. */
   PLAN_CHARS: "task.plan_chars",
 } as const;
-export type PanelSpanAttribute = (typeof PANEL_SPAN_ATTRIBUTE)[keyof typeof PANEL_SPAN_ATTRIBUTE];
+type PanelSpanAttribute = (typeof PANEL_SPAN_ATTRIBUTE)[keyof typeof PANEL_SPAN_ATTRIBUTE];
 
 /** One timing, ended: when it started and ended, in the epoch's milliseconds, and what it measured, read only where it is kept. */
 export interface PanelSpan {

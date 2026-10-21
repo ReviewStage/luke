@@ -16,7 +16,7 @@ import { Tooltip } from "../tooltip.js";
  */
 
 /** The words a + that takes any file says. */
-export const ATTACH_FILES = "Attach files";
+const ATTACH_FILES = "Attach files";
 
 export function AttachFilesButton({
   onFiles,

@@ -23,7 +23,7 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { USER_ROLE } from "../admin/admin-access.js";
-import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
+import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
@@ -89,7 +89,7 @@ const openAccounts = () =>
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
       readRole: readAccountRole,
-      anthropicFastAccess,
+      accountFastOffer,
       writePreferences: writeAccountPreferences,
       readPlanTemplate,
       writePlanTemplate,

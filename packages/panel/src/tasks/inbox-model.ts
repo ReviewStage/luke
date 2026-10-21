@@ -47,6 +47,7 @@ import { insideCode, linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import { matchesTokens } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header.js";
 import type { SnippetLines } from "./code-snippet-model.js";
@@ -672,7 +673,7 @@ export function withDoPress(
  * Answer, whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
  */
-export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
+function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
   const { ask } = asking;
   if (!knownAsk(ask)) return undefined;
   const id = asking.message.id;
@@ -719,7 +720,7 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
  * `do` that names none ticked where it was marked done, and an `answer`'s
  * values. A field or a step the answer left empty stands empty.
  */
-export function answeredDraft(ask: InboxKnownAsk, answers: InboxAnswers): InboxDraft {
+export function answeredDraft(ask: InboxAsk, answers: InboxAnswers): InboxDraft {
   const titleStep = ask.type === INBOX_ASK.DO && ask.steps.length === 0;
   const done = answers.reply === INBOX_REPLY.DONE;
   return {
@@ -908,10 +909,10 @@ export function answerOf(
 /**
  * The two ways an approval and a to-do are decided, the one that holds
  * back and the one that goes ahead, and the nod a note is answered by:
- * the Inbox's cards in the question and a chat ask's presses (`chat-ask.tsx`)
- * name them alike, and a settled item keeps them as what it offered.
+ * the Inbox's cards in the question name them so, and a settled item keeps
+ * them as what it offered.
  */
-export const INBOX_PRESSES = {
+const INBOX_PRESSES = {
   [INBOX_RESPONSE.APPROVAL]: {
     back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
     ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
@@ -926,8 +927,8 @@ export const INBOX_PRESSES = {
   },
 } as const;
 
-/** The presses a chat ask answers the response by, or nothing where words, a pick, or a form answer it. */
-export function pressesOf(
+/** The presses a response from before version 5 is answered by, or nothing where words, a pick, or a form answer it. */
+function pressesOf(
   response: InboxReadResponse,
 ): (typeof INBOX_PRESSES)[keyof typeof INBOX_PRESSES] | undefined {
   if (!knownResponse(response)) return undefined;
@@ -1034,6 +1035,13 @@ function valueLines(answer: InboxReply): string | undefined {
   return values.length === 0 ? undefined : values.join("\n");
 }
 
+/** What an answer's answerer did, in a few words after who they are: "chose Postgres", "marked it done". */
+export function answerDid(answer: InboxReply): string {
+  return answer.reply === INBOX_REPLY.CHOSE
+    ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
+    : REPLY_WORDS[answer.reply];
+}
+
 /** How an item was settled, or nothing while it waits: what its answerer did and wrote, or the agent taking it back and why. */
 export function settlementOf(item: InboxItem): Settlement | undefined {
   if (item.status === INBOX_STATUS.OPEN) return undefined;
@@ -1048,10 +1056,7 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
   const answer = item.answer;
   if (answer === undefined)
     return { by: SETTLED_BY.DEVELOPER, did: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
-  const did =
-    answer.reply === INBOX_REPLY.CHOSE
-      ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
-      : REPLY_WORDS[answer.reply];
+  const did = answerDid(answer);
   const values = valueLines(answer);
   return {
     by: SETTLED_BY.DEVELOPER,
@@ -1595,6 +1600,84 @@ export function holderName(holder: InboxHolder): string {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
 }
 
+/** The words a block says: Markdown's in plain words, a link's label, a file's path, a picture's alt; none of a block this build does not know. */
+function blockWords(block: InboxItem["blocks"][number]): string | undefined {
+  if (!knownBlock(block)) return undefined;
+  switch (block.type) {
+    case INBOX_BLOCK.MARKDOWN:
+      return plainWords(block.text);
+    case INBOX_BLOCK.LINK:
+      return block.label;
+    case INBOX_BLOCK.CODE:
+      return block.path;
+    case INBOX_BLOCK.IMAGE:
+      return block.alt;
+  }
+}
+
+/** The words options say: each one's label and the trade-off written under it. */
+function optionWords(options: readonly { label: string; detail?: string }[]): readonly string[] {
+  return options.flatMap((option) => [option.label, option.detail ?? ""]);
+}
+
+/** The words a form's fields say: each one's label and a select's options. */
+function fieldWords(fields: readonly InboxForm["fields"][number][]): readonly string[] {
+  return fields.flatMap((field) => [field.label, ...(field.options ?? [])]);
+}
+
+/** The words a filled form says: each field's label and its value as words. */
+function valueWords(values: readonly InboxFormValue[] | undefined): readonly string[] {
+  return (values ?? []).flatMap((each) => [each.label, fieldValueWords(each.value)]);
+}
+
+/** The words an ask offers: a decision's options, a to-do's steps, and an answer's fields; none of an ask this build does not know. */
+function askWords(ask: InboxReadAsk | undefined): readonly string[] {
+  if (ask === undefined || !knownAsk(ask)) return [];
+  if (ask.type === INBOX_ASK.DECIDE) return optionWords(ask.options);
+  if (ask.type === INBOX_ASK.DO) return ask.steps.map(plainWords);
+  return fieldWords(ask.fields ?? []);
+}
+
+/** The words a response offers: a choice's options and a form's fields. */
+function responseWords(response: InboxItem["response"]): readonly string[] {
+  if (!knownResponse(response)) return [];
+  if (response.type === INBOX_RESPONSE.CHOICE) return optionWords(response.options);
+  if (response.type === INBOX_RESPONSE.FORM) return fieldWords(response.fields);
+  return [];
+}
+
+/**
+ * Every line of words an item says, as a search reads it: its title, its
+ * blocks, what it offers to choose or fill in, each message of its thread
+ * and what that asks, picks, or fills in, and the answer it was given. Note that it names no
+ * address, id, or member, because a query typed is about what was said, and
+ * an address holds letters enough to match almost anything.
+ */
+export function inboxItemWords(item: InboxItem): readonly string[] {
+  const offered = responseWords(item.response);
+  const said = (item.thread ?? item.messages ?? []).flatMap((message) => [
+    plainWords(message.text),
+    ...askWords(message.ask),
+    ...(message.answers?.choices ?? []),
+    ...valueWords(message.answers?.values),
+  ]);
+  const answered = [
+    ...(item.answer?.choices ?? []),
+    ...valueWords(item.answer?.values),
+    item.answer?.note ?? "",
+  ];
+  return [item.title, ...item.blocks.map(blockWords), ...offered, ...said, ...answered].filter(
+    (words): words is string => words !== undefined && words.length > 0,
+  );
+}
+
+/** Whether an item answers a list's search: every word of it somewhere in the item's words (`inboxItemWords`) or its holder's name; any item answers none. */
+function searchedItem(holder: InboxHolder, item: InboxItem, search: readonly string[]): boolean {
+  return (
+    search.length === 0 || matchesTokens([holderName(holder), ...inboxItemWords(item)], search)
+  );
+}
+
 /** What one group of agents no readable automation started is keyed by. */
 const NO_AUTOMATION_KEY = "no-automation";
 
@@ -1932,6 +2015,9 @@ function statusGroups(
   });
 }
 
+/** No search: every item answers it. */
+const NO_SEARCH: readonly string[] = [];
+
 /** Whether an item is one the Whose choice lists: anyone's, the reader's own (`readersItem`), or one the teammate's agent asks. */
 function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefined): boolean {
   switch (whose.kind) {
@@ -1950,7 +2036,7 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
  * under the person whose agent asks it, under where it stands, or in one
  * run, the tasks and the people in the order their first item stands and
  * the statuses in theirs. The scope shown lists only the items it takes
- * (`showsItem`) of the people Whose names, and the item chosen where one is given. Note that the rows a list draws are given
+ * (`showsItem`) of the people Whose names that its search finds (`searchedItem`), and the item chosen where one is given. Note that the rows a list draws are given
  * only the chosen item they drew already, kept while it stays chosen
  * (`use-held-inbox-list.ts`), so a settled item leaves a list filtered to
  * exclude it once another is chosen, while the steps through the list are
@@ -1970,16 +2056,26 @@ export function inboxList(
     readonly sort?: InboxSort | undefined;
     /** Whose items are listed; everyone's where none is given. */
     readonly whose?: InboxWhose | undefined;
+    /** The words of the list's search (`searchTokens`), each somewhere in every item listed; none narrows nothing. */
+    readonly search?: readonly string[] | undefined;
     /** Where the items held still stand (`inboxPlaces`), each other item where it is now; none holds every item where it is now. */
     readonly places?: ReadonlyMap<string, InboxPlace> | undefined;
   },
 ): InboxListView {
-  const { readerId, sort = INBOX_SORT.LATEST, whose = EVERYONES, places = NO_PLACES } = view;
+  const {
+    readerId,
+    sort = INBOX_SORT.LATEST,
+    whose = EVERYONES,
+    search = NO_SEARCH,
+    places = NO_PLACES,
+  } = view;
   const placed = (item: InboxItem): InboxPlace =>
     places.get(item.id) ?? { at: item.updatedAt, status: statusOf(item, readerId) };
   const order = (a: InboxItem, b: InboxItem) => SORT_ORDER[sort](placed(a).at, placed(b).at);
   const shows = (holder: InboxHolder) => (item: InboxItem) =>
-    (showsItem(view.show, { holder, item }, readerId) && whoseItem(whose, item, readerId)) ||
+    (showsItem(view.show, { holder, item }, readerId) &&
+      whoseItem(whose, item, readerId) &&
+      searchedItem(holder, item, search)) ||
     item.id === view.chosen;
   const groups = tasks
     .map(({ holder, items }) => ({ holder, items: items.filter(shows(holder)).toSorted(order) }))

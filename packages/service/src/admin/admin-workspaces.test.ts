@@ -22,6 +22,12 @@ import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
+import {
+  ADMIN_METRICS_SCOPE,
+  ADMIN_WORKSPACES_KIND,
+  type AdminMetricsScope,
+  type AdminWorkspacesKind,
+} from "@luke/features/admin-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
@@ -34,12 +40,6 @@ import {
   INVITATION_STATUS,
 } from "./admin-workspaces.js";
 import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
-import {
-  ADMIN_METRICS_SCOPE,
-  ADMIN_WORKSPACES_KIND,
-  type AdminMetricsScope,
-  type AdminWorkspacesKind,
-} from "./http.js";
 
 /**
  * The read's builder over hand-made sources, its handler's refusal, and its

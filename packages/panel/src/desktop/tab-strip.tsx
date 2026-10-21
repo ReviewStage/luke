@@ -383,7 +383,9 @@ export function Tab({
   tabRef,
   quiet = false,
   anchored = false,
+  preview = false,
   onSelect,
+  onKeep,
   onClose,
   contextMenu,
   onMenu,
@@ -406,7 +408,11 @@ export function Tab({
   tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   quiet?: boolean;
   anchored?: boolean;
+  /** Stands as its strip's preview, which the next link opened takes the place of: its label in italics, as VS Code draws one. */
+  preview?: boolean;
   onSelect: () => void;
+  /** Keeps a preview as a tab of its own, as a double-click on it asks. */
+  onKeep?: (() => void) | undefined;
   onClose?: (() => void) | undefined;
   contextMenu?: ContextMenuProps | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
@@ -432,6 +438,7 @@ export function Tab({
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       tabIndex={selected ? 0 : -1}
       onClick={onSelect}
+      onDoubleClick={preview ? onKeep : undefined}
       {...contextMenu}
       onKeyDown={(event) => {
         if (onMenu !== undefined && opensMenu(event)) {
@@ -464,6 +471,7 @@ export function Tab({
       data-closable={String(onClose !== undefined)}
       data-quiet={String(quiet)}
       data-anchored={String(anchored)}
+      data-preview={String(preview)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}
     >

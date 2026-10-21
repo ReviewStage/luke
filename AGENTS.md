@@ -68,20 +68,8 @@ Review places a module and a component alike under this rule.
   view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
   trace, a counted event, a fixture, app state, the service, or the voice
   window; the still is left out of the screen recording, and the title and
-  address the tab draws are masked there as every word is. Amended, approved
-  by Dean on 2026-10-20: while that Mac's "Let agents run commands on this
-  Mac" switch (`macCommands`, `packages/settings/src/schema.ts`) is on, an
-  agent on a task may drive that task's Browser tabs on the Mac, over the
-  view's debugger, with no approval for each action, and a tab's address,
-  title, a downscaled screenshot and a text snapshot of its page then also
-  reach that agent and its workers, the service and the model, and the agent's
-  transcript, where the screenshot goes to the model and is left out of the
-  stored conversation, as `look_at_picture`'s is; to that extent "only to the
-  panel" and "never the service" above no longer hold. Everything else in the
-  line stays: none of it reaches a trace, a counted event, a fixture, app
-  state, or the voice window, and the screen recording still leaves it out.
-  With the switch off, the line stands as first written.
-  And, approved by Dean (the cloud browser), an agent's cloud browser, a Chromium
+  address the tab draws are masked there as every word is.
+  And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
   in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
   address, title, screenshots, and text snapshots to that agent and its workers,
   the model, the agent's transcript (a screenshot reaches the model but is left

@@ -67,6 +67,8 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPartParams,
+  type CodingAgentPartView,
   type CodingAgentPictureParams,
   type CodingAgentPinParams,
   type CodingAgentPullRequestActionParams,
@@ -82,6 +84,8 @@ import {
   type CodingAgentStopParams,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptOlderAnswer,
+  type CodingAgentTranscriptOlderParams,
   type CodingAgentWorkspaceListParams,
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
@@ -105,11 +109,13 @@ import {
   codingAgentOverviewConversationAnswerViewSchema,
   codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
+  codingAgentPartViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentReviewOptionsAnswerViewSchema,
   codingAgentTranscriptChangedSchema,
+  codingAgentTranscriptOlderAnswerSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -170,6 +176,8 @@ import {
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskBrowserTabsFollow,
+  type TaskBrowserTabsFollowed,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -257,6 +265,7 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
   tasksBrowserTabsAnswerSchema,
@@ -510,6 +519,12 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** A followed plan's pages as they now stand, each time they move while followed. */
   onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+  /** One task's cloud Browser tabs followed from now until let go, heard through `onTaskBrowserTabsChanged`. */
+  tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
+  /** A followed task's Browser tabs let go: nothing more is heard of them until they are followed again. */
+  tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
+  /** A followed task's Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
+  onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
   /** One plan's newest page of history followed from now until let go, heard through `onTaskHistoryChanged`. */
   tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** A followed plan's history let go: nothing more is heard of it until it is followed again. */
@@ -789,6 +804,10 @@ export interface HostOperator {
   transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
   /** One followed transcript let go: nothing more is heard of it until it is followed again. */
   transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+  /** The page of a transcript below the oldest message the window holds, read at once; or why there is none. */
+  transcriptOlder(
+    params: CodingAgentTranscriptOlderParams,
+  ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
   /** A followed transcript's next page, or why there is none, each time it moves. */
   onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
   codingAgentInboxAttachment(
@@ -798,6 +817,8 @@ export interface HostOperator {
   codingAgentPicture(
     params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
+  /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
+  codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
   /** A workspace's chat, followed from now until let go or signed out, heard through `onChatChanged`; following again starts over. */
   codingAgentChatFollow(workspaceId: string): Effect.Effect<void>;
   /** A workspace's chat let go: nothing more is heard of it until it is followed again. */
@@ -1520,6 +1541,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
+    tasksBrowserTabsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, scope)),
+    tasksBrowserTabsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, scope)),
+    onTaskBrowserTabsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(taskBrowserTabsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
     tasksHistoryFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, scope)),
     tasksHistoryUnfollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, scope)),
@@ -1837,7 +1871,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : undefined),
           ...("from" in params ? { from: params.from } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
-          ...("payer" in params ? { payer: params.payer } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -2224,6 +2257,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(
         client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript)),
       ),
+    transcriptOlder: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, {
+          ...transcriptParams(params),
+          before: params.before,
+        }),
+        codingAgentAnswer(codingAgentTranscriptOlderAnswerSchema),
+      ),
     transcriptUnfollow: (transcript) =>
       fire(
         client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript)),
@@ -2249,6 +2290,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+      ),
+    codingAgentPart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PART, params),
+        codingAgentAnswer(codingAgentPartViewSchema),
       ),
     codingAgentChatFollow: (workspaceId) =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),

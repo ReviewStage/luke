@@ -120,13 +120,13 @@ const SUMMARY_WIDE = 1040;
 const SUMMARY_RAILED = 480;
 
 /** How the summary stands in the plan's column: pinned, a rail, or not drawn where the column has no room for one. */
-const SUMMARY_MODE = {
+export const SUMMARY_MODE = {
   COLUMN: "column",
   RAIL: "rail",
   NONE: "none",
 } as const;
 
-type SummaryMode = (typeof SUMMARY_MODE)[keyof typeof SUMMARY_MODE];
+export type SummaryMode = (typeof SUMMARY_MODE)[keyof typeof SUMMARY_MODE];
 
 /** What hung the card, which takes the focus back when Escape or its chevron takes the card down. */
 const CARD_FROM = {

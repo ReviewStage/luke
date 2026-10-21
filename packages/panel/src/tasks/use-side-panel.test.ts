@@ -6,6 +6,7 @@ import { fakeActPortAnswering, type SentPortAct } from "@luke/panel/testing/app-
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { installPressIntent } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   type OpenTask,
@@ -356,52 +357,6 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
   assert.deepEqual(second.control().browsers, []);
 });
 
-test("a Browser tab an agent opened is chosen on the open plan, only held on another, and goes when the agent closes it", () => {
-  fakeActPortAnswering(() => Promise.resolve(undefined));
-  const panel = launch({ task: TASK, taskAgents: [] });
-  const here = { browserId: "agent-tab-here", taskId: TASK, address: "http://localhost:3000/" };
-  const there = {
-    browserId: "agent-tab-there",
-    taskId: OTHER_TASK,
-    address: "https://example.com/",
-  };
-
-  act(() => panel.control().onAgentBrowser(here));
-  act(() => panel.control().onAgentBrowser(there));
-  act(() => panel.control().onAgentBrowser(here));
-
-  assert.deepEqual(panel.control().browsers, [
-    { tab: { browser: here.browserId }, task: TASK, address: here.address },
-  ]);
-  assert.deepEqual(panel.control().tab, { browser: here.browserId }, "chosen on the open plan");
-  assert.equal(panel.control().open, true);
-  panel.render({ task: OTHER_TASK, taskAgents: [] });
-  assert.deepEqual(panel.control().browsers, [
-    { tab: { browser: there.browserId }, task: OTHER_TASK, address: there.address },
-  ]);
-
-  act(() => panel.control().onBrowserGone(there.browserId));
-  assert.deepEqual(panel.control().browsers, []);
-});
-
-test("a chosen Browser tab an agent closes gives way to the tab viewed before it, as a tab's own close does", () => {
-  fakeActPortAnswering(() => Promise.resolve(undefined));
-  const panel = launch({ task: TASK, taskAgents: [] });
-  const first = { browserId: "agent-tab-first", taskId: TASK, address: "http://localhost:3000/" };
-  const second = { browserId: "agent-tab-second", taskId: TASK, address: "https://example.com/" };
-  act(() => panel.control().onAgentBrowser(first));
-  act(() => panel.control().onAgentBrowser(second));
-  assert.deepEqual(panel.control().tab, { browser: second.browserId });
-
-  act(() => panel.control().onBrowserGone(second.browserId));
-
-  assert.deepEqual(panel.control().tab, { browser: first.browserId });
-  assert.deepEqual(
-    panel.control().browsers.map((each) => each.tab.browser),
-    [first.browserId],
-  );
-});
-
 test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
   const sent: SentPortAct[] = [];
   // The act port is the window's door to main, the process boundary a closed tab's page is let go across.
@@ -654,4 +609,86 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
       `the ${room} room shows the Inbox with no panel over it`,
     );
   }
+});
+
+test("a link opens its tab as the panel's preview, and the next link takes its place, so a run of links read leaves one tab", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel.control().preview, { changes: AGENT });
+  assert.deepEqual(panel.control().tab, { changes: AGENT });
+
+  act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
+  assert.deepEqual(panel.control().tab, { changes: OTHER_AGENT });
+  assert.deepEqual(
+    panel.control().changes,
+    [{ changes: OTHER_AGENT }],
+    "the first preview gave way",
+  );
+});
+
+test("a preview kept stands as a tab of its own, so the next link opens beside it rather than in its place", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  act(() => panel.control().onKeep({ changes: AGENT }));
+  assert.equal(panel.control().preview, undefined);
+
+  act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+  assert.deepEqual(panel.control().changes, [{ changes: AGENT }, { changes: OTHER_AGENT }]);
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
+});
+
+test("a link to a tab standing as one of its own only chooses it, and a fixed kind opens as chosen, never as a preview", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onChoose({ changes: AGENT }));
+  act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel.control().tab, { changes: AGENT });
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT }, "the preview still stands");
+
+  act(() => panel.control().onPreview(SIDE_PANEL_TAB.PLAN));
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
+  assert.equal(panel.control().changes.length, 2);
+});
+
+test("a link pressed with ⌘ opens a tab of its own, as a double-click keeps a preview", () => {
+  const stop = installPressIntent(window);
+  try {
+    const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+    const link = document.body.appendChild(document.createElement("a"));
+    link.addEventListener("click", () => panel.control().onPreview({ changes: AGENT }));
+    act(() => {
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+    });
+    assert.deepEqual(panel.control().tab, { changes: AGENT });
+    assert.equal(panel.control().preview, undefined, "⌘ keeps it");
+    act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+    assert.deepEqual(panel.control().changes, [{ changes: AGENT }, { changes: OTHER_AGENT }]);
+  } finally {
+    stop();
+  }
+});
+
+test("a preview closed lets its preview go, so the same tab opened again by a chosen door stands as a tab of its own", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  act(() => panel.control().onClose({ changes: AGENT }));
+  act(() => panel.control().onChoose({ changes: AGENT }));
+  assert.equal(panel.control().preview, undefined);
+});
+
+test("a preview browsed on to another file stays the preview on that file, so the next link still takes its place", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreviewFile({ path: "src/a.ts" }));
+  assert.deepEqual(panel.control().preview, { file: "src/a.ts" });
+  act(() => panel.control().onBrowseFile("src/a.ts", "src/b.ts", false));
+  assert.deepEqual(panel.control().preview, { file: "src/b.ts" });
+
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel.control().preview, { changes: AGENT });
+  assert.ok(
+    !panel.control().strip.some((tab) => typeof tab === "object" && "file" in tab),
+    "the browsed preview gave way",
+  );
 });

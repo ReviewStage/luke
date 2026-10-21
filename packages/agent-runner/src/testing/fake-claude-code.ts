@@ -3,7 +3,8 @@
  *
  * It stands at the process boundary the runner drives the real CLI across,
  * so a test sees what the CLI would have: the options it was started with,
- * every prompt in order, the interrupts, the model and effort changes, and
+ * every prompt in order, the interrupts, the model, effort, and fast mode
+ * changes, and
  * whether it was closed. It runs the runner's own Stop hook where the CLI
  * would, before the `result` it precedes.
  */
@@ -23,6 +24,8 @@ interface CliRecord {
   interrupts: number;
   readonly models: (string | undefined)[];
   readonly efforts: EffortSetting[];
+  /** Each fast mode the flag settings were set to. */
+  readonly fastModes: (boolean | null | undefined)[];
   closed: boolean;
 }
 
@@ -51,6 +54,7 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     interrupts: 0,
     models: [],
     efforts: [],
+    fastModes: [],
     closed: false,
   };
 
@@ -124,7 +128,8 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
         record.models.push(model);
       },
       applyFlagSettings: async (settings) => {
-        record.efforts.push(settings.effortLevel);
+        if ("effortLevel" in settings) record.efforts.push(settings.effortLevel);
+        if ("fastMode" in settings) record.fastModes.push(settings.fastMode);
       },
       close: () => {
         record.closed = true;

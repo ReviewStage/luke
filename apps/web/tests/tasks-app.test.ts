@@ -17,7 +17,7 @@ import {
   openWorkspace,
 } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
-import { boardAnswerSchema } from "@luke/features/board-wire";
+import { boardAnswerSchema, boardSaveAnswerSchema } from "@luke/features/board-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -46,6 +46,7 @@ import {
   TASK_PRIORITY,
   TASK_STATUS,
   taskAnswerSchema,
+  taskDeleteAnswerSchema,
   taskFileAnswerSchema,
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
@@ -55,6 +56,7 @@ import {
   EVE_RESET_OUTCOME,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { messagesProcedures } from "@luke/service/agents/messages-procedures";
+import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import {
   requestUserId,
   type SessionEndpoint,
@@ -87,6 +89,7 @@ import {
   makeDocumentTask,
   makeSavedDocumentTask,
 } from "@luke/service/testing/plan-documents";
+import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
 import { added } from "@luke/service/testing/task-contents";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -295,6 +298,8 @@ const answer = (
         requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
       workspaces: yield* fakeWorkspaceSeams,
       eveOrigin: () => ORIGIN,
+      sessionSandboxes: sessionSandboxesLayer,
+      keepAwake: keepAwakeDetached,
       ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
     };
     const { handler, dispose } = HttpRouter.toWebHandler(
@@ -873,10 +878,14 @@ it.layer(getTestDB())("the plan routes", (it) => {
           HOSTED_HTTP_STATUS.OK,
           "the task stands",
         );
-        assert.deepEqual(yield* ask(request(ONE_TASK(taskId), owner, { method: "DELETE" })), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { deleted: true },
-        });
+        assert.equal(
+          readAnswer(
+            taskDeleteAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(ONE_TASK(taskId), owner, { method: "DELETE" })),
+          ).deleted,
+          true,
+        );
       }),
   );
 
@@ -893,7 +902,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const deletedBy = (taskId: string, by: string) =>
           ask(request(ONE_TASK(taskId), undefined, { method: "DELETE", cookie: by }));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-        const deleted = { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } };
+        // A delete is answered with the transaction it committed in, whichever that is.
+        const deletedAs = (taskId: string, by: string) =>
+          Effect.map(
+            deletedBy(taskId, by),
+            (answer) => readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).deleted,
+          );
 
         assert.equal(
           (yield* ask(request(ONE_TASK(relay), undefined, { cookie }))).status,
@@ -904,8 +918,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(yield* deletedBy(ledger, sessionCookieOf(other)), notFound);
         assert.deepEqual(retired, [], "another account's cookie retires nothing");
 
-        assert.deepEqual(yield* deletedBy(relay, cookie), deleted);
-        assert.deepEqual(yield* deletedBy(ledger, cookie), deleted);
+        assert.equal(yield* deletedAs(relay, cookie), true);
+        assert.equal(yield* deletedAs(ledger, cookie), true);
         assert.deepEqual(
           readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
             .plans,
@@ -1566,34 +1580,41 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
-  it.effect("the board one member saves is read by the rest of the workspace", () =>
-    Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts();
-      const started = readAnswer(
-        taskAnswerSchema,
-        HOSTED_HTTP_STATUS.CREATED,
-        yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-      ).plan;
-      yield* joinWorkspace(started.workspaceId, other);
+  it.effect(
+    "the board one member saves is read by the rest of the workspace, the save answering its transaction where the board's live row moved and none where it did not",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const started = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        ).plan;
+        yield* joinWorkspace(started.workspaceId, other);
+        const save = () =>
+          Effect.map(
+            ask(
+              request(BOARD(started.id), other, {
+                method: "PUT",
+                body: { elements: [NOTE], appliedDrawing: 0 },
+              }),
+            ),
+            (answer) => readAnswer(boardSaveAnswerSchema, HOSTED_HTTP_STATUS.OK, answer),
+          );
 
-      const saved = yield* ask(
-        request(BOARD(started.id), other, {
-          method: "PUT",
-
-          body: { elements: [NOTE], appliedDrawing: 0 },
-        }),
-      );
-
-      assert.equal(saved.status, HOSTED_HTTP_STATUS.OK);
-      assert.deepEqual(
-        readAnswer(
-          boardAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(BOARD(started.id), owner)),
-        ).board.elements,
-        [NOTE],
-      );
-    }),
+        const saved = yield* save();
+        assert.deepEqual(saved.board.elements, [NOTE]);
+        assert.match(saved.txid ?? "", /^\d+$/, "the board's first save adds its live row");
+        assert.equal((yield* save()).txid, undefined, "the same scene again moves nothing");
+        assert.deepEqual(
+          readAnswer(
+            boardAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(BOARD(started.id), owner)),
+          ).board.elements,
+          [NOTE],
+        );
+      }),
   );
 
   it.effect(

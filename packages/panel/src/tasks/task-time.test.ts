@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
-import { callHeading, clockText } from "./task-time.js";
+import { callHeading } from "./task-time.js";
 import { TurnCard } from "./turn-card.js";
 
 /** The Mac's own region, read by a time asked for in no locale of its own: one that sets the clock on 24 hours. */
@@ -46,10 +46,4 @@ test("a turn's heading and the card it hangs read one clock on a Mac set to 24 h
 
   assert.equal(callHeading(endedAt, now), "Today, 3:42 PM");
   assert.match(card, /Oct 8, 2026, 2:32 PM → 3:42 PM/u);
-});
-
-test("a chat message's time reads on the clock, with its day only where it was not posted today", () => {
-  const now = new Date(2026, 9, 8, 18, 0).getTime();
-  assert.equal(clockText(new Date(2026, 9, 8, 10, 42).getTime(), now), "10:42 AM");
-  assert.equal(clockText(new Date(2026, 9, 7, 23, 5).getTime(), now), "Oct 7, 11:05 PM");
 });

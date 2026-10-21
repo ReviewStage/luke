@@ -88,6 +88,15 @@ export const GATEWAY_METHOD = {
   TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
   /** A followed plan's history let go: no more `TASKS_HISTORY_CHANGED` events of it until it is followed again. */
   TASKS_HISTORY_UNFOLLOW: "tasks.historyUnfollow",
+  /**
+   * One task's cloud Browser tabs, the agent's pointer on each among them,
+   * followed from now until let go, over Neon Realtime. What they hold is
+   * heard as `TASKS_BROWSER_TABS_CHANGED` events, never answered; following
+   * what is already followed does nothing.
+   */
+  TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
+  /** A followed task's Browser tabs let go: no more `TASKS_BROWSER_TABS_CHANGED` events of it until it is followed again. */
+  TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
@@ -187,6 +196,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
   /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
   CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
+  /** The page of an agent's or worker's transcript below the oldest message a window holds, read at once: its messages, and where the page older still is read below. */
+  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
@@ -334,6 +345,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_PICTURE: "codingAgents.picture",
+  /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
+  CODING_AGENTS_PART: "codingAgents.part",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
@@ -686,6 +699,8 @@ export const GATEWAY_EVENT = {
   TASKS_PAGES_CHANGED: "tasks.pagesChanged",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
+  /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
+  TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
   /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
   AUTOMATIONS_CHANGED: "automations.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */

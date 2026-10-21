@@ -59,17 +59,6 @@ const SETTINGS_FIELD = {
 const STORED_API_KEYS_FIELD = "apiKeys";
 
 /**
- * The providers whose stored key an earlier build could still use: the set
- * its credential provider list last named. A ciphertext under any other id
- * (the developer's own OpenAI key, until LUKE-205) is dropped by
- * `retireStoredApiKeys`; these are carried. Spelled out here, since the
- * vocabulary that named them is gone with them.
- */
-const KEPT_API_KEY_PROVIDER = { CONDUCTOR: "conductor" } as const;
-
-const KEPT_API_KEY_PROVIDERS: ReadonlySet<string> = new Set(Object.values(KEPT_API_KEY_PROVIDER));
-
-/**
  * A credential is only ever written through OS-provided encryption. Electron's
  * `safeStorage` satisfies this on macOS by deriving its key from the Keychain.
  *
@@ -961,19 +950,15 @@ export class SettingsStore {
   }
 
   /**
-   * Drops the ciphertext of every provider an earlier build no longer named,
-   * so a key nothing would read does not stay on disk, and carries the rest.
-   * A ciphertext is never decrypted to be dropped.
+   * Drops every provider key an earlier build stored, since no build reads
+   * one any more, so none stays on disk. A ciphertext is never decrypted to
+   * be dropped.
    */
   retireStoredApiKeys(): Effect.Effect<void, PlatformError> {
     return this.#mutate((persisted) => {
-      const apiKeys = this.#carried[STORED_API_KEYS_FIELD];
-      if (!isRecord(apiKeys)) return undefined;
-      const kept = Object.fromEntries(
-        Object.entries(apiKeys).filter(([providerId]) => KEPT_API_KEY_PROVIDERS.has(providerId)),
-      );
-      if (Object.keys(kept).length === Object.keys(apiKeys).length) return undefined;
-      this.#carried = { ...this.#carried, [STORED_API_KEYS_FIELD]: kept };
+      if (!(STORED_API_KEYS_FIELD in this.#carried)) return undefined;
+      const { [STORED_API_KEYS_FIELD]: _retired, ...carried } = this.#carried;
+      this.#carried = carried;
       return { ...persisted };
     });
   }

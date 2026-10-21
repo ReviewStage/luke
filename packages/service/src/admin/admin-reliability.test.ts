@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
+import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import { type AdminReliabilitySource, buildAdminReliability } from "./admin-reliability.js";
-import { ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * The Reliability answer's shaping and its address: each day of the window

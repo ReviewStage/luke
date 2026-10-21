@@ -78,6 +78,7 @@ import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
+import { useTaskMaker } from "./use-task-origin.js";
 import {
   useWordsDatePicker,
   WordsDatePickerRoom,
@@ -225,24 +226,25 @@ type ShowHistory = (save: number | undefined) => void;
  */
 function EditTime({
   at,
-  now,
   label,
   onShow,
   short = false,
 }: {
   at: number;
-  now: number;
-  label: string;
+  /** What the press is called, from how long ago the edit was, "2 hours ago". */
+  label: (ago: string) => string;
   onShow: (() => void) | undefined;
   short?: boolean;
 }): React.JSX.Element {
+  // Note that the time reads the minute itself, so the minute draws it again and not the section it stands in.
+  const now = useMinute();
   const words = short ? sinceText(at, now, { year: false }) : agoText(at, now);
   const time =
     onShow === undefined ? (
       <span>{words}</span>
     ) : (
       <TextButton
-        aria-label={label}
+        aria-label={label(agoText(at, now))}
         // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
         onPointerEnter={VERSION_HISTORY.prefetch}
         onFocus={VERSION_HISTORY.prefetch}
@@ -255,6 +257,14 @@ function EditTime({
       </TextButton>
     );
   return short ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
+}
+
+/** The press that opens the history from a plan's last edit, by how long ago it was. */
+const editedLabel = (ago: string): string => `Edited ${ago}. Show version history`;
+
+/** How long ago a moment was, in words, drawn again as the minute turns. */
+function Ago({ at }: { at: number }): React.JSX.Element {
+  return <span>{agoText(at, useMinute())}</span>;
 }
 
 /**
@@ -271,7 +281,6 @@ function EditedLine({
   place: EditPlace;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
-  const ago = agoText(edit.at, place.now);
   return (
     <p className="plan-edit-note actor-line">
       {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
@@ -279,8 +288,7 @@ function EditedLine({
       {" · "}
       <EditTime
         at={edit.at}
-        now={place.now}
-        label={`Edited ${ago}. Show version history`}
+        label={editedLabel}
         onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
       />
     </p>
@@ -309,11 +317,14 @@ function PlanByline({
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
   const creator = useCreator(task, place.reader.readerId);
+  const maker = useTaskMaker(task);
+  const now = useMinute();
   return (
     <DocumentByline
       creator={creator}
+      maker={maker}
       createdAt={task.createdAt}
-      now={place.now}
+      now={now}
       edited={
         edit === undefined ? undefined : (
           <>
@@ -322,8 +333,7 @@ function PlanByline({
             {" · "}
             <EditTime
               at={edit.at}
-              now={place.now}
-              label={`Edited ${agoText(edit.at, place.now)}. Show version history`}
+              label={editedLabel}
               onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
             />
           </>
@@ -400,7 +410,6 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
   const { onShowHistory, place } = marks;
-  const named = `${heading}: edited ${agoText(edit.at, place.now)}`;
   return (
     <span className="plan-unit-byline actor-line">
       {edit.actor === PLAN_ACTOR.EARLIER ? (
@@ -410,8 +419,7 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
       )}{" "}
       <EditTime
         at={edit.at}
-        now={place.now}
-        label={`${named}. Show version history`}
+        label={(ago) => `${heading}: edited ${ago}. Show version history`}
         onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
         short
       />
@@ -434,7 +442,7 @@ function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element 
       {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
       <EditedBy edit={edit} place={place} sentence />
       {" · "}
-      <span>{agoText(edit.at, place.now)}</span>
+      <Ago at={edit.at} />
     </span>
   );
 }
@@ -975,7 +983,6 @@ export const PlanBody = memo(function PlanBody({
   const text = editable ? task.document.body : undefined;
   const editing = usePlanEditing(task.id, text, onEdit ?? NO_EDIT);
   const editReader = useEditReader(reader);
-  const now = useMinute();
   // Note that what each section is drawn from is held steady across draws,
   // because a section drawn again parses its Markdown again
   // (`DocumentUnit`), and the page hands its props over afresh on each draw.
@@ -987,8 +994,8 @@ export const PlanBody = memo(function PlanBody({
     [agentsControl, openAgent],
   );
   const place = useMemo<EditPlace>(
-    () => ({ reader: editReader, sections: sectionEdits, agents: steadyAgents, now }),
-    [editReader, sectionEdits, steadyAgents, now],
+    () => ({ reader: editReader, sections: sectionEdits, agents: steadyAgents }),
+    [editReader, sectionEdits, steadyAgents],
   );
   const showHistory = useSteadyDoor(onShowHistory);
   const marks = useMemo<SectionMarks>(

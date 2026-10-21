@@ -7,7 +7,7 @@ import {
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
+import { INLINE_EDIT_LOOK, InlineEdit, SKELETON_SHAPE, Skeleton } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useEffect, useRef } from "react";
@@ -16,11 +16,11 @@ import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { RetryButton } from "../retry-button.js";
-import { SpinnerRegion } from "../spinner.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
+import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import type { ChatNoticeDoors } from "../tasks/chat-notice.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
@@ -43,7 +43,11 @@ import {
   type TabPin,
   type TabViews,
 } from "./strip-tabs.js";
+import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
+
+/** How wide the block standing in a tab is while the task or its agents are read: a typical tab's width. */
+export const TAB_SKELETON_WIDTH = "120px";
 
 /**
  * main-tabs.tsx -- the task's column's tabs: each agent's, the draft agent's, and its Chat, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
@@ -398,6 +402,7 @@ export function MainTabStrip({
     (entry) => entry.tab,
   );
   const strip = own;
+  useStripLooks(LOOK_STRIP.COLUMN, task.id, strip);
   const copyLink = useCopyLinkItem();
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
@@ -464,6 +469,12 @@ export function MainTabStrip({
           short of room (desktop.css's `plan-toolbar`). */}
       {agents.listFailed && agents.agents === undefined ? (
         <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+      ) : null}
+      {/* While the agents are read, one tab-shaped block stands where their
+          tabs will, as it stood while the task was read, so the row holds
+          still until they land. */}
+      {agents.agents === undefined && !agents.listFailed ? (
+        <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
       ) : null}
       <AddTabButton
         label="Open a tab"
@@ -549,36 +560,43 @@ export function MainTabContent({
         call={call}
       />
     ) : (
-      <SpinnerRegion label="Loading agent" />
+      <AgentTabSkeleton />
     );
   }
-  const agent = agents.agents?.find((each) => each.id === tab.agent);
-  // The tab stands for an agent the list no longer holds only until the
-  // column moves back to the task, a render away.
-  return agent === undefined ? (
-    <SpinnerRegion label="Loading agent" />
-  ) : (
+  const agentId = tab.agent;
+  // The tab follows its agent's transcript by the id alone, so a task opened
+  // on an agent reads it beside the task's list of agents rather than after
+  // it; what needs the agent itself waits for the list in the tab's shape.
+  // Note that the tab stands for an agent the list no longer holds only until
+  // the column moves back to the task, a render away.
+  const agent = agents.agents?.find((each) => each.id === agentId);
+  return (
     <ForkProvider
-      key={agent.id}
-      value={agentForkDoors({
-        agent,
-        control: agents,
-        onFork,
-        onContinue,
-        cards: cards.agent(agent.id),
-        onOpenTarget,
-      })}
+      key={agentId}
+      value={
+        agent === undefined
+          ? undefined
+          : agentForkDoors({
+              agent,
+              control: agents,
+              onFork,
+              onContinue,
+              cards: cards.agent(agentId),
+              onOpenTarget,
+            })
+      }
     >
       <AgentTab
+        agentId={agentId}
         agent={agent}
         control={agents}
         shown={shown}
-        onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
+        onOpenSubagent={(callId, task, status) => onOpenDelegation(agentId, callId, task, status)}
         onOpenPullRequest={
-          onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agent.id)
+          onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agentId)
         }
         onOpenTarget={onOpenTarget}
-        cards={cards.agent(agent.id)}
+        cards={cards.agent(agentId)}
         chat={chat}
         onHeld={views.onAgentHeld}
         run={agents.origin}

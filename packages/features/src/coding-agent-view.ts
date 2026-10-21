@@ -4,15 +4,20 @@ import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from 
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
+  codingAgentAnswerSchema,
   codingAgentArchiveRequestSchema,
+  codingAgentBeforeSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
+  codingAgentMessageAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOlderAnswerSchema,
   codingAgentOverviewChecksAnswerSchema,
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPartAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
@@ -294,11 +299,22 @@ export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;
 
 /** An agent started, messaged, or stopped, as the window hears it: the agent as it then stands, or why it was not. */
 export const codingAgentAgentAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ agent: codingAgentSummarySchema }),
+  EffectSchema.Struct({
+    agent: codingAgentSummarySchema,
+    txid: codingAgentAnswerSchema.fields.txid,
+  }),
   failedReaching,
 ]);
 
 export type CodingAgentAgentAnswer = typeof codingAgentAgentAnswerSchema.Type;
+
+/** A message handed to an agent, as the host hears the service answer it: the agent, and the transaction that wrote its row where one did; or why there is none. */
+const codingAgentMessageAnswerViewSchema = EffectSchema.Union([
+  codingAgentMessageAnswerSchema,
+  failedReaching,
+]);
+
+export type CodingAgentMessageAnswerView = typeof codingAgentMessageAnswerViewSchema.Type;
 
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const codingAgentMessagesParamsSchema = EffectSchema.Struct({
@@ -332,16 +348,51 @@ export const codingAgentTranscriptKeySchema = EffectSchema.Struct({
 export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Type;
 
 /**
- * A followed transcript's next page, as the window hears it pushed: the
- * messages past the last page pushed, the first from the start, with where
- * the agent stands as it was read; or why there is none.
+ * A followed transcript's page as the window hears it pushed, with where the
+ * agent stands as it was read; or why there is none. The follow opens with
+ * the transcript's `newest` page, which carries `before`, where the next
+ * older page is read below (absent where nothing older stands), and each
+ * later page is what moved past the last. A newest page that is `held`
+ * came from the host's own memory of the transcript, not a read. `caughtUp` says the page came
+ * back short, so every message written by then is told.
  */
+const codingAgentTranscriptPageSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    ...codingAgentMessagesAnswerSchema.fields,
+    newest: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+    /** The newest page is the window the host held from the last time the transcript was followed, told before the service was asked anything. */
+    held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+    before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+    caughtUp: EffectSchema.Boolean,
+  }),
+  failed,
+]);
+
+export type CodingAgentTranscriptPage = typeof codingAgentTranscriptPageSchema.Type;
+
+/** A followed transcript's next page, as the window hears it pushed. */
 export const codingAgentTranscriptChangedSchema = EffectSchema.Struct({
   transcript: codingAgentTranscriptKeySchema,
-  page: codingAgentMessagesAnswerViewSchema,
+  page: codingAgentTranscriptPageSchema,
 });
 
 export type CodingAgentTranscriptChanged = typeof codingAgentTranscriptChangedSchema.Type;
+
+/** The page of a followed transcript below the oldest message a window holds, as the window asks it: the transcript, and the `before` its last page named. */
+export const codingAgentTranscriptOlderParamsSchema = EffectSchema.Struct({
+  ...codingAgentTranscriptKeySchema.fields,
+  before: codingAgentBeforeSchema,
+});
+
+export type CodingAgentTranscriptOlderParams = typeof codingAgentTranscriptOlderParamsSchema.Type;
+
+/** An older page of a transcript, as the window hears it: its messages, oldest first, and where the page older still is read below; or why there is none. */
+export const codingAgentTranscriptOlderAnswerSchema = EffectSchema.Union([
+  codingAgentOlderAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentTranscriptOlderAnswer = typeof codingAgentTranscriptOlderAnswerSchema.Type;
 
 /** Messaging an agent, as the window asks it: the agent, and the message request the service takes, its key the window's own. */
 export const codingAgentMessageParamsSchema = EffectSchema.Struct({
@@ -559,7 +610,7 @@ export const codingAgentInboxChangedSchema = EffectSchema.Struct({
 export type CodingAgentInboxChanged = typeof codingAgentInboxChangedSchema.Type;
 
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
-export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
+const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 
 export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
 
@@ -642,6 +693,21 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
+
+/** One part of a message of an agent's transcript, or one of its workers' where `callId` names the delegation call that started it, by the message's id and the part's index among its parts: what the page carried cut (`cutParts`). */
+export const codingAgentPartParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  messageId: EffectSchema.NonEmptyString,
+  index: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  callId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentPartParams = typeof codingAgentPartParamsSchema.Type;
+
+/** The part whole, as the window hears it, or why there is none. */
+export const codingAgentPartViewSchema = EffectSchema.Union([codingAgentPartAnswerSchema, failed]);
+
+export type CodingAgentPartView = typeof codingAgentPartViewSchema.Type;
 
 /** One picture a chat message carries, as the window asks it: the workspace, the message, and the attachment its image block names. */
 export const codingAgentChatAttachmentParamsSchema = EffectSchema.Struct({

@@ -909,6 +909,25 @@ test("a notice another coding agent posted names it by its own chip in the handl
   );
 });
 
+test("a notice of a person's message keeps the line breaks they typed, as Chat draws their words, while an agent's lines join", () => {
+  const typed = (author: "human" | "agent"): CodingAgentMessage => ({
+    ...NOTICE,
+    id: `notice-${author}`,
+    parts: [
+      {
+        type: "text",
+        text: "Chat · Maria in #teammate-invitations (m 43):\n\nfirst line\nsecond line",
+      },
+    ],
+    metadata: { author, channel: "chat", chat_seq: 43, from: "Maria Chen" },
+  });
+  const breaks = (author: "human" | "agent") =>
+    noticeDrawn(false, true, typed(author)).container.querySelectorAll(".chat-notice-words br")
+      .length;
+  assert.equal(breaks("human"), 1);
+  assert.equal(breaks("agent"), 0);
+});
+
 test("an inbox answer the developer sent reads back in their bubble without the item's key", () => {
   const { container } = drawn({
     id: "answer",

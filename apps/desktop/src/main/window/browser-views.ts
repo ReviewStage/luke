@@ -1,22 +1,14 @@
-import { randomUUID } from "node:crypto";
 import {
   BROWSER_SHOWN_MAX_CHARS,
   BROWSER_STEP,
   type BrowserBounds,
   type BrowserFocus,
   type BrowserKey,
-  type BrowserOpened,
   type BrowserPage,
   type BrowserStep,
   chordIsWindows,
   isBrowserAddress,
 } from "@luke/features/browser-acts";
-import {
-  MAC_DEBUGGER_VERSION,
-  type MacBrowserTab,
-  type MacTabDebugger,
-  type MacTaskTabs,
-} from "@luke/host/mac-browser-tabs";
 import { BrowserWindow, type Session, session, type WebContents, WebContentsView } from "electron";
 
 /**
@@ -44,14 +36,6 @@ import { BrowserWindow, type Session, session, type WebContents, WebContentsView
  * chords answer over a page as over any tab, but for those a page edits its
  * text with. A panel's views go with its page: a reload or a close takes
  * them all.
- *
- * Each view is kept with the task its tab was opened on, so an agent on
- * that task can reach every Browser tab on it (`agentTabs`), and open one,
- * which the panel is told of and draws as the "+" would, without taking the
- * keyboard. While an agent drives a page its debugger is attached, the page
- * keeps running as if shown, and the tab's bar says so (`BrowserPage`'s
- * `agent`); its Stop cuts the agent off and refuses every agent's action
- * on the page until the developer clicks into it again.
  */
 
 /** The partition every Browser tab's page shares, kept across launches so a sign-in to a site holds, and apart from Luke's own. */
@@ -63,38 +47,19 @@ const STILL_QUALITY = 80;
 /** The load failure a navigation the tab or the page cut short reports, which is no failure. */
 const ABORTED = -3;
 
-/**
- * The size a view an agent opened is laid out at until its tab first places
- * it, so its page has a viewport to draw, click, and capture in before the
- * developer ever sees it.
- */
-const UNPLACED_SIZE = { width: 1280, height: 800 } as const;
-
-/** One Browser tab's view, the window it stands in, and the task it is on. */
+/** One Browser tab's view, and the window it stands in. */
 interface Held {
   readonly view: WebContentsView;
   readonly window: BrowserWindow;
-  readonly taskId: string;
   /** Whether the view stands among the window's children yet, which it does from its first placing. */
   attached: boolean;
   failure: string | undefined;
-  /** How many agents' commands hold the page's debugger now; it is attached while any does. */
-  drivers: number;
-  /** Counts each Stop, so a command cut off by one gives back nothing a later command took. */
-  stops: number;
-  /** Whether the bar's Stop keeps agents off the page, until the developer clicks into it. */
-  stopped: boolean;
 }
 
 /** What a panel's Browser tabs ask of the views. Each answers false, or nothing, where the panel holds no view by that id. */
 export interface BrowserViews {
-  /** Opens a view on the address, on the task, and answers how its page stands; a view already open is answered as it stands, its address left. */
-  open(
-    sender: WebContents,
-    browserId: string,
-    address: string,
-    taskId: string,
-  ): BrowserPage | undefined;
+  /** Opens a view on the address and answers how its page stands; a view already open is answered as it stands, its address left. */
+  open(sender: WebContents, browserId: string, address: string): BrowserPage | undefined;
   navigate(sender: WebContents, browserId: string, address: string): boolean;
   step(sender: WebContents, browserId: string, step: BrowserStep): boolean;
   /** Lays the view over the window at the tab's bounds, in its CSS pixels, or puts it out of sight. */
@@ -102,10 +67,6 @@ export interface BrowserViews {
   /** A still of the page as it is drawn now, as a data address; none where it draws nothing. */
   capture(sender: WebContents, browserId: string): Promise<string | null>;
   close(sender: WebContents, browserId: string): void;
-  /** The bar's Stop: the agent driving the page is cut off, and agents are kept off it until the developer clicks into it. */
-  stop(sender: WebContents, browserId: string): boolean;
-  /** The panel's Browser tabs on the task, as an agent on the task reaches them. */
-  agentTabs(sender: WebContents, taskId: string): MacTaskTabs;
 }
 
 /** How the views reach the panel that opened them. */
@@ -118,10 +79,6 @@ export interface BrowserViewsDependencies {
   tellFocus: (sender: WebContents, focus: BrowserFocus) => void;
   /** Calls `then` once, when the panel's page is gone (`whenPageGone`). */
   whenGone: (sender: WebContents, then: () => void) => void;
-  /** Tells the panel an agent opened a Browser tab on a task, which it draws without taking the keyboard. */
-  tellOpened: (sender: WebContents, opened: BrowserOpened) => void;
-  /** Tells the panel an agent closed one of its Browser tabs. */
-  tellClosed: (sender: WebContents, closed: { browserId: string }) => void;
 }
 
 /** A shown string cut to what the panel is told, since it is only drawn. */
@@ -141,8 +98,7 @@ function pageOf(browserId: string, held: Held): BrowserPage {
     back: history.canGoBack(),
     forward: history.canGoForward(),
   };
-  const driven = held.drivers > 0 ? { ...page, agent: true } : page;
-  return held.failure === undefined ? driven : { ...driven, failure: shownText(held.failure) };
+  return held.failure === undefined ? page : { ...page, failure: shownText(held.failure) };
 }
 
 /**
@@ -175,89 +131,15 @@ function newView(): WebContentsView {
   });
 }
 
-/** Lets go of a page's debugger, and lets the page rest again as its view does. */
-function letGo(held: Held): void {
-  const contents = held.view.webContents;
-  if (contents.isDestroyed()) return;
-  if (contents.debugger.isAttached()) contents.debugger.detach();
-  contents.setBackgroundThrottling(true);
-}
-
-/**
- * One page's debugger as an agent's command holds it. The first command to
- * take it attaches it and keeps the page running as if shown; the last to
- * give it back detaches it. Note that a command a Stop cut off gives back
- * nothing, since the Stop let go of the debugger for every command at once.
- */
-function debuggerOf(held: Held, told: () => void): MacTabDebugger {
-  const contents = held.view.webContents;
-  let takenAt: number | undefined;
-  return {
-    attach: () => {
-      if (takenAt !== undefined) return;
-      if (held.drivers === 0) {
-        contents.debugger.attach(MAC_DEBUGGER_VERSION);
-        contents.setBackgroundThrottling(false);
-      }
-      held.drivers += 1;
-      takenAt = held.stops;
-      told();
-    },
-    detach: () => {
-      if (takenAt === undefined) return;
-      const cutOff = takenAt !== held.stops;
-      takenAt = undefined;
-      if (cutOff) return;
-      held.drivers -= 1;
-      if (held.drivers === 0) letGo(held);
-      told();
-    },
-    send: (method, params) => contents.debugger.sendCommand(method, params),
-    onEvent: (listener) => {
-      const heard = (
-        _event: Electron.Event,
-        method: string,
-        params: unknown,
-        sessionId: string,
-      ) => {
-        if (sessionId === "") listener(method, params);
-      };
-      contents.debugger.on("message", heard);
-      return () => {
-        contents.debugger.off("message", heard);
-      };
-    },
-  };
-}
-
-/** A view's visible page as a JPEG in base64, caught even while out of sight, at the quality and scale asked. */
-async function captureOf(held: Held, shot: { quality: number; scale: number }) {
-  const contents = held.view.webContents;
-  if (contents.isDestroyed()) return undefined;
-  const image = await contents.capturePage(undefined, { stayHidden: true, stayAwake: true });
-  if (image.isEmpty()) return undefined;
-  const size = image.getSize();
-  const scaled =
-    shot.scale >= 1
-      ? image
-      : image.resize({
-          width: Math.max(1, Math.round(size.width * shot.scale)),
-          height: Math.max(1, Math.round(size.height * shot.scale)),
-          quality: "best",
-        });
-  return scaled.toJPEG(Math.round(shot.quality)).toString("base64");
-}
-
 export function createBrowserViews(dependencies: BrowserViewsDependencies): BrowserViews {
-  const { tellPage, tellKey, tellFocus, whenGone, tellOpened, tellClosed } = dependencies;
+  const { tellPage, tellKey, tellFocus, whenGone } = dependencies;
   /** Each panel's views, by the id its tab made. */
   const panels = new Map<WebContents, Map<string, Held>>();
 
   const heldOf = (sender: WebContents, browserId: string) => panels.get(sender)?.get(browserId);
 
-  /** One view let go: out of its window, its debugger let go, and its page closed. */
+  /** One view let go: out of its window, and its page closed. */
   const release = (held: Held) => {
-    letGo(held);
     if (held.attached && !held.window.isDestroyed())
       held.window.contentView.removeChildView(held.view);
     if (!held.view.webContents.isDestroyed()) held.view.webContents.close();
@@ -305,21 +187,8 @@ export function createBrowserViews(dependencies: BrowserViewsDependencies): Brow
       held.failure = description;
       told();
     });
-    // Note that a click into the page lifts the bar's Stop, as the developer taking it back.
     contents.on("focus", () => {
-      if (held.stopped) {
-        held.stopped = false;
-        told();
-      }
       if (!sender.isDestroyed()) tellFocus(sender, { browserId });
-    });
-    // Note that the debugger is let go of from outside too, as the page's developer tools open, and no agent then holds it.
-    contents.debugger.on("detach", () => {
-      if (held.drivers === 0) return;
-      held.drivers = 0;
-      held.stops += 1;
-      contents.setBackgroundThrottling(true);
-      told();
     });
     contents.on("render-process-gone", () => {
       held.failure = "its process stopped";
@@ -328,8 +197,14 @@ export function createBrowserViews(dependencies: BrowserViewsDependencies): Brow
     // Note that the panel is handed the keyboard with the chord, because
     // what a chord opens, ⌘K's palette among them, takes its keys there.
     contents.on("before-input-event", (event, input) => {
-      if (input.type !== "keyDown" || !input.meta) return;
-      const chord = { key: input.key, shift: input.shift, alt: input.alt, control: input.control };
+      if (input.type !== "keyDown") return;
+      const chord = {
+        key: input.key,
+        meta: input.meta,
+        shift: input.shift,
+        alt: input.alt,
+        control: input.control,
+      };
       if (!chordIsWindows(chord) || sender.isDestroyed()) return;
       event.preventDefault();
       sender.focus();
@@ -337,51 +212,17 @@ export function createBrowserViews(dependencies: BrowserViewsDependencies): Brow
     });
   };
 
-  /** A view opened on the address, on the task, for the panel; none where the panel stands in no window. */
-  const opened = (sender: WebContents, browserId: string, address: string, taskId: string) => {
-    const window = BrowserWindow.fromWebContents(sender);
-    if (window === null) return undefined;
-    const held: Held = {
-      view: newView(),
-      window,
-      taskId,
-      attached: false,
-      failure: undefined,
-      drivers: 0,
-      stops: 0,
-      stopped: false,
-    };
-    viewsOf(sender).set(browserId, held);
-    watch(sender, browserId, held);
-    void held.view.webContents.loadURL(address).catch(() => undefined);
-    return held;
-  };
-
-  /** Tells the panel how a page stands now, as its own moves do. */
-  const toldOf = (sender: WebContents, browserId: string, held: Held) => () => {
-    if (!sender.isDestroyed() && !held.view.webContents.isDestroyed()) {
-      tellPage(sender, pageOf(browserId, held));
-    }
-  };
-
-  /** One of the panel's tabs as an agent reaches it. */
-  const agentTab = (sender: WebContents, browserId: string, held: Held): MacBrowserTab => ({
-    id: browserId,
-    page: () => ({
-      url: held.view.webContents.getURL(),
-      title: held.view.webContents.getTitle(),
-    }),
-    capture: (shot) => captureOf(held, shot),
-    stopped: () => held.stopped,
-    debugger: debuggerOf(held, toldOf(sender, browserId, held)),
-  });
-
   return {
-    open(sender, browserId, address, taskId) {
+    open(sender, browserId, address) {
       const standing = heldOf(sender, browserId);
       if (standing !== undefined) return pageOf(browserId, standing);
-      const held = opened(sender, browserId, address, taskId);
-      return held === undefined ? undefined : pageOf(browserId, held);
+      const window = BrowserWindow.fromWebContents(sender);
+      if (window === null) return undefined;
+      const held: Held = { view: newView(), window, attached: false, failure: undefined };
+      viewsOf(sender).set(browserId, held);
+      watch(sender, browserId, held);
+      void held.view.webContents.loadURL(address).catch(() => undefined);
+      return pageOf(browserId, held);
     },
     navigate(sender, browserId, address) {
       const held = heldOf(sender, browserId);
@@ -432,42 +273,6 @@ export function createBrowserViews(dependencies: BrowserViewsDependencies): Brow
       if (views === undefined || held === undefined) return;
       views.delete(browserId);
       release(held);
-    },
-    stop(sender, browserId) {
-      const held = heldOf(sender, browserId);
-      if (held === undefined) return false;
-      held.stopped = true;
-      held.stops += 1;
-      held.drivers = 0;
-      letGo(held);
-      toldOf(sender, browserId, held)();
-      return true;
-    },
-    agentTabs(sender, taskId) {
-      const onTask = () =>
-        [...(panels.get(sender) ?? new Map<string, Held>()).entries()].filter(
-          ([, held]) => held.taskId === taskId,
-        );
-      return {
-        list: () => onTask().map(([browserId, held]) => agentTab(sender, browserId, held)),
-        open: (url) => {
-          const browserId = randomUUID();
-          const held = opened(sender, browserId, url, taskId);
-          if (held === undefined) return undefined;
-          held.view.setBounds({ x: 0, y: 0, ...UNPLACED_SIZE });
-          tellOpened(sender, { browserId, taskId, address: url });
-          return agentTab(sender, browserId, held);
-        },
-        close: (browserId) => {
-          const views = panels.get(sender);
-          const held = views?.get(browserId);
-          if (views === undefined || held === undefined || held.taskId !== taskId) return false;
-          views.delete(browserId);
-          release(held);
-          tellClosed(sender, { browserId });
-          return true;
-        },
-      };
     },
   };
 }

@@ -2,12 +2,16 @@ import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import {
   endsTurn,
+  keepsSandboxAlive,
   lapsesCredential,
+  parksForLongSleep,
   renewsCredential,
   type SandboxRecord,
   stopsAtTurnEnd,
   withdrawsCredential,
+  withdrawsCredentialForSleep,
 } from "@luke/service/agents/agent-runtime/sandbox";
+import { sandboxIdle } from "@luke/service/agents/agent-runtime/sandbox-idle";
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
 import { deepensSandbox } from "@luke/service/agents/coder-host/deepen";
@@ -15,6 +19,7 @@ import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
 import { handedAfterCompaction } from "@luke/service/agents/coder-host/turn-context";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
+import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
 import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -38,7 +43,11 @@ import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
  * firewall (`packages/service/src/agents/coder-host/deepen.ts`), a step
  * that starts past the credential's age renews it there, or, for an agent on its starter's own token, which never ages, the
  * first step of each turn sets it again, and a turn's end takes that token
- * off wherever it stops the sandbox; and a turn's end, however it ended,
+ * off wherever it stops the sandbox; a step keeps the running sandbox alive
+ * past its short timeout every few minutes of a turn
+ * (`packages/service/src/agents/session-sandboxes.ts`); a step whose one
+ * call is a long pause stops the sandbox for it where nothing the agent
+ * started still runs, and the next step resumes it; and a turn's end, however it ended,
  * writes the branch checked out
  * in the sandbox on the agent's row, which is where its pull request is
  * read from, then stops the sandbox at once rather than waiting out its
@@ -202,6 +211,35 @@ async function endSandbox(
   if (stopsAtTurnEnd(AGENT_ROLE.CODER, event, record, held)) await ending.stop();
 }
 
+/**
+ * The sandbox stopped for a long pause inside the turn, its filesystem kept
+ * for the next step to resume, as a turn's end stops it: unless a
+ * developer's terminal holds it, and only where no process the agent
+ * started still runs, which a dev server or a command left in the
+ * background is. A member's own token comes off the firewall first and is
+ * set again at the next step. A stop that fails is logged, and the sandbox
+ * stands until the turn's end stops it.
+ */
+async function stopForSleep(
+  ctx: HookContext,
+  record: ReturnType<typeof pinnedState<SandboxRecord>>,
+): Promise<void> {
+  if (await terminalHolds(ctx)) return;
+  const sandbox = await ctx.getSandbox();
+  if (!(await runAgent(sandboxIdle(sandbox)))) return;
+  if (withdrawsCredentialForSleep(AGENT_ROLE.CODER, record.get())) {
+    await withdrawCredential(ctx);
+    record.update((standing) => ({ ...standing, credentialLapsed: true }));
+  }
+  await runAgent(
+    Effect.tryPromise(() => sandbox.stop()).pipe(
+      Effect.catch(() =>
+        Effect.logWarning(`The sandbox of session ${ctx.session.id} was not stopped for its pause`),
+      ),
+    ),
+  );
+}
+
 export default defineHook({
   events: {
     async "*"(event, ctx) {
@@ -251,6 +289,14 @@ export default defineHook({
         const now = seams.now();
         if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
           await renewCredential(ctx, sandbox, now);
+        }
+        // Stamped before it is asked, so a keep-alive Vercel did not confirm waits the interval like one it did.
+        if (keepsSandboxAlive(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
+          sandbox.update((held) => ({ ...held, keptAliveAt: now }));
+          await runAgent(keepSessionSandboxAlive(ctx.session.id));
+        }
+        if (parksForLongSleep(AGENT_ROLE.CODER, event, sandbox.get())) {
+          await stopForSleep(ctx, sandbox);
         }
       } finally {
         if (ending !== undefined) await endSandbox(ctx, event, sandbox, ending);

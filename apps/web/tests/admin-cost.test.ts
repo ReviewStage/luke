@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import type { AdminCost } from "@luke/service/admin/admin-cost-wire";
-import { SECONDS_LIST_PRICE } from "@luke/service/admin/admin-cost-wire";
+import type { AdminCost } from "@luke/features/admin-cost-wire";
+import { SECONDS_LIST_PRICE } from "@luke/features/admin-cost-wire";
+import { CostScreen } from "@luke/panel/admin/screens/cost";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { CostScreen } from "../src/admin/screens/cost";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-cost.test.ts -- the Cost screen reads its window and scope from the
@@ -104,16 +105,18 @@ async function openCost(
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(CostScreen, {
-        hideAdmins: true,
-        onHideAdminsChange: () => undefined,
-        windowDays: 7,
-        onWindowDaysChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onOpenAccount: (id) => opened.push(id),
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(CostScreen, {
+          hideAdmins: true,
+          onHideAdminsChange: () => undefined,
+          windowDays: 7,
+          onWindowDaysChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onOpenAccount: (id) => opened.push(id),
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return page;

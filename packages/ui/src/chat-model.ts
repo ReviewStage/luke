@@ -2,6 +2,7 @@ import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_MEMBER_LABEL,
   CHAT_TARGET_SIGIL,
@@ -12,8 +13,10 @@ import {
   type ChatMessage,
   type ChatOpenRequest,
   type ChatPostRequest,
+  type ChatReadBlock,
   type ChatReply,
   GENERAL_CHANNEL,
+  knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
@@ -23,6 +26,7 @@ import {
   type MentionPlace,
   mentionMarkdown,
 } from "@luke/features/mention-link";
+import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import type { ChatTarget } from "./chat-mention.js";
 
@@ -140,6 +144,8 @@ export interface ChatRailRow {
   /** The other member of a direct message, for its mark. */
   readonly other: ChatWho | undefined;
   readonly unread: number;
+  /** How many open asks someone else posted in it wait on the reader, as For you lists them. */
+  readonly asks: number;
   /** The newest root or reply the channel holds as read, which its row previews; none in an empty one. */
   readonly latest: ChatMessage | undefined;
 }
@@ -156,12 +162,14 @@ export interface ChatRail {
   readonly direct: readonly ChatRailRow[];
 }
 
-/** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or none, and its rows in order. */
+/** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or the rest, and its rows in order. */
 interface ChatRailGroup {
   /** The group's own key, which a list draws it under. */
   readonly key: string;
-  /** What heads it; none for the tasks no pin or section holds where nothing else is grouped. */
-  readonly title: string | undefined;
+  /** What heads it, as the sidebar heads the same tasks. */
+  readonly title: string;
+  /** The section's icon, as the sidebar's section head wears it; none for Pinned, the rest, and a section made without one. */
+  readonly icon: TaskSectionIcon | undefined;
   readonly rows: readonly ChatRailRow[];
 }
 
@@ -171,6 +179,7 @@ export interface ChatTaskGrouping {
   readonly sections: readonly {
     readonly id: string;
     readonly title: string;
+    readonly icon: TaskSectionIcon | undefined;
     readonly taskIds: readonly string[];
   }[];
 }
@@ -178,7 +187,7 @@ export interface ChatTaskGrouping {
 /** What a group of task channels is headed by, where the rail draws it. */
 const TASK_GROUP = {
   PINNED: "Pinned",
-  OTHER: "Other tasks",
+  OTHER: "Tasks",
 } as const;
 
 /** The keys of the groups no section names. */
@@ -272,8 +281,8 @@ function messagesIn(chat: ChatAnswer, channelId: string): readonly ChatMessage[]
 /**
  * The task channels grouped as the sidebar groups their tasks: the pinned
  * first, in the pins' order, then each section in its order, then the rest
- * by name, under Other tasks where any group stands above them and headed
- * by nothing where none does. A task stands in its first group only. Note
+ * by name under Tasks, as the sidebar names the tasks no section holds. A
+ * task stands in its first group only. Note
  * that the order within a group is the sidebar's own, so a task is found
  * where the reader keeps it.
  */
@@ -297,10 +306,17 @@ function taskGroups(
   const groups: ChatRailGroup[] = [];
   const pinned = take(grouping?.pinned ?? []);
   if (pinned.length > 0)
-    groups.push({ key: TASK_GROUP_KEY.PINNED, title: TASK_GROUP.PINNED, rows: pinned });
+    groups.push({
+      key: TASK_GROUP_KEY.PINNED,
+      title: TASK_GROUP.PINNED,
+      icon: undefined,
+      rows: pinned,
+    });
   for (const section of grouping?.sections ?? []) {
     const held = take(section.taskIds);
-    if (held.length > 0) groups.push({ key: section.id, title: section.title, rows: held });
+    if (held.length > 0) {
+      groups.push({ key: section.id, title: section.title, icon: section.icon, rows: held });
+    }
   }
   const rest = rows.filter(
     (row) => row.channel.planId === undefined || !placed.has(row.channel.planId),
@@ -308,7 +324,8 @@ function taskGroups(
   if (rest.length > 0) {
     groups.push({
       key: TASK_GROUP_KEY.OTHER,
-      title: groups.length === 0 ? undefined : TASK_GROUP.OTHER,
+      title: TASK_GROUP.OTHER,
+      icon: undefined,
       rows: rest,
     });
   }
@@ -320,6 +337,7 @@ export function chatRail(
   names: ChatNames,
   grouping?: ChatTaskGrouping | undefined,
 ): ChatRail {
+  const waiting = forYou(chat);
   const row = (channel: ChatChannel): ChatRailRow => {
     const other = otherOf(chat, channel);
     const who = other === undefined ? undefined : chatWho(chat, names, other);
@@ -328,6 +346,9 @@ export function chatRail(
       label: channelLabel(chat, names, channel),
       other: who,
       unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
+      asks: waiting.filter(
+        (entry) => entry.reason === FOR_YOU_REASON.ASK && entry.channel.id === channel.id,
+      ).length,
       latest: messagesIn(chat, channel.id).at(-1),
     };
   };
@@ -350,7 +371,7 @@ export function chatRail(
     .filter((channel) => channel.kind === CHANNEL_KIND.DM)
     .toSorted((one, other) => latest(other) - latest(one));
   return {
-    forYou: forYou(chat).length,
+    forYou: waiting.length,
     channels: channels.map(row),
     tasks: taskGroups(tasks.map(row), grouping),
     archived: archived.map(row),
@@ -389,6 +410,53 @@ export function continuesRun(before: ChatThread | undefined, thread: ChatThread)
   if (before === undefined || before.replies.length > 0) return false;
   const gap = thread.message.postedAt - before.message.postedAt;
   return before.message.authorId === thread.message.authorId && gap >= 0 && gap <= CHAT_RUN_SPAN;
+}
+
+/**
+ * The seq of the first root in a channel someone else posted past the
+ * reader's cursor there, where its "New" line stands as the channel opens;
+ * nothing where none is. Note that a root is counted by when it was posted,
+ * not when it last changed, so an old message edited or answered since
+ * never reads as new, and that a reply, drawn folded under its root, is
+ * never where the line stands.
+ */
+export function firstUnreadSeq(chat: ChatAnswer, channelId: string): number | undefined {
+  const read = readSeqIn(chat, channelId);
+  return channelThreads(chat, channelId).find(
+    ({ message }) => message.seq > read && message.authorId !== chat.self,
+  )?.message.seq;
+}
+
+/** One block as a paragraph of the Markdown a message's Copy takes; nothing for a picture, which has no address a reader can open, or a block this build does not know. */
+function blockMarkdown(block: ChatReadBlock): string | undefined {
+  if (!knownBlock(block)) return undefined;
+  switch (block.type) {
+    case CHAT_BLOCK.MARKDOWN:
+      return block.text;
+    case CHAT_BLOCK.LINK: {
+      // Its label's brackets and its address's parentheses escaped, so the link reads back as written.
+      const label = block.label.replace(/[\\[\]]/gu, (mark) => `\\${mark}`);
+      return `[${label}](${block.url.replaceAll("(", "%28").replaceAll(")", "%29")})`;
+    }
+    case CHAT_BLOCK.CODE: {
+      const path = block.path.split("/").map(encodeURIComponent).join("/");
+      const lines =
+        block.endLine > block.startLine
+          ? `#L${block.startLine}-L${block.endLine}`
+          : `#L${block.startLine}`;
+      return `https://github.com/${block.repo}/blob/${block.sha}/${path}${lines}`;
+    }
+    case CHAT_BLOCK.IMAGE:
+      return undefined;
+  }
+}
+
+/** A message's words as the Markdown its Copy takes: each block a paragraph of its own, in order, a code block by its lines' GitHub address. */
+export function messageMarkdown(message: ChatMessage): string {
+  return message.blocks
+    .flatMap((block) => blockMarkdown(block) ?? [])
+    .filter((paragraph) => paragraph !== "")
+    .join("\n\n");
 }
 
 /** Why a message waits on the reader, or nothing where it does not. */

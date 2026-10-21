@@ -620,7 +620,7 @@ const ANSWER_FIELDS = {
 };
 
 /** What a message asks of its reader, one of three: decide among options, do steps, or answer. */
-export const inboxAskSchema = EffectSchema.Union([
+const inboxAskSchema = EffectSchema.Union([
   EffectSchema.Struct(DECIDE_FIELDS),
   EffectSchema.Struct(DO_FIELDS),
   EffectSchema.Struct(ANSWER_FIELDS),
@@ -851,10 +851,19 @@ export const inboxAnswerRequestSchema = EffectSchema.Struct({
 
 export type InboxAnswerRequest = typeof inboxAnswerRequestSchema.Type;
 
-/** What an answer comes back as: the item as it then stands, and whether the answer was taken, which it is not where the agent changed the item first. */
+/**
+ * The transaction a member's write on the inbox committed in, as Neon's
+ * mutations guide returns it, which a window following the inbox waits for
+ * on its live view before it answers; left out where the write changed no
+ * row, and by a service from before it, so there is nothing to wait for.
+ */
+const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
+
+/** What an answer comes back as: the item as it then stands, whether the answer was taken, which it is not where the agent changed the item first, and the transaction it was taken in. */
 export const inboxAnsweredSchema = EffectSchema.Struct({
   item: inboxItemSchema,
   taken: EffectSchema.Boolean,
+  ...writtenIn,
 });
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
@@ -914,13 +923,14 @@ export const inboxMessageRequestSchema = EffectSchema.Struct({
 
 export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
-/** What a member's message comes back as: the item as it then stands, its thread with the message on it. */
-export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema });
+/** What a member's message comes back as: the item as it then stands, its thread with the message on it, and, where the message answered the thread's open ask, the transaction it was taken in. */
+export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema, ...writtenIn });
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   unread: EffectSchema.Boolean,
+  ...writtenIn,
 });
 
 /**
@@ -934,8 +944,8 @@ export const inboxReadAllRequestSchema = EffectSchema.Struct({
 
 export type InboxReadAllRequest = typeof inboxReadAllRequestSchema.Type;
 
-/** What marking every item read answers: how many items it marked read that were unread. */
-export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber });
+/** What marking every item read answers: how many items it marked read that were unread, and the transaction that marked them. */
+export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber, ...writtenIn });
 
 /** How a member's message on an item's thread opens, in the message that hands it to the agent. */
 export const INBOX_MESSAGE_LEAD = "Inbox message";

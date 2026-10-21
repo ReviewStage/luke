@@ -36,7 +36,9 @@ import {
 } from "react";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
+import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
   type CloudBrowserFrame,
@@ -56,7 +58,8 @@ import { CLOUD_BROWSER_AGENT_RECENT } from "./cloud-browser-tabs.js";
  * shape inside the pane, which is the viewport every point the member sends
  * is in. The pane opens its view while it is shown, and again each time it
  * is shown again, or Watch again pressed, after the relay closed it; until
- * the page first paints it says so, quietly, and a view closed as idle
+ * the page first paints, and while it reconnects, the window's spinner
+ * stands over it, and a view closed as idle
  * offers Watch again. While the member drives the tab, the mouse, the
  * wheel, and the keys pressed on the canvas go to the page, and a paste goes
  * as text; a Command chord the window answers (`chordIsWindows`) stays the
@@ -64,7 +67,9 @@ import { CLOUD_BROWSER_AGENT_RECENT } from "./cloud-browser-tabs.js";
  * is sent as Control, since the page runs on Linux. What the page shows is
  * the agent's and its members', so the pane is left out of the screen
  * recording (`ph-no-capture`), whose canvas recording is off in any case,
- * and no frame, address, or title is kept past the drawn tab.
+ * and no frame, address, or title is kept past the drawn tab. The agent's
+ * pointer is drawn over the canvas, never in its frame, while the agent has
+ * the tab (`cloud-browser-cursor.tsx`).
  */
 
 /** The most characters one text message carries; a longer paste goes in pieces. */
@@ -123,21 +128,83 @@ function standingOf(input: {
   return lately ? `${owner} is using this tab` : undefined;
 }
 
-/** The quiet line over the body while no page stands to drive, or none once it does. */
-function noticeOf(view: CloudBrowserView): string | undefined {
+/** What stands over the body while no page stands to drive: a wait, drawn as the window's spinner, or words. */
+type Notice =
+  | { readonly waiting: true; readonly label: string }
+  | { readonly waiting: false; readonly words: string };
+
+/** What stands over the body while no page stands to drive, or none once one does. */
+function noticeOf(view: CloudBrowserView): Notice | undefined {
   if (view.phase === CLOUD_BROWSER_PHASE.ENDED) {
-    return view.ended === BROWSER_LIVE_CLOSE_REASON.GONE
-      ? "This tab has closed"
-      : "Paused while no one watched";
+    const words =
+      view.ended === BROWSER_LIVE_CLOSE_REASON.GONE
+        ? "This tab has closed"
+        : "Paused while no one watched";
+    return { waiting: false, words };
   }
-  if (view.phase === CLOUD_BROWSER_PHASE.RECONNECTING) return "Reconnecting";
-  return view.painted ? undefined : "Waiting for the page";
+  if (view.phase === CLOUD_BROWSER_PHASE.RECONNECTING) {
+    return { waiting: true, label: "Reconnecting" };
+  }
+  return view.painted ? undefined : { waiting: true, label: "Waiting for the page" };
 }
 
 /** Paints a decoded frame over the canvas, scaled to it whole. */
 function paint(canvas: HTMLCanvasElement | null, image: HTMLImageElement | undefined): void {
   if (canvas === null || image === undefined) return;
   canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+}
+
+/**
+ * The relative luminance (WCAG 2, linear light) under which the page beneath
+ * the agent's pointer reads as dark: about where its two greys, `--agent-pointer`
+ * (#6b6f76) and `--agent-pointer-on-dark` (#ced1d6), stand apart from the page
+ * equally, so the one that stands further apart is drawn.
+ */
+const DARK_PAGE_LUMA = 0.32;
+
+/** One sRGB channel byte in linear light, as WCAG 2's relative luminance reads it. */
+function linearOf(byte: number): number {
+  const channel = byte / 255;
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+/** The side of the square of canvas pixels the page beneath the pointer is read across. */
+const GROUND_SAMPLE = 8;
+
+/** How far into the arrow's body from its tip the page beneath it is read, in CSS pixels. */
+const GROUND_INSET = 4;
+
+/**
+ * Whether the drawn page is dark beneath the pointer's tip, given in CSS
+ * pixels of the canvas; none where the canvas cannot be read. Only a few
+ * pixels are read, and only to choose the pointer's grey: nothing read is
+ * kept.
+ */
+function darkBeneath(
+  canvas: HTMLCanvasElement | null,
+  point: { readonly x: number; readonly y: number },
+): boolean | undefined {
+  const context = canvas?.getContext("2d");
+  if (canvas === null || context === null || context === undefined) return undefined;
+  const ratio = window.devicePixelRatio || 1;
+  const side = Math.min(GROUND_SAMPLE, canvas.width, canvas.height);
+  if (side < 1) return undefined;
+  const at = (value: number, most: number) =>
+    Math.max(0, Math.min(most - side, Math.round((value + GROUND_INSET) * ratio - side / 2)));
+  const { data } = context.getImageData(
+    at(point.x, canvas.width),
+    at(point.y, canvas.height),
+    side,
+    side,
+  );
+  let luma = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    luma +=
+      0.2126 * linearOf(data[index] ?? 0) +
+      0.7152 * linearOf(data[index + 1] ?? 0) +
+      0.0722 * linearOf(data[index + 2] ?? 0);
+  }
+  return luma / (data.length / 4) < DARK_PAGE_LUMA;
 }
 
 /**
@@ -169,17 +236,37 @@ export function CloudBrowserPane({
   const viewport = useRef<CloudBrowserViewport | undefined>(undefined);
   viewport.current = size.width > 0 && size.height > 0 ? size : undefined;
 
+  // Where the agent's pointer stands on the drawn page, and whether the page is dark beneath it.
+  const placed = tab.cursor === undefined ? undefined : cursorPlacement(tab.cursor, size);
+  const pointer = useRef(placed);
+  pointer.current = placed;
+  const [onDarkPage, setOnDarkPage] = useState(false);
+  const readGround = useCallback(() => {
+    const point = pointer.current;
+    const dark = point === undefined ? undefined : darkBeneath(canvas.current, point);
+    if (dark !== undefined) setOnDarkPage(dark);
+  }, []);
+  useEffect(() => {
+    if (placed !== undefined) readGround();
+  }, [readGround, placed?.x, placed?.y]);
+
   // The last frame drawn, kept only to paint it again once the canvas changes size, which clears it.
   const shownFrame = useRef<HTMLImageElement | undefined>(undefined);
-  const onFrame = useCallback((frame: CloudBrowserFrame) => {
-    if (frame.pageWidth > 0 && frame.pageHeight > 0) setAspect(frame.pageWidth / frame.pageHeight);
-    const image = new Image();
-    image.onload = () => {
-      shownFrame.current = image;
-      paint(canvas.current, image);
-    };
-    image.src = `data:image/jpeg;base64,${frame.data}`;
-  }, []);
+  const onFrame = useCallback(
+    (frame: CloudBrowserFrame) => {
+      if (frame.pageWidth > 0 && frame.pageHeight > 0) {
+        setAspect(frame.pageWidth / frame.pageHeight);
+      }
+      const image = new Image();
+      image.onload = () => {
+        shownFrame.current = image;
+        paint(canvas.current, image);
+        readGround();
+      };
+      image.src = `data:image/jpeg;base64,${frame.data}`;
+    },
+    [readGround],
+  );
   const live = useMemo(
     () =>
       cloudBrowserLive({
@@ -273,12 +360,13 @@ export function CloudBrowserPane({
       if (!yours) return;
       const chord = {
         key: event.key,
+        meta: event.metaKey,
         shift: event.shiftKey,
         alt: event.altKey,
         control: event.ctrlKey,
       };
-      // A Command chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
-      if (event.metaKey && chordIsWindows(chord)) return;
+      // A chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
+      if (chordIsWindows(chord)) return;
       if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "v")
         return;
       event.preventDefault();
@@ -314,6 +402,7 @@ export function CloudBrowserPane({
   const notice = noticeOf(view);
   const standing = standingOf({ view, tab, owner, memberName });
   const address = view.page?.address ?? tab.address;
+  const driven = (view.driver?.driver ?? tab.driver) !== null;
   return (
     <section
       className="browser-view cloud-browser-view file-view ph-no-capture"
@@ -370,30 +459,43 @@ export function CloudBrowserPane({
         </Text>
       ) : null}
       <div ref={body} className="browser-view-body cloud-browser-body">
-        <canvas
-          ref={canvas}
-          className="cloud-browser-canvas"
-          aria-label="The page"
-          data-driving={yours ? "" : undefined}
-          tabIndex={yours ? 0 : -1}
-          width={Math.round(size.width * (window.devicePixelRatio || 1))}
-          height={Math.round(size.height * (window.devicePixelRatio || 1))}
-          style={{ width: size.width, height: size.height }}
-          onMouseDown={mouse(BROWSER_LIVE_MOUSE_ACTION.DOWN)}
-          onMouseUp={mouse(BROWSER_LIVE_MOUSE_ACTION.UP)}
-          onMouseMove={mouse(BROWSER_LIVE_MOUSE_ACTION.MOVE)}
-          onContextMenu={(event) => {
-            if (yours) event.preventDefault();
-          }}
-          onWheel={wheel}
-          onKeyDown={key(BROWSER_LIVE_KEY_ACTION.DOWN)}
-          onKeyUp={key(BROWSER_LIVE_KEY_ACTION.UP)}
-          onPaste={paste}
-        />
-        {notice === undefined ? null : (
+        <div className="cloud-browser-stage" style={{ width: size.width, height: size.height }}>
+          <canvas
+            ref={canvas}
+            className="cloud-browser-canvas"
+            aria-label="The page"
+            data-driving={yours ? "" : undefined}
+            tabIndex={yours ? 0 : -1}
+            width={Math.round(size.width * (window.devicePixelRatio || 1))}
+            height={Math.round(size.height * (window.devicePixelRatio || 1))}
+            style={{ width: size.width, height: size.height }}
+            onMouseDown={mouse(BROWSER_LIVE_MOUSE_ACTION.DOWN)}
+            onMouseUp={mouse(BROWSER_LIVE_MOUSE_ACTION.UP)}
+            onMouseMove={mouse(BROWSER_LIVE_MOUSE_ACTION.MOVE)}
+            onContextMenu={(event) => {
+              if (yours) event.preventDefault();
+            }}
+            onWheel={wheel}
+            onKeyDown={key(BROWSER_LIVE_KEY_ACTION.DOWN)}
+            onKeyUp={key(BROWSER_LIVE_KEY_ACTION.UP)}
+            onPaste={paste}
+          />
+          <CloudBrowserCursor
+            cursor={tab.cursor}
+            lastActedAt={tab.lastActedAt}
+            frame={size}
+            hidden={driven || notice !== undefined}
+            onDarkPage={onDarkPage}
+          />
+        </div>
+        {notice === undefined ? null : notice.waiting ? (
+          <div className="cloud-browser-notice">
+            <Spinner label={notice.label} size={SPINNER_SIZE.REGION} />
+          </div>
+        ) : (
           <div className="cloud-browser-notice" role="status">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {notice}
+              {notice.words}
             </Text>
             {resumable ? (
               <Button

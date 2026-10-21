@@ -46,7 +46,7 @@ function staged(railEnd: number): ReadonlyMap<string, Staged> {
   ]);
 }
 
-/** The Chat page as the shell draws it, a thread's reply open above the channel's composer, and the folded sidebar's card over its foot. */
+/** The Chat page as the shell draws it, a thread's reply open above the channel's composer, each the shared composer card (`.agent-composer`), and the folded sidebar's card over its foot. */
 function ChatShell({ narrow }: { narrow: boolean }): React.JSX.Element {
   const shell = useRef<HTMLDivElement>(null);
   useColumnDock(shell, false, narrow, "chat");
@@ -57,12 +57,12 @@ function ChatShell({ narrow }: { narrow: boolean }): React.JSX.Element {
       "div",
       { className: "chat-view", "data-staged": "chat-view" },
       createElement("div", {
-        className: "chat-composer",
+        className: "agent-composer chat-composer",
         "data-compact": "true",
         "data-staged": "reply",
       }),
       createElement("div", {
-        className: "chat-composer",
+        className: "agent-composer chat-composer",
         "data-compact": "false",
         "data-staged": "foot",
       }),
@@ -88,7 +88,10 @@ function RailShell({ narrow }: { narrow: boolean }): React.JSX.Element {
       createElement(
         "div",
         { hidden: true },
-        createElement("div", { className: "chat-composer", "data-compact": "false" }),
+        createElement("div", {
+          className: "agent-composer chat-composer",
+          "data-compact": "false",
+        }),
       ),
     ),
   );

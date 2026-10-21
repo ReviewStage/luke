@@ -18,6 +18,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
+  type CodingAgentPartCut,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
@@ -28,6 +29,7 @@ import {
   type CodingAgentTodos,
   type CodingAgentUsage,
   type ContextWindow,
+  PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
@@ -246,6 +248,11 @@ export function subagentActor(model: string | undefined, state: GlyphState, name
     provider: model === undefined ? undefined : providerOf(model),
     state: ACTOR_STATE_OF_GLYPH[state],
   };
+}
+
+/** Where an agent's work stands, as its tile wears it, read off its status. */
+export function agentActorState(status: CodingAgentStatus): ActorState {
+  return ACTOR_STATE_OF_GLYPH[agentGlyphState(status)];
 }
 
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
@@ -588,7 +595,7 @@ export function planPayerOf(runtime: CodingAgentRuntime | undefined): CodingAgen
 }
 
 /** What a message refused by the Claude plan that pays for its agent says. */
-export const CLAUDE_PLAN_REFUSAL = {
+const CLAUDE_PLAN_REFUSAL = {
   SIGNED_OUT: "Your Claude plan needs reconnecting in Settings.",
   LIMIT_REACHED: "Your Claude plan has reached its usage limit. It waits until the limit resets.",
 } as const;
@@ -935,11 +942,6 @@ function baseIdOf(id: string): string | undefined {
   return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
 }
 
-/** Whether a catalog id names a model's fast version. */
-export function isFastModelId(id: string): boolean {
-  return baseIdOf(id) !== undefined;
-}
-
 /**
  * The catalog folded to its base models, each with its fast version, in the
  * menus' order. The signal is the id: a model whose id is another offered
@@ -1239,19 +1241,29 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
 
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 
+/** A part its page carried cut (`cutParts`): its two ends and its whole size, and the message and index it is fetched whole by. */
+export type AgentPartCut = Omit<CodingAgentPartCut, "field"> & { readonly messageId: string };
+
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
   | { readonly kind: typeof AGENT_PART.TEXT; readonly text: string }
-  | { readonly kind: typeof AGENT_PART.REASONING; readonly text: string }
+  | {
+      readonly kind: typeof AGENT_PART.REASONING;
+      /** Empty on a thought its page carried cut, whose words `cut` holds the ends of. */
+      readonly text: string;
+      readonly cut?: AgentPartCut;
+    }
   | {
       readonly kind: typeof AGENT_PART.TOOL;
       readonly tool: string;
       readonly callId: string;
       readonly state: ToolState;
       readonly input: WireValue | undefined;
+      /** None while the call has not answered, and on a call whose answer its page carried cut, which `cut` holds the ends of. */
       readonly output: WireValue | undefined;
       /** The error's own text, on a call that ended in one. */
       readonly errorText: string | undefined;
+      readonly cut?: AgentPartCut;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER }
@@ -1270,7 +1282,7 @@ function toolState(value: WireValue | undefined): ToolState {
  * reasoning part without its words, and any kind this build does not know,
  * draws nothing rather than refusing the message.
  */
-function agentPart(part: WireValue): AgentPart {
+export function agentPart(part: WireValue): AgentPart {
   if (!isRecord(part) || !isWireString(part.type)) return { kind: AGENT_PART.OTHER };
   if (part.type === AGENT_PART.TEXT || part.type === AGENT_PART.REASONING) {
     return isWireString(part.text)
@@ -1313,11 +1325,30 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
   return read.channel === MESSAGE_CHANNEL.CHAT ? read : undefined;
 }
 
-/** The parts of a message as the tab draws them, in the row's order. */
+/**
+ * A part its page carried cut, as the tab draws it: a thought with no words
+ * of its own, or a call with no answer of its own, each with the ends it was
+ * cut to; a part that is neither draws as it reads.
+ */
+function cutAgentPart(part: WireValue, cut: CodingAgentPartCut, messageId: string): AgentPart {
+  const { field: _field, ...ends } = cut;
+  const marked = { ...ends, messageId };
+  if (cut.field === PART_CUT_FIELD.TEXT) {
+    return { kind: AGENT_PART.REASONING, text: "", cut: marked };
+  }
+  const read = agentPart(part);
+  return read.kind === AGENT_PART.TOOL ? { ...read, cut: marked } : read;
+}
+
+/** The parts of a message as the tab draws them, in the row's order, each its page carried cut marked so. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   const read = partsRead.get(message);
   if (read !== undefined) return read;
-  const parts = message.parts.map(agentPart);
+  const cuts = new Map((message.cutParts ?? []).map((cut) => [cut.index, cut]));
+  const parts = message.parts.map((part, index) => {
+    const cut = cuts.get(index);
+    return cut === undefined ? agentPart(part) : cutAgentPart(part, cut, message.id);
+  });
   partsRead.set(message, parts);
   return parts;
 }
@@ -1417,13 +1448,18 @@ export interface StandingTodos {
  * streams the list before it is still the one standing.
  */
 export function newestTodos(messages: readonly CodingAgentMessage[]): StandingTodos | undefined {
-  const writes = messages.flatMap(agentParts).flatMap((part) => {
-    const todos = isTodos(part) ? todosView(part.input) : undefined;
-    return todos === undefined || part.kind !== AGENT_PART.TOOL
-      ? []
-      : [{ callId: part.callId, todos }];
-  });
-  return writes.at(-1);
+  // Note that the messages are read from the newest back, so a page is read only as far as its newest list.
+  for (let at = messages.length - 1; at >= 0; at -= 1) {
+    const message = messages[at];
+    const parts = message === undefined ? [] : agentParts(message);
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const part = parts[index];
+      if (part === undefined || part.kind !== AGENT_PART.TOOL || !isTodos(part)) continue;
+      const todos = todosView(part.input);
+      if (todos !== undefined) return { callId: part.callId, todos };
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -1671,7 +1707,7 @@ export function placedMessages(messages: readonly CodingAgentMessage[]): readonl
 }
 
 /** How much of a turn the voice read aloud on a call, which folds that much of it once it has finished. */
-export const TURN_READ = {
+const TURN_READ = {
   /** All of it, answering an ask that was the whole turn's: the voice's lines stand ahead of the turn. */
   WHOLE: "whole",
   /** The work after a call's ask joined the turn under way: the voice's lines stand where the ask arrived, the work before it as it was. */
@@ -1692,11 +1728,23 @@ const SpokenLineSchema = Schema.Struct({
   read_from: Schema.optionalKey(Schema.String),
 });
 
-const spokenLine = Schema.decodeUnknownOption(SpokenLineSchema);
+const decodeSpokenLine = Schema.decodeUnknownOption(SpokenLineSchema);
+
+/** Each message's spoken line as last decoded, by the message, which is never changed in place: a transcript is placed again on every page, and a page touches only its own messages. */
+const spokenRead = new WeakMap<CodingAgentMessage, ReturnType<typeof decodeSpokenLine>>();
+
+/** The line the voice said that a message is, decoded once for the message. */
+function spokenLineOf(message: CodingAgentMessage): ReturnType<typeof decodeSpokenLine> {
+  const read = spokenRead.get(message);
+  if (read !== undefined) return read;
+  const line = decodeSpokenLine(message.metadata);
+  spokenRead.set(message, line);
+  return line;
+}
 
 /** Whether a row is a line the voice said on a call, which reads a turn aloud rather than being one. */
 function isSpokenLine(message: CodingAgentMessage): boolean {
-  return message.role === MESSAGE_ROLE.ASSISTANT && Option.isSome(spokenLine(message.metadata));
+  return message.role === MESSAGE_ROLE.ASSISTANT && Option.isSome(spokenLineOf(message));
 }
 
 /** Where among the rows a line the voice said names the turn it read aloud: the turn's journal, and where the call's ask joined that turn under way, the steps begun before it. */
@@ -1717,7 +1765,7 @@ function readAloudPlaceOf(
 ): ReadAloudPlace | undefined {
   if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
   return Option.getOrUndefined(
-    Option.flatMap(spokenLine(message.metadata), (line) => {
+    Option.flatMap(spokenLineOf(message), (line) => {
       if (message.readFrom === undefined) {
         return Option.fromUndefinedOr(line.read_from).pipe(
           Option.map((journalId) => ({ journalId })),

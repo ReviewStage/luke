@@ -454,12 +454,26 @@ export const automationListAnswerSchema = EffectSchema.Struct({
 });
 
 /**
+ * The id of the transaction a write committed in, as Postgres counts it, in
+ * decimal: present where the write changed a row, so the desktop following
+ * the automations waits for it to arrive before it confirms the write, as
+ * Neon's mutations guide says.
+ */
+const automationTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+/**
  * One automation as a write answers it; a webhook trigger's secret rides
  * along only on the answer that made it, the one time it is shown.
  */
 export const automationAnswerSchema = EffectSchema.Struct({
   automation: automationSummarySchema,
   webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
+  txid: EffectSchema.optionalKey(automationTxidSchema),
+});
+
+/** A deleted automation (DELETE), with the transaction its row went in. */
+export const automationDeletedAnswerSchema = EffectSchema.Struct({
+  txid: EffectSchema.optionalKey(automationTxidSchema),
 });
 
 /** The repositories an automation's runs work in, `owner/name` each, the first where a run starts: at least one, and a handful at most. */
@@ -533,6 +547,7 @@ export const automationRunRequestSchema = EffectSchema.Struct({
 /** The run a "Run now" made, as it came out. */
 export const automationRunAnswerSchema = EffectSchema.Struct({
   run: automationRunSummarySchema,
+  txid: EffectSchema.optionalKey(automationTxidSchema),
 });
 
 /** An automation's runs, newest first (GET). */

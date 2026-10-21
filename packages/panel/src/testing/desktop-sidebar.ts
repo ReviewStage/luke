@@ -24,7 +24,14 @@ export function sidebarProps(tasks: TasksControl): ComponentProps<typeof Desktop
       onResize: ignore,
       staged: false,
     },
-    history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
+    history: {
+      canGoBack: false,
+      canGoForward: false,
+      onBack: ignore,
+      onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
+    },
     tasks: tasks,
     tab: PANEL_TAB.TASKS,
     onTabChange: ignore,
@@ -48,6 +55,5 @@ export function sidebarProps(tasks: TasksControl): ComponentProps<typeof Desktop
       onOpenLatest: ignore,
     },
     onSignOut: () => Promise.resolve(),
-    call: undefined,
   };
 }

@@ -72,11 +72,11 @@ test("an opening frame is either a create or an attach, told apart by type", () 
     VOICE_SERVICE_FRAME.SESSION_CREATE,
   );
   assert.equal(sessionOpeningFrameFromWire(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
-  // Every call is about one task: a create that names none, or names it in another shape, is refused.
+  // A call is keyed by its agent: a create that names no task is a call into an agent with none, and one naming it in another shape is refused.
   const { planId: _named, ...taskless } = createFrame();
-  assert.equal(sessionOpeningFrameFromWire(taskless), undefined);
+  assert.deepEqual(sessionOpeningFrameFromWire(taskless), taskless);
   assert.equal(sessionOpeningFrameFromWire(createFrame({ planId: "plan-1" })), undefined);
-  // And every call speaks into one of the task's agents: a create that names none is no request at all.
+  // And every call speaks into one agent: a create that names none is no request at all.
   const { agentId: _agent, ...agentless } = createFrame();
   assert.equal(sessionOpeningFrameFromWire(agentless), undefined);
   assert.equal(sessionOpeningFrameFromWire(createFrame({ agentId: "agent-1" })), undefined);

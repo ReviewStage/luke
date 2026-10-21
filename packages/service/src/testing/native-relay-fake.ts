@@ -40,7 +40,7 @@ export const NATIVE_RELAY_FAKE = {
 } as const;
 
 /** One call the harness behind the route took: which, on which harness, acting for whom, and what it named. */
-export interface HeardCall {
+interface HeardCall {
   readonly call: string;
   readonly runtime: string;
   readonly account: string;

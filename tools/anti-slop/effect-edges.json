@@ -52,7 +52,7 @@
     "packages/panel/src/luke-face-mood.ts",
     "packages/panel/src/use-voice-notice.ts",
     "packages/ui/src/components/menu/touch-hold.ts",
-    "apps/web/src/admin/use-admin-read.ts",
+    "packages/panel/src/admin/use-admin-read.ts",
     "packages/service/src/testing/voice-fakes.ts"
   ]
 }

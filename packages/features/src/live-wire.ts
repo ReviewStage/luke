@@ -40,7 +40,7 @@ import {
   inboxReplySchema,
   standingAsk,
 } from "./inbox-wire.js";
-import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
+import { type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { type PageLine, pageLineSchema, pageShowerSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
 import {
@@ -51,6 +51,7 @@ import {
   planRevisionSeqSchema,
   UNKNOWN_AGENT_LABEL,
 } from "./task-wire.js";
+import { transcriptWindowPartRowSchema, transcriptWindowRowSchema } from "./transcript-window.js";
 
 /**
  * live-wire.ts -- a read the desktop follows over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
@@ -401,8 +402,11 @@ export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
  * cursor is read from, which move where the service's held read would wake
  * (`packages/service/src/agents/coder-host/transcript-live.ts`): its
  * messages, its turns, its conversation's journal revision and title, the
- * agent's title, and its workers' titles and delegations. The page itself
- * is still read from the service, once they move. The service answers
+ * agent's title, and its workers' titles and delegations; and its newest
+ * messages themselves as rows (`window`, `windowParts`), which the reader
+ * draws as they arrive. What stands beside them on a page, the agent's
+ * status, cost, and workers, is still read from the service, once the
+ * turns, titles, or workers move. The service answers
  * `not-found` for an agent the account does not reach, and `unavailable`
  * where its deployment's Realtime is misconfigured, which the desktop
  * answers by asking again.
@@ -410,11 +414,14 @@ export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
 export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
+    /** How many messages the transcript holds and its newest: still sealed for released desktops, which read a page again as it moves; the host follows the window's rows instead. */
     messages: sealedLiveQuerySchema,
     turns: sealedLiveQuerySchema,
     conversation: sealedLiveQuerySchema,
     agent: sealedLiveQuerySchema,
     workers: sealedLiveQuerySchema,
+    window: sealedLiveQuerySchema,
+    windowParts: sealedLiveQuerySchema,
   }),
 });
 
@@ -422,7 +429,6 @@ export type AgentTranscriptLiveAnswer = typeof agentTranscriptLiveAnswerSchema.T
 
 /** A transcript's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
-  messages: EffectSchema.Array(EffectSchema.Struct({ rows: countedNumber, seq: countedNumber })),
   turns: EffectSchema.Array(
     EffectSchema.Struct({
       status: EffectSchema.String,
@@ -451,6 +457,8 @@ export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
       callId: EffectSchema.NullOr(EffectSchema.String),
     }),
   ),
+  window: EffectSchema.Array(transcriptWindowRowSchema),
+  windowParts: EffectSchema.Array(transcriptWindowPartRowSchema),
 });
 
 /** The query a transcript read is asked at once by rather than held, and the one word it takes. */
@@ -492,17 +500,17 @@ export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
 
 export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
 
-const [macShellCommandSchema, macBrowserCommandSchema] = macCommandSchema.members;
+const [macShellCommandSchema] = macCommandSchema.members;
 
 /**
  * One unclaimed command as its row delivers it: the command of its kind, and
- * when it was queued in epoch milliseconds. Note that the column the other
- * kind leaves null is read past, as every key a struct does not name is.
+ * when it was queued in epoch milliseconds. Note that a column its kind
+ * leaves null is read past, as every key a struct does not name is.
  */
-const macCommandLiveRowSchema = EffectSchema.Union([
-  EffectSchema.Struct({ ...macShellCommandSchema.fields, queuedAt: countedNumber }),
-  EffectSchema.Struct({ ...macBrowserCommandSchema.fields, queuedAt: countedNumber }),
-]);
+const macCommandLiveRowSchema = EffectSchema.Struct({
+  ...macShellCommandSchema.fields,
+  queuedAt: countedNumber,
+});
 
 /** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const macCommandsLiveRowsSchema = EffectSchema.Struct({
@@ -518,10 +526,12 @@ export function macCommandsOfLiveRows(
       a.queuedAt !== b.queuedAt ? a.queuedAt - b.queuedAt : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
     )
     .map(
-      (row): MacCommand =>
-        row.kind === MAC_COMMAND_KIND.SHELL
-          ? { id: row.id, kind: row.kind, command: row.command, timeoutSeconds: row.timeoutSeconds }
-          : { id: row.id, kind: row.kind, params: row.params, timeoutSeconds: row.timeoutSeconds },
+      (row): MacCommand => ({
+        id: row.id,
+        kind: row.kind,
+        command: row.command,
+        timeoutSeconds: row.timeoutSeconds,
+      }),
     );
 }
 

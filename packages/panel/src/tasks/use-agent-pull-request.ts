@@ -32,6 +32,16 @@ export type PullRequestReader = (agentId: string) => Promise<CodingAgentPullRequ
 interface Held {
   agentId: string;
   published: CodingAgentPullRequestAnswer | undefined;
+  /** Whether a read for the agent has answered, a refusal among them. */
+  settled: boolean;
+}
+
+/** What the tab draws of what the agent published, and whether that is settled for its first draw. */
+export interface AgentPublished {
+  /** What a read answered, else the pull request the task already knows of the agent; nothing before either. */
+  readonly published: CodingAgentPullRequestAnswer | undefined;
+  /** Whether what is drawn will not appear later: a read answered, or the task already knew the pull request. */
+  readonly settled: boolean;
 }
 
 /** The last read out or landed: when, and for which standing of the agent. */
@@ -48,13 +58,15 @@ export function useAgentPullRequest(input: {
   /** The transcript as held, whose every change is a page landed. */
   messages: readonly CodingAgentMessage[];
   read: PullRequestReader;
+  /** The pull request the task's own read already holds for the agent (`TaskPullRequests`), drawn until the tab's read answers. */
+  known?: CodingAgentPullRequest | undefined;
   /** The clock the gap between reads is measured on. */
   now?: () => number;
-}): CodingAgentPullRequestAnswer | undefined {
-  const { agentId, status, shown, messages, read } = input;
+}): AgentPublished {
+  const { agentId, status, shown, messages, read, known } = input;
   const now = input.now ?? (() => Date.now());
-  const [held, setHeld] = useState<Held>({ agentId, published: undefined });
-  if (held.agentId !== agentId) setHeld({ agentId, published: undefined });
+  const [held, setHeld] = useState<Held>({ agentId, published: undefined, settled: false });
+  if (held.agentId !== agentId) setHeld({ agentId, published: undefined, settled: false });
   const latest = useRef({ read, now });
   latest.current = { read, now };
   const last = useRef<{ agentId: string; read: LastRead | undefined }>({
@@ -86,17 +98,23 @@ export function useAgentPullRequest(input: {
     // runs again, because a transcript page landing while the read is out
     // runs it again inside the gap, which asks nothing, and the answer
     // dropped would leave the chip unshown until the next page.
-    latest.current.read(agentId).then(
-      (answer) => {
-        if (ask === asks.current && !("failure" in answer)) {
-          setHeld((was) => (was.agentId === agentId ? { agentId, published: answer } : was));
-        }
-      },
-      () => undefined,
-    );
+    // Note that a refusal settles the read too, so a tab waiting on it to draw never waits for good.
+    const refused = () =>
+      setHeld((was) => (was.agentId === agentId && !was.settled ? { ...was, settled: true } : was));
+    latest.current.read(agentId).then((answer) => {
+      if (ask !== asks.current) return;
+      if ("failure" in answer) return refused();
+      setHeld((was) =>
+        was.agentId === agentId ? { agentId, published: answer, settled: true } : was,
+      );
+    }, refused);
   }, [agentId, shown, ended, messages]);
 
-  return held.agentId === agentId ? held.published : undefined;
+  const own = held.agentId === agentId ? held : undefined;
+  const published =
+    own?.published ??
+    (known === undefined ? undefined : { repository: null, branch: null, pullRequest: known });
+  return { published, settled: own?.settled === true || known !== undefined };
 }
 
 /** The task's agents' pull requests, and the reader that keeps them as its answers land. */

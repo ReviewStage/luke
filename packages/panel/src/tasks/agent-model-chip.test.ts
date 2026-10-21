@@ -16,9 +16,10 @@ import { AgentModelChip } from "./agent-model-chip.js";
  * open: turning Fast on widens the chip leftward from its fixed trailing
  * edge, and the menu hung from that edge neither jumps on the frame the
  * chip widens nor once the resize is measured. On an agent that runs on
- * Claude Code it offers Claude models alone, with no Fast switch and no
- * Context row, the list `list_models` answers for the same catalog
- * (`coder-agent-tools.test.ts`), while an eve agent's offers all of it.
+ * Claude Code it offers Claude models alone, with Fast and no Context row,
+ * on Codex GPT models alone with neither, the list `list_models` answers
+ * for the same catalog (`coder-agent-tools.test.ts`), while an eve agent's
+ * offers all of it. A model whose plan runs no fast mode draws no Fast.
  */
 
 const MODELS: readonly CatalogModel[] = [
@@ -164,7 +165,11 @@ const RUNTIME_MODELS: readonly CatalogModel[] = [
 ];
 
 /** The open menu of a chip on an agent on the runtime given: the models it lists, and its pinned rows. */
-function openMenuOn(runtime: CodingAgentRuntime | undefined): {
+function openMenuOn(
+  runtime: CodingAgentRuntime | undefined,
+  choice: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" },
+  models: readonly CatalogModel[] = RUNTIME_MODELS,
+): {
   models: string[];
   foot: string;
 } {
@@ -176,12 +181,12 @@ function openMenuOn(runtime: CodingAgentRuntime | undefined): {
     root.render(
       createElement(AgentModelChip, {
         model: {
-          choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+          choice,
           note: undefined,
           choose: () => undefined,
           runtime,
         },
-        models: RUNTIME_MODELS,
+        models,
         readModels: () => undefined,
         usage: undefined,
       }),
@@ -199,19 +204,41 @@ function openMenuOn(runtime: CodingAgentRuntime | undefined): {
   return { models: listed, foot };
 }
 
-test("on a Claude Code agent the menu offers Claude models alone, no Fast switch, and no Context row, while an eve agent's offers every model with both", () => {
+test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither, while an eve agent's offers every model with both", () => {
   const claudeCode = openMenuOn(CODING_AGENT_RUNTIME.CLAUDE_CODE);
+  const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX);
   const eve = openMenuOn(undefined);
 
   assert.equal(claudeCode.models.length, 2, claudeCode.models.join(" | "));
   assert.match(claudeCode.models[0] ?? "", /Opus 5\.5/u);
   assert.match(claudeCode.models[1] ?? "", /Sonnet 5\.5/u);
   assert.match(claudeCode.foot, /Effort/u);
-  assert.doesNotMatch(claudeCode.foot, /Fast|Context/u);
+  assert.match(claudeCode.foot, /Fast/u);
+  assert.doesNotMatch(claudeCode.foot, /Context/u);
+
+  assert.equal(codex.models.length, 1, codex.models.join(" | "));
+  assert.match(codex.models[0] ?? "", /GPT-6\.1 Sol/u);
+  assert.doesNotMatch(codex.foot, /Fast|Context/u);
 
   assert.equal(eve.models.length, 3, eve.models.join(" | "));
   assert.match(eve.models[2] ?? "", /GPT-6\.1 Sol/u);
   assert.match(eve.foot, /Effort/u);
   assert.match(eve.foot, /Context/u);
   assert.match(eve.foot, /Fast/u);
+});
+
+test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not even a resting one, while Opus beside it keeps Fast", () => {
+  const withheld = RUNTIME_MODELS.map((model) =>
+    model.provider === MODEL_PROVIDER.OPENAI ? { ...model, fastWithheldByPlan: true } : model,
+  );
+  const gpt = openMenuOn(undefined, { model: "openai/gpt-6.1-sol", effort: "low" }, withheld);
+  const opus = openMenuOn(
+    undefined,
+    { model: "anthropic/claude-opus-5.5", effort: "high" },
+    withheld,
+  );
+
+  assert.match(gpt.foot, /Effort/u);
+  assert.doesNotMatch(gpt.foot, /Fast/u);
+  assert.match(opus.foot, /Fast/u);
 });

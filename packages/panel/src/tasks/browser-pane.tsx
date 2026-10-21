@@ -6,24 +6,8 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  BANNER_LOOK,
-  BANNER_TONE,
-  Banner,
-  BUTTON_VARIANT,
-  Button,
-  ERROR_STATE_PLACEMENT,
-  ErrorState,
-  IconButton,
-} from "@luke/ui";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  BotIcon,
-  ExternalLinkIcon,
-  RotateCwIcon,
-  XIcon,
-} from "lucide-react";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
+import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
   type FormEvent,
   type RefObject,
@@ -36,7 +20,7 @@ import {
 import { useAct } from "../act.js";
 import { appBridge } from "../app-bridge.js";
 import { Tooltip } from "../tooltip.js";
-import type { OpenBrowser, SidePanelControl } from "./use-side-panel.js";
+import type { OpenBrowser } from "./use-side-panel.js";
 
 /**
  * browser-pane.tsx -- one Browser tab in the side panel: a bar to type an address and step the page, and the page itself, a view main lays over the tab's body.
@@ -60,10 +44,6 @@ import type { OpenBrowser, SidePanelControl } from "./use-side-panel.js";
  * page comes back from main and is pressed on this window, so the window's
  * own chords answer over the page as over any tab, and ⌘L and ⌘R are the
  * pane's: the address, and a reload.
- *
- * While an agent on the task drives the page, a strip under the bar says
- * so, with a Stop that cuts the agent off and keeps every agent off the
- * page until the developer clicks into it again (`browser-views.ts`).
  */
 
 /**
@@ -165,29 +145,6 @@ export function useBrowserPages(hearing = true): ReadonlyMap<string, BrowserPage
   const read = () => pages;
   // Note that a server render, as a test draws one, reads the pages as they stand too.
   return useSyncExternalStore(hearing ? hearPages : hearNothing, read, read);
-}
-
-/**
- * Holds a Browser tab an agent opened in main, and lets go of one an agent
- * closed, as the "+" and a tab's own close do, while `hearing`, the Browser
- * tab experiment on. Note that its owner stands whether the side panel is
- * drawn or not, because main tells of each tab once and a tab opened while
- * the panel is shut must still be there when it opens.
- */
-export function useAgentBrowserTabs(
-  control: Pick<SidePanelControl, "onAgentBrowser" | "onBrowserGone">,
-  hearing: boolean,
-): void {
-  const { onAgentBrowser, onBrowserGone } = control;
-  useEffect(() => {
-    if (!hearing) return;
-    const unhearOpened = appBridge().onBrowserOpened(onAgentBrowser);
-    const unhearClosed = appBridge().onBrowserClosed(({ browserId }) => onBrowserGone(browserId));
-    return () => {
-      unhearOpened();
-      unhearClosed();
-    };
-  }, [hearing, onAgentBrowser, onBrowserGone]);
 }
 
 /** What a Browser tab is called: its page's title, its address's host until it has one, and none before a page is opened. */
@@ -351,13 +308,13 @@ function focusHere(body: HTMLElement | null): void {
   body?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 }
 
-/** Presses on this window a Command chord pressed over the tab's page, so its keymap answers it as over any tab. */
+/** Presses on this window a chord of the window's pressed over the tab's page, so its keymap, or ⌃Tab's switcher, answers it as over any tab. */
 function pressHere(key: BrowserKey): void {
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
       key: key.key,
       code: key.code,
-      metaKey: true,
+      metaKey: key.meta,
       shiftKey: key.shift,
       altKey: key.alt,
       ctrlKey: key.control,
@@ -418,7 +375,7 @@ export function BrowserPane({
   const openAt = useCallback(
     (address: string) => {
       setRefused(false);
-      act(ACT_KIND.BROWSER_OPEN, { browserId, address, taskId: open.task }).then(
+      act(ACT_KIND.BROWSER_OPEN, { browserId, address }).then(
         (answer) => {
           notePage(answer);
           setOpened(true);
@@ -426,7 +383,7 @@ export function BrowserPane({
         () => setRefused(true),
       );
     },
-    [act, browserId, open.task],
+    [act, browserId],
   );
   // A tab drawn again opens its view where it stood, which main answers as it stands.
   useEffect(() => {
@@ -532,23 +489,6 @@ export function BrowserPane({
           />
         </div>
       </header>
-      {page?.agent === true ? (
-        <Banner
-          look={BANNER_LOOK.STRIP}
-          tone={BANNER_TONE.ATTENTION}
-          glyph={<BotIcon />}
-          actions={
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              onClick={() => tell(ACT_KIND.BROWSER_STOP, { browserId })}
-            >
-              Stop agent
-            </Button>
-          }
-        >
-          An agent is using this tab
-        </Banner>
-      ) : null}
       <div ref={body} className="browser-view-body">
         {!opened && !refused ? null : refused ? (
           <ErrorState

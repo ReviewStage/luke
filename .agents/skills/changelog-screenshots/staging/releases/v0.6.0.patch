@@ -104,8 +104,8 @@ index 000000000..70bad25ac
 +    "",
 +    "## Agents",
 +    "",
-+    "- **Add teammate invitations**: Claude Code in Conductor, on #214.",
-+    "- **Invite emails**: Codex in Conductor, on #216 (the Postmark template).",
++    "- **Add teammate invitations**: Claude Code in the cloud, on #214.",
++    "- **Invite emails**: Codex in the cloud, on #216 (the Postmark template).",
 +    "- **Webhook retries** (Claude Code) and **Usage-based billing** (Codex) run locally on Dean's Mac.",
 +    "",
 +  ].join("\n");
@@ -283,7 +283,7 @@ index 000000000..fc1020803
 +
 +type FixtureSession = FixtureSnapshot["sessions"][number];
 +
-+/** acme's Conductor workspaces, by the chat each holds. */
++/** acme's cloud workspaces, by the chat each holds. */
 +const SESSION = {
 +  INVITATIONS: "acme-relay-teammate-invitations",
 +  EMAILS: "acme-relay-invite-emails",
@@ -294,15 +294,15 @@ index 000000000..fc1020803
 +  EMAILS: "Invite emails",
 +} as const;
 +
-+const CONDUCTOR_APP = [
++const CLOUD_APP = [
 +  {
 +    id: SESSION_APPLICATION_ID.CONDUCTOR,
-+    name: "Conductor",
++    name: "Cloud",
 +    scope: SESSION_APPLICATION_SCOPE.SESSION,
 +  },
 +] as const;
 +
-+function conductorChat(
++function cloudChat(
 +  id: string,
 +  title: string,
 +  agent: { id: FixtureSession["providerId"]; name: string },
@@ -315,10 +315,10 @@ index 000000000..fc1020803
 +    id,
 +    title,
 +    providerId: PROVIDER_ID.CONDUCTOR,
-+    provider: "Conductor",
++    provider: "Cloud",
 +    agentId: agent.id,
 +    agent: agent.name,
-+    applications: CONDUCTOR_APP,
++    applications: CLOUD_APP,
 +    location: SESSION_LOCATION.CLOUD,
 +    ...rest,
 +  };
@@ -331,7 +331,7 @@ index 000000000..fc1020803
 + * and the chips resolve against these titles.
 + */
 +export const ACME_SESSIONS: readonly FixtureSession[] = [
-+  conductorChat(
++  cloudChat(
 +    SESSION.INVITATIONS,
 +    TITLE.INVITATIONS,
 +    { id: PROVIDER_ID.CLAUDE_CODE, name: "Claude Code" },
@@ -347,7 +347,7 @@ index 000000000..fc1020803
 +      workspace: { id: "acme-invitations", name: "teammate-invitations" },
 +    },
 +  ),
-+  conductorChat(
++  cloudChat(
 +    SESSION.EMAILS,
 +    TITLE.EMAILS,
 +    { id: PROVIDER_ID.CODEX, name: "Codex" },

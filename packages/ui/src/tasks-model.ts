@@ -471,18 +471,13 @@ export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put ba
 /** A task's pin and archive as the list carries them, each only where it stands. */
 type MarkStamps = Pick<TaskSummary, "pinnedAt" | "archivedAt">;
 
-/**
- * A pin, an archive, or a status given to a task that main's view has yet
- * to carry: the instant a pin or an archive was asked, or null for one taken
- * away, and the status a press set.
- */
+/** A pin or an archive given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
 export interface PendingMark {
   readonly pinnedAt?: number | null;
   readonly archivedAt?: number | null;
-  readonly status?: TaskStatus;
 }
 
-/** The pins, archives, and statuses given to tasks that main's view has yet to carry, by task id. */
+/** The pins and archives given to tasks that main's view has yet to carry, by task id. */
 export type PendingMarks = ReadonlyMap<string, PendingMark>;
 
 /** The pending stamps a press asks for, made at `at`. */
@@ -510,7 +505,7 @@ function stampAfter(standing: number | undefined, asked: number | null | undefin
   return standing ?? asked;
 }
 
-/** A row or the open document with its pending pin, archive, and status drawn in place of what it carries; an unpin takes the pin's place with it. */
+/** A row or the open document with its pending pin and archive drawn in place of what it carries; an unpin takes the pin's place with it. */
 function marked<Row extends TaskSummary>(
   row: Row,
   mark: PendingMark | undefined,
@@ -523,11 +518,10 @@ function marked<Row extends TaskSummary>(
     ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
     ...(pinned === undefined || pinPosition === undefined ? undefined : { pinPosition }),
     ...(archived === undefined ? undefined : { archivedAt: archived }),
-    ...(mark?.status === undefined ? undefined : { status: mark.status }),
   };
 }
 
-/** The view with each pending pin, archive, and status drawn in place, in the list and on the open document alike. */
+/** The view with each pending pin and archive drawn in place, in the list and on the open document alike. */
 export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   if (marks.size === 0) return view;
   const held = view.document.task;
@@ -541,14 +535,13 @@ export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   };
 }
 
-/** Whether the view carries everything a pending mark asks for: each stamp standing where it is asked and gone where it is taken away, and the status asked. */
-function markLanded(row: MarkStamps & Pick<TaskSummary, "status">, mark: PendingMark): boolean {
+/** Whether the view carries every stamp a pending mark asks for: each standing where it is asked, and gone where it is taken away. */
+function markLanded(row: MarkStamps, mark: PendingMark): boolean {
   const pinLanded =
     mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
   const archiveLanded =
     mark.archivedAt === undefined || (mark.archivedAt === null) === (row.archivedAt === undefined);
-  const statusLanded = mark.status === undefined || standingStatus(row) === mark.status;
-  return pinLanded && archiveLanded && statusLanded;
+  return pinLanded && archiveLanded;
 }
 
 /**
@@ -564,6 +557,60 @@ export function unsettledMarks(marks: PendingMarks, view: TasksView): PendingMar
     return viewed !== undefined && !markLanded(viewed, mark);
   });
   return unsettled.length === marks.size ? marks : new Map(unsettled);
+}
+
+/**
+ * A status a press gave a task that main's view has yet to carry. Each is an
+ * object of its own, so whoever set it lets go of it alone, and never of a
+ * later press's status for the same task.
+ */
+interface PendingStatus {
+  readonly status: TaskStatus;
+}
+
+/** The statuses given to tasks that main's view has yet to carry, by task id, apart from the pins and archives, so each lands or is refused on its own. */
+export type PendingStatuses = ReadonlyMap<string, PendingStatus>;
+
+/** The view with each pending status drawn in place, in the list and on the open document alike. */
+export function statusedView(view: TasksView, statuses: PendingStatuses): TasksView {
+  if (statuses.size === 0) return view;
+  const statused = <Row extends TaskSummary>(row: Row): Row => {
+    const pending = statuses.get(row.id);
+    return pending === undefined ? row : { ...row, status: pending.status };
+  };
+  const held = view.document.task;
+  return {
+    ...view,
+    tasks: view.tasks.map(statused),
+    document: held === undefined ? view.document : { ...view.document, task: statused(held) },
+  };
+}
+
+/** The pending statuses the view still contradicts; one it now carries, or of a task it no longer holds, is let go. */
+export function unsettledStatuses(statuses: PendingStatuses, view: TasksView): PendingStatuses {
+  const unsettled = [...statuses].filter(([taskId, pending]) => {
+    const held = view.document.task;
+    const viewed =
+      view.tasks.find((task) => task.id === taskId) ?? (held?.id === taskId ? held : undefined);
+    return viewed !== undefined && standingStatus(viewed) !== pending.status;
+  });
+  return unsettled.length === statuses.size ? statuses : new Map(unsettled);
+}
+
+/**
+ * What an Undo of settling tasks at a status still puts back: only the tasks
+ * that still stand there, since one given another status since was chosen
+ * anew and an Undo must not take that choice back.
+ */
+export function undoStillDue(
+  undo: readonly StatusChange[],
+  settled: SettledStatus,
+  tasks: readonly Pick<TaskSummary, "id" | "status">[],
+): readonly StatusChange[] {
+  return undo.filter(({ taskId }) => {
+    const task = tasks.find((each) => each.id === taskId);
+    return task !== undefined && standingStatus(task) === settled;
+  });
 }
 
 /** What the toast says when the service refused a repository's pin, by whether it was a pin or an unpin. */

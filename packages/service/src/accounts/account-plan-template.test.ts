@@ -35,7 +35,7 @@ import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
-import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
+import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_BODY_CEILING_BYTES } from "../orpc/handler.js";
@@ -122,7 +122,7 @@ const openAccounts = Effect.gen(function* () {
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
     readRole: readAccountRole,
-    anthropicFastAccess,
+    accountFastOffer,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,
     writePlanTemplate,

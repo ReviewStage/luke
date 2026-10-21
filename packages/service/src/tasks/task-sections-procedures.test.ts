@@ -7,7 +7,7 @@ import { getTestDB, openWorkspace } from "@luke/database/testing";
 import {
   TASK_SECTION_WRITE,
   type TaskSections,
-  taskSectionsAnswerSchema,
+  taskSectionsWrittenSchema,
 } from "@luke/features/task-section-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -84,12 +84,18 @@ function request(
   });
 }
 
-/** The sections an answer carries, failing the test where it is not the wire's. */
-function sectionsOf(answered: Answer): TaskSections {
+/** An answer read as the wire's, a write's with the transaction it wrote in; failing the test where it is not. */
+function readAnswer(answered: Answer) {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-  const read = readEither(taskSectionsAnswerSchema)(unparsedWire(answered.body));
+  const read = readEither(taskSectionsWrittenSchema)(unparsedWire(answered.body));
   if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
   return read.success;
+}
+
+/** The sections an answer carries, failing the test where it is not the wire's. */
+function sectionsOf(answered: Answer): TaskSections {
+  const { txid: _txid, ...sections } = readAnswer(answered);
+  return sections;
 }
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
@@ -102,8 +108,8 @@ it.layer(getTestDB())("the task sections route", (it) => {
       const id = randomUUID();
       const madeAt = yield* Clock.currentTimeMillis;
       yield* TestClock.adjust("1 minute");
-      const made = sectionsOf(
-        yield* ask(
+      const createIt = () =>
+        ask(
           request(owner, {
             method: "PUT",
             body: {
@@ -114,8 +120,12 @@ it.layer(getTestDB())("the task sections route", (it) => {
               icon: { kind: "emoji", emoji: "🚀" },
             },
           }),
-        ),
-      );
+        );
+      const answered = yield* createIt();
+      const made = sectionsOf(answered);
+      // The write names the transaction it wrote in, for the sidebar's follower to wait on; made again, it wrote nothing and names none.
+      assert.match(readAnswer(answered).txid ?? "", /^\d+$/u);
+      assert.equal(readAnswer(yield* createIt()).txid, undefined);
 
       assert.deepEqual(made, {
         sections: [
@@ -128,9 +138,14 @@ it.layer(getTestDB())("the task sections route", (it) => {
           },
         ],
         entries: [],
+        agentEntries: [],
       });
       assert.deepEqual(sectionsOf(yield* ask(request(owner))), made);
-      assert.deepEqual(sectionsOf(yield* ask(request(other))), { sections: [], entries: [] });
+      assert.deepEqual(sectionsOf(yield* ask(request(other))), {
+        sections: [],
+        entries: [],
+        agentEntries: [],
+      });
     }),
   );
 
@@ -171,7 +186,11 @@ it.layer(getTestDB())("the task sections route", (it) => {
           deleted,
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
-        assert.deepEqual(sectionsOf(yield* ask(request(owner))), { sections: [], entries: [] });
+        assert.deepEqual(sectionsOf(yield* ask(request(owner))), {
+          sections: [],
+          entries: [],
+          agentEntries: [],
+        });
       }),
   );
 });

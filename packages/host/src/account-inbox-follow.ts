@@ -17,7 +17,8 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import type { InboxTxWaits } from "./inbox-tx-waits.js";
+import { LiveBroken, type LiveClient, liveRows, liveShown } from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and told to main each time it moves.
@@ -63,6 +64,8 @@ export interface AccountInboxDependencies {
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /** Where the account inbox's wait for a write's transaction stands while it is subscribed, which the inbox's writes wait on. */
+  readonly txWaits: InboxTxWaits;
 }
 
 /** Each account's subscription, by its id, held while main reads it and a while after. */
@@ -102,6 +105,7 @@ export function accountInboxes(
             reseal: () => dependencies.seal(userId, false),
             poll: (after) => dependencies.seal(userId, true, after),
             now: dependencies.now,
+            onTxWait: dependencies.txWaits.hook(),
           },
           first,
         ).pipe(
@@ -113,7 +117,7 @@ export function accountInboxes(
           ),
         );
         yield* Effect.forkScoped(
-          Stream.runForEach(Stream.switchMap(rows, answersOf), (answer) =>
+          Stream.runForEach(liveShown(Stream.switchMap(rows, answersOf)), (answer) =>
             SubscriptionRef.set(inbox, { kind: "standing", answer }),
           ).pipe(
             Effect.catch(() => Effect.void),
