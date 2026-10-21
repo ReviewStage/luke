@@ -738,7 +738,9 @@ export function AgentComposer({
           quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
         />
         <PromptInputFooter ref={foot}>
-          {dictating && dictates ? (
+          {/* Note that a clip already being read keeps its strip and its Cancel
+              until it lands, a moment, rather than leaving the box held with no way out. */}
+          {dictating && (dictates || dictation.phase === DICTATION_PHASE.TRANSCRIBING) ? (
             <DictationStrip dictation={dictation} />
           ) : (
             <>
