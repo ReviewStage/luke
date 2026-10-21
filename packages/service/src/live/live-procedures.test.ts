@@ -650,6 +650,8 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           "conversation",
           "messages",
           "turns",
+          "window",
+          "windowParts",
           "workers",
         ]);
         for (const query of Object.values(answer.queries)) {
@@ -830,6 +832,8 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           "conversation",
           "messages",
           "turns",
+          "window",
+          "windowParts",
           "workers",
         ]);
         for (const query of Object.values(answer.queries)) {

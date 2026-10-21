@@ -56,7 +56,7 @@ export interface TranscriptWindowStatements {
   readonly windowParts: LiveStatement;
 }
 
-export interface TranscriptLiveStatements {
+export interface TranscriptLiveStatements extends TranscriptWindowStatements {
   readonly messages: LiveStatement;
   readonly turns: LiveStatement;
   readonly conversation: LiveStatement;
@@ -383,5 +383,12 @@ export function transcriptLiveStatements(
     conversation: liveStatementOf(conversation),
     agent: liveStatementOf(agent),
     workers: liveStatementOf(workers),
-  });
+  }).pipe(
+    Option.flatMap((statements) =>
+      Option.map(transcriptWindowLiveStatements(target, reached), (window) => ({
+        ...statements,
+        ...window,
+      })),
+    ),
+  );
 }
