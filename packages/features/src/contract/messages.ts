@@ -20,6 +20,8 @@ import { Schema as EffectSchema } from "effect";
 import {
   CHAT_BOUNDS,
   chatAnswerSchema,
+  chatJoinAnswerSchema,
+  chatJoinRequestSchema,
   chatWriteAnswerSchema,
   chatWriteRequestSchema,
 } from "../chat-wire.js";
@@ -59,7 +61,7 @@ const byCall = { id: EffectSchema.String, call: EffectSchema.String };
 /** A transcript read past a cursor. */
 const transcriptQuery = { after: queryValue };
 
-/** An agent's or a worker's transcript read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
+/** An agent's or a worker's transcript, or a planning worker's, read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
 const agentTranscriptQuery = { ...transcriptQuery, wait: queryValue };
 
 /** A page of an agent's or a worker's transcript, with whether the held read would have held on it, and how soon the clock alone may end that, where it was read at once (`transcriptNowAnswerSchema`). */
@@ -97,22 +99,28 @@ export const messagesContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
     .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
     .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
-  /** One task's conversation, past the cursor and held while a turn runs, or a page of its turns. */
+  /** One task's conversation, past the cursor and held while a turn runs, or in one look where `hold=none` asks, or a page of its turns. */
   task: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/messages" }))
-    .input(EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue }))
+    .input(
+      EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue, hold: queryValue }),
+    )
     .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
-  /** One task's brain worker's transcript past the cursor, held while it runs. */
+  /** One task's brain worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   taskWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/subagents/{call}/messages" }))
-    .input(EffectSchema.Struct({ ...byCall, ...transcriptQuery }))
-    .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
+    .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
+    .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
   /** A workspace's chat past the cursor, held while nothing moved. */
   chat: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_CHAT }))
     .input(EffectSchema.Struct({ workspaceId: queryValue, after: queryValue }))
     .output(EffectSchema.flip(chatAnswerSchema)),
-  /** One write to a workspace's chat: a post, an answer, a resolve, or a read. */
+  /**
+   * One write to a workspace's chat: a join, which makes the person's
+   * member and `#general` where they are not yet and answers their member,
+   * or a post, an answer, a resolve, or a read.
+   */
   chatWrite: hostedProcedure
     .meta(bodyCap(CHAT_WRITE_BODY_BYTES))
     .meta(
@@ -128,9 +136,9 @@ export const messagesContract = {
           params: EffectSchema.optionalKey(EffectSchema.Unknown),
           query: chatQuery,
           headers: EffectSchema.optionalKey(EffectSchema.Unknown),
-          body: chatWriteRequestSchema,
+          body: EffectSchema.Union([chatJoinRequestSchema, chatWriteRequestSchema]),
         }),
       ),
     )
-    .output(EffectSchema.flip(chatWriteAnswerSchema)),
+    .output(EffectSchema.flip(EffectSchema.Union([chatJoinAnswerSchema, chatWriteAnswerSchema]))),
 };

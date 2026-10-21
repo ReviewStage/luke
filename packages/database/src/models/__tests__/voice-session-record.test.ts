@@ -5,6 +5,7 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { voiceTranscriptSegments } from "../../schemas/voice.js";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, startTask } from "../../testing/index.js";
 import { VOICE_SEGMENT_ROLE } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
@@ -32,7 +33,7 @@ const openAccount = Effect.gen(function* () {
 });
 
 /** An agent on the task, started blank under the account. */
-const startAgent = (userId: string, taskId: string) =>
+const startAgent = (userId: string, taskId: string, runtime?: ConversationRuntime) =>
   Effect.map(
     createCodingAgent(userId, {
       taskId,
@@ -42,6 +43,7 @@ const startAgent = (userId: string, taskId: string) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: null,
+      runtime,
     }),
     (started) => Option.getOrThrow(started).agent,
   );
@@ -102,6 +104,7 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           agentId: agent.id,
           taskId: task.id,
           archived: false,
+          runtime: CONVERSATION_RUNTIME.EVE,
           conversation: { userId: starter, conversationId: agent.conversationId },
         };
         assert.deepEqual(yield* record.heldAgent({ userId: starter, agentId: agent.id }), held);
@@ -114,6 +117,18 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           true,
         );
       }),
+  );
+
+  it.effect("an agent on a native harness is held with its runtime, so a call can refuse it", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      const task = yield* startTask(userId, { name: "Billing export" });
+      const native = yield* startAgent(userId, task.id, CONVERSATION_RUNTIME.CLAUDE_CODE);
+      assert.equal(
+        (yield* record.heldAgent({ userId, agentId: native.id }))?.runtime,
+        CONVERSATION_RUNTIME.CLAUDE_CODE,
+      );
+    }),
   );
 
   it.effect("the session's row names its agent, and a re-attach reads it back", () =>

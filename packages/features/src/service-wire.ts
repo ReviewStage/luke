@@ -76,9 +76,9 @@ export const HOSTED_API_ERROR = {
    */
   AGENT_IMAGE_PREPARING: "agent-image-preparing",
   /**
-   * The agent runs on a native harness (Claude Code) that this part of Luke
-   * cannot reach yet, such as Luke's planner or an eve agent's tools; nothing
-   * was written. It is reached from the agent's own tab.
+   * The agent runs on a native harness (Claude Code or Codex) that this part
+   * of Luke cannot reach yet, such as a call, which runs on eve alone; nothing
+   * was written or charged. It is reached from the agent's own tab.
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /**

@@ -9,7 +9,7 @@ import { AttachedFileChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 
 /**
- * plan-comment-files.tsx -- the files on a plan's comment: the ones a comment carries, drawn under its words, and the ones its field holds before it is sent.
+ * plan-comment-files.tsx -- the files on a plan's comment: the ones a comment carries, drawn over its words, and the ones its field holds before it is sent.
  *
  * A comment's files are kept by the service beside the comment and named
  * on its entry by id; the window reads each one's bytes through the plan's
@@ -24,7 +24,7 @@ import { readFiles, withFiles } from "./attached-files.js";
  * (`attached-files.ts`) and held to the bounds a message to an agent is.
  */
 
-/** A comment's files under its words, each read once as it is first drawn. */
+/** A comment's files over its words, each read once as it is first drawn. */
 export function CommentFiles({
   planId,
   files,

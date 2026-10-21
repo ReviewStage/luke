@@ -177,7 +177,6 @@ let boxWidth = 900;
 let root: Root | undefined;
 
 const standIn: DiffViewModule = {
-  colourLines: () => Promise.resolve(undefined),
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
   mountFile: () => ({
     update: () => undefined,
@@ -920,7 +919,7 @@ test("View settings groups its rows under Diff, Lines, and Text, shows one appea
     ["Lines", ["Word wrap", "Line numbers", "Minimize inline comments"]],
     ["Text", ["Syntax theme", "For dark mode", "Font", "Font size", "Line height", "Ligatures"]],
   ]);
-  assert.match(popover.textContent ?? "", /Or press I in the list/u, "Minimize names its key");
+  assert.match(popover.textContent ?? "", /Or press I over the code/u, "Minimize names its key");
 
   act(() => settingControl(popover, '[role="radio"]', "Light").click());
   assert.ok(
@@ -1017,7 +1016,7 @@ test("a read that stopped short of every file offers no patch, and says why", as
   const [copy, download] = menuItems();
   for (const item of [copy, download]) {
     assert.equal(item?.getAttribute("aria-disabled") ?? String(item?.disabled), "true");
-    assert.match(item?.textContent ?? "", /Only the first files were read/u);
+    assert.match(item?.textContent ?? "", /This pull request has more files than were read/u);
   }
 });
 

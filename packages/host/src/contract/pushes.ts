@@ -2,9 +2,8 @@
  * pushes.ts -- what main pushes to a window, as one ordered stream on its act port: each push's name, its payload's guard, and the bridge method a window hears it on.
  *
  * Every push to a window rides one event-iterator procedure, `pushes`, in the
- * order main sent them, as they rode one IPC pipe before: the talk key's
- * press is never overtaken by its release, nor a document by an ask resolved
- * against it. A window opens the stream once, before its first read, and
+ * order main sent them, as they rode one IPC pipe before: a document is
+ * never overtaken by an ask resolved against it. A window opens the stream once, before its first read, and
  * hears each push through its bridge's `on…` method; the payload is read by
  * the push's own guard there, as the preload read it, and one that fails is
  * dropped. The event is declared with oRPC's `type`, not a schema, because
@@ -15,10 +14,13 @@ import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-gra
 import {
   type BrowserFocus,
   type BrowserKey,
+  type BrowserOpened,
   type BrowserPage,
   isBrowserFocus,
   isBrowserKey,
+  isBrowserOpened,
   isBrowserPage,
+  isBrowserView,
 } from "@luke/features/browser-acts";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
@@ -39,9 +41,6 @@ export const PUSH = {
   APP_STATE: "app:state",
   LIFECYCLE: "app:lifecycle",
   MENU_COMMAND: "app:menu-command",
-  VOICE_HOTKEY_PRESS: "app:voice-hotkey-press",
-  VOICE_HOTKEY_RELEASE: "app:voice-hotkey-release",
-  STOP_HOTKEY_PRESS: "app:stop-hotkey-press",
   VOICE_LIVE_SESSION_CHANGED: "app:voice-live-session-changed",
   TASKS_TALK: "app:task-talk-forwarded",
   SHOW_AGENT: "app:show-agent",
@@ -53,10 +52,11 @@ export const PUSH = {
   AVATAR_SESSION: "app:avatar-session",
   AVATAR_FEED: "app:avatar-feed",
   AVATAR_VIEW_SIGNAL: "app:avatar-view-signal",
-  SHOW_TASK: "app:show-task",
   BROWSER_STATE: "app:browser-state",
   BROWSER_KEY: "app:browser-key",
   BROWSER_FOCUS: "app:browser-focus",
+  BROWSER_OPENED: "app:browser-opened",
+  BROWSER_CLOSED: "app:browser-closed",
   SHOW_LINK: "app:show-link",
   AGENT_ENDED: "app:agent-ended",
   INBOX_ITEM_OPENED: "app:inbox-item-opened",
@@ -82,15 +82,6 @@ export const PUSH_GUARD = {
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   [PUSH.MENU_COMMAND]: result<AppCommand>(isAppCommand),
   /**
-   * The talk key going down, carrying the panel's open task while one is open
-   * and nothing otherwise.
-   */
-  [PUSH.VOICE_HOTKEY_PRESS]: result<{ taskId: string } | undefined>(
-    (value) => value === undefined || (isRecord(value) && isWireString(value.taskId)),
-  ),
-  [PUSH.VOICE_HOTKEY_RELEASE]: result<void>((v) => v === undefined),
-  [PUSH.STOP_HOTKEY_PRESS]: result<void>((v) => v === undefined),
-  /**
    * The host's word on its one live session, relayed to the voice window as
    * the event it is: wanted asks the window to open a session muted for what
    * Luke has to say, closing asks it to hang up, and a repeated wanted is a
@@ -102,12 +93,12 @@ export const PUSH_GUARD = {
     ),
   ),
   /**
-   * The Tasks tab's microphone press, forwarded by the main process to the
-   * voice window alone, carrying the task the panel had open when it was
-   * pressed and nothing else.
+   * An agent's Call press, forwarded by the main process to the voice window
+   * alone, carrying the agent pressed for and the task the panel had open
+   * when it was pressed, and nothing else.
    */
-  [PUSH.TASKS_TALK]: result<{ taskId: string }>(
-    (value) => isRecord(value) && isWireString(value.taskId),
+  [PUSH.TASKS_TALK]: result<{ taskId: string; agentId: string }>(
+    (value) => isRecord(value) && isWireString(value.taskId) && isWireString(value.agentId),
   ),
   /**
    * A coding agent's notification clicked: the panel is to open the task on
@@ -192,14 +183,6 @@ export const PUSH_GUARD = {
     (value) => avatarViewSignalFromWire(value) !== undefined,
   ),
   /**
-   * The call card's way back pressed, in the floating window or a panel's
-   * own card: the panel is to show the call's task. An event, as a notification's click is, because it is an
-   * ask the window answers once.
-   */
-  [PUSH.SHOW_TASK]: result<{ taskId: string }>(
-    (value) => isRecord(value) && isWireString(value.taskId),
-  ),
-  /**
    * How one of this panel's Browser tabs' pages stands now, each time it
    * moves: loading, loaded, titled, sent elsewhere, or failed. An event
    * rather than a slice of the document, because a page is this window's
@@ -217,6 +200,13 @@ export const PUSH_GUARD = {
    * page stands in.
    */
   [PUSH.BROWSER_FOCUS]: result<BrowserFocus>(isBrowserFocus),
+  /**
+   * A Browser tab an agent on a task opened in main, which the panel draws
+   * as a tab of that task, as the "+" opens one, without taking the keyboard.
+   */
+  [PUSH.BROWSER_OPENED]: result<BrowserOpened>(isBrowserOpened),
+  /** A Browser tab whose page an agent closed in main, which the panel lets go. */
+  [PUSH.BROWSER_CLOSED]: result<{ browserId: string }>(isBrowserView),
   /**
    * A Luke link the system handed the app: the panel is to open the place it
    * names, in the workspace it was written under. An event, as a click is,
@@ -327,9 +317,6 @@ export const PUSH_METHOD = {
   onAppState: PUSH.APP_STATE,
   onLifecycle: PUSH.LIFECYCLE,
   onMenuCommand: PUSH.MENU_COMMAND,
-  onVoiceHotkeyPress: PUSH.VOICE_HOTKEY_PRESS,
-  onVoiceHotkeyRelease: PUSH.VOICE_HOTKEY_RELEASE,
-  onStopHotkeyPress: PUSH.STOP_HOTKEY_PRESS,
   onVoiceLiveSessionChanged: PUSH.VOICE_LIVE_SESSION_CHANGED,
   onTasksTalk: PUSH.TASKS_TALK,
   onShowAgent: PUSH.SHOW_AGENT,
@@ -341,10 +328,11 @@ export const PUSH_METHOD = {
   onAvatarSession: PUSH.AVATAR_SESSION,
   onAvatarFeed: PUSH.AVATAR_FEED,
   onAvatarViewSignal: PUSH.AVATAR_VIEW_SIGNAL,
-  onShowTask: PUSH.SHOW_TASK,
   onBrowserState: PUSH.BROWSER_STATE,
   onBrowserKey: PUSH.BROWSER_KEY,
   onBrowserFocus: PUSH.BROWSER_FOCUS,
+  onBrowserOpened: PUSH.BROWSER_OPENED,
+  onBrowserClosed: PUSH.BROWSER_CLOSED,
   onShowLink: PUSH.SHOW_LINK,
   onAgentEnded: PUSH.AGENT_ENDED,
   onInboxItemOpened: PUSH.INBOX_ITEM_OPENED,

@@ -50,8 +50,8 @@ import {
   type TerminalStripTab,
   tabKey,
 } from "@luke/ui/tab-strip-model";
+import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import {
   Fragment,
   Suspense,
@@ -100,7 +100,7 @@ import { PageCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
-import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { type KindLook, type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TaskBoard } from "../tasks/task-board.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells.js";
@@ -205,6 +205,13 @@ const NO_CODE_LINE = "No code yet.";
 
 /** What the Code tab says where the task's code could not be read and none is held. */
 const UNREAD_CODE_LINE = "The code could not be read.";
+
+/**
+ * The calls the Code tab's feed groups its code under: none, since every
+ * call is an agent's now and drawn in that agent's tab, so the feed heads
+ * each code by the turn that showed it.
+ */
+const NO_CODE_CALLS: readonly CodeFeedCallSource[] = [];
 
 /** The task's work read that did not land, and its retry, which the Code tab offers while it holds no code. */
 interface CodeFailed {
@@ -452,9 +459,9 @@ export function showPullRequest(
   panel.onChoose(tab);
 }
 
-/** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open. */
-function kindRow(tab: FixedSidePanelTab): MenuRow {
-  return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab }) };
+/** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open, the Plan's the task's own where it is known. */
+function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRow {
+  return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }) };
 }
 
 /**
@@ -491,10 +498,12 @@ export function panelEntries(input: {
   };
   /** The door a new Browser tab opens through, while the Browser tab experiment is on; none where the caller offers none. */
   onNewBrowser?: (() => void) | undefined;
+  /** The task the panel stands beside, whose name and status the Plan's row wears; none where the caller does not know it. */
+  plan?: PlanStanding | undefined;
 }): AddEntry[] {
   const { panel, workers, files, changes = [], pages = [] } = input;
   const kinds = input.kinds.map((kind) => ({
-    row: kindRow(kind),
+    row: kindRow(kind, input.plan),
     onPick: () => panel.onChoose(kind),
   }));
   const subagentRows = workers.map((worker) => ({
@@ -669,6 +678,8 @@ function stripTabs(input: {
   shownAgent: string | undefined;
   /** The open plan, whose pages a page tab's card previews. */
   taskId: string;
+  /** The task the panel stands beside, whose name and status its Plan tab wears; none where it is not known. */
+  plan: PlanStanding | undefined;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
@@ -694,7 +705,7 @@ function stripTabs(input: {
   const fixed = panel.tabs.map((tab) => ({
     tab,
     look: look(tab, {
-      ...tabLook({ kind: TAB_KIND.PANEL, tab }),
+      ...tabLook({ kind: TAB_KIND.PANEL, tab, plan: input.plan }),
       detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
       endMark:
         tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
@@ -861,6 +872,7 @@ function PanelTabs({
   panel,
   holder,
   taskId,
+  task,
   keys,
   unread,
   agents,
@@ -887,6 +899,8 @@ function PanelTabs({
   holder: SidePanelHolder;
   /** The open task, which a tab's pin is of. */
   taskId: string;
+  /** The task's name and status, which its Plan tab wears; none where they are not known. */
+  task: PlanStanding | undefined;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
   keys: boolean;
   unread: readonly StripTab[];
@@ -948,6 +962,7 @@ function PanelTabs({
     onOpenAgent,
     shownAgent,
     taskId,
+    plan: task,
     inboxWaiting,
     inboxDrafted,
   });
@@ -1046,22 +1061,11 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
   );
 }
 
-/** What was said on the open task's calls, and the retry of a read that failed. */
-interface SidePanelTranscript {
-  region: TranscriptRegion;
-  onRetry: () => void;
-  /** The call a version's Open asked to bring into view. */
-  reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
-}
-
-/** What the brain wrote and ran on the open task's calls. */
+/** What Luke's own brain ran on the open task, whose workers a subagent's tab reads. */
 interface SidePanelWork {
   conversation: TaskConversation;
-  onLoadEarlier: () => Promise<void>;
   /** Reads a brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
   readWorker: TranscriptReader;
-  /** The moment whose turn a version's Open asked to bring into view. */
-  reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
 }
 
 /** An open page tab the task draws, with the page as the plan lists it. */
@@ -1381,7 +1385,7 @@ function TabContent({
   codeFailed,
   files,
   pages,
-  transcript,
+  work,
   workRows,
   agents,
   standings,
@@ -1417,7 +1421,7 @@ function TabContent({
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
-  transcript: SidePanelTranscript;
+  work: SidePanelWork;
   /** The task's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
@@ -1642,7 +1646,12 @@ function TabContent({
       ) : (
         <CodePane
           shown={shownCode}
-          calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
+          calls={NO_CODE_CALLS}
+          taskId={taskId}
+          agentLabel={(agentId) => {
+            const agent = agents.agents?.find((each) => each.id === agentId);
+            return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+          }}
           onOpenFile={onOpenFile}
         />
       );
@@ -1869,7 +1878,6 @@ export function SidePanel({
   shownCode,
   codeFailed,
   pages,
-  transcript,
   work,
   agents,
   openAgents,
@@ -1880,6 +1888,7 @@ export function SidePanel({
   onOpenTarget,
   banner,
   plan,
+  task,
   inbox,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
@@ -1897,7 +1906,6 @@ export function SidePanel({
   codeFailed: CodeFailed | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
-  transcript: SidePanelTranscript;
   work: SidePanelWork;
   agents: CodingAgentsControl;
   /** The task's agents whose tabs stand open in the task's column, whose workers' tabs stand here; nothing while unread. */
@@ -1916,6 +1924,8 @@ export function SidePanel({
   banner?: React.ReactNode;
   /** The plan's document, which its Plan tab shows; none beside anything but a task's page. */
   plan?: React.ReactNode;
+  /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
+  task?: PlanStanding | undefined;
   /** The task's Inbox, which its Inbox tab shows, how many of its items wait on the developer, which the tab counts, and whether a card holds a draft, which the tab marks; none beside anything but a task's page. */
   inbox?:
     | { readonly body: React.ReactNode; readonly waiting: number; readonly drafted: boolean }
@@ -2037,7 +2047,7 @@ export function SidePanel({
                   ? TAB_WORDS.MAC_TERMINAL
                   : isBrowserTab(tab)
                     ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
-                    : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                    : tabLook({ kind: TAB_KIND.PANEL, tab, plan: task }).label;
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
@@ -2062,6 +2072,7 @@ export function SidePanel({
         }),
     onNewBrowser:
       browsing && holder !== SIDE_PANEL_HOLDER.INBOX ? () => panel.onOpenBrowser() : undefined,
+    plan: task,
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
@@ -2100,6 +2111,7 @@ export function SidePanel({
           shownAgent={shownAgent}
           inboxWaiting={inbox?.waiting ?? 0}
           inboxDrafted={inbox?.drafted ?? false}
+          task={task}
         />
       }
       actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
@@ -2114,7 +2126,7 @@ export function SidePanel({
         <FindScope
           className="side-panel-content"
           role="tabpanel"
-          aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN }).label}
+          aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label}
           hidden={tab !== SIDE_PANEL_TAB.PLAN}
           active={keys && focused && tab === SIDE_PANEL_TAB.PLAN}
           subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
@@ -2150,7 +2162,7 @@ export function SidePanel({
             codeFailed={codeFailed}
             files={files}
             pages={taskPages}
-            transcript={transcript}
+            work={work}
             workRows={workRows}
             agents={agents}
             standings={standings}

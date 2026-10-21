@@ -240,22 +240,6 @@ it.effect(
 );
 
 it.effect(
-  "reads one agent's inbox past a cursor at the agent's own path, held as a plan's is",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        [`GET /api/agents/${AGENT_ID}/inbox`]: {
-          answer: () => ({ items: [], cursor: "3" }),
-        },
-      });
-
-      const read = yield* Effect.provide(client().agentInbox(AGENT_ID, "0"), api.layer);
-
-      assert.deepEqual(read, { items: [], cursor: "3" });
-    }),
-);
-
-it.effect(
   "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, sends an answer to the open ask on a reply with no words, and sends nothing that carries neither words, files, nor an answer",
   () =>
     Effect.gen(function* () {
@@ -616,6 +600,33 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(unanswered), {
         failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
       });
+    }),
+);
+
+it.effect(
+  "a Start from an agent travels to that agent's own path with the body a task's Start carries, and one naming no agent travels nowhere",
+  () =>
+    Effect.gen(function* () {
+      const request = { idempotencyKey: "press-1", from: { agentId: AGENT_ID } };
+      const api = fakeCloudApi({
+        [`POST /api/agents/${AGENT_ID}/agents`]: {
+          answer: () => ({ agent: AGENT }),
+          status: 201,
+        },
+      });
+
+      const started = yield* Effect.provide(client().startFrom(request), api.layer);
+      const nowhere = yield* Effect.provide(
+        client().startFrom({ idempotencyKey: "press-2", prompt: "Go." }),
+        api.layer,
+      );
+
+      assert.deepEqual(started, { agent: AGENT });
+      assert.deepEqual(nowhere, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
+        [[`https://tryluke.dev/api/agents/${AGENT_ID}/agents`, request]],
+      );
     }),
 );
 

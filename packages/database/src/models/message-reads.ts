@@ -935,10 +935,11 @@ export function noReceiptOfLine() {
  * here as the writer holds it when it takes such a line, since a task
  * conversation's turnless user rows are its spoken asks and wait for no
  * turn of eve's. A line a turn already received under another row
- * (`noReceiptOfLine`) is not counted, and neither is a line said on a call
- * into the agent: the voice answers many of those itself, and one it hands
- * on opens its spoken turn through the asks (`asks.ts`), whose turn row is
- * what reads the agent as running, so no spoken line waits on a turn here.
+ * (`noReceiptOfLine`) is not counted, and neither is a line said or typed
+ * on a call into the agent: the voice answers many spoken ones itself, and
+ * one it hands on, as every typed one is, opens its spoken turn through the
+ * asks (`asks.ts`), whose turn row is what reads the agent as running, so no
+ * line of a call waits on a turn here.
  */
 const newestAwaitingLines = SqlSchema.findAll({
   Request: ConversationsReadSchema,
@@ -960,6 +961,7 @@ const newestAwaitingLines = SqlSchema.findAll({
             eq(messages.role, MESSAGE_ROLE.USER),
             isNull(messages.turnId),
             sql`${messages.metadata} ->> 'channel' is distinct from ${MESSAGE_CHANNEL.VOICE}`,
+            sql`${messages.metadata} ->> 'voice_session_id' is null`,
             noReceiptOfLine(),
           ),
         )
@@ -1264,6 +1266,8 @@ const findSpokenRows = SqlSchema.findAll({
             eq(messages.userId, userId),
             eq(messages.conversationId, conversationId),
             inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
+            // A line typed into the call names it too, but nothing of it was said.
+            sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
             sql`${messages.metadata}->>'from_ms' is not null`,
           ),
         )

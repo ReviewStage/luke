@@ -43,9 +43,7 @@ Each instance has its own profile under `~/Library/Application Support/Luke Dev
 <name>/` (sign-in, settings, window place, single-instance lock), its own
 `Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
 `.build/traces/<name>/`. Its windows' titles end in `(<name>)`, and its app menu
-says "Quit Luke Dev <name>". The system-wide talk and stop keys are held by
-one Luke only, so a named instance leaves them to the plain one and registers
-none (a call starts from the panel instead). No development run claims the
+says "Quit Luke Dev <name>". No development run claims the
 `tryluke:` links, named or not.
 Agents' commands for this Mac go to whichever signed-in instance of the account
 reads them first, once each, and every instance runs them in the same login

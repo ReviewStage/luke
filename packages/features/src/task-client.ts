@@ -35,7 +35,12 @@ import {
   hostedClient,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
-import { LIVE_SIGNED_OUT, LIVE_USER_QUERY, type TaskBoardLiveAnswer } from "./live-wire.js";
+import {
+  LIVE_SIGNED_OUT,
+  LIVE_USER_QUERY,
+  type TaskBoardLiveAnswer,
+  type TaskRecordLiveAnswer,
+} from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import {
@@ -436,6 +441,29 @@ export class HostedTaskClient {
   > {
     return hostedResult(
       askLive(this.#hosted.live.taskBoard, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /**
+   * Where one task's pages and calls stand, sealed for following over Neon
+   * Realtime, or with `poll` their rows inline, for a reader polling while
+   * Realtime fails them, for the account `userId` names: not found where the
+   * account reaches no such task, signed out where the session is another's,
+   * unanswered for anything else, which the caller answers by sealing again.
+   */
+  recordLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskRecordLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskRecord, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
       LIVE_REFUSALS,
     );
   }

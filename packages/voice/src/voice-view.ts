@@ -43,9 +43,9 @@ type VoiceCallLine = typeof voiceCallLineSchema.Type;
  * `voice.callTranscript`, beside `voice.view`: the voice window reports only
  * a {@link VoiceCallTranscriptChange} with each view, main splices it in
  * with {@link withCallTranscriptChange}, and a panel opened mid-call reads
- * the whole of it from the document. Its one reader is the Tasks tab's live
+ * the whole of it from the document. Its one reader is the agent tab's live
  * transcript (`transcript-model.ts`'s `heardCalls`), which matches it to
- * `view.callTaskId`; it is none while no call stands or before its first line.
+ * `view.call`'s agent; it is none while no call stands or before its first line.
  */
 export interface VoiceCallTranscript {
   readonly voiceSessionId: string | undefined;
@@ -74,6 +74,26 @@ export function isVoiceCallTranscriptChange(value: UnparsedWireValue): boolean {
   return isTranscriptChange(value);
 }
 
+/**
+ * What a call is about: the agent it speaks into, and the task that agent is
+ * on, which the host creates the call only for while the panel has it open.
+ * One call stands on a Mac at a time, about one agent; calling another hangs
+ * it up first.
+ */
+export interface VoiceCallAbout {
+  readonly taskId: string;
+  readonly agentId: string;
+}
+
+/** Whether two calls are about the same agent, and so are the same call to press for. */
+export function sameCallAbout(
+  left: VoiceCallAbout | undefined,
+  right: VoiceCallAbout | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return left.taskId === right.taskId && left.agentId === right.agentId;
+}
+
 export interface VoiceView extends VoiceSpeakers {
   /**
    * The one claim the status names, which the media duck, the exchange count,
@@ -87,8 +107,8 @@ export interface VoiceView extends VoiceSpeakers {
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own words still being said, drawn only under the captions preference. */
   developerCaptions: readonly string[] | undefined;
-  /** The task the standing call is about, where the panel's open task opened it; none for no call. */
-  callTaskId: string | undefined;
+  /** The agent the standing call speaks into, and its task; none for no call. */
+  call: VoiceCallAbout | undefined;
   /** The store's id for the session of the last call Luke ended himself; none before he has. */
   lukeEndedCall: string | undefined;
   /** Whether Luke's voice is silenced on this Mac for the standing call, his words still captioned; never while none stands. */
@@ -103,7 +123,7 @@ export interface VoiceView extends VoiceSpeakers {
 export const VOICE_COMMAND = {
   STOP_SPEAKING: "stop-speaking",
   END_CALL: "end-call",
-  /** The standing call's microphone muted, or heard again, whatever task the panel has open. */
+  /** The standing call's microphone muted, or heard again, whatever the panel has open. */
   TOGGLE_MICROPHONE: "toggle-microphone",
   /** Luke's voice silenced on this Mac for the call standing, and heard again; the session is told nothing. */
   MUTE_SPEAKER: "mute-speaker",
@@ -127,12 +147,12 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   talkOpening: false,
   lukeCaptions: undefined,
   developerCaptions: undefined,
-  callTaskId: undefined,
+  call: undefined,
   lukeEndedCall: undefined,
   speakerMuted: false,
 };
 
-/** The statuses of a call still in progress, the ones a task call holds the panel open through. */
+/** The statuses of a call still in progress, the ones a call holds the panel open through. */
 const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
   LIVE_STATUS.CONNECTING,
   LIVE_STATUS.MUTED,
@@ -141,13 +161,13 @@ const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * Whether a task call is in progress: the developer is talking a task
- * through, whatever the panel shows. A call closing or failed is not in
+ * Whether a call is in progress: the developer is talking with an agent,
+ * whatever the panel shows. A call closing or failed is not in
  * progress. The panel's call bar, the mute chords, and the floating call
  * window all answer to it.
  */
-export function callInProgress(view: Pick<VoiceView, "voiceStatus" | "callTaskId">): boolean {
-  return view.callTaskId !== undefined && CALL_IN_PROGRESS.has(view.voiceStatus);
+export function callInProgress(view: Pick<VoiceView, "voiceStatus" | "call">): boolean {
+  return view.call !== undefined && CALL_IN_PROGRESS.has(view.voiceStatus);
 }
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
@@ -160,6 +180,13 @@ const VOICE_COMMANDS: ReadonlySet<string> = new Set(Object.values(VOICE_COMMAND)
 
 export function isVoiceCommand(value: UnparsedWireValue): value is VoiceCommand {
   return isWireString(value) && VOICE_COMMANDS.has(value);
+}
+
+function isOptionalCallAbout(value: UnparsedWireValue): boolean {
+  return (
+    value === undefined ||
+    (isRecord(value) && isWireString(value.taskId) && isWireString(value.agentId))
+  );
 }
 
 function isOptionalWireStrings(value: UnparsedWireValue): value is readonly string[] | undefined {
@@ -190,7 +217,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   if (!isOptionalWireString(value.voiceError) || !isOptionalWireString(value.voiceNotice))
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
-  if (!isOptionalWireString(value.callTaskId)) return false;
+  if (!isOptionalCallAbout(value.call)) return false;
   if (!isOptionalWireString(value.lukeEndedCall)) return false;
   if (!isWireBoolean(value.speakerMuted)) return false;
   if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;

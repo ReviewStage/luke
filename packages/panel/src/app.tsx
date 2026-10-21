@@ -20,10 +20,11 @@ import {
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
-import { callBarTaskId, callCard, callCardShown } from "@luke/ui/call-card-model";
+import { callBarAgentId, callCard, callCardShown } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
+import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
@@ -342,30 +343,10 @@ function AppWindow(): React.JSX.Element {
     setFeedbackKind(FEEDBACK_KIND.PROMPT);
   });
 
-  /**
-   * Moves the talk key, or resets it when no chord is named. The key the row
-   * shows is not taken from this reply — the main process announces the one
-   * that actually registered, the same way it always has — so the reply
-   * carries only the stored choice and any refusal.
-   */
-  const changeVoiceHotkey = useCallback(
-    (accelerator: string | undefined) =>
-      updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
-    [],
-  );
-
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
   useWindowZoom(useAppSlice(ZOOM), (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
   useWindowFullScreen(useAppSlice(FULL_SCREEN));
-
-  // The stop key, under the same rule: the key the row shows follows the main
-  // process's own announcement of what actually registered.
-  const changeStopHotkey = useCallback(
-    (accelerator: string | undefined) =>
-      updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
-    [],
-  );
 
   const signOut = useCallback(async () => {
     await act(ACT_KIND.ACCOUNT_SIGN_OUT);
@@ -383,18 +364,6 @@ function AppWindow(): React.JSX.Element {
       };
     }
   }, [act]);
-
-  // True while a settings row is recording a chord. Both Luke keys stay
-  // registered through a recording — the recording is how one gets replaced —
-  // so a press of a current chord landing then is held here rather than
-  // opening the microphone under the field being typed into.
-  const shortcutCapture = useRef(false);
-  const changeShortcutCapture = useCallback((capturing: boolean) => {
-    shortcutCapture.current = capturing;
-    // The talk and stop keys are routed by the main process to a window that
-    // is not this one, so the recording is reported there to be honored.
-    appPlatform().setShortcutCapturing(capturing);
-  }, []);
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
@@ -547,36 +516,24 @@ function AppWindow(): React.JSX.Element {
     [],
   );
   useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
-  // The call card's way back: the Tasks tab, on the call's task's document,
-  // opening it where another task, or none, is open.
-  const showTask = useRef(tasks.onShowTask);
-  showTask.current = tasks.onShowTask;
-  useEffect(
-    () =>
-      appBridge().onShowTask(({ taskId }) =>
-        guardLeave(() => {
-          changeTab(PANEL_TAB.TASKS);
-          showTask.current(taskId);
-        })(),
-      ),
-    [changeTab, guardLeave],
-  );
   // The call card, while this window has the keyboard and its call bar is not
-  // on screen: another task, the home page, Settings, or the task itself
-  // under its version history, the Inbox, an agent's page, or a side panel filling the window.
+  // on screen: another agent's tab or none, the home page, Settings, or the
+  // agent's own task under its version history, the Inbox, an agent's page,
+  // or a side panel filling the window.
   const focused = useWindowFocused();
-  const taskShown = callBarTaskId({
+  const columnTab = tasks.mainTabs.tab;
+  const agentShown = callBarAgentId({
     tasksTab: tab === PANEL_TAB.TASKS,
     documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
     historyOpen: tasks.history.open,
     inboxOpen: tasks.inboxView.open || tasks.chatView.open,
     agentPageOpen: tasks.agentView.agentId !== undefined,
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
-    activeTaskId: planning?.activeTaskId,
+    columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
   });
   const callVideo = useCallCardVideo();
   const call: CallCardInput | undefined =
-    !accountGated && callCardShown({ view: voiceView, focused, taskShown: taskShown })
+    !accountGated && callCardShown({ view: voiceView, focused, agentShown })
       ? {
           card: callCard({ view: voiceView, tasks: planning ?? IDLE_TASKS_VIEW }),
           speakerMuted: voiceView.speakerMuted,
@@ -797,9 +754,6 @@ function AppWindow(): React.JSX.Element {
     onSignOut: signOut,
     onDeleteAccount: deleteAccount,
     onRequestMicrophone: requestMicrophoneAccess,
-    onVoiceHotkeyChange: changeVoiceHotkey,
-    onStopHotkeyChange: changeStopHotkey,
-    onShortcutCapture: changeShortcutCapture,
     workspace,
   };
 

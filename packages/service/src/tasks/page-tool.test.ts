@@ -9,7 +9,12 @@ import { PAGE_SHOWER, type PageShower } from "@luke/features/page-wire";
 import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../core.js";
-import { type PageToolBinding, runShowPage, SHOW_PAGE_REFUSAL } from "./page-tool.js";
+import {
+  CODER_SHOW_PAGE_TOOL,
+  type PageToolBinding,
+  runShowPage,
+  SHOW_PAGE_REFUSAL,
+} from "./page-tool.js";
 
 /**
  * `show_page`, every agent's one tool for a page, through its public
@@ -61,6 +66,12 @@ const LUKE: PageShower = { kind: PAGE_SHOWER.LUKE };
 
 const show = (binding: PageToolBinding, input: WireBoundaryInput, shownBy: PageShower = LUKE) =>
   runShowPage(binding, unparsedWire(input), shownBy);
+
+const AGENT: PageShower = { kind: PAGE_SHOWER.AGENT, agentId: randomUUID() };
+
+/** A call as a coding agent makes it, whose `show_page` takes `path` alone. */
+const showAsCoder = (binding: PageToolBinding, input: WireBoundaryInput) =>
+  runShowPage(binding, unparsedWire(input), AGENT, "path");
 
 const readAccepted = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -114,6 +125,23 @@ it.layer(getTestDB())("show_page", (it) => {
         );
         assert.deepEqual([stored.html, stored.shownBy], [FUNNEL, LUKE]);
       }),
+  );
+
+  it.effect("a coding agent's show_page reads a page from its path and takes no html", () =>
+    Effect.gen(function* () {
+      const task = yield* openTask;
+      const { sandbox } = sandboxWith({ [`${CHECKOUT}/funnel.html`]: FUNNEL });
+      const agent = { ...task, sandbox };
+
+      const shown = shownPage(yield* showAsCoder(agent, { title: "Funnel", path: "funnel.html" }));
+      assert.equal(shown.version, 1);
+      assert.deepEqual(
+        yield* showAsCoder(agent, { title: "Inline", html: FUNNEL }),
+        refused(SHOW_PAGE_REFUSAL.UNREADABLE_PATH),
+      );
+      assert.equal((yield* listPages(task.userId, task.taskId)).length, 1);
+      assert.ok(!("html" in CODER_SHOW_PAGE_TOOL.inputSchema.fields));
+    }),
   );
 
   it.effect("a secret file in the sandbox is never read into a page", () =>

@@ -972,8 +972,8 @@ test("a settled choice's answer is the developer's comment, under a line saying 
   assert.deepEqual(answeredPicks(page), ["Retry 3 times over an hour"], "a press changes nothing");
   assert.equal(
     pane.querySelector(".composer-editor")?.getAttribute("aria-label"),
-    "Message Alerts…",
-    "a settled item takes no answer, only a message on its thread",
+    "Reply",
+    "a settled item takes no answer, only a reply on its thread",
   );
   const reply = pane.querySelector<HTMLElement>('[data-inbox-comment="answered"]');
   assert.ok(reply, "the developer's answer is their own comment");
@@ -981,7 +981,8 @@ test("a settled choice's answer is the developer's comment, under a line saying 
   assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
   assert.match(answerHead(page) ?? "", /^You.+ · Sent to Alerts$/u);
   assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     "person",
     "the answerer's face leads their comment",
   );
@@ -1289,9 +1290,33 @@ function answerSend(pane: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** What the box's quiet line says, or nothing where it says nothing. */
-function quietWords(pane: HTMLElement): string | null {
-  return pane.querySelector("[data-inbox-quiet]")?.textContent ?? null;
+/**
+ * What the open item's box says in its foot around its note line, its
+ * presses' words among it: nothing but a notice's Got it, since the box
+ * carries no helper text, its Send held until it holds something to send.
+ */
+function footWords(pane: HTMLElement): string {
+  const foot =
+    pane.querySelector("form.inbox-answer .inbox-answer-foot") ?? assert.fail("the box's foot");
+  const copy = foot.cloneNode(true);
+  assert.ok(copy instanceof Element);
+  for (const field of copy.querySelectorAll(".agent-composer-field")) field.remove();
+  return copy.textContent ?? "";
+}
+
+/**
+ * The box's foot as a reader meets it, left to right: each press by its
+ * name, and the note line, which stands in the foot as its field, by what
+ * it asks for.
+ */
+function footParts(pane: HTMLElement): (string | null)[] {
+  const foot =
+    pane.querySelector("form.inbox-answer .inbox-answer-foot") ?? assert.fail("the box's foot");
+  return [...foot.querySelectorAll<HTMLElement>("button, .composer-editor")].map((part) =>
+    part.matches(".composer-editor")
+      ? `line: ${part.getAttribute("aria-label")}`
+      : (part.getAttribute("aria-label") ?? part.textContent),
+  );
 }
 
 /**
@@ -1350,7 +1375,7 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
   act(() => keys.unmount());
 });
 
-test("Enter on a focused option sends the answer and never presses the option; with nothing picked, Enter there or in the box sends nothing, takes the keyboard to the options, and says on the box's foot what is missing until an option is picked", async () => {
+test("Enter on a focused option sends the answer and never presses the option; with nothing picked, Send stands held, and Enter there or in the box sends nothing and takes the keyboard to the options, the box saying nothing of what is missing", async () => {
   const { page } = mount();
   await settle();
   const sent = heldAnswers();
@@ -1360,7 +1385,13 @@ test("Enter on a focused option sends the answer and never presses the option; w
   pressInComposer(pane, "Enter");
   await settle();
   assert.equal(document.activeElement, openOptions(pane)[0], "the keyboard goes to the options");
-  assert.equal(quietWords(pane), "Pick an option");
+  assert.equal(footWords(pane), "", "the box says nothing of what is missing");
+  assert.equal(answerSend(pane).disabled, true, "Send stands held");
+  assert.deepEqual(
+    footParts(pane),
+    ["Attach files", "line: Add a note", "Dictate", "Send"],
+    "its foot is one row, the note line in it, under the options",
+  );
   keyOn(openOptions(pane)[0] ?? assert.fail("no option"), "Enter");
   await settle();
   assert.deepEqual(sent, [], "an answer lacking its pick goes nowhere");
@@ -1368,7 +1399,7 @@ test("Enter on a focused option sends the answer and never presses the option; w
 
   const once = openOptions(pane)[1] ?? assert.fail("no second option");
   act(() => once.click());
-  assert.equal(quietWords(pane), null, "the line goes once the pick is made");
+  assert.equal(answerSend(pane).disabled, false, "the pick lights Send");
   keyOn(once, "Enter");
   await settle();
   assert.deepEqual(
@@ -1379,7 +1410,7 @@ test("Enter on a focused option sends the answer and never presses the option; w
   assert.deepEqual(answeredPicks(page), ["Retry once"], "Enter left the pick standing");
 });
 
-test("a waiting choice of several is a checkbox list whose box counts the picks on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
+test("a waiting choice of several is a checkbox list whose box counts nothing on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
   inboxes.set(BILLING.id, [
     {
       ...THRESHOLD,
@@ -1400,8 +1431,8 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
     boxes().map((box) => box.querySelector(".luke-choice-control")?.getAttribute("data-shape")),
     ["box", "box", "box"],
   );
-  assert.equal(quietWords(pane), "Pick any that apply");
-  assert.equal(pane.textContent?.includes("Pick any that apply."), false, "no line under the list");
+  assert.equal(footWords(pane), "", "the foot says nothing of how many may be picked");
+  assert.equal(pane.textContent?.includes("Pick any that apply"), false, "no line under the list");
 
   const email = boxes()[0] ?? assert.fail("no Email");
   act(() => email.focus());
@@ -1417,7 +1448,7 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
   pressKey("2", document.activeElement ?? document.body);
   pressKey("2", document.activeElement ?? document.body);
   assert.deepEqual(checkedOptions(pane), ["Email", "Pager"]);
-  assert.equal(quietWords(pane), "2 picked");
+  assert.equal(footWords(pane), "", "nor how many are");
 
   keyOn(email, "Enter");
   await settle();
@@ -1429,7 +1460,7 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled takes the keyboard to the first required one, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
+test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled takes the keyboard to the first required one, the box naming nothing; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
   inboxes.set(INVITES.id, [
     {
       ...EXPIRY,
@@ -1461,7 +1492,7 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   await settle();
   assert.deepEqual(sent, []);
   assert.equal(document.activeElement, segment(segmentedGroup(pane, "Severity"), "Low"));
-  assert.equal(quietWords(pane), "Fill in Severity");
+  assert.equal(footWords(pane), "");
 
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
@@ -1520,22 +1551,19 @@ test("an approval is decided in its question, Approve and Decline two cards pick
       ["Decline", "2", "danger"],
     ],
   );
-  assert.deepEqual(
-    footPresses(pane),
-    ["Dictate", "Send to agent"],
-    "Decline and Approve left the foot",
-  );
+  assert.deepEqual(footPresses(pane), ["Dictate", "Send"], "Decline and Approve left the foot");
 
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
   await settle();
   assert.deepEqual(sent, []);
   assert.equal(document.activeElement, openOptions(pane)[0]);
-  assert.equal(quietWords(pane), "Approve or decline");
+  assert.equal(footWords(pane), "");
+  assert.equal(answerSend(pane).disabled, true);
 
   pressKey("2", document.activeElement ?? document.body);
   assert.deepEqual(checkedOptions(pane), ["Decline"]);
-  assert.equal(quietWords(pane), null);
+  assert.equal(answerSend(pane).disabled, false);
   keyOn(openOptions(pane)[1] ?? assert.fail("no Decline"), "Enter");
   await settle();
   assert.deepEqual(
@@ -1557,7 +1585,7 @@ test("a to-do is a card of two picks in its question: its step, the item's title
   assert.equal(step.textContent, "Add POSTMARK_SERVER_TOKEN to Vercel1");
   assert.equal(pill.textContent, "Couldn't do it2");
   assert.deepEqual([step.tabIndex, pill.tabIndex], [0, -1], "Tab lands on the step");
-  assert.deepEqual(footPresses(pane), ["Dictate", "Send to agent"], "Done left the foot");
+  assert.deepEqual(footPresses(pane), ["Dictate", "Send"], "Done left the foot");
 
   act(() => step.click());
   assert.equal(step.getAttribute("aria-checked"), "true");
@@ -1571,7 +1599,7 @@ test("a to-do is a card of two picks in its question: its step, the item's title
   act(() => step.click());
   assert.equal(step.getAttribute("aria-checked"), "false", "a press on the pick takes it back");
   keyOn(step, "Enter");
-  assert.equal(quietWords(pane), "Tick it, or say you couldn't");
+  assert.equal(footWords(pane), "");
   assert.equal(step.getAttribute("aria-checked"), "false", "Enter ticks nothing");
 
   act(() => step.click());
@@ -1584,7 +1612,7 @@ test("a to-do is a card of two picks in its question: its step, the item's title
   );
 });
 
-test("a note from before version 5 that asks to be heard back is left open as it is opened, since its nod would message the agent: its Send says Got it while its box is empty and Send once a word is written, and Enter in its box sends the nod, with no Got it at the foot beside it", async () => {
+test("a note from before version 5 that asks to be heard back is left open as it is opened, since its nod would message the agent: its Send reads Got it while its box is empty and is the round Send once a word is written, and Enter in its box sends the nod, with no line at the foot beside it", async () => {
   onlyAsking({ type: INBOX_RESPONSE.NONE }, { needsReply: true });
   const sent = heldAnswers();
   const { page } = mount();
@@ -1592,9 +1620,14 @@ test("a note from before version 5 that asks to be heard back is left open as it
   assert.deepEqual(sent, [], "opening it answers nothing");
   const pane = itemPane(page);
   assert.deepEqual(footPresses(pane), ["Dictate", "Got it"]);
-  assert.equal(answerSend(pane).textContent, "Got it");
+  assert.equal(
+    footWords(pane),
+    "Got it",
+    "Got it is Send's own words, and no line stands beside it",
+  );
   typeInComposer(pane, "Looks right");
-  assert.equal(answerSend(pane).textContent, "Send");
+  assert.equal(answerSend(pane).getAttribute("aria-label"), "Send");
+  assert.equal(footWords(pane), "");
   act(() => composerEditor(pane).editor?.commands.clearContent(true));
   assert.equal(answerSend(pane).textContent, "Got it");
 
@@ -1628,7 +1661,7 @@ test("a note from before version 5 that needs no reply is acknowledged as it is 
     [{ itemId: note.id, reply: INBOX_REPLY.ACKNOWLEDGED }],
   );
   const pane = itemPane(page);
-  assert.equal(answerSend(pane).textContent, "Send");
+  assert.equal(answerSend(pane).getAttribute("aria-label"), "Send");
   assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
@@ -1726,7 +1759,8 @@ test("a teammate's answer names them by their disc and name, their pick checked 
     assert.fail("their answer");
   assert.match(answerHead(page) ?? "", /^Charles Pan.+ · /u);
   assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     "person",
   );
 
@@ -1765,7 +1799,7 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
     pane.querySelector<HTMLInputElement>('[data-inbox-field="boolean"] input[type="checkbox"]') ??
     assert.fail("no Page on-call checkbox");
   const unpicked = readSegmented(channel());
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.equal(askMarker(pane), null);
 
   act(() => segment(channel(), "Slack").click());
@@ -2081,7 +2115,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
 });
 
-test("a thread draws no strip of files over a comment's words: an agent's pictures stand once, where its words draw them, one they do not draw after them, and a member's picture and file after their words, the viewer walking each picture once", async () => {
+test("a thread draws a comment's files over its words: an agent's pictures stand once, where its words draw them, one they do not draw over them, and a member's picture and file over their words, the viewer walking each picture once", async () => {
   const [before, after, unnamed, mine, spec] = [
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c80",
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c81",
@@ -2135,11 +2169,11 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   );
   const alts = (within: Element) =>
     [...within.querySelectorAll<HTMLImageElement>(".picture-block img")].map((image) => image.alt);
-  assert.deepEqual(alts(agent), ["Before", "After", "older.png"], "each picture stands once");
+  assert.deepEqual(alts(agent), ["older.png", "Before", "After"], "each picture stands once");
   assert.deepEqual(alts(member), ["mine.png"]);
   assert.deepEqual(attachedNames(agent), []);
   assert.deepEqual(attachedNames(member), ["spec.pdf"]);
-  // What the message carried stands after its words, never over them.
+  // What the message carried stands over its words, as every message's files do.
   for (const [comment, carried] of [
     [agent, agent.querySelector("[data-inbox-file-pictures]")],
     [member, member.querySelector("[data-inbox-file-pictures]")],
@@ -2147,7 +2181,7 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   ] as const) {
     const words = comment.querySelector("[data-inbox-message-text]");
     assert.ok(words && carried, "the words and the files are drawn");
-    assert.ok(words.compareDocumentPosition(carried) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(words.compareDocumentPosition(carried) & Node.DOCUMENT_POSITION_PRECEDING);
   }
 
   const press = pane.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
@@ -2169,13 +2203,13 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
           new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
         ),
     );
-  assert.deepEqual(viewer(), ["After.png", "2 of 4"]);
-  key("ArrowRight");
-  assert.deepEqual(viewer(), ["older.png", "3 of 4"]);
+  assert.deepEqual(viewer(), ["After.png", "3 of 4"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["mine.png", "4 of 4"]);
   key("ArrowRight");
-  assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
+  assert.deepEqual(viewer(), ["older.png", "1 of 4"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Before.png", "2 of 4"]);
 });
 
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
@@ -2227,7 +2261,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   const asking =
     page.querySelector('[data-inbox-comment="asked"]') ?? assert.fail("the question is a comment");
   assert.ok(
-    asking.querySelector('.inbox-comment-face .actor-mark[data-kind="agent"]'),
+    asking.querySelector('.inbox-comment-head [data-actor-ref] .actor-mark[data-kind="agent"]'),
     "the agent's tile leads its comment",
   );
   reach(comment);
@@ -3463,16 +3497,20 @@ test("an answer file whose read failed says so under the files, and Retry reads 
   assert.ok(comment().querySelector('button[aria-label="Open spec.pdf"]'), "the file opens now");
 });
 
-test("an item that needs no reply says a file attached in its box will be sent to the agent", async () => {
+test("an item that needs no reply says nothing in its box of whether its answer will message the agent, bare, with a note, or with a file", async () => {
   inboxes = new Map([
     [BILLING.id, [{ ...THRESHOLD, response: { type: INBOX_RESPONSE.TODO }, needsReply: false }]],
   ]);
   const { page } = mount();
   await settle();
-  const quiet = () => itemPane(page).querySelector("[data-inbox-quiet]")?.textContent;
-  assert.equal(quiet(), "Without a note, this won't message the agent.");
+  const pane = itemPane(page);
+  assert.equal(footWords(pane), "");
+  typeInComposer(pane, "Done on preview too.");
+  assert.equal(footWords(pane), "");
   await handFiles(page, [new File(["ok\n"], "flag.txt", { type: "text/plain" })], "pick");
-  assert.equal(quiet(), "Your answer and its files will be sent to the agent.");
+  assert.equal(footWords(pane), "");
+  assert.equal(pane.textContent?.includes("message the agent"), false);
+  assert.equal(pane.textContent?.includes("sent to the agent"), false);
 });
 
 test("an answered item draws the files its answer carried after its words, never as a strip of thumbnails: a picture as a picture in its words is drawn, once read, and any other file as its chip; files alone stand under the answer's head with no pick and no empty note", async () => {
@@ -3826,26 +3864,6 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   await pressNoteSkill(page, "/release");
 
   assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
-});
-
-test("an item that needs no reply says a bare answer won't message the agent, and that a note typed in its box will", async () => {
-  const todo: InboxItem = {
-    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
-    response: { type: INBOX_RESPONSE.TODO },
-    needsReply: false,
-  };
-  inboxes = new Map([
-    [BILLING.id, [todo]],
-    [INVITES.id, [EXPIRY]],
-  ]);
-  const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, "Turn on the flag").click());
-  const quiet = () => page.querySelector(".inbox-view-items [data-inbox-quiet]")?.textContent;
-  assert.equal(quiet(), "Without a note, this won't message the agent.");
-
-  typeInComposer(page.querySelector(".inbox-view-items") ?? page, "Done on preview too.");
-  assert.equal(quiet(), "Your note will be sent to the agent.");
 });
 
 test("an item that needs no reply, once settled, says a note or a file was sent to the agent and a bare press kept for it to read", async () => {
@@ -4643,7 +4661,8 @@ function threadOf(page: HTMLElement): (string | null | undefined)[][] {
     ),
   ].map((entry) => [
     entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
-    entry.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    entry.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     wordsOf(entry.querySelector(".inbox-comment-name")),
     wordsOf(entry.querySelector("[data-inbox-message-text]")),
   ]);
@@ -5080,10 +5099,7 @@ test("an open item's box still answers it: its note goes as the answer and never
     ["asked", "agent", "Alerts", null],
     ["message", "person", "Charles Pan", "Is 80% too eager?"],
   ]);
-  assert.equal(
-    composerEditor(pane).getAttribute("aria-label"),
-    "Add a note, or answer in your own words",
-  );
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note");
 
   typeInComposer(pane, "Use 90%");
   composerEditor(pane).focus();
@@ -5152,7 +5168,7 @@ test("an answer left unsent on an item a teammate answers meanwhile is let go ra
     deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
   );
   await settle();
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Message Alerts…");
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply");
   assert.equal(composerEditor(pane).textContent, "", "the unsent answer is not a message");
 
   typeInComposer(pane, "Thanks, Charles.");
@@ -5725,6 +5741,41 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   );
 });
 
+test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
+  // The invites plan's held read is the test's to land, as an answer from another Mac would.
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = (taskId) =>
+    taskId === INVITES.id
+      ? new Promise((resolve) => {
+          deliver = resolve;
+        })
+      : new Promise(() => undefined);
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+
+  act(() => setInboxOpen(false));
+  await settle();
+  const answered = {
+    ...EXPIRY,
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.ANSWERED, note: "Keep 7 days" },
+    settledAt: 6_000,
+    updatedAt: 6_000,
+  };
+  act(() => deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered], cursor: "2" } }));
+  await settle();
+  act(() => setInboxOpen(true));
+  await settle();
+  assert.deepEqual(
+    listed(page),
+    ["*Alert at 80%?"],
+    "the item answered while the Inbox was hidden no longer needs you, so it has no row",
+  );
+});
+
 test("on All, every item settled and read is drawn gray, and what waits or is unread is not", async () => {
   inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.CLOSED, unread: true }]);
   const { page } = mount();
@@ -6216,15 +6267,12 @@ function answeredCard(reply: Element): string | null | undefined {
   return wordsOf(card);
 }
 
-/** The thread's box's one button, by its words, its chord left out. */
+/** The thread's box's one button, by its words, or by its name where it is the round Send that shows none. */
 function sendWords(pane: HTMLElement): string | null {
   const button =
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
     assert.fail("the box has its button");
-  const copy = button.cloneNode(true);
-  assert.ok(copy instanceof Element);
-  for (const chord of copy.querySelectorAll("kbd")) chord.remove();
-  return copy.textContent;
+  return button.textContent === "" ? button.getAttribute("aria-label") : button.textContent;
 }
 
 /** The open ask's marker ending the agent's message, as a reader hears it; none where no ask waits. */
@@ -6288,6 +6336,50 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
+/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face its head draws, each as the chip naming them holds it, and the faces drawn anywhere but in its head or its body. */
+function commentHeads(pane: HTMLElement): (string | undefined | (string | undefined)[])[][] {
+  return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
+    (comment) => [
+      comment.dataset.inboxComment,
+      [
+        ...comment.querySelectorAll<HTMLElement>(
+          ".inbox-comment-head > .inbox-comment-name > [data-actor-ref] .actor-mark",
+        ),
+      ].map((mark) => mark.dataset.kind),
+      [...comment.querySelectorAll<HTMLElement>(".actor-mark")]
+        .filter((mark) => mark.closest(".inbox-comment-head, .inbox-comment-body") === null)
+        .map((mark) => mark.dataset.kind),
+    ],
+  );
+}
+
+test("each comment of a thread is headed by its writer's chip, their face and name as one target, its face the thread's gutter with no face drawn apart from it; the draft reply's head is the reader's chip, \"You\", with nothing after it", async () => {
+  const shown = threadItem([
+    askingMessage(EXPIRY_ASK),
+    threadMessage(
+      "e1b2c3d4-0000-4000-8000-000000000002",
+      { member: TEAMMATE },
+      "7 days, surely?",
+      2_000,
+    ),
+  ]);
+  const pane = await mountThread(shown);
+
+  assert.deepEqual(commentHeads(pane), [
+    ["message", ["agent"], []],
+    ["message", ["person"], []],
+    ["draft", ["person"], []],
+  ]);
+  const draft =
+    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .inbox-comment-head') ??
+    assert.fail("the draft reply has a head");
+  assert.equal(wordsOf(draft), "You", "the reader's chip alone, no draft and no time after it");
+  assert.ok(
+    draft.querySelector('.inbox-comment-name > [data-actor-ref][data-kind="person"] .actor-mark'),
+    "the reader is named by their chip, its face and name",
+  );
+});
+
 test("a thread draws every message, the agent's by its tile and name alone, no tag after its chip, and a member's by their face and name, under its title alone; its open ask is a marker ending the agent's message, its options standing in the reader's draft reply at the thread's end, over the note", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
@@ -6333,9 +6425,9 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
       ["inbox-comment-name", "inbox-comment-when"],
       ["inbox-comment-name", "inbox-comment-when"],
       ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name", "inbox-comment-when"],
+      ["inbox-comment-name"],
     ],
-    "an agent's message, as a member's and the draft, is headed by its name and when alone, with no tag after its chip",
+    "an agent's message, as a member's, is headed by its chip and when alone, with no tag after its chip, and the draft by the reader's chip alone",
   );
   assert.deepEqual(askBoxes(pane), [], "the open ask is no card in the agent's message");
   const [asked] = pane.querySelectorAll(".inbox-thread > li");
@@ -6345,7 +6437,7 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     "the agent's message ends with its words, no marker saying the ask waits on the reader",
   );
   assert.equal(asked?.querySelector('[role="radio"]'), null, "and holds none of its options");
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.deepEqual(checkedOptions(pane), [], "nothing is picked for the reader");
   assert.deepEqual(
     openOptions(pane).map((option) => wordsOf(option)),
@@ -6355,24 +6447,32 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     pane.querySelector(
       '.inbox-thread > li:last-child form.inbox-answer > [data-inbox-draft-ask] [role="radio"]',
     ),
-    "the options stand in the draft's box, over its note",
+    "the options stand in the draft's box, as its body",
   );
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note…");
+  assert.deepEqual(
+    footParts(pane),
+    ["Attach files", "line: Add a note", "Dictate", "Send"],
+    "under them, one row: +, the note line, the microphone, and Send",
+  );
+  assert.equal(footWords(pane), "", "and no line of help");
   // What the thread draws stands inside the pane's masked region.
   assert.ok(pane.querySelector(".ph-no-capture [data-inbox-draft-ask]"));
   assert.ok(pane.querySelector(".ph-no-capture [data-inbox-message-text]"));
 });
 
-test("a plain reply sends no answer and leaves the ask open, the box's one button reading Reply and its foot saying replying keeps the ask open", async () => {
+test("a plain reply sends no answer and leaves the ask open, the box's Send held until it holds words and nothing saying the ask stays open", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
   const answers = heldAnswers();
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000010"));
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note…");
-  assert.equal(sendWords(pane), "Reply");
-  assert.equal(quietWords(pane), "Replying keeps the ask open");
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note");
+  assert.equal(sendWords(pane), "Send");
+  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(footWords(pane), "", "nothing says replying keeps the ask open");
 
   typeInComposer(pane, "Does it matter for SSO teams?");
+  assert.equal(answerSend(pane).disabled, false, "words light Send");
+  assert.equal(footWords(pane), "");
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
   await settle();
@@ -6383,7 +6483,7 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
   );
   assert.deepEqual(answers, [], "the old answer path is never taken");
   assert.equal(askMarker(pane), null);
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.deepEqual(threadOf(pane.ownerDocument.body).at(-1), [
     "message",
     "person",
@@ -6456,7 +6556,7 @@ test("opening the reader's own notice acknowledges it at its revision, once whil
   const send =
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
     assert.fail("the box has its button");
-  assert.equal(sendWords(pane), "Reply", "no Got it stands");
+  assert.equal(sendWords(pane), "Send", "no Got it stands");
   assert.equal(send.disabled, true);
   assert.deepEqual(answersOf(answered), [acknowledged], "it is not tried again while it is shown");
 
@@ -6500,7 +6600,7 @@ test("a notice whose box holds a draft is left open as it is opened, and its wor
   await settle();
   assert.equal(answered.length, 1, "opened with a draft, it is not acknowledged");
   assert.equal(composerEditor(itemPane(page)).textContent, "Looks right.");
-  assert.equal(sendWords(itemPane(page)), "Reply");
+  assert.equal(sendWords(itemPane(page)), "Send");
 
   act(() =>
     itemPane(page)
@@ -6515,12 +6615,17 @@ test("a notice whose box holds a draft is left open as it is opened, and its wor
   assert.equal(answered.length, 1, "the reply is no second answer");
 });
 
-test("a teammate's notice is left open as it is opened, since acknowledging it settles it for them too, and its box reads Got it, which answers it at its revision; with words it reads Reply", async () => {
+test("a teammate's notice is left open as it is opened, since acknowledging it settles it for them too, and its box's Send reads Got it, which answers it at its revision, with no line beside it", async () => {
   const notice = noticeItem({ startedBy: TEAMMATE });
   const { answered, messaged } = noticeWrites();
   const pane = await mountThread(notice);
   assert.deepEqual(answered, [], "opening it answers nothing");
   assert.equal(sendWords(pane), "Got it");
+  assert.equal(
+    footWords(pane),
+    "Got it",
+    "Got it is Send's own words, the foot saying nothing else",
+  );
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
   );
@@ -6696,7 +6801,7 @@ test("words written on a reply's settled box while the reply carrying the ask's 
   assert.equal(askMarker(pane), null);
   assert.equal(composerEditor(pane).textContent, "One more detail");
   assert.deepEqual(checkedOptions(pane), ["7 days"]);
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
 });
 
 test("words another window writes in the open ask's box while this window's reply carrying the answer is out are kept beside this window's own once the reply is refused", async () => {
@@ -6750,26 +6855,27 @@ test("words another window writes in the open ask's box while this window's repl
   );
 });
 
-test("picking an option in the draft reply stands it picked, the foot no longer saying the ask stays open and the button still Reply, and pressing it again takes it off; sent, the reply drops into the thread as the reader's comment leading with the answered card, and the draft stands plain at the end again", async () => {
+test("picking an option in the draft reply stands it picked and lights Send, the box saying nothing, and pressing it again takes it off; sent, the reply drops into the thread as the reader's comment leading with the answered card, and the draft stands plain at the end again", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000011"));
 
   act(() => openOptions(pane)[1]?.click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   assert.equal(pane.querySelector("[data-inbox-attached]"), null, "no stamp stands over the note");
 
   act(() => openOptions(pane)[1]?.click());
   assert.deepEqual(checkedOptions(pane), [], "pressed again, the pick is let go");
-  assert.equal(quietWords(pane), "Replying keeps the ask open");
+  assert.equal(answerSend(pane).disabled, true, "and Send stands held again");
+  assert.equal(footWords(pane), "", "nothing says the ask stays open");
 
   // The number keys still pick, from wherever in the Inbox the reader stands.
   keyOn(document.body, "2");
   assert.deepEqual(checkedOptions(pane), ["7 days"]);
   typeInComposer(pane, "Most teams asked for it.");
   await settle();
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
   );
@@ -6799,9 +6905,9 @@ test("picking an option in the draft reply stands it picked, the foot no longer 
   assert.equal(askMarker(pane), null, "and its marker");
   assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
-  assert.deepEqual(draftReply(pane), ["Youdraft"], "the draft stands at the end, plain");
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply…");
-  assert.equal(quietWords(pane), null);
+  assert.deepEqual(draftReply(pane), ["You"], "the draft stands at the end, plain");
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply");
+  assert.deepEqual(footParts(pane), ["Attach files", "line: Reply", "Dictate", "Send"]);
 });
 
 test("an approve-or-request-changes ask is two small buttons in the draft reply: the one pressed stands pressed, pressed again it is let go, and the reply sent with words carries it, stamped as requested changes", async () => {
@@ -6815,14 +6921,14 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000012"));
   assert.deepEqual(openOptions(pane), [], "no radio list stands for a yes or no");
 
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Approve").click());
   act(() => askPress(pane, "Approve").click());
   assert.equal(askPress(pane, "Approve").getAttribute("aria-pressed"), "false", "let go");
   act(() => askPress(pane, "Request changes").click());
   assert.equal(askPress(pane, "Request changes").getAttribute("aria-pressed"), "true");
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   typeInComposer(pane, "The banner overlaps the header.");
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
@@ -6849,6 +6955,39 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
   assert.deepEqual(askBoxes(pane), []);
 });
 
+test("an ask of words alone is a plain box with no controls, its line asking for a Reply and its Send held until words are in; the words sent answer it, and the agent's message then says it was answered", async () => {
+  const shown = threadItem([askingMessage({ type: INBOX_ASK.ANSWER })]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000015"));
+  assert.deepEqual(draftReply(pane), ["You"], "no controls stand in the box");
+  assert.equal(pane.querySelector("[data-inbox-draft-ask]"), null, "and no Answer press");
+  assert.deepEqual(footParts(pane), ["Attach files", "line: Reply", "Dictate", "Send"]);
+  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(footWords(pane), "");
+
+  typeInComposer(pane, "Nothing needs you right now.");
+  assert.equal(answerSend(pane).disabled, false, "words light Send");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text, answers }) => ({ text, answers })),
+    [
+      {
+        text: "Nothing needs you right now.",
+        answers: { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED },
+      },
+    ],
+  );
+  assert.equal(askMarker(pane), null, "the ask waits no more");
+  assert.equal(
+    wordsOf(pane.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-settled]`)),
+    "Answered",
+  );
+  assert.deepEqual(draftReply(pane), ["You"]);
+});
+
 test("a form's fields attach to the reply as they are filled, with no Submit, and a form filled in part sends what was filled, a required field left empty absent from it", async () => {
   const shown = threadItem([
     askingMessage({
@@ -6866,8 +7005,8 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
     ["Low", "High"],
     "the draft's box holds the ask's fields and no Submit",
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
-  assert.equal(sendWords(pane), "Reply");
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.equal(sendWords(pane), "Send");
 
   const reason =
     [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
@@ -6875,9 +7014,9 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
     ) ?? assert.fail("no Reason field");
   typeInComposer(reason, "Spiked twice");
   await settle();
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
   );
@@ -6932,18 +7071,18 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
   assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
   assert.equal(askMarker(pane), null);
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
-  assert.equal(quietWords(pane), "Replying keeps the ask open");
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
 
   act(() => steps()[0]?.click());
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Mark done").click());
   assert.deepEqual(
     steps().map((step) => step.checked),
     [true, true],
     "Mark done ticks the step left unticked",
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Couldn't do it").click());
   assert.deepEqual(
     steps().map((step) => step.checked),
@@ -6952,10 +7091,14 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   );
   act(() => askPress(pane, "Couldn't do it").click());
   assert.equal(askPress(pane, "Couldn't do it").getAttribute("aria-pressed"), "false");
-  assert.equal(quietWords(pane), null, "pressed again, it is let go, the step ticked still sent");
+  assert.equal(
+    answerSend(pane).disabled,
+    false,
+    "pressed again, it is let go, the step ticked still sent",
+  );
   act(() => askPress(pane, "Mark done").click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
   );
@@ -6990,7 +7133,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   );
 });
 
-test("a to-do with every step ticked by hand stands marked done and Reply sends it so, letting a step go takes that back off, and steps ticked with neither press go as they stand", async () => {
+test("a to-do with every step ticked by hand stands marked done and Send sends it so, letting a step go takes that back off, and steps ticked with neither press go as they stand", async () => {
   const toDo = { type: INBOX_ASK.DO, steps: ["Open the repository's settings", "Add the secret"] };
   const shown = threadItem([askingMessage(toDo)]);
   const pane = await mountThread(shown);
@@ -7001,12 +7144,13 @@ test("a to-do with every step ticked by hand stands marked done and Reply sends 
   act(() => steps()[0]?.click());
   act(() => steps()[1]?.click());
   assert.equal(markDone(), "true", "every step ticked stands as Mark done");
-  assert.equal(quietWords(pane), null, "the reply carries the answer");
+  assert.equal(answerSend(pane).disabled, false, "the reply carries the answer");
   act(() => steps()[1]?.click());
   assert.equal(markDone(), "false", "letting a step go takes Mark done back off");
-  assert.equal(quietWords(pane), null, "the step still ticked goes with the reply");
+  assert.equal(answerSend(pane).disabled, false, "the step still ticked goes with the reply");
   act(() => steps()[0]?.click());
-  assert.equal(quietWords(pane), "Replying keeps the ask open", "nothing ticked, nothing attached");
+  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
+  assert.equal(footWords(pane), "");
   act(() => steps()[0]?.click());
   act(() => steps()[1]?.click());
   act(() =>
@@ -7382,7 +7526,7 @@ test("an ask of a type this build does not know reads as a line naming a newer L
   const pane = await mountThread(threadItem([asking]));
   assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke."]]);
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
-  assert.equal(sendWords(pane), "Reply");
+  assert.equal(sendWords(pane), "Send");
 });
 
 test("an ask of a type this build does not know, open on a teammate's item, names the teammate it waits on", async () => {
@@ -7416,7 +7560,7 @@ test("an item from before version 5, its question in its blocks and its thread a
   ]);
   assert.equal(pane.querySelector(".inbox-ask"), null);
   assert.equal(askMarker(pane), null);
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
 
   act(() => openOptions(pane)[1]?.click());
   act(() => answerSend(pane).click());
@@ -7442,7 +7586,7 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
     );
   act(() => pane.querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
   act(() => askPress(pane, "Couldn't do it").click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
@@ -7451,7 +7595,7 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
 
   assert.deepEqual(ticked(), [true, false]);
   assert.equal(askPress(pane, "Couldn't do it").getAttribute("aria-pressed"), "true");
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
 });
 
 test("the reader's own open ask draws no waiting marker anywhere in the thread, its draft reply holding the ask's controls", async () => {
@@ -7462,7 +7606,7 @@ test("the reader's own open ask draws no waiting marker anywhere in the thread, 
     pane.querySelector(".inbox-thread")?.textContent ?? assert.fail("the thread"),
     /Waiting on/u,
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
 });
 
 test("a teammate's open ask says on its marker that it waits on them, rather than on you, and still takes your answer in your draft reply", async () => {
@@ -7470,7 +7614,7 @@ test("a teammate's open ask says on its marker that it waits on them, rather tha
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.equal(askMarker(pane), "Waiting on Charles Pan");
   act(() => openOptions(pane)[0]?.click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
 });
 
 test("a thread's row says the ask itself while one is open, led by its kind's glyph: the steps left and the next as the reader ticks them in its box, the fields, or an answer to write; a teammate's waits on them with no mark, and an answer reads as its stamp, led by a tick", async () => {

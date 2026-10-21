@@ -60,6 +60,7 @@ export interface PageToolBinding {
 /** Why a call showed nothing, in words the model can act on. */
 export const SHOW_PAGE_REFUSAL = {
   UNREADABLE: `Not shown: give a title of at most ${PAGE_BOUNDS.MAX_TITLE_CHARS} characters, and the page as either \`html\` or \`path\`, not both.`,
+  UNREADABLE_PATH: `Not shown: give a title of at most ${PAGE_BOUNDS.MAX_TITLE_CHARS} characters and the \`path\` of the page's HTML file in your sandbox. Write the page as a file and pass its path; \`html\` is not taken.`,
   NO_SANDBOX: "Not shown: you have no sandbox to read a path from. Send the page's HTML as `html`.",
   SECRET: "Not shown: that file holds secrets, such as a `.env`, and is never shown.",
   NO_FILE: "Not shown: no such file in your sandbox:",
@@ -97,7 +98,18 @@ const SHOW_PAGE_INPUT = Schema.Struct({
   ),
 });
 
+/** A coding agent's input: the page is always a file in its sandbox, so `path` is required and there is no `html`. */
+const CODER_SHOW_PAGE_INPUT = Schema.Struct({
+  title: SHOW_PAGE_INPUT.fields.title,
+  path: describeWire(
+    Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1_024)),
+    "A file in your sandbox holding the page as one whole HTML document, relative to the checkout.",
+  ),
+  page: SHOW_PAGE_INPUT.fields.page,
+});
+
 const readInput = readEither(SHOW_PAGE_INPUT);
+const readCoderInput = readEither(CODER_SHOW_PAGE_INPUT);
 
 /** The tool as an agent is offered it: its name, its words, and its input schema. */
 export const SHOW_PAGE_TOOL = {
@@ -113,6 +125,23 @@ export const SHOW_PAGE_TOOL = {
     "page's id, its version, and its mention, the `[@title](link)` to name it by in your words, " +
     "or `rejected` and why nothing was shown.",
   inputSchema: SHOW_PAGE_INPUT,
+} as const;
+
+/** The tool as a coding agent is offered it: the same, but the page is named by `path` alone. */
+export const CODER_SHOW_PAGE_TOOL = {
+  name: AGENT_TOOL.SHOW_PAGE,
+  description:
+    "Show the developer an interactive HTML page in the task's side panel: a chart, a table to " +
+    "sort, a mockup of a screen, or a comparison they can click through, when it says more than " +
+    "a diagram or words would. Write the page as one self-contained HTML file in your sandbox, " +
+    "its scripts and styles inline and libraries only from https://cdnjs.cloudflare.com, then " +
+    "pass its `path`. It runs sealed off: it cannot " +
+    "fetch, post, open links or windows, store anything, or load images from the web, so put its " +
+    "data in the page. Never put a secret in a page. Call it again with the `page` it answered to " +
+    "replace that page with a new version rather than making another. Answers `accepted` with the " +
+    "page's id, its version, and its mention, the `[@title](link)` to name it by in your words, " +
+    "or `rejected` and why nothing was shown.",
+  inputSchema: CODER_SHOW_PAGE_INPUT,
 } as const;
 
 /** A call that showed nothing, and why. */
@@ -215,10 +244,23 @@ export function runShowPage(
   binding: PageToolBinding,
   input: UnparsedWireValue,
   shownBy: PageShower,
+  inputs: "html-or-path" | "path" = "html-or-path",
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const read = readInput(input);
-    if (Result.isFailure(read)) return showPageRejected(SHOW_PAGE_REFUSAL.UNREADABLE);
+    const read: Result.Result<
+      {
+        readonly title: string;
+        readonly page?: string;
+        readonly html?: string;
+        readonly path?: string;
+      },
+      unknown
+    > = inputs === "path" ? readCoderInput(input) : readInput(input);
+    if (Result.isFailure(read)) {
+      return showPageRejected(
+        inputs === "path" ? SHOW_PAGE_REFUSAL.UNREADABLE_PATH : SHOW_PAGE_REFUSAL.UNREADABLE,
+      );
+    }
     const { title, page } = read.success;
     const html = yield* htmlOf(binding, read.success);
     if (Result.isFailure(html)) return showPageRejected(html.failure);

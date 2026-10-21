@@ -43,9 +43,27 @@ export interface SpokenAskAttach {
   rows: readonly SpokenRowUpsert[];
 }
 
+/**
+ * A line the developer typed into the call rather than said: written once,
+ * as a typed row under the id the service minted for its ask, naming the
+ * call and the instant on the call's clock it was typed at, so the voice's
+ * reply to it finds it as the line that reply followed.
+ */
+export interface TypedRowWrite {
+  /** The row's client id for life, and the ask's: the ask's turn finds the row by it. */
+  rowId: string;
+  /** The session the line was typed into, opaque, as the provider named it. */
+  voiceSessionId: string;
+  text: string;
+  /** Where on the session's clock the line was typed: the latest instant the call had reached. */
+  atMs: number;
+}
+
 export interface LiveRecord {
   /** Writes or grows one speaker's row as the ledger holds it; answers whether the record took it. */
   upsertSpokenRow(row: SpokenRowUpsert): Effect.Effect<boolean>;
   /** Writes the developer's rows a delegation is about as they stand and gives them the delegation; answers whether the record took them. */
   attachSpokenAsk(attach: SpokenAskAttach): Effect.Effect<boolean>;
+  /** Writes a line typed into the call as the developer's typed row; answers whether the record took it. */
+  writeTypedRow(row: TypedRowWrite): Effect.Effect<boolean>;
 }

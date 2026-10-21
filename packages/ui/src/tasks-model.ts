@@ -24,7 +24,7 @@ import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wi
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
-import type { VoiceView } from "@luke/voice/voice-view";
+import type { VoiceCallAbout, VoiceView } from "@luke/voice/voice-view";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
@@ -715,9 +715,9 @@ const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * The open task's call as the microphone row draws it: the voice's word, and
- * the backend's line, which is the brain while it works, with its
- * pending command where it has one, and whether the notetaker is writing.
+ * An agent's call as its tab's call bar draws it: the voice's word, and the
+ * backend's line, which is the agent while it works, with its pending
+ * command where it has one.
  */
 export interface CallStatus {
   voiceWord: string;
@@ -725,8 +725,8 @@ export interface CallStatus {
 }
 
 /**
- * The microphone row's two lines while a call stands about the open task,
- * and nothing otherwise. A voice error or notice is not repeated here, since
+ * The call bar's two lines while a call into the agent stands, and nothing
+ * otherwise. A voice error or notice is not repeated here, since
  * the panel's own strip already carries it under the shape, exactly as it
  * does for any call. The voice line is the call's status, except that a
  * listening or muted call reads the wait the service says the voice is in;
@@ -735,18 +735,18 @@ export interface CallStatus {
  * for the voice.
  */
 export function callStatus(
-  view: Pick<VoiceView, "voiceStatus" | "callTaskId">,
-  tasks: Pick<TasksView, "activeTaskId" | "activity">,
+  view: Pick<VoiceView, "voiceStatus" | "call">,
+  activity: TaskActivity | undefined,
+  agentId: string,
 ): CallStatus | undefined {
-  const { activeTaskId, activity } = tasks;
-  if (activeTaskId === undefined || view.callTaskId !== activeTaskId) return undefined;
+  if (view.call?.agentId !== agentId) return undefined;
   return standingCallStatus(view, activity);
 }
 
 /**
- * The standing call's two lines whichever task it is about, read off that
- * call's own activity: the call bar's words, which the call card draws in
- * the same bar while the call's task is off screen.
+ * The standing call's two lines whichever agent it speaks into, read off
+ * that call's own activity: the call bar's words, which the call card draws
+ * in the same bar while the call's agent is off screen.
  */
 export function standingCallStatus(
   view: Pick<VoiceView, "voiceStatus">,
@@ -765,15 +765,15 @@ export function standingCallStatus(
   };
 }
 
-/** What the microphone button does when pressed. */
+/** What an agent's Call button does when pressed. */
 export const MICROPHONE_PRESS = {
-  /** Nothing: voice cannot run, or no task is open. */
+  /** Nothing: voice cannot run, or the task is archived. */
   NONE: "none",
   /** Raises macOS's own microphone prompt. */
   ASK_ACCESS: "ask-access",
   /** Opens System Settings, the one place a denial can be changed. */
   OPEN_SETTINGS: "open-settings",
-  /** Talks to Luke about the open task: opens the task's call and hears it, or toggles its microphone. */
+  /** Talks to the agent: opens a call into it and hears it, or toggles its call's microphone. */
   TALK: "talk",
 } as const;
 
@@ -783,12 +783,15 @@ export interface MicrophoneButton {
   readonly press: MicrophonePress;
   /** The button's name for a reader and its hover. */
   readonly label: string;
-  /** Whether the open task's call stands with the developer not heard, which the button draws struck through. */
+  /** Whether the agent's call stands with the developer not heard, which the button draws struck through. */
   readonly muted: boolean;
 }
 
-/** What the microphone button says on an archived task, which no call is about. */
-const ARCHIVED_CALL_LABEL = "Unarchive the task to talk about it";
+/** What the Call button says on an archived task's agent, which no call speaks into. */
+const ARCHIVED_CALL_LABEL = "Unarchive the task to call its agents";
+
+/** What the Call button says where a press opens a call into its agent. */
+export const CALL_LABEL = "Call";
 
 /** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
 const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
@@ -798,28 +801,29 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * The microphone button, from what voice can run on and which task is open.
- * The microphone permission comes first, on the panel's own rules, because a
- * press that cannot be heard is no press; then the task, since a call is
- * always about the open task. The press toggles: while the developer is
- * heard on this task's own call it mutes, and otherwise it opens the task's
- * call or hears it again, hanging up another task's first,
- * which is also how a call that failed or was lost is tried again. Muted is
- * this task's own call standing with the developer not heard, so the button
- * says so rather than reading as a call not yet begun. An archived task
- * opens no call, so its press is none until it is brought back; a call of
- * its own still standing, which only a race leaves, is still muted and
- * heard again.
+ * An agent's Call button, and its call bar's microphone, from what voice can
+ * run on and which agent the call speaks into. The microphone permission
+ * comes first, on the panel's own rules, because a press that cannot be
+ * heard is no press. The press toggles: while the developer is heard on
+ * this agent's own call it mutes, and otherwise it opens a call into the
+ * agent or hears it again, hanging up another agent's first, which is also
+ * how a call that failed or was lost is tried again. Muted is this agent's
+ * own call standing with the developer not heard, so the button says so
+ * rather than reading as a call not yet begun. An archived task's agent
+ * takes no call, so its press is none until the task is brought back; a
+ * call of its own still standing, which only a race leaves, is still muted
+ * and heard again.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
-  activeTaskId: string | undefined;
-  /** Whether the open task is archived. */
+  /** The agent whose tab the button stands in. */
+  agentId: string;
+  /** Whether the agent's task is archived. */
   archived: boolean;
   listening: boolean;
-  /** The task the standing call is about, as the voice window reports it. */
-  callTaskId: string | undefined;
+  /** What the standing call speaks into, as the voice window reports it. */
+  call: VoiceCallAbout | undefined;
   voiceStatus: LiveStatus;
 }): MicrophoneButton {
   if (!input.voiceAvailable) {
@@ -839,10 +843,7 @@ export function microphoneButton(input: {
   if (!row.ready) {
     return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
   }
-  if (input.activeTaskId === undefined) {
-    return { press: MICROPHONE_PRESS.NONE, label: "Open a task to talk about it", muted: false };
-  }
-  const ownCall = input.callTaskId === input.activeTaskId;
+  const ownCall = input.call?.agentId === input.agentId;
   if (ownCall && input.listening) {
     return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false };
   }
@@ -852,5 +853,5 @@ export function microphoneButton(input: {
   if (input.archived) {
     return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };
   }
-  return { press: MICROPHONE_PRESS.TALK, label: "Talk about this task", muted: false };
+  return { press: MICROPHONE_PRESS.TALK, label: CALL_LABEL, muted: false };
 }

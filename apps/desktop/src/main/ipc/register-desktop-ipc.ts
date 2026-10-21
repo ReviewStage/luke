@@ -9,23 +9,22 @@ import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { PUSH } from "@luke/host/contract";
+import { macBrowserTabsOver } from "@luke/host/mac-browser-tabs";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import {
   BrowserWindow,
   clipboard,
   dialog,
   ipcMain,
   MessageChannelMain,
+  nativeImage,
   type WebContents,
   webContents,
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createBrowserViews } from "../window/browser-views";
-import { HOTKEY_RANK } from "../window/hotkey-registrar";
 import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserProcedures } from "./browser-acts";
@@ -62,7 +61,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     services: effectServices,
   } = services;
   const { launch } = config;
-  const { panels, voiceWindow, callWindow, hotkeys } = windows;
+  const { panels, voiceWindow, callWindow } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -74,7 +73,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     panels,
     voiceWindow,
     state,
-    setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     liveDiagnostics: () => operator.host.liveDiagnostics(),
     liveSession: operator.host,
@@ -84,23 +82,37 @@ export function registerDesktopIpc(services: DesktopServices): void {
     },
   };
 
+  const browserExperimentOn = () =>
+    experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER);
+
   // A Browser tab's page is told to the panel that opened it alone, and goes with that panel's page.
   const browserViews = createBrowserViews({
     tellPage: (sender, page) => windowPushes.push(sender, PUSH.BROWSER_STATE, page),
     tellKey: (sender, key) => windowPushes.push(sender, PUSH.BROWSER_KEY, key),
     tellFocus: (sender, focus) => windowPushes.push(sender, PUSH.BROWSER_FOCUS, focus),
+    tellOpened: (sender, opened) => windowPushes.push(sender, PUSH.BROWSER_OPENED, opened),
+    tellClosed: (sender, closed) => windowPushes.push(sender, PUSH.BROWSER_CLOSED, closed),
     whenGone: whenPageGone,
   });
+
+  // An agent on a task reaches the window's Browser tabs on that task while the window is open on screen.
+  native.serveBrowserTabs(
+    macBrowserTabsOver({
+      experimentOn: browserExperimentOn,
+      panel: () => {
+        const window = panels.primaryPanel();
+        return window?.isVisible() ? window.webContents : undefined;
+      },
+      shownTask: () => state.snapshot().tasks.activeTaskId,
+      tabsOn: (panel, taskId) => browserViews.agentTabs(panel, taskId),
+    }),
+  );
 
   // The acts main answers itself on the act port: its windows', ports', and
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
     ...avatarProcedures({ avatar }),
-    ...browserProcedures({
-      views: browserViews,
-      experimentOn: () =>
-        experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
-    }),
+    ...browserProcedures({ views: browserViews, experimentOn: browserExperimentOn }),
     ...macTerminalProcedures({
       host: operator.host,
       worktreesRoot: worktreesRoot(os.homedir()),
@@ -152,6 +164,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
       openExternal: config.openExternal,
       testNotification,
       copyText: (words) => clipboard.writeText(words),
+      copyImage: (png) => {
+        const image = nativeImage.createFromBuffer(Buffer.from(png, "base64"));
+        if (image.isEmpty()) return false;
+        clipboard.writeImage(image);
+        return true;
+      },
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };
@@ -232,12 +250,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
           },
           lastSettings: () => operator.settings(),
           sideEffects: clientSettingSideEffects({
-            hotkeys,
             applyLoginItem: windows.applyLoginItem,
             mediaDuck: native.mediaDuck,
           }),
-          stopChordHolder: (chord) =>
-            hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
         },
         tasks: {
           host: operator.host,
@@ -245,18 +260,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,
-          talkAboutTask: (taskId) => {
+          talkTo: (about) => {
             const voice = voiceWindow.current();
-            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, { taskId });
+            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, about);
           },
-          voiceReady: () => {
-            const snapshot = state.snapshot();
-            return (
-              snapshot.settings?.status.voiceAvailable === true &&
-              snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
-            );
-          },
-          callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
         },
         taskIssues: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },

@@ -10,12 +10,10 @@ import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
@@ -135,6 +133,7 @@ export function codingAgentsControl(
     onUnarchive: undefined,
     continueAgent: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
+    startVoiceChat: undefined,
     onStop: () => Promise.resolve(),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -153,6 +152,7 @@ export function codingAgentsControl(
     onStatus: ignore,
     onTitle: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readCalls: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     transcripts: pushedTranscripts(() => []),
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
@@ -217,14 +217,12 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-    microphone: { label: "Talk about this task", enabled: true, muted: false, onPress: ignore },
-    speaker: { muted: false, onPress: ignore },
-    stop: { shown: false, onPress: ignore },
-    status: undefined,
+    calls: undefined,
+    onNewVoiceChat: undefined,
     live: false,
     mainTabs: {
-      tabs: [MAIN_TAB.CALL],
-      tab: MAIN_TAB.CALL,
+      tabs: [],
+      tab: undefined,
       openAgents: undefined,
       newTabAsked: false,
       onChoose: ignore,
@@ -279,6 +277,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpenBrowser: ignore,
       onCloseBrowsers: ignore,
       onBrowserOpened: ignore,
+      onAgentBrowser: ignore,
+      onBrowserGone: ignore,
     },
     unreadTabs: [],
     board: undefined,
@@ -286,10 +286,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     workFailed: false,
     onRetryWork: ignore,
     pages: undefined,
-    transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: {
       conversation: undefined,
-      onLoadEarlier: () => Promise.resolve(),
       readWorker: () => Promise.reject(new Error("No planning worker is read in this test.")),
     },
     agents: codingAgentsControl(),
@@ -360,7 +358,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onRuns: ignore,
       onClose: ignore,
     },
-    callTaskId: undefined,
+    talkingTaskId: undefined,
     chatView: {
       open: false,
       available: false,

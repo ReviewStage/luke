@@ -48,7 +48,6 @@ import {
 } from "./task-issue-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
-  codeRefSchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
@@ -60,6 +59,7 @@ import {
   taskFileRefusalSchema,
   taskFileRequestSchema,
   taskFileTextSchema,
+  taskFileWindowSchema,
   taskPrioritySchema,
   taskRenameRequestSchema,
   taskSchema,
@@ -326,38 +326,17 @@ export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSc
 export type CodeLines = typeof codeLinesSchema.Type;
 
 /**
- * One code Luke showed on the active task: what he named, the repository
- * the service read it from, the file's lines as they arrived and this
- * Mac coloured them, the window's first line first, and his note on them. Nothing of it enters
- * the task's document.
- */
-const taskCodeSchema = EffectSchema.Struct({
-  ref: codeRefSchema,
-  /** The repository the lines were read from, `owner/name`. */
-  repository: EffectSchema.String,
-  /** The commit the checkout stood at when the lines were read; absent on code shown before it was recorded. */
-  commit: EffectSchema.optionalKey(EffectSchema.String),
-  /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */
-  firstLine: EffectSchema.Int,
-  /** How many lines the whole file has. */
-  lineCount: EffectSchema.Int,
-  lines: codeLinesSchema,
-  /** What Luke said the lines are for; absent on code shown before notes were asked for. */
-  note: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type TaskCode = typeof taskCodeSchema.Type;
-
-/**
- * One code Luke showed on a task: the `show_code` call that showed it, the
- * turn it ran in and when that turn began writing, and the place and lines
- * as the call answered them.
+ * One code Luke or an agent showed on a task: the `show_code` call that
+ * showed it, the turn it ran in and when that turn began writing, the agent
+ * whose turn it was, and the place and lines as the call answered them.
  */
 const taskShownCodeFields = {
   callId: EffectSchema.String,
   turnId: EffectSchema.String,
   /** Epoch milliseconds the turn that showed it began. */
   shownAt: EffectSchema.Finite,
+  /** The agent on the task whose turn showed it; absent for Luke's own, and on a call's frame, which the record's copy names it on. */
+  agentId: EffectSchema.optionalKey(EffectSchema.String),
 };
 
 export const taskShownCodeSchema = EffectSchema.Struct({
@@ -369,14 +348,14 @@ export type TaskShownCode = typeof taskShownCodeSchema.Type;
 
 /**
  * One code shown on the active task as the Code tab draws it: the call that
- * showed it, its turn and when that began, and the lines coloured.
+ * showed it, its turn and when that began, and the lines pointed at with a
+ * few of the file around them, plain, as the service read them, which the
+ * window colours as it draws them (`code-snippet.tsx`).
  */
-const taskCodeShowingSchema = EffectSchema.Struct({
-  ...taskShownCodeFields,
-  code: taskCodeSchema,
-});
+export type TaskCodeShowing = TaskShownCode;
 
-export type TaskCodeShowing = typeof taskCodeShowingSchema.Type;
+/** The code of one showing as the Code tab draws it: what Luke named, where it was read, its lines, and his note on them. */
+export type TaskCode = TaskCodeShowing["code"];
 
 /**
  * A task's work as the service keeps it (GET `/api/plans/{id}/work`, with
@@ -457,7 +436,7 @@ export const tasksViewSchema = EffectSchema.Struct({
    * the record's copy of it stand once; absent with none, and cleared with
    * the activity. A call's end keeps them.
    */
-  shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskCodeShowingSchema)),
+  shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
   /**
    * The brain turns of the active task's calls, oldest first: the newest
    * page read from the service when the task opens, each older page read as
@@ -726,22 +705,9 @@ export const tasksFileParamsSchema = EffectSchema.Struct({
 
 export type TasksFileParams = typeof tasksFileParamsSchema.Type;
 
-/** A window of a file as the File tab draws it: its place, the branch it was read on and the commit where the service named it, how long the whole file is, and its lines as this Mac coloured them. */
-const taskFileShownSchema = EffectSchema.Struct({
-  path: EffectSchema.String,
-  repository: EffectSchema.String,
-  branch: EffectSchema.String,
-  commit: EffectSchema.optionalKey(EffectSchema.String),
-  firstLine: EffectSchema.Int,
-  lineCount: EffectSchema.Int,
-  lines: codeLinesSchema,
-});
-
-export type TaskFileShown = typeof taskFileShownSchema.Type;
-
-/** The File tab's read, as the window hears it: the window coloured, the whole text read raw, why the file is not shown, or that the service did not answer. */
+/** The File tab's read, as the window hears it: the window as the service read it, the whole text read raw, why the file is not shown, or that the service did not answer. */
 export const tasksFileAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ file: taskFileShownSchema }),
+  EffectSchema.Struct({ file: taskFileWindowSchema }),
   EffectSchema.Struct({ text: taskFileTextSchema }),
   taskFileRefusalSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),

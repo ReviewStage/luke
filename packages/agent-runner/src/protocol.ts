@@ -259,7 +259,7 @@ export const RUNNER_END = {
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
 
-/** The ACCEPTED event: the message line, by its `uuid`, handed to the SDK. */
+/** The ACCEPTED event: the message line, by its `uuid`, handed to the SDK, or taken by Codex's app-server. */
 export interface RunnerAccepted {
   readonly type: typeof RUNNER_EVENT.ACCEPTED;
   readonly uuid: string;

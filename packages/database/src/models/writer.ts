@@ -306,6 +306,14 @@ export interface SpokenAskAttach {
 /** What attaching a spoken ask did: the rows now the delegation's, by id; or a row the vocabulary refused with the delegation on it. */
 type SpokenAskAttached = Result.Result<readonly string[], typeof NO_CONVERSATION | MessageRefused>;
 
+/** A line typed into a call: the developer's typed row, naming the call, and who typed it. */
+interface TypedCallLineWrite {
+  readonly clientId: string;
+  readonly text: string;
+  readonly metadata: TypedAskMetadata;
+  readonly sender: LineSender;
+}
+
 type UserMessageWriteResult = Result.Result<
   { readonly id: string; readonly effect: StoreWriteEffect },
   typeof NO_CONVERSATION | MessageRefused
@@ -462,7 +470,21 @@ export interface StoreWriter {
    * the row again as it now stands, where it stood.
    */
   upsertSpokenRow(target: ConversationTarget, write: SpokenRowWrite): Write<UserMessageWriteResult>;
-  /** The latest developer line one voice session left starting at or before an instant, and the delegation that owns it where one does. */
+  /**
+   * Writes a line the developer typed into a call as a finished typed row
+   * with no turn, under the client id the call minted for its ask, so the
+   * ask's turn takes it in by that id as it does a spoken ask's rows. A row
+   * already standing under the id is answered as repeated and left as it is.
+   */
+  writeTypedCallLine(
+    target: ConversationTarget,
+    write: TypedCallLineWrite,
+  ): Write<UserMessageWriteResult>;
+  /**
+   * The latest developer line one voice session left starting at or before an
+   * instant, and the ask that owns it where one does: a spoken line's
+   * delegation, or a line typed into the call, which is its own ask's.
+   */
   latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
   /**
    * Writes the developer's line to a coding agent as a row awaiting its
@@ -1061,6 +1083,15 @@ const SpokenLineRowSchema = Schema.Struct({
   delegationId: Schema.NullOr(Schema.String),
 });
 
+/**
+ * The ask a developer's line on a call belongs to: a spoken line's
+ * delegation, or, for a line typed into the call, the line's own client id,
+ * which is the id its ask was submitted under.
+ */
+const LINE_ASK_ID = sql<
+  string | null
+>`coalesce(${SPOKEN_DELEGATION_ID}, case when ${messages.metadata} ->> 'channel' = ${MESSAGE_CHANNEL.TYPED} then ${messages.clientId} end)`;
+
 /** The latest line whose start is at or before the instant: the line a delegation at that offset is about, its end past the offset or not. */
 const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
@@ -1068,7 +1099,7 @@ const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ clientId: messages.clientId, delegationId: SPOKEN_DELEGATION_ID })
+        .select({ clientId: messages.clientId, delegationId: LINE_ASK_ID })
         .from(messages)
         .where(
           and(
@@ -1593,17 +1624,23 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = standing.value;
   const found = toolPartOf(row.parts, event.callId);
   if (found === undefined) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CALL });
+  // Note that an input told with the settlement replaces the one the start
+  // recorded, in the same write, so the call stands as it answered.
+  const settled = settledToolPart(
+    event.input === undefined ? found.part : { ...found.part, input: event.input },
+    event.settlement,
+  );
   // A call settles once. The same settlement told again is a repeat; a
   // different one, after the turn's end already settled the call as
   // unanswered, finds the call closed and is refused rather than rewritten.
   if (isSettledToolPartState(found.part.state)) {
-    return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
+    return isDeepStrictEqual(settled, found.part)
       ? Result.succeed(STORE_WRITE_EFFECT.REPEATED)
       : Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   }
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   const parts = [...row.parts];
-  parts[found.index] = settledToolPart(found.part, event.settlement);
+  parts[found.index] = settled;
   return yield* amendJournal(context, event.turnId, row, parts);
 });
 
@@ -2189,6 +2226,8 @@ const findAwaitingLines = SqlSchema.findAll({
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             eq(messages.role, MESSAGE_ROLE.USER),
             isNull(messages.turnId),
+            // A line typed into a call is its ask's, taken in by the ask's id and never by its words.
+            sql`${SPOKEN_VOICE_SESSION_ID} is null`,
             noReceiptOfLine(),
           ),
         )
@@ -2342,6 +2381,31 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: line.sender,
   });
   return Result.succeed(Option.some({ id, effect: STORE_WRITE_EFFECT.WRITTEN }));
+});
+
+const writeTypedCallLine = /* @__PURE__ */ Effect.fn("web/writeTypedCallLine")(function* (
+  context: WriterContext,
+  write: TypedCallLineWrite,
+): Effect.fn.Return<UserMessageWriteResult, WriteFailure, DatabaseServices> {
+  const standing = yield* messageByClientId(context, write.clientId);
+  if (Option.isSome(standing)) {
+    return Result.succeed({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED });
+  }
+  const read = yield* admitted(context, {
+    id: write.clientId,
+    role: MESSAGE_ROLE.USER,
+    metadata: write.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
+  });
+  if (Result.isFailure(read)) return Result.fail(read.failure);
+  const { id } = yield* insertMessage(context, {
+    clientId: write.clientId,
+    turnId: undefined,
+    message: read.success,
+    finishedAt: context.now,
+    sender: write.sender,
+  });
+  return Result.succeed({ id, effect: STORE_WRITE_EFFECT.WRITTEN });
 });
 
 const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -2585,6 +2649,8 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
       underConversation(target, (context) => attachSpokenAsk(context, attach)),
     upsertSpokenRow: (target, write) =>
       underConversation(target, (context) => upsertSpokenRow(context, write)),
+    writeTypedCallLine: (target, write) =>
+      underConversation(target, (context) => writeTypedCallLine(context, write)),
     latestSpokenLine: (target, query) =>
       underConversation(target, (context) => latestSpokenLine(context, query)),
     writeAwaitingLine: (target, line, dispatch) =>

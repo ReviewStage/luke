@@ -14,7 +14,11 @@
  * `turn/completed` of the turn it is running, on its own thread, once no
  * message Luke sent is left unanswered. Each `turn/start` and `turn/steer`
  * carries a `clientUserMessageId`, which Codex echoes as the `clientId` of
- * the `userMessage` item a turn takes it in; a message no such item has
+ * the `userMessage` item a turn takes it in, and which is Luke's own id for
+ * the line where a message goes alone. As app-server takes a line (its
+ * `turn/start` or `turn/steer` answered), the launch posts ACCEPTED naming
+ * the line, as Claude Code's launch does, once for each line a merged turn
+ * carries; a message no such item has
  * named by the turn's end (a steer the turn accepted too late to take, one
  * app-server refused because the turn had just ended, one that arrived in
  * between) is sent again, merged into one, as the next turn of the same
@@ -57,6 +61,7 @@ import {
   InputLineSchema,
   RUNNER_END,
   RUNNER_ENV,
+  RUNNER_EVENT,
   type RunnerEnd,
 } from "./protocol.js";
 
@@ -121,10 +126,16 @@ type Signal =
   | { readonly kind: typeof SIGNAL.EXITED; readonly stderrTail: string }
   | { readonly kind: typeof SIGNAL.UNDELIVERED };
 
-/** A message Luke sent, as Codex takes it, under the id Codex echoes when a turn takes it. */
+/**
+ * A message Luke sent, as Codex takes it, under the id Codex echoes when a
+ * turn takes it: Luke's own id for the line where it goes alone. `lines` are
+ * the ids of Luke's lines it carries, one for a line, several for a merged
+ * next turn.
+ */
 interface Outgoing {
   readonly clientId: string;
   readonly input: readonly UserInput[];
+  readonly lines: readonly string[];
 }
 
 /** The fields of an answer the controller reads. */
@@ -208,6 +219,8 @@ interface CodexLaunch {
   readonly sent: Map<string, Outgoing>;
   /** Messages for the next turn. */
   waiting: Outgoing[];
+  /** Luke's lines this launch has said app-server took, each said once. */
+  readonly accepted: Set<string>;
   /** A refreshed token, taken by a restart before the next turn starts. */
   nextToken: string | undefined;
   model: string;
@@ -320,6 +333,23 @@ const restart = Effect.fn("agent-runner/restart")(function* (launch: CodexLaunch
   launch.nextToken = undefined;
 });
 
+/**
+ * Says each of Luke's lines a message carries was taken by app-server, as
+ * Claude Code's launch says a line was handed to the SDK, so Luke ties the
+ * line to the turn that runs it. A line said once is not said again when a
+ * message is sent again in the next turn.
+ */
+const accepted = Effect.fn("agent-runner/codex/accepted")(function* (
+  launch: CodexLaunch,
+  outgoing: Outgoing,
+) {
+  for (const uuid of outgoing.lines) {
+    if (launch.accepted.has(uuid)) continue;
+    launch.accepted.add(uuid);
+    yield* launch.context.sink.emit({ type: RUNNER_EVENT.ACCEPTED, uuid });
+  }
+});
+
 /** Starts the next turn with the messages given, merged into one, restarting first for a refreshed token. */
 const startTurn = Effect.fn("agent-runner/startTurn")(function* (
   launch: CodexLaunch,
@@ -329,7 +359,11 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
   const outgoing: Outgoing =
     messages.length === 1 && messages[0] !== undefined
       ? messages[0]
-      : { clientId: randomUUID(), input: messages.flatMap((message) => message.input) };
+      : {
+          clientId: randomUUID(),
+          input: messages.flatMap((message) => message.input),
+          lines: messages.flatMap((message) => message.lines),
+        };
   const answer = decodeTurnAnswer(
     yield* launch.server.request(METHOD.TURN_START, {
       threadId: launch.threadId,
@@ -347,6 +381,7 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
   }
   launch.turnId = answer.value.turn.id;
   launch.sent.set(outgoing.clientId, outgoing);
+  yield* accepted(launch, outgoing);
 });
 
 /** One of Luke's lines, acted on; answers the launch's outcome where the line ends it. */
@@ -363,7 +398,9 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   const value = line.value;
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
-      const outgoing: Outgoing = { clientId: randomUUID(), input: userInput(value.content) };
+      // Note that Luke's id for the line is the id Codex echoes, so a turn that takes it names it.
+      const uuid = value.uuid ?? randomUUID();
+      const outgoing: Outgoing = { clientId: uuid, input: userInput(value.content), lines: [uuid] };
       if (launch.turnId === undefined) {
         yield* startTurn(launch, [outgoing]);
         return undefined;
@@ -377,8 +414,12 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
           input: [...outgoing.input],
         })
         .pipe(Effect.option);
-      if (Option.isSome(steered)) launch.sent.set(outgoing.clientId, outgoing);
-      else launch.waiting.push(outgoing);
+      if (Option.isNone(steered)) {
+        launch.waiting.push(outgoing);
+        return undefined;
+      }
+      launch.sent.set(outgoing.clientId, outgoing);
+      yield* accepted(launch, outgoing);
       return undefined;
     }
     case INPUT_LINE.STOP: {
@@ -505,6 +546,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     turnId: undefined,
     sent: new Map(),
     waiting: [],
+    accepted: new Set(),
     nextToken: undefined,
     model: config.model,
     effort: config.effort,

@@ -57,7 +57,6 @@ vi.mock("electron", () => ({
 const RUN_MODE: RunMode = {
   requiresAccount: false,
   observesProviders: false,
-  registersGlobalKeys: false,
   animates: false,
   takesFocus: false,
   sendsNetwork: false,

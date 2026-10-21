@@ -1234,7 +1234,57 @@ test("start_agent forks an agent at one of its messages that read_agent names, w
   );
 });
 
-test("start_agent from another agent refuses, in words the model acts on and starting nothing, an agent of no workspace of the caller's, a message none of the source's, a prompt, a branch, or a new task beside it, the caller continuing itself, a source still working, a task other than the source's, an archived task, and a source on no task", async () => {
+test("start_agent continues a teammate's agent on no task in its own workspace, on its repository, handed its transcript, and forks it at one of its messages there too; a second continue names the first, as that call run again does", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const sweeper = await tasklessAgentOn(teammates.userId, workspaceId);
+  await saidTurnOn(sweeper, "The first flake was a shared temp dir.");
+  await saidTurnOn(sweeper, "The second is a clock read.");
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  const continued = await call(
+    CODER_TOOL.START_AGENT,
+    { from: { agentId: sweeper.id } },
+    "call-continue-taskless",
+  );
+  const stored = await storedStart(caller.userId, continued);
+  const source = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, sweeper.id)));
+  assert.deepEqual(
+    [stored.taskId, stored.organizationId, stored.repository, stored.startedFrom?.agentId],
+    [null, workspaceId, source.repository, sweeper.id],
+  );
+  const words = openingWords(eve.sent);
+  assert.ok(words.includes("a clock read"), words);
+  assert.ok(stored.prompt?.startsWith("Sweep the flaky tests."), "the source's brief comes first");
+  assert.ok(stored.prompt?.includes("a clock read"), "and its transcript after it");
+
+  const read = await call(CODER_TOOL.READ_AGENT, { agentId: sweeper.id });
+  const [messageId] = tailMessageIds(read);
+  assert.ok(messageId !== undefined);
+  const forked = await call(
+    CODER_TOOL.START_AGENT,
+    { from: { agentId: sweeper.id, messageId } },
+    "call-fork-taskless",
+  );
+  const fork = await storedStart(caller.userId, forked);
+  assert.deepEqual([fork.taskId, fork.startedFrom?.messageId], [null, messageId]);
+  const forkWords = openingWords(eve.sent);
+  assert.ok(forkWords.includes("shared temp dir") && !forkWords.includes("a clock read"));
+
+  // A second continue names the first, and so does that call run again, as on a task.
+  const from = { agentId: sweeper.id };
+  const second = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-taskless-again");
+  assert.ok(Array.isArray(second.earlierContinuations), JSON.stringify(second));
+  assert.deepEqual(
+    second.earlierContinuations.map((each) => (isRecord(each) ? each.id : undefined)),
+    [stored.id],
+  );
+  const again = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-taskless-again");
+  assert.deepEqual(again.earlierContinuations, second.earlierContinuations);
+});
+
+test("start_agent from another agent refuses, in words the model acts on and starting nothing, an agent of no workspace of the caller's, a message none of the source's, a prompt, a branch, or a new task beside it, the caller continuing itself, a source still working, a task other than the source's, an archived task, a task named beside a source on no task, and a source on no task in no repository", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -1275,7 +1325,18 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   await refused({ from: { agentId: teammates.id } }, R.ARCHIVED);
   const sweeper = await tasklessAgentOn(teammates.userId, workspaceId);
   await saidTurnOn(sweeper, "Swept.");
-  await refused({ from: { agentId: sweeper.id } }, R.SOURCE_NO_TASK);
+  await refused({ from: { agentId: sweeper.id }, taskId: tasks.invitations }, R.SOURCE_OTHER_TASK);
+  const bare = await claimed(teammates.userId, {
+    ...AGENT_CHOICE,
+    repository: null,
+    idempotencyKey: randomUUID(),
+    taskId: null,
+    organizationId: workspaceId,
+    planSnapshot: null,
+    prompt: "Talk the release through.",
+  });
+  await saidTurnOn(bare, "Talked it through.");
+  await refused({ from: { agentId: bare.id } }, R.SOURCE_NO_REPOSITORY);
   assert.equal(eve.sent.length, 0, "no refusal opens a session");
 });
 

@@ -1,4 +1,3 @@
-import type { CodeLines } from "@luke/features/tasks-view";
 import type {
   DIFF_FONT,
   DIFF_FONT_SIZES,
@@ -10,7 +9,7 @@ import type {
 } from "@luke/settings/diff-view";
 
 /**
- * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch, one for a list of files, and one for a whole file with no diff, the handles the view redraws them through, and a door that colours a run of a file's lines as a diff is coloured.
+ * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch, one for a list of files, and one for a whole file with no diff, and the handles the view redraws them through.
  *
  * A changed file's patch is drawn by Pierre's diffs (`@pierre/diffs`), with
  * Shiki colouring it, which is too large for the bundle every window parses,
@@ -112,6 +111,13 @@ export interface DiffViewProps {
   readonly annotations?: readonly DiffAnnotation[] | undefined;
   /** The element each note is drawn in, by its key, which the view keeps and fills; asked only for a note `annotations` names. */
   readonly renderAnnotation?: ((key: string) => HTMLElement) | undefined;
+  /**
+   * Whether the patch is coloured in the kept pool's workers, off the
+   * window's thread, as a list's files are, where many patches are drawn at
+   * once, a Code tab's cards; on the window's thread where absent. Read once,
+   * as the patch is mounted.
+   */
+  readonly pooled?: boolean | undefined;
 }
 
 /**
@@ -296,19 +302,6 @@ export interface DiffFileTexts {
   readonly after: string;
 }
 
-/** A run of a file's lines to colour in a look's syntax themes: the file's name, which its grammar is read from, and its lines. */
-export interface ColourRequest {
-  readonly name: string;
-  readonly lines: readonly string[];
-  readonly look: DiffLook;
-}
-
-/** A run of lines coloured, each run of one colour carrying it in both appearances, and each theme's own ground. */
-export interface ColouredLines {
-  readonly lines: CodeLines;
-  readonly ground: { readonly dark: string; readonly light: string };
-}
-
 /** Whether two lists light the same lines of the same file, or both none. */
 export function sameListSelection(
   a: DiffListSelection | undefined,
@@ -380,10 +373,4 @@ export interface DiffViewModule {
    * coloured off the window's thread where the pool's workers run.
    */
   readonly mountFile: (host: HTMLElement, props: FileViewProps) => FileViewHandle;
-  /**
-   * Colours a run of a file's lines in the look's syntax themes, as a diff
-   * is coloured, off the window's thread where the pool's workers run; none
-   * where the file's name names no grammar, or the colouring failed.
-   */
-  readonly colourLines: (request: ColourRequest) => Promise<ColouredLines | undefined>;
 }

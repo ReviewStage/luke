@@ -319,6 +319,7 @@ const ORIGIN = "https://luke.test";
 const TASK_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
+const AGENT_STARTS = "/api/agents/agents";
 const AGENT = "/api/agents/agent";
 const AGENT_CALLS = "/api/agents/calls";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
@@ -563,6 +564,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
   ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
+  ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
@@ -9137,6 +9139,50 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a continue of a source on no task, keyed by that source, copies its checkout to a branch of its own as a task's continue does, checked against the repository the source's own place clones",
+    (t) =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, checkout } = yield* copyScenario(t);
+        // An automation's run leaves an agent so: in its workspace, on no task, handed a prompt.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({
+              taskId: null,
+              organizationId: task.workspaceId,
+              planSnapshot: null,
+              prompt: SNAPSHOT,
+            })
+            .where(eq(codingAgent.id, source.id)),
+        );
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            request(AGENT_STARTS, owner, {
+              method: "POST",
+              id: source.id,
+              body: { idempotencyKey: randomUUID(), from: { agentId: source.id } },
+            }),
+          ),
+        ).agent;
+        const preamble = openedParts(eve).parts.replay?.preamble ?? "";
+
+        assert.equal(started.planId, null);
+        const branch = started.from?.branch ?? "";
+        assert.match(branch, /^luke\/teammate-invitations-continued-[0-9a-f]{8}$/u);
+        assert.ok(
+          preamble.includes(
+            `with what it had not committed or pushed recorded as one snapshot commit on top, is copied to the branch \`${branch}\`, made for you`,
+          ),
+        );
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+      }),
+  );
+
+  it.effect(
     "a continue of a source whose pull request is still open is told to carry the copy onto that pull request's branch and open no second one, and the words it is handed bring the branch to the copy",
     (t) =>
       Effect.gen(function* () {
@@ -9510,6 +9556,158 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a Start keyed by an agent on no task continues it in its workspace on its repository and forks it at one of its messages there, a retry answering the agent it made, even once the source is gone; a body naming another source, an account outside the workspace, a task's Start naming it, and a source in no repository start nothing; and one keyed by an agent on a task starts on that task",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, eve } = yield* openTask();
+        const BRIEF = "Sweep the flaky tests.";
+        const made = yield* createCodingAgent(owner, {
+          taskId: null,
+          organizationId: task.workspaceId,
+          planSnapshot: null,
+          prompt: BRIEF,
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          repository: RELAY_FULL_NAME,
+        });
+        const source = Option.getOrThrow(made).agent;
+        yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, [text(BRIEF)]);
+        const firstTurn = yield* transcriptRow(source, 2, MESSAGE_ROLE.ASSISTANT, [
+          text("Fixed the shared temp dir."),
+        ]);
+        yield* transcriptRow(source, 3, MESSAGE_ROLE.USER, [text("Now the clock.")]);
+        yield* transcriptRow(source, 4, MESSAGE_ROLE.ASSISTANT, [text("Fixed the clock read.")]);
+        const startFromAs = (bearer: string, agentId: string, body: WireBoundaryInput) =>
+          ask(request(AGENT_STARTS, bearer, { method: "POST", id: agentId, body }));
+        const replayed = () =>
+          (openedParts(eve).parts.replay?.steps ?? []).map((step) => step.summary);
+
+        const key = randomUUID();
+        const continueBody = { idempotencyKey: key, from: { agentId: source.id } };
+        const continued = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* startFromAs(owner, source.id, continueBody),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, continued.id));
+        assert.deepEqual(
+          [stored.taskId, stored.organizationId, stored.repository, stored.planSnapshot],
+          [null, task.workspaceId, RELAY_FULL_NAME, null],
+        );
+        assert.equal(openedParts(eve).parts.brief, BRIEF);
+        assert.deepEqual(replayed(), [
+          "Said: Fixed the shared temp dir.",
+          "The developer: Now the clock.",
+          "Said: Fixed the clock read.",
+        ]);
+        assert.equal(stored.prompt, openedParts(eve).text, "it keeps the message it was handed");
+        assert.deepEqual(continued.from, { agentId: source.id, steps: 3, totalSteps: 3 });
+        const opened = eve.opened.length;
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* startFromAs(owner, source.id, continueBody),
+        ).agent;
+        assert.equal(again.id, continued.id);
+        assert.equal(eve.opened.length, opened, "a retry opens no session");
+        assert.deepEqual(
+          yield* startFromAs(owner, source.id, {
+            idempotencyKey: key,
+            from: { agentId: source.id, messageId: firstTurn },
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a key reused for another Start is refused, never answered with the first's agent",
+        );
+        assert.deepEqual(
+          yield* startFromAs(owner, source.id, { ...continueBody, model: SOL }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a retry naming a model without its effort is refused as the first would be",
+        );
+
+        const forked = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* startFromAs(owner, source.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id, messageId: firstTurn },
+          }),
+        ).agent;
+        assert.equal(forked.planId, null);
+        assert.deepEqual(replayed(), ["Said: Fixed the shared temp dir."]);
+
+        const before = eve.opened.length;
+        assert.deepEqual(
+          yield* startFromAs(owner, continued.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id },
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* startFromAs(other, source.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id },
+          }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          "a task's Start refuses a source on no task rather than starting afresh",
+        );
+        const bare = yield* createCodingAgent(owner, {
+          taskId: null,
+          organizationId: task.workspaceId,
+          planSnapshot: null,
+          prompt: "Talk the release through.",
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          repository: null,
+        });
+        const bareId = Option.getOrThrow(bare).agent.id;
+        assert.deepEqual(
+          yield* startFromAs(owner, bareId, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: bareId },
+          }),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+          "a source on no task and in no repository has no checkout to go on from",
+        );
+        assert.equal(eve.opened.length, before);
+
+        // The same path from an agent on a task starts on that task, as the task's own Start would.
+        const onTask = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const fromTask = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* startFromAs(owner, onTask.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: onTask.id },
+          }),
+        ).agent;
+        assert.equal(fromTask.planId, task.id);
+        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, fromTask.id)).taskId, task.id);
+
+        // A retry is answered with the agent its key made though the source is gone since.
+        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, source.id)));
+        const retried = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* startFromAs(owner, source.id, continueBody),
+        ).agent;
+        assert.equal(retried.id, continued.id);
       }),
   );
 

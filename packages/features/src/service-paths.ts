@@ -86,8 +86,18 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_INBOX: "/api/live/inbox",
   /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
   LIVE_TASK_BOARD: "/api/live/task-board",
+  /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_RECORD: "/api/live/task-record",
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
+  /** One task's planning conversation under `?id=`, its mark and running workers sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_CONVERSATION: "/api/live/task-conversation",
+  /** One planning worker's transcript under `?id=` (the plan) and `&call=` (the call that started it), sealed for following over Neon Realtime (GET), as an agent's worker's is, or `not-found` or `unavailable`. */
+  LIVE_TASK_WORKER_TRANSCRIPT: "/api/live/task-worker-transcript",
+  /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
+  LIVE_TASK_INBOX: "/api/live/task-inbox",
+  /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
+  LIVE_AGENT_INBOX: "/api/live/agent-inbox",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
@@ -103,6 +113,16 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   MAC_COMMANDS: "/api/mac-commands",
+  /** One waiting command, named by its id, claimed for the Mac that heard of it live (POST). `mac-command-wire.ts` declares the bodies. */
+  MAC_COMMAND_CLAIM: "/api/mac-commands/claim",
+  /** That a Mac of the account listens now for the kinds it names (POST), which a Mac following its commands live says on a timer, since its read writes nothing. */
+  MAC_COMMANDS_LISTENING: "/api/mac-commands/listening",
+  /**
+   * The commands of the kinds named that no Mac of the account has claimed,
+   * sealed for following (GET), or with `?poll=true` their rows inline.
+   * `live-wire.ts` declares the answer.
+   */
+  LIVE_MAC_COMMANDS: "/api/live/mac-commands",
   /**
    * One browser command's result, posted by the Mac that took it (POST): its
    * JSON and at most one image, under a body cap of its own that fits the

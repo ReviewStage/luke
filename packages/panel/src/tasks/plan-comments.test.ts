@@ -141,6 +141,7 @@ function drawn(
   plan: Task = PLAN,
   reveal?: { readonly thread: string; readonly ask: number },
   mentions?: TaskMentionsValue,
+  me?: string,
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
@@ -176,6 +177,7 @@ function drawn(
           task: plan,
           live: false,
           ...(view === "page" ? { sectionLinks: PAGE_LINKS } : undefined),
+          ...(me === undefined ? undefined : { reader: { readerId: me } }),
         });
   // Note that a page with mentions draws on a registry of its own, so the editor bundle installed for it is read afresh.
   const registry = AtomRegistry.make();
@@ -1319,6 +1321,12 @@ test("a reply carries the files picked into its field, and a comment's files are
     ["expiry.txt"],
   );
   assert.deepEqual(read, [fileId]);
+  const words = card.querySelector(".comment-entry .comment-words");
+  assert.ok(sent[0] && words);
+  assert.ok(
+    sent[0].compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "a comment's files stand over its words",
+  );
 
   const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
   await pickFiles(field, [new File(["Steps to reproduce\n"], "steps.txt", { type: "text/plain" })]);
@@ -1370,4 +1378,85 @@ test("a picture pasted into the plain field is attached to the reply, as the edi
       : undefined,
     [["screenshot.png", "image/png"]],
   );
+});
+
+/** A thread whose one comment, written by `by`, names a date. */
+function datedThread(by: { userId: string; name: string }): PlanCommentThread {
+  return threadOn(ID.OPEN, "**single-use link** that expires", "", {
+    entries: [
+      {
+        id: `${ID.OPEN.slice(0, -4)}aaaa`,
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by },
+        words: "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
+        at: 1,
+      },
+    ],
+  });
+}
+
+test("the date chip in the reader's own comment opens its picker with no field opened, and a day picked there saves the comment with the date named anew", async () => {
+  const { container, asked } = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })]);
+
+  act(() => container.querySelector<HTMLElement>('.comment-entry [data-kind="date"]')?.click());
+  await act(async () => undefined);
+  const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
+  assert.ok(dialog, "the picker is open");
+  assert.equal(container.querySelector(".comment-editing"), null);
+  act(() =>
+    dialog.querySelector<HTMLElement>('button[aria-label="Saturday, October 24, 2026"]')?.click(),
+  );
+  act(() =>
+    (dialog.contains(document.activeElement) ? document.activeElement : dialog)?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    ),
+  );
+  await act(async () => undefined);
+
+  assert.equal(container.querySelector('[role="dialog"]'), null);
+  assert.deepEqual(asked, [
+    {
+      thread: ID.OPEN,
+      action: {
+        action: PLAN_COMMENT_ACTION.EDIT,
+        entry: `${ID.OPEN.slice(0, -4)}aaaa`,
+        words: "Ship by [@Oct 24, 2026](luke://date/2026-10-24).",
+      },
+    },
+  ]);
+});
+
+test("the date chip in another's comment opens no picker, since only its writer changes it", () => {
+  const { container } = drawn("tab", [datedThread({ userId: "u-charles", name: "Charles Pan" })]);
+
+  const chip = container.querySelector<HTMLElement>('.comment-entry [data-kind="date"]');
+  assert.ok(chip);
+  act(() => chip.click());
+
+  assert.equal(chip.tagName, "SPAN");
+  assert.equal(container.querySelector('[role="dialog"]'), null);
+});
+
+test("on the plan's page the date chip in the reader's own comment, its thread open in the margin, opens its picker beside it", async () => {
+  const thread = datedThread({ userId: "u-dean", name: "Dean" });
+  const { container } = wide(() =>
+    drawn("page", [thread], () => true, PLAN, undefined, undefined, "u-dean"),
+  );
+  await act(async () => undefined);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .comment-head`)
+      ?.click(),
+  );
+
+  act(() =>
+    container
+      .querySelector<HTMLElement>(
+        '.comment-card[data-open="true"] .comment-entry [data-kind="date"]',
+      )
+      ?.click(),
+  );
+  await act(async () => undefined);
+
+  assert.ok(container.querySelector('[role="dialog"]'), "the picker is open");
 });

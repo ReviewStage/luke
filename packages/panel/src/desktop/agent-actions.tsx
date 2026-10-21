@@ -1,8 +1,14 @@
-import type { CodingAgentBrief, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type {
+  CodingAgentAttachment,
+  CodingAgentBrief,
+  CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
+import { useSteadyDoor } from "../steady-door.js";
+import type { AgentFork } from "../tasks/fork-model.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { agentTranscript, readWholeTranscript } from "../tasks/transcript-copy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
@@ -24,7 +30,10 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * two copies, read whole from the service; and Archive agent, asked first
  * while it works (`agent-archive.tsx`), or Unarchive once it is archived.
  * The doors that open a terminal are the column's, from where it stands
- * (`useAgentTerminalDoors`).
+ * (`useAgentTerminalDoors`), and so are those that open a fork of one of its
+ * messages or a continue of it as a draft (`useAgentDraftDoors`): the
+ * task's draft tab, or the draft on an agent's own page, each started
+ * through the same control.
  */
 
 /** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`). */
@@ -89,6 +98,38 @@ export function useAgentTerminalDoors(
             onShown();
           },
   };
+}
+
+/** The doors an agent's pane opens a fork or a continue of the agent through, each as the place's draft; none while what it stands under is archived. */
+export interface AgentDraftDoors {
+  readonly onFork: ((fork: AgentFork) => void) | undefined;
+  readonly onContinue:
+    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | undefined;
+}
+
+/**
+ * The doors a surface opens a fork or a continue of one of its agents
+ * through: the control's draft, the task's or the agent page's, made a fork
+ * of the message or a continue of the agent, then shown where the surface
+ * shows a draft (`onOpenDraft`), by its key. Each is steady across renders
+ * (`useSteadyDoor`), and none while what the agents stand under is archived.
+ */
+export function useAgentDraftDoors(
+  agents: Pick<CodingAgentsControl, "onForkDraft" | "onContinueDraft">,
+  archived: boolean,
+  onOpenDraft: (draftId: string) => void,
+): AgentDraftDoors {
+  const onFork = useSteadyDoor(
+    archived ? undefined : (fork: AgentFork) => onOpenDraft(agents.onForkDraft(fork)),
+  );
+  const onContinue = useSteadyDoor(
+    archived
+      ? undefined
+      : (agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) =>
+          onOpenDraft(agents.onContinueDraft(agentId, words, attachments)),
+  );
+  return { onFork, onContinue };
 }
 
 /** One agent's actions, as every surface that draws it offers them. */

@@ -34,7 +34,6 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxReadAllView,
@@ -106,10 +105,12 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
 } from "./inbox-wire.js";
+import type { ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
+  type TaskConversationLiveAnswer,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
@@ -313,6 +314,14 @@ function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttach
  * caller names, with the fields that refusal carries; unanswered for
  * everything else.
  */
+/** A transcript page read at once, or unanswered where the service said nothing of whether it would hold, as one too old to read at once does. */
+function readNow(
+  answer: (CodingAgentMessagesAnswerView & { readonly holds?: boolean }) | Failed,
+): TranscriptNowAnswer | Failed {
+  if ("failure" in answer) return answer;
+  return answer.holds === undefined ? UNANSWERED : { ...answer, holds: answer.holds };
+}
+
 function hostedAnswer<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: NamedRefusals,
@@ -651,6 +660,31 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * Starts an agent from the one named, continuing it or forking it at the
+   * message the request's `from` names, in that agent's own place: its task,
+   * or its workspace and repository where it has none. Keyed and refused as
+   * `start` is; a request whose `from` names no agent is refused here.
+   */
+  startFrom(
+    request: CodingAgentStartRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const sourceId = request.from?.agentId;
+    const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
+    if (sourceId === undefined || admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      Effect.map(
+        askHosted(
+          this.#hosted.agents.startFrom,
+          { params: { id: sourceId }, body: admitted },
+          HOSTED_DEADLINE.START,
+        ),
+        (started) => started.body,
+      ),
+      START_REFUSALS,
+    );
+  }
+
+  /**
    * One agent's transcript past the cursor, or a worker's, read at once
    * rather than held, with whether the held read would have held on it: for
    * a reader following the transcript's live statements, which reads again
@@ -666,11 +700,7 @@ export class HostedCodingAgentClient {
       callId === undefined
         ? askHosted(this.#hosted.messages.agent, { id: agentId, after, wait })
         : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, after, wait });
-    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), (answer) =>
-      "failure" in answer || answer.holds === undefined
-        ? UNANSWERED
-        : { ...answer, holds: answer.holds },
-    );
+    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
   }
 
   /**
@@ -682,6 +712,36 @@ export class HostedCodingAgentClient {
    * the account `userId` names, and signed out where the session is no
    * longer that account's.
    */
+  /**
+   * One task's planning conversation, its mark and running workers sealed
+   * for following over Neon Realtime, or with `poll` their rows inline:
+   * not found where the account reaches no such task, signed out where
+   * `userId` is not the bearer's own, and unanswered for anything else,
+   * which the caller answers by sealing it again.
+   */
+  taskConversationLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskConversationLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.catchIf(
+      askLive(
+        this.#hosted.live.taskConversation,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
   agentTranscriptLive(
     agentId: string,
     userId: string,
@@ -704,6 +764,56 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * One planning worker's transcript past the cursor, read at once rather
+   * than held, with whether the held read would have held on it: for a
+   * reader following the worker's live statements.
+   */
+  taskWorkerMessagesNow(
+    taskId: string,
+    callId: string,
+    after: string,
+  ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
+    const asked = askHosted(this.#hosted.messages.taskWorker, {
+      id: taskId,
+      call: callId,
+      after,
+      wait: TRANSCRIPT_NOW_QUERY.NONE,
+    });
+    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
+  }
+
+  /**
+   * One planning worker's transcript sealed for following over Neon
+   * Realtime, as an agent's worker's is, answered at once: not found where
+   * the account reaches no such plan, signed out where `userId` is not the
+   * bearer's own, and unanswered for anything else, which the caller
+   * answers by sealing it again.
+   */
+  taskWorkerTranscriptLive(
+    taskId: string,
+    callId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AgentTranscriptLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.catchIf(
+      askLive(
+        this.#hosted.live.taskWorkerTranscript,
+        { id: taskId, call: callId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
+  /**
    * One task's conversation as an agent's transcript is read, or a
    * brain worker's where the call that started it is named: past the
    * cursor, held by the service while a turn or the worker runs; with no
@@ -711,7 +821,7 @@ export class HostedCodingAgentClient {
    */
   taskMessages(
     taskId: string,
-    page: { after?: string; before?: string },
+    page: { after?: string; before?: string; unheld?: boolean },
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
     const asked =
@@ -722,6 +832,7 @@ export class HostedCodingAgentClient {
               id: taskId,
               ...(page.after === undefined ? undefined : { after: page.after }),
               ...(page.before === undefined ? undefined : { before: page.before }),
+              ...(page.unheld === true ? { hold: "none" } : undefined),
             },
             HOSTED_DEADLINE.HELD,
           )
@@ -934,28 +1045,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One task's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
-  inbox(
-    taskId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.task, { id: taskId, after }, HOSTED_DEADLINE.HELD),
-      ROW_REFUSALS,
-    );
-  }
-
-  /** One agent's inbox past the cursor, an agent with no task as much as one on a task: every item it posted, held by the service while nothing changed. */
-  agentInbox(
-    agentId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD),
-      ROW_REFUSALS,
-    );
-  }
-
   /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
   chat(
     workspaceId: string,
@@ -1013,6 +1102,52 @@ export class HostedCodingAgentClient {
       ),
       {},
     );
+  }
+
+  /**
+   * One plan's inbox sealed for following over Neon Realtime, or with
+   * `poll` its rows inline, answered at once: not found where the account
+   * reaches no such plan, unanswered for anything else, which the caller
+   * answers by asking again. Sealed for the account `userId` names, and
+   * signed out where the session is no longer that account's.
+   */
+  taskInboxLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { id: taskId, [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.taskInbox, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
+  /** One agent's inbox sealed for following over Neon Realtime, on the terms a plan's is. */
+  agentInboxLive(
+    agentId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.agentInbox, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
   /**
@@ -1091,12 +1226,16 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(this.#hosted.messages.chatWrite, {
-        query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
-        body: admitted,
-      }),
-      MESSAGE_REFUSALS,
+    return Effect.map(
+      hostedAnswer(
+        askHosted(this.#hosted.messages.chatWrite, {
+          query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
+          body: admitted,
+        }),
+        MESSAGE_REFUSALS,
+      ),
+      // A join answers the joiner's member, which no write is answered with.
+      (answer) => ("self" in answer ? UNANSWERED : answer),
     );
   }
   /**

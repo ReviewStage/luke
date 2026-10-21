@@ -57,10 +57,11 @@ const SESSIONS_HANG_UP_FRAMES: readonly string[] = [
   VOICE_SERVICE_FRAME.SESSION_HANG_UP,
   LIVE_CLIENT_EVENT.CLOSE,
 ];
-/** The service-vocabulary frames the Mac sends after the handshake, read here and never forwarded: its idle, and the stop key. */
+/** The service-vocabulary frames the Mac sends after the handshake, read here and never forwarded: its idle, the stop key, and a line typed into the call. */
 export const SESSIONS_REPORT_FRAMES: readonly string[] = [
   VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
   VOICE_SERVICE_FRAME.SESSION_STOP,
+  VOICE_SERVICE_FRAME.SESSION_TYPED,
 ];
 
 /** The avatar asks the Mac sends after the handshake, which the service answers itself and never forwards. */

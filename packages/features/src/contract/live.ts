@@ -4,8 +4,15 @@
  * What waits on the developer across the account, as the address to
  * subscribe at and one sealed statement per part of the account inbox's
  * answer; and one task's whiteboard, named by `?id=`, as the statement that
- * marks where it stands; and one coding agent's transcript, or one of its
- * workers' under `&call=`, as the statements its pages are read from. Each
+ * marks where it stands, its pages and calls the same way, and its planning
+ * conversation as its mark and its running workers; and one coding agent's
+ * transcript, or one of its workers' under `&call=`, as the statements its
+ * pages are read from, and one task's planning worker's transcript, by the
+ * task and the call that started the worker, on the same statements; and the
+ * commands of the kinds `?kinds=` names that no Mac of the account has
+ * claimed, as one statement; and
+ * one plan's inbox, or one agent's, named by `?id=`, as its items, their
+ * threads, and their files. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -22,7 +29,11 @@ import {
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_USER_QUERY,
+  macCommandsLiveAnswerSchema,
+  scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
+  taskConversationLiveAnswerSchema,
+  taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { hostedProcedure } from "./base.js";
@@ -51,10 +62,35 @@ const liveTaskSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
+/** The plan or agent a scope's inbox is followed for; one that is no UUID is answered as not found, so it is read as text here. */
+const liveScopeSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
 /** The agent a transcript is followed for, and the delegation call of the worker where it is a worker's; each read as text, an id or call of no shape answered as not found. */
 const liveTranscriptSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   call: EffectSchema.optionalKey(EffectSchema.String),
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The kinds of command a Mac's live read follows, as its held read names them (`macCommandKindsQuery`). */
+const liveMacCommandsSchema = EffectSchema.Struct({
+  kinds: EffectSchema.optionalKey(EffectSchema.String),
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The task a planning worker's transcript is followed under, and the call that started the worker; each read as text, one of no shape answered as not found. */
+const liveTaskWorkerSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  call: EffectSchema.String,
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -69,8 +105,34 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BOARD }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskBoardLiveAnswerSchema)),
+  taskRecord: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskRecordLiveAnswerSchema)),
+  taskConversation: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_CONVERSATION }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskConversationLiveAnswerSchema)),
   agentTranscript: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)
     .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
+  macCommands: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_MAC_COMMANDS }))
+    .input(liveMacCommandsSchema)
+    .output(EffectSchema.flip(macCommandsLiveAnswerSchema)),
+  taskWorkerTranscript: hostedProcedure
+    .meta(
+      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_WORKER_TRANSCRIPT }),
+    )
+    .input(liveTaskWorkerSchema)
+    .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
+  taskInbox: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_INBOX }))
+    .input(liveScopeSchema)
+    .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
+  agentInbox: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX }))
+    .input(liveScopeSchema)
+    .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
 };

@@ -78,6 +78,13 @@ import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
+import {
+  useWordsDatePicker,
+  WordsDatePickerRoom,
+  type WordsDates,
+  WordsDatesContext,
+  wordsDatesDoor,
+} from "./words-dates.js";
 
 /**
  * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
@@ -852,6 +859,52 @@ const DocumentUnit = memo(function DocumentUnit({
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }, sameUnit);
 
+/** How the plan's sections at rest change a date written in them: the plan's text, where a section's words stand in it, and the save of the text written anew. */
+interface PlanDates {
+  /** The task the page draws now, which a page handed another task without remounting changes. */
+  readonly taskId: () => string;
+  /** The plan's text as it stands. */
+  readonly text: () => string;
+  /** Where a section's words start in the text, while they stand as drawn; none mid-chase or while the editor is open. */
+  readonly from: (section: number) => number | undefined;
+  readonly write: (value: string, base: string) => void;
+}
+
+/**
+ * A section's words at rest, whose date chips open the picker of the
+ * plan's room (`words-dates.tsx`) and save the plan with the date written
+ * anew, where the plan takes a change; their chips open nothing elsewhere.
+ * Note that the door stands across draws, so a section is not drawn again
+ * for a new one.
+ */
+function SectionDates({
+  section,
+  dates,
+  children,
+}: {
+  section: number;
+  dates: PlanDates | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const open = useWordsDatePicker();
+  const door = useMemo<WordsDates | undefined>(() => {
+    if (open === undefined || dates === undefined) return undefined;
+    return {
+      pick: (written, chip) => {
+        // Note that the chip's link is placed in its section's words, which start where the section does in the plan's text.
+        const from = dates.from(section);
+        if (from === undefined) return;
+        const at = { from: from + written.at.from, to: from + written.at.to };
+        // Note that the date is written only into the plan it was picked on, so a page handed another task while the picker stands writes nothing.
+        const picked = dates.taskId();
+        const text = () => (dates.taskId() === picked ? dates.text() : undefined);
+        wordsDatesDoor(open, text, dates.write).pick({ ...written, at }, chip);
+      },
+    };
+  }, [open, dates, section]);
+  return <WordsDatesContext.Provider value={door}>{children}</WordsDatesContext.Provider>;
+}
+
 /**
  * The task's document: its name as the title over its text. `live` is the
  * task's call in progress, which keeps the caret waiting where the typing
@@ -860,7 +913,10 @@ const DocumentUnit = memo(function DocumentUnit({
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed; without them the document is
- * drawn read-only. An editable plan opens its text from a press on the
+ * drawn read-only. A date chip in an editable plan's words at rest opens
+ * its picker where it stands, and a date changed there saves the plan
+ * through `onEdit` with the date written anew (`SectionDates`), as a task
+ * item's box ticks it. An editable plan opens its text from a press on the
  * panel's empty room, as a document editor's page does (`useTextRoom`): at
  * the end under its last line, or anywhere where it has no text yet, and on
  * the nearest line beside it. With `page` the document is drawn as a Settings page,
@@ -1109,6 +1165,32 @@ export const PlanBody = memo(function PlanBody({
   };
   const latestTick = useRef(tick);
   latestTick.current = tick;
+  // A date changed from the plan at rest is written over the text as it then stands, read as the picker closes.
+  const latestDates = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
+  latestDates.current = { cut, views, id: task.id, body: task.document.body, onEdit };
+  const planDates = useMemo<PlanDates | undefined>(
+    () =>
+      editable
+        ? {
+            taskId: () => latestDates.current.id,
+            text: () => latestDates.current.body,
+            from: (section) => {
+              const { cut: now, views: drawn } = latestDates.current;
+              const unit = now[section];
+              return unit !== undefined && unit.text === drawn[section]?.words
+                ? unit.from
+                : undefined;
+            },
+            write: (value, base) => {
+              const save = latestDates.current.onEdit;
+              if (save === undefined) return;
+              // Note that a save not taken leaves the date as it was, as an unticked box flips back.
+              save({ document: { base, value } }).catch(() => undefined);
+            },
+          }
+        : undefined,
+    [editable],
+  );
   // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
   const togglers = useRef(new Map<number, TaskToggler>());
   const taskToggler = (section: number): TaskToggler | undefined => {
@@ -1145,17 +1227,19 @@ export const PlanBody = memo(function PlanBody({
         entry={entry === view.id}
         editing={editing}
       >
-        <DocumentUnit
-          view={view}
-          section={drawnSections?.[section]}
-          marks={marks}
-          link={link}
-          linked={linked}
-          anchor={anchors[section] ?? ""}
-          entry={entry === view.id}
-          onTask={taskToggler(section)}
-          planText={pendingText}
-        />
+        <SectionDates section={section} dates={planDates}>
+          <DocumentUnit
+            view={view}
+            section={drawnSections?.[section]}
+            marks={marks}
+            link={link}
+            linked={linked}
+            anchor={anchors[section] ?? ""}
+            entry={entry === view.id}
+            onTask={taskToggler(section)}
+            planText={pendingText}
+          />
+        </SectionDates>
       </DocumentBlock>
     ) : (
       <DocumentUnit
@@ -1197,72 +1281,74 @@ export const PlanBody = memo(function PlanBody({
       <DocumentScroll ref={scroller}>
         {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
         <div ref={bodyHost} className={BODY_CLASS}>
-          {taskStanding === undefined || page !== undefined ? null : (
-            <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
-          )}
-          {titled ? (
-            attributed(
-              // Keyed by the plan, so words typed for one are saved to it as another opens.
-              <EditableTitle
-                key={task.id}
-                name={task.name}
-                entry={entry === EDITOR_PLACE.TITLE}
+          <WordsDatePickerRoom>
+            {taskStanding === undefined || page !== undefined ? null : (
+              <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
+            )}
+            {titled ? (
+              attributed(
+                // Keyed by the plan, so words typed for one are saved to it as another opens.
+                <EditableTitle
+                  key={task.id}
+                  name={task.name}
+                  entry={entry === EDITOR_PLACE.TITLE}
+                  editing={editing}
+                  renaming={renaming}
+                  onRename={onRename}
+                  onDraft={onDraftName}
+                />,
+                null,
+                titleMenu,
+              )
+            ) : page === undefined ? (
+              attributed(<TaskTitle name={task.name} />, null, titleMenu)
+            ) : (
+              <header className="task-page-head">
+                <div className="task-title-line">
+                  <TaskTitle name={task.name} />
+                  {page.actions}
+                </div>
+                {editedNote}
+                {page.note}
+              </header>
+            )}
+            {page === undefined ? (
+              <>
+                {taskStanding === undefined ? null : (
+                  <TaskStandingChips task={task} onSet={taskStanding.onSet} />
+                )}
+                {underTitle}
+                <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+                <ChangedLine looks={looks} marks={marks} />
+              </>
+            ) : null}
+            {editing.editor === undefined ? (
+              sections
+            ) : (
+              <PlanDocumentEditor
+                task={task}
+                editor={editing.editor}
                 editing={editing}
-                renaming={renaming}
-                onRename={onRename}
-                onDraft={onDraftName}
-              />,
-              null,
-              titleMenu,
-            )
-          ) : page === undefined ? (
-            attributed(<TaskTitle name={task.name} />, null, titleMenu)
-          ) : (
-            <header className="task-page-head">
-              <div className="task-title-line">
-                <TaskTitle name={task.name} />
-                {page.actions}
-              </div>
-              {editedNote}
-              {page.note}
-            </header>
-          )}
-          {page === undefined ? (
-            <>
-              {taskStanding === undefined ? null : (
-                <TaskStandingChips task={task} onSet={taskStanding.onSet} />
-              )}
-              {underTitle}
-              <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
-              <ChangedLine looks={looks} marks={marks} />
-            </>
-          ) : null}
-          {editing.editor === undefined ? (
-            sections
-          ) : (
-            <PlanDocumentEditor
-              task={task}
-              editor={editing.editor}
-              editing={editing}
-              drawn={sections}
-              hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
-              mentions={mentionDoors}
-              scroller={scroller}
-              handle={editorHandle}
-              closedOn={closedOn}
-            />
-          )}
-          {comments === undefined || !commentsHere || drawnSections === undefined ? null : (
-            <PlanCommentLayer
-              body={body}
-              scroller={scroller}
-              unitClass={UNIT_CLASS}
-              sections={drawnSections}
-              text={task.document.body}
-              doors={{ control: comments, agents, me: reader.readerId }}
-              editor={editing.editor === undefined ? undefined : editorHandle}
-            />
-          )}
+                drawn={sections}
+                hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+                mentions={mentionDoors}
+                scroller={scroller}
+                handle={editorHandle}
+                closedOn={closedOn}
+              />
+            )}
+            {comments === undefined || !commentsHere || drawnSections === undefined ? null : (
+              <PlanCommentLayer
+                body={body}
+                scroller={scroller}
+                unitClass={UNIT_CLASS}
+                sections={drawnSections}
+                text={task.document.body}
+                doors={{ control: comments, agents, me: reader.readerId }}
+                editor={editing.editor === undefined ? undefined : editorHandle}
+              />
+            )}
+          </WordsDatePickerRoom>
         </div>
       </DocumentScroll>
     </PlanPictures>

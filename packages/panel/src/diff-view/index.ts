@@ -8,15 +8,12 @@ import {
   type FileContents,
   type FileDiffMetadata,
   type FileDiffOptions,
-  getFiletypeFromFileName,
-  getSharedHighlighter,
   getSingularPatch,
   type LineAnnotation,
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
   parsePatchFiles,
-  renderFileWithHighlighter,
   type SelectedLineRange,
 } from "@pierre/diffs";
 import { FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
@@ -26,10 +23,7 @@ import {
   ANNOTATION_BAND_ATTRIBUTE,
   markAnnotationBands,
 } from "./annotation-bands.js";
-import { colouredFrom } from "./colour-lines.js";
 import {
-  type ColouredLines,
-  type ColourRequest,
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
   type DiffLineRange,
@@ -60,7 +54,7 @@ import {
 } from "./contract.js";
 import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
-import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
+import { type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
@@ -155,7 +149,9 @@ import { wholeOf } from "./whole-diff.js";
  * and each note under its line drawn in the element the view keeps for it,
  * as a list's are. Pierre numbers a file from its first line, so the file
  * is handed whole. One patch alone takes notes under its lines the same way
- * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's.
+ * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's;
+ * a feed of such cards colours each in the same pool (\`pooled\`), so many
+ * landing at once never hold the window's thread.
  *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
@@ -429,6 +425,14 @@ const FILL_CSS = `
   pre {
     min-height: 100%;
   }
+  /* A note under one patch's lines, Luke's under a Code card's snippet,
+     stands on the code's own ground, its numbers' column too, rather than
+     Pierre's context ground, which sets a comment's row apart in a diff:
+     a snippet's lines are a file's, so none of them stands apart. */
+  [data-line-annotation],
+  [data-gutter-buffer="annotation"] {
+    --diffs-annotation-bg: var(--diffs-bg);
+  }
 }
 `;
 
@@ -583,9 +587,13 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
   const release = adoptShadowStyles(root, lookSheets().fill);
   typeset(container, props.look);
-  const view = new PierreFileDiff<string, undefined>(optionsOf(props));
+  // A pooled patch is read under a name of its own, so the pool's cache never hands it another's colours.
+  const highlighting = props.pooled === true ? listHighlighting(props.look) : undefined;
+  const read = highlighting === undefined ? getSingularPatch : readPatch;
+  const view = new PierreFileDiff<string, undefined>(optionsOf(props), highlighting?.pool);
   let patch = props.patch;
-  let fileDiff = getSingularPatch(patch);
+  let look = props.look;
+  let fileDiff = read(patch);
   view.render({
     fileDiff,
     fileContainer: container,
@@ -596,8 +604,12 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
     update: (next) => {
       if (next.patch !== patch) {
         patch = next.patch;
-        fileDiff = getSingularPatch(patch);
+        fileDiff = read(patch);
       }
+      // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the patch's own.
+      if (highlighting !== undefined && !sameLook(next.look, look))
+        void highlighting.follow(next.look);
+      look = next.look;
       typeset(container, next.look);
       view.setOptions(optionsOf(next));
       view.render({
@@ -1106,7 +1118,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
 /** The id a whole file's one item stands under in its view. */
 const WHOLE_FILE_ITEM = "file";
 
-/** How much room stands above a whole file's first line and below its last, in pixels: the File tab's rows' own (`styles/tasks.css`'s `.code-lines`). */
+/** How much room stands above a whole file's first line and below its last, in pixels: what the File tab's rows of lines stood in before Pierre drew them. */
 const WHOLE_FILE_EDGE = 6;
 
 /**
@@ -1338,52 +1350,4 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
   };
 }
 
-/**
- * A run of a file's lines coloured in the look's syntax themes, as a list's
- * files are: in the kept pool's workers once they hold the look, or on the
- * window's own thread where the pool settled there; none where the file's
- * name names no grammar Pierre carries, or the colouring failed.
- */
-async function colourLines(request: ColourRequest): Promise<ColouredLines | undefined> {
-  colouringsAsked += 1;
-  const file = {
-    name: request.name,
-    contents: request.lines.join("\n"),
-    cacheKey: String(colouringsAsked),
-  };
-  if (getFiletypeFromFileName(file.name) === PLAIN_TEXT) return undefined;
-  const highlighting = listHighlighting(request.look);
-  const { pool } = highlighting;
-  try {
-    if ((await highlighting.settled) === HIGHLIGHT_MODE.POOL && pool !== undefined) {
-      await highlighting.follow(request.look);
-      await pool.primeFileHighlightCache(file);
-      const cached = pool.getFileResultCache(file)?.result;
-      // Its key is never asked for again, so the result is let go once read.
-      pool.evictFileFromCache(file.cacheKey);
-      return cached === undefined ? undefined : colouredFrom(cached, request.lines.length);
-    }
-    const { dark, light } = request.look.themes;
-    const highlighter = await getSharedHighlighter({
-      themes: [dark, light],
-      langs: [getFiletypeFromFileName(file.name)],
-      preferredHighlighter: "shiki-js",
-    });
-    const drawn = renderFileWithHighlighter(file, highlighter, {
-      theme: request.look.themes,
-      useTokenTransformer: false,
-      tokenizeMaxLineLength: MAX_LINE_DIFF_LENGTH,
-    });
-    return colouredFrom(drawn, request.lines.length);
-  } catch {
-    return undefined;
-  }
-}
-
-/** How many colourings were asked for, which names each in the pool's cache, as `patchesRead` names a list's reads. */
-let colouringsAsked = 0;
-
-/** The name Pierre gives a file whose name names no grammar. */
-const PLAIN_TEXT = "text";
-
-export const diffView: DiffViewModule = { mount, mountList, mountFile, colourLines };
+export const diffView: DiffViewModule = { mount, mountList, mountFile };

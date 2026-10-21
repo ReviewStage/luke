@@ -287,15 +287,9 @@ test("a thread's form attaches its values to the reply as they are filled, with 
   });
 });
 
-test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
-  assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.OPTION,
-    line: "Pick an option",
-  });
-  assert.deepEqual(inboxMissing(CHANNELS, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.OPTION,
-    line: "Pick at least one",
-  });
+test("what an answer lacks follows what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
+  assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
+  assert.deepEqual(inboxMissing(CHANNELS, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
   assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"] }), undefined);
   assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, note: "Use SQS." }), undefined);
   const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
@@ -316,11 +310,10 @@ test("what an answer lacks is said by what it asks: a choice its pick, unless th
   assert.deepEqual(inboxMissing(rollout, EMPTY_INBOX_DRAFT), {
     kind: INBOX_MISSING.FIELD,
     label: "Effort",
-    line: "Fill in Effort",
   });
   assert.deepEqual(
     inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
-    { kind: INBOX_MISSING.FIELD, label: "Effort", line: "Fill in Effort" },
+    { kind: INBOX_MISSING.FIELD, label: "Effort" },
     "blank words fill nothing",
   );
   const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
@@ -338,7 +331,6 @@ test("what an answer lacks is said by what it asks: a choice its pick, unless th
   const question = item({ id: "question" });
   assert.deepEqual(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: " " }), {
     kind: INBOX_MISSING.WORDS,
-    line: "Write your answer",
   });
   assert.equal(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
 });
@@ -397,13 +389,9 @@ test("an approval and a task are answered by the decision the card holds, or a c
 test("an approval or a to-do lacks its decision until one is picked, a note lacks nothing, and a number key picks an approval's or a to-do's decision, the one going ahead first, as it picks a choice's option", () => {
   const step = item({ id: "step", response: { type: INBOX_RESPONSE.APPROVAL } });
   const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
-  assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.OPTION,
-    line: "Approve or decline",
-  });
+  assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
   assert.deepEqual(inboxMissing(task, { ...EMPTY_INBOX_DRAFT, note: "Did half." }), {
     kind: INBOX_MISSING.OPTION,
-    line: "Tick it, or say you couldn't",
   });
   assert.equal(inboxMissing(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE)), undefined);
   const fyi = item({ id: "fyi", response: { type: INBOX_RESPONSE.NONE } });
@@ -1128,7 +1116,7 @@ test("a code block near the file's top reads from its first line, a file that en
       branch: block.sha,
       firstLine: 1,
       lineCount: 1,
-      lines: [[{ text: "export {};" }]],
+      lines: ["export {};"],
     },
   };
   assert.deepEqual(codeReadOf(block, short), {
@@ -1501,7 +1489,7 @@ test("an item is drawn as its thread where the thread asks, or where the agent's
   assert.equal(inboxThreadOf(item({ id: QUEUE.id })), undefined);
 });
 
-test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words", () => {
+test("a reply on a thread is plain unless an answer is attached: a pick, a press, a field filled, or, to an ask of words alone, its words or files; an attached answer the ask would refuse sends nothing", () => {
   const pick: InboxAsk = { type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] };
   const decide = [asking(pick)];
   const draft: InboxDraft = { ...EMPTY_INBOX_DRAFT, note: "  Why not C?  " };
@@ -1518,9 +1506,14 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
   });
 
   const answer = [asking({ type: INBOX_ASK.ANSWER })];
-  const pressed: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.ANSWERED };
-  assert.equal(inboxThreadSend(answer, pressed), undefined, "Answer's words are the answer");
-  assert.deepEqual(inboxThreadSend(answer, { ...pressed, note: "Use 90%" })?.answers, {
+  assert.equal(inboxThreadSend(answer, EMPTY_INBOX_DRAFT), undefined, "no words, no answer");
+  assert.deepEqual(
+    inboxThreadSend(answer, { ...EMPTY_INBOX_DRAFT, note: "Use 90%" })?.answers,
+    { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED },
+    "an ask of words alone is answered by the reply's words, with no press",
+  );
+  const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
+  assert.deepEqual(inboxThreadSend(answer, { ...EMPTY_INBOX_DRAFT, attachments: files })?.answers, {
     ask: ASKING_ID,
     reply: INBOX_REPLY.ANSWERED,
   });

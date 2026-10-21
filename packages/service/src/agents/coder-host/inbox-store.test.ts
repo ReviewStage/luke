@@ -47,7 +47,12 @@ import {
   type InboxImageBlock,
   type InboxPost,
 } from "@luke/features/inbox-wire";
-import { accountInboxLiveRowSchemas, accountInboxOfLiveRows } from "@luke/features/live-wire";
+import {
+  accountInboxLiveRowSchemas,
+  accountInboxOfLiveRows,
+  inboxOfLiveRows,
+  scopeInboxLiveRowsSchema,
+} from "@luke/features/live-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
@@ -66,12 +71,15 @@ import {
   markInboxItemRead,
   markInboxItemUnread,
   markInboxRead,
+  memberAgentInboxItems,
+  memberAgentInboxLiveStatements,
   postInboxItem,
   postInboxMessage,
   readInboxAttachment,
   readInboxItem,
   replyInboxItem,
   taskInboxItems,
+  taskInboxLiveStatements,
   withdrawInboxAnswer,
   withdrawInboxClose,
   withdrawInboxMessage,
@@ -264,6 +272,81 @@ it.layer(getTestDB())("the inbox store", (it) => {
           [fromOf.get(fromGrace.message.id), fromOf.get(fromLuke.message.id)],
           ["Grace Hopper", "Luke"],
         );
+      }),
+  );
+
+  it.effect(
+    "the live statements of a plan's inbox and an agent's deliver the items their held reads answer, open, answered, and closed alike, to a member and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const open = yield* postInboxItem(agent, { ...SETTINGS, key: "open" });
+        assert.ok(Result.isSuccess(open));
+        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "closed" })));
+        assert.ok(
+          Option.isSome(
+            yield* answerInboxItem(teammate, posted.success.id, 1, DONE, randomUUID(), [
+              attached("first.txt", "text/plain", TRACE),
+              attached("second.txt", "text/plain", TRACE),
+            ]),
+          ),
+        );
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "closed", "Not needed after all")));
+        // The teammate's message on the open item, with a file, leaves it read for them and unread for its starter.
+        assert.ok(
+          Option.isSome(
+            yield* postInboxMessage(teammate, open.success.id, {
+              text: "Here is the trace.",
+              clientKey: randomUUID(),
+              files: [attached("trace.txt", "text/plain", TRACE)],
+            }),
+          ),
+        );
+
+        for (const reader of [agent.userId, teammate, outsider]) {
+          const plan = Option.getOrThrow(taskInboxLiveStatements(reader, agent.taskId ?? ""));
+          const ofAgent = Option.getOrThrow(memberAgentInboxLiveStatements(reader, agent.agentId));
+          const liveOf = (statements: typeof plan) =>
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              const rows = yield* Effect.all({
+                items: sql.unsafe(statements.items.sql, [...statements.items.params]),
+                messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
+                files: sql.unsafe(statements.files.sql, [...statements.files.params]),
+              });
+              return inboxOfLiveRows(
+                yield* Schema.decodeUnknownEffect(scopeInboxLiveRowsSchema)(rows),
+              );
+            });
+          assert.deepEqual(yield* liveOf(plan), yield* taskInboxItems(reader, agent.taskId ?? ""));
+          assert.deepEqual(
+            yield* liveOf(ofAgent),
+            yield* memberAgentInboxItems(reader, agent.agentId),
+          );
+        }
+        const read = yield* taskInboxItems(teammate, agent.taskId ?? "");
+        const openOf = (items: typeof read) => items.find((item) => item.id === open.success.id);
+        assert.equal(openOf(read)?.unread, false, "the teammate wrote on it last");
+        assert.equal(openOf(yield* taskInboxItems(agent.userId, agent.taskId ?? ""))?.unread, true);
+        assert.deepEqual(
+          openOf(read)?.messages?.map((message) => [message.text, message.files?.length]),
+          [["Here is the trace.", 1]],
+        );
+        assert.deepEqual(
+          read.find((item) => item.id === posted.success.id)?.answerFiles?.map((file) => file.name),
+          ["first.txt", "second.txt"],
+        );
+        assert.deepEqual(read.map((item) => item.status).toSorted(), [
+          INBOX_STATUS.ANSWERED,
+          INBOX_STATUS.CLOSED,
+          INBOX_STATUS.OPEN,
+        ]);
       }),
   );
 

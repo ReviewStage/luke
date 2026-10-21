@@ -560,7 +560,7 @@ export interface RefusedCall {
 }
 
 /** What a Start that did not start says beside the button, and what mends it. */
-export function startFailureNote(refused: RefusedCall, taskId: string): Failure {
+export function startFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
     ? unreachedFailure(refused.unreached, taskId)
     : callFailure(startFailureWords(refused.failure));

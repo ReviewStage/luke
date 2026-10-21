@@ -109,7 +109,12 @@ import type { AgentSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
+import {
+  accountModelChoices,
+  placeOfAgent,
+  type StartWhere,
+  startCodingAgent,
+} from "./coder-host/start.js";
 import {
   codingAgentFailureOf,
   codingAgentStatusOf,
@@ -404,6 +409,9 @@ export const START_CODING_AGENT_REFUSAL = {
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
+  SOURCE_NO_REPOSITORY:
+    "Not started: that agent works on no task and in no GitHub repository, so there is no " +
+    "checkout to go on from; start a new agent with a prompt instead.",
   NO_BRANCH:
     "Not started: the task's repository has no such branch on GitHub. Push it first, or name a " +
     "branch that exists there, such as the head branch of the pull request to build on; leave " +
@@ -420,12 +428,9 @@ export const START_CODING_AGENT_REFUSAL = {
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
-  SOURCE_NO_TASK:
-    "Not started: that agent works on no task, and only an agent on a task is continued or " +
-    "forked; start a new agent with a prompt instead.",
   SOURCE_OTHER_TASK:
-    "Not started: that agent works on another task than the taskId named; leave taskId out to " +
-    "start on its own task.",
+    "Not started: that agent works on another task than the taskId named, or on none; leave " +
+    "taskId out to start where it works.",
   FROM_WITH_PROMPT:
     "Not started: an agent started from another is handed that agent's brief, transcript, and " +
     "work on that agent's own task, so it takes no prompt, no branch, and no new task; put what it " +
@@ -642,7 +647,8 @@ const START_AGENT_INPUT = Schema.Struct({
           ),
         ),
       }),
-      "Another coding agent of your workspace to take over from, on its own task: the new " +
+      "Another coding agent of your workspace to take over from, on its own task, or on no " +
+        "task where it has none: the new " +
         "agent is handed its brief and its transcript (with Luke's summary of the steps that " +
         "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
         "the note after them; it takes no prompt and no branch. Without messageId it continues " +
@@ -1388,7 +1394,7 @@ const startedBefore = (call: CodingAgentCall) =>
     // A continue run again names the agents that continued its source before it, as its first answer did.
     const from = agent.startedFrom;
     const continuedBy =
-      from === null || from.messageId !== undefined || agent.taskId === null
+      from === null || from.messageId !== undefined
         ? []
         : yield* earlierContinuationsOf(
             { userId, workspaceId: workspace.value, taskId: agent.taskId },
@@ -1579,9 +1585,9 @@ interface EarlierContinuation {
   readonly mention: string;
 }
 
-/** Where a start from another agent lands: the source's own task, and, for a continue, the agents that already continued the source, oldest first. */
+/** Where a start from another agent lands: the source's own place, its task or, with none, its workspace and repository, and, for a continue, the agents that already continued the source, oldest first. */
 interface SourceLanding {
-  readonly taskId: string;
+  readonly place: StartWhere;
   readonly continuedBy: readonly EarlierContinuation[];
 }
 
@@ -1591,7 +1597,7 @@ interface SourceLanding {
  * after it; all of them where none is named. A fork is no continuation.
  */
 const earlierContinuationsOf = (
-  at: { readonly userId: string; readonly workspaceId: string; readonly taskId: string },
+  at: { readonly userId: string; readonly workspaceId: string; readonly taskId: string | null },
   sourceId: string,
   upTo?: string,
 ) =>
@@ -1606,7 +1612,11 @@ const earlierContinuationsOf = (
       (each): EarlierContinuation => ({
         id: each.agentId,
         mention: writtenMention(
-          { kind: MENTION_KIND.AGENT, taskId: at.taskId, agentId: each.agentId },
+          {
+            kind: MENTION_KIND.AGENT,
+            ...(at.taskId === null ? undefined : { taskId: at.taskId }),
+            agentId: each.agentId,
+          },
           each.title ?? CONTINUATION_NAME,
           step,
         ),
@@ -1614,7 +1624,7 @@ const earlierContinuationsOf = (
     );
   });
 
-/** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
+/** The place a start from another agent lands in, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
 const sourceLanding = (
   caller: AgentCaller,
   from: CodingAgentStartFrom,
@@ -1627,18 +1637,20 @@ const sourceLanding = (
     if (!controlsAgent(callerUserId(caller), source)) {
       return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
     }
-    if (source.taskId === null) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_TASK);
     if (named !== undefined && named !== source.taskId) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_OTHER_TASK);
     }
     if (task.task?.archived === true) return Result.fail(START_CODING_AGENT_REFUSAL.ARCHIVED);
+    // An agent with no task is started from in its own workspace, on the repository it cloned.
+    const place = placeOfAgent(source);
+    if (place === undefined) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY);
     // A fork names one of the source's own messages, and leaves the source going on beside it.
     if (from.messageId !== undefined) {
       const { userId, conversationId } = source;
       const role = MESSAGE_ROLE.ASSISTANT;
       const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
       if (Option.isNone(at)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_MESSAGE);
-      return Result.succeed({ taskId: source.taskId, continuedBy: [] });
+      return Result.succeed({ place, continuedBy: [] });
     }
     // A continue takes over work that has ended; one already continued is
     // continued again, since a continuation may itself fail or go wrong, and
@@ -1647,9 +1659,8 @@ const sourceLanding = (
     if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
     }
-    const taskId = source.taskId;
-    const at = { userId: callerUserId(caller), workspaceId, taskId };
-    return Result.succeed({ taskId, continuedBy: yield* earlierContinuationsOf(at, source.id) });
+    const at = { userId: callerUserId(caller), workspaceId, taskId: source.taskId };
+    return Result.succeed({ place, continuedBy: yield* earlierContinuationsOf(at, source.id) });
   });
 
 /** What a continue's answer adds where other agents already continued its source: those agents, oldest first, the one it started left out; nothing otherwise. */
@@ -1746,15 +1757,17 @@ export function runStartAgent(
         const reached = yield* taskOfCallerWorkspace(caller, named);
         if (!reached) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
       }
-      // A start from another agent lands on that agent's own task.
+      // A start from another agent lands in that agent's own place, its task or its workspace.
       const landing = from === undefined ? undefined : yield* sourceLanding(caller, from, named);
       if (landing !== undefined && Result.isFailure(landing)) {
         return agentToolRejected(landing.failure);
       }
-      const taskId = landing?.success.taskId ?? named ?? ownTask;
-      if (taskId === null) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
+      const taskId = named ?? ownTask;
+      const place: StartWhere | undefined =
+        landing?.success.place ?? (taskId === null ? undefined : { taskId });
+      if (place === undefined) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
-        taskId: taskId,
+        ...place,
         idempotencyKey: call.clientKey,
         choice,
         prompt,

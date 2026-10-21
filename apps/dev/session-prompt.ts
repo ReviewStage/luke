@@ -1,6 +1,7 @@
 import type { SandboxRecord } from "@luke/service/agents/agent-runtime/sandbox";
 import type { CoderSessionPromptRecord } from "@luke/service/agents/coder-host/host";
 import { NO_NOTES_TAKEN, type NotesTaken } from "@luke/service/agents/coder-host/plan-edit";
+import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import { defineState } from "eve/context";
 
 /**
@@ -46,3 +47,11 @@ export const planNotesTaken = defineState<NotesTaken>(
  * counts the post once it lands.
  */
 export const chatPostsMade = defineState<NotesTaken>("luke.coder.chat-posts", () => NO_NOTES_TAKEN);
+
+/**
+ * What the session's turns have handed the agent of its task and its chat
+ * in their own messages (`TurnHanded`), in eve's durable session state:
+ * read and written by the turn's message as each turn opens
+ * (`instructions/turn-message.ts`), so a turn hands only what changed.
+ */
+export const turnHanded = defineState<TurnHanded>("luke.coder.turn-handed", () => ({}));

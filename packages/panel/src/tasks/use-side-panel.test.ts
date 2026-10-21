@@ -7,10 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { MAIN_TAB } from "./use-main-tabs.js";
 import {
-  inColumn,
-  isPinnable,
   type OpenTask,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -321,6 +318,52 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
   assert.deepEqual(second.control().browsers, []);
 });
 
+test("a Browser tab an agent opened is chosen on the open plan, only held on another, and goes when the agent closes it", () => {
+  fakeActPortAnswering(() => Promise.resolve(undefined));
+  const panel = launch({ task: TASK, taskAgents: [] });
+  const here = { browserId: "agent-tab-here", taskId: TASK, address: "http://localhost:3000/" };
+  const there = {
+    browserId: "agent-tab-there",
+    taskId: OTHER_TASK,
+    address: "https://example.com/",
+  };
+
+  act(() => panel.control().onAgentBrowser(here));
+  act(() => panel.control().onAgentBrowser(there));
+  act(() => panel.control().onAgentBrowser(here));
+
+  assert.deepEqual(panel.control().browsers, [
+    { tab: { browser: here.browserId }, task: TASK, address: here.address },
+  ]);
+  assert.deepEqual(panel.control().tab, { browser: here.browserId }, "chosen on the open plan");
+  assert.equal(panel.control().open, true);
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().browsers, [
+    { tab: { browser: there.browserId }, task: OTHER_TASK, address: there.address },
+  ]);
+
+  act(() => panel.control().onBrowserGone(there.browserId));
+  assert.deepEqual(panel.control().browsers, []);
+});
+
+test("a chosen Browser tab an agent closes gives way to the tab viewed before it, as a tab's own close does", () => {
+  fakeActPortAnswering(() => Promise.resolve(undefined));
+  const panel = launch({ task: TASK, taskAgents: [] });
+  const first = { browserId: "agent-tab-first", taskId: TASK, address: "http://localhost:3000/" };
+  const second = { browserId: "agent-tab-second", taskId: TASK, address: "https://example.com/" };
+  act(() => panel.control().onAgentBrowser(first));
+  act(() => panel.control().onAgentBrowser(second));
+  assert.deepEqual(panel.control().tab, { browser: second.browserId });
+
+  act(() => panel.control().onBrowserGone(second.browserId));
+
+  assert.deepEqual(panel.control().tab, { browser: first.browserId });
+  assert.deepEqual(
+    panel.control().browsers.map((each) => each.tab.browser),
+    [first.browserId],
+  );
+});
+
 test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
   const sent: SentPortAct[] = [];
   // The act port is the window's door to main, the process boundary a closed tab's page is let go across.
@@ -495,7 +538,7 @@ test("a task that may draw no Inbox, holding no agent and nothing waiting, draws
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
 });
 
-test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin opening the Call in the task's column", () => {
+test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin let go too", () => {
   window.localStorage.setItem(
     "luke.sidePanel",
     JSON.stringify({
@@ -514,10 +557,7 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
-  assert.deepEqual(
-    panel.control().pins.map(({ tab }) => [tab, isPinnable(tab) && inColumn(tab)]),
-    [[MAIN_TAB.CALL, true]],
-  );
+  assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
 });
 
 test("a narrow room holds the open panel full screen alone, so the window's ways out of full screen shut it there, and a room widened again stands it beside the document", () => {

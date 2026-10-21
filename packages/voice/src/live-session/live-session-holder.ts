@@ -50,6 +50,7 @@ import {
   type LiveSessionSource,
 } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
+import type { VoiceCallAbout } from "../voice-view.js";
 import {
   requestClose,
   SIDEBAND_CLOSE_OUTCOME,
@@ -202,9 +203,9 @@ export const LIVE_SESSION_END_CAUSE = {
 export type LiveSessionEndCause =
   (typeof LIVE_SESSION_END_CAUSE)[keyof typeof LIVE_SESSION_END_CAUSE];
 
-/** A creation under way: the task it is about, and the end a delete or a sign-out asked for meanwhile. */
+/** A creation under way: the agent it speaks into and that agent's task, and the end a delete or a sign-out asked for meanwhile. */
 interface Creating {
-  readonly taskId: string;
+  readonly about: VoiceCallAbout;
   endedBy: LiveSessionEndCause | undefined;
 }
 
@@ -217,6 +218,8 @@ interface HeldSession {
   peerReason: LivePeerEndReason | undefined;
   /** The task the call is about, which the session is bound to for its life. */
   readonly taskId: string;
+  /** The agent the call speaks into, which the host checked belongs to that task before the call was created. */
+  readonly agentId: string;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
@@ -373,7 +376,7 @@ export class LiveSessionHolder {
           : LIVE_SESSION_END_CAUSE.TASK_DELETED;
       const about = (candidate: string) => taskId === undefined || candidate === taskId;
       const creating = this.#creating;
-      if (creating !== undefined && about(creating.taskId)) creating.endedBy ??= cause;
+      if (creating !== undefined && about(creating.about.taskId)) creating.endedBy ??= cause;
       const session = this.#held;
       if (session === undefined || !about(session.taskId)) return Effect.void;
       return this.#end(session, cause);
@@ -389,10 +392,13 @@ export class LiveSessionHolder {
    * is opened before anything is created into it and closed again unless a
    * session came to stand there.
    */
-  createSession(sdpOffer: string, taskId: string): Effect.Effect<LiveSessionCreated | undefined> {
+  createSession(
+    sdpOffer: string,
+    about: VoiceCallAbout,
+  ): Effect.Effect<LiveSessionCreated | undefined> {
     // The creation is named from its first step to its last, so an end landing
     // anywhere in it (the prior session's end, the create, the attach) is heard.
-    const creating: Creating = { taskId, endedBy: undefined };
+    const creating: Creating = { about, endedBy: undefined };
     return Effect.ensuring(
       Effect.suspend(() => {
         this.#creating = creating;
@@ -411,7 +417,7 @@ export class LiveSessionHolder {
       if (!source || creating.endedBy !== undefined) return undefined;
       const scope = yield* Scope.fork(this.#sessions, "sequential");
       const created = yield* Effect.onExit(
-        this.#stand(source, sdpOffer, creating.taskId, scope),
+        this.#stand(source, sdpOffer, creating.about, scope),
         (exit) =>
           Exit.isSuccess(exit) && exit.value !== undefined
             ? Effect.void
@@ -431,11 +437,11 @@ export class LiveSessionHolder {
   #stand(
     source: LiveSessionSource,
     sdpOffer: string,
-    taskId: string,
+    about: VoiceCallAbout,
     scope: Scope.Closeable,
   ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
-      const opened = yield* Scope.provide(source.create({ sdpOffer, taskId }), scope);
+      const opened = yield* Scope.provide(source.create({ sdpOffer, ...about }), scope);
       if (!opened) return undefined;
       this.#options.emit({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
       const sideband = yield* Scope.provide(opened.attach(), scope);
@@ -444,7 +450,8 @@ export class LiveSessionHolder {
         stoodAt: this.#clock.currentTimeMillisUnsafe(),
         endCause: undefined,
         peerReason: undefined,
-        taskId,
+        taskId: about.taskId,
+        agentId: about.agentId,
         sideband,
         opened,
         scope,
@@ -672,6 +679,25 @@ export class LiveSessionHolder {
     const stop = session.opened.stopSpeaking;
     if (stop === undefined) return false;
     stop();
+    return true;
+  }
+
+  /**
+   * A line typed into an agent's composer, handed to the call where the
+   * standing call speaks into that agent: the service is asked, through the
+   * source's door, to write it down, hand it to the agent, and speak the
+   * reply, so nothing here appends it, under the composer's key for the send,
+   * so a Retry is the same line to the service. Answers whether the call took it; a
+   * call on another agent, a session not yet started, or one with no door
+   * takes nothing, and the line is the composer's to send as it would with
+   * no call up.
+   */
+  typeLine(agentId: string, text: string, clientKey: string): boolean {
+    const session = this.#held;
+    if (!session?.started || session.ended || session.agentId !== agentId) return false;
+    const type = session.opened.typeLine;
+    if (type === undefined) return false;
+    type(text, clientKey);
     return true;
   }
 

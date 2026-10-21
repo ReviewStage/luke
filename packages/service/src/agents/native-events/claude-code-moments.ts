@@ -1,29 +1,22 @@
-import { RUNNER_END, RUNNER_EVENT, type RunnerEnd } from "@luke/agent-runner/protocol";
 import { CLAUDE_CODE_LUKE_TOOL_PREFIX, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
-import {
-  TOOL_CALL_SETTLEMENT,
-  type ToolCallSettlement,
-  toolCallSettlementOf,
-} from "@luke/features/brain";
+import type { ToolCallSettlement } from "@luke/features/brain";
 import { redactCredentials } from "@luke/features/credential-redaction";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  valueFromJsonText,
-  type WireValue,
-  WireValueSchema,
-} from "@luke/wire";
+import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
-import { NATIVE_ENDING, NATIVE_MOMENT, type NativeMoment } from "./native-moments.js";
+import { NATIVE_MOMENT, type NativeHeld, type NativeMoment } from "./native-moments.js";
+import {
+  FAILURE_CHARS,
+  PICTURE_STAND_IN,
+  runnerMoments,
+  toolAnswerSettlement,
+} from "./runner-moments.js";
 
 /**
  * claude-code-moments.ts -- Claude Code's SDK messages, as its runner posts them, read as the moments of a native run.
  *
  * Each message the pinned Agent SDK emits (`@anthropic-ai/claude-agent-sdk`'s
- * `SDKMessage`) and each of the runner's own (`@luke/agent-runner/protocol`)
- * is read here for what the transcript keeps: a model call's answer is a
+ * `SDKMessage`) is read here, and each of the runner's own as every
+ * harness's is (`runner-moments.ts`), for what the transcript keeps: a model call's answer is a
  * step, its text and thinking blocks its words and reasoning, its
  * `tool_use` blocks its calls, the `tool_result` blocks of the next user
  * message their answers, and a `result` the end of one model turn with its
@@ -39,9 +32,6 @@ import { NATIVE_ENDING, NATIVE_MOMENT, type NativeMoment } from "./native-moment
  * a field the SDK adds changes nothing here, and a message no schema fits
  * is no moment.
  */
-
-/** What a picture in a tool's answer is kept as: the bytes went to the model once, and a transcript carries every byte it holds into each read. */
-const PICTURE_STAND_IN = "[image]";
 
 const TextBlockSchema = Schema.Struct({ type: Schema.Literal("text"), text: Schema.String });
 const ThinkingBlockSchema = Schema.Struct({
@@ -133,15 +123,6 @@ const readRateLimit = Schema.decodeUnknownOption(
   }),
 );
 
-const readAccepted = Schema.decodeUnknownOption(Schema.Struct({ uuid: Schema.String }));
-
-const readEnd = Schema.decodeUnknownOption(
-  Schema.Struct({
-    reason: Schema.Literals(Object.values(RUNNER_END)),
-    detail: Schema.optionalKey(Schema.String),
-  }),
-);
-
 /** The SDK's message types read here, as it spells them. */
 const SDK_MESSAGE = {
   SYSTEM: "system",
@@ -157,9 +138,6 @@ const SYSTEM_SUBTYPE = { INIT: "init", COMPACT_BOUNDARY: "compact_boundary" } as
 /** The limit status that refuses the plan's calls, as `SDKRateLimitInfo` spells it. */
 const RATE_LIMIT_REFUSED = "rejected";
 
-/** How long the turn's record keeps a failure the CLI reported, inside the writer's own bound. */
-const FAILURE_CHARS = 300;
-
 /** The name a call is stored under: Luke's tool's own for a call to Luke's MCP server, the CLI's otherwise. */
 function storedClaudeCodeToolName(name: string): string {
   return name.startsWith(CLAUDE_CODE_LUKE_TOOL_PREFIX)
@@ -168,9 +146,6 @@ function storedClaudeCodeToolName(name: string): string {
 }
 
 const CLI_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_TOOL));
-
-/** The name of a call the projection holds, by its id; nothing for a call it does not hold. */
-export type HeldCallName = (callId: string) => string | undefined;
 
 /** A tool's answer as the text the model read: its text blocks joined, a picture standing in for its bytes where `pictures` asks, and left out otherwise. */
 function answerText(content: string | readonly WireValue[] | undefined, pictures: boolean): string {
@@ -201,18 +176,9 @@ function settlementOf(
 ): ToolCallSettlement {
   const lukeTool = !CLI_TOOL_NAMES.has(storedName);
   const text = answerText(content, !lukeTool);
-  const output: UnparsedWireValue = lukeTool ? valueFromJsonText(text) : text;
-  if (isError) {
-    return {
-      state: TOOL_CALL_SETTLEMENT.OUTPUT_ERROR,
-      output,
-      errorText: text,
-      status: ACTION_RESULT_STATUS.REJECTED,
-    };
-  }
-  if (!lukeTool) return toolCallSettlementOf(JSON.stringify(text), undefined);
-  const status = isRecord(output) && isWireString(output.status) ? output.status : undefined;
-  return toolCallSettlementOf(text, status);
+  return lukeTool
+    ? toolAnswerSettlement({ lukeTool: true, text }, isError)
+    : toolAnswerSettlement({ lukeTool: false, text, output: text }, isError);
 }
 
 /** A model call's answer, or the one block of it the SDK streams as a message: a step, and its words, reasoning, and calls. */
@@ -250,7 +216,7 @@ function assistantMoments(message: WireValue): readonly NativeMoment[] {
 }
 
 /** The tools' answers a user message carries, each settling the call the projection holds; the step that asked for them is over. */
-function userMoments(message: WireValue, heldCallName: HeldCallName): readonly NativeMoment[] {
+function userMoments(message: WireValue, held: NativeHeld): readonly NativeMoment[] {
   const read = readUser(message);
   if (Option.isNone(read)) return [];
   const { content } = read.value.message;
@@ -259,7 +225,7 @@ function userMoments(message: WireValue, heldCallName: HeldCallName): readonly N
   for (const block of content) {
     const answer = readToolResultBlock(block);
     if (Option.isNone(answer)) continue;
-    const name = heldCallName(answer.value.tool_use_id);
+    const name = held.callName(answer.value.tool_use_id);
     if (name === undefined) continue;
     moments.push({
       kind: NATIVE_MOMENT.TOOL_SETTLED,
@@ -346,30 +312,6 @@ function rateLimitMoments(message: WireValue): readonly NativeMoment[] {
   ];
 }
 
-/** How each of the runner's endings reads on the turn. */
-const ENDING_OF_RUNNER_END = {
-  [RUNNER_END.TURN_ENDED]: NATIVE_ENDING.DONE,
-  [RUNNER_END.STOPPED]: NATIVE_ENDING.STOPPED,
-  [RUNNER_END.INPUT_CLOSED]: NATIVE_ENDING.FAILED,
-  [RUNNER_END.FAILED]: NATIVE_ENDING.FAILED,
-} as const satisfies Record<RunnerEnd, (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING]>;
-
-function endMoments(message: WireValue): readonly NativeMoment[] {
-  const read = readEnd(message);
-  if (Option.isNone(read)) return [];
-  const { reason, detail } = read.value;
-  const said = detail === undefined ? reason : `${reason} ${detail}`;
-  return [
-    {
-      kind: NATIVE_MOMENT.ENDED,
-      ending: ENDING_OF_RUNNER_END[reason],
-      ...(reason === RUNNER_END.TURN_ENDED || reason === RUNNER_END.STOPPED
-        ? undefined
-        : { detail: redactCredentials(said).slice(0, FAILURE_CHARS) }),
-    },
-  ];
-}
-
 function systemMoments(subtype: string | undefined, message: WireValue): readonly NativeMoment[] {
   switch (subtype) {
     case SYSTEM_SUBTYPE.INIT:
@@ -392,14 +334,13 @@ function systemMoments(subtype: string | undefined, message: WireValue): readonl
 /**
  * One message the runner posted, as the moments of the run: nothing for a
  * message of a subagent, which its `Agent` call stands for, or of a type the
- * transcript keeps nothing of. `heldCallName` names the calls the projection
+ * transcript keeps nothing of. `held` names the calls the projection
  * holds, so an answer settles a call the transcript holds and is read as
  * that tool answers.
  */
-export function claudeCodeMoments(
-  message: WireValue,
-  heldCallName: HeldCallName,
-): readonly NativeMoment[] {
+export function claudeCodeMoments(message: WireValue, held: NativeHeld): readonly NativeMoment[] {
+  const own = runnerMoments(message);
+  if (Option.isSome(own)) return own.value;
   const envelope = readEnvelope(message);
   if (Option.isNone(envelope)) return [];
   const { type, subtype, parent_tool_use_id } = envelope.value;
@@ -410,24 +351,13 @@ export function claudeCodeMoments(
     case SDK_MESSAGE.ASSISTANT:
       return assistantMoments(message);
     case SDK_MESSAGE.USER:
-      return userMoments(message, heldCallName);
+      return userMoments(message, held);
     case SDK_MESSAGE.STREAM_EVENT:
       return streamMoments(message);
     case SDK_MESSAGE.RESULT:
       return resultMoments(message);
     case SDK_MESSAGE.RATE_LIMIT:
       return rateLimitMoments(message);
-    case RUNNER_EVENT.ACCEPTED:
-      return Option.match(readAccepted(message), {
-        onSome: ({ uuid }): readonly NativeMoment[] => [
-          { kind: NATIVE_MOMENT.LINE_ACCEPTED, clientId: uuid },
-        ],
-        onNone: () => [],
-      });
-    case RUNNER_EVENT.WAITING:
-      return [{ kind: NATIVE_MOMENT.WAITING }];
-    case RUNNER_EVENT.END:
-      return endMoments(message);
     default:
       return [];
   }

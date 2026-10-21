@@ -4,8 +4,9 @@ import type { UnparsedWireValue } from "@luke/wire";
 /**
  * native-moments.ts -- what a native harness's run amounts to for the transcript, said once for every harness.
  *
- * A runner posts its harness's own messages: Claude Code's SDK messages now
- * (`claude-code-moments.ts`), Codex's app-server notifications later. Each
+ * A runner posts its harness's own messages: Claude Code's SDK messages
+ * (`claude-code-moments.ts`) or Codex's app-server notifications
+ * (`codex-moments.ts`). Each
  * harness's reader turns its messages into these moments, and the one
  * projection (`native-projection.ts`) folds the moments into the store
  * writer's events, so a second harness adds a reader and nothing else.
@@ -37,6 +38,13 @@ export const NATIVE_MOMENT = {
   TOOL_SETTLED: "tool_settled",
   /** What a model turn of the harness cost. */
   USAGE: "usage",
+  /**
+   * What the harness's session has cost in all, for a harness that reports
+   * its running total rather than each call's (Codex): the turn is metered
+   * what the total grew by since last metered, and a total reported again,
+   * as a resumed thread reports it, meters nothing.
+   */
+  USAGE_TOTAL: "usage_total",
   /** A model turn of the harness ended, failed where `failure` says why. */
   RESULT: "result",
   /** The harness folded its context. */
@@ -79,8 +87,11 @@ export type NativeMoment =
       readonly kind: typeof NATIVE_MOMENT.TOOL_SETTLED;
       readonly callId: string;
       readonly settlement: ToolCallSettlement;
+      /** The call's input as it stood when it answered, for a harness that fills it in after the start (Codex); it replaces the started one. */
+      readonly input?: UnparsedWireValue;
     }
   | { readonly kind: typeof NATIVE_MOMENT.USAGE; readonly usage: BrainRunUsage }
+  | { readonly kind: typeof NATIVE_MOMENT.USAGE_TOTAL; readonly total: BrainRunUsage }
   | { readonly kind: typeof NATIVE_MOMENT.RESULT; readonly failure?: string }
   | { readonly kind: typeof NATIVE_MOMENT.COMPACTED }
   | {
@@ -95,3 +106,15 @@ export type NativeMoment =
       readonly ending: NativeEnding;
       readonly detail?: string;
     };
+
+/**
+ * What a reader may know of the projection as it reads one event: the
+ * calls it holds by name, the harness's session as last recorded, and the
+ * event's own number, which names what the harness names nothing for.
+ */
+export interface NativeHeld {
+  /** The name a held call is stored under, by its id; nothing for a call the projection does not hold. */
+  readonly callName: (callId: string) => string | undefined;
+  readonly session: string | undefined;
+  readonly sequence: number;
+}

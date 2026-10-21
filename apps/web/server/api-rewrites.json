@@ -80,6 +80,14 @@
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
   },
   {
+    "src": "/api/browser/live",
+    "dest": "/api/browser/live"
+  },
+  {
+    "src": "/api/browser/live\\.js",
+    "dest": "/api/browser/live.js"
+  },
+  {
     "src": "/api/feedback",
     "dest": "/api/feedback"
   },

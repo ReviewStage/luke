@@ -224,8 +224,6 @@ const SAMPLE_VALUE = {
   openAtLogin: false,
   voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
-  voiceHotkey: "Shift+Command+L",
-  stopHotkey: "Control+Alt+P",
   duckOtherMedia: false,
   preferBuiltInMicrophone: false,
   // On is the default, so Off is the choice that has to survive a reopen.

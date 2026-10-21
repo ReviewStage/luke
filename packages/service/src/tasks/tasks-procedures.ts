@@ -357,7 +357,12 @@ const startedAgentOn = (
   task: Task,
   agent: TaskAgentStart,
 ) =>
-  startRequestedAgent(eveFor<EveTypedTurn>(seams, request, userId), userId, task.id, agent).pipe(
+  startRequestedAgent(
+    eveFor<EveTypedTurn>(seams, request, userId),
+    userId,
+    { taskId: task.id },
+    agent,
+  ).pipe(
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),

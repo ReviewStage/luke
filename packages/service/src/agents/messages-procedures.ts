@@ -61,9 +61,11 @@ import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import {
   BRAIN_POLL,
   type BrainPage,
+  brainPageNow,
   brainPagePast,
   brainStatusNow,
   brainTitleAwaited,
+  brainTitleEdge,
   brainTurnsPage,
   brainWorkerSession,
 } from "../tasks/brain-transcript.js";
@@ -88,7 +90,12 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
-import { readWorkspaceChat, workspaceOf, writeWorkspaceChat } from "./workspace-chat.js";
+import {
+  joinWorkspaceChatAsPerson,
+  readWorkspaceChat,
+  workspaceOf,
+  writeWorkspaceChat,
+} from "./workspace-chat.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -145,6 +152,18 @@ const turnNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readEither(wireUuidSchema)(unparsedWire(before));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
+});
+
+/** The one word a task's read takes for `hold`: past the cursor in one look, never held. */
+const HOLD_NONE = "none";
+
+/** Whether a read past the cursor asks for one look rather than a hold; refused where `hold` names anything else. */
+const unheldNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
+  hold: string | undefined,
+): Effect.fn.Return<boolean, HostedRefusal> {
+  if (hold === undefined) return false;
+  if (hold !== HOLD_NONE) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return true;
 });
 
 /**
@@ -362,7 +381,8 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const taskId = yield* uuidNamed(input.id);
       const after = yield* cursorNamed(input.after);
       const before = yield* turnNamed(input.before);
-      if (after !== undefined && before !== undefined) {
+      const unheld = yield* unheldNamed(input.hold);
+      if ((after !== undefined && before !== undefined) || (unheld && after === undefined)) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
@@ -378,7 +398,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const page = yield* hostedStoreOrUnavailable(
         after === undefined
           ? brainTurnsPage(target, before)
-          : brainPagePast(target, cursorOfWire(after)),
+          : (unheld ? brainPageNow : brainPagePast)(target, cursorOfWire(after)),
       );
       return taskAnswer(page, null);
     }),
@@ -387,6 +407,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const taskId = yield* uuidNamed(input.id);
       const call = yield* callNamed(input.call);
       const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
+      const now = readsNow(input.wait);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task) || task.value.conversationId === undefined) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -399,26 +420,47 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         if (status !== CODING_AGENT_STATUS.RUNNING) {
           return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
         }
-        return taskAnswer(
+        return transcriptAnswer(
           { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
           null,
+          now ? true : undefined,
         );
       }
       const child = childConversationId(parent.conversationId, session);
       const createdAt = new Date(yield* Clock.currentTimeMillis);
-      const page = yield* hostedStoreOrUnavailable(
-        transcriptPast(
-          { userId: context.userId, conversationId: child },
-          HOSTED_TOOL_SET,
-          cursorOfWire(after),
-          { createdAt },
-          undefined,
-          brainTitleAwaited(parent, child),
-          BRAIN_POLL,
-        ),
-      );
+      const worker = { userId: context.userId, conversationId: child };
+      const cursor = cursorOfWire(after);
+      const titleAwaited = brainTitleAwaited(parent, child);
+      const { page, holds, wakeIn } = now
+        ? yield* hostedStoreOrUnavailable(
+            transcriptNow(
+              worker,
+              HOSTED_TOOL_SET,
+              cursor,
+              { createdAt },
+              undefined,
+              titleAwaited,
+              brainTitleEdge(parent, child),
+            ),
+          )
+        : {
+            page: yield* hostedStoreOrUnavailable(
+              transcriptPast(
+                worker,
+                HOSTED_TOOL_SET,
+                cursor,
+                { createdAt },
+                undefined,
+                titleAwaited,
+                BRAIN_POLL,
+              ),
+            ),
+            holds: undefined,
+            wakeIn: undefined,
+          };
+      // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(parent, [child]));
-      return taskAnswer(page, titles.get(child) ?? null);
+      return transcriptAnswer(page, titles.get(child) ?? null, holds, wakeIn);
     }),
 
     chat: signedIn.chat.effect(function* ({ input, context }) {
@@ -429,6 +471,9 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(accountMiddleware(seams.resolveUserId))
       .chatWrite.effect(function* ({ input, context }) {
         const workspaceId = yield* workspaceOf(input.query.workspaceId);
+        if ("join" in input.body) {
+          return yield* joinWorkspaceChatAsPerson(context.userId, workspaceId);
+        }
         return yield* writeWorkspaceChat(seams, context.userId, workspaceId, input.body);
       }),
   };

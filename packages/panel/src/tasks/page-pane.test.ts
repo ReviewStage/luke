@@ -11,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane, type ReadPageSource } from "./page-pane.js";
 
 /**
@@ -72,12 +73,11 @@ function mount(page: PageLine, read: ReadPageSource = readSource, findActive = t
     assert.ok(button);
     await act(async () => button.click());
   };
-  // The source's lines as drawn, each its number then its text.
-  const sourceLines = () =>
-    [...container.querySelectorAll(".code-lines .code-line")].map(
-      (line) =>
-        `${line.querySelector(".code-line-number")?.textContent} ${line.querySelector(".code-line-text")?.textContent}`,
-    );
+  // The source's lines as drawn, each its number then its text, once Pierre has drawn them.
+  const sourceLines = async () => {
+    await wholeFileDrawn(container);
+    return wholeFileLines(container);
+  };
   return { container, frame, press, render, sourceLines };
 }
 
@@ -105,15 +105,15 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   await press("View source");
 
   assert.equal(container.querySelector("iframe"), null);
-  assert.deepEqual(sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
-  const tag = container.querySelector<HTMLElement>(".code-line-text span");
-  assert.equal(tag?.textContent, "<h1>");
-  assert.notEqual(tag?.getAttribute("style") ?? "", "");
-  assert.ok(container.querySelector(".code-lines")?.closest(".ph-no-capture"));
+  assert.deepEqual(await sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
+  const tag = wholeFileRoot(container)?.querySelector<HTMLElement>('[data-line="1"] span');
+  assert.equal(tag?.textContent, "<");
+  assert.match(tag?.getAttribute("style") ?? "", /--diffs-token/);
+  assert.ok(container.querySelector(".whole-file")?.closest(".ph-no-capture"));
 
   await press("View page");
 
-  assert.deepEqual(sourceLines(), []);
+  assert.deepEqual(wholeFileLines(container), []);
   assert.equal(frame().getAttribute("src"), versionUrl(3));
 });
 
@@ -156,13 +156,13 @@ test("the source stays shown while the versions are stepped, each version's own"
   await press("Earlier version");
 
   assert.equal(container.querySelector("iframe"), null);
-  assert.deepEqual(sourceLines(), ["1 <h1>Funnel v2", "2 <p>Invites sent</p>"]);
+  assert.deepEqual(await sourceLines(), ["1 <h1>Funnel v2", "2 <p>Invites sent</p>"]);
   assert.match(container.textContent ?? "", /Version 2 of 3/);
 
   await press("View page");
   await press("Later version");
 
-  assert.equal(container.querySelector(".code-lines"), null);
+  assert.equal(container.querySelector(".whole-file"), null);
   assert.ok(container.querySelector(`iframe[src="${versionUrl(3)}"]`));
 });
 
@@ -188,7 +188,7 @@ test("a source the service did not answer says so in its place, and Retry reads 
   assert.ok(retry);
   await act(async () => retry.click());
 
-  assert.deepEqual(sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
+  assert.deepEqual(await sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
 });
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
@@ -339,5 +339,5 @@ test("a source read before a Reload that answers after it does not replace the f
   await act(async () => answers[1]?.("<h1>Fresh</h1>"));
   await act(async () => answers[0]?.("<h1>Stale</h1>"));
 
-  assert.deepEqual(sourceLines(), ["1 <h1>Fresh</h1>"]);
+  assert.deepEqual(await sourceLines(), ["1 <h1>Fresh</h1>"]);
 });

@@ -17,11 +17,13 @@
  */
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
   macCommandResult,
   macCommandsWaiting,
+  macListeningSince,
   queueMacCommand,
 } from "@luke/database/models/mac-command-store";
 import { user } from "@luke/database/schemas/auth";
@@ -48,6 +50,8 @@ import { macCommandsProcedures } from "./mac-commands-procedures.js";
 const ORIGIN = "https://luke.test";
 const MAC_COMMANDS = "/api/mac-commands";
 const BROWSER_RESULTS = "/api/mac-commands/browser";
+const CLAIM = "/api/mac-commands/claim";
+const LISTENING = "/api/mac-commands/listening";
 const JSON_TYPE = "application/json";
 
 const COMMAND: MacCommand = {
@@ -426,5 +430,69 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         refused(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, "method-not-allowed"),
       );
     }),
+  );
+
+  it.effect(
+    "a command heard of live is claimed by its id once, by its own account, and answered with what to run",
+    () =>
+      Effect.gen(function* () {
+        yield* account("user-claims");
+        yield* account("user-claims-other");
+        const queued = { ...BROWSER_COMMAND, id: randomUUID() };
+        yield* queueMacCommand("user-claims", queued);
+        const claim = (userId: string, body: string) =>
+          bytes(request({ method: "POST", path: CLAIM, userId, body }));
+        const asked = JSON.stringify({ id: queued.id });
+        const notFound = refused(HOSTED_HTTP_STATUS.NOT_FOUND, "not-found");
+
+        assert.deepEqual(yield* claim("user-claims-other", asked), notFound);
+        assert.deepEqual(yield* claim("user-claims", asked), {
+          status: HOSTED_HTTP_STATUS.OK,
+          contentType: JSON_TYPE,
+          cacheControl: "private, no-store",
+          text: JSON.stringify({ command: queued }),
+        });
+        assert.deepEqual(yield* claim("user-claims", asked), notFound, "claimed once");
+        assert.deepEqual(
+          yield* claim("user-claims", '{"id":"not-an-id"}'),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, "invalid-request"),
+        );
+        assert.deepEqual(
+          yield* bytes(request({ method: "POST", path: CLAIM, cookie: true, body: asked })),
+          refused(HOSTED_HTTP_STATUS.UNAUTHORIZED, "invalid-token"),
+          "never on a cookie",
+        );
+      }),
+  );
+
+  it.effect(
+    "a Mac that says it listens is counted listening for the kinds it names, for its own account alone",
+    () =>
+      Effect.gen(function* () {
+        yield* account("user-listens");
+        yield* account("user-silent");
+        const since = new Date(yield* Clock.currentTimeMillis);
+
+        assert.deepEqual(
+          yield* bytes(
+            request({
+              method: "POST",
+              path: LISTENING,
+              userId: "user-listens",
+              body: JSON.stringify({ kinds: NEWER_KINDS }),
+            }),
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.OK,
+            contentType: JSON_TYPE,
+            cacheControl: "private, no-store",
+            text: '{"listening":true}',
+          },
+        );
+        for (const kind of [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER]) {
+          assert.equal(yield* macListeningSince("user-listens", kind, since), true, kind);
+          assert.equal(yield* macListeningSince("user-silent", kind, since), false, kind);
+        }
+      }),
   );
 });

@@ -262,11 +262,17 @@ export const codingAgentListAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentListAnswer = typeof codingAgentListAnswerViewSchema.Type;
 
-/** Starting an agent, as the window asks it: the task, and the Start request the service takes. */
+/**
+ * Starting an agent, as the window asks it: the task, and the Start request
+ * the service takes; or, for a Start from another agent, no task, the new
+ * agent going where that agent is, its task or its workspace where it has
+ * none. A Start naming neither a task nor an agent to start from starts
+ * nowhere, and is refused.
+ */
 export const codingAgentStartParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
+  taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   ...codingAgentStartRequestFields,
-});
+}).check(EffectSchema.makeFilter(({ taskId, from }) => taskId !== undefined || from !== undefined));
 
 export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;
 
@@ -404,7 +410,10 @@ export const codingAgentPageAnswerViewSchema = EffectSchema.Union([
 export type CodingAgentPageAnswerView = typeof codingAgentPageAnswerViewSchema.Type;
 
 /** The calls into one agent, as the window hears them: each call's lines and its record, or why there is no answer. */
-const codingAgentCallsAnswerViewSchema = EffectSchema.Union([taskTranscriptAnswerSchema, failed]);
+export const codingAgentCallsAnswerViewSchema = EffectSchema.Union([
+  taskTranscriptAnswerSchema,
+  failed,
+]);
 
 export type CodingAgentCallsAnswerView = typeof codingAgentCallsAnswerViewSchema.Type;
 
@@ -535,6 +544,12 @@ export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
+
+/** Whose inbox is followed: a plan's, or one agent's. */
+export const INBOX_SCOPE_KIND = {
+  PLAN: "plan",
+  AGENT: "agent",
+} as const;
 
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);

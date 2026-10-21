@@ -2,13 +2,14 @@ import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { IconButton, useMenu, WingFace } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { Tooltip } from "../tooltip.js";
 import { AnnotationCard, AnnotationComment, AnnotationComments } from "./annotation-card.js";
 import type { FileNote } from "./file-tab-model.js";
+import { chipPress, MinimizedChip } from "./minimized-threads.js";
 import { RelativeTime } from "./relative-time.js";
 import { useMentionLink } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
@@ -27,9 +28,12 @@ import { useOpenLink, useOpenPlace } from "./use-open-link.js";
  * (`LINK_PLACE.TURN`), the one place a link can name for it. The pointer
  * on a card, or the keyboard in it, lights the lines it is on, as a review
  * thread lights its own. A card folds to its head alone, and the tab keeps
- * which it folded (`use-side-panel.ts`). The words are text in the tab's
- * own lines, so a find over the tab finds them, a folded note's among them,
- * and the recording's text masking covers them.
+ * which it folded (`use-side-panel.ts`). While Minimize inline comments is
+ * on, a card stands put away behind a chip at the end of its line, Luke's
+ * wing mark on it, as a review thread does in Files changed
+ * (`minimized-threads.tsx`). The tab's find reads the notes' words from
+ * their Markdown (`file-find.ts`) and opens a folded card, or a chip, whose
+ * words it brings into view; the recording's text masking covers them.
  */
 
 /** What Luke is called over his note, as the Call tab names him. */
@@ -40,6 +44,10 @@ const NOTE_WORDS = {
   MENU: "Note actions",
   VIEW_CONVERSATION: "View in conversation",
 } as const;
+
+/** What a chip says of Luke's note, and what pressing it does. */
+const CHIP_LABEL = (lines: string, shown: boolean) =>
+  `${AUTHOR}'s note on ${lines.toLowerCase()}, ${chipPress(shown)}`;
 
 /** A run of a file's lines, from its first to its last. */
 export interface NoteLines {
@@ -173,23 +181,47 @@ function FileNoteCard({
 }
 
 /**
- * What a run of a File tab's lines draws after each line: the cards of the
- * notes whose ranges end there, nothing where none does. A note on a file
- * since shortened inside its range stands after the file's last line, as
- * long as its range still begins in the file.
+ * The line a note stands under in a file of `lineCount` lines: its range's
+ * last, or the file's last where the file was shortened inside the range
+ * since he showed it; none where the range begins past the file's end.
  */
-export function notesAfter(notes: FileNotes, lastLine: number): (line: number) => ReactNode {
-  return (line) =>
-    notes.notes
-      .filter((note) => note.startLine <= lastLine && Math.min(note.endLine, lastLine) === line)
-      .map((note) => (
-        <FileNoteCard
-          key={note.callId}
-          note={note}
-          folded={notes.folded.includes(note.callId)}
-          taskId={notes.taskId}
-          onFold={(folded) => notes.onFold(note.callId, folded)}
-          onLight={notes.onLight}
-        />
-      ));
+export function noteLineOf(note: FileNote, lineCount: number): number | undefined {
+  return note.startLine <= lineCount ? Math.min(note.endLine, lineCount) : undefined;
+}
+
+/** A note as the tab draws it under its line: its card, or, while notes are minimized, the chip it stands behind, shown or put away as `minimized` says. */
+export function FileNoteAnnotation({
+  note,
+  notes,
+  minimized,
+}: {
+  note: FileNote;
+  notes: FileNotes;
+  minimized: { readonly shown: boolean; readonly onShown: (shown: boolean) => void } | undefined;
+}): React.JSX.Element {
+  const card = (
+    <FileNoteCard
+      note={note}
+      folded={notes.folded.includes(note.callId)}
+      taskId={notes.taskId}
+      onFold={(folded) => notes.onFold(note.callId, folded)}
+      onLight={notes.onLight}
+    />
+  );
+  if (minimized === undefined) return card;
+  return (
+    <MinimizedChip
+      label={CHIP_LABEL(lineRangeText(note) ?? "", minimized.shown)}
+      faces={
+        <span className="transcript-luke-mark" aria-hidden="true">
+          <WingFace />
+        </span>
+      }
+      count={1}
+      shown={minimized.shown}
+      onShown={minimized.onShown}
+    >
+      {card}
+    </MinimizedChip>
+  );
 }

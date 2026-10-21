@@ -32,7 +32,10 @@ import { LiveCall, type LiveStreamSlot, SESSION_CLOSE_TIMEOUT_MS } from "./live-
  * too low fails every run rather than one.
  */
 /** What every call here is opened about: the task a press names. */
-const OPENING = { taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" } as const;
+const OPENING = {
+  taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  agentId: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
+} as const;
 
 const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
   times: 12,
@@ -635,7 +638,7 @@ it.effect(
     }),
 );
 
-it.effect("the stop's silence drops the feed, and the stop key flushes the avatar", () =>
+it.effect("the stop's silence drops the feed, and Escape's stop flushes the avatar", () =>
   Effect.gen(function* () {
     const f = yield* standingWithAvatar;
     f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
@@ -651,40 +654,6 @@ it.effect("the stop's silence drops the feed, and the stop key flushes the avata
     f.call.interruptAvatar();
     assert.deepEqual(f.fed, [AUDIO, INTERRUPT]);
   }),
-);
-
-it.effect(
-  "a held talk key flushes the avatar once Luke's track has been quiet 350 ms, and not again within a second",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* standingWithAvatar;
-      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
-      yield* settle;
-      f.call.reportRemoteAudioLevel(true);
-      f.tee.emit(AUDIO);
-      f.call.reportTalkKey(true);
-      // The meter reports quiet once its own hangover has passed since Luke's last word.
-      f.call.reportRemoteAudioLevel(false);
-      yield* advance(350 - VOICE_ACTIVITY_HANGOVER_MS - 1);
-      assert.deepEqual(f.fed, [AUDIO]);
-      yield* advance(1);
-      assert.deepEqual(f.fed, [AUDIO, INTERRUPT]);
-      // Luke speaks again under the same hold and yields again inside the cooldown.
-      f.call.reportRemoteAudioLevel(true);
-      f.tee.emit(AUDIO);
-      f.call.reportRemoteAudioLevel(false);
-      yield* advance(350 - VOICE_ACTIVITY_HANGOVER_MS);
-      assert.deepEqual(f.fed, [AUDIO, INTERRUPT, AUDIO]);
-      yield* advance(1_000 - (350 - VOICE_ACTIVITY_HANGOVER_MS));
-      assert.deepEqual(f.fed, [AUDIO, INTERRUPT, AUDIO, INTERRUPT]);
-      // With the key up, Luke going quiet flushes nothing.
-      f.call.reportTalkKey(false);
-      f.call.reportRemoteAudioLevel(true);
-      f.tee.emit(AUDIO);
-      f.call.reportRemoteAudioLevel(false);
-      yield* advance(2_000);
-      assert.deepEqual(f.fed, [AUDIO, INTERRUPT, AUDIO, INTERRUPT, AUDIO]);
-    }),
 );
 
 it.effect("the call's end gives Luke's voice back to the element and takes the tee down", () =>

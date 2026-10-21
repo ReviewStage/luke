@@ -1,7 +1,8 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readCodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import type { AgentSessions, EveMount } from "../agents/brain-host/eve-sessions.js";
@@ -57,6 +58,8 @@ const TASK_GONE_MESSAGE = "the task the session is bound to no longer stands";
 
 const AGENT_GONE_MESSAGE = "the agent the session is bound to no longer stands";
 
+const NATIVE_AGENT_MESSAGE = "the agent the session is bound to runs on a native harness, not eve";
+
 /** A conversation found, or the refusal that the session's binding names none. */
 function found(
   conversation: Option.Option<ConversationTarget>,
@@ -68,6 +71,23 @@ function found(
   });
 }
 
+/** The agent's conversation, as `sessionConversation` reads it: none for an agent gone, and a refusal for one eve does not run. */
+const agentConversation = (accountId: string, agentId: string) =>
+  Effect.gen(function* () {
+    const agent = yield* readCodingAgent(accountId, agentId);
+    const routing = yield* readCodingAgentRouting(accountId, agentId);
+    if (Option.isSome(routing) && routing.value.runtime !== CONVERSATION_RUNTIME.EVE) {
+      return yield* Effect.fail(new ExchangeCannotStand({ message: NATIVE_AGENT_MESSAGE }));
+    }
+    return yield* found(
+      Option.map(agent, (held) => ({
+        userId: held.userId,
+        conversationId: held.conversationId,
+      })),
+      AGENT_GONE_MESSAGE,
+    );
+  });
+
 /**
  * The conversation a call lands in. A call about the task alone lands in
  * the task's, opened and attached now where the task has none yet, and
@@ -75,7 +95,9 @@ function found(
  * an agent lands in the agent's, under the member who started it, whoever is
  * calling. A task or an agent deleted since the session was created, or one
  * the account no longer reaches, has none to offer, and the session is
- * refused.
+ * refused. So is an agent whose conversation a native harness (Claude Code
+ * or Codex) answers, whenever the session was admitted: a call's asks reach
+ * eve alone, and eve must never answer a conversation beside its harness.
  */
 const sessionConversation = (session: AttachedSession) =>
   session.agentId === undefined
@@ -88,15 +110,7 @@ const sessionConversation = (session: AttachedSession) =>
           TASK_GONE_MESSAGE,
         ),
       )
-    : Effect.flatMap(readCodingAgent(session.accountId, session.agentId), (agent) =>
-        found(
-          Option.map(agent, (held) => ({
-            userId: held.userId,
-            conversationId: held.conversationId,
-          })),
-          AGENT_GONE_MESSAGE,
-        ),
-      );
+    : agentConversation(session.accountId, session.agentId);
 
 export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttachment {
   return (

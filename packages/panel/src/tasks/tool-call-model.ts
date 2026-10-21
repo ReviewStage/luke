@@ -2,6 +2,7 @@ import {
   AGENT_TOOL,
   type AgentTool,
   CLAUDE_CODE_TOOL,
+  CODEX_TOOL,
   EVE_TOOL,
   RETIRED_TOOL,
 } from "@luke/features/agent-tools";
@@ -511,7 +512,7 @@ function sleepOutput(output: WireValue): ToolBlock {
 
 /**
  * A native harness's subagent, whose inner work its transcript folds under
- * the one call that started it (`claude-code-moments.ts`): drawn as one call,
+ * the one call that started it (`claude-code-moments.ts`, `codex-moments.ts`): drawn as one call,
  * named by the few words the agent gave it, or its task's first line, its
  * task the call's input and the subagent's answer its output, as a copy of
  * the transcript reads a delegation.
@@ -665,6 +666,7 @@ function knownToolView(
     case RETIRED_TOOL.REPLY_INBOX:
       return inboxToolView(tool, input, output);
     case CLAUDE_CODE_TOOL.AGENT:
+    case CODEX_TOOL.SUBAGENT:
       return subagentCallView(input, output);
     case AGENT_TOOL.SLEEP: {
       const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;

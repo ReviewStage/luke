@@ -42,6 +42,9 @@ const PHONE = {
   SCREEN: 390,
 } as const;
 
+/** The Inbox's draft reply's card in a 360px window: the screen less the thread's insets and the reply's face beside it. */
+const INBOX_CARD_AT_360 = 288;
+
 const DESKTOP = {
   STAGE: 800,
   CARD: 720,
@@ -306,4 +309,32 @@ test("a page that says no room of its own is answered by its dimmed window's wid
   layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM }, { touch: true });
   const dialog = composerDialog();
   assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
+});
+
+/** The Inbox's answer box's foot as the box lays it (`inbox-answer-box.tsx`): its +, its note line, its microphone, and its Send. */
+function inboxFoot(): Record<"foot" | "attach" | "line" | "mic" | "send", HTMLElement> {
+  const part = (parent: Element, tag: string, className: string) => {
+    const element = parent.appendChild(document.createElement(tag));
+    element.className = className;
+    return element;
+  };
+  const card = part(document.body, "div", "agent-composer");
+  const form = part(card, "form", "prompt-input inbox-answer");
+  const foot = part(form, "div", "prompt-input-footer inbox-answer-foot");
+  const attach = part(part(foot, "div", "prompt-input-tools inbox-answer-tools"), "button", "");
+  const line = part(foot, "div", "agent-composer-field");
+  part(line, "div", "agent-composer-input");
+  const actions = part(foot, "div", "inbox-answer-actions");
+  const mic = part(actions, "button", "dictate-button");
+  const send = part(actions, "button", "prompt-input-submit");
+  return { foot, attach, line, mic, send };
+}
+
+test("in a 360px window, the Inbox box's foot keeps its +, its note line, its microphone, and Send in one row, the line taking the room between them", () => {
+  layContainersAt({ composer: INBOX_CARD_AT_360 }, { touch: true });
+  const { foot, attach, line, mic, send } = inboxFoot();
+  assert.deepEqual([attach, line, mic, send].map(shown), [true, true, true, true]);
+  assert.equal(getComputedStyle(foot).flexWrap, "nowrap", "one row");
+  assert.equal(getComputedStyle(line).flexGrow, "1", "the line grows into the row");
+  assert.equal(getComputedStyle(line).minWidth, "0px", "and gives way before a press does");
 });

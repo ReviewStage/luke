@@ -3,6 +3,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
@@ -59,6 +60,7 @@ import {
   dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
   githubTokenSaveParamsSchema,
+  INBOX_SCOPE_KIND,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionsAnswerView,
@@ -70,6 +72,7 @@ import {
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
   type ChaptersModelAnswerView,
@@ -93,6 +96,7 @@ import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
+import { InboxScopeKey, inboxPast, type ScopeInboxes, scopeInboxes } from "./scope-inbox-follow.js";
 import {
   followTranscript,
   type TranscriptFollows,
@@ -135,6 +139,7 @@ export type CodingAgentClient = Pick<
   | "list"
   | "listWorkspace"
   | "start"
+  | "startFrom"
   | "messagesNow"
   | "agentTranscriptLive"
   | "message"
@@ -145,7 +150,7 @@ export type CodingAgentClient = Pick<
   | "pin"
   | "stop"
   | "agent"
-  | "agentInbox"
+  | "calls"
   | "pullRequest"
   | "changes"
   | "overviewPullRequest"
@@ -167,13 +172,14 @@ export type CodingAgentClient = Pick<
   | "readPlanTemplateRevision"
   | "restorePlanTemplate"
   | "transcribeDictation"
-  | "inbox"
   | "answerInbox"
   | "closeInbox"
   | "messageInbox"
   | "markInboxItemRead"
   | "markInboxItemUnread"
   | "markInboxRead"
+  | "taskInboxLive"
+  | "agentInboxLive"
   | "accountInbox"
   | "inboxAttachment"
   | "agentPicture"
@@ -186,18 +192,44 @@ export interface CodingAgentsDependencies {
   kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
-  /** Realtime's client at an address, which a transcript is followed over; Realtime's own outside a test. */
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
+  /** Realtime's client at an address, which a transcript and every plan's and agent's inbox are followed over; Realtime's own outside a test. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
+  /**
+   * Hands a line typed to an agent to the call standing on that agent, where
+   * one does (`LiveSessionHolder.typeLine`); answers whether the call took
+   * it. None where this Mac holds no calls, and every line steers.
+   */
+  typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
 }
 
 export interface CodingAgentsComposer extends Composer {
-  /** Every transcript's subscription let go, as a sign-out lets them go. */
+  /** Every transcript's and every plan's and agent's inbox subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
+  /**
+   * The task an agent is on, as the service reads it now, which a call into
+   * the agent is checked against: null for an agent on no task, and none
+   * for one archived, or that the account does not reach or could not read.
+   */
+  readonly agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** Whether the service may be asked now: a run that sends, behind an open account gate. */
+function gateOf({ kernel, account }: CodingAgentsDependencies): () => boolean {
+  return () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+}
+
+/** The service asked behind the gate, over the host's own HTTP client. */
+function askedOf(dependencies: CodingAgentsDependencies, http: HttpClient.HttpClient) {
+  const gate = gateOf(dependencies);
+  return <Answer>(
+    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer | typeof UNANSWERED> =>
+    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
+}
 
 export function composeCodingAgents(
   dependencies: CodingAgentsDependencies,
@@ -205,6 +237,7 @@ export function composeCodingAgents(
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const asked = askedOf(dependencies, http);
+    const { client } = dependencies;
     const transcripts = yield* transcriptFollows({
       seal: (key, poll, userId, after) =>
         asked(
@@ -215,30 +248,53 @@ export function composeCodingAgents(
       now: dependencies.kernel.now,
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
-    return composed(dependencies, http, transcripts, followed);
+    const inboxes = yield* scopeInboxes({
+      seal: (scope, poll, userId, after) =>
+        asked(
+          scope.kind === INBOX_SCOPE_KIND.PLAN
+            ? client.taskInboxLive(scope.id, userId, poll, after)
+            : client.agentInboxLive(scope.id, userId, poll, after),
+        ),
+      accountId: dependencies.accountId,
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: dependencies.kernel.now,
+    });
+    return composed(dependencies, http, transcripts, followed, inboxes);
   });
 }
 
-/** The service asked behind the gate, over the host's own HTTP client. */
-function askedOf({ kernel, account }: CodingAgentsDependencies, http: HttpClient.HttpClient) {
-  const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
-  return <Answer>(
-    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
-}
-
-/** The composer's one table, built from its seams; nothing here starts anything but a transcript's subscription, while a window reads it. */
+/** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
   transcripts: TranscriptFollows,
   /** The transcripts main follows for its windows, one fiber each. */
   followed: FiberMap.FiberMap<TranscriptKey>,
+  inboxes: ScopeInboxes,
 ): CodingAgentsComposer {
-  const { kernel, account, client } = dependencies;
-  const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+  const { client, kernel } = dependencies;
+  const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
+
+  /**
+   * The agent as a line handed to its call leaves it, as a message's answer
+   * carries it: read whole and answered as its summary, running, as a steer's
+   * answer is read after the message was taken. The call writes and asks the
+   * line a moment after the frame leaves, so a read now could still say the
+   * agent is idle; the transcript's follow settles the status from there.
+   */
+  const agentAsItStands = (agentId: string): Effect.Effect<CodingAgentAgentAnswer> =>
+    Effect.map(asked(client.agent(agentId)), (answer) => {
+      if ("failure" in answer) return answer;
+      const {
+        automationId: _automation,
+        origin: _origin,
+        workspaceId: _workspace,
+        repository: _repository,
+        ...agent
+      } = answer.agent;
+      return { agent: { ...agent, status: CODING_AGENT_STATUS.RUNNING } };
+    });
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -400,9 +456,12 @@ function composed(
         const { taskId, ...request } = yield* read(
           codingAgentStartParamsSchema,
           params,
-          "starting an agent names a task and the press's own key",
+          "starting an agent names a task or an agent to start from, and the press's own key",
         );
-        const answer = yield* asked(client.start(taskId, request));
+        // A Start from another agent that names no task goes where that agent is, its task or its workspace.
+        const answer = yield* asked(
+          taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
+        );
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
@@ -447,6 +506,15 @@ function composed(
           params,
           "messaging an agent names the agent, its words, and the send's key",
         );
+        // A line with words, typed while this Mac's call is up on the agent, is the call's: the
+        // service answers it aloud and writes it down as typed. Its files ride nowhere, since the
+        // call hands on words alone; a line of files alone steers as it would with no call up.
+        if (
+          request.text !== "" &&
+          dependencies.typeIntoCall?.(agentId, request.text, request.clientKey) === true
+        ) {
+          return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));
+        }
         const answer = yield* asked(client.message(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
@@ -519,6 +587,16 @@ function composed(
         );
         const answer = yield* asked(client.agent(agentId));
         return carried<CodingAgentPageAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CALLS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPageParamsSchema,
+          params,
+          "reading an agent's calls names one agent",
+        );
+        const answer = yield* asked(client.calls(agentId));
+        return carried<CodingAgentCallsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
@@ -651,7 +729,13 @@ function composed(
           params,
           "reading a task's inbox names the task and a cursor",
         );
-        const answer = yield* asked(client.inbox(taskId, after));
+        const answer = gate()
+          ? yield* inboxPast(
+              inboxes,
+              new InboxScopeKey({ kind: INBOX_SCOPE_KIND.PLAN, id: taskId }),
+              after,
+            )
+          : UNANSWERED;
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
@@ -661,7 +745,13 @@ function composed(
           params,
           "reading an agent's inbox names the agent and a cursor",
         );
-        const answer = yield* asked(client.agentInbox(agentId, after));
+        const answer = gate()
+          ? yield* inboxPast(
+              inboxes,
+              new InboxScopeKey({ kind: INBOX_SCOPE_KIND.AGENT, id: agentId }),
+              after,
+            )
+          : UNANSWERED;
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
@@ -781,7 +871,12 @@ function composed(
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
+    for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
   });
 
-  return { methods, lifetime: Effect.void, reset };
+  const agentTaskOf = (agentId: string) =>
+    Effect.map(asked(client.agent(agentId)), (answer) =>
+      "agent" in answer && answer.agent.archivedAt === undefined ? answer.agent.planId : undefined,
+    );
+  return { methods, lifetime: Effect.void, reset, agentTaskOf };
 }
