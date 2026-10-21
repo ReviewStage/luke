@@ -5728,6 +5728,41 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   );
 });
 
+test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
+  // The invites plan's held read is the test's to land, as an answer from another Mac would.
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = (taskId) =>
+    taskId === INVITES.id
+      ? new Promise((resolve) => {
+          deliver = resolve;
+        })
+      : new Promise(() => undefined);
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+
+  act(() => setInboxOpen(false));
+  await settle();
+  const answered = {
+    ...EXPIRY,
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.ANSWERED, note: "Keep 7 days" },
+    settledAt: 6_000,
+    updatedAt: 6_000,
+  };
+  act(() => deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered], cursor: "2" } }));
+  await settle();
+  act(() => setInboxOpen(true));
+  await settle();
+  assert.deepEqual(
+    listed(page),
+    ["*Alert at 80%?"],
+    "the item answered while the Inbox was hidden no longer needs you, so it has no row",
+  );
+});
+
 test("on All, every item settled and read is drawn gray, and what waits or is unread is not", async () => {
   inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.CLOSED, unread: true }]);
   const { page } = mount();

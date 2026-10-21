@@ -20,7 +20,9 @@ import {
  * The chosen item's row stays while it is chosen, once the list drew it,
  * though answering or reading it leaves the scope shown, so it goes gray
  * where it stood (`isDone`) rather than leaving under the reader; choosing
- * another row lets it go, and so does another scope or Whose. An item the
+ * another row lets it go, and so does another scope or Whose, or the list
+ * being hidden, so an item settled while it was hidden is gone once the
+ * list is shown again. An item the
  * list never drew, chosen by a link, gets no row. While the list is shown
  * every row keeps the place it was first drawn in, when its item changed and
  * the status it stood under, so an answer, which changes both, moves no row;
@@ -84,7 +86,8 @@ export function useHeldInboxList(
   const listed = listedItems(matching).some(({ item }) => item.id === chosen);
   // Note that the chosen row is kept only once the list drew it, so one chosen from outside the scope never gets a row.
   const kept =
-    chosen !== undefined && (listed || (last.kept === chosen && sameScope(last.filter, filter)))
+    chosen !== undefined &&
+    (listed || (shown && last.kept === chosen && sameScope(last.filter, filter)))
       ? chosen
       : undefined;
   const list =
@@ -94,7 +97,9 @@ export function useHeldInboxList(
   const steps = inboxList(groups, { ...filter, chosen, places });
   // Note that what was drawn is held once it is on screen, so a render React drops holds nothing.
   useLayoutEffect(() => {
-    held.current = { filter, kept, places: shown ? inboxPlaces(list, places) : NO_PLACES };
+    held.current = shown
+      ? { filter, kept, places: inboxPlaces(list, places) }
+      : { filter, kept: undefined, places: NO_PLACES };
   });
   return { list, steps };
 }
