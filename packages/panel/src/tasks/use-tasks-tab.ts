@@ -141,7 +141,7 @@ import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
-import type { AdminView } from "../admin/routing.js";
+import { type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -3177,6 +3177,17 @@ export function useTasksTab(input: {
       case LINK_PLACE.FACTORY:
         standInFor({ kind: STAND_IN.FACTORY });
         return;
+      // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
+      // workspace's accounts, so it lists nothing; one naming the place alone opens on its list, as Settings' does.
+      case LINK_PLACE.ADMIN: {
+        const view = adminViewOfLink(place);
+        standInFor({
+          kind: STAND_IN.ADMIN,
+          view: view ?? ADMIN_OVERVIEW,
+          listed: view === undefined,
+        });
+        return;
+      }
       // Note that a link to Chat opens it as its sidebar row does, and one to a channel on that channel, in the workspace
       // the link names, which is the chat's own at once, so listing it first does not put Chat back on For you.
       case LINK_PLACE.CHAT:

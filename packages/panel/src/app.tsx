@@ -81,6 +81,8 @@ import {
   APP_SLICE,
   appStateDerivedAtom,
   SETTINGS_HELD,
+  useAdminAccess,
+  useAdminAccessPending,
   useAppSlice,
   useExperiment,
   VOICE_AVAILABLE,
@@ -460,13 +462,20 @@ function AppWindow(): React.JSX.Element {
     () => [...tasks.tasks, ...tasks.archived],
     [tasks.tasks, tasks.archived],
   );
+  // An Admin link opens while the account's access is still being read, the
+  // place waiting on it, and never for an account that is no admin
+  // (`link-route.ts`).
+  const adminOn = useAdminAccess();
+  const adminPending = useAdminAccessPending();
   // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
   const openLukeLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       factoryOn,
       chatOn,
+      adminOn: adminOn || adminPending,
     });
+    if (route.kind === LINK_ROUTE.NOT_PERMITTED) return;
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {

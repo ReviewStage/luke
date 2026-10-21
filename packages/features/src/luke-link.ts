@@ -1,4 +1,5 @@
 import { Schema as EffectSchema, Option } from "effect";
+import { isUtcDayKey } from "./admin-wire.js";
 import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
 
@@ -36,7 +37,12 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  * - Chat, `/chat`, and one of its channels, `/chat/<channelId>`, a topic,
  *   a task's channel, or a direct message alike;
  * - a person's page in the workspace, `/person/<userId>`, a member or
- *   someone who left, by the account id the service names them by.
+ *   someone who left, by the account id the service names them by;
+ * - the Admin place, an admin's alone, which reads every workspace's
+ *   accounts, so its workspace is only the one the link was copied in:
+ *   `/admin`, a section of it, `/admin/<cost|reliability|workspaces|users>`,
+ *   an account's page, `/admin/user/<userId>`, and a day's,
+ *   `/admin/day/<YYYY-MM-DD>`.
  *
  * An issue's page, `/issue/<issueId>`, is no place now that Luke keeps no
  * issues of its own, so an old link to one reads as a link it does not know.
@@ -80,7 +86,21 @@ export const LINK_PLACE = {
   PERSON: "person",
   /** Chat, on For you, or on one of its channels by the id the service mints it. */
   CHAT: "chat",
+  /** The Admin place: its Overview, a section, an account's page, or a day's. */
+  ADMIN: "admin",
 } as const;
+
+/** The Admin place's sections a link names past its Overview, which is the place's own link. */
+export const ADMIN_LINK_SECTION = {
+  COST: "cost",
+  RELIABILITY: "reliability",
+  WORKSPACES: "workspaces",
+  USERS: "users",
+} as const;
+
+export type AdminLinkSection = (typeof ADMIN_LINK_SECTION)[keyof typeof ADMIN_LINK_SECTION];
+
+const ADMIN_LINK_SECTIONS: ReadonlySet<string> = new Set(Object.values(ADMIN_LINK_SECTION));
 
 /** Which of a Pull request tab's views a review thread's link opens it in: its Conversation, or Files changed, on its line. */
 export const PULL_REQUEST_THREAD_VIEW = {
@@ -114,6 +134,9 @@ const STEP = {
   SETTINGS: "settings",
   PERSON: "person",
   CHAT: "chat",
+  ADMIN: "admin",
+  USER: "user",
+  DAY: "day",
 } as const;
 
 /** The query a task's link names one of its comment threads under. */
@@ -137,6 +160,9 @@ const SETTINGS_PAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
 /** A picture's id as the service mints one, a UUID in lower case (`plan-attachment-link.ts`). */
 const PICTURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+/** A UTC day as the Admin place's day page names it, `YYYY-MM-DD`; whether it is a real day is `isUtcDayKey`'s. */
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/u;
 
 /** A number spelled whole: a version's, or a moment's in epoch milliseconds. */
 const WHOLE = /^\d{1,15}$/u;
@@ -240,6 +266,20 @@ const linkPlaceSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(LINK_PLACE.SETTINGS),
     page: EffectSchema.optionalKey(
       EffectSchema.String.check(EffectSchema.isPattern(SETTINGS_PAGE)),
+    ),
+  }),
+  // One struct with every view optional, as Settings' and Chat's are, so a
+  // section the schema does not know is refused rather than read as the
+  // Overview by a struct naming none.
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.ADMIN),
+    section: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(ADMIN_LINK_SECTION))),
+    userId: EffectSchema.optionalKey(idSchema),
+    day: EffectSchema.optionalKey(
+      EffectSchema.String.check(
+        EffectSchema.isPattern(DAY_KEY),
+        EffectSchema.makeFilter((value: string) => isUtcDayKey(value)),
+      ),
     ),
   }),
 ]);
@@ -395,9 +435,24 @@ function placeFields(steps: readonly string[]) {
       return id === undefined
         ? { kind: LINK_PLACE.CHAT }
         : { kind: LINK_PLACE.CHAT, channelId: id };
+    case STEP.ADMIN:
+      return adminFields(id, rest);
     default:
       return undefined;
   }
+}
+
+/** The Admin place's fields past its step: its Overview, a section, an account's page, or a day's. */
+function adminFields(step: string | undefined, rest: readonly string[]) {
+  if (step === undefined) return { kind: LINK_PLACE.ADMIN };
+  const [id, ...more] = rest;
+  if (more.length > 0) return undefined;
+  if (step === STEP.USER)
+    return id === undefined ? undefined : { kind: LINK_PLACE.ADMIN, userId: id };
+  if (step === STEP.DAY) return id === undefined ? undefined : { kind: LINK_PLACE.ADMIN, day: id };
+  return id === undefined && ADMIN_LINK_SECTIONS.has(step)
+    ? { kind: LINK_PLACE.ADMIN, section: step }
+    : undefined;
 }
 
 /**
@@ -473,6 +528,10 @@ function placePath(place: LinkPlace): readonly string[] {
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
     case LINK_PLACE.CHAT:
       return place.channelId === undefined ? [STEP.CHAT] : [STEP.CHAT, place.channelId];
+    case LINK_PLACE.ADMIN:
+      if (place.userId !== undefined) return [STEP.ADMIN, STEP.USER, place.userId];
+      if (place.day !== undefined) return [STEP.ADMIN, STEP.DAY, place.day];
+      return place.section === undefined ? [STEP.ADMIN] : [STEP.ADMIN, place.section];
   }
 }
 

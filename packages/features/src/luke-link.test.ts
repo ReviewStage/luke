@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  ADMIN_LINK_SECTION,
   appLinkOf,
   LINK_PLACE,
   type LinkPlace,
@@ -102,6 +103,11 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
   [{ kind: LINK_PLACE.CHAT }, `${HOME}/chat`],
   [{ kind: LINK_PLACE.CHAT, channelId: OTHER }, `${HOME}/chat/${OTHER}`],
+  [{ kind: LINK_PLACE.ADMIN }, `${HOME}/admin`],
+  [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.COST }, `${HOME}/admin/cost`],
+  [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.USERS }, `${HOME}/admin/users`],
+  [{ kind: LINK_PLACE.ADMIN, userId: "user_9Fq2-x" }, `${HOME}/admin/user/user_9Fq2-x`],
+  [{ kind: LINK_PLACE.ADMIN, day: "2026-10-12" }, `${HOME}/admin/day/2026-10-12`],
 ];
 
 test("every place is shared as its kind's address under its workspace, by its ids alone", () => {
@@ -241,6 +247,17 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/chats/${OTHER}`,
     `${HOME}/chat/${OTHER}/message/${AGENT}`,
     `${HOME}/chat/%23general`,
+    // The Admin place's Overview is the place's own link, and a section, an account, or a day it does not know is no place.
+    `${HOME}/admin/dashboard`,
+    `${HOME}/admin/animations`,
+    `${HOME}/admin/bogus`,
+    `${HOME}/admin/cost/more`,
+    `${HOME}/admin/user`,
+    `${HOME}/admin/user/u1/tasks`,
+    `${HOME}/admin/user/charles%40acme.dev`,
+    `${HOME}/admin/day`,
+    `${HOME}/admin/day/latest`,
+    `${HOME}/admin/day/2026-02-30`,
     `${HOME}/agent/%E0%A4%A`,
     `${HOME}/agent/${"a".repeat(201)}`,
     `luke://mcp/linear`,

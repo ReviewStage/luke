@@ -4,7 +4,7 @@ import { fixedBearer } from "@luke/features";
 import { fakeHttpClientLayer, jsonResponse } from "@luke/wire/testing";
 import { Effect, Fiber } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
-import type { AppAccessSlice } from "./app-state.js";
+import { type AppAccessSlice, NO_ACCESS } from "./app-state.js";
 
 /**
  * The account's access as the host reads and holds it: an admin's read is
@@ -40,7 +40,10 @@ function service(answers: Array<() => Response>) {
 
 /** What an admin outside the native-agents cohort may open, and what nobody may. */
 const ADMIN: AppAccessSlice = { admin: true };
-const NOTHING: AppAccessSlice = { admin: false };
+/** What stands for an account whose access is not read, or no longer held. */
+const UNREAD: AppAccessSlice = NO_ACCESS;
+/** A read that answered, or failed, as no admin. */
+const NOT_ADMIN: AppAccessSlice = { admin: false };
 
 function client(fetchLike: Parameters<typeof fakeHttpClientLayer>[0]) {
   return new AccountAccessClient({
@@ -77,7 +80,7 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
   Effect.gen(function* () {
     const { client } = service([json({ admin: true })]);
     const { held, account, published } = holder(client, "admin@luke.test");
-    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
 
     yield* held.refresh;
     assert.deepEqual(held.current(), ADMIN);
@@ -87,13 +90,13 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
     account.key = undefined;
     yield* held.forget;
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), NOTHING);
-    assert.deepEqual(published.at(-1), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
+    assert.deepEqual(published.at(-1), UNREAD);
 
     // The same account back is no admin until it is read again.
     account.key = "admin@luke.test";
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
   }),
 );
 
@@ -107,8 +110,8 @@ it.effect("a sign-out the same account returned from before its change landed st
     yield* held.forget;
     yield* held.accountChanged;
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), NOTHING);
-    assert.deepEqual(published.at(-1), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
+    assert.deepEqual(published.at(-1), UNREAD);
   }),
 );
 
@@ -120,11 +123,11 @@ it.effect("an admin's read is no answer for another account signed in after it",
 
     account.key = "member@luke.test";
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), NOTHING);
-    assert.deepEqual(published.at(-1), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
+    assert.deepEqual(published.at(-1), UNREAD);
 
     yield* held.refresh;
-    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(held.current(), NOT_ADMIN);
   }),
 );
 
@@ -142,11 +145,11 @@ it.effect("a read answered after the account changed is kept for nobody", () =>
     };
 
     yield* held.refresh;
-    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
     assert.deepEqual(published, []);
 
     account.key = "admin@luke.test";
-    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
   }),
 );
 
@@ -178,8 +181,8 @@ it.effect("a read still out across a sign-out and the same account's return is d
     yield* Fiber.join(reading);
 
     assert.equal(held.requests.length, 1);
-    assert.deepEqual(access.current(), NOTHING);
-    assert.deepEqual(published, [NOTHING]);
+    assert.deepEqual(access.current(), UNREAD);
+    assert.deepEqual(published, [UNREAD]);
   }),
 );
 
@@ -195,12 +198,12 @@ it.effect("a read that fails, or answers no flag, is no admin", () =>
     for (const failure of failures) {
       const { held } = holder(service([failure]).client, "admin@luke.test");
       yield* held.refresh;
-      assert.deepEqual(held.current(), NOTHING);
+      assert.deepEqual(held.current(), NOT_ADMIN);
     }
     const refused = client(async () => {
       throw new Error("offline");
     });
-    assert.deepEqual(yield* refused.readAccess(), NOTHING);
+    assert.deepEqual(yield* refused.readAccess(), NOT_ADMIN);
   }),
 );
 
@@ -211,7 +214,7 @@ it.effect("nobody signed in asks the service nothing", () =>
     yield* held.refresh;
     assert.equal(requests.length, 0);
     assert.deepEqual(published, []);
-    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(held.current(), UNREAD);
   }),
 );
 

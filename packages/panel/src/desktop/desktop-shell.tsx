@@ -44,7 +44,12 @@ import {
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
-import { useAdminAccess, useCapability, useExperiment } from "../use-app-state.js";
+import {
+  useAdminAccess,
+  useAdminAccessPending,
+  useCapability,
+  useExperiment,
+} from "../use-app-state.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { WindowVoiceNotice } from "../window-voice.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
@@ -578,12 +583,14 @@ export function DesktopShell({
   useEffect(() => {
     if (chatShown && !chatOn) closeChat();
   }, [chatShown, chatOn, closeChat]);
-  // The Admin place is an admin's alone: an account that is no admin, or no longer one, is given the task's place back.
+  // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
+  // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
   const adminAccess = useAdminAccess();
+  const adminPending = useAdminAccessPending();
   const { open: adminShown, onClose: closeAdmin } = tasks.adminView;
   useEffect(() => {
-    if (adminShown && !adminAccess) closeAdmin();
-  }, [adminShown, adminAccess, closeAdmin]);
+    if (adminShown && !adminAccess && !adminPending) closeAdmin();
+  }, [adminShown, adminAccess, adminPending, closeAdmin]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
@@ -748,15 +755,23 @@ export function DesktopShell({
     );
   }
   // The Admin place takes the whole window as Settings does, its sections listed where the tasks were.
-  if (tasks.adminView.open && adminAccess) {
+  if (tasks.adminView.open && (adminAccess || adminPending)) {
     const exitAdmin = history.canGoBack ? history.onBack : tasks.adminView.onClose;
+    const loading = (
+      <AdminLoading onExit={exitAdmin} hidden={hiddenColumns(room, tasks.adminView.listed)} />
+    );
+    // While the account's access is read, the place stands as it does while its chunk loads.
+    if (!adminAccess) {
+      return (
+        <div className="desktop-shell" data-room={room}>
+          {loading}
+          {NOTICE_STRIP}
+        </div>
+      );
+    }
     return (
       <div className="desktop-shell" data-room={room}>
-        <Suspense
-          fallback={
-            <AdminLoading onExit={exitAdmin} hidden={hiddenColumns(room, tasks.adminView.listed)} />
-          }
-        >
+        <Suspense fallback={loading}>
           <ADMIN_PLACE.Route
             sidebar={sidebar}
             room={room}

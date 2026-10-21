@@ -2395,7 +2395,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED,
         (payload): AppAccessSlice | undefined =>
-          isRecord(payload) && isWireBoolean(payload.admin) ? { admin: payload.admin } : undefined,
+          isRecord(payload) && isWireBoolean(payload.admin)
+            ? {
+                admin: payload.admin,
+                ...(payload.pending === true ? { pending: true } : undefined),
+              }
+            : undefined,
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>

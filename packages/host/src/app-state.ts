@@ -214,6 +214,13 @@ interface AppNetworkSlice {
  */
 export interface AppAccessSlice {
   admin: boolean;
+  /**
+   * Whether the access is not read yet for whoever is signed in, as it is
+   * for a moment after a sign-in or a launch: a window holds back on what it
+   * would refuse a reader who is no admin, such as a reloaded Admin address,
+   * until it is. Absent once read, a failed read among them.
+   */
+  pending?: true;
 }
 
 /**
@@ -315,4 +322,4 @@ export function sessionReplayBootstrap(
 }
 
 /** The access of nobody, of another account, or of a read that failed: nothing opened. */
-export const NO_ACCESS: AppAccessSlice = { admin: false };
+export const NO_ACCESS: AppAccessSlice = { admin: false, pending: true };

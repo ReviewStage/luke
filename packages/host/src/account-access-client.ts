@@ -40,7 +40,8 @@ export class AccountAccessClient {
   readAccess(): Effect.Effect<AppAccessSlice> {
     return askHosted(this.#hosted.account.access, undefined).pipe(
       Effect.map((answer): AppAccessSlice => ({ admin: answer.admin })),
-      Effect.orElseSucceed(() => NO_ACCESS),
+      // A read that failed is settled as no admin, not left pending, so nothing waits on it.
+      Effect.orElseSucceed((): AppAccessSlice => ({ admin: false })),
       Effect.provide(this.#client),
     );
   }
