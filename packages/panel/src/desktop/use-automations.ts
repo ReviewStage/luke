@@ -73,9 +73,15 @@ export function useAutomations(workspaceId: string | undefined) {
   // sent before draws nothing over it: that push may hold a newer write of another window's, and
   // the write's own commit is pushed after it in any case.
   const pushes = useRef(0);
+  // Note that every automation a push carried is remembered, so a new one's answer is not put back
+  // into a list that has carried it already, and since lost it to a deletion.
+  const pushedIds = useRef(new Set<string>()).current;
   const reload = useFollowedAutomations(workspaceId, (read) => {
     if (workspaceId === undefined) return;
-    if (!("failure" in read)) pushes.current += 1;
+    if (!("failure" in read)) {
+      pushes.current += 1;
+      for (const each of read.automations) pushedIds.add(each.id);
+    }
     setHeld((was) =>
       "failure" in read &&
       was?.workspaceId === workspaceId &&
@@ -117,20 +123,20 @@ export function useAutomations(workspaceId: string | undefined) {
     },
     [newestWrite],
   );
-  /** A new automation taken into the list of the workspace it is of, first, unless a push already carried it, which is as new as the answer or newer. */
-  const landCreated = useCallback((answer: AutomationView) => {
-    if (!("automation" in answer)) return;
-    const { automation } = answer;
-    setHeld((was) =>
-      was !== undefined &&
-      was.workspaceId === automation.workspaceId &&
-      was.read !== undefined &&
-      "automations" in was.read &&
-      !was.read.automations.some((each) => each.id === automation.id)
-        ? { ...was, read: replaced(was.read, automation) }
-        : was,
-    );
-  }, []);
+  /** A new automation taken into the list of the workspace it is of, first, unless a push already carried it, which is as new as the answer or newer, whether it still holds it or has since lost it to a deletion. */
+  const landCreated = useCallback(
+    (answer: AutomationView) => {
+      if (!("automation" in answer)) return;
+      const { automation } = answer;
+      if (pushedIds.has(automation.id)) return;
+      setHeld((was) =>
+        was !== undefined && was.workspaceId === automation.workspaceId
+          ? { ...was, read: replaced(was.read, automation) }
+          : was,
+      );
+    },
+    [pushedIds],
+  );
   /** A write's answer taken into the list of the workspace it is of, in its place, and into no other's. */
   const landAutomation = useCallback((answer: AutomationView) => {
     if (!("automation" in answer)) return;
