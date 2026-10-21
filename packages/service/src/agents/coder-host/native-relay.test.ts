@@ -6,6 +6,8 @@ import {
   type CodingAgent,
   createCodingAgent,
   readCodingAgentRouting,
+  readRunnerTokenConversation,
+  recordCodingAgentRunnerToken,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
@@ -26,6 +28,7 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { eq } from "drizzle-orm";
 import { type Context, Effect, Layer, Option, Redacted, Result, Stream } from "effect";
+import { SqlClient } from "effect/sql";
 import { TURN_ORIGIN } from "../../core.js";
 import { HOSTED_API_ERROR } from "../../http/http.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
@@ -168,7 +171,21 @@ const nativeSessionOf = (owner: string, agent: CodingAgent) =>
     return session;
   });
 
-/** The servers standing on the conversation's agent's row, as a launch's write would meet it. */
+/** Whether the message's own transaction wrote or locked the row: its xmin or xmax is this transaction's id. */
+const heldHere = (
+  table: "coding_agent" | "conversations",
+  column: "conversation_id" | "id",
+  id: string,
+) =>
+  Effect.flatMap(
+    SqlClient.SqlClient,
+    (sql) =>
+      sql<{
+        readonly held: boolean;
+      }>`select (xmin::text = (pg_current_xact_id()::text)::xid::text or xmax::text = (pg_current_xact_id()::text)::xid::text) as held from ${sql(table)} where ${sql(column)} = ${id}`,
+  ).pipe(Effect.map((rows) => rows[0]?.held ?? false));
+
+/** The servers standing on the conversation's agent's row, as eve's turn would meet them. */
 const serversOfConversation = (conversationId: string) =>
   Database.use((db) =>
     db
@@ -176,6 +193,40 @@ const serversOfConversation = (conversationId: string) =>
       .from(codingAgent)
       .where(eq(codingAgent.conversationId, conversationId)),
   ).pipe(Effect.map((rows) => rows[0]?.servers ?? null));
+
+/**
+ * What a launch meets as it runs inside a message's hand-over, then its own write: whether the
+ * message's transaction holds the agent's row, which a launch writes its runner's bearer to, and
+ * the conversation's, which it holds while it hands the words over; and the servers standing.
+ * A row the message holds is one a launch on the web's own connection would wait on until the
+ * hand-over gave up. The bearer is then recorded as a launch records it.
+ */
+const launchMeets = (conversationId: string) =>
+  Effect.gen(function* () {
+    const held = {
+      agent: yield* heldHere("coding_agent", "conversation_id", conversationId),
+      conversation: yield* heldHere("conversations", "id", conversationId),
+    };
+    const servers = yield* serversOfConversation(conversationId);
+    const [agent] = yield* Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, userId: codingAgent.userId })
+        .from(codingAgent)
+        .where(eq(codingAgent.conversationId, conversationId)),
+    );
+    assert.ok(agent);
+    const digest = `digest-${conversationId}`;
+    yield* recordCodingAgentRunnerToken(agent.userId, agent.id, digest);
+    // The row the bearer landed on is the one a launch on its own connection would have waited for.
+    const [onAgent] = yield* Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(eq(codingAgent.runnerTokenHash, digest)),
+    );
+    const launchWaits = onAgent === undefined ? held.conversation : held.agent;
+    return { launchWaits, conversationHeld: held.conversation, servers };
+  });
 
 /** A raw post to the route, under the bearer given. */
 const rawCall = (bearer: string | undefined, body: object) =>
@@ -377,7 +428,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message mentioning a server to a Claude Code agent relaunched or launched through the relay finds its row untouched by the message's transaction, where the launch writes it, and its servers stand once the harness took the words; an eve agent's are written before eve hears them, as before",
+      "a message mentioning a server to a Claude Code agent relaunched or launched through the relay holds no row the launch writes, so the launch never waits on it, and its servers stand once the harness took the words; an eve agent's are written before eve hears them, as before",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -393,7 +444,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           // Note that a launch writes the agent's row on the web's own connection in production, so a
           // row this transaction had already locked and written would hold it until the hand-over gave
           // up; here the one connection is shared, so what the harness reads is what it would wait on.
-          const relay = yield* nativeRelayFake({ onLaunch: serversOfConversation });
+          const relay = yield* nativeRelayFake({ onLaunch: launchMeets });
           yield* Effect.addFinalizer(() => Effect.promise(relay.dispose));
           const eveSaw: unknown[] = [];
           const eve = recordingEve();
@@ -433,11 +484,25 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(
             relay.heard.map(({ call, names, seen }) => [call, names, seen]),
             [
-              ["send", session, null],
-              ["open", launched.conversationId, null],
+              // The message holds the conversation's row, and never the row the launch writes its bearer to.
+              ["send", session, { launchWaits: false, conversationHeld: true, servers: null }],
+              [
+                "open",
+                launched.conversationId,
+                { launchWaits: false, conversationHeld: true, servers: null },
+              ],
             ],
           );
           assert.deepEqual(eveSaw, [[INTEGRATION_PROVIDER.LINEAR]]);
+          // Each launch's bearer stands on its agent, found again by its digest as the runner's calls find it.
+          for (const agent of [relaunched, launched]) {
+            assert.equal(
+              Option.getOrThrow(
+                yield* readRunnerTokenConversation(`digest-${agent.conversationId}`),
+              ).conversationId,
+              agent.conversationId,
+            );
+          }
           for (const agent of [relaunched, launched]) {
             assert.deepEqual(yield* takeCodingAgentMentionedServers(owner, agent.conversationId), [
               INTEGRATION_PROVIDER.LINEAR,

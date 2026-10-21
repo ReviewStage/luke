@@ -89,7 +89,7 @@ export const conversations = pgTable(
     runtime: text("runtime").$type<ConversationRuntime>(),
     /** The harness's own session or thread id on a Claude Code or Codex conversation, which a relaunch resumes; null on eve's and before the harness answers one. */
     nativeSession: text("native_session"),
-    /** The digest of the bearer the conversation's runner presents at Luke's MCP server, never the bearer itself; null where no runner holds one. */
+    /** Unused since the digest moved to the agent's row (`coding_agent.runner_token_hash`), so a launch never waits on the conversation's lock a message's hand-over holds; neither written nor read, and kept for a later cleanup to drop with its index. */
     runnerTokenHash: text("runner_token_hash"),
     /** The number of the last runner event projected into the conversation, so a batch the runner posts again applies nothing twice; null before a runner's first event. */
     nativeSequence: bigint("native_sequence", { mode: "number" }),
@@ -117,8 +117,7 @@ export const conversations = pgTable(
     index("conversations_runtime_session")
       .on(table.runtimeSessionId)
       .where(sql`${table.runtimeSessionId} is not null`),
-    // Luke's MCP server finds the conversation a runner's bearer stands for by the bearer's digest,
-    // on every tool call; one digest names one conversation.
+    // Unused, as the column above is: kept for the later cleanup that drops both.
     uniqueIndex("conversations_runner_token_hash")
       .on(table.runnerTokenHash)
       .where(sql`${table.runnerTokenHash} is not null`),

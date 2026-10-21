@@ -884,7 +884,7 @@ const findAgentRouting = SqlSchema.findOneOption({
         .select({
           runtime: conversations.runtime,
           nativeSession: conversations.nativeSession,
-          runnerTokenHash: conversations.runnerTokenHash,
+          runnerTokenHash: codingAgent.runnerTokenHash,
           payer: codingAgent.payer,
         })
         .from(codingAgent)
@@ -942,10 +942,11 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
           conversationId: conversations.id,
           runtimeSessionId: conversations.runtimeSessionId,
         })
-        .from(conversations)
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
         .where(
           and(
-            eq(conversations.runnerTokenHash, runnerTokenHash),
+            eq(codingAgent.runnerTokenHash, runnerTokenHash),
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             isNull(conversations.deletedAt),
           ),
@@ -1045,10 +1046,10 @@ const updateAgentRunnerToken = SqlSchema.findAll({
   execute: ({ userId, agentId, runnerTokenHash }) =>
     Database.use((db) =>
       db
-        .update(conversations)
+        .update(codingAgent)
         .set({ runnerTokenHash })
-        .where(reachableAgentConversation(userId, agentId))
-        .returning({ id: conversations.id }),
+        .where(reachableAgent(userId, agentId))
+        .returning({ id: codingAgent.id }),
     ),
 });
 

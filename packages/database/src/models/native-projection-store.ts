@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { conversations } from "../schemas/storage.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -48,14 +49,16 @@ const lockProjectionRow = SqlSchema.findOneOption({
           projection: conversations.nativeProjection,
         })
         .from(conversations)
+        .innerJoin(codingAgent, eq(codingAgent.conversationId, conversations.id))
         .where(
           and(
             eq(conversations.id, conversationId),
             eq(conversations.userId, userId),
-            eq(conversations.runnerTokenHash, runnerTokenHash),
+            eq(codingAgent.runnerTokenHash, runnerTokenHash),
             isNull(conversations.deletedAt),
           ),
         )
+        // Both rows: the conversation's for the projection, and the agent's, which a retire writes.
         .for("update"),
     ),
 });
@@ -124,8 +127,9 @@ export interface NativeProjectionApplied<A> {
  * made; nothing for a conversation the account does not hold, that was
  * cleared, or whose runner holds a bearer of another digest by the time the
  * lock is taken, where `apply` never runs. Note that the digest is read
- * again under the lock, because a bearer retired after the caller admitted
- * it takes the same row's lock and must leave its runner writing nothing.
+ * again under the lock, on the agent's row, which is locked with the
+ * conversation's, because a bearer retired after the caller admitted it
+ * takes that row's lock and must leave its runner writing nothing.
  */
 export function withNativeProjection<A, E, R>(
   target: ConversationTarget,
