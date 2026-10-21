@@ -38,6 +38,8 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
@@ -85,6 +87,7 @@ import {
   FileDiffIcon,
   GitPullRequestIcon,
   MessagesSquareIcon,
+  PlayIcon,
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
@@ -233,7 +236,9 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * (⌘-click opens it on GitHub), the title first in the markup so a screen
  * reader names it before the pill drawn ahead of it, and at the row's end, while it is open or a
  * draft, the merge control saying what can happen now, its panel holding
- * GitHub's own sentence and the presses (`merge-box.tsx`). Open on GitHub
+ * GitHub's own sentence and the presses (`merge-box.tsx`), with Run before
+ * it, which runs the agent's branch in a terminal of this Mac in the side
+ * panel, where the panel offers one (`onRun`). Open on GitHub
  * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
  * hands them to while it is drawn (`useHandedTabActions`). Under it one
  * line, wrapping where it must:
@@ -299,6 +304,8 @@ const PULL_REQUEST_WORDS = {
   CHECKS_FAILED: "The checks could not be read.",
   CONVERSATION_FAILED: "The conversation could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
+  RUN: "Run",
+  RUN_LABEL: "Run on this Mac",
   NO_DESCRIPTION: "No description provided.",
   NO_CHECKS: "No checks have run on this pull request.",
   NO_CONVERSATION: "Nobody has commented yet.",
@@ -2138,6 +2145,8 @@ interface AgentPullRequestTabProps {
   onView: (view: PullRequestView) => void;
   /** Hears what the side panel's toolbar ⋯ offers while the tab is drawn, Open on GitHub and Refresh (`useHandedTabActions`); none where no toolbar draws them. */
   onActions?: HandTabActions | undefined;
+  /** Runs the agent's branch in a terminal of this Mac in the side panel, which the header's Run offers; none where the platform has no Mac terminal, no repository is known, or the tab names another pull request than the agent's own. */
+  onRun?: (() => void) | undefined;
 }
 
 /**
@@ -2227,6 +2236,7 @@ function PullRequestTabBody({
   view,
   onView,
   onActions,
+  onRun,
 }: AgentPullRequestTabProps): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
@@ -2401,6 +2411,16 @@ function PullRequestTabBody({
                       />
                     )}
                     <div className="pull-request-title-actions">
+                      {onRun === undefined || held === undefined ? null : (
+                        <Button
+                          variant={BUTTON_VARIANT.OUTLINE}
+                          icon={<PlayIcon />}
+                          label={PULL_REQUEST_WORDS.RUN_LABEL}
+                          onClick={onRun}
+                        >
+                          {PULL_REQUEST_WORDS.RUN}
+                        </Button>
+                      )}
                       {overview === undefined ? null : (
                         <MergeControl
                           pullRequest={overview}

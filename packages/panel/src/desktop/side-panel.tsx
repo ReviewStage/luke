@@ -137,6 +137,7 @@ import {
 import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import type { MenuAction } from "./action-menu.js";
+import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
@@ -1298,6 +1299,7 @@ function TabContent({
   inbox,
   chat,
   onTabActions,
+  onRunOnMac,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1355,6 +1357,8 @@ function TabContent({
   chat: React.ReactNode;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
+  /** Runs an agent's branch in a terminal of this Mac in this panel, which its Pull request tab's Run offers; none where no repository is known or the platform has no Mac terminal. */
+  onRunOnMac: ((agentId: string) => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const directory = useMemberDirectory();
@@ -1437,6 +1441,12 @@ function TabContent({
             view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
             onView={(view) => onPullRequestView(tab, view)}
             onActions={(actions) => onTabActions(tab, actions)}
+            // Note that Run reads the agent's own branch, so a tab naming another pull request by its number offers none.
+            onRun={
+              onRunOnMac === undefined || tab.number !== undefined
+                ? undefined
+                : () => onRunOnMac(tab.changes)
+            }
           />
         </Suspense>
       </PullRequestsOnGitHub>
@@ -1961,6 +1971,8 @@ export function SidePanel({
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
+  // A Pull request tab's Run opens the agent's branch on this Mac in this panel, which already holds the keys.
+  const macTerminalDoors = useAgentTerminalDoors(panel, repository, noFocusMove);
   // The Inbox is offered only on a task holding an agent, an archived one among them, since only an agent posts.
   const inboxOffered =
     (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
@@ -2104,6 +2116,7 @@ export function SidePanel({
             inbox={inbox?.body}
             chat={chat}
             onTabActions={handTabActions}
+            onRunOnMac={macTerminalDoors.onOpenOnMac}
           />
         </FindScope>
       )}

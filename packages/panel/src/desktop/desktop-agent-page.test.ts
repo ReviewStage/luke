@@ -1309,7 +1309,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal and Run, Copy link, the transcript's two copies, and Archive agent", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal, Copy link, the transcript's two copies, and Archive agent, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1322,7 +1322,6 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
   assert.deepEqual(offered, [
     "Rename",
     "Open terminal⌘J",
-    "Run",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
@@ -1382,16 +1381,41 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   assert.deepEqual(chosen, []);
 });
 
-test("Run on the page's ⋯ runs the agent's branch on this Mac in the side panel, from its own repository", async () => {
-  const { page, chosen } = mountHearingPanel();
+test("Run in the header of the agent's Pull request tab runs its branch on this Mac in the side panel, from its own repository", async () => {
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  const container = await mountPanelPage();
   await settle();
-  const run = pageMenuItem(page, "Run");
+  const row =
+    container.querySelector<HTMLButtonElement>(
+      '.agent-tab-foot [aria-label="Pull request"] li > button',
+    ) ?? assert.fail("the pull request's row stands over the box");
+  act(() => row.click());
+  await settle();
+
+  const run =
+    container.querySelector<HTMLButtonElement>(
+      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
+    ) ?? assert.fail("the Pull request tab's header offers Run");
+  assert.equal(run.textContent, "Run");
   act(() => run.click());
   await settle();
 
-  const [tab] = chosen;
+  const tab = drawnPanel?.tab;
   assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
-  assert.equal(chosen.length, 1);
   assert.equal(tab.macTerminal, AGENT_ID);
   assert.equal(tab.repository, PAGE.repository);
 });
