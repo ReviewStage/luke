@@ -404,6 +404,8 @@ export function TabSwitcher({
   const shown = useRef<readonly Stop[]>([]);
   const front = useRef<typeof STOP_KIND.COLUMN | typeof STOP_KIND.PANEL>(STOP_KIND.COLUMN);
   const stills = useRef<readonly HeldStill[]>([]);
+  // The tasks the window's list has named, so a task gone from it after is one deleted rather than one not yet listed.
+  const listed = useRef(new Set<string>());
   const doors = useRef({ tab, tasks, onTabChange });
   doors.current = { tab, tasks, onTabChange };
   const [hold] = useState(holdAtom);
@@ -533,10 +535,10 @@ export function TabSwitcher({
     stops.current = forgotten(stops.current, (stop) => {
       const taskId = stopTask(stop);
       if (taskId === undefined) return false;
-      // Note that the open task is never judged by the list, because a task just made stands open before its row reaches it.
-      if (taskId !== open && control.listRead && taskName(control, taskId) === undefined) {
-        return true;
-      }
+      if (taskName(control, taskId) !== undefined) listed.current.add(taskId);
+      // Note that the open task is judged by the list only once its row has reached it, because a task just made stands open before it does.
+      const awaited = taskId === open && !listed.current.has(taskId);
+      if (control.listRead && !awaited && taskName(control, taskId) === undefined) return true;
       // Note that only the task's own page says which of its tabs stand, because the Inbox or an agent's page standing in its place hands the panel a strip of its own.
       if (taskId !== open || !shown.current.some((each) => stopTask(each) === open)) return false;
       if (stop.kind === STOP_KIND.PANEL) {

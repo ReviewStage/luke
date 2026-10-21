@@ -388,3 +388,18 @@ test("a task opened before its row reaches the list stays a stop, and one gone f
     "a task deleted since is no stop",
   );
 });
+
+test("the open task gone from the list after it was listed, as one deleted by a teammate, is no stop", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  const inbox = { ...tasksControl().inboxView, open: true };
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { tasks: [] }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { tasks: [], inboxView: inbox }));
+
+  tab();
+  letGo();
+  assert.deepEqual(told, asked());
+});
