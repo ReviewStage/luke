@@ -179,6 +179,8 @@ export interface AppInboxSlice {
   automations: readonly AppInboxAutomationHolding[];
   /** The newest run of each of the account's own automations that failed to start lately, the latest first, which marks the window's Automations until that automation is opened. */
   failedRuns: readonly AccountFailedRun[];
+  /** The chat messages that wait on the developer across the account's workspaces, by id, while the window offers Chat: what a chat toast is withdrawn by once its message no longer waits. */
+  chat: readonly string[];
 }
 
 /**

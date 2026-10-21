@@ -365,6 +365,8 @@ type StandIn =
       readonly place: ChatPlace;
       /** Whether the rail stands rather than the place, which only a narrow room draws apart. */
       readonly listed: boolean;
+      /** The message a toast's View asked for, whose channel is shown once the read holds it. */
+      readonly seek?: string | undefined;
     }
   | { readonly kind: typeof STAND_IN.BOARD };
 
@@ -463,6 +465,12 @@ interface ChatViewControl {
   readonly listed: boolean;
   /** Goes back from the place shown to the rail. */
   readonly onList: () => void;
+  /** Whether the open Chat shows one column by its own width (`column-split.ts`), which the window's history steps between its rail and its place by, as it does in a narrow room. */
+  readonly single?: boolean;
+  /** Says whether Chat shows one column. */
+  readonly onSingle?: (single: boolean) => void;
+  /** Opens it from wherever the window stands, on the channel a message stands in once the read holds it: what a chat toast's View asks. */
+  readonly onShowMessage: (messageId: string) => void;
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
@@ -1180,6 +1188,7 @@ export function useTasksTab(input: {
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
+  const [chatSingle, setChatSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
   /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
   const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
@@ -1396,7 +1405,7 @@ export function useTasksTab(input: {
       shown &&
       standIn?.kind === STAND_IN.CHAT &&
       standIn.place.kind === CHAT_PLACE.CHANNEL &&
-      !(standIn.listed && input.room === SHELL_ROOM.NARROW)
+      !(standIn.listed && (input.room === SHELL_ROOM.NARROW || chatSingle))
         ? standIn.place.channelId
         : tabReading,
     followChat: chatFollowerOf(act),
@@ -1444,6 +1453,22 @@ export function useTasksTab(input: {
         : held,
     );
   }, [shownChannel, heldAnswer, liveRun]);
+  // A message a toast's View asked for opens its channel once a read holds it; till then Chat stands where it was opened, For you listing it.
+  const chatSeek = standIn?.kind === STAND_IN.CHAT ? standIn.seek : undefined;
+  useEffect(() => {
+    if (chatSeek === undefined) return;
+    const message = heldAnswer?.messages.find((each) => each.id === chatSeek);
+    if (message === undefined) return;
+    setStandIn((held) =>
+      held?.kind === STAND_IN.CHAT && held.seek === chatSeek
+        ? {
+            kind: STAND_IN.CHAT,
+            place: { kind: CHAT_PLACE.CHANNEL, channelId: message.channelId },
+            listed: false,
+          }
+        : held,
+    );
+  }, [chatSeek, heldAnswer]);
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after
@@ -3298,9 +3323,20 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place, listed: false } : held,
         ),
+      single: standIn?.kind === STAND_IN.CHAT && chatSingle,
+      onSingle: setChatSingle,
       onShow: guard((place: ChatPlace) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.CHAT, place, listed: false });
+      }),
+      onShowMessage: guard((messageId: string) => {
+        setHistoryFor(undefined);
+        setStandIn((held) => ({
+          kind: STAND_IN.CHAT,
+          place: held?.kind === STAND_IN.CHAT ? held.place : FOR_YOU,
+          listed: false,
+          seek: messageId,
+        }));
       }),
       onPost: (post) =>
         liveRun

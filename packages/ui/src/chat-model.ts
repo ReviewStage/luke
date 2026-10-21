@@ -144,6 +144,8 @@ export interface ChatRailRow {
   /** The other member of a direct message, for its mark. */
   readonly other: ChatWho | undefined;
   readonly unread: number;
+  /** How many open asks someone else posted in it wait on the reader, as For you lists them. */
+  readonly asks: number;
   /** The newest root or reply the channel holds as read, which its row previews; none in an empty one. */
   readonly latest: ChatMessage | undefined;
 }
@@ -335,6 +337,7 @@ export function chatRail(
   names: ChatNames,
   grouping?: ChatTaskGrouping | undefined,
 ): ChatRail {
+  const waiting = forYou(chat);
   const row = (channel: ChatChannel): ChatRailRow => {
     const other = otherOf(chat, channel);
     const who = other === undefined ? undefined : chatWho(chat, names, other);
@@ -343,6 +346,9 @@ export function chatRail(
       label: channelLabel(chat, names, channel),
       other: who,
       unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
+      asks: waiting.filter(
+        (entry) => entry.reason === FOR_YOU_REASON.ASK && entry.channel.id === channel.id,
+      ).length,
       latest: messagesIn(chat, channel.id).at(-1),
     };
   };
@@ -365,7 +371,7 @@ export function chatRail(
     .filter((channel) => channel.kind === CHANNEL_KIND.DM)
     .toSorted((one, other) => latest(other) - latest(one));
   return {
-    forYou: forYou(chat).length,
+    forYou: waiting.length,
     channels: channels.map(row),
     tasks: taskGroups(tasks.map(row), grouping),
     archived: archived.map(row),

@@ -2750,6 +2750,50 @@ test("a chat notification's click, listing the workspace its message waits in an
   assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
 });
 
+test("a chat toast's View opens Chat, and the channel its message stands in once a read holds it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  const messageId = "d0d0d0d0-0000-4000-8000-000000000003";
+  const stream = chatStream();
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().chatView.onShowMessage(messageId));
+  assert.equal(tab.control().chatView.open, true);
+  assert.deepEqual(tab.control().chatView.place, FOR_YOU, "For you stands until the read lands");
+  stream.push({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
+    channels: [{ id: channelId, kind: CHANNEL_KIND.TOPIC, name: "infra", archived: false }],
+    messages: [
+      {
+        id: messageId,
+        seq: 4,
+        touchedSeq: 4,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [me],
+        postedAt: 1,
+      },
+    ],
+    cursor: "",
+  });
+  await vi.waitFor(async () => {
+    await settle();
+    assert.deepEqual(tab.control().chatView.place, { kind: CHAT_PLACE.CHANNEL, channelId });
+  });
+  assert.equal(tab.control().chatView.listed, false);
+});
+
 test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and never in the column", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());

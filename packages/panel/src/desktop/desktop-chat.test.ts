@@ -125,6 +125,7 @@ function mount(
           onClose: () => undefined,
           onChoose: setPlace,
           onShow: setPlace,
+          onShowMessage: () => undefined,
           listed: false,
           onList: () => undefined,
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
