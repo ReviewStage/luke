@@ -24,6 +24,7 @@ import {
   type CodingAgentPage,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
@@ -204,6 +205,8 @@ export function codingAgentFailureOf(
 export interface AgentTurnStanding {
   readonly turn: CodingAgentLatestTurn | undefined;
   readonly awaitingLineAt: Date | undefined;
+  /** The provider's own harness its conversation runs on; none on eve, and where the read named none. */
+  readonly runtime?: NativeCodingAgentRuntime | undefined;
 }
 
 /** When the run the status is read from began: the newest turn's start, or its queueing before eve starts it, the agent's own before any turn, and none while a line awaits its turn. */
@@ -269,6 +272,7 @@ function summaryFields(
     ...(agent.contextWindow === CONTEXT_WINDOW.STANDARD
       ? { contextWindow: agent.contextWindow }
       : undefined),
+    ...(standing.runtime === undefined ? undefined : { runtime: standing.runtime }),
     title: agent.title,
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {

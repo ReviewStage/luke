@@ -54,6 +54,7 @@ import {
   runnerEnded,
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
+import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -358,6 +359,37 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         { type: INPUT_LINE.STOP, launch: 0 },
       ]);
     }),
+  );
+
+  it.effect(
+    "a change of model and effort reaches the running runner as a model line alone, and a session with no runner takes nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "anthropic/claude-sonnet-5.5",
+          effort: "low",
+        });
+
+        const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
+        const elsewhere = yield* sessions.retune(
+          `${opened.sessionId.slice(0, -4)}0000`,
+          agent.conversationId,
+        );
+
+        assert.deepEqual([retuned, elsewhere], [RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE]);
+        assert.equal(api.commands.length, 1);
+        assert.deepEqual(linesOf(api.commands[0]).slice(2), [
+          { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
+        ]);
+      }),
   );
 
   it.effect("a Stop of a turn no longer under way writes nothing to the runner", () =>

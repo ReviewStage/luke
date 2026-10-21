@@ -37,7 +37,10 @@ import {
   readCodingAgentOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import {
+  claimRuntimeSession,
+  recordedRuntimeSession,
+} from "@luke/database/models/recorded-session";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Context, Effect, Option, Stream } from "effect";
@@ -51,10 +54,29 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
+  PLAN_REFUSAL,
+  type PlanRefusal,
   RUNTIME_REFUSAL,
   type RuntimeRefusal,
 } from "../brain-host/eve-sessions.js";
 import { isNativeRuntime, type NativeRuntime, nativeRuntimeOfSession } from "./native-runtime.js";
+
+/** What a change of model or effort came to at a native agent's runner. */
+export const RUNNER_CHOICE = {
+  /** The `model` line was written to the runner, which takes it at its next model call. */
+  WRITTEN: "written",
+  /** No runner runs now; the next message's launch or `model` line carries the change. */
+  NOT_LIVE: "not_live",
+  FAILED: "failed",
+} as const;
+
+export type RunnerChoice = (typeof RUNNER_CHOICE)[keyof typeof RUNNER_CHOICE];
+
+/** A native harness's sessions: eve's interface, and the agent's model and effort as they stand handed to a running runner. */
+export interface NativeSessions<Turn extends BrainHostTurn = BrainHostTurn>
+  extends AgentSessions<Turn> {
+  readonly retune: (sessionId: string, conversationId: string) => Effect.Effect<RunnerChoice>;
+}
 
 export interface NativeAgentSessionsService {
   /**
@@ -65,7 +87,7 @@ export interface NativeAgentSessionsService {
   readonly sessions: (
     runtime: NativeRuntime,
     account: string,
-  ) => Option.Option<Effect.Effect<AgentSessions<BrainHostTurn>>>;
+  ) => Option.Option<Effect.Effect<NativeSessions<BrainHostTurn>>>;
 }
 
 /** The native harnesses a function can launch and write to: provided by the web functions that ship the runner. */
@@ -245,15 +267,62 @@ function routed<Turn extends BrainHostTurn>(
 }
 
 /**
+ * A change of the agent's model or effort, already written on its row,
+ * handed to its runner where it runs one: a `model` line written now, which
+ * the runner takes at its next model call, acting for the agent's starter
+ * as every native call does. An agent on eve, one whose runner is not up,
+ * and a function that cannot reach the harness write nothing, since eve
+ * reads the row at its next step and a native agent's next message goes
+ * behind the same line (`claude-code-sessions.ts`'s `ahead`). Nothing here
+ * fails its caller: the row already holds the change.
+ */
+export const runnerChoiceApplied = (agent: {
+  readonly id: string;
+  readonly userId: string;
+  readonly conversationId: string;
+}): Effect.Effect<RunnerChoice, never, DatabaseServices> =>
+  Effect.gen(function* () {
+    const routing = yield* readCodingAgentRouting(agent.userId, agent.id);
+    const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
+    if (!isNativeRuntime(runtime)) return RUNNER_CHOICE.NOT_LIVE;
+    const native = yield* Effect.serviceOption(NativeAgentSessions);
+    const reached = Option.flatMap(native, (service) => service.sessions(runtime, agent.userId));
+    if (Option.isNone(reached)) return RUNNER_CHOICE.NOT_LIVE;
+    const sessionId = yield* recordedRuntimeSession({
+      userId: agent.userId,
+      conversationId: agent.conversationId,
+    });
+    if (sessionId === undefined || nativeRuntimeOfSession(sessionId) === undefined) {
+      return RUNNER_CHOICE.NOT_LIVE;
+    }
+    return yield* (yield* reached.value).retune(sessionId, agent.conversationId);
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(`a native agent's choice did not reach its runner: ${failure._tag}`),
+        RUNNER_CHOICE.FAILED,
+      ),
+    ),
+  );
+
+/**
  * What a call that failed answers its caller as: a native harness whose
  * image is still being prepared, which the same request later takes; a
- * native harness this function cannot reach, said by name; or the service
- * down, as every other failure of eve's or a harness's reads.
+ * native harness this function cannot reach, said by name; the starter's
+ * plan refusing the launch, said by name, whose sign-in is signed in again
+ * or whose provider is asked again later, and never turned to another
+ * payer; or the service down, as every other failure of eve's or a
+ * harness's reads.
  */
 export function failedCallRefusal(failed: {
   readonly status: number;
   readonly runtimeRefusal?: RuntimeRefusal | undefined;
+  readonly planRefusal?: PlanRefusal | undefined;
 }): HostedRefusal {
+  if (failed.planRefusal === PLAN_REFUSAL.UNREACHABLE) {
+    return HOSTED_REFUSAL.AGENT_PLAN_UNREACHABLE;
+  }
+  if (failed.planRefusal !== undefined) return HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
     return HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.IMAGE_PREPARING) {

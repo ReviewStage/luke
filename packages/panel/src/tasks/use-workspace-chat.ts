@@ -1,39 +1,41 @@
-import {
-  CHAT_CURSOR_START,
-  type ChatAnswer,
-  type ChatChannel,
-  type ChatMessage,
-  type ChatWriteAnswer,
-  type ChatWriteRequest,
+import type {
+  ChatAnswer,
+  ChatChannel,
+  ChatMessage,
+  ChatWriteAnswer,
+  ChatWriteRequest,
 } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChatAnswerView,
   type CodingAgentChatAttachmentParams,
-  type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentInboxAttachmentView,
 } from "@luke/features/coding-agent-view";
+import { ACT_KIND } from "@luke/host/acts";
 import type { ChatAskAnswer, ChatChannelChange, ChatPost } from "@luke/ui/chat-model";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { askAct } from "../act.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 
 /**
- * use-workspace-chat.ts -- the chosen workspace's chat as one control: read on the service's held long-poll, and the window's posts, answers, resolves, and reads on their way back.
+ * use-workspace-chat.ts -- the chosen workspace's chat as one control: followed over Neon Realtime and pushed as it changes, and the window's posts, answers, resolves, and reads on their way back.
  *
- * The service holds a read open while nothing changed past the cursor and
- * lets it go at its own hold, so the loop is one read after another with no
- * clock of its own, as a plan's inbox is read (`use-plan-inbox.ts`). The
- * cursor is the service's own; the start answers at once. Each answer
- * carries the roster and the channels whole, which replace what was held,
- * and the messages posted or changed past the cursor, which replace the
- * ones held by id where they are newer by the place they last changed at,
- * so a read that crosses a write's own answer never sets a message back.
- * The loop runs while the window is signed in to a workspace outside a
- * fixture run; another workspace starts from nothing of this one's. A read
- * that did not answer ends the loop and says so, with Try again, rather
- * than asking again at once.
+ * The window holds the chat's stream open on its act port
+ * (`codingAgents.chatFollow`) while it is signed in to a workspace outside
+ * a fixture run, and the host pushes the chat whole down it each time it
+ * changes, so nothing here asks again, holds a cursor, or keeps a loop.
+ * Each push is the chat whole: the roster, the channels, and the messages
+ * it holds (each channel's newest, and every open ask), which replace what
+ * was held, a message held newer by the place it last changed at kept, so a
+ * push that crosses a write's own answer never sets a message back. What
+ * the window wrote, a message or a channel, is laid over each push that may
+ * have been read before the write landed, until a push holds it as written
+ * or `OVERLAY_HOLD` has passed since it was answered.
+ * Another workspace starts from nothing of this one's. A chat
+ * that could not be read is let go and says so, with Try again, which
+ * follows it anew.
  *
  * A post and an answer go under a key minted here and kept with their
  * words, so the same one sent again after a lost reply is taken once and
@@ -47,8 +49,45 @@ import { messageFailureWords } from "./coding-agent-model.js";
  * attachment its block names, in the workspace read.
  */
 
-/** How one read is asked: the workspace and the cursor to read past, answered as the view hears it. */
-export type ChatReader = (params: CodingAgentChatParams) => Promise<CodingAgentChatAnswerView>;
+/**
+ * How the window follows a workspace's chat: each push is handed to `hear`
+ * as it comes, a stream that could not open or broke as a chat that could
+ * not be read, until the returned call stops it.
+ */
+export type ChatFollower = (
+  workspaceId: string,
+  hear: (chat: CodingAgentChatAnswerView) => void,
+) => () => void;
+
+/** A follower over an act door: the chat's stream, opened as an act. */
+export const chatFollowerOf =
+  (act: typeof askAct): ChatFollower =>
+  (workspaceId, hear) => {
+    let stopped = false;
+    let stream: AsyncIteratorObject<CodingAgentChatAnswerView> | undefined;
+    const following = act(ACT_KIND.CODING_AGENTS_CHAT_FOLLOW, { workspaceId }).then(
+      async (opened) => {
+        stream = opened;
+        // A stream that opened only after the window let it go is closed at once.
+        if (stopped) {
+          await opened.return?.(undefined);
+          return;
+        }
+        for await (const chat of opened) {
+          if (!stopped) hear(chat);
+        }
+        // A stream that ended though the window still follows it has stopped being told anything.
+        if (!stopped) hear({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      },
+    );
+    following.catch(() => {
+      if (!stopped) hear({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    });
+    return () => {
+      stopped = true;
+      void stream?.return?.(undefined);
+    };
+  };
 
 /** How one write is sent: the workspace and the write, answered as the view hears it. */
 export type ChatWriter = (
@@ -107,6 +146,9 @@ function fresh(account: string | undefined, workspaceId: string | undefined): He
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** How long what the window wrote is laid over pushes that may predate it, at most: a held poll answers a change within about a second. */
+const OVERLAY_HOLD_MS = 30_000;
+
 /** The messages held with each newer word on one put in place by id, in the order posted. */
 function withMessages(
   held: readonly ChatMessage[],
@@ -122,7 +164,7 @@ function withMessages(
   return [...byId.values()].toSorted((one, other) => one.seq - other.seq);
 }
 
-/** The channels given with each one written since put in its place by id, or after them where the read had none yet. */
+/** The channels given with each one written since put in its place by id, or after them where the push had none yet. */
 function withChannels(
   channels: readonly ChatChannel[],
   written: readonly ChatChannel[],
@@ -135,30 +177,50 @@ function withChannels(
 }
 
 /**
- * The chat held with a read's answer taken in: the roster and channels
- * whole, the messages by id. Note that a channel carries no place of its
- * own to order a read against a write, as a message's `touchedSeq` does, so
- * the channels the window wrote while the read was out are laid back over
- * the read's, which may have been taken before they were.
+ * The chat held with a push taken in: the push whole, which messages it
+ * holds included, each one the window holds newer kept, and what the window
+ * wrote laid over it, since a push may have been read before a write landed.
  */
 function withRead(
   chat: ChatAnswer | undefined,
   answer: ChatAnswer,
-  written: readonly ChatChannel[],
+  written: { readonly channels: readonly ChatChannel[]; readonly messages: readonly ChatMessage[] },
 ): ChatAnswer {
+  const held = new Map((chat?.messages ?? []).map((message) => [message.id, message]));
+  const pushed = answer.messages.map((message) => {
+    const standing = held.get(message.id);
+    return standing !== undefined && standing.touchedSeq > message.touchedSeq ? standing : message;
+  });
   return {
     ...answer,
-    channels: withChannels(answer.channels, written),
-    messages: withMessages(chat?.messages ?? [], answer.messages),
+    channels: withChannels(answer.channels, written.channels),
+    messages: withMessages(pushed, written.messages),
   };
 }
 
-/** A channel the window wrote: what the write answered, the account and workspace it went as and to, and the count of channel writes it was. */
-interface WrittenChannel {
-  readonly channel: ChatChannel;
+/** What the window wrote, a channel or a message: what the write answered, the account and workspace it went as and to, and when it was answered. */
+interface Written {
+  readonly channel?: ChatChannel;
+  readonly message?: ChatMessage;
   readonly account: string | undefined;
   readonly workspaceId: string;
-  readonly generation: number;
+  readonly at: number;
+}
+
+/** Whether a push holds what the window wrote as written: the channel as it stands, or the message as new as it. */
+function holdsAsWritten(pushed: ChatAnswer, written: Written): boolean {
+  const { channel, message } = written;
+  if (message !== undefined) {
+    const standing = pushed.messages.find((each) => each.id === message.id);
+    return standing !== undefined && standing.touchedSeq >= message.touchedSeq;
+  }
+  const standing = pushed.channels.find((each) => each.id === channel?.id);
+  return (
+    standing !== undefined &&
+    standing.name === channel?.name &&
+    standing.purpose === channel?.purpose &&
+    standing.archived === channel?.archived
+  );
 }
 
 /** The chat held with a write's answer taken in: the message it names in place, or the cursor where it moved. */
@@ -225,11 +287,11 @@ export function useWorkspaceChat(input: {
   /** The account signed in, whose chat it is. */
   account: string | undefined;
   workspaceId: string | undefined;
-  /** Whether the chat is read at all: a live run, signed in. */
+  /** Whether the chat is followed at all: a live run, signed in. */
   active: boolean;
   /** The channel of Chat on screen, whose messages have been read; none while For you or nothing of Chat is. */
   reading: string | undefined;
-  readChat: ChatReader;
+  followChat: ChatFollower;
   writeChat: ChatWriter;
   readPicture: ChatPictureReader;
 }): WorkspaceChatControl {
@@ -239,49 +301,41 @@ export function useWorkspaceChat(input: {
   const [attempt, setAttempt] = useState(0);
   // A send's key and words, by what it sends, so the same send again goes under the same key.
   const keys = useRef(new Map<string, string>());
-  // Each channel the window writes, by id, and how many it has written, which a read taken before one did not see.
-  const written = useRef(new Map<string, WrittenChannel>());
-  const channelWrites = useRef(0);
+  // What the window wrote, by id, laid over pushes that may predate it.
+  const written = useRef(new Map<string, Written>());
   const latest = useRef(input);
   latest.current = input;
 
-  const looping = active && workspaceId !== undefined && !held.failed;
+  const following = active && workspaceId !== undefined && !held.failed;
   useEffect(() => {
-    if (!looping || workspaceId === undefined) return;
-    let live = true;
-    const loop = async () => {
-      let after = CHAT_CURSOR_START;
-      while (live) {
-        const asked = channelWrites.current;
-        const answer = await latest.current
-          .readChat({ workspaceId, after })
-          .catch((): CodingAgentChatAnswerView => UNANSWERED);
-        if (!live) return;
-        if ("failure" in answer) {
-          setHeld((was) => (heldFor(was, account, workspaceId) ? { ...was, failed: true } : was));
-          return;
-        }
-        after = answer.cursor;
-        // A write this read was asked after is in it, so only the ones written since are laid over it, and the rest let go.
-        for (const [id, each] of written.current) {
-          if (each.generation <= asked) written.current.delete(id);
-        }
-        const since = [...written.current.values()].flatMap((each) =>
-          each.account === account && each.workspaceId === workspaceId ? [each.channel] : [],
-        );
-        setHeld((was) =>
-          heldFor(was, account, workspaceId)
-            ? { ...was, chat: withRead(was.chat, answer, since) }
-            : was,
-        );
+    if (!following || workspaceId === undefined) return;
+    return latest.current.followChat(workspaceId, (pushed) => {
+      if ("failure" in pushed) {
+        setHeld((was) => (heldFor(was, account, workspaceId) ? { ...was, failed: true } : was));
+        return;
       }
-    };
-    void loop();
-    return () => {
-      live = false;
-    };
-    // Note that the account is a dependency, so another account's read starts over rather than landing in its chat.
-  }, [looping, account, workspaceId, attempt]);
+      // A write is let go once a push holds it as written, or once a push could no longer predate it.
+      const now = Date.now();
+      for (const [id, each] of written.current) {
+        if (holdsAsWritten(pushed, each) || now - each.at > OVERLAY_HOLD_MS) {
+          written.current.delete(id);
+        }
+      }
+      const ours = [...written.current.values()].filter(
+        (each) => each.account === account && each.workspaceId === workspaceId,
+      );
+      const since = {
+        channels: ours.flatMap((each) => (each.channel === undefined ? [] : [each.channel])),
+        messages: ours.flatMap((each) => (each.message === undefined ? [] : [each.message])),
+      };
+      setHeld((was) =>
+        heldFor(was, account, workspaceId)
+          ? { ...was, chat: withRead(was.chat, pushed, since) }
+          : was,
+      );
+    });
+    // Note that the account is a dependency, so another account's push starts over rather than landing in its chat.
+  }, [following, account, workspaceId, attempt]);
 
   const onRetry = useCallback(() => {
     setHeld((was) => ({ ...was, failed: false }));
@@ -296,14 +350,18 @@ export function useWorkspaceChat(input: {
         .writeChat({ workspaceId, write: request })
         .catch((): CodingAgentChatWriteAnswerView => UNANSWERED);
       if ("failure" in answer) return { refused: messageFailureWords(answer.failure) };
+      const at = Date.now();
       if ("channel" in answer) {
-        channelWrites.current += 1;
         written.current.set(answer.channel.id, {
           channel: answer.channel,
           account,
           workspaceId,
-          generation: channelWrites.current,
+          at,
         });
+      } else if (!("readSeq" in answer)) {
+        const message =
+          "posted" in answer ? answer.posted : "ask" in answer ? answer.ask : answer.resolved;
+        written.current.set(message.id, { message, account, workspaceId, at });
       }
       setHeld((was) =>
         heldFor(was, account, workspaceId) && was.chat !== undefined

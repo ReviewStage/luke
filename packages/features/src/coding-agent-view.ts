@@ -112,8 +112,12 @@ export const CODING_AGENT_CALL_FAILURE = {
   NOT_PERMITTED: "not-permitted",
   /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
   AGENT_IMAGE_PREPARING: "agent-image-preparing",
-  /** The agent runs on Claude Code, which this part of Luke cannot reach yet. */
+  /** The agent runs on Claude Code or Codex, which this part of Luke cannot reach yet. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
+  /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
+  AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
+  /** The agent runs on its starter's plan, whose provider did not answer; the same call a little later may be taken. */
+  AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -716,6 +720,22 @@ export type CodingAgentChatParams = typeof codingAgentChatParamsSchema.Type;
 export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
 
 export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
+
+/** A workspace's chat as the window follows it: the workspace. */
+export const codingAgentChatFollowParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+});
+
+/**
+ * A followed workspace's chat as it now stands, as the host tells it: whole,
+ * with no cursor, or why there is none.
+ */
+export const codingAgentChatChangedSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  chat: codingAgentChatAnswerViewSchema,
+});
+
+export type CodingAgentChatChanged = typeof codingAgentChatChangedSchema.Type;
 
 /** A write to a workspace's chat, as the window asks it: the workspace, and the write the service takes, its key the window's own where it carries one. */
 export const codingAgentChatPostParamsSchema = EffectSchema.Struct({

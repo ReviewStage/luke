@@ -75,8 +75,8 @@ export {
  * of the app names a person, an agent, or a task's Luke: by its mention
  * link (`mention-link.ts`), `[@Ada Lovelace](…/person/<userId>)`, an agent's
  * under its task or its workspace, a Luke's under his task, which a post
- * addresses a member by, a `to` names a DM by, and a reader is named by;
- * the handle each member was minted is no longer read. A channel is the workspace's
+ * addresses a member by, a `to` names a DM by, and a reader is named by.
+ * A channel is the workspace's
  * `#general`, a plan's own channel where its agents post by default, a
  * topic channel a member opened, or a DM between two members; a thread is
  * a reply to a root message. Messages are records of their own, addressed
@@ -158,8 +158,6 @@ export const CHAT_BOUNDS = {
   MAX_TOPIC_CHANNELS: 12,
   /** The most posts one agent's turn may make: a coding agent's whole run is one turn, and it is told to keep its team posted throughout. */
   MAX_POSTS_PER_TURN: 50,
-  /** The most characters a handle may spell. */
-  MAX_HANDLE_CHARS: 40,
   /** The most characters a `to` may spell: a channel's `#name`, or a member's mention link, whose label is a name and whose address an agent's task and id make long. */
   MAX_TARGET_CHARS: 512,
   /** The most characters a topic channel's purpose may spell: a line under its name, never a brief. */
@@ -236,12 +234,6 @@ export type ChannelKind = (typeof CHANNEL_KIND)[keyof typeof CHANNEL_KIND];
 export const GENERAL_CHANNEL = "general";
 
 /**
- * The handle every plan's planner answers to, told apart by the plan.
- * @public
- */
-export const LUKE_HANDLE = "luke";
-
-/**
  * How a `to` names a channel, and how the window's composer opens a member's mention.
  * @public
  */
@@ -301,22 +293,12 @@ export function chatNoticeWords(text: string): string {
   return words.join("\n\n").trim();
 }
 
-/** A handle's grammar: a slug opening on a letter. */
-const HANDLE_GRAMMAR = /^[a-z][a-z0-9-]*$/u;
-
 /** A channel's name, without its `#`: the same grammar as a key. */
 export const chatChannelNameSchema = inboxKeySchema;
 
 /** What a topic channel says it is for: one line of words, with no line break in it. */
 const chatPurposeSchema = filledText(CHAT_BOUNDS.MAX_PURPOSE_CHARS).check(
   EffectSchema.isPattern(/^[^\r\n]*$/u),
-);
-
-/** A member's handle, without its `@`. */
-export const chatHandleSchema = EffectSchema.String.check(
-  EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_HANDLE_CHARS),
-  EffectSchema.isPattern(HANDLE_GRAMMAR),
 );
 
 /** A channel as a `to` names it: `#name`, within a key's grammar and bound. */
@@ -545,16 +527,14 @@ export const editChannelInputSchema = EffectSchema.Struct({
 });
 
 /**
- * A member as a reader sees one: its handle and kind, and what it stands
- * for by kind, a person's account, an agent, or a plan's planner; and
+ * A member as a reader sees one: its kind, what it is called, and what it
+ * stands for by kind, a person's account, an agent, or a plan's planner; and
  * whether it has left, an archived agent or plan, which is still named in
  * the messages it wrote.
  */
 export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
-  /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
-  handle: EffectSchema.optionalKey(EffectSchema.String),
   /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a Luke, always Luke, and for a member whose account or agent is gone. */
   name: EffectSchema.optionalKey(EffectSchema.String),
   userId: EffectSchema.optionalKey(EffectSchema.String),

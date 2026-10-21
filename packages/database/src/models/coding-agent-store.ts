@@ -992,6 +992,31 @@ const findNativeAgentConversation = SqlSchema.findOneOption({
     ),
 });
 
+/**
+ * The native runtime of each conversation named that runs on one, read with
+ * no account in hand: only for ids a gate already read, as
+ * `latestTurnsOfReached`, such as the agents a member's workspace reaches.
+ */
+const findNativeRuntimes = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    conversationId: Schema.String,
+    runtime: Schema.Literals(NATIVE_RUNTIMES),
+  }),
+  execute: ({ conversationIds }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: conversations.id, runtime: conversations.runtime })
+        .from(conversations)
+        .where(
+          and(
+            inArray(conversations.id, [...conversationIds]),
+            inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
+          ),
+        ),
+    ),
+});
+
 /** The conversation's newest turn: where it stands, and when it settled. */
 const findNewestTurnStanding = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -2269,6 +2294,21 @@ export function readCodingAgentRouting(
   return Effect.map(
     findAgentRouting({ userId, agentId }),
     Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.EVE })),
+  );
+}
+
+/**
+ * The native runtime of each conversation named, keyed by conversation;
+ * one on eve, or from before the column, is absent. Only for ids a gate
+ * already read, as above.
+ */
+export function nativeRuntimesOfReached(
+  conversationIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, (typeof NATIVE_RUNTIMES)[number]>> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findNativeRuntimes({ conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row.runtime])),
   );
 }
 

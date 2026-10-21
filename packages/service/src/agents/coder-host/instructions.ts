@@ -120,10 +120,11 @@ const CHECKS_WORDS = {
     "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
 } as const;
 
-/** The harnesses whose instructions differ in the tools they name: eve, which runs Luke's own, and Claude Code, which runs its own. */
+/** The harnesses whose instructions differ in the tools they name: eve, which runs Luke's own, and Claude Code and Codex, which each run their own. */
 export const CODER_HARNESS = {
   EVE: CONVERSATION_RUNTIME.EVE,
   CLAUDE_CODE: CONVERSATION_RUNTIME.CLAUDE_CODE,
+  CODEX: CONVERSATION_RUNTIME.CODEX,
 } as const;
 
 export type CoderHarness = (typeof CODER_HARNESS)[keyof typeof CODER_HARNESS];
@@ -158,11 +159,13 @@ interface ToolWords {
  * What a coding agent is told of `browser`, the Chromium in its own sandbox
  * whose tabs the developer watches and may take over: for what the
  * developer should see or help with, while a throwaway check of its own
- * work stays on the sandbox's Playwright, which leaves no tab behind.
+ * work stays on the sandbox's Playwright, which leaves no tab behind; and
+ * of `on: "mac"`, the developer's own Mac's tabs, only for what only the Mac
+ * reaches, since there it acts as the developer.
  */
 const BROWSER_WORDS = `## Your browser
 
-\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab. With \`on: "mac"\` the same actions run on your task's Browser tabs in Luke on the developer's own Mac instead, where you act as the developer, signed in to whatever they are signed in to: use it only for the developer's own \`localhost\` or a site they are signed in to there, and keep your own dev server and anything they should watch or take over in your own browser.
 
 `;
 
@@ -172,7 +175,11 @@ const BROWSER_WORDS = `## Your browser
  * (the `Agent` tool), so a Claude Code agent is told of those by the names
  * Claude Code gives them, and never of Luke's that it is not offered; the
  * tools that touch Luke stay Luke's, over its MCP server, under their own
- * names. Its checkout is fetched whole as it opens (`runner-sessions.ts`).
+ * names. Codex likewise owns its shell, `apply_patch`, its plan tool for
+ * to-dos, its subagents, its skills (`.agents/skills`), and web search, and
+ * its shell waits on a long command inside the turn, so a Codex agent waits
+ * on its checks with the command itself. A native agent's checkout is
+ * fetched whole as it opens (`runner-sessions.ts`).
  */
 const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
   [CODER_HARNESS.EVE]: {
@@ -209,6 +216,26 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     },
     worker: () =>
       "Claude Code's Agent tool hands a scoped task to a subagent, which runs on a Claude model and answers you once it is done; several run at once. Hand it broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A subagent knows only what its task says, and the developer reads it too, so write the task as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
+  },
+  [CODER_HARNESS.CODEX]: {
+    checkout: `Your own tools start there: every shell command runs in the checkout, and \`apply_patch\` resolves a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
+    sandbox: `Your own tools start in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in: every shell command runs there, and \`apply_patch\` resolves a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION}`,
+    serve:
+      "Start the app from your shell in the background (with `&` and its output sent to a file), which keeps a server running while your turn lasts",
+    readFile: "your shell (`cat`, or `sed -n` for a range), or Codex's `view_image` for a picture",
+    glob: "your shell (`rg --files`, or `ls`)",
+    searchWeb: "Search the public web with Codex's own web search",
+    skills:
+      "A word like `/name` in the developer's message names one of the repository's skills, which Codex finds under `.agents/skills`: read that skill's `SKILL.md` before anything else, and follow what it says. Where the checkout has no such skill, read `.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md` on the default branch, and follow that instead.",
+    browser: "",
+    todos:
+      "For work of more than a couple of steps, keep your to-dos with Codex's plan tool (`update_plan`), which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
+    checks: {
+      readable: `After you push and open or update a pull request, watch its checks with \`gh pr checks <number> --watch --fail-fast\` from your shell, which waits on the command for as long as it runs, rather than checking every few seconds or polling in a loop of your own. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and watch again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+      rest: `After you push and open or update a pull request, read its checks on the commit you pushed with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, waiting between reads with \`sleep <seconds>\` in your shell for about as long as the checks usually take rather than checking every few seconds. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and read again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+    },
+    worker: () =>
+      "Codex's own subagents take a scoped task each, run on a GPT model, and answer you once they are done; several run at once. Hand them broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A subagent knows only what its task says, and the developer reads it too, so write the task as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
   },
 };
 

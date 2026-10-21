@@ -338,10 +338,11 @@ test("a key a teammate's agent failed on is named as theirs, with no Settings of
 async function macPlace(
   startedBy: typeof CHARLES | undefined,
   readerId: string | undefined,
+  kind: typeof CALL_KIND.MAC_COMMAND | typeof CALL_KIND.MAC_BROWSER = CALL_KIND.MAC_COMMAND,
 ): Promise<HTMLElement> {
   const row = createElement(TranscriptTool, {
     state: TOOL_STATE.OUTPUT_AVAILABLE,
-    kind: CALL_KIND.MAC_COMMAND,
+    kind,
     subject: "pnpm test",
     input: { kind: TOOL_BLOCK.COMMAND, text: "pnpm test" },
     output: { kind: TOOL_BLOCK.TEXT, text: "ok" },
@@ -377,6 +378,20 @@ test("a command an agent ran on a Mac says whose, by their disc and name: a team
   const untold = await macPlace(CHARLES, undefined);
   assert.equal(untold.textContent?.trim(), "On your Mac");
   assert.equal(untold.querySelector(".actor-mark"), null);
+});
+
+test("a browser call on a Mac says whose Mac, as a command on one does", async () => {
+  const theirs = await macPlace(CHARLES, DEAN.userId, CALL_KIND.MAC_BROWSER);
+  assert.equal(theirs.querySelector(".actor-words")?.firstChild?.textContent, "Browser · on ");
+  assert.equal(
+    theirs.querySelector("[data-actor-ref] .luke-inline-ref-label")?.textContent,
+    "Charles Pan’s",
+  );
+  assert.equal(theirs.querySelector(".actor-words")?.lastChild?.textContent, " Mac");
+  act(() => root?.unmount());
+
+  const untold = await macPlace(CHARLES, undefined, CALL_KIND.MAC_BROWSER);
+  assert.equal(untold.textContent?.trim(), "Browser · on your Mac");
 });
 
 test("a starter or sender who left keeps their picture and their account's name now, from the read of who left", () => {

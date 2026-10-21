@@ -6,6 +6,7 @@ import {
   type CodingAgentStartedFromIt,
   continuationsOf,
   latestTurnsOfReached,
+  nativeRuntimesOfReached,
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
@@ -134,9 +135,11 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 > {
   const turns = yield* hostedStoreOrUnavailable(latestTurnsOfReached(conversationIds));
   const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOfReached(conversationIds));
+  const runtimes = yield* hostedStoreOrUnavailable(nativeRuntimesOfReached(conversationIds));
   return (conversationId) => ({
     turn: turns.get(conversationId),
     awaitingLineAt: awaiting.get(conversationId),
+    runtime: runtimes.get(conversationId),
   });
 });
 

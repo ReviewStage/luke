@@ -7,15 +7,32 @@ import {
   takeOverBrowserTab,
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
+import {
+  claimMacCommands,
+  macCommandsWaiting,
+  markMacListening,
+  settleMacBrowserResult,
+  settleMacCommand,
+} from "@luke/database/models/mac-command-store";
+import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_AGENT_ACTION, BROWSER_STEP_STATUS } from "@luke/features/browser-agent-actions";
+import {
+  BROWSER_AGENT_ACTION,
+  BROWSER_STEP_STATUS,
+  type BrowserAgentRun,
+} from "@luke/features/browser-agent-actions";
 import type { PageTarget } from "@luke/features/browser-cdp";
+import {
+  MAC_COMMAND_IMAGE_TYPE,
+  MAC_COMMAND_KIND,
+  type MacCommand,
+} from "@luke/features/mac-command-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Clock, Effect, Layer } from "effect";
+import { Clock, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import {
   agentBrowserTestLayer,
@@ -31,6 +48,7 @@ import { AgentBrowser, agentBrowserOver } from "./agent-browser.js";
 import {
   BROWSER_TOOL_REFUSAL,
   BROWSER_TOOL_STATUS,
+  type BrowserCall,
   type BrowserToolResult,
   browserModelOutput,
   runBrowserTool,
@@ -476,5 +494,276 @@ it.layer(getTestDB())("the browser tool", (it) => {
       assert.match(result.reason, /has not opened its sandbox yet/u);
       assert.deepEqual(yield* keptTabs(conversationId), []);
     }),
+  );
+});
+
+/** The kinds a Mac that drives its Browser tabs names as it listens: shell, and the browser. */
+const MAC_KINDS = [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER];
+
+const TASK_ID = "22222222-2222-4222-8222-222222222222";
+
+/** A JPEG's first bytes, which is what the store reads an image's type off. */
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff, 0xe0];
+
+/** A small JPEG's base64, as the Mac sends a screenshot. */
+const MAC_JPEG = (() => {
+  const image = new Uint8Array(64);
+  image.set(JPEG_SIGNATURE);
+  return Buffer.from(image).toString("base64");
+})();
+
+/** A screenshot step as the Mac's run carries it: its picture left empty, since it goes as the result's image. */
+function macScreenshot(tab: string) {
+  return {
+    action: BROWSER_AGENT_ACTION.SCREENSHOT,
+    status: BROWSER_STEP_STATUS.DONE,
+    tab,
+    image: { mime: "image/jpeg", data: "", width: 1280, height: 800 },
+  } as const;
+}
+
+/**
+ * A call as a coding agent's root makes it, its starter's Mac given: the
+ * sandbox it would open counted, so a call that never reaches the sandbox
+ * is seen to leave it be.
+ */
+function macCall(conversationId: string, userId: string, taskId: string | null) {
+  const opened = { count: 0 };
+  const call: BrowserCall = {
+    browserSession: SESSION,
+    conversationId,
+    openSandbox: async () => {
+      opened.count += 1;
+    },
+    mac: { userId, taskId: Effect.succeed(taskId) },
+  };
+  return { call, opened };
+}
+
+/** One call of the tool on the call given, with no sandbox browser to reach. */
+function callOn(call: BrowserCall, input: unknown) {
+  return runBrowserTool(call, unparsedWire(input as WireBoundaryInput)).pipe(
+    Effect.provide(noSandboxBrowserLayer),
+  );
+}
+
+/** Lets a forked call's statements run until a command waits for the account. */
+const untilQueued = (userId: string) =>
+  Effect.gen(function* () {
+    const since = new Date(yield* Clock.currentTimeMillis);
+    while (!(yield* macCommandsWaiting(userId, since, MAC_KINDS))) yield* Effect.yieldNow;
+  });
+
+/**
+ * The developer's Mac, as the store sees it: it listens for shell and
+ * browser commands, takes the one a call queued, and settles it with the
+ * answer given; what it took is answered for the test to read.
+ */
+function macAnswering(
+  userId: string,
+  pending: Fiber.Fiber<BrowserToolResult>,
+  settle: (taken: MacCommand) => TaskStoreEffect<boolean>,
+) {
+  return Effect.gen(function* () {
+    yield* untilQueued(userId);
+    const [taken] = yield* claimMacCommands(userId, new Date(0), MAC_KINDS);
+    assert.ok(taken);
+    assert.equal(yield* settle(taken), true);
+    yield* TestClock.adjust("1 second");
+    return { taken, result: yield* Fiber.join(pending) };
+  });
+}
+
+it.layer(getTestDB())("the browser tool on the developer's Mac", (it) => {
+  it.effect(
+    "a call on the Mac is sent to the starter's Mac as a browser command on the agent's task, and leaves the sandbox and its kept tabs be",
+    () =>
+      Effect.gen(function* () {
+        const { userId, conversationId } = yield* openConversation;
+        yield* markMacListening(userId, MAC_KINDS);
+        const { call, opened } = macCall(conversationId, userId, TASK_ID);
+        const actions = [
+          { action: BROWSER_AGENT_ACTION.OPEN, url: "http://localhost:5173/" },
+          { action: BROWSER_AGENT_ACTION.SNAPSHOT },
+        ];
+        const run: BrowserAgentRun = {
+          steps: [
+            { action: BROWSER_AGENT_ACTION.OPEN, status: BROWSER_STEP_STATUS.DONE, tab: "mac-7" },
+            {
+              action: BROWSER_AGENT_ACTION.SNAPSHOT,
+              status: BROWSER_STEP_STATUS.DONE,
+              tab: "mac-7",
+              url: "http://localhost:5173/",
+              title: "My app",
+              text: 'heading "Welcome"',
+              truncated: false,
+            },
+          ],
+          skipped: 0,
+        };
+
+        const pending = yield* Effect.forkChild(callOn(call, { actions, on: "mac" }));
+        const { taken, result } = yield* macAnswering(userId, pending, (command) =>
+          settleMacBrowserResult(userId, command.id, { output: run }),
+        );
+
+        assert.equal(taken.kind, MAC_COMMAND_KIND.BROWSER);
+        assert.ok(taken.kind === MAC_COMMAND_KIND.BROWSER);
+        assert.deepEqual(taken.params, { taskId: TASK_ID, actions });
+        assert.deepEqual(result, {
+          status: BROWSER_TOOL_STATUS.RAN,
+          ...run,
+          tabs: [{ tab: "mac-7", url: "http://localhost:5173/", title: "My app" }],
+        });
+        assert.equal(opened.count, 0, "the sandbox is never opened for the Mac");
+        assert.deepEqual(yield* keptTabs(conversationId), []);
+      }),
+  );
+
+  it.effect(
+    "the Mac's screenshot reaches the model where its run took the last one, and never the stored conversation",
+    () =>
+      Effect.gen(function* () {
+        const { userId, conversationId } = yield* openConversation;
+        yield* markMacListening(userId, MAC_KINDS);
+        const { call } = macCall(conversationId, userId, TASK_ID);
+        const actions = [
+          { action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "mac-1" },
+          { action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "mac-2" },
+        ];
+        const output = { steps: [macScreenshot("mac-1"), macScreenshot("mac-2")], skipped: 0 };
+
+        const pending = yield* Effect.forkChild(callOn(call, { actions, on: "mac" }));
+        const { result } = yield* macAnswering(userId, pending, (command) =>
+          settleMacBrowserResult(userId, command.id, {
+            output,
+            image: { mediaType: MAC_COMMAND_IMAGE_TYPE.JPEG, data: MAC_JPEG },
+          }),
+        );
+        const shown = browserModelOutput(unparsedWire(result));
+        const stored = JSON.stringify(storedBrowserOutput(unparsedWire(result)));
+
+        assert.ok(shown.type === "content");
+        assert.deepEqual(shown.value.slice(1), [
+          { type: "text", text: "The screenshot of tab mac-2:" },
+          { type: "file", data: { type: "data", data: MAC_JPEG }, mediaType: "image/jpeg" },
+        ]);
+        assert.ok(!stored.includes(MAC_JPEG));
+        assert.ok(stored.includes('"tab":"mac-2"'));
+      }),
+  );
+
+  it.effect(
+    "a Mac's run is given time for every wait it asks, and a tab whose page may have moved since it was read is not named by the old page",
+    () =>
+      Effect.gen(function* () {
+        const { userId, conversationId } = yield* openConversation;
+        yield* markMacListening(userId, MAC_KINDS);
+        const { call } = macCall(conversationId, userId, TASK_ID);
+        const waits = Array.from({ length: 8 }, () => ({
+          action: BROWSER_AGENT_ACTION.WAIT,
+          timeoutMs: 30_000,
+        }));
+        // The snapshot reads the sign-in page; the waits after it may see it redirect.
+        const actions = [{ action: BROWSER_AGENT_ACTION.SNAPSHOT, tab: "mac-1" }, ...waits];
+        const output = {
+          steps: [
+            {
+              action: BROWSER_AGENT_ACTION.SNAPSHOT,
+              status: BROWSER_STEP_STATUS.DONE,
+              tab: "mac-1",
+              url: "https://app.test/login",
+              title: "Sign in",
+              text: 'button "Sign in" [e3]',
+              truncated: false,
+            },
+            ...waits.map(() => ({
+              action: BROWSER_AGENT_ACTION.WAIT,
+              status: BROWSER_STEP_STATUS.DONE,
+              tab: "mac-1",
+            })),
+          ],
+          skipped: 0,
+        };
+
+        const pending = yield* Effect.forkChild(callOn(call, { actions, on: "mac" }));
+        const { taken, result } = yield* macAnswering(userId, pending, (command) =>
+          settleMacBrowserResult(userId, command.id, { output }),
+        );
+
+        assert.ok(taken.timeoutSeconds >= 8 * 30 + 20, "the Mac may take every action's own bound");
+        assert.deepEqual(ran(result).tabs, []);
+      }),
+  );
+
+  it.effect("a Mac that ran nothing is told in its own words, and so is no Mac listening", () =>
+    Effect.gen(function* () {
+      const { userId, conversationId } = yield* openConversation;
+      const { call } = macCall(conversationId, userId, TASK_ID);
+      const input = { actions: [{ action: BROWSER_AGENT_ACTION.LIST }], on: "mac" };
+
+      const unheard = yield* callOn(call, input);
+      yield* markMacListening(userId, MAC_KINDS);
+      const pending = yield* Effect.forkChild(callOn(call, input));
+      const words = "Not run: no window of Luke on this Mac shows the task.";
+      const { result: refused } = yield* macAnswering(userId, pending, (command) =>
+        settleMacCommand(userId, command.id, { refused: words }),
+      );
+
+      assert.equal(unheard.status, BROWSER_TOOL_STATUS.NOT_RUN);
+      assert.ok(unheard.status === BROWSER_TOOL_STATUS.NOT_RUN);
+      assert.match(unheard.reason, /no Mac of the developer's that can drive its Browser tabs/u);
+      assert.deepEqual(refused, { status: BROWSER_TOOL_STATUS.NOT_RUN, reason: words });
+    }),
+  );
+
+  it.effect(
+    "an agent on no task, or one that reaches no Mac, is refused in words and sends the Mac nothing",
+    () =>
+      Effect.gen(function* () {
+        const { userId, conversationId } = yield* openConversation;
+        yield* markMacListening(userId, MAC_KINDS);
+        const since = new Date(yield* Clock.currentTimeMillis);
+        const input = { actions: [{ action: BROWSER_AGENT_ACTION.LIST }], on: "mac" };
+        const { call } = macCall(conversationId, userId, null);
+        const { mac: _mac, ...macless } = call;
+
+        const taskless = yield* callOn(call, input);
+        const unreached = yield* callOn(macless, input);
+
+        assert.deepEqual(taskless, {
+          status: BROWSER_TOOL_STATUS.NOT_RUN,
+          reason: BROWSER_TOOL_REFUSAL.TASKLESS,
+        });
+        assert.deepEqual(unreached, {
+          status: BROWSER_TOOL_STATUS.NOT_RUN,
+          reason: BROWSER_TOOL_REFUSAL.NO_MAC,
+        });
+        assert.equal(yield* macCommandsWaiting(userId, since, MAC_KINDS), false);
+      }),
+  );
+
+  it.effect(
+    "a call that names no place runs on the agent's own sandbox browser, even with a Mac listening",
+    () =>
+      Effect.gen(function* () {
+        const { userId, conversationId } = yield* openConversation;
+        yield* markMacListening(userId, MAC_KINDS);
+        const since = new Date(yield* Clock.currentTimeMillis);
+        const { peer } = yield* browser();
+        const { call } = macCall(conversationId, userId, TASK_ID);
+
+        const result = yield* runBrowserTool(
+          call,
+          unparsedWire({
+            actions: [{ action: BROWSER_AGENT_ACTION.OPEN, url: "http://localhost:3000/" }],
+          }),
+        ).pipe(Effect.provide(agentBrowserTestLayer(peer, SESSION)));
+
+        assert.deepEqual(ran(result).tabs, [
+          { tab: "tab-1", url: "http://localhost:3000/", title: "New tab" },
+        ]);
+        assert.equal(yield* macCommandsWaiting(userId, since, MAC_KINDS), false);
+      }),
   );
 });

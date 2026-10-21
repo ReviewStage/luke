@@ -30,7 +30,7 @@ import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { MAIN_TAB, type MainTab, type MainTabsControl } from "../tasks/use-main-tabs.js";
+import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
@@ -331,13 +331,13 @@ export function chatEntries(available: boolean, onPick: () => void): AddEntry[] 
 /**
  * The "+" menu's rows: New voice chat, where the window has a voice, New
  * agent, unavailable with Start's own reason while Start could not run, both
- * left out on an archived task, and the task's Chat, each by itself under no
- * heading; then each of its agents under Agents (`agentEntries`).
+ * left out on an archived task, each by itself under no heading; then each
+ * of its agents under Agents (`agentEntries`). The task's Chat stands in the
+ * side panel, whose own "+" offers it.
  */
 function addEntries(
   main: MainTabsControl,
   agents: CodingAgentsControl,
-  chat: boolean,
   onNewVoiceChat: (() => void) | undefined,
 ): AddEntry[] {
   const { start } = agents;
@@ -363,15 +363,13 @@ function addEntries(
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
-  const chatRows = chatEntries(chat, () => main.onChoose(MAIN_TAB.CHAT));
   const agentRows = agentEntries(main, agents);
   const starts = agents.onUnarchive === undefined ? [...voiceChat, newAgent] : [];
-  return [...starts, ...chatRows, ...agentRows];
+  return [...starts, ...agentRows];
 }
 
 /**
- * The column's strip across its toolbar: the agents', the draft's, and the
- * Chat's, then the "+", which stands apart from the strip so it is never
+ * The column's strip across its toolbar: the agents' and the draft's, then the "+", which stands apart from the strip so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the column
  * holds the window's focus (`keys`).
  */
@@ -386,7 +384,6 @@ export function MainTabStrip({
   shown,
   onOpenTerminal,
   onOpenOnMac,
-  chat,
   onNewVoiceChat,
   calling,
 }: {
@@ -410,8 +407,6 @@ export function MainTabStrip({
   onOpenTerminal?: ((agentId: string) => void) | undefined;
   /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository or the platform has no Mac terminal. */
   onOpenOnMac?: ((agentId: string) => void) | undefined;
-  /** Whether there is a chat to read, so the "+" menu offers the plan's Chat tab. */
-  chat: boolean;
   /** Starts a new voice chat on the task, which the "+" menu offers first; none where the window has no voice. */
   onNewVoiceChat: (() => void) | undefined;
   /** The agent a call is in progress into, whose tab's glyph wears the live mark; none while no call stands. */
@@ -420,23 +415,10 @@ export function MainTabStrip({
   const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.task === task.id && sameTab(pin.tab, tab));
-  const chatTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.CHAT)
-    ? [
-        {
-          tab: MAIN_TAB.CHAT,
-          look: {
-            ...tabLook({ kind: TAB_KIND.CHAT }),
-            selected: main.tab === MAIN_TAB.CHAT,
-            onSelect: () => main.onChoose(MAIN_TAB.CHAT),
-          },
-          close: () => main.onClose(MAIN_TAB.CHAT),
-        },
-      ]
-    : [];
-  // The agents', the draft's, and Chat's tabs in the column's order,
+  // The agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    [...agentTabs({ main, agents, unread, views, drafted, calling }), ...chatTab],
+    agentTabs({ main, agents, unread, views, drafted, calling }),
     main.tabs,
     (entry) => entry.tab,
   );
@@ -512,7 +494,7 @@ export function MainTabStrip({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(main, agents, chat, onNewVoiceChat)}
+        entries={addEntries(main, agents, onNewVoiceChat)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}
@@ -524,7 +506,6 @@ export function MainTabStrip({
 
 /** What an agent's or the draft's tab is called to a reader of the column. */
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
-  if (tab === MAIN_TAB.CHAT) return tabLook({ kind: TAB_KIND.CHAT }).label;
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
@@ -553,7 +534,7 @@ export function MainTabContent({
   onContinue,
   call,
 }: {
-  tab: Exclude<MainTab, typeof MAIN_TAB.CHAT>;
+  tab: MainTab;
   agents: CodingAgentsControl;
   /** What an agent's tab takes calls through; none where the platform has no voice. */
   call?: AgentCallDoors | undefined;
