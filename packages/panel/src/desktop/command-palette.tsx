@@ -1,5 +1,5 @@
 /**
- * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
+ * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, the Inbox's items, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
  *
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
@@ -29,6 +29,12 @@
  * files are the open task's repository read whole in the one listing the File
  * tab's search reads, the first time a file is searched, and fuzzy-matched on
  * their paths.
+ *
+ * The Inbox's items are the listed workspace's, as the window's Inbox lists
+ * them, followed the first time the Inbox is searched (`use-inbox-search.ts`):
+ * each found by its title and its task's or automation's name, and else by
+ * anything its thread says, the words that found it then said beside its
+ * task's name. One chosen opens in the Inbox, as a notification's would.
  *
  * It is the nearest layer while it stands: no key pressed in it goes on to
  * the window, so Escape closes the palette and nothing else, a call's reply
@@ -103,6 +109,7 @@ import {
   useAppCommand,
   useOverlayHold,
 } from "../app-commands.js";
+import { AttentionMark } from "../attention-mark.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { Highlighted } from "../search-field.js";
@@ -120,8 +127,20 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
+import { ItemMark } from "../tasks/inbox-list.js";
+import {
+  holderName,
+  type InboxListed,
+  inboxItemWords,
+  NEEDS_YOU,
+  needsYou,
+} from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
+import { cardTitle } from "../tasks/tool-call-model.js";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { choiceOf } from "../tasks/use-inbox-listing.js";
+import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -140,6 +159,7 @@ const PALETTE_FILTER = {
   ALL: "all",
   TASKS: "plans",
   AGENTS: "agents",
+  INBOX: "inbox",
   PEOPLE: "people",
   FILES: "files",
   ACTIONS: "actions",
@@ -158,6 +178,7 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.TASKS]: "Tasks",
   [PALETTE_FILTER.AGENTS]: "Agents",
+  [PALETTE_FILTER.INBOX]: "Inbox",
   [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.ACTIONS]: "Actions",
@@ -166,9 +187,10 @@ const FILTER_LABEL = {
 
 /** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
-  [PALETTE_FILTER.ALL]: "Search tasks, agents, people, files, actions, and settings…",
+  [PALETTE_FILTER.ALL]: "Search tasks, agents, inbox, people, files, actions, and settings…",
   [PALETTE_FILTER.TASKS]: "Search tasks…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
+  [PALETTE_FILTER.INBOX]: "Search inbox…",
   [PALETTE_FILTER.PEOPLE]: "Search people…",
   [PALETTE_FILTER.FILES]: "Search files…",
   [PALETTE_FILTER.ACTIONS]: "Search actions…",
@@ -215,6 +237,13 @@ const READING_LINE = "Reading the repository's files…";
 /** What the Tasks filter says while the account's tasks are first read, and where that read did not land. */
 const TASKS_READING_LINE = "Reading your tasks…";
 const TASKS_FAILED_LINE = "Your tasks could not be read.";
+
+/** What the Inbox filter says while its items are first read, and where a read did not land. */
+const INBOX_READING_LINE = "Reading your inbox…";
+const INBOX_FAILED_LINE = "Your inbox could not be read.";
+
+/** How many characters of an item's words a row says on either side of the word that found it. */
+const SNIPPET_REACH = 40;
 
 /** What the People filter says while the listed workspace's members are read, and where that read did not land. */
 const PEOPLE_READING_LINE = "Reading the workspace's members…";
@@ -434,6 +463,14 @@ function peopleNotice(
   return read.refused
     ? { kind: PALETTE_NOTICE.FAILED, line: PEOPLE_FAILED_LINE, onRetry: read.retry }
     : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
+}
+
+/** What the Inbox filter says while its items have not been pushed, or a push did not land; nothing once every one is. */
+function inboxNotice(search: InboxSearch): PaletteNotice | undefined {
+  if (search.reading) return { kind: PALETTE_NOTICE.READING, line: INBOX_READING_LINE };
+  return search.failed
+    ? { kind: PALETTE_NOTICE.FAILED, line: INBOX_FAILED_LINE, onRetry: search.onRetry }
+    : undefined;
 }
 
 /**
@@ -722,6 +759,79 @@ function peopleRows(
     terms: [member.name, member.email],
     onChoose: () => open(member.userId),
   }));
+}
+
+/**
+ * The words around where a query's word that the row's title and holder do
+ * not hold landed in what the item says, cut on either side, for a row
+ * those did not find whole; none where they did, or where nothing else it
+ * says holds such a word. Note that the title is never the snippet, since
+ * the row already says it.
+ */
+function snippetOf(
+  words: readonly string[],
+  seen: readonly string[],
+  tokens: readonly string[],
+): string | undefined {
+  const missing = tokens.filter((token) => !matchesTokens(seen, [token]));
+  for (const line of words) {
+    if (seen.includes(line)) continue;
+    const lowered = line.toLowerCase();
+    const token = missing.find((each) => lowered.includes(each));
+    if (token === undefined) continue;
+    const at = lowered.indexOf(token);
+    const from = Math.max(0, at - SNIPPET_REACH);
+    const to = Math.min(line.length, at + token.length + SNIPPET_REACH);
+    return `${from > 0 ? "…" : ""}${line.slice(from, to).trim()}${to < line.length ? "…" : ""}`;
+  }
+  return undefined;
+}
+
+/**
+ * The listed workspace's Inbox items, each by its agent's tile and title,
+ * beside its task's or automation's name and, where its thread rather than
+ * those found it, the words that did; one that needs the reader wears the
+ * mark its Inbox row wears. Each is found by its title and its holder's
+ * name, and else by everything it says (`inboxItemWords`).
+ */
+function inboxRows(
+  items: readonly InboxListed[],
+  seams: {
+    readonly readerId: string | undefined;
+    readonly models: CodingAgentsControl["models"];
+    readonly tokens: readonly string[];
+    readonly open: (listed: InboxListed) => void;
+  },
+): readonly PaletteRow[] {
+  return items.map((listed) => {
+    const { holder, item } = listed;
+    const title = cardTitle(item.title);
+    const name = holderName(holder);
+    const words = inboxItemWords(item);
+    const snippet = snippetOf(words, [item.title, title, name], seams.tokens);
+    return {
+      icon: (
+        <ItemMark
+          holder={holder}
+          agentId={item.agentId}
+          models={seams.models}
+          readerId={seams.readerId}
+          plain
+        />
+      ),
+      label: title,
+      detail: snippet === undefined ? name : `${name} · ${snippet}`,
+      endMark: needsYou(listed, seams.readerId) ? (
+        <span className="inbox-row-attention">
+          <AttentionMark />
+          <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+        </span>
+      ) : undefined,
+      terms: [title, name],
+      keywords: words,
+      onChoose: () => seams.open(listed),
+    };
+  });
 }
 
 /** The commands offered now, the palette's own left out, each with its chord. */
@@ -1229,6 +1339,10 @@ export function CommandPalette({
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
   const filesOpen = opensTaskItems(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
+  // Note that the Inbox is read the first time it is searched, on the Files filter's terms.
+  const inboxAsked =
+    open && tasks.signedIn && (filter === PALETTE_FILTER.INBOX || tokens.length > 0);
+  const inboxSearch = useInboxSearch(tasks, inboxAsked);
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
@@ -1276,6 +1390,17 @@ export function CommandPalette({
         : [],
     ],
     [PALETTE_FILTER.AGENTS]: () => [agentRows(tasks, chatOn, onTasks)],
+    [PALETTE_FILTER.INBOX]: () => [
+      inboxAsked
+        ? inboxRows(inboxSearch.items, {
+            readerId: tasks.me,
+            models: tasks.agents.models,
+            tokens,
+            open: (listed) =>
+              onTasks(() => tasks.inboxView.onOpenItem({ ...choiceOf(listed), opened: true })),
+          })
+        : [],
+    ],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
@@ -1319,6 +1444,7 @@ export function CommandPalette({
   const noticeOf = {
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
     [PALETTE_FILTER.AGENTS]: () => undefined,
+    [PALETTE_FILTER.INBOX]: () => (inboxAsked ? inboxNotice(inboxSearch) : undefined),
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.FILES]: () =>
       fileQuery === undefined ? undefined : filesNotice(filesOpen, held),

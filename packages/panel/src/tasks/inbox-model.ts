@@ -1595,6 +1595,77 @@ export function holderName(holder: InboxHolder): string {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
 }
 
+/** The words a block says: Markdown's in plain words, a link's label, a file's path, a picture's alt; none of a block this build does not know. */
+function blockWords(block: InboxItem["blocks"][number]): string | undefined {
+  if (!knownBlock(block)) return undefined;
+  switch (block.type) {
+    case INBOX_BLOCK.MARKDOWN:
+      return plainWords(block.text);
+    case INBOX_BLOCK.LINK:
+      return block.label;
+    case INBOX_BLOCK.CODE:
+      return block.path;
+    case INBOX_BLOCK.IMAGE:
+      return block.alt;
+  }
+}
+
+/** The words options say: each one's label and the trade-off written under it. */
+function optionWords(options: readonly { label: string; detail?: string }[]): readonly string[] {
+  return options.flatMap((option) => [option.label, option.detail ?? ""]);
+}
+
+/** The words a form's fields say: each one's label and a select's options. */
+function fieldWords(fields: readonly InboxForm["fields"][number][]): readonly string[] {
+  return fields.flatMap((field) => [field.label, ...(field.options ?? [])]);
+}
+
+/** The words a filled form says: each field's label and its value as words. */
+function valueWords(values: readonly InboxFormValue[] | undefined): readonly string[] {
+  return (values ?? []).flatMap((each) => [each.label, fieldValueWords(each.value)]);
+}
+
+/** The words an ask offers: a decision's options, a to-do's steps, and an answer's fields; none of an ask this build does not know. */
+function askWords(ask: InboxReadAsk | undefined): readonly string[] {
+  if (ask === undefined || !knownAsk(ask)) return [];
+  if (ask.type === INBOX_ASK.DECIDE) return optionWords(ask.options);
+  if (ask.type === INBOX_ASK.DO) return ask.steps.map(plainWords);
+  return fieldWords(ask.fields ?? []);
+}
+
+/** The words a response offers: a choice's options and a form's fields. */
+function responseWords(response: InboxItem["response"]): readonly string[] {
+  if (!knownResponse(response)) return [];
+  if (response.type === INBOX_RESPONSE.CHOICE) return optionWords(response.options);
+  if (response.type === INBOX_RESPONSE.FORM) return fieldWords(response.fields);
+  return [];
+}
+
+/**
+ * Every line of words an item says, as a search reads it: its title, its
+ * blocks, what it offers to choose or fill in, each message of its thread
+ * and what that asks, picks, or fills in, and the answer it was given. Note that it names no
+ * address, id, or member, because a query typed is about what was said, and
+ * an address holds letters enough to match almost anything.
+ */
+export function inboxItemWords(item: InboxItem): readonly string[] {
+  const offered = responseWords(item.response);
+  const said = (item.thread ?? item.messages ?? []).flatMap((message) => [
+    plainWords(message.text),
+    ...askWords(message.ask),
+    ...(message.answers?.choices ?? []),
+    ...valueWords(message.answers?.values),
+  ]);
+  const answered = [
+    ...(item.answer?.choices ?? []),
+    ...valueWords(item.answer?.values),
+    item.answer?.note ?? "",
+  ];
+  return [item.title, ...item.blocks.map(blockWords), ...offered, ...said, ...answered].filter(
+    (words): words is string => words !== undefined && words.length > 0,
+  );
+}
+
 /** What one group of agents no readable automation started is keyed by. */
 const NO_AUTOMATION_KEY = "no-automation";
 
