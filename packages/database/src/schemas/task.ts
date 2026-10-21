@@ -11,7 +11,6 @@ import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
-import { issue } from "./issue.js";
 import { conversations } from "./storage.js";
 
 /**
@@ -84,21 +83,6 @@ export const task = pgTable(
      */
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     /**
-     * @deprecated A task's issues are its links now, in `task_issue`
-     * (`task-issue.ts`), and nothing writes or reads this. It was the one
-     * Linear issue a task was started from, as the service read it then. It
-     * stands until no running build reads it, then a later migration drops
-     * it.
-     */
-    linearIssue: jsonb("linear_issue"),
-    /**
-     * @deprecated Luke keeps no issues of its own now (`issue.ts`), and
-     * nothing writes or reads this. It was the workspace's own issue the task
-     * was started from. It stands until no running build reads it, then a
-     * later migration drops it.
-     */
-    issueId: uuid("issue_id").references(() => issue.id, { onDelete: "set null" }),
-    /**
      * The developer's own words about the task as they started it, which
      * Luke is handed beside the plan to plan from; null for a task started
      * with none. Kept as written, like the document.
@@ -125,9 +109,6 @@ export const task = pgTable(
     index("task_user_created").on(table.userId, table.createdAt),
     // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
-    // Deprecated with `issue_id`: an issue's deletion let each of its tasks go. Note that it is not
-    // named `task_issue`, because an index shares its name's namespace with the table of links.
-    index("task_workspace_issue").on(table.issueId),
     // The key names one task of its workspace, and a new task takes the next number.
     uniqueIndex("task_organization_number").on(table.organizationId, table.number),
     // A workspace's tasks assigned to one member, and that member leaving letting each of them go.

@@ -5,7 +5,7 @@ import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
@@ -603,52 +603,6 @@ it.layer(getTestDB())("a task's number", (it) => {
 
       assert.equal(Option.getOrUndefined(moved)?.number, 2);
       assert.equal(next.number, 4);
-    }),
-  );
-
-  it.effect(
-    "is taken from the same count by an insert that names none, as the build before numbering inserts",
-    () =>
-      Effect.gen(function* () {
-        const dean = yield* openAccount;
-        const acme = yield* openWorkspace(dean);
-        yield* createTask(dean, { organizationId: acme });
-        const id = randomUUID();
-
-        yield* Database.use((db) =>
-          db.execute(
-            sql`insert into task (id, user_id, organization_id, name, document) values (${id}, ${dean}, ${acme}, 'Older build', '')`,
-          ),
-        );
-        const after = yield* createTask(dean, { organizationId: acme });
-
-        assert.deepEqual(yield* standingOf(dean, id), {
-          number: 2,
-          status: TASK_STATUS.TODO,
-          priority: TASK_PRIORITY.NONE,
-        });
-        assert.equal(after.number, 3);
-      }),
-  );
-});
-
-it.layer(getTestDB())("a task moved by the build before numbering", (it) => {
-  it.effect("takes the next number of the workspace it lands in, never one standing there", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const acme = yield* openWorkspace(dean);
-      const initech = yield* openWorkspace(dean);
-      const moving = yield* createTask(dean, { organizationId: acme });
-      yield* createTask(dean, { organizationId: initech });
-
-      // The build before numbering moves a task by its workspace alone.
-      yield* Database.use((db) =>
-        db.execute(sql`update task set organization_id = ${initech} where id = ${moving.id}`),
-      );
-      const after = yield* createTask(dean, { organizationId: initech });
-
-      assert.equal((yield* standingOf(dean, moving.id)).number, 2);
-      assert.equal(after.number, 3);
     }),
   );
 });
