@@ -269,6 +269,8 @@ function fakeService() {
   let pinTxid: string | undefined;
   // The transaction the service says each inbox write committed in; none says it changed nothing.
   let committedIn: { readonly txid?: string } = {};
+  /** The transaction the service says wrote a sent message's row; none says none was written. */
+  let sentTxid: string | undefined;
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -347,7 +349,7 @@ function fakeService() {
     message: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`message:${agentId}:${request.clientKey}:${request.text}`);
-        return { agent: AGENT };
+        return sentTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: sentTxid };
       }),
     choose: (agentId, choice) =>
       Effect.sync(() => {
@@ -669,6 +671,10 @@ function fakeService() {
     pageNewest: (page: CodingAgentNewestAnswer | { readonly failure: "unanswered" }) => {
       newestPage = page;
     },
+    /** The transaction the service answers a sent message with. */
+    sendTxid: (txid: string | undefined) => {
+      sentTxid = txid;
+    },
     /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
     sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       scope = next;
@@ -750,6 +756,7 @@ function subject(
         ),
       pageNow: service.pageNow,
       pageNewest: service.pageNewest,
+      sendTxid: service.sendTxid,
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
       commitIn: service.commitIn,
@@ -2198,5 +2205,33 @@ it.effect(
         "a write that changed nothing answers at once",
       );
       assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
+);
+
+it.effect(
+  "a sent message is confirmed once its row's transaction reached the transcript a window follows, and at once where none follows it",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealTranscript, pageNow: script, sendTxid, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      sendTxid("742");
+      const send = { agentId: AGENT_ID, text: "Use seven days.", clientKey: "send-1" };
+
+      // No window follows the transcript: nothing to wait on.
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send), { agent: AGENT });
+      assert.deepEqual(realtime.awaitingTxids(), []);
+
+      script(pageNow("1:0", { holds: true }));
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 1);
+      yield* settled;
+      const sending = yield* Effect.forkChild(call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send));
+      yield* settled;
+      assert.deepEqual(realtime.awaitingTxids(), ["742"]);
+      assert.equal(sending.pollUnsafe(), undefined);
+
+      realtime.arrive("742");
+      assert.deepEqual(yield* Fiber.join(sending), { agent: AGENT });
     }),
 );
