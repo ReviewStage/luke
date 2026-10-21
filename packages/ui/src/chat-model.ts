@@ -2,6 +2,7 @@ import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_MEMBER_LABEL,
   CHAT_TARGET_SIGIL,
@@ -12,8 +13,10 @@ import {
   type ChatMessage,
   type ChatOpenRequest,
   type ChatPostRequest,
+  type ChatReadBlock,
   type ChatReply,
   GENERAL_CHANNEL,
+  knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
@@ -389,6 +392,53 @@ export function continuesRun(before: ChatThread | undefined, thread: ChatThread)
   if (before === undefined || before.replies.length > 0) return false;
   const gap = thread.message.postedAt - before.message.postedAt;
   return before.message.authorId === thread.message.authorId && gap >= 0 && gap <= CHAT_RUN_SPAN;
+}
+
+/**
+ * The seq of the first root in a channel someone else posted past the
+ * reader's cursor there, where its "New" line stands as the channel opens;
+ * nothing where none is. Note that a root is counted by when it was posted,
+ * not when it last changed, so an old message edited or answered since
+ * never reads as new, and that a reply, drawn folded under its root, is
+ * never where the line stands.
+ */
+export function firstUnreadSeq(chat: ChatAnswer, channelId: string): number | undefined {
+  const read = readSeqIn(chat, channelId);
+  return channelThreads(chat, channelId).find(
+    ({ message }) => message.seq > read && message.authorId !== chat.self,
+  )?.message.seq;
+}
+
+/** One block as a paragraph of the Markdown a message's Copy takes; nothing for a picture, which has no address a reader can open, or a block this build does not know. */
+function blockMarkdown(block: ChatReadBlock): string | undefined {
+  if (!knownBlock(block)) return undefined;
+  switch (block.type) {
+    case CHAT_BLOCK.MARKDOWN:
+      return block.text;
+    case CHAT_BLOCK.LINK: {
+      // Its label's brackets and its address's parentheses escaped, so the link reads back as written.
+      const label = block.label.replace(/[\\[\]]/gu, (mark) => `\\${mark}`);
+      return `[${label}](${block.url.replaceAll("(", "%28").replaceAll(")", "%29")})`;
+    }
+    case CHAT_BLOCK.CODE: {
+      const path = block.path.split("/").map(encodeURIComponent).join("/");
+      const lines =
+        block.endLine > block.startLine
+          ? `#L${block.startLine}-L${block.endLine}`
+          : `#L${block.startLine}`;
+      return `https://github.com/${block.repo}/blob/${block.sha}/${path}${lines}`;
+    }
+    case CHAT_BLOCK.IMAGE:
+      return undefined;
+  }
+}
+
+/** A message's words as the Markdown its Copy takes: each block a paragraph of its own, in order, a code block by its lines' GitHub address. */
+export function messageMarkdown(message: ChatMessage): string {
+  return message.blocks
+    .flatMap((block) => blockMarkdown(block) ?? [])
+    .filter((paragraph) => paragraph !== "")
+    .join("\n\n");
 }
 
 /** Why a message waits on the reader, or nothing where it does not. */

@@ -34,7 +34,7 @@ import {
 } from "../tasks/chat-fixture.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
-import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -71,6 +71,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -238,6 +240,133 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Invite emails",
     "  ↳ Add teammate invitations",
     "  ↳ Invite emails",
+  ]);
+});
+
+/**
+ * Lays out every log the window draws as a box 100 tall over 1000 of
+ * lines, since jsdom lays nothing out, its scroll position kept as written,
+ * and the "New" line standing `lineTop` from the box's top.
+ */
+function layOutLogs(lineTop = 0): void {
+  const tops = new WeakMap<Element, number>();
+  const log = (element: Element) => element.getAttribute("role") === "log";
+  vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(function (this: Element) {
+    return log(this) ? 1000 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    return log(this) ? 100 : 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
+    return tops.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "set").mockImplementation(function (
+    this: Element,
+    top: number,
+  ) {
+    tops.set(this, top);
+  });
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const top = this.classList.contains("chat-unread-line") ? lineTop : 0;
+    return DOMRect.fromRect({ x: 0, y: top, width: 0, height: 0 });
+  });
+}
+
+/** The shown place's log: the box its messages scroll in. */
+function shownLog(page: HTMLElement): HTMLElement {
+  const log = page.querySelector<HTMLElement>('.chat-stream [role="log"]');
+  assert.ok(log, "the place's messages stand in a log");
+  return log;
+}
+
+/** The way back to the newest message, where it floats over the log. */
+function toNewest(page: HTMLElement): HTMLButtonElement | null {
+  return page.querySelector('button[aria-label="Scroll to the newest line"]');
+}
+
+/** The shown channel's roots in order, by seq, and its "New" line where it stands. */
+function roots(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".chat-messages > li")].map((node) =>
+    node.classList.contains("chat-unread-line")
+      ? (node.textContent ?? "")
+      : (node.getAttribute("data-seq") ?? ""),
+  );
+}
+
+test("a channel opens as a log at its newest message, a New line before the first message someone posted since the developer read it, and the way back floats once they scroll up", () => {
+  layOutLogs();
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const log = shownLog(page);
+  assert.equal(log.scrollTop, 1000);
+  // The developer read up to 46, so the line stands between it and 47, and once alone.
+  const shown = roots(page);
+  assert.deepEqual(shown.slice(shown.indexOf("New") - 1, shown.indexOf("New") + 2), [
+    "46",
+    "New",
+    "47",
+  ]);
+  assert.equal(shown.filter((each) => each === "New").length, 1);
+  // The first unread message heads a run of its own, named and faced, though its author spoke last.
+  assert.equal(
+    page.querySelector('.chat-message[data-seq="47"]')?.getAttribute("data-continued"),
+    "false",
+  );
+  assert.equal(toNewest(page), null);
+  log.scrollTop = 400;
+  act(() => {
+    log.dispatchEvent(new Event("scroll"));
+  });
+  assert.ok(toNewest(page), "scrolled up, the way back to the newest message floats");
+  act(() => toNewest(page)?.click());
+  assert.equal(log.scrollTop, 1000);
+  assert.equal(toNewest(page), null);
+  act(() => railRow(page, "general").click());
+  assert.equal(page.querySelector(".chat-unread-line"), null);
+});
+
+test("a channel whose unread run is taller than the box opens with its New line at the top, let go of the newest message", () => {
+  layOutLogs(-600);
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(shownLog(page).scrollTop, 400);
+  assert.ok(toNewest(page), "opened above the newest message, the way back floats");
+});
+
+test("For you is a log too, opened at its newest entry", () => {
+  layOutLogs();
+  const page = mount();
+  assert.equal(shownLog(page).scrollTop, 1000);
+});
+
+test("a message says how long ago it was posted, as every row and thread in the window does, a continued one too", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AT);
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const time = (seq: number) =>
+    page.querySelector(`.chat-message[data-seq="${seq}"] time.chat-time`)?.textContent;
+  assert.equal(time(47), "16m");
+  assert.equal(time(51), "3m");
+});
+
+test("a message's Copy takes its words as Markdown, beside the Reply its byline offers", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const actions = page.querySelector('.chat-message[data-seq="51"] .chat-byline-action');
+  assert.deepEqual(
+    [...(actions?.querySelectorAll("button") ?? [])].map(
+      (button) => button.getAttribute("aria-label") ?? button.textContent,
+    ),
+    ["Copy", "Reply"],
+  );
+  act(() => actions?.querySelector<HTMLButtonElement>('button[aria-label="Copy"]')?.click());
+  await settle();
+  assert.deepEqual(copied, [
+    "Two invites to one address in one workspace would otherwise both go pending. It's one " +
+      "migration, online, and nothing writes the pair twice today.",
   ]);
 });
 
