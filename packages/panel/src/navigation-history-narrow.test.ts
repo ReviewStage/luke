@@ -820,3 +820,13 @@ test("on a narrow stage Back from an automation with unsaved work to another aut
   assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "and a browser's Back too");
   assert.equal(window.held.current().at, 1, "the history stands back on it");
 });
+
+test("on a narrow stage another tab chosen in the side panel standing over the plan is a step of its own, which Back shows again", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));
+  assert.equal(window.addresses().length, 3, "the plan, the page's tab, then the plan's tab");
+
+  act(() => window.history().onBack());
+  assert.deepEqual(window.at().panel, { open: true, tab: PAGE_TAB });
+});

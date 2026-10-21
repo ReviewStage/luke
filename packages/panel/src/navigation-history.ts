@@ -302,6 +302,11 @@ function samePage(one: Place, other: Place): boolean {
   return true;
 }
 
+/** The tab a narrow room's side panel shows over the plan, while it is open. */
+function openPanelTab(panel: PanelStep | undefined): SidePanelTab | undefined {
+  return panel?.open === true ? panel.tab : undefined;
+}
+
 /** Whether two tabs are one, or both none. */
 function sameTabOrNone(one: StripTab | undefined, other: StripTab | undefined): boolean {
   return one === undefined || other === undefined ? one === other : sameTab(one, other);
@@ -321,7 +326,11 @@ function sameOrUnknownTab(one: StripTab | undefined, other: StripTab | undefined
  */
 function sameShown(one: Place, other: Place): boolean {
   if (one.kind === PLACE_KIND.TASK && other.kind === PLACE_KIND.TASK) {
-    return sameOrUnknownTab(one.column, other.column) && sameOrUnknownTab(one.side, other.side);
+    return (
+      sameOrUnknownTab(one.column, other.column) &&
+      sameOrUnknownTab(one.side, other.side) &&
+      sameOrUnknownTab(openPanelTab(one.panel), openPanelTab(other.panel))
+    );
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
     return one.chosen === undefined || other.chosen === undefined
@@ -860,7 +869,10 @@ export function useWindowHistory(input: {
   const knownStrips = useRef(new Map<string, KnownStrips>()).current;
   if (stripsKnown && !inboxOpen && !historyOpen) {
     knownStrips.set(boundFor, {
-      column: columnKnown ? new Set(tasks.mainTabs.tabs.map(tabKey)) : undefined,
+      // Note that a task reopened before its agents are read keeps the column it was last seen with.
+      column: columnKnown
+        ? new Set(tasks.mainTabs.tabs.map(tabKey))
+        : knownStrips.get(boundFor)?.column,
       side: new Set(tasks.sidePanel.strip.map(tabKey)),
     });
   }

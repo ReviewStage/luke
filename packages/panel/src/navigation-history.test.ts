@@ -887,3 +887,25 @@ test("the side panel's tabs are steps though the task's agents are not read, as 
   act(() => window.history().onBack());
   assert.deepEqual(shown, ["side:code"]);
 });
+
+test("a task opened again before its agents are read keeps the column it was last seen with, so a step on an agent's tab since closed is still passed over", () => {
+  const shown: string[] = [];
+  const window = mount(onTabs({ column: AGENT_A, shown }));
+  press();
+  window.stand(onTabs({ column: AGENT_B, shown }));
+  press();
+  window.stand(onTabs({ column: AGENT_C, shown }));
+  // Agent B's tab closed from the strip, then the window goes home.
+  window.stand(onTabs({ column: AGENT_C, agents: [AGENT_A, AGENT_C], shown }));
+  press();
+  window.stand(tasksControl());
+  // The task opened again, its agents on their way.
+  press();
+  const unread = onTabs({ column: undefined, shown });
+  window.stand({ ...unread, mainTabs: { ...unread.mainTabs, tabs: [], openAgents: undefined } });
+
+  act(() => window.history().onBack());
+  act(() => window.history().onBack());
+  act(() => window.history().onBack());
+  assert.deepEqual(shown, ["column:agent-c", "column:agent-a"], "home, then C, then A past B");
+});
