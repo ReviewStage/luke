@@ -1,17 +1,18 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { readerZone } from "@luke/features/date-mention";
-import { ComboboxList, comboboxOptionId, ErrorState, GAP, Inline, SUBMIT_STATE } from "@luke/ui";
 import {
-  type ChatMention,
-  type ChatTarget,
-  chatMentionAt,
-  chatRows,
-  chooseTarget,
-} from "@luke/ui/chat-mention";
+  ErrorState,
+  GAP,
+  Inline,
+  SUBMIT_STATE,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputFooter,
@@ -34,13 +35,17 @@ import { Tooltip } from "../tooltip.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
-import { chatOption, useChatMentionPicker } from "./chat-mention-picker.js";
 import { ComposerField } from "./composer-field.js";
-import { useDatePicker } from "./date-picker.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
+import {
+  MENTION_MENU_SIDE,
+  type MentionableChannel,
+  type MentionMembers,
+  type MentionSource,
+  useMentionPicker,
+} from "./mention-picker.js";
 import { useMentionDoors, useTaskMentions } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
 
@@ -61,16 +66,16 @@ import { useKnownNames } from "./use-known-names.js";
  * What is typed and not sent is kept per channel, and per thread for a
  * reply, as every box that sends somewhere keeps it (`composer-drafts.ts`),
  * so another channel opened, a thread hidden, or the window reloaded finds
- * it where it was left. An `@` or a `#`
- * at the start of a word opens the chat's own list over the box
- * (`chat-mention-picker.tsx`). A member chosen, a person, an agent, or a
- * task's Luke, is written as their chip, the same mention link the agent
- * box, the Inbox, and a plan comment write
+ * it where it was left. An `@` at the start of a word opens the app's one
+ * mention list at the word, as the agent box's, the Inbox's, and a plan
+ * comment's do (`mention-picker.tsx`): the people and agents a mention here
+ * tells first, then the channel's task, its repository's files, and its pull
+ * requests where it has a task, and dates. A member chosen is written as
+ * their chip, the same mention link the other boxes write
  * (`[@Ada Lovelace](…/person/<id>)`), which the service reads to tell them;
- * a channel is written as its word (`#general`).
- * Words after an `@` that read as a date offer it first, and a pick writes
- * the same date link the other boxes write (`[@Oct 20, 2026](luke://date/…)`).
- * A Luke address pasted whole is written as its chip, as it is in the
+ * the box says so where the words name more members than a post tells. A
+ * `#` opens the same list on the channels, one chosen written as its word
+ * (`#general`). A Luke address pasted whole is written as its chip, as it is in the
  * agent box, the Inbox, and a plan comment (`pastedMentionNode`).
  * The microphone records a dictation and lays its words in at the
  * caret (`use-dictation.ts`), listening for the chat's members' names and
@@ -82,7 +87,8 @@ import { useKnownNames } from "./use-known-names.js";
  * file that cannot come says why under the card, and a post may be
  * pictures alone. While pictures are read the post waits for them. Where
  * the editor's bundle could not be loaded, a plain textarea stands in with
- * the same list and no pictures, so a message can always be written. What
+ * no list and no pictures, as a plan comment's does, so a message can
+ * always be written. What
  * is typed is a person's words, so the box is out of a session recording
  * (`ph-no-capture`) as well as masked.
  */
@@ -104,46 +110,19 @@ function carriesFiles(event: React.DragEvent): boolean {
   return event.dataTransfer.types.includes("Files");
 }
 
-/** The list's own name, which its listbox is read by. */
-const MENTION_MENU_LABEL = "Mention";
+/** What the box says where the words name more members than a post tells. */
+const CROWDED = `Only the first ${CHAT_BOUNDS.MAX_STEERS_PER_POST} members mentioned are notified.`;
 
-/** The highlight as it was moved, held against the word it was moved in. */
-interface Highlight {
-  readonly start: number;
-  readonly query: string;
-  readonly at: number;
-}
-
-/** The list an `@` or `#` word opens: a row per target offered, the highlighted one washed. */
-function MentionMenu({
-  id,
-  rows,
-  at,
-  onHover,
-  onChoose,
-}: {
-  id: string;
-  rows: readonly ChatTarget[];
-  at: number;
-  onHover: (index: number) => void;
-  onChoose: (target: ChatTarget) => void;
-}): React.JSX.Element {
-  const options = rows.map(chatOption);
-  return (
-    <div className="menu-surface searchable-menu chat-mention-menu">
-      <ComboboxList
-        id={id}
-        label={MENTION_MENU_LABEL}
-        groups={[{ options }]}
-        active={at}
-        onActiveChange={onHover}
-        onChoose={(index) => {
-          const target = rows[index];
-          if (target !== undefined) onChoose(target);
-        }}
-      />
-    </div>
-  );
+/** What an `@` or a `#` in a chat box offers, as the place it stands in hands it (`chat-mention-source.ts`). */
+export interface ChatComposerMentions {
+  /** The task an `@` offers beside the members, with its repository and pull requests, and the workspace a mention is written in. */
+  readonly source: MentionSource;
+  /** The people and agents a mention here tells. */
+  readonly members: MentionMembers;
+  /** The channels a `#` names. */
+  readonly channels: readonly MentionableChannel[];
+  /** Whether the words name more members than a post here tells. */
+  readonly crowded: (text: string) => boolean;
 }
 
 /** What a chat box is handed by the place it stands in. */
@@ -154,8 +133,8 @@ interface ChatComposerProps {
   readonly replyTo?: number | undefined;
   /** What the box asks for while empty, which names it for assistive technology too. */
   readonly label: string;
-  /** What an `@` or `#` offers. */
-  readonly targets: readonly ChatTarget[];
+  /** What an `@` or a `#` offers. */
+  readonly mentions: ChatComposerMentions;
   /** The words a dictation here is likely to say (`chatKeywords`). */
   readonly keywords: readonly string[];
   /** Whether it stands under a thread, a line high, rather than at a place's foot. */
@@ -322,6 +301,19 @@ function NoteLine({
   );
 }
 
+/** A line under the box where the words name more members than a post tells, since those past the first few hear nothing of it. */
+function CrowdedNote({ shown }: { shown: boolean }): React.JSX.Element {
+  return (
+    <div className="chat-composer-crowded" role="status">
+      {shown ? (
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {CROWDED}
+        </Text>
+      ) : null}
+    </div>
+  );
+}
+
 /** A chat box takes no skills, which are an agent's. */
 const NO_SKILLS: ReadonlySet<string> = new Set();
 
@@ -350,12 +342,12 @@ function usePastedMention(doors: MentionDoors): (words: string) => MentionNode |
         );
 }
 
-/** The box on the agent box's editor: `@` and `#` open the chat's list over it, and the microphone lays a dictation in at the caret. */
+/** The box on the agent box's editor: `@` and `#` open the app's mention list at the word, and the microphone lays a dictation in at the caret. */
 function EditorChatComposer({
   channelId,
   replyTo,
   label,
-  targets,
+  mentions,
   keywords,
   compact,
   onSend,
@@ -363,9 +355,7 @@ function EditorChatComposer({
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
-  // A date chip in the box opens its picker over the card, as the agent box's does.
   const card = useRef<HTMLDivElement>(null);
-  const datePicker = useDatePicker(card);
   const [dropping, setDropping] = useState(false);
   const {
     draft,
@@ -407,21 +397,17 @@ function EditorChatComposer({
         card.current?.contains(active) === true);
     if (dropped) editor.current?.focus();
   }, [sending]);
-  const mentions = useChatMentionPicker({
-    targets,
-    onChoose: (target) => {
-      // A date is written as its chip, the date in full, wherever the box stands.
-      if (target.date !== undefined) {
-        editor.current?.chooseMention({ name: target.detail ?? target.name, target: target.date });
-        return;
-      }
-      // A member is written as their chip, the link every box of the app writes; a channel as its word.
-      if (target.link !== undefined) {
-        editor.current?.chooseMention({ name: target.name, target: target.link });
-        return;
-      }
-      editor.current?.chooseWords(`${target.sigil}${target.name}`);
+  // A mention is written as its chip, the link every box of the app writes; a channel as its word.
+  const picker = useMentionPicker({
+    source: mentions.source,
+    members: mentions.members,
+    channels: {
+      known: mentions.channels,
+      onChoose: (name) => editor.current?.chooseWords(`#${name}`),
     },
+    room,
+    side: MENTION_MENU_SIDE.ABOVE,
+    onChoose: (mention) => editor.current?.chooseMention(mention),
   });
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
@@ -447,8 +433,6 @@ function EditorChatComposer({
         attach(Array.from(event.dataTransfer.files));
       }}
     >
-      {mentions.menu}
-      {datePicker.popover}
       <PromptInput
         onSubmit={() => {
           refocus.current = card.current?.contains(document.activeElement) === true;
@@ -476,9 +460,9 @@ function EditorChatComposer({
           }
           maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
           skills={NO_SKILLS}
-          aria={{ ...mentions.aria, "aria-placeholder": label }}
+          aria={{ ...picker.aria, "aria-placeholder": label }}
           onKey={(event) => {
-            if (dictation.onFieldKey(event) || mentions.onKey(event)) return true;
+            if (dictation.onFieldKey(event) || picker.onKey(event)) return true;
             // Escape, where no list or dictation takes it, leaves the box, as the agent box's does.
             if (event.key !== "Escape") return false;
             event.stopPropagation();
@@ -498,13 +482,13 @@ function EditorChatComposer({
           onTrigger={() => undefined}
           chip={() => null}
           mentions={{
-            onTrigger: mentions.onMemberTrigger,
-            onChannelTrigger: mentions.onChannelTrigger,
+            onTrigger: picker.onTrigger,
+            onChannelTrigger: picker.onChannelTrigger,
             chip: (mention, node) => (
               <MentionNodeChip
                 mention={mention}
                 doors={doors}
-                edit={{ node, pickDate: datePicker.open }}
+                edit={{ node, pickDate: picker.pickDate }}
               />
             ),
             pasted,
@@ -514,7 +498,9 @@ function EditorChatComposer({
           // while the caret is out of the box.
           takesFocus={false}
           focus={compact === true ? true : undefined}
-        />
+        >
+          {picker.menu}
+        </ComposerField>
         {dictating ? (
           <PromptInputFooter>
             <DictationStrip dictation={dictation} />
@@ -536,21 +522,21 @@ function EditorChatComposer({
           </ComposerFoot>
         )}
       </PromptInput>
+      <CrowdedNote shown={mentions.crowded(draft)} />
       <NoteLine note={note} onRetry={send} />
     </div>
   );
 }
 
-/** The plain box a bundle that failed to load leaves: a textarea whose `@` or `#` word opens the same list. */
+/** The plain box a bundle that failed to load leaves: a textarea that posts its words, with no list, as a plan comment's plain box has none. */
 function PlainChatComposer({
   channelId,
   replyTo,
   label,
-  targets,
+  mentions,
   compact,
   onSend,
 }: ChatComposerProps): React.JSX.Element {
-  const listId = useId();
   const field = useRef<HTMLTextAreaElement>(null);
   const { draft, setDraft, sending, empty, note, send } = useChatSend(
     chatPlace(channelId, replyTo),
@@ -563,101 +549,15 @@ function PlainChatComposer({
     element.style.height = "auto";
     element.style.height = `${element.scrollHeight}px`;
   }, [draft]);
-  const [caret, setCaret] = useState<number | undefined>(undefined);
-  const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
-  const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
-  // Note that the caret an edit leaves is set once its words are in the box, on the next render.
-  const pendingCaret = useRef<number | undefined>(undefined);
-  useLayoutEffect(() => {
-    if (pendingCaret.current === undefined || field.current === null) return;
-    field.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
-    setCaret(pendingCaret.current);
-    pendingCaret.current = undefined;
-  }, [draft]);
-
-  const now = useMinute();
-  const zone = readerZone();
-  // Note that this box reads an `@` word as one word, so it offers a date one word names (`@tomorrow`, `@fri`) and the editor the rest.
-  const mention: ChatMention | undefined =
-    caret === undefined ? undefined : chatMentionAt(draft, caret);
-  // A word closed with Escape stays closed only while the caret is in it.
-  if (closedAt !== undefined && mention?.start !== closedAt) setClosedAt(undefined);
-  const open = mention !== undefined && closedAt !== mention.start;
-  const rows = open ? chatRows(targets, mention, now, zone) : [];
-  const held =
-    highlight !== undefined &&
-    mention !== undefined &&
-    highlight.start === mention.start &&
-    highlight.query === mention.query
-      ? highlight.at
-      : 0;
-  const at = Math.min(held, Math.max(rows.length - 1, 0));
-  const listed = open && rows.length > 0;
-
-  const choose = (target: ChatTarget) => {
-    if (mention === undefined) return;
-    const written = chooseTarget(draft, mention, target);
-    if (written.text.length > CHAT_BOUNDS.MAX_TEXT_CHARS) return;
-    pendingCaret.current = written.caret;
-    setDraft(written.text);
-  };
-  const onCaret = () => {
-    const now = field.current;
-    if (now === null) return;
-    setCaret(now.selectionStart === now.selectionEnd ? now.selectionStart : undefined);
-  };
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Note that every key an input method composes with is the method's, its candidates' arrows and Escape among them.
-    if (event.nativeEvent.isComposing) return;
-    if (listed && mention !== undefined) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setClosedAt(mention.start);
-        return;
-      }
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        const step = event.key === "ArrowDown" ? 1 : rows.length - 1;
-        setHighlight({ start: mention.start, query: mention.query, at: (at + step) % rows.length });
-        return;
-      }
-      const row = rows[at];
-      if (
-        row !== undefined &&
-        ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")
-      ) {
-        event.preventDefault();
-        choose(row);
-        return;
-      }
-    }
-    if (enterSends(event)) {
-      event.preventDefault();
-      submitPromptInput(event.currentTarget);
-    }
+    // Note that every key an input method composes with is the method's.
+    if (event.nativeEvent.isComposing || !enterSends(event)) return;
+    event.preventDefault();
+    submitPromptInput(event.currentTarget);
   };
 
-  // The box's ties to the list, for assistive technology, as the agent composer's are (`skill-picker.tsx`).
-  const listProps = {
-    "aria-autocomplete": "list",
-    "aria-expanded": listed,
-    "aria-controls": listed ? listId : undefined,
-    "aria-activedescendant": listed ? comboboxOptionId(listId, at) : undefined,
-  } as const;
   return (
     <div className="agent-composer chat-composer" data-compact={String(compact === true)}>
-      {listed && mention !== undefined ? (
-        <MentionMenu
-          id={listId}
-          rows={rows}
-          at={at}
-          onHover={(index) =>
-            setHighlight({ start: mention.start, query: mention.query, at: index })
-          }
-          onChoose={choose}
-        />
-      ) : null}
       <PromptInput onSubmit={send}>
         <textarea
           ref={field}
@@ -669,17 +569,12 @@ function PlainChatComposer({
           enterKeyHint={enterKeyHint()}
           value={draft}
           disabled={sending}
-          {...listProps}
-          onChange={(event) => {
-            setDraft(event.currentTarget.value);
-            onCaret();
-          }}
-          onSelect={onCaret}
+          onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={onKeyDown}
-          onBlur={() => setCaret(undefined)}
         />
         <ComposerFoot sending={sending} empty={empty} />
       </PromptInput>
+      <CrowdedNote shown={mentions.crowded(draft)} />
       <NoteLine note={note} onRetry={send} />
     </div>
   );

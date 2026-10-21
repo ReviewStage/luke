@@ -5579,22 +5579,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   max-height: 320px;
 }
 
-/* The list an `@` or `#` opens stands over the card at its left. */
-.chat-mention-menu {
-  position: absolute;
-  /* It stands over the box, so the searchable menu's own top is let go. */
-  top: auto;
-  bottom: calc(100% + var(--luke-space-4));
-  left: 0;
-  width: 320px;
-  /* Never past the window's edges, nor, on a phone, past its card's, so one
-     a thread's box opens, inset by the thread, stays on screen. */
-  max-width: calc(100vw - 2 * var(--luke-space-12));
-  z-index: 10;
-}
-
-.desktop-shell[data-room="narrow"] .chat-mention-menu {
-  max-width: 100%;
+/* The line under the box where its words name more members than a post
+   tells: a live region that stands empty, and so takes no room, until then. */
+.chat-composer-crowded:not(:empty) {
+  margin: var(--luke-space-6) 0 0;
 }
 
 /* The note's field and, where the answer is sent by one, its send beside it. */

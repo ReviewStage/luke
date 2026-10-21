@@ -801,6 +801,7 @@ function ChatView({
         names={names}
         place={view.place}
         mentionPlace={mentionPlaceOf(tasks)}
+        tasks={listed}
         now={now}
         openLink={openLink}
         onPost={view.onPost}
@@ -896,6 +897,7 @@ export function TaskChatTab({
       names={names}
       place={{ kind: CHAT_PLACE.CHANNEL, channelId: channel.id }}
       mentionPlace={mentionPlaceOf(tasks)}
+      tasks={listed}
       now={now}
       openLink={openLink}
       onPost={view.onPost}
