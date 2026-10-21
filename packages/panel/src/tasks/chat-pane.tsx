@@ -447,6 +447,8 @@ function ThreadRow({
             ) : null}
             {open && canReply ? (
               <ChatComposer
+                channelId={message.channelId}
+                replyTo={message.seq}
                 label="Reply in thread"
                 targets={context.targetsIn(message.channelId)}
                 keywords={context.keywords}
@@ -661,10 +663,11 @@ export function ChatPane({
           </div>
         </ScrollArea>
       )}
-      {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another. */}
+      {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another, and each channel's draft waits under its own. */}
       {postsIn(chat, channel) ? (
         <ChatComposer
           key={channel.id}
+          channelId={channel.id}
           label={composerLabel(chat, names, channel)}
           targets={targetsIn(channel.id)}
           keywords={keywords}

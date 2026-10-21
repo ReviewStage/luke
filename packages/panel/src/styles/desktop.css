@@ -5435,9 +5435,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
    shared composer card (`PromptInput`) around the box, its foot saying what
    the box takes with the round send at its end. */
 .chat-composer {
-  position: relative;
   width: calc(100% - 2 * var(--column-inset));
   margin: var(--luke-space-12) auto var(--luke-space-16);
+  padding: 0;
 }
 
 /* Where no box is offered (an archived channel, or a direct message
@@ -5469,23 +5469,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
   outline: none; /* no ring: the caret marks the field */
 }
 
+/* A thread's box stands a line high, its field and its placeholder at
+   the plain field's compact insets, as a plan comment's field does
+   (`.comment-field .agent-composer-input`). */
 .chat-composer[data-compact="true"] .chat-composer-field {
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
-.chat-composer-note {
-  margin: var(--luke-space-6) 0 0;
+.chat-composer[data-compact="true"] .agent-composer-field {
+  --agent-composer-field-block: calc(var(--luke-space-8) + var(--luke-space-4));
 }
 
-/* The pictures a post will carry, as chips over the box's words at the
-   agent composer's inset (`.agent-composer .attached-files`); and files
-   dragged over the box brighten the card's edge, as the agent box's do. */
-.chat-composer .attached-files {
-  padding: var(--luke-space-12) var(--luke-space-12) 0;
+.chat-composer[data-compact="true"] .agent-composer-input {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
-.chat-composer[data-dropping] form {
-  border-color: var(--luke-color-border-selected);
+.chat-composer[data-compact="true"] .agent-composer-placeholder {
+  padding: var(--luke-space-8) var(--luke-space-12) 0;
 }
 
 /* A picture a message carries (`chat-pane.tsx`'s ChatPicture): a plan's
@@ -6570,7 +6570,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
 .side-panel-content .draft-fork-dock,
-.side-panel-content .agent-composer {
+.side-panel-content .agent-composer:not(.chat-composer) {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
 

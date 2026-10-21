@@ -5812,7 +5812,7 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
    opens for them hangs where the ⋯ stands. */
 @container composer (max-width: 399px) {
   .agent-composer :is(.agent-servers-button, .agent-context-button),
-  .agent-composer > form:not(.inbox-answer) .dictate-button {
+  .agent-composer:not(.chat-composer) > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 
