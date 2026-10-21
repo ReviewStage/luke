@@ -537,6 +537,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The newest page of each task's history a window's version history follows, by the task. */
   const historyFollows = yield* FiberMap.make<string>();
   const decodeHistory = Schema.decodeUnknownOption(taskHistoryLiveRowsSchema);
+  /** How to wait for a write's transaction on each task's followed history, while it is live. */
+  const historyTxWaits = new Map<string, TxWait>();
 
   /** Follows `taskId`'s newest page of history live until let go, each change emitted as `TASKS_HISTORY_CHANGED`. */
   function followHistory(taskId: string) {
@@ -564,6 +566,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
           carried({ taskId, view: page ?? { failure: TASK_CALL_FAILURE.UNANSWERED } }),
         ),
+      onTxWait: (wait) => {
+        if (wait === undefined) historyTxWaits.delete(taskId);
+        else historyTxWaits.set(taskId, wait);
+      },
     });
   }
 
@@ -1723,7 +1729,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return carried<TasksPictureKeepAnswer>(kept);
       }),
     // The service answers the task as restored, so the list's row and the
-    // open document take it in place and nothing is read again.
+    // open document take it in place and nothing is read again. It is
+    // confirmed once its transaction reached the history the window follows.
     [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksRevisionParamsSchema)(unparsedWire(params));
@@ -1731,14 +1738,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return yield* invalid("restoring a revision names a task and its number");
         if (!gate()) return { restored: false };
         const { taskId, seq } = read.success;
-        return yield* serial(
+        const restored = yield* serial(
           Effect.gen(function* () {
-            const restored = yield* served(client.restore(taskId, seq));
-            if (restored === undefined) return { restored: false };
-            takeAnswered(restored);
-            return { restored: true };
+            const answer = yield* served(client.restore(taskId, seq));
+            if (answer !== undefined) takeAnswered(answer.task);
+            return answer;
           }),
         );
+        if (restored === undefined) return { restored: false };
+        // Note that the wait stands outside the serial reads, so no read waits on it.
+        yield* confirmWrite(historyTxWaits.get(taskId), restored.txid);
+        return { restored: true };
       }),
     // Leaving the task returns to the list, which was read when the tab
     // showed, and leaves its call standing, as opening another task does.

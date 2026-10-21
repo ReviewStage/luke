@@ -832,15 +832,19 @@ export class HostedTaskClient {
     );
   }
 
-  /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
+  /** Puts one revision of a plan back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */
   restore(
     taskId: string,
     seq: number,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    { readonly task: Task; readonly txid: string | undefined } | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
     return orNothing(
       Effect.map(
         askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
-        (answer) => answer.plan,
+        (answer) => ({ task: answer.plan, txid: answer.txid }),
       ),
     );
   }
