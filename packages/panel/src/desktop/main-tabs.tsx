@@ -43,6 +43,7 @@ import {
   type TabPin,
   type TabViews,
 } from "./strip-tabs.js";
+import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
@@ -398,6 +399,7 @@ export function MainTabStrip({
     (entry) => entry.tab,
   );
   const strip = own;
+  useStripLooks(LOOK_STRIP.COLUMN, task.id, strip);
   const copyLink = useCopyLinkItem();
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);

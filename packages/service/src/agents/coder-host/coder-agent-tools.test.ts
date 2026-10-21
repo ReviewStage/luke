@@ -58,7 +58,7 @@ import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
@@ -1864,6 +1864,8 @@ test("create_task makes a task in the caller's workspace for the member the agen
     history.revisions.map((revision) => revision.agentId),
     [caller.id],
   );
+  // It names the agent that made it for Bob, which the window draws apart from a task Bob made by hand.
+  assert.deepEqual(stored.task.origin, { actor: PLAN_ACTOR.AGENT, agentId: caller.id });
   assert.equal(eve.sent.length, 0, "a task is made with no agent on it");
   // It stands in the workspace's list as any task does, for a teammate too, and in no other workspace.
   const alice = agents.caller.userId;

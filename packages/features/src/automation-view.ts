@@ -2,6 +2,7 @@ import { Schema as EffectSchema, Struct } from "effect";
 import {
   automationChangeRequestSchema,
   automationCreateRequestSchema,
+  automationDeletedAnswerSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
@@ -92,6 +93,7 @@ export const automationViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
     automation: automationSummarySchema,
     webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
+    txid: automationDeletedAnswerSchema.fields.txid,
   }),
   failed,
 ]);
@@ -100,7 +102,10 @@ export type AutomationView = typeof automationViewSchema.Type;
 
 /** A deletion as the window hears it. */
 export const automationDeletedViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({ deleted: EffectSchema.Literal(true) }),
+  EffectSchema.Struct({
+    deleted: EffectSchema.Literal(true),
+    txid: automationDeletedAnswerSchema.fields.txid,
+  }),
   failed,
 ]);
 

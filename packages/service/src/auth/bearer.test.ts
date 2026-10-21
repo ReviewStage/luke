@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { session, user } from "@luke/database/schemas/auth";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { repositoryPinsAnswerSchema } from "@luke/features/task-wire";
+import { repositoryPinsWrittenSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { makeSignature } from "better-auth/crypto";
@@ -148,7 +148,7 @@ const pinnedBy = (resolveUserId: UserIdResolver, request: Request) =>
     // SAFETY: the route answers JSON; the test reads it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(body));
-    const answered = readEither(repositoryPinsAnswerSchema)(unparsedWire(body));
+    const answered = readEither(repositoryPinsWrittenSchema)(unparsedWire(body));
     if (Result.isFailure(answered))
       return assert.fail(`not the wire's: ${answered.failure.refusal}`);
     return answered.success.pins.map((pin) => pin.repository);

@@ -501,7 +501,17 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
             agent.userId,
           ],
         );
-        assert.equal((yield* answer(["sfo1"], key)).outcome, INBOX_ASK_ANSWER.REPEATED);
+        assert.match(
+          taken.txid ?? "",
+          /^\d+$/u,
+          "the answer is taken in a transaction to wait for",
+        );
+        const repeated = yield* answer(["sfo1"], key);
+        assert.deepEqual(
+          [repeated.outcome, repeated.txid],
+          [INBOX_ASK_ANSWER.REPEATED, undefined],
+          "the same answer sent again writes nothing, so nothing is waited for",
+        );
         const changed = yield* answer(["fra1"], key);
         assert.deepEqual(
           [changed.outcome, changed.refusal, changed.item.answer?.choices],

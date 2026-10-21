@@ -42,6 +42,7 @@ import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type CodingAgentMessage,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -60,6 +61,11 @@ import { planSections } from "@luke/features/plan-document";
 import { PLAN_HEADING } from "@luke/features/plan-template";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
+import {
+  transcriptWindowPartRowSchema,
+  transcriptWindowRowSchema,
+  windowMessagesOf,
+} from "@luke/features/transcript-window";
 import { EXPERIMENT } from "@luke/settings";
 import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
@@ -112,6 +118,7 @@ import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { accountInboxPast } from "./inbox-page.js";
 import type { ProviderKeys } from "./model.js";
+import { cutMessage } from "./part-cut.js";
 import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
@@ -124,7 +131,11 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./transcript.js";
-import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
+import {
+  agentFollowedBy,
+  transcriptLiveStatements,
+  transcriptWindowLiveStatements,
+} from "./transcript-live.js";
 import { handedAfterCompaction, type TurnHanded } from "./turn-context.js";
 
 /**
@@ -630,6 +641,24 @@ const liveRowsOf = (
     );
   });
 
+/** A transcript's live window run as Realtime runs it, each row decoded as the desktop decodes it and drawn as the tab draws it, oldest first. */
+const windowOf = (target: ConversationTarget, readerId = target.userId) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const statements = Option.getOrThrow(
+      transcriptWindowLiveStatements(
+        target,
+        agentFollowedBy(target.userId, target.conversationId, readerId),
+      ),
+    );
+    const rows = yield* sql.unsafe(statements.window.sql, [...statements.window.params]);
+    const parts = yield* sql.unsafe(statements.windowParts.sql, [...statements.windowParts.params]);
+    return windowMessagesOf(
+      yield* Schema.decodeUnknownEffect(Schema.Array(transcriptWindowRowSchema))(rows),
+      yield* Schema.decodeUnknownEffect(Schema.Array(transcriptWindowPartRowSchema))(parts),
+    );
+  });
+
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
   it.effect(
     "a line no turn takes after the agent's turn ended holds the read running, which the read says it wakes from once the line's grace ends",
@@ -672,6 +701,88 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           past.wakeIn,
           writtenAt.getTime() + Duration.toMillis(CODER.LINE_GRACE) + 1 - now,
         );
+      }),
+  );
+
+  it.effect(
+    "a transcript's live window draws each of its newest messages as the page past the start says it, the turn's journal and every sender's line alike, and holds nothing for an account outside the agent's workspace",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "Now send the invitation from the settings page.",
+            clientKey: "from-a-member",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.succeed(true),
+        );
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "The invite emails are in.",
+            clientKey: "from-an-agent",
+            sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
+          },
+          Effect.succeed(true),
+        );
+        // A journal whose command output and thoughts run past the bound, which the window carries cut as a page asked cut does.
+        const db = yield* Database;
+        yield* db.insert(messages).values({
+          userId,
+          conversationId: target.conversationId,
+          seq: 900,
+          clientId: randomUUID(),
+          role: MESSAGE_ROLE.ASSISTANT,
+          // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+          parts: [
+            { type: "text", text: "Building." },
+            // A part of a tool since retired, which every read leaves out, so the parts after it keep their places.
+            {
+              type: "tool-long_retired",
+              toolCallId: "call-retired",
+              state: "output-available",
+              input: {},
+              output: "gone",
+            },
+            {
+              type: "tool-bash",
+              toolCallId: "call-build",
+              state: "output-available",
+              input: { command: "pnpm build" },
+              output: "built one more file\n".repeat(1_000),
+            },
+            { type: "reasoning", text: "Weigh the build again. ".repeat(500), state: "done" },
+          ] as never,
+          metadata: { author: MESSAGE_AUTHOR.BRAIN },
+          placedAt: new Date(),
+        });
+        const page = yield* transcriptNow(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+
+        const drawn = yield* windowOf(target);
+        assert.ok(drawn.some((message) => message.sentBy?.name === "Invite emails"));
+        assert.ok(drawn.some((message) => message.startedAt !== undefined));
+        assert.deepEqual(
+          drawn.at(-1)?.cutParts?.map((cut) => cut.index),
+          [1, 2],
+        );
+        // SAFETY: a page's message is the wire's once serialized, which its JSON parts already are here.
+        const said = page.page.messages as unknown as readonly CodingAgentMessage[];
+        assert.deepEqual(drawn, said.map(cutMessage));
+
+        const stranger = yield* openGithubUser();
+        assert.deepEqual(yield* windowOf(target, stranger), []);
       }),
   );
 

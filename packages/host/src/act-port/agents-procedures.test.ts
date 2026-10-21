@@ -15,9 +15,9 @@ import { afterEach, it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentMessagesAnswerView,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptPage,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
@@ -70,6 +70,9 @@ const REFUSAL = {
     "Could not read the workspace's agents on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_START]: "Could not start an agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGES]: "Could not read the agent's transcript on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_PART]: "Could not read the agent's output on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]:
+    "Could not read the agent's earlier messages on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: "Could not message the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_CHOOSE]: "Could not change the agent's model on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_RENAME]: "Could not rename the agent on this system.",
@@ -79,6 +82,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: "Could not mark the agent as read on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: "Could not read the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]:
     "Could not read the agent's pull request on this system.",
@@ -135,6 +139,16 @@ const ACTS: readonly {
     ask: "codingAgentMessages",
   },
   {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_PART,
+    payload: { agentId: AGENT_ID, messageId: "message-1", index: 1 },
+    ask: "codingAgentPart",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER,
+    payload: { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID, before: "40" },
+    ask: "transcriptOlder",
+  },
+  {
     kind: AGENT_ACT_KIND.CODING_AGENTS_MESSAGE,
     payload: { agentId: AGENT_ID, text: "Carry on.", clientKey: "send-1" },
     ask: "codingAgentMessage",
@@ -172,6 +186,10 @@ const ACTS: readonly {
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_SHOWN,
     payload: { agentId: AGENT_ID, inboxTaskId: null },
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_SEEN,
+    payload: { agentId: AGENT_ID },
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_PAGE,
@@ -281,6 +299,9 @@ function windowPort(
     },
     shown: (agentId) => {
       noted.push(`shown:${agentId}`);
+    },
+    seen: (agentId) => {
+      noted.push(`seen:${agentId}`);
     },
     shownInbox: (taskId) => {
       noted.push(`inbox:${taskId}`);
@@ -471,6 +492,16 @@ it("a panel's word on what it shows is noted whole, the Chat as none where it na
   assert.deepEqual(asked, []);
 });
 
+it("a panel's Mark as read on an agent clears its unseen dot without naming a page shown, and answers nothing", async () => {
+  const { call, asked, noted } = windowPort(PANEL);
+
+  const answer = await call(AGENT_ACT_KIND.CODING_AGENTS_SEEN, { agentId: AGENT_ID });
+
+  assert.deepEqual(answer, { answer: undefined });
+  assert.deepEqual(noted, [`seen:${AGENT_ID}`]);
+  assert.deepEqual(asked, []);
+});
+
 it("a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and its read of which files it viewed hears each file's mark", async () => {
   const viewed = {
     outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
@@ -605,11 +636,12 @@ it("a panel's transcript stream follows the transcript at the host, hears each p
   ports.push(port);
   const client = port.as(PANEL);
   const transcript: CodingAgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
-  const page: CodingAgentMessagesAnswerView = {
+  const page: CodingAgentTranscriptPage = {
     messages: [],
     cursor: "1:0",
     status: CODING_AGENT_STATUS.RUNNING,
     title: "Invites",
+    caughtUp: false,
   };
 
   const one = await client[AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript);

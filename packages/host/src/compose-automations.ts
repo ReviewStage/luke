@@ -1,6 +1,7 @@
 import type { HostedAutomationClient } from "@luke/features";
 import {
   AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
   type AutomationDeletedView,
   type AutomationFollow,
   type AutomationFollowed,
@@ -32,7 +33,7 @@ import { followAutomations } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type LiveClient, openRealtimeClient } from "./live-follow.js";
+import { confirmWrite, type LiveClient, openRealtimeClient, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -132,6 +133,47 @@ function composed(
 ): AutomationsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+  /** Each standing follow's wait for a write's transaction, by what it follows and then its id. */
+  const waits = {
+    [AUTOMATION_FOLLOW.WORKSPACE]: new Map<string, TxWait>(),
+    [AUTOMATION_FOLLOW.RUNS]: new Map<string, TxWait>(),
+  };
+
+  /**
+   * A write confirmed once its transaction arrives on any of the follows
+   * that would show it, as Neon's mutations guide says; a write that
+   * changed nothing, or one no window follows over Realtime, waits for
+   * nothing, and one not confirmed in time is answered all the same.
+   */
+  const confirmed = (txid: string | undefined, on: readonly (TxWait | undefined)[]) =>
+    Effect.suspend(() => {
+      const standing = on.filter((wait): wait is TxWait => wait !== undefined);
+      return txid === undefined || standing.length === 0
+        ? Effect.void
+        : Effect.raceAll(standing.map((wait) => confirmWrite(wait, txid)));
+    });
+
+  /** The workspace whose followed list last drew each automation, by the automation's id. */
+  const listedIn = new Map<string, string>();
+
+  /**
+   * The waits of the follows that show an automation: its workspace's list,
+   * named or as a followed list last drew it, and, with `history`, its runs.
+   * Note that no other follow is waited on, since a list that never drew the
+   * automation never carries its transaction and would only hold the write
+   * to its timeout.
+   */
+  const waitsShowing = (
+    automationId: string,
+    workspaceId: string | undefined,
+    history: boolean,
+  ) => {
+    const listed = workspaceId ?? listedIn.get(automationId);
+    return [
+      listed === undefined ? undefined : waits[AUTOMATION_FOLLOW.WORKSPACE].get(listed),
+      history ? waits[AUTOMATION_FOLLOW.RUNS].get(automationId) : undefined,
+    ];
+  };
 
   /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
@@ -166,7 +208,14 @@ function composed(
           params,
           "an automation names where it stands, a name, a trigger, and an action",
         );
-        return carried<AutomationView>(yield* asked(client.create(made)));
+        const answer = yield* asked(client.create(made));
+        if ("automation" in answer) {
+          yield* confirmed(
+            answer.txid,
+            waitsShowing(answer.automation.id, answer.automation.workspaceId, false),
+          );
+        }
+        return carried<AutomationView>(answer);
       }),
     [GATEWAY_METHOD.AUTOMATIONS_CHANGE]: (params) =>
       Effect.gen(function* () {
@@ -175,12 +224,24 @@ function composed(
           params,
           "a change names an automation and what changes",
         );
-        return carried<AutomationView>(yield* asked(client.change(change)));
+        const answer = yield* asked(client.change(change));
+        if ("automation" in answer) {
+          yield* confirmed(
+            answer.txid,
+            waitsShowing(answer.automation.id, answer.automation.workspaceId, false),
+          );
+        }
+        return carried<AutomationView>(answer);
       }),
     [GATEWAY_METHOD.AUTOMATIONS_DELETE]: (params) =>
       Effect.gen(function* () {
         const named = yield* read(automationIdParamsSchema, params, "a delete names an automation");
-        return carried<AutomationDeletedView>(yield* asked(client.remove(named)));
+        const answer = yield* asked(client.remove(named));
+        // A delete takes the automation off its list and its runs out of its history.
+        if ("deleted" in answer) {
+          yield* confirmed(answer.txid, waitsShowing(named.automationId, undefined, true));
+        }
+        return carried<AutomationDeletedView>(answer);
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUN]: (params) =>
       Effect.gen(function* () {
@@ -189,7 +250,12 @@ function composed(
           params,
           "a run names an automation and a key",
         );
-        return carried<AutomationRunView>(yield* asked(client.runNow(run)));
+        const answer = yield* asked(client.runNow(run));
+        // A run stands in its automation's followed history and as the last run on a followed list.
+        if ("run" in answer) {
+          yield* confirmed(answer.txid, waitsShowing(run.automationId, undefined, true));
+        }
+        return carried<AutomationRunView>(answer);
       }),
     [GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET]: (params) =>
       Effect.gen(function* () {
@@ -211,11 +277,12 @@ function composed(
             webhookSecretHash: hashed.success,
           }),
         );
-        return carried<AutomationView>(
-          "failure" in replaced
-            ? replaced
-            : { automation: replaced.automation, webhookSecret: secret },
+        if ("failure" in replaced) return carried<AutomationView>(replaced);
+        yield* confirmed(
+          replaced.txid,
+          waitsShowing(replaced.automation.id, replaced.automation.workspaceId, false),
         );
+        return carried<AutomationView>({ automation: replaced.automation, webhookSecret: secret });
       }),
     [GATEWAY_METHOD.AUTOMATIONS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -223,6 +290,8 @@ function composed(
         // The account the follow starts for, which every read names, so one under another's session is refused as signed out and ends.
         // Behind a closed gate every read is told unanswered and asked again; with nobody signed in the follow ends unsaid.
         const userId = dependencies.accountId();
+        /** The wait this follow last handed, which only it lets go of. */
+        let handed: TxWait | undefined;
         const follow = followAutomations(
           {
             liveList: (workspaceId, poll, after) =>
@@ -236,8 +305,23 @@ function composed(
             openLive: dependencies.openLive ?? openRealtimeClient,
             now: kernel.now,
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            publish: (followed: AutomationFollowed) =>
-              kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed)),
+            publish: (followed: AutomationFollowed) => {
+              if (
+                followed.scope.kind === AUTOMATION_FOLLOW.WORKSPACE &&
+                "automations" in followed.view
+              ) {
+                for (const each of followed.view.automations)
+                  listedIn.set(each.id, followed.scope.id);
+              }
+              kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed));
+            },
+            // Note that a follow lets go only of its own wait, since one started over may hand its wait first.
+            onTxWait: (wait) => {
+              const standing = waits[scope.kind];
+              if (wait !== undefined) standing.set(scope.id, wait);
+              else if (standing.get(scope.id) === handed) standing.delete(scope.id);
+              handed = wait;
+            },
           },
           scope,
         );

@@ -48,6 +48,9 @@ export const RUNNING_STATUS = "running";
 /** Vercel's answer for a sandbox or session already gone. */
 const NOT_FOUND_STATUS = 404;
 
+/** Vercel's answer for a resume whose snapshot is gone: expired past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted. */
+export const SNAPSHOT_GONE_STATUS = 410;
+
 const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
 
 const SANDBOX_API = {

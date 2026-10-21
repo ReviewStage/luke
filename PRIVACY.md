@@ -1008,6 +1008,13 @@ leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked. Each recording carries Luke's version and whether it is a released
 build or a development one; only a released build records at all.
 
+**Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
+small, downscaled still of a tab or page you visited, taken by the app as you
+settle on it and as ⌃Tab leaves it. Those stills stay in that window's memory
+while it is open, a few at a time: they are never written to disk and never
+reach our service, a trace, a counted event, or the voice window, and the
+screen recording leaves them out, as it leaves out a Browser tab's still.
+
 **Browser tabs.** With the Browser tab experiment on, a Browser tab opens a
 web page you choose, your own `localhost` included, in a view of its own on
 your Mac. Luke does not see, store, log, or count the page, its address, or
@@ -1019,21 +1026,6 @@ word does. The pages keep their own cookies and storage on your
 Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
 launches. Every permission a page asks for, such as the camera, microphone, or
 location, is refused, and downloads are cancelled.
-
-With "Let agents run commands on this Mac" on, the same per-Mac switch that
-lets an agent run commands there, an agent on a task can open, read, click, and
-type in that task's Browser tabs on your Mac, and so **can act as you on any
-site you are signed in to in a Browser tab**, `localhost` included, with no
-approval for each action. Only the Mac running Luke's window answers, and only
-for the tab's own task. What an agent reads from a tab is its address, its
-title, a downscaled screenshot, and a text snapshot of the page. They reach that
-agent and its workers, our service, and the model that runs the agent. The
-text, address, and title are kept in the agent's transcript with the rest of
-the conversation; a screenshot goes to the model and is left out of the stored
-conversation, as a picture an agent looks at is. They still reach no trace, no
-counted event, and no voice call, and the screen recording still leaves them
-out. Turn the switch off, in Settings, and an agent can no longer reach a
-Browser tab; the tab then reaches only its panel, as before.
 
 A Browser tab can also be a cloud browser, which an agent drives and you
 watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
@@ -1482,8 +1474,8 @@ and error, performance, and agent reports by Sentry.
 
 - Sign out of your Luke account to turn voice off.
 - Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
-  coding agents running commands on that Mac and driving its Browser
-  tabs; it is set on each Mac apart, and signing out stops it too.
+  coding agents running commands on that Mac; it is set on each Mac apart, and
+  signing out stops it too.
 - Switch an integration off for one coding agent in its message box's MCP
   menu, or disconnect it for every agent in Settings › Integrations.
 - Delete any workspace file an earlier version of Luke left on your Mac;

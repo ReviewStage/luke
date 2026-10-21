@@ -22,7 +22,10 @@
  * transcript read with `wait=none` is answered at once rather than held,
  * with whether the held read would have held on it and how soon the clock
  * alone may end that hold, for a reader following
- * its live statements (`live-wire.ts`).
+ * its live statements (`live-wire.ts`). A transcript read with `parts=cut`
+ * carries each heavy part cut to its two ends (`coder-host/part-cut.ts`), and
+ * the part reads beside them answer one such part whole, under the same
+ * reach as the transcript it stands in.
  *
  * Beside them, the same two transcripts read back from their end, at once
  * (`GET /api/agents/{id}/messages/newest`, and its worker's under
@@ -45,11 +48,14 @@ import {
   type CodingAgentMessagesAnswer,
   type CodingAgentNewestAnswer,
   type CodingAgentOlderAnswer,
+  type CodingAgentPartAnswer,
   codingAgentBeforeSchema,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
+  TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
 import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
+import { isRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
@@ -64,8 +70,9 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
+import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
-import { steerCodingAgent } from "./coder-host/steer.js";
+import { steerCodingAgentWritten } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
@@ -175,10 +182,41 @@ const titleAwaitedOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 function wireMessages(
   messages: TranscriptPage["messages"] | readonly CodingAgentMessage[],
+  cut: boolean,
 ): CodingAgentMessagesAnswer["messages"] {
   // SAFETY: every part and metadata is the JSON its row stored (`storedObjectSchema`), which the SDK's part types only name more narrowly.
-  return messages as CodingAgentMessagesAnswer["messages"];
+  const stored = messages as CodingAgentMessagesAnswer["messages"];
+  return cut ? stored.map(cutMessage) : stored;
 }
+
+/** Whether a transcript read asks its heavy parts cut (`TRANSCRIPT_PARTS_QUERY`). */
+function readsCut(parts: string | undefined): boolean {
+  return parts === TRANSCRIPT_PARTS_QUERY.CUT;
+}
+
+/** A part's index as its path segment spells it, or not found for one that is no index. */
+const indexNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
+  index: string,
+): Effect.fn.Return<number, HostedRefusal> {
+  if (!/^\d{1,6}$/u.test(index)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return Number(index);
+});
+
+/** One part of a message of the conversation, whole, or not found where none stands at the index. */
+const partAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  message: string,
+  index: string,
+) {
+  const messageId = yield* uuidNamed(message);
+  const at = yield* indexNamed(index);
+  const part = yield* hostedStoreOrUnavailable(wholePartOf(target, CODER_TOOL_SET, messageId, at));
+  if (Option.isNone(part) || !isRecord(part.value)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  const answer: CodingAgentPartAnswer = { part: part.value };
+  return answer;
+});
 
 /** When the window of every title `titleAwaitedOf` waits on closes, on the same terms: none where the deployment generates no titles. */
 const titleEdgeOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -200,13 +238,14 @@ function readsNow(wait: string | undefined): boolean {
 function transcriptAnswer(
   page: TranscriptPage,
   title: string | null,
+  cut: boolean,
   holds?: boolean,
   wakeIn?: number,
 ): CodingAgentMessagesAnswer & { readonly holds?: boolean; readonly wakeIn?: number } {
   return {
     ...(holds === undefined ? undefined : { holds }),
     ...(wakeIn === undefined ? undefined : { wakeIn }),
-    messages: wireMessages(page.messages),
+    messages: wireMessages(page.messages, cut),
     cursor: cursorToWire(page.cursor),
     status: page.status,
     ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
@@ -221,17 +260,21 @@ function transcriptAnswer(
 }
 
 /** A transcript's newest page as the wire answers it, with where the page before it is read below. */
-function newestAnswer(newest: TranscriptNewest, title: string | null): CodingAgentNewestAnswer {
+function newestAnswer(
+  newest: TranscriptNewest,
+  title: string | null,
+  cut: boolean,
+): CodingAgentNewestAnswer {
   return {
-    ...transcriptAnswer(newest.page, title),
+    ...transcriptAnswer(newest.page, title, cut),
     ...(newest.before === undefined ? undefined : { before: String(newest.before) }),
   };
 }
 
 /** An older page of a transcript as the wire answers it. */
-function olderAnswer(older: TranscriptOlder): CodingAgentOlderAnswer {
+function olderAnswer(older: TranscriptOlder, cut: boolean): CodingAgentOlderAnswer {
   return {
-    messages: wireMessages(older.messages),
+    messages: wireMessages(older.messages, cut),
     ...(older.before === undefined ? undefined : { before: String(older.before) }),
   };
 }
@@ -265,7 +308,7 @@ const tooLongMiddleware = middlewareGen<HostedContext>(function* ({ next }, inpu
   );
 });
 
-/** The messages resource: its five held reads, the two transcripts read back from their end, and the two writes on their paths, each to a signed-in caller. */
+/** The messages resource: its five held reads, the two transcripts read back from their end, the two writes on their paths, and the two part reads, each to a signed-in caller. */
 export function messagesProcedures(seams: MessagesProcedureSeams) {
   const signedIn = hosted.messages.use(accountMiddleware(seams.resolveUserId));
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -303,6 +346,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           onNone: () => agent.title,
           onSome: (now: CodingAgent) => now.title,
         }),
+        readsCut(input.parts),
         holds,
         wakeIn,
       );
@@ -314,11 +358,13 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
         const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
-        yield* steerCodingAgent(eve, writer, context.userId, agent, {
+        const { txid } = yield* steerCodingAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
         });
-        return { agent: yield* summaryOf(context.userId, agent) };
+        const summary = yield* summaryOf(context.userId, agent);
+        // The transaction that wrote the line, which the host waits to see live before it confirms the send.
+        return txid === undefined ? { agent: summary } : { agent: summary, txid };
       }),
 
     agentWorker: signedIn.agentWorker.effect(function* ({ input, context }) {
@@ -335,6 +381,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         return transcriptAnswer(
           { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
           null,
+          false,
           now ? true : undefined,
         );
       }
@@ -363,7 +410,28 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           };
       // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
-      return transcriptAnswer(page, titles.get(conversationId) ?? null, holds, wakeIn);
+      return transcriptAnswer(
+        page,
+        titles.get(conversationId) ?? null,
+        readsCut(input.parts),
+        holds,
+        wakeIn,
+      );
+    }),
+
+    agentPart: signedIn.agentPart.effect(function* ({ input, context }) {
+      const { target } = yield* reachedAgent(context.userId, input.id);
+      return yield* partAnswer(target, input.message, input.index);
+    }),
+
+    agentWorkerPart: signedIn.agentWorkerPart.effect(function* ({ input, context }) {
+      const callId = yield* callNamed(input.call);
+      const { agent } = yield* reachedAgent(context.userId, input.id);
+      const worker = {
+        userId: agent.userId,
+        conversationId: childConversationId(agent.conversationId, callId),
+      };
+      return yield* partAnswer(worker, input.message, input.index);
     }),
 
     agentNewest: signedIn.agentNewest.effect(function* ({ input, context }) {
@@ -372,6 +440,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       if (before !== undefined) {
         return olderAnswer(
           yield* hostedStoreOrUnavailable(transcriptBefore(target, CODER_TOOL_SET, before)),
+          readsCut(input.parts),
         );
       }
       const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
@@ -383,6 +452,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       return newestAnswer(
         newest,
         Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
+        readsCut(input.parts),
       );
     }),
 
@@ -395,7 +465,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       if (read.delegation === undefined) {
         if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
         // The call's record has not landed yet, so its worker has written nothing.
-        if (before !== undefined) return olderAnswer({ messages: [] });
+        if (before !== undefined) return olderAnswer({ messages: [] }, false);
         return newestAnswer(
           {
             page: {
@@ -405,12 +475,14 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
             },
           },
           null,
+          false,
         );
       }
       const worker = { userId: agent.userId, conversationId };
       if (before !== undefined) {
         return olderAnswer(
           yield* hostedStoreOrUnavailable(transcriptBefore(worker, CODER_TOOL_SET, before)),
+          readsCut(input.parts),
         );
       }
       const started = { createdAt: read.delegation.createdAt };
@@ -419,7 +491,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       );
       // The title is read after the page, since it lands beside the worker's start, which the page's reads may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
-      return newestAnswer(newest, titles.get(conversationId) ?? null);
+      return newestAnswer(newest, titles.get(conversationId) ?? null, readsCut(input.parts));
     }),
 
     chat: signedIn.chat.effect(function* ({ input, context }) {

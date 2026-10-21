@@ -6,30 +6,42 @@
  * summed and how it ended; and whether Anthropic refused a fast step of it,
  * which then ran at standard speed. A tab draws those on the card its "Worked for"
  * line hangs, so the reads that answer a tab's turns carry them beside the
- * turn's span: the Work tab's brain turns and its workers' sessions, and
- * a coding agent's journals. A leaf over the row alone, so it reads nothing.
+ * turn's span: a coding agent's journals, read by the service's page and by
+ * the host from the transcript's live window alike. A leaf over the row
+ * alone, so it reads nothing.
  */
 
-import { TurnUsageColumnSchema } from "@luke/database/models/columns";
-import type { StoredTurnRecord } from "@luke/database/models/message-reads";
+import { TURN_STATUS } from "@luke/wire";
+import { Option, Schema } from "effect";
+import { BRAIN_REQUEST_FAILURE } from "./brain/requests.js";
 import {
   CODING_AGENT_BOUNDS,
   TURN_ENDING,
   type TurnEnding,
   type TurnRecord,
   type TurnTokens,
-} from "@luke/features/coding-agent-wire";
-import { catalogIdOf } from "@luke/features/model-label";
-import { Option, Schema } from "effect";
-import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
+} from "./coding-agent-wire.js";
+import { catalogIdOf } from "./model-label.js";
 
 /** The row's fields a record is read from. */
-export type RecordedTurn = Pick<
-  StoredTurnRecord,
-  "status" | "model" | "reasoningEffort" | "usage" | "failure" | "fastRefused"
->;
+export interface RecordedTurn {
+  readonly status: string;
+  readonly model: string | null;
+  readonly reasoningEffort: string | null;
+  readonly usage: unknown;
+  readonly failure: string | null;
+  readonly fastRefused: boolean;
+}
 
-const decodeUsage = Schema.decodeUnknownOption(TurnUsageColumnSchema);
+/** The counts of a turn's `usage` column a record reads; the column carries more beside them. */
+const RecordedUsageSchema = Schema.Struct({
+  inputTokens: Schema.Number,
+  outputTokens: Schema.Number,
+  cachedInputTokens: Schema.Number,
+  cacheWriteTokens: Schema.optionalKey(Schema.Number),
+});
+
+const decodeUsage = Schema.decodeUnknownOption(RecordedUsageSchema);
 
 /** A recorded name the wire carries: one it bounds, and nothing for an empty or overlong one. */
 function choiceOf(recorded: string | null): string | undefined {

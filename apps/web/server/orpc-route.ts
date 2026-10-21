@@ -5,6 +5,7 @@ import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
 import { hostedAdminSeams } from "@luke/service/admin/admin-route";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
+import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import { agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
@@ -81,6 +82,7 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   workspaces: workspaceSeams(auth.api),
   eveOrigin: deploymentEveOrigin,
   sandbox: agentSandboxLayer,
+  sessionSandboxes: sessionSandboxesLayer,
   members: memberSeams(auth.api),
 };
 

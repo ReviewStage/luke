@@ -37,6 +37,7 @@ function fakeRealtime() {
         };
       },
       renew: () => Promise.resolve(),
+      awaitTxId: () => Promise.resolve(),
       unsubscribe: () => {
         listener = undefined;
       },

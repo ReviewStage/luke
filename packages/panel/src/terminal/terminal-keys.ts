@@ -9,8 +9,10 @@
  * them: ⌘← and ⌘→ to the line's start and end, and ⌘⌫ to delete back to it.
  * Shift+Return sends a line feed rather than Return's carriage return, which
  * a coding agent's prompt reads as a new line within the message rather than
- * as sending it. Everything else, Escape and Control chords included, is the
- * shell's, and Option types the character the keyboard layout gives it.
+ * as sending it. ⌃Tab and ⌃⇧Tab are the window's too, its tab switcher's, as
+ * they are in VS Code's terminal, since a shell reads them as a bare Tab.
+ * Everything else, Escape and Control chords included, is the shell's, and
+ * Option types the character the keyboard layout gives it.
  */
 
 /** Where a key press goes. */
@@ -58,5 +60,6 @@ export function terminalKey(event: KeyboardEvent): TerminalKey {
     return { kind: TERMINAL_KEY.SEND, data: line };
   }
   if (event.metaKey) return { kind: TERMINAL_KEY.WINDOW };
+  if (event.key === "Tab" && event.ctrlKey && !event.altKey) return { kind: TERMINAL_KEY.WINDOW };
   return { kind: TERMINAL_KEY.SHELL };
 }

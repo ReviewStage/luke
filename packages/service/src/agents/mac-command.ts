@@ -14,7 +14,6 @@ import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
-  type MacBrowserResult,
   type MacCommand,
   type MacCommandKind,
   type MacCommandResult,
@@ -96,49 +95,26 @@ const MAC_COMMAND_KIND_REFUSAL = {
     NO_MAC: MAC_COMMAND_REFUSAL.NO_MAC,
     UNREADABLE: MAC_COMMAND_REFUSAL.UNREADABLE,
   },
-  [MAC_COMMAND_KIND.BROWSER]: {
-    NO_MAC:
-      "Not run: no Mac of the developer's that can drive its Browser tabs is listening. Luke " +
-      "may not be running there, may need updating, or Settings › Let agents run commands on " +
-      "this Mac is off.",
-    UNREADABLE:
-      "Not run: a browser command's params must be JSON of at most " +
-      `${MAC_COMMAND_BOUNDS.MAX_BROWSER_PARAMS_CHARS} characters, and its timeout a whole ` +
-      `number of seconds from 1 to ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}.`,
-  },
 } as const satisfies Record<
   MacCommandKind,
   { readonly NO_MAC: string; readonly UNREADABLE: string }
 >;
 
-/**
- * What a call answers: what a shell command did, what a browser command
- * did, its image among it where it carried one, or why nothing ran. Note
- * that a browser command's image is its base64 as the Mac sent it, which
- * the tool that asked hands the model as an image and keeps out of what
- * the conversation stores, as `look_at_picture` does (`tasks/picture-look.ts`).
- */
+/** What a call answers: what a shell command did, or why nothing ran. */
 // A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
 export type MacCommandAnswer =
   | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacShellResult)
-  | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacBrowserResult)
   | { readonly status: typeof MAC_COMMAND_STATUS.NOT_RUN; readonly reason: string };
 
 /**
  * What a call asks of the Mac: a command of one kind, what that kind
  * carries, and how long it may run, the default where unsaid.
  */
-export type MacCommandAsk =
-  | {
-      readonly kind: typeof MAC_COMMAND_KIND.SHELL;
-      readonly command: string;
-      readonly timeoutSeconds?: number;
-    }
-  | {
-      readonly kind: typeof MAC_COMMAND_KIND.BROWSER;
-      readonly params: Schema.Json;
-      readonly timeoutSeconds?: number;
-    };
+export type MacCommandAsk = {
+  readonly kind: typeof MAC_COMMAND_KIND.SHELL;
+  readonly command: string;
+  readonly timeoutSeconds?: number;
+};
 
 const readMacCommand = readEither(macCommandSchema);
 
@@ -186,18 +162,17 @@ function notRun(reason: string): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.NOT_RUN, reason };
 }
 
-/** Whether a Mac of the account that runs the kind given read for its commands within the freshness window. */
-function macListening(userId: string, kind: MacCommandKind): TaskStoreEffect<boolean> {
+/** Whether a Mac of the account read for its commands within the freshness window. */
+function macListening(userId: string): TaskStoreEffect<boolean> {
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     macListeningSince(
       userId,
-      kind,
       new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.LISTENER_FRESH)),
     ),
   );
 }
 
-/** What a call answers for what the Mac said: what a shell or a browser command did, or why the Mac ran nothing. */
+/** What a call answers for what the Mac said: what a shell command did, or why the Mac ran nothing. */
 function answered(result: MacCommandResult): MacCommandAnswer {
   if ("refused" in result) return notRun(result.refused);
   return { status: MAC_COMMAND_STATUS.RAN, ...result };
@@ -241,7 +216,7 @@ export function askMac(
   if (Result.isFailure(asked)) return Effect.succeed(notRun(refusal.UNREADABLE));
   const queued = asked.success;
   const run = Effect.gen(function* () {
-    if (!(yield* macListening(userId, queued.kind))) return notRun(refusal.NO_MAC);
+    if (!(yield* macListening(userId))) return notRun(refusal.NO_MAC);
     const result = yield* queueMacCommand(userId, queued).pipe(
       Effect.andThen(awaitedResult(userId, queued)),
       Effect.ensuring(Effect.ignore(withdrawMacCommand(userId, queued.id))),
@@ -310,7 +285,7 @@ export function macCommandsFor(
     Clock.currentTimeMillis,
     (now) => new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),
   );
-  return markMacListening(userId, kinds).pipe(
+  return markMacListening(userId).pipe(
     Effect.andThen(
       Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since, kinds)).pipe(
         Effect.repeat({ schedule: Schedule.spaced(MAC_COMMAND_SERVICE.POLL), until: (any) => any }),

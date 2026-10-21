@@ -44,7 +44,7 @@ import {
   Text,
   useMenu,
 } from "@luke/ui";
-import { creatorActor } from "@luke/ui/actor-model";
+import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
@@ -67,6 +67,7 @@ import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.j
 import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
@@ -260,6 +261,7 @@ function TaskBoardCard({
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
   const creator = creatorActor(task, useMemberDirectory(), undefined);
+  const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   const actions = useTaskMenu(tasks, task.id, task.name, {
@@ -282,7 +284,14 @@ function TaskBoardCard({
       )}
       {drawn(TASK_PROPERTY.CREATOR) ? (
         <span className="tasks-board-face">
-          <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+          {maker === undefined ? null : (
+            <span className="tasks-board-maker">{actorName(maker.actor)}</span>
+          )}
+          <ActorMark
+            actor={maker?.actor ?? creator}
+            size={ACTOR_SIZE.MARK}
+            forWhom={maker === undefined ? undefined : creator}
+          />
         </span>
       ) : null}
     </span>

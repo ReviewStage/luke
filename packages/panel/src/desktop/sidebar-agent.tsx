@@ -27,10 +27,12 @@ import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
+import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { RowHint, RowHintOptions } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
+import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
 
@@ -49,9 +51,10 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * keyboard (`RowMarks`), as on a task's row, and rested on, the row hangs the
  * agent's card beside it, as its tab does on a task (`agent-ref.tsx`). A
  * press opens the agent's own page, and it reads in semibold while it ended
- * unseen, as its tab does. A right-click offers its actions where the
+ * unseen, as its tab does, or while it is marked unread by hand. A right-click offers its actions where the
  * pointer is, in a task's row's groups: Copy link and Rename, which turns
- * the row into its name's field until the edit ends; then Pin or Unpin,
+ * the row into its name's field until the edit ends, with Mark as unread
+ * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
  * the reader's own, and Archive agent, asked first while the agent works
  * (`agent-archive.tsx`), or Unarchive. An archived agent offers neither a
  * pin nor a rename, as an archived task. Note that the agent is read again
@@ -110,7 +113,7 @@ export function SidebarAgent({
   agents: CodingAgentsControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
-  /** Whether its turn ended while the developer was not looking at it. */
+  /** Whether its turn ended while the developer was not looking at it: main's unseen dot, which a mark by hand adds to. */
   unread: boolean;
   /** The time the row's time is counted back from. */
   now: number;
@@ -140,6 +143,8 @@ export function SidebarAgent({
   const place = useRowPlace();
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   const { act } = useAct();
+  const reads = useAgentReadMarks();
+  const isUnread = unread || reads.markedUnread(agent.id);
   const archive = useAgentArchive(
     agent,
     { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
@@ -160,7 +165,11 @@ export function SidebarAgent({
   const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
   const put = archived ? unarchive : archive.action;
   const groups = [
-    [...(copyLink === undefined ? [] : [copyLink]), ...(archived ? [] : [renameItem])],
+    [
+      ...(copyLink === undefined ? [] : [copyLink]),
+      markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) }),
+      ...(archived ? [] : [renameItem]),
+    ],
     [...(pin === undefined ? [] : [pin]), put],
   ].filter((group) => group.length > 0);
   // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
@@ -207,7 +216,7 @@ export function SidebarAgent({
             ) : (
               <>
                 {name}
-                {unread ? <span className="luke-visually-hidden">(unread)</span> : null}
+                {isUnread ? <span className="luke-visually-hidden">(unread)</span> : null}
               </>
             )
           }
@@ -227,7 +236,7 @@ export function SidebarAgent({
             )
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
-          unread={unread}
+          unread={isUnread}
           menuOpen={menu.open !== undefined}
           hint={rename.editing ? undefined : { Hint: RowHint, label: name }}
           onPress={

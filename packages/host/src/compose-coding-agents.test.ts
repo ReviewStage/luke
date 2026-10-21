@@ -3,12 +3,18 @@ import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentChatWriteAnswerView,
+  TRANSCRIPT_KIND,
+} from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
+  type CodingAgentNewestAnswer,
   type CodingAgentPage,
   type CodingAgentSummary,
   MERGE_STATE,
@@ -60,10 +66,10 @@ import {
 } from "@luke/gateway";
 import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
-import type { LiveClient } from "./live-follow.js";
+import { fakeRealtime } from "./testing/fake-realtime.js";
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -253,9 +259,14 @@ function fakeService() {
   let cursor = CODING_AGENT_CURSOR_START;
   let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
   let chatLive: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined;
+  let written: CodingAgentChatWriteAnswerView = { readSeq: 4 };
   let accountLive: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly TranscriptNowAnswer[] = [];
+  // The newest page, as the follow opens with it; none answers one with something on it.
+  let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
+  // The transaction a pin answers it committed in, where it answers one.
+  let pinTxid: string | undefined;
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -304,6 +315,26 @@ function fakeService() {
         cursor = "2:1";
         return page ?? { ...SAID, cursor, holds: false };
       }),
+    messagesNewest: (agentId, callId, cut) =>
+      Effect.sync(() => {
+        asked.push(
+          (callId === undefined
+            ? `messages-newest:${agentId}`
+            : `worker-newest:${agentId}:${callId}`) + (cut === true ? ":cut" : ""),
+        );
+        // Note that the service answers an agent the account does not reach not found on every read alike.
+        if (transcript !== undefined && "failure" in transcript) return transcript;
+        return newestPage ?? { ...SAID, cursor: "1:0" };
+      }),
+    messagesBefore: (agentId, before, callId, cut) =>
+      Effect.sync(() => {
+        asked.push(
+          (callId === undefined
+            ? `messages-before:${agentId}:${before}`
+            : `worker-before:${agentId}:${callId}:${before}`) + (cut === true ? ":cut" : ""),
+        );
+        return { messages: SAID.messages, before: "3" };
+      }),
     agentTranscriptLive: (agentId, _userId, callId, poll) =>
       Effect.sync(() => {
         asked.push(
@@ -344,7 +375,7 @@ function fakeService() {
     pin: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
-        return { agent: AGENT };
+        return pinTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: pinTxid };
       }),
     agent: (agentId) =>
       Effect.sync(() => {
@@ -517,6 +548,11 @@ function fakeService() {
         asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
+    agentPart: (agentId, messageId, index, callId) =>
+      Effect.sync(() => {
+        asked.push(`part:${agentId}:${messageId}:${index}:${callId ?? ""}`);
+        return { part: { type: "reasoning", text: "Whole." } };
+      }),
     markInboxItemRead: (itemId) =>
       Effect.sync(() => {
         asked.push(`inbox-read:${itemId}`);
@@ -587,7 +623,7 @@ function fakeService() {
     chatPost: (workspaceId, write) =>
       Effect.sync(() => {
         asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
-        return { readSeq: 4 };
+        return written;
       }),
     chatJoin: (workspaceId) =>
       Effect.sync(() => {
@@ -614,6 +650,10 @@ function fakeService() {
     ) => {
       transcript = next;
     },
+    /** What the service answers a write to a workspace's chat. */
+    answerWrites: (next: CodingAgentChatWriteAnswerView) => {
+      written = next;
+    },
     /** What the service seals for following a workspace's chat, or that the account is not in it; none answers unanswered. */
     sealChat: (next: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       chatLive = next;
@@ -622,6 +662,10 @@ function fakeService() {
     pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
       pagesNow = pages;
     },
+    /** The newest page the service answers. */
+    pageNewest: (page: CodingAgentNewestAnswer | { readonly failure: "unanswered" }) => {
+      newestPage = page;
+    },
     /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
     sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       scope = next;
@@ -629,6 +673,10 @@ function fakeService() {
     /** What the service seals for following the account inbox, or that the session signed out; none answers unanswered. */
     sealAccount: (next: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined) => {
       accountLive = next;
+    },
+    /** The transaction a pin answers it committed in; none answers none. */
+    pinCommits: (txid: string | undefined) => {
+      pinTxid = txid;
     },
   };
 }
@@ -641,47 +689,6 @@ function sealed(part: string, expiresAt = NOW + 60_000) {
   return { capability: `capability-${part}`, queryFingerprint: `fingerprint-${part}`, expiresAt };
 }
 
-/**
- * Realtime as a script: the address each client was opened at and closed,
- * each part's subscription by its capability, and a way to deliver rows to
- * one.
- */
-function fakeRealtime() {
-  const opened: string[] = [];
-  const closed: string[] = [];
-  const listeners = new Map<
-    string,
-    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
-  >();
-  const open = (url: string): LiveClient => {
-    opened.push(url);
-    return {
-      subscribe: (query) => ({
-        onChange: (listener) => {
-          listeners.set(query.capability, listener);
-          return () => listeners.delete(query.capability);
-        },
-        renew: () => Promise.resolve(),
-        unsubscribe: () => void listeners.delete(query.capability),
-      }),
-      close: () => void closed.push(url),
-    };
-  };
-  return {
-    open,
-    opened,
-    closed,
-    /** Rows delivered to the part's subscription, as Realtime's snapshot carries them. */
-    deliver: (part: string, data: readonly unknown[]) => {
-      const listener = listeners.get(`capability-${part}`);
-      assert.ok(listener, `no subscription to ${part}`);
-      listener({ status: "live", data });
-    },
-    /** The parts subscribed to now, by capability. */
-    subscribed: () => [...listeners.keys()].toSorted(),
-  };
-}
-
 /** Every step a subscription has to take, taken: it runs on a fiber of its own. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
@@ -691,6 +698,7 @@ function subject(
     sendsNetwork?: boolean;
     typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
     accountId?: () => string | undefined;
+    listed?: (txid: string | undefined) => Effect.Effect<void>;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -708,6 +716,7 @@ function subject(
       client: service.client,
       openLive: realtime.open,
       ...(options.typeIntoCall === undefined ? undefined : { typeIntoCall: options.typeIntoCall }),
+      ...(options.listed === undefined ? undefined : { listed: options.listed }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -723,14 +732,17 @@ function subject(
       call,
       pages,
       asked: service.asked,
+      pinCommits: service.pinCommits,
       sealTranscript: service.sealTranscript,
       sealChat: service.sealChat,
+      answerWrites: service.answerWrites,
       /** Every workspace chat the host said changed, in order. */
       chats: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.CHAT_CHANGED ? [event.payload] : [],
         ),
       pageNow: service.pageNow,
+      pageNewest: service.pageNewest,
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
       realtime,
@@ -748,6 +760,24 @@ function subject(
     };
   });
 }
+
+it.effect(
+  "a pin that answers its transaction waits for the task list to carry it before it answers",
+  () =>
+    Effect.gen(function* () {
+      const waited: (string | undefined)[] = [];
+      const { call, pinCommits } = yield* subject({
+        listed: (txid) => Effect.sync(() => void waited.push(txid)),
+      });
+      pinCommits("9101");
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
+        { agent: AGENT, txid: "9101" },
+      );
+      assert.deepEqual(waited, ["9101"]);
+    }),
+);
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
@@ -936,6 +966,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PART, {
+        agentId: AGENT_ID,
+        messageId: "message-1",
+        index: 2,
+      }),
+      { part: { type: "reasoning", text: "Whole." } },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
         itemId: ITEM.id,
         revision: 2,
@@ -1057,6 +1095,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request-viewed:${AGENT_ID}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
+      `part:${AGENT_ID}:message-1:2:`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
@@ -1213,60 +1252,205 @@ function pageNow(
   };
 }
 
-/** A page as the window is answered it: the service's word on whether it would have held left in the host. */
+/** A page past a cursor as the window is told it: the service's word on whether it would have held left in the host, and whether it came back short of a page's most. */
 function windowPage(page: TranscriptNowAnswer) {
   const { holds: _holds, ...rest } = page;
-  return rest;
+  return { ...rest, caughtUp: page.messages.length < CODING_AGENT_BOUNDS.MESSAGES_PAGE };
+}
+
+/** The newest page the service answers: one message, the cursor to follow on from, and where the older page is read below. */
+function newestPage(cursor: string, text: string, before?: string): CodingAgentNewestAnswer {
+  return {
+    messages: [{ id: `m-${cursor}`, role: "assistant", parts: [{ type: "text", text }] }],
+    cursor,
+    status: CODING_AGENT_STATUS.RUNNING,
+    title: "Invites",
+    ...(before === undefined ? undefined : { before }),
+  };
 }
 
 const FOLLOWED = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID } as const;
 
+/** Whether a page the host told came back caught up. */
+function caughtUpOf(told: WireValue | undefined): unknown {
+  return isRecord(told) && isRecord(told.page) ? told.page.caughtUp : undefined;
+}
+
 it.effect(
-  "a followed transcript is told page by page from the start, the next at once after one that said something, then again only as its statements move or at the edge the service names; letting it go ends the telling",
+  "a followed transcript opens on its newest page, read once beside the seal, then follows on from its cursor once the subscription stands, missing nothing written between; a short page is caught up, and the next is read only as the statements move or at the edge the service names; letting it go ends the telling",
   () =>
     Effect.gen(function* () {
-      const { call, asked, pages, sealTranscript, pageNow: script, realtime } = yield* subject();
+      const {
+        call,
+        asked,
+        pages,
+        sealTranscript,
+        pageNow: script,
+        pageNewest,
+        realtime,
+      } = yield* subject();
       sealTranscript(SEALED_TRANSCRIPT);
-      const said = pageNow("1:0", { holds: false, text: "Reading the invites." });
-      const caught = { ...pageNow("1:0", { holds: true }), wakeIn: 3_000 };
-      script(said, caught);
+      const newest = newestPage("1:0", "Reading the invites.", "40");
+      pageNewest(newest);
+      // A message written after the newest page was read, before the subscription stood.
+      const between = {
+        ...pageNow("2:0", { holds: true, text: "Writing the expiry." }),
+        wakeIn: 3_000,
+      };
+      script(between);
       assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
       yield* settled;
       assert.deepEqual(pages(), [
-        { transcript: FOLLOWED, page: windowPage(said) },
-        { transcript: FOLLOWED, page: windowPage(caught) },
+        { transcript: FOLLOWED, page: { ...newest, newest: true, caughtUp: false } },
+      ]);
+      assert.deepEqual(asked.toSorted(), [
+        `messages-newest:${AGENT_ID}:cut`,
+        `transcript-live:${AGENT_ID}`,
       ]);
 
-      // Rows landing read the page again; the edge the service named reads it once more.
-      transcriptRows(realtime, 1);
-      yield* settled;
-      assert.equal(pages().length, 3);
-      yield* TestClock.adjust("3 seconds");
-      yield* settled;
-      assert.equal(pages().length, 4);
-
-      const moved = pageNow("2:0", { holds: false, text: "Writing the expiry." });
-      const ended = pageNow("2:0", { holds: false });
-      script(moved, ended);
+      // The subscription's first rows read on from the newest page's cursor, never from the start.
       transcriptRows(realtime, 2);
       yield* settled;
-      // Note that each part landing may move the statements, so the page past the last may be read more than once.
-      assert.deepEqual(pages()[4], { transcript: FOLLOWED, page: windowPage(moved) });
-      assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(ended) });
-      assert.deepEqual(asked.slice(0, 3), [
-        `transcript-live:${AGENT_ID}`,
-        `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
-        `messages-now:${AGENT_ID}:1:0`,
-      ]);
+      assert.deepEqual(pages()[1], { transcript: FOLLOWED, page: windowPage(between) });
+      assert.equal(caughtUpOf(pages()[1]), true);
+      const reads = asked.filter((ask) => ask.startsWith("messages-"));
+      assert.deepEqual(reads, [`messages-newest:${AGENT_ID}:cut`, `messages-now:${AGENT_ID}:1:0`]);
+
+      // Note that a short page is caught up, so nothing is read again until the clock reaches the edge the service named.
+      yield* TestClock.adjust("2 seconds");
+      yield* settled;
+      assert.equal(pages().length, 2);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      assert.equal(pages().length, 3);
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:2:0`);
+
+      const moved = pageNow("3:0", { holds: false, text: "Testing the expiry." });
+      script(moved);
+      transcriptRows(realtime, 3);
+      yield* settled;
+      assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(moved) });
+      assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
+      assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`));
       assert.ok(!JSON.stringify(pages()).includes("capability"));
 
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       const toldBefore = pages().length;
-      transcriptRows(realtime, 3);
+      transcriptRows(realtime, 4);
       yield* settled;
       assert.equal(pages().length, toldBefore);
     }),
+);
+
+it.effect(
+  "a full page is followed by the next at once, and the short one after it is caught up",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, pages, sealTranscript, pageNow: script, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      const full: TranscriptNowAnswer = {
+        ...pageNow("2:0", { holds: false }),
+        messages: Array.from({ length: CODING_AGENT_BOUNDS.MESSAGES_PAGE }, (_, index) => ({
+          id: `m-full-${index}`,
+          role: "assistant" as const,
+          parts: [{ type: "text" as const, text: `Step ${index}` }],
+        })),
+      };
+      const rest = pageNow("3:0", { holds: true, text: "Done." });
+      script(full, rest);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 2);
+      yield* settled;
+      const told = pages().map(caughtUpOf);
+      assert.deepEqual(told.slice(0, 3), [false, false, true]);
+      assert.deepEqual(asked.filter((ask) => ask.startsWith("messages-now")).slice(0, 2), [
+        `messages-now:${AGENT_ID}:1:0`,
+        `messages-now:${AGENT_ID}:2:0`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a seal the service does not answer leaves the newest page told, is asked again a bounded number of times, then says the transcript could not be read; following again seals anew",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, pages, sealTranscript } = yield* subject();
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(pages(), [
+        {
+          transcript: FOLLOWED,
+          page: { ...SAID, cursor: "1:0", newest: true, caughtUp: false },
+        },
+      ]);
+
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      const seals = asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
+      assert.ok(seals > 1 && seals < 60, `sealed ${seals} times`);
+      assert.deepEqual(pages().at(-1), {
+        transcript: FOLLOWED,
+        page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      });
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals);
+
+      sealTranscript(SEALED_TRANSCRIPT);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
+      assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length, 2);
+    }),
+);
+
+it.effect(
+  "a newest page the service keeps not answering is asked for a bounded number of times, then the follow ends on the failure told",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, pages, sealTranscript, pageNewest } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      pageNewest({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      const newest = () => asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length;
+      const read = newest();
+      assert.ok(read > 1 && read < 60, `read the newest page ${read} times`);
+      assert.deepEqual(pages().at(-1), {
+        transcript: FOLLOWED,
+        page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      });
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      assert.equal(newest(), read);
+      assert.ok(!asked.some((ask) => ask.startsWith("messages-now")));
+    }),
+);
+
+it.effect("an older page is read below the place the window names, the agent's or a worker's", () =>
+  Effect.gen(function* () {
+    const { call, asked } = yield* subject();
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
+      { messages: SAID.messages, before: "3" },
+    );
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, {
+      ...FOLLOWED,
+      callId: "call-7",
+      before: "40",
+    });
+    const refused = yield* Effect.flip(
+      call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "the start" }),
+    );
+    assert.equal(refused._tag, "InvalidParamsRefusal");
+    assert.deepEqual(asked, [
+      `messages-before:${AGENT_ID}:40:cut`,
+      `worker-before:${AGENT_ID}:call-7:40:cut`,
+    ]);
+  }),
 );
 
 it.effect(
@@ -1510,6 +1694,45 @@ it.effect(
         [first, second],
       );
       assert.ok(!JSON.stringify(told).includes("capability"));
+    }),
+);
+
+it.effect(
+  "a write to a followed chat is answered once its transaction reaches the chat, and a write that changed nothing, or to a chat not followed, at once",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealChat, answerWrites, realtime } = yield* subject();
+      sealChat(SEALED_CHAT);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      deliverChat(realtime, []);
+      yield* settled;
+      const write = (workspaceId: string, request: WireRecord) =>
+        Effect.forkChild(
+          call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, { workspaceId, write: request }),
+        );
+
+      answerWrites({ readSeq: 0, reads: [{ channelId: CHANNEL_ID, readSeq: 3 }], txid: "78" });
+      const read = yield* write(WORKSPACE_ID, { readTo: 3, channelId: CHANNEL_ID });
+      yield* settled;
+      assert.equal(read.pollUnsafe(), undefined, "the write waits for its transaction");
+      assert.deepEqual(realtime.awaitingTxids(), ["78"]);
+      realtime.arrive("78");
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(read), {
+        readSeq: 0,
+        reads: [{ channelId: CHANNEL_ID, readSeq: 3 }],
+        txid: "78",
+      });
+
+      // A read to where the cursor stands writes nothing, and another workspace's chat is not followed.
+      answerWrites({ readSeq: 0 });
+      yield* Fiber.join(yield* write(WORKSPACE_ID, { readTo: 3, channelId: CHANNEL_ID }));
+      answerWrites({ readSeq: 0, txid: "79" });
+      yield* Fiber.join(
+        yield* write("3c1e9d2b-7a4f-4e6b-8d0c-1f2a3b4c5d6e", { readTo: 3, channelId: CHANNEL_ID }),
+      );
+      assert.deepEqual(realtime.awaitingTxids(), []);
     }),
 );
 

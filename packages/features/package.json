@@ -24,6 +24,8 @@
     "./sentry-reporting": "./src/sentry-reporting.js",
     "./sentry-tracing": "./src/sentry-tracing.js",
     "./live-wire": "./src/live-wire.js",
+    "./transcript-window": "./src/transcript-window.js",
+    "./turn-record": "./src/turn-record.js",
     "./task-list-live": "./src/task-list-live.js",
     "./video-avatar": "./src/video-avatar.js",
     "./board-text": "./src/board-text.js",

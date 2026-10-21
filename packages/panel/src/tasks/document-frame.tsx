@@ -45,17 +45,22 @@ export function DocumentScroll({
 
 /**
  * The line under a document's title: "Created by [Charles] Charles Pan ·
- * 3d ago", or "Created · 3d ago" where nobody is named, then `edited`, the
+ * 3d ago", "Created by [agent] Invite emails for [Dean] you · 6m ago" and "From
+ * Teammate invitations" for a task Luke or an agent made, or "Created · 3d
+ * ago" where nobody is named, then `edited`, the
  * page's own phrase for its last edit, where it has one. The creator hangs
  * their card, and the time moves on with `now`.
  */
 export function DocumentByline({
   creator,
+  maker,
   createdAt,
   now,
   edited,
 }: {
   creator: Actor | undefined;
+  /** Luke or the coding agent that made the task for `creator`, and the task the agent works on, which the line says it came from; none for one made by hand. */
+  maker?: { readonly actor: Actor; readonly fromTask?: string | undefined } | undefined;
   createdAt: number;
   now: number;
   /** The phrase for the last edit, "Last edited by [Luke] Luke · 2h ago"; none where nothing changed since it was created. */
@@ -64,11 +69,24 @@ export function DocumentByline({
   return (
     <p className="plan-byline">
       <span className="actor-line">
-        {creator === undefined ? "Created" : "Created by "}
+        {creator === undefined && maker === undefined ? "Created" : "Created by "}
+        {maker === undefined ? null : (
+          <>
+            <ActorRef actor={maker.actor} />
+            {creator === undefined ? null : " for "}
+          </>
+        )}
         {creator === undefined ? null : <ActorRef actor={creator} sentence />}
         {" · "}
         <RelativeTime at={createdAt} now={now} ago />
       </span>
+      {/* Note that where it came from is a phrase of its own, so a long line wraps between phrases rather than cutting a name short. */}
+      {maker?.fromTask === undefined ? null : (
+        <>
+          {" "}
+          <span className="actor-line plan-byline-from">{`From ${maker.fromTask}`}</span>
+        </>
+      )}
       {/* Note that the space between the phrases is read, not drawn: the line's gap draws it. */}
       {edited === undefined ? null : (
         <>

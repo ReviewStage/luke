@@ -209,6 +209,8 @@ function SettingsHarness({
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
     },
     room: SHELL_ROOM.WIDE,
     step: { listed: true, onList: ignore },

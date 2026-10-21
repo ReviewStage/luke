@@ -30,7 +30,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { creatorActor } from "@luke/ui/actor-model";
+import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import {
@@ -40,6 +40,7 @@ import {
   filteredFields,
   keptTasksDisplay,
   NO_TASKS_FILTER,
+  TASK_MAKER_ORDER,
   TASK_PROPERTY,
   TASK_PROPERTY_ORDER,
   TASKS_GROUP,
@@ -74,6 +75,7 @@ import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { readKept, writeKept } from "./folded-groups.js";
 import { sectionGlyph } from "./section-icon-picker.js";
@@ -142,6 +144,7 @@ const storedFilters = Schema.fromJsonString(
       status: Schema.optionalKey(Schema.Array(Schema.Literals(Object.values(TASK_STATUS)))),
       priority: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PRIORITY_ORDER))),
       creator: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
+      madeBy: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_MAKER_ORDER))),
       repository: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
     }),
   ),
@@ -388,6 +391,7 @@ function TaskListRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const creator = creatorActor(task, useMemberDirectory(), undefined);
+  const maker = useTaskMaker(task);
   const drawn = (property: TaskProperty) => properties.includes(property);
   const key =
     task.number === undefined || !drawn(TASK_PROPERTY.KEY)
@@ -433,8 +437,15 @@ function TaskListRow({
           {drawn(TASK_PROPERTY.REPOSITORY) ? (
             <span className="home-row-context">{task.repository ?? NO_REPOSITORY}</span>
           ) : null}
+          {drawn(TASK_PROPERTY.CREATOR) && maker !== undefined ? (
+            <span className="home-row-context">{actorName(maker.actor)}</span>
+          ) : null}
           {drawn(TASK_PROPERTY.CREATOR) ? (
-            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+            <ActorMark
+              actor={maker?.actor ?? creator}
+              size={ACTOR_SIZE.MARK}
+              forWhom={maker === undefined ? undefined : creator}
+            />
           ) : null}
           {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMark task={task} /> : null}
           {drawn(TASK_PROPERTY.UPDATED) ? (

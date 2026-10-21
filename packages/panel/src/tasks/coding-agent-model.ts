@@ -18,6 +18,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
+  type CodingAgentPartCut,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
@@ -28,6 +29,7 @@ import {
   type CodingAgentTodos,
   type CodingAgentUsage,
   type ContextWindow,
+  PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
@@ -246,6 +248,11 @@ export function subagentActor(model: string | undefined, state: GlyphState, name
     provider: model === undefined ? undefined : providerOf(model),
     state: ACTOR_STATE_OF_GLYPH[state],
   };
+}
+
+/** Where an agent's work stands, as its tile wears it, read off its status. */
+export function agentActorState(status: CodingAgentStatus): ActorState {
+  return ACTOR_STATE_OF_GLYPH[agentGlyphState(status)];
 }
 
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
@@ -1239,19 +1246,29 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
 
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 
+/** A part its page carried cut (`cutParts`): its two ends and its whole size, and the message and index it is fetched whole by. */
+export type AgentPartCut = Omit<CodingAgentPartCut, "field"> & { readonly messageId: string };
+
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
   | { readonly kind: typeof AGENT_PART.TEXT; readonly text: string }
-  | { readonly kind: typeof AGENT_PART.REASONING; readonly text: string }
+  | {
+      readonly kind: typeof AGENT_PART.REASONING;
+      /** Empty on a thought its page carried cut, whose words `cut` holds the ends of. */
+      readonly text: string;
+      readonly cut?: AgentPartCut;
+    }
   | {
       readonly kind: typeof AGENT_PART.TOOL;
       readonly tool: string;
       readonly callId: string;
       readonly state: ToolState;
       readonly input: WireValue | undefined;
+      /** None while the call has not answered, and on a call whose answer its page carried cut, which `cut` holds the ends of. */
       readonly output: WireValue | undefined;
       /** The error's own text, on a call that ended in one. */
       readonly errorText: string | undefined;
+      readonly cut?: AgentPartCut;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER }
@@ -1270,7 +1287,7 @@ function toolState(value: WireValue | undefined): ToolState {
  * reasoning part without its words, and any kind this build does not know,
  * draws nothing rather than refusing the message.
  */
-function agentPart(part: WireValue): AgentPart {
+export function agentPart(part: WireValue): AgentPart {
   if (!isRecord(part) || !isWireString(part.type)) return { kind: AGENT_PART.OTHER };
   if (part.type === AGENT_PART.TEXT || part.type === AGENT_PART.REASONING) {
     return isWireString(part.text)
@@ -1313,11 +1330,30 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
   return read.channel === MESSAGE_CHANNEL.CHAT ? read : undefined;
 }
 
-/** The parts of a message as the tab draws them, in the row's order. */
+/**
+ * A part its page carried cut, as the tab draws it: a thought with no words
+ * of its own, or a call with no answer of its own, each with the ends it was
+ * cut to; a part that is neither draws as it reads.
+ */
+function cutAgentPart(part: WireValue, cut: CodingAgentPartCut, messageId: string): AgentPart {
+  const { field: _field, ...ends } = cut;
+  const marked = { ...ends, messageId };
+  if (cut.field === PART_CUT_FIELD.TEXT) {
+    return { kind: AGENT_PART.REASONING, text: "", cut: marked };
+  }
+  const read = agentPart(part);
+  return read.kind === AGENT_PART.TOOL ? { ...read, cut: marked } : read;
+}
+
+/** The parts of a message as the tab draws them, in the row's order, each its page carried cut marked so. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   const read = partsRead.get(message);
   if (read !== undefined) return read;
-  const parts = message.parts.map(agentPart);
+  const cuts = new Map((message.cutParts ?? []).map((cut) => [cut.index, cut]));
+  const parts = message.parts.map((part, index) => {
+    const cut = cuts.get(index);
+    return cut === undefined ? agentPart(part) : cutAgentPart(part, cut, message.id);
+  });
   partsRead.set(message, parts);
   return parts;
 }

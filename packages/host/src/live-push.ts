@@ -1,5 +1,11 @@
 import { Duration, Effect, Option, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows, type SealedRead } from "./live-follow.js";
+import {
+  LiveBroken,
+  type LiveClient,
+  liveRows,
+  type SealedRead,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * live-push.ts -- a read followed over Neon Realtime for the windows that draw it, each change published for the host to push to them.
@@ -29,6 +35,8 @@ export interface LivePushDependencies<Part extends string, Value> {
   readonly now: () => number;
   /** The value as it now stands each time it moves, or that it could not be followed. */
   readonly publish: (value: Value | undefined) => void;
+  /** Handed how to wait for a write's transaction on the read once it is live, and none once it is not (`liveRows`). */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /** The read followed until interrupted, each change published. */
@@ -47,6 +55,7 @@ export function pushLive<Part extends string, Value>(
         reseal: () => dependencies.seal(false),
         poll: (after) => dependencies.seal(true, after),
         now: dependencies.now,
+        ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
       },
       sealed,
     );

@@ -8,6 +8,7 @@ import {
   type GitHubRepositoryPullRequestAnswer,
   type TaskCallResult,
   type TaskStarted,
+  type TaskWritten,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
@@ -170,6 +171,8 @@ interface FakeService extends TasksClient {
   readonly recordReads: string[];
   /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
   readonly images: Record<string, string | undefined>;
+  /** The transaction the next board save answers, as one that moved the board's live row; none answers no txid. */
+  boardSaveTxid: string | undefined;
   /** Every code shown on each task as the service keeps it, by task id; a task with none answers nothing, as a service that did not answer. */
   codes: Record<string, readonly TaskShownCode[]>;
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
@@ -217,6 +220,8 @@ interface FakeService extends TasksClient {
   sections: TaskSections | undefined;
   /** Every change to the sections the service was asked for, in order. */
   sectionWrites: TaskSectionWrite[];
+  /** The transaction a pin's or a section's write answers, where a test sets one; none as a write that changed no row. */
+  sidebarTxid: string | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -231,6 +236,8 @@ interface FakeService extends TasksClient {
   renameAnswered: Effect.Effect<void>;
   /** Whether Realtime misses the store's changes, telling none of them. */
   realtimeMisses: boolean;
+  /** The transaction a task's rename answers it committed in, where it answers one. */
+  renameTxid: string | undefined;
   /** Realtime as the service's deployment holds it: each subscription to the workspaces is told the table as it stands, and again on every change. */
   realtime: ReturnType<typeof fakeServiceRealtime>;
   /** Realtime's client as the host opens it at the workspaces' address, each subscription told the workspaces at once, as Realtime's first result. */
@@ -472,6 +479,7 @@ function fakeService(tasks: Task[]): FakeService {
     historySeals: {},
     recordReads: [],
     images: {},
+    boardSaveTxid: undefined,
     codes: {},
     files: {},
     folders: {},
@@ -535,13 +543,14 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? restored : candidate,
         );
-        return restored;
+        return { task: restored, txid: `txid-${seq}` };
       }),
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
     sections: undefined,
     sectionWrites: [],
+    sidebarTxid: undefined,
     get memberships() {
       return memberships;
     },
@@ -579,6 +588,7 @@ function fakeService(tasks: Task[]): FakeService {
     workspacesSignedOut: false,
     renamedAgain: undefined,
     renameAnswered: Effect.void,
+    renameTxid: undefined,
     members: {},
     former: {},
     linearIssues: {},
@@ -845,13 +855,17 @@ function fakeService(tasks: Task[]): FakeService {
         service.pins = pinned
           ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
           : others;
-        return service.pins;
+        const txid = service.sidebarTxid;
+        return txid === undefined ? { pins: service.pins } : { pins: service.pins, txid };
       }),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
       Effect.sync(() => {
         service.sectionWrites.push(write);
-        return service.sections;
+        const txid = service.sidebarTxid;
+        return service.sections === undefined || txid === undefined
+          ? service.sections
+          : { ...service.sections, txid };
       }),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -985,7 +999,8 @@ function fakeService(tasks: Task[]): FakeService {
         service.images[taskId] = image;
         const board = { ...service.boards[taskId], elements, appliedDrawing };
         service.boards[taskId] = board;
-        return board;
+        const txid = service.boardSaveTxid;
+        return txid === undefined ? { board } : { board, txid };
       }),
     listLive: () =>
       Effect.sync(() => {
@@ -1010,7 +1025,7 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     // The service keeps the repository on the task and answers the task whole.
     setRepository: (taskId, repository) =>
-      Effect.sync((): TaskCallResult<Task, RepositoryCallFailure> => {
+      Effect.sync((): TaskCallResult<TaskWritten, RepositoryCallFailure> => {
         if (service.repositoryUnreachable) {
           return { ok: false, failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
         }
@@ -1020,18 +1035,18 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
-        return { ok: true, answer: changed };
+        return { ok: true, answer: { task: changed } };
       }),
     // The service moves the task and answers it whole.
     move: (taskId, workspaceId) =>
-      Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
+      Effect.sync((): TaskCallResult<TaskWritten, TaskCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
         const moved = { ...found, workspaceId };
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? moved : candidate,
         );
-        return { ok: true, answer: moved };
+        return { ok: true, answer: { task: moved } };
       }),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
@@ -1042,7 +1057,9 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? renamed : candidate,
         );
-        return renamed;
+        return service.renameTxid === undefined
+          ? { task: renamed }
+          : { task: renamed, txid: service.renameTxid };
       }),
     // The service sets the status, the priority, and the assignee named, naming the assignee by
     // their account, and leaves the rest standing; null assigns the task to no one.
@@ -1060,7 +1077,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
-        return changed;
+        return { task: changed };
       }),
     // The service stamps a pin or an archive at its own clock, and a false takes it away.
     mark: (taskId, { pinned, archived }) =>
@@ -1078,13 +1095,13 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? marked : candidate,
         );
-        return marked;
+        return { task: marked };
       }),
     delete: (taskId) =>
       Effect.sync(() => {
-        if (service.deleteFails) return false;
+        if (service.deleteFails) return undefined;
         service.tasks = service.tasks.filter((candidate) => candidate.id !== taskId);
-        return true;
+        return {};
       }),
   };
   return service;
@@ -1099,6 +1116,15 @@ function fakeRealtime() {
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
   >();
   const closed: string[] = [];
+  const arrived = new Set<string>();
+  const waiting = new Map<string, Array<() => void>>();
+  /** A write's transaction waited on until `arrive` names it, as Realtime's `awaitTxId` settles. */
+  const awaitTxId = (txid: string): Promise<void> => {
+    if (arrived.has(txid)) return Promise.resolve();
+    const { promise, resolve } = Promise.withResolvers<void>();
+    waiting.set(txid, [...(waiting.get(txid) ?? []), resolve]);
+    return promise;
+  };
   const open = (url: string): LiveClient => ({
     subscribe: (query) => ({
       onChange: (listener) => {
@@ -1106,6 +1132,7 @@ function fakeRealtime() {
         return () => listeners.delete(query.capability);
       },
       renew: () => Promise.resolve(),
+      awaitTxId,
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => void closed.push(url),
@@ -1147,6 +1174,14 @@ function fakeRealtime() {
       assert.ok(listener, `no subscription to ${part}`);
       listener({ status: "live", data });
     },
+    /** A write's transaction reaching the subscriptions, settling every wait on it. */
+    arrive: (txid: string) => {
+      arrived.add(txid);
+      for (const resolve of waiting.get(txid) ?? []) resolve();
+      waiting.delete(txid);
+    },
+    /** The transactions a wait still stands on. */
+    awaitingTxids: () => [...waiting.keys()].toSorted(),
     /** One part of the task list's subscription stopped for good. */
     failPart: (part: string) => listeners.get(part)?.({ status: "error", data: [] }),
     /** Lets what was delivered reach the view, through the fibers that carry it. */
@@ -1434,6 +1469,45 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
 );
 
 it.effect(
+  "a rename that answers its transaction is answered once the followed list carries it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.renameTxid = "7301";
+      const { call, listed, realtime, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+
+      const renaming = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
+      );
+      yield* settled;
+      assert.deepEqual(realtime.awaitingTxids(), ["7301"]);
+      assert.equal(renaming.pollUnsafe(), undefined, "the rename waits for its transaction");
+
+      realtime.arrive("7301");
+      assert.deepEqual(yield* Fiber.join(renaming), { renamed: true });
+      assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
+);
+
+it.effect(
+  "a rename's transaction is waited for by nothing while the list is not followed over Realtime",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.renameTxid = "7302";
+      const { call, realtime } = yield* subject(service);
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
+        { renamed: true },
+      );
+      assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
+);
+
+it.effect(
   "a task's code read as none is held as none, and a task whose code read did not answer holds its code unread",
   () =>
     Effect.gen(function* () {
@@ -1667,6 +1741,65 @@ it.effect(
         last()?.repositoryPins?.map((pin) => pin.repository),
         ["acme/web", "acme/relay"],
       );
+    }),
+);
+
+it.effect(
+  "a pin or a section's write answers once the followed sidebar has its transaction, at once where it names none, and at once before the sidebar is followed",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, settled } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      service.sections = { sections: [launch], entries: [] };
+
+      // Before the first refresh nothing follows the sidebar, so a write's transaction is not waited on.
+      service.sidebarTxid = "40";
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, {
+          repository: "acme/relay",
+          pinned: true,
+        }),
+        { changed: true },
+      );
+      assert.deepEqual(service.realtime.awaitingTxids(), []);
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+
+      service.sidebarTxid = "41";
+      const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
+      service.sections = { sections: [launch], entries: [placed] };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      const placing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place));
+      yield* settled;
+      assert.deepEqual(service.realtime.awaitingTxids(), ["41"]);
+      assert.equal(placing.pollUnsafe(), undefined, "the write waits for its transaction");
+      service.realtime.arrive("41");
+      assert.deepEqual(yield* Fiber.join(placing), { changed: true });
+      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+
+      service.sidebarTxid = "42";
+      const pinning = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
+      );
+      yield* settled;
+      assert.deepEqual(service.realtime.awaitingTxids(), ["42"]);
+      service.realtime.arrive("42");
+      assert.deepEqual(yield* Fiber.join(pinning), { changed: true });
+
+      // A write that changed no row names no transaction, so there is nothing to wait for.
+      service.sidebarTxid = undefined;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
+        { changed: true },
+      );
+      assert.deepEqual(service.realtime.awaitingTxids(), []);
     }),
 );
 
@@ -3161,6 +3294,7 @@ function fakeBoardRealtime() {
         return () => listeners.delete(query.capability);
       },
       renew: () => Promise.resolve(),
+      awaitTxId: () => Promise.resolve(),
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => {},
@@ -3243,6 +3377,57 @@ it.effect(
       // Leaving the task lets the subscription go.
       yield* call(GATEWAY_METHOD.TASKS_CLOSE);
       assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a board save is answered once its transaction reaches the open task's followed board, and at once where nothing is followed",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
+      service.boardSeals[INVITES] = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          board: {
+            capability: "capability-board",
+            queryFingerprint: "board",
+            expiresAt: 3_600_000,
+          },
+        },
+      };
+      const realtime = fakeServiceRealtime();
+      const { call, tasks } = yield* subject(service, { openLive: realtime.open });
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* boardSettled;
+      realtime.deliver("board", [
+        { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },
+      ]);
+      yield* boardSettled;
+      const save = { taskId: INVITES, elements: [], appliedDrawing: 0 };
+
+      // A save that moved the live row waits on its transaction before it answers.
+      service.boardSaveTxid = "42";
+      const saving = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
+      yield* boardSettled;
+      assert.deepEqual(realtime.awaitingTxids(), ["42"]);
+      assert.equal(saving.pollUnsafe(), undefined, "not answered before the transaction arrives");
+      realtime.arrive("42");
+      assert.deepEqual(yield* Fiber.join(saving), { saved: true });
+
+      // A save that answers no transaction has nothing to wait for.
+      service.boardSaveTxid = undefined;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
+
+      // A follow Realtime stopped is polled, which hands out no wait, so a save answers at once.
+      delete service.boardSeals[INVITES];
+      realtime.fail("board");
+      yield* boardSettled;
+      service.boardSaveTxid = "43";
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
+      assert.deepEqual(realtime.awaitingTxids(), []);
     }),
 );
 
@@ -3539,6 +3724,49 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a restore is confirmed once its transaction reaches the followed history, and at once where no history is followed",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.revisions[1] = {
+        seq: 1,
+        document: { body: "# Invites", assumptions: [] },
+        previous: null,
+      };
+      service.historySeals[INVITES] = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          revisions: {
+            capability: "capability-revisions",
+            queryFingerprint: "history",
+            expiresAt: 3_600_000,
+          },
+        },
+      };
+      const realtime = fakeServiceRealtime();
+      const { call } = yield* subject(service, { openLive: realtime.open });
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }), {
+        restored: true,
+      });
+      assert.deepEqual(realtime.awaitingTxids(), [], "no history is followed, so nothing waits");
+
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      realtime.deliver("revisions", []);
+      yield* boardSettled;
+      const restore = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }),
+      );
+      yield* boardSettled;
+      assert.deepEqual(realtime.awaitingTxids(), ["txid-1"]);
+      assert.equal(restore.pollUnsafe(), undefined, "the restore waits for its transaction");
+      realtime.arrive("txid-1");
+      assert.deepEqual(yield* Fiber.join(restore), { restored: true });
     }),
 );
 
