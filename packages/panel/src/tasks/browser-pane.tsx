@@ -6,8 +6,24 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
-import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
+import {
+  BANNER_LOOK,
+  BANNER_TONE,
+  Banner,
+  BUTTON_VARIANT,
+  Button,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+} from "@luke/ui";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  BotIcon,
+  ExternalLinkIcon,
+  RotateCwIcon,
+  XIcon,
+} from "lucide-react";
 import {
   type FormEvent,
   type RefObject,
@@ -44,6 +60,10 @@ import type { OpenBrowser } from "./use-side-panel.js";
  * page comes back from main and is pressed on this window, so the window's
  * own chords answer over the page as over any tab, and ⌘L and ⌘R are the
  * pane's: the address, and a reload.
+ *
+ * While an agent on the task drives the page, a strip under the bar says
+ * so, with a Stop that cuts the agent off and keeps every agent off the
+ * page until the developer clicks into it again (`browser-views.ts`).
  */
 
 /**
@@ -375,7 +395,7 @@ export function BrowserPane({
   const openAt = useCallback(
     (address: string) => {
       setRefused(false);
-      act(ACT_KIND.BROWSER_OPEN, { browserId, address }).then(
+      act(ACT_KIND.BROWSER_OPEN, { browserId, address, taskId: open.task }).then(
         (answer) => {
           notePage(answer);
           setOpened(true);
@@ -383,7 +403,7 @@ export function BrowserPane({
         () => setRefused(true),
       );
     },
-    [act, browserId],
+    [act, browserId, open.task],
   );
   // A tab drawn again opens its view where it stood, which main answers as it stands.
   useEffect(() => {
@@ -489,6 +509,23 @@ export function BrowserPane({
           />
         </div>
       </header>
+      {page?.agent === true ? (
+        <Banner
+          look={BANNER_LOOK.STRIP}
+          tone={BANNER_TONE.ATTENTION}
+          glyph={<BotIcon />}
+          actions={
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              onClick={() => tell(ACT_KIND.BROWSER_STOP, { browserId })}
+            >
+              Stop agent
+            </Button>
+          }
+        >
+          An agent is using this tab
+        </Banner>
+      ) : null}
       <div ref={body} className="browser-view-body">
         {!opened && !refused ? null : refused ? (
           <ErrorState

@@ -63,6 +63,7 @@ import {
   useState,
 } from "react";
 import { useAct } from "../act.js";
+import { appBridge } from "../app-bridge.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -2025,6 +2026,17 @@ export function SidePanel({
   const browsing = browserOn && browserOffered;
   const browsers = browsing ? panel.browsers : NO_BROWSERS;
   const browserPages = useBrowserPages(browsing);
+  // A Browser tab an agent opened or closed in main is held or let go here, as one the "+" opened is.
+  const { onAgentBrowser, onBrowserGone } = panel;
+  useEffect(() => {
+    if (!browsing) return;
+    const unhearOpened = appBridge().onBrowserOpened(onAgentBrowser);
+    const unhearClosed = appBridge().onBrowserClosed(({ browserId }) => onBrowserGone(browserId));
+    return () => {
+      unhearOpened();
+      unhearClosed();
+    };
+  }, [browsing, onAgentBrowser, onBrowserGone]);
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {

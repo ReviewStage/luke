@@ -1,5 +1,5 @@
 /**
- * browser-snapshot.ts -- a page's accessibility tree as the compact text an agent reads: an element a line, indented under its parent, each one an agent can act on marked with its ref.
+ * browser-agent-snapshot.ts -- a page's accessibility tree as the compact text an agent reads: an element a line, indented under its parent, each one an agent can act on marked with its ref.
  *
  * The tree is Chromium's own (`Accessibility.getFullAXTree`). A node the
  * tree ignores, and a wrapper with no name of its own, is left out and its
@@ -12,14 +12,10 @@
  * saying the rest was left out.
  */
 
-import {
-  BROWSER_AGENT_LIMITS,
-  browserRefOf,
-  cutBrowserText,
-} from "@luke/features/browser-agent-actions";
+import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Result, Schema } from "effect";
-import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
+import { BROWSER_AGENT_LIMITS, browserRefOf, cutBrowserText } from "./browser-agent-actions.js";
 
 /** Roles a node is printed under only where it has a name: wrappers that say nothing themselves. */
 const WRAPPER_ROLES: ReadonlySet<string> = new Set([

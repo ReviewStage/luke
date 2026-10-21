@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
   MAC_COMMAND_KIND,
+  type MacBrowserParams,
   type MacCommandKind,
   type MacCommandRead,
   type MacCommandResult,
@@ -21,8 +22,8 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
  * runs, and each command it takes is run or refused by its kind.
  */
 
-/** Commands as this Mac reads them off the wire: a shell command, a browser command, and one of a kind a newer service queued. */
-const [COMMAND, BROWSER, NEWER] = Schema.decodeUnknownSync(macCommandsAnswerSchema)({
+/** Commands as this Mac reads them off the wire: a shell command, a browser command whose params it cannot read, one of a kind a newer service queued, and a browser command it can. */
+const [COMMAND, BROWSER, NEWER, OPEN] = Schema.decodeUnknownSync(macCommandsAnswerSchema)({
   commands: [
     {
       id: "2f6a1c7e-9b3d-4e8f-a5c1-7d2e9b4f6a03",
@@ -37,8 +38,38 @@ const [COMMAND, BROWSER, NEWER] = Schema.decodeUnknownSync(macCommandsAnswerSche
       timeoutSeconds: 30,
     },
     { id: "0e9d8c7b-6a5f-4e3d-9c2b-1a0f9e8d7c6b", kind: "hologram", timeoutSeconds: 30 },
+    {
+      id: "5b4a3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+      kind: MAC_COMMAND_KIND.BROWSER,
+      params: {
+        taskId: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
+        actions: [{ action: "open", url: "http://localhost:3000/" }, { action: "snapshot" }],
+      },
+      timeoutSeconds: 30,
+    },
   ],
-}).commands as readonly [MacCommandRead, MacCommandRead, MacCommandRead];
+}).commands as readonly [MacCommandRead, MacCommandRead, MacCommandRead, MacCommandRead];
+
+/** What the scripted Mac's Browser tabs answer every browser command they are handed. */
+const RAN: MacCommandResult = {
+  output: { steps: [{ action: "open", status: "done", tab: "tab-1" }], skipped: 1 },
+};
+
+/** The Browser tabs' side of the concern, the experiment on or off, keeping every task a command was run on. */
+function scriptedBrowser(on: boolean) {
+  const ranOn: string[] = [];
+  return {
+    ranOn,
+    browser: {
+      enabled: Effect.succeed(on),
+      run: (params: MacBrowserParams) =>
+        Effect.sync(() => {
+          ranOn.push(params.taskId);
+          return RAN;
+        }),
+    },
+  };
+}
 
 /**
  * A service that hands the first read its commands and answers every read
@@ -97,6 +128,7 @@ it.effect("with the setting off, or no account signed in, the service is never r
         account: { capabilitiesActive: () => gate.signedIn },
         enabled: Effect.succeed(gate.enabled),
         client: service.client,
+        browser: scriptedBrowser(true).browser,
       }).pipe(Effect.provide(machine(spawner)));
 
       yield* Effect.scoped(Effect.andThen(composer.lifetime, TestClock.adjust("1 minute")));
@@ -108,16 +140,18 @@ it.effect("with the setting off, or no account signed in, the service is never r
 );
 
 it.effect(
-  "each read names shell alone, and a command of a kind this Mac cannot run is refused while the shell one runs",
+  "with the Browser tab experiment off, each read names shell alone, and a browser command or one of a kind this Mac cannot run is refused while the shell one runs",
   () =>
     Effect.gen(function* () {
       const spawner = scriptedSpawner(() => ({ stdout: "v24.0.0\n", exitCode: 0 }));
-      const service = yield* scriptedService([BROWSER, COMMAND, NEWER]);
+      const service = yield* scriptedService([BROWSER, COMMAND, NEWER, OPEN]);
+      const tabs = scriptedBrowser(false);
       const composer = yield* composeMacCommands({
         kernel: { runMode: { sendsNetwork: true } },
         account: { capabilitiesActive: () => true },
         enabled: Effect.succeed(true),
         client: service.client,
+        browser: tabs.browser,
       }).pipe(Effect.provide(machine(spawner)));
 
       yield* Effect.scoped(Effect.andThen(composer.lifetime, TestClock.adjust("30 seconds")));
@@ -133,13 +167,46 @@ it.effect(
         truncated: false,
         timedOut: false,
       });
-      for (const refused of [BROWSER, NEWER]) {
+      for (const refused of [BROWSER, NEWER, OPEN]) {
         const result = settled.get(refused.id);
         assert.ok(result !== undefined && "refused" in result, refused.kind);
       }
+      assert.deepEqual(tabs.ranOn, []);
       assert.deepEqual(
         spawner.spawned.map((process) => process.args),
         [["-l", "-c", "node --version"]],
       );
+    }),
+);
+
+it.effect(
+  "with the Browser tab experiment on, each read names browser too, and a browser command runs on its task's tabs while one whose params do not read is refused in words",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = yield* scriptedService([BROWSER, OPEN]);
+      const tabs = scriptedBrowser(true);
+      const composer = yield* composeMacCommands({
+        kernel: { runMode: { sendsNetwork: true } },
+        account: { capabilitiesActive: () => true },
+        enabled: Effect.succeed(true),
+        client: service.client,
+        browser: tabs.browser,
+      }).pipe(Effect.provide(machine(spawner)));
+
+      yield* Effect.scoped(Effect.andThen(composer.lifetime, TestClock.adjust("30 seconds")));
+
+      const reads = yield* Ref.get(service.reads);
+      assert.ok(reads.length >= 1);
+      for (const kinds of reads) {
+        assert.deepEqual(kinds, [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER]);
+      }
+      const settled = yield* Ref.get(service.settled);
+      assert.deepEqual(settled.get(OPEN.id), RAN);
+      const unread = settled.get(BROWSER.id);
+      assert.ok(unread !== undefined && "refused" in unread);
+      assert.match(unread.refused, /params could not be read/u);
+      assert.deepEqual(tabs.ranOn, ["9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a"]);
+      assert.deepEqual(spawner.spawned, []);
     }),
 );

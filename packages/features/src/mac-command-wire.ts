@@ -1,5 +1,6 @@
 import { Effect, Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import { browserAgentActionsSchema } from "./browser-agent-actions.js";
 import { sniffImageType } from "./image-signature.js";
 import { PICTURE_TYPE } from "./picture-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
@@ -120,8 +121,9 @@ function boundedJson(maxChars: number) {
 /**
  * One browser command waiting for the Mac: its id, what it asks of a
  * Browser tab, and how long it may take. Note that the params are any JSON
- * within a bound for now, because what they hold is the browser acts' own
- * vocabulary, which the Mac that runs them declares.
+ * within a bound here, and read as `macBrowserParamsSchema` by the Mac that
+ * runs them, so a Mac refuses in words params it cannot read rather than
+ * spoiling the whole read.
  */
 const macBrowserCommandSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -129,6 +131,23 @@ const macBrowserCommandSchema = EffectSchema.Struct({
   params: boundedJson(MAC_COMMAND_BOUNDS.MAX_BROWSER_PARAMS_CHARS),
   timeoutSeconds: commandTimeout,
 });
+
+/**
+ * What a browser command's params say: the task whose Browser tabs it acts
+ * on, and the actions to take on them, in order, in the vocabulary an
+ * agent's browser speaks wherever it runs (`browser-agent-actions.ts`). An
+ * action reaches only a Browser tab opened on that task; `open` opens one
+ * on it. The service queues these as the command's `params`, and the Mac
+ * reads them back the same way.
+ */
+export const macBrowserParamsSchema = EffectSchema.Struct({
+  taskId: wireUuidSchema,
+  actions: browserAgentActionsSchema,
+});
+
+export type MacBrowserParams = typeof macBrowserParamsSchema.Type;
+
+export type MacBrowserCommand = typeof macBrowserCommandSchema.Type;
 
 /** One command waiting for the Mac, of a kind the service queues. */
 export const macCommandSchema = EffectSchema.Union([
@@ -176,6 +195,11 @@ export type MacCommandRead = typeof macCommandReadSchema.Type;
  */
 export function isMacShellCommand(command: MacCommandRead): command is MacShellCommand {
   return command.kind === MAC_COMMAND_KIND.SHELL;
+}
+
+/** Whether a command the Mac read is a browser command, read off its kind as `isMacShellCommand` is. */
+export function isMacBrowserCommand(command: MacCommandRead): command is MacBrowserCommand {
+  return command.kind === MAC_COMMAND_KIND.BROWSER;
 }
 
 /** The commands claimed for this Mac (GET), none where nothing came while the read was held. */

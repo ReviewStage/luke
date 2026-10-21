@@ -1,3 +1,4 @@
+import type { BrowserOpened } from "@luke/features/browser-acts";
 import type { CodeRef } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { BoardIcon, CodeIcon, CommentsIcon, DocumentIcon } from "@luke/ui";
@@ -656,6 +657,10 @@ export interface SidePanelControl {
   onCloseBrowsers: () => void;
   /** Says the Browser tab's page was opened at the address, which the tab opens its view on when it is drawn again; one opened already keeps its first. */
   onBrowserOpened: (browserId: string, address: string) => void;
+  /** Holds a Browser tab an agent opened on a task, as the "+" opens one: chosen and shown where the task is the open one, held for its task otherwise. */
+  onAgentBrowser: (opened: BrowserOpened) => void;
+  /** Lets go of a Browser tab whose page an agent closed. */
+  onBrowserGone: (browserId: string) => void;
 }
 
 function clampWidth(width: number): number {
@@ -1163,6 +1168,13 @@ function drawnChanges(held: HeldState, drawn: DrawnTabs): readonly ChangesStripT
   return (taskTabs(held, drawn.task.id).changes ?? NO_CHANGES).filter((each) =>
     drawsChanges(each, drawn),
   );
+}
+
+/** A Browser tab held on the open task, placed at the strip's end, chosen, and the panel shown. */
+function withBrowserChosen(held: HeldState, open: OpenBrowser, drawn: DrawnTabs): HeldState {
+  const placed = withTabLast(withChosenViewed(held, open.tab, drawn), open.tab, drawn);
+  const browsers = [...placed.browsers, open];
+  return { ...withTab({ ...placed, browsers }, open.tab, open.task), open: true };
 }
 
 /** The Browser tabs opened on the task, which it alone draws, in the order opened. */
@@ -1931,13 +1943,34 @@ export function useSidePanel(
       if (taskId === undefined) return;
       const tab: BrowserStripTab = { browser: crypto.randomUUID() };
       setAsked(undefined);
-      update((held) => {
-        const placed = withTabLast(withChosenViewed(held, tab, drawn), tab, drawn);
-        const browsers = [...placed.browsers, { tab, task: taskId, address }];
-        return { ...withTab({ ...placed, browsers }, tab, taskId), open: true };
-      });
+      update((held) => withBrowserChosen(held, { tab, task: taskId, address }, drawn));
     },
     [update, drawn, taskId],
+  );
+  // Note that an agent's tab on another task is only held, so the window stays where the developer has it.
+  const onAgentBrowser = useCallback(
+    (opened: BrowserOpened) =>
+      update((held) => {
+        if (held.browsers.some((each) => each.tab.browser === opened.browserId)) return held;
+        const open = {
+          tab: { browser: opened.browserId },
+          task: opened.taskId,
+          address: opened.address,
+        };
+        return opened.taskId === taskId
+          ? withBrowserChosen(held, open, drawn)
+          : { ...held, browsers: [...held.browsers, open] };
+      }),
+    [update, drawn, taskId],
+  );
+  const onBrowserGone = useCallback(
+    (browserId: string) =>
+      update((held) =>
+        held.browsers.some((each) => each.tab.browser === browserId)
+          ? { ...held, browsers: held.browsers.filter((each) => each.tab.browser !== browserId) }
+          : held,
+      ),
+    [update],
   );
   // Note that a Browser tab chosen goes too, and the plan shows its first tab in its place.
   const onCloseBrowsers = useCallback(
@@ -2012,5 +2045,7 @@ export function useSidePanel(
     onOpenBrowser,
     onCloseBrowsers,
     onBrowserOpened,
+    onAgentBrowser,
+    onBrowserGone,
   };
 }

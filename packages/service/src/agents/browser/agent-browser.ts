@@ -24,6 +24,15 @@
  * browser, a browser that would not start, or a bridge that never came up.
  */
 
+import {
+  CDP_FAILURE,
+  type CdpCommand,
+  type CdpEvent,
+  CdpFailure,
+  type CdpFailureKind,
+  type CdpSession,
+  type PageTarget,
+} from "@luke/features/browser-cdp";
 import { readEither } from "@luke/wire/effect";
 import {
   Context,
@@ -42,13 +51,7 @@ import {
   Stream,
 } from "effect";
 import type { HttpClient } from "effect/http";
-import {
-  EXCESS_KEYS,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-  WireValueSchema,
-} from "../../core.js";
+import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire, WireValueSchema } from "../../core.js";
 import type { RelayFrame, RelaySocket } from "../../terminal/relay.js";
 import { SandboxPty, type SandboxPtyService } from "../sandbox-pty.js";
 import {
@@ -119,68 +122,6 @@ export class BrowserUnreachable extends Data.TaggedError("BrowserUnreachable")<{
     const message = UNREACHABLE_MESSAGE[this.reason];
     return this.status === undefined ? message : `${message} (Vercel answered ${this.status})`;
   }
-}
-
-/** How a command failed: the browser refused it, its answer did not come in time or was not what it should be, or the connection ended first. */
-export const CDP_FAILURE = {
-  REFUSED: "refused",
-  TIMED_OUT: "timed-out",
-  MALFORMED: "malformed",
-  CLOSED: "closed",
-} as const;
-
-export type CdpFailureKind = (typeof CDP_FAILURE)[keyof typeof CDP_FAILURE];
-
-/** A command that failed: its method, how, and the browser's own code and words where it refused it. */
-export class CdpFailure extends Data.TaggedError("CdpFailure")<{
-  readonly kind: CdpFailureKind;
-  readonly method: string;
-  readonly code?: number;
-  readonly detail?: string;
-}> {
-  override get message(): string {
-    return this.detail === undefined
-      ? `${this.method} ${this.kind}`
-      : `${this.method} ${this.kind}: ${this.detail}`;
-  }
-}
-
-/** A command's parameters, as JSON carries them. @public */
-export type CdpParams = { readonly [key: string]: WireBoundaryInput };
-
-/** One command: its method, its parameters, and the target session it goes to; none for the browser itself. @public */
-export interface CdpCommand {
-  readonly method: string;
-  readonly params?: CdpParams;
-  readonly sessionId?: string;
-}
-
-/** One event the browser sent: its method, its parameters, and the target session it came from. */
-export interface CdpEvent {
-  readonly method: string;
-  readonly params: UnparsedWireValue;
-  readonly sessionId?: string;
-}
-
-/** A page target, a tab: its id, address, and title. */
-export interface PageTarget {
-  readonly targetId: string;
-  readonly url: string;
-  readonly title: string;
-}
-
-/** A DevTools protocol connection to the agent's browser, open for the scope it was made in. @public */
-export interface CdpSession {
-  /** Sends a command and answers its result. */
-  readonly send: (command: CdpCommand) => Effect.Effect<UnparsedWireValue, CdpFailure>;
-  /** The events the browser sends from the moment this is run, ending with the connection. */
-  readonly events: Stream.Stream<CdpEvent>;
-  /** The browser's page targets. */
-  readonly pages: Effect.Effect<readonly PageTarget[], CdpFailure>;
-  /** Opens a page at the address given, answering its target's id. */
-  readonly openPage: (url: string) => Effect.Effect<string, CdpFailure>;
-  /** Closes the page target named. */
-  readonly closePage: (targetId: string) => Effect.Effect<void, CdpFailure>;
 }
 
 /** The browser made sure of: the running sandbox session it is in, and whether this call started it. @public */
