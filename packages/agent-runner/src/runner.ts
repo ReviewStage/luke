@@ -32,7 +32,9 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   Cause,
+  Clock,
   Deferred,
+  Duration,
   Effect,
   Fiber,
   MutableRef,
@@ -41,12 +43,14 @@ import {
   Redacted,
   Ref,
   Schema,
+  Semaphore,
   Stream,
 } from "effect";
 import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
 import { type LaunchContext, type LaunchOutcome, RunnerFailed, type RunnerSelf } from "./launch.js";
+import { ProcessTable } from "./processes.js";
 import {
   type ClaudeCodeConfig,
   EFFORT,
@@ -58,11 +62,14 @@ import {
   RUNNER_ENV,
   RUNNER_EVENT,
   RUNNER_HARNESS,
+  RUNNER_RELEASE,
   RunnerConfigSchema,
   type RunnerEnd,
   type RunnerEndEvent,
   type RunnerWaiting,
+  type RunnerWakeup,
 } from "./protocol.js";
+import { oneShotDueAt } from "./wakeups.js";
 
 /** The name the Luke MCP server is registered under, so its tools reach the model as `mcp__luke__<tool>`. */
 const MCP_SERVER = "luke";
@@ -178,6 +185,12 @@ interface Launch {
   /** The messages Luke sent that no `result` has answered yet, by their uuid. */
   readonly unanswered: Ref.Ref<ReadonlySet<string>>;
   readonly stopping: Ref.Ref<boolean>;
+  /** How many waits the launch has posted, so a wait's release is dropped once a newer one began. */
+  readonly waits: Ref.Ref<number>;
+  /** The wakeups a released wait left for Luke to deliver; none until it is released. */
+  readonly released: Ref.Ref<readonly RunnerWakeup[] | undefined>;
+  /** Held while a message is taken into the launch and while a wait is released, so no message lands in a launch a release ends. */
+  readonly admission: Semaphore.Semaphore;
   readonly ended: Deferred.Deferred<RunnerEnd>;
   /** The launch's first event number, which a turn-scoped stop names. */
   readonly firstSequence: number;
@@ -201,14 +214,24 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
   const value = line.value;
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
-      const running = yield* Ref.getAndSet(launch.turnRunning, true);
+      const content = value.content;
       // SAFETY: a line's uuid is checked against the UUID pattern as the line is read.
       const uuid = (value.uuid as UUID | undefined) ?? randomUUID();
-      yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
-      // Posted ahead of the hand-off, so it is numbered before anything the CLI says of the message.
-      yield* launch.sink.emit({ type: RUNNER_EVENT.ACCEPTED, uuid });
-      yield* Queue.offer(launch.prompts, userMessage(uuid, value.content, running));
-      return;
+      return yield* launch.admission.withPermit(
+        Effect.gen(function* () {
+          // A launch a released wait ended takes nothing more: the line stays unaccepted, for Luke's next send to relaunch on.
+          if ((yield* Ref.get(launch.released)) !== undefined) {
+            return yield* Effect.logWarning(
+              "agent-runner: skipped a message for a released launch",
+            );
+          }
+          const running = yield* Ref.getAndSet(launch.turnRunning, true);
+          yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
+          // Posted ahead of the hand-off, so it is numbered before anything the CLI says of the message.
+          yield* launch.sink.emit({ type: RUNNER_EVENT.ACCEPTED, uuid });
+          yield* Queue.offer(launch.prompts, userMessage(uuid, content, running));
+        }),
+      );
     }
     case INPUT_LINE.STOP: {
       // A stop for another launch's turn is not this launch's to take.
@@ -303,6 +326,67 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   if (!waiting) return yield* Deferred.succeed(launch.ended, RUNNER_END.TURN_ENDED);
   yield* Ref.set(launch.turnRunning, false);
   yield* launch.sink.emit({ type: RUNNER_EVENT.WAITING, ...inFlight });
+  const wait = yield* Ref.updateAndGet(launch.waits, (count) => count + 1);
+  yield* Effect.forkScoped(watchWait(launch, wait, inFlight));
+});
+
+/** The wakeups a wait's one-shot tasks come due at, earliest first; none where one's time cannot be told, which holds the wait. */
+function wakeupsOf(inFlight: InFlight, now: Date): RunnerWakeup[] | undefined {
+  const wakeups: RunnerWakeup[] = [];
+  for (const task of inFlight.session_crons) {
+    if (task.recurring) continue;
+    const at = oneShotDueAt(task.schedule, now);
+    if (at === undefined) return undefined;
+    wakeups.push({ at: at.toISOString(), prompt: task.prompt });
+  }
+  return wakeups.sort((one, other) => Date.parse(one.at) - Date.parse(other.at));
+}
+
+/**
+ * One wait watched for its release (`RUNNER_RELEASE`): once it has lasted
+ * `SETTLE_MS`, it ends the launch where nothing is in flight but scheduled
+ * tasks, every one-shot's time can be told and the earliest is still that
+ * far off, any recurring task's wait has outlasted `IDLE_CAP_MS`, and no
+ * process of the agent's runs (`processes.ts`); and it looks again every
+ * `RECHECK_MS` until a turn starts, a newer wait begins, or the earliest
+ * wakeup is near enough for the CLI to fire it. A background task is the
+ * agent's own process, so a wait with one is never released.
+ */
+const watchWait = Effect.fn("agent-runner/watchWait")(function* (
+  launch: Launch,
+  wait: number,
+  inFlight: InFlight,
+) {
+  if (inFlight.background_tasks.length > 0) return;
+  const processes = yield* ProcessTable;
+  const startedAt = yield* Clock.currentTimeMillis;
+  const wakeups = wakeupsOf(inFlight, new Date(startedAt));
+  if (wakeups === undefined) return;
+  const earliest = wakeups[0] === undefined ? undefined : Date.parse(wakeups[0].at);
+  const recurring = inFlight.session_crons.some((task) => task.recurring);
+  yield* Effect.sleep(Duration.millis(RUNNER_RELEASE.SETTLE_MS));
+  for (;;) {
+    const now = yield* Clock.currentTimeMillis;
+    if (earliest !== undefined && earliest - now < RUNNER_RELEASE.SETTLE_MS) return;
+    const held = recurring && now - startedAt < RUNNER_RELEASE.IDLE_CAP_MS;
+    if (!held && !(yield* processes.agentProcessRuns)) {
+      const releasing = yield* launch.admission.withPermit(
+        Effect.gen(function* () {
+          const current =
+            (yield* Ref.get(launch.waits)) === wait &&
+            !(yield* Ref.get(launch.turnRunning)) &&
+            !(yield* Ref.get(launch.stopping)) &&
+            !(yield* Deferred.isDone(launch.ended));
+          if (current) yield* Ref.set(launch.released, wakeups);
+          return current;
+        }),
+      );
+      if (releasing) yield* Deferred.succeed(launch.ended, RUNNER_END.RELEASED);
+      return;
+    }
+    if ((yield* Ref.get(launch.waits)) !== wait || (yield* Ref.get(launch.turnRunning))) return;
+    yield* Effect.sleep(Duration.millis(RUNNER_RELEASE.RECHECK_MS));
+  }
 });
 
 /**
@@ -337,6 +421,9 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     turnRunning: yield* Ref.make(false),
     unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
     stopping: yield* Ref.make(false),
+    waits: yield* Ref.make(0),
+    released: yield* Ref.make<readonly RunnerWakeup[] | undefined>(undefined),
+    admission: yield* Semaphore.make(1),
     ended: yield* Deferred.make<RunnerEnd>(),
     firstSequence: config.firstSequence,
   };
@@ -374,7 +461,10 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
   const end = yield* Deferred.await(launch.ended);
   yield* Fiber.interruptAll(loops);
   session.close();
-  return { end, failure } satisfies LaunchOutcome;
+  const wakeups = yield* Ref.get(launch.released);
+  return (
+    wakeups === undefined ? { end, failure } : { end, failure, wakeups }
+  ) satisfies LaunchOutcome;
 });
 
 /**
@@ -413,14 +503,17 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     secrets,
   });
   const context = { lines, env: input.env, bearer, sink, self: input.self };
-  const { end, failure } =
+  const outcome: LaunchOutcome =
     config.harness === RUNNER_HARNESS.CODEX
       ? yield* runCodex({ ...context, config })
       : yield* runClaudeCode({ ...context, config });
-  const last: RunnerEndEvent =
-    failure === ""
-      ? { type: RUNNER_EVENT.END, reason: end }
-      : { type: RUNNER_EVENT.END, reason: end, detail: failure };
+  const { end, failure, wakeups } = outcome;
+  const last: RunnerEndEvent = {
+    type: RUNNER_EVENT.END,
+    reason: end,
+    ...(failure === "" ? undefined : { detail: failure }),
+    ...(wakeups === undefined ? undefined : { wakeups }),
+  };
   yield* sink.emit(last);
   yield* sink.drain;
   return end;

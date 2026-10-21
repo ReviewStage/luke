@@ -278,6 +278,13 @@ export const RUNNER_END = {
   INPUT_CLOSED: "input_closed",
   /** The CLI or app-server failed, or Codex's turn did; the turn shows as interrupted, and Continue relaunches with `resume`. */
   FAILED: "failed",
+  /**
+   * A wait released (`RUNNER_RELEASE`): the agent waited on wakeups alone,
+   * with no process of its own still running, so the launch ended for its
+   * sandbox to stop; the END names the wakeups for Luke to deliver as they
+   * come due. The turn is over, as a `turn_ended` one is.
+   */
+  RELEASED: "released",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
 
@@ -294,11 +301,56 @@ export interface RunnerWaiting {
   readonly session_crons: readonly SessionCronSummary[];
 }
 
-/** The END event; `detail` is the CLI's failure, with the launch's secrets taken out, where it failed. */
+/** A wakeup a released wait left for Luke to deliver: the instant it comes due, and the prompt the CLI would have run then. */
+export interface RunnerWakeup {
+  /** An ISO 8601 instant. */
+  readonly at: string;
+  readonly prompt: string;
+}
+
+/**
+ * When a waiting launch is released (`RUNNER_END.RELEASED`). Claude Code
+ * fires a session's scheduled tasks only while its CLI runs, and a resumed
+ * session restores neither a self-paced wakeup nor a one-shot task whose
+ * time has passed (https://code.claude.com/docs/en/scheduled-tasks), so a
+ * wait on a wakeup held the CLI, and the 8 GB sandbox under it, up until the
+ * wakeup came. A launch waiting on one-shot wakeups alone, with no
+ * background task and no process of the agent's still running, is ended
+ * instead, and Luke delivers each wakeup as a message when it comes due,
+ * which relaunches the CLI on the session it resumes.
+ */
+export const RUNNER_RELEASE = {
+  /**
+   * How long a wait lasts before it is released, and how far off its
+   * earliest wakeup must still be then. Vercel bills a sandbox's memory by
+   * the minute it runs, and a released wait costs a stop, a resume, and a
+   * relaunch of the CLI, so a wait shorter than two billed minutes is held;
+   * the same bound eve's agent stops its sandbox for a pause at
+   * (`CODER.SLEEP_STOPS_AT`).
+   */
+  SETTLE_MS: 2 * 60 * 1_000,
+  /** How often a wait not yet released is looked at again, for a process of the agent's that has since ended. */
+  RECHECK_MS: 60 * 1_000,
+  /**
+   * How long a wait on a recurring task is held before it is released all the
+   * same. A recurring task's next run is jittered by the CLI and cannot be
+   * told from its schedule here, so it is not delivered; the CLI restores it
+   * when the session is next resumed (the same page). An hour holds a
+   * recurring task that runs at least hourly, since each run starts a new
+   * wait and an evenly spaced task's runs keep their spacing (the same
+   * page), and bounds a loop nobody stopped. A self-paced loop's pending
+   * wakeup is listed as a one-shot task, so it is delivered rather than
+   * held.
+   */
+  IDLE_CAP_MS: 60 * 60 * 1_000,
+} as const;
+
+/** The END event; `detail` is the CLI's failure, with the launch's secrets taken out, where it failed, and `wakeups` what a released wait left to deliver. */
 export interface RunnerEndEvent {
   readonly type: typeof RUNNER_EVENT.END;
   readonly reason: RunnerEnd;
   readonly detail?: string;
+  readonly wakeups?: readonly RunnerWakeup[];
 }
 
 /**

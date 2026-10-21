@@ -3,11 +3,14 @@
  */
 
 import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
+import { processTable } from "./processes.js";
 import {
   EFFORT,
   IMAGE_MEDIA_TYPE,
@@ -16,6 +19,7 @@ import {
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
+  RUNNER_RELEASE,
   type RunnerConfig,
   type RunnerEvent,
 } from "./protocol.js";
@@ -23,14 +27,20 @@ import { runAgent } from "./runner.js";
 import { fakeAppServer } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
 import { ANSWER, type Answer, makeFakeLuke } from "./testing/fake-luke.js";
+import { type FakeProcess, fakeProc, UNREAD_PROC } from "./testing/fake-proc.js";
 import {
+  BACKGROUND_WAIT,
   FOLLOW_UP_TURNS,
+  RECURRING_WAIT,
   SHORT_TURN,
   STOPPED_COMMAND,
   STOPPED_TURN,
   type Step,
   TURN_DONE,
+  WAKEUP,
   WAKEUP_STOPPED_TURN,
+  WAKEUP_WAIT,
+  WAKEUP_WAIT_THEN_MESSAGE,
   WORKFLOW_TURN,
 } from "./testing/recorded-stream.js";
 
@@ -39,6 +49,8 @@ const BEARER = "runner-bearer-for-tests";
 const CLAUDE_TOKEN = 'plan-token-"for\\tests\n';
 const EVENTS_URL = "https://luke.test/runner/events";
 const FIRST_SEQUENCE = 7;
+/** The runner's own pid in the test's `/proc`. */
+const RUNNER_PID = 100;
 
 const ENV = {
   [RUNNER_ENV.BEARER]: BEARER,
@@ -101,6 +113,7 @@ function launch(
   steps: readonly Step[],
   luke: ReturnType<typeof fakeLuke>,
   env: Record<string, string> = ENV,
+  proc: string = UNREAD_PROC,
 ) {
   return Effect.gen(function* () {
     const cli = yield* fakeClaudeCode(steps);
@@ -109,7 +122,14 @@ function launch(
     const write = (line: RunnerConfig | InputLine) => writeText(JSON.stringify(line));
     const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(cli.layer, luke.layer, fakeAppServer([]).layer)),
+      Effect.provide(
+        Layer.mergeAll(
+          cli.layer,
+          luke.layer,
+          fakeAppServer([]).layer,
+          processTable(proc, RUNNER_PID),
+        ),
+      ),
       Effect.forkScoped,
     );
     return { cli: cli.record, prompted: cli.prompted, release: cli.release, write, writeText, run };
@@ -534,4 +554,122 @@ it.effect(
         assert.equal(cli.options, undefined);
       }
     }),
+);
+
+/** The sandbox's processes while the agent waits: the sandbox's init, the runner, and the CLI it spawned, nothing of the agent's beside them. */
+const WAITING_PROCESSES: readonly FakeProcess[] = [
+  { pid: 1, parent: 0, emptied: false },
+  { pid: RUNNER_PID, parent: 1, emptied: true },
+  { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: true },
+];
+/** A dev server the agent started, detached from its shell onto the sandbox's init. */
+const DEV_SERVER: FakeProcess = { pid: 4242, parent: 1, emptied: true };
+
+/** When the recorded wakeup's one-shot schedule, `17 12 21 10 *`, next comes due from the test clock's start, in local time. */
+const WAKEUP_DUE = new Date(1970, 9, 21, 12, 17).toISOString();
+
+it.effect(
+  "releases a wait on a one-shot wakeup alone once it has lasted two minutes, naming the wakeup in its END",
+  () =>
+    Effect.gen(function* () {
+      const proc = yield* fakeProc(WAITING_PROCESSES);
+      const luke = fakeLuke([], WAKEUP.prompt);
+      const { cli, write, run } = yield* launch(WAKEUP_WAIT, luke, ENV, proc);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+
+      yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS - 1);
+      assert.equal(run.pollUnsafe(), undefined);
+      yield* TestClock.adjust(1);
+      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
+      assert.deepEqual(luke.applied.at(-1)?.message, {
+        type: RUNNER_EVENT.END,
+        reason: RUNNER_END.RELEASED,
+        wakeups: [{ at: WAKEUP_DUE, prompt: WAKEUP.prompt }],
+      });
+      assert.equal(cli.closed, true);
+    }),
+);
+
+it.effect(
+  "holds a wait while a process the agent started runs, and releases it once that process ends",
+  () =>
+    Effect.gen(function* () {
+      const proc = yield* fakeProc([...WAITING_PROCESSES, DEV_SERVER]);
+      const luke = fakeLuke([], WAKEUP.prompt);
+      const { write, run } = yield* launch(WAKEUP_WAIT, luke, ENV, proc);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+
+      yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
+      assert.equal(run.pollUnsafe(), undefined);
+      rmSync(join(proc, String(DEV_SERVER.pid)), { recursive: true });
+      yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
+      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
+    }),
+);
+
+it.effect("never releases a wait on a background task, the agent's own process", () =>
+  Effect.gen(function* () {
+    const proc = yield* fakeProc(WAITING_PROCESSES);
+    const luke = fakeLuke([], RUNNER_EVENT.WAITING);
+    const { write, run } = yield* launch(BACKGROUND_WAIT, luke, ENV, proc);
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* luke.seen;
+
+    yield* TestClock.adjust(2 * RUNNER_RELEASE.IDLE_CAP_MS);
+    assert.equal(run.pollUnsafe(), undefined);
+    yield* write({ type: INPUT_LINE.STOP });
+    assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+  }),
+);
+
+it.effect(
+  "holds a recurring task's wait for the idle cap, then releases it with no wakeup to deliver",
+  () =>
+    Effect.gen(function* () {
+      const proc = yield* fakeProc(WAITING_PROCESSES);
+      const luke = fakeLuke([], RUNNER_EVENT.WAITING);
+      const { write, run } = yield* launch(RECURRING_WAIT, luke, ENV, proc);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+
+      yield* TestClock.adjust(RUNNER_RELEASE.IDLE_CAP_MS - RUNNER_RELEASE.RECHECK_MS);
+      assert.equal(run.pollUnsafe(), undefined);
+      yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
+      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
+      assert.deepEqual(luke.applied.at(-1)?.message, {
+        type: RUNNER_EVENT.END,
+        reason: RUNNER_END.RELEASED,
+        wakeups: [],
+      });
+    }),
+);
+
+it.effect("keeps a waiting launch whose wait a message from Luke turned into a turn", () =>
+  Effect.gen(function* () {
+    const proc = yield* fakeProc(WAITING_PROCESSES);
+    const luke = fakeLuke([], WAKEUP.prompt);
+    const { prompted, release, write, run } = yield* launch(
+      WAKEUP_WAIT_THEN_MESSAGE,
+      luke,
+      ENV,
+      proc,
+    );
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* luke.seen;
+    yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
+    yield* Queue.take(prompted);
+    yield* Queue.take(prompted);
+
+    yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + RUNNER_RELEASE.RECHECK_MS);
+    assert.equal(run.pollUnsafe(), undefined);
+    yield* release;
+    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+  }),
 );
