@@ -8,14 +8,12 @@
  */
 
 import { ACT_KIND } from "@luke/host/acts";
-import { VOICE_HOTKEY_NONE } from "@luke/settings";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { fixtureUpdate } from "@luke/settings/update-row";
 import {
   type MicrophoneControl,
   NOTIFICATIONS_GRANTOR,
   type NotificationsControl,
-  type ShortcutControl,
   type UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
@@ -36,9 +34,6 @@ export interface SettingsDoors {
   onSignOut: () => Promise<void>;
   onDeleteAccount: () => Promise<ActionResult>;
   onRequestMicrophone: () => void;
-  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
-  onStopHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
-  onShortcutCapture: (capturing: boolean) => void;
   workspace: WorkspaceSettingsControl;
 }
 
@@ -66,7 +61,6 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
   const run = useAppSlice(APP_SLICE.RUN);
   const settings = useAppSlice(APP_SETTINGS_VIEW);
   const audio = useAppSlice(APP_SLICE.AUDIO);
-  const hotkeys = useAppSlice(APP_SLICE.HOTKEYS);
   const notificationsStatus = useAppSlice(APP_SLICE.NOTIFICATIONS)?.status;
   const update = useShownUpdate();
   const packaged = run?.packaged;
@@ -90,7 +84,7 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
   );
   return useMemo(() => {
     if (account === undefined || run === undefined || audio === undefined) return undefined;
-    if (hotkeys === undefined || notificationsStatus === undefined || updates === undefined) {
+    if (notificationsStatus === undefined || updates === undefined) {
       return undefined;
     }
     const microphone: MicrophoneControl = {
@@ -106,20 +100,6 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
       onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
       onTest: testNotifications,
     };
-    const shortcuts: ShortcutControl = {
-      ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
-      voiceHotkeyHeld: hotkeys.talkHeld,
-      voiceChosen: settings?.voiceHotkey !== undefined,
-      voiceOff: settings?.voiceHotkey === VOICE_HOTKEY_NONE,
-      onVoiceHotkeyChange: doors.onVoiceHotkeyChange,
-      // Both rows take the accelerator: they draw the keys apart and
-      // label the chord whole for the buttons beside them.
-      ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
-      stopChosen: settings?.stopHotkey !== undefined,
-      stopOff: settings?.stopHotkey === VOICE_HOTKEY_NONE,
-      onStopHotkeyChange: doors.onStopHotkeyChange,
-      onCapture: doors.onShortcutCapture,
-    };
     return {
       account,
       onSignOut: doors.onSignOut,
@@ -130,9 +110,8 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
       notifications,
       updates,
       ...(settings === undefined ? undefined : { settings }),
-      shortcuts,
       capabilities: run.capabilities,
       workspace: doors.workspace,
     };
-  }, [account, run, settings, audio, hotkeys, notificationsStatus, updates, doors, tell]);
+  }, [account, run, settings, audio, notificationsStatus, updates, doors, tell]);
 }

@@ -3,6 +3,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
@@ -135,6 +136,7 @@ export type CodingAgentClient = Pick<
   | "list"
   | "listWorkspace"
   | "start"
+  | "startFrom"
   | "messagesNow"
   | "agentTranscriptLive"
   | "message"
@@ -145,6 +147,7 @@ export type CodingAgentClient = Pick<
   | "pin"
   | "stop"
   | "agent"
+  | "calls"
   | "agentInbox"
   | "pullRequest"
   | "changes"
@@ -195,6 +198,12 @@ export interface CodingAgentsDependencies {
 export interface CodingAgentsComposer extends Composer {
   /** Every transcript's subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
+  /**
+   * The task an agent is on, as the service reads it now, which a call into
+   * the agent is checked against: null for an agent on no task, and none
+   * for one archived, or that the account does not reach or could not read.
+   */
+  readonly agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -400,9 +409,12 @@ function composed(
         const { taskId, ...request } = yield* read(
           codingAgentStartParamsSchema,
           params,
-          "starting an agent names a task and the press's own key",
+          "starting an agent names a task or an agent to start from, and the press's own key",
         );
-        const answer = yield* asked(client.start(taskId, request));
+        // A Start from another agent that names no task goes where that agent is, its task or its workspace.
+        const answer = yield* asked(
+          taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
+        );
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
@@ -519,6 +531,16 @@ function composed(
         );
         const answer = yield* asked(client.agent(agentId));
         return carried<CodingAgentPageAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CALLS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPageParamsSchema,
+          params,
+          "reading an agent's calls names one agent",
+        );
+        const answer = yield* asked(client.calls(agentId));
+        return carried<CodingAgentCallsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
@@ -783,5 +805,9 @@ function composed(
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
   });
 
-  return { methods, lifetime: Effect.void, reset };
+  const agentTaskOf = (agentId: string) =>
+    Effect.map(asked(client.agent(agentId)), (answer) =>
+      "agent" in answer && answer.agent.archivedAt === undefined ? answer.agent.planId : undefined,
+    );
+  return { methods, lifetime: Effect.void, reset, agentTaskOf };
 }

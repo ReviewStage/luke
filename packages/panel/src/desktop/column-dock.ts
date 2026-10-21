@@ -5,7 +5,7 @@
 import { type RefObject, useLayoutEffect } from "react";
 
 /** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a task's call bar, whichever stand. */
-const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .desktop-call-bar";
+const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .agent-call-foot";
 
 /**
  * A chat's composer at its foot, never a thread's reply box, which scrolls

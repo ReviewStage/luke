@@ -13,7 +13,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -82,7 +82,7 @@ afterEach(() => {
 /** The plan's page as `reader` sees it, `main` chosen in its column and `side` in its panel, every tab either is asked to show recorded. */
 async function mount(input: {
   reader: string;
-  main: MainTab;
+  main: MainTab | undefined;
   side?: SidePanelTab | undefined;
 }): Promise<{ container: HTMLElement; chosen: (MainTab | SidePanelTab)[] }> {
   const chosen: (MainTab | SidePanelTab)[] = [];
@@ -93,7 +93,7 @@ async function mount(input: {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, { agent: AGENT.id }],
+      tabs: [{ agent: AGENT.id }],
       tab: input.main,
       openAgents: [AGENT.id],
       onChoose: (tab) => chosen.push(tab),
@@ -201,7 +201,7 @@ test("the line naming who sent the plan stands under its card, then when it was 
 test("a worker's tab opens on its task sent by the agent that delegated it, whose name opens that agent's tab", async () => {
   const { container, chosen } = await mount({
     reader: DEAN.userId,
-    main: MAIN_TAB.CALL,
+    main: undefined,
     side: { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } },
   });
 

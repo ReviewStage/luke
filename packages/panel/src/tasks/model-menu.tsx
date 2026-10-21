@@ -118,6 +118,8 @@ export function ModelMenu(props: {
   onLeave: (left: EventTarget | null) => void;
   /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on the Start button's. */
   footNote?: string | undefined;
+  /** Rows pinned after the model's own, each a press of its own: Start's New voice chat. */
+  actions?: readonly FootRow[] | undefined;
   /** The menu is on its way out (`SearchableMenu`'s). */
   leaving?: boolean | undefined;
   /** Hands the menu's element to the hold its owner draws it through its exit with. */
@@ -235,7 +237,11 @@ export function ModelMenu(props: {
       }}
       onClose={onClose}
       onLeave={props.onLeave}
-      foot={foot}
+      foot={
+        props.actions === undefined || props.actions.length === 0
+          ? foot
+          : [...(foot ?? []), ...props.actions]
+      }
       footNote={props.footNote}
       leaving={props.leaving}
       ref={props.ref}

@@ -1,6 +1,7 @@
 import type { LiveStatus } from "@luke/live";
 import type { LiveConversationLine } from "@luke/wire/conversation";
 import type { Effect } from "effect";
+import type { VoiceCallAbout } from "../voice-view.js";
 
 /**
  * The one GPT Live session as the policy above the peer drives it. The peer
@@ -12,14 +13,12 @@ import type { Effect } from "effect";
  * over its trusted sideband, so the call can carry no authority to speak.
  */
 /**
- * What a session is opened about. Every session is opened by a press, the
- * user action the WebRTC guide asks the microphone be requested from, so a
- * capture device rides every offer.
+ * What a session is opened about: the agent it speaks into, and that agent's
+ * task, which the host creates the session about. Every session is opened by
+ * a press, the user action the WebRTC guide asks the microphone be requested
+ * from, so a capture device rides every offer.
  */
-export interface LiveVoiceCallOpening {
-  /** The task the call is about, which the host creates the session about. */
-  taskId: string;
-}
+export type LiveVoiceCallOpening = VoiceCallAbout;
 
 export interface LiveVoiceCall {
   readonly status: LiveStatus;

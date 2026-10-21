@@ -33,7 +33,7 @@ import { and, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
-import type { TitleAwaited } from "../agents/coder-host/transcript.js";
+import type { TitleAwaited, TitleEdge } from "../agents/coder-host/transcript.js";
 import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "../core.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { taskWorkOf, workerSessionCallsOf } from "./task-work.js";
@@ -462,6 +462,21 @@ export function brainWorkerSession(
       if (session !== undefined) return session;
     }
     return undefined;
+  });
+}
+
+/**
+ * When the wait `brainTitleAwaited` holds a planning worker's read on ends
+ * by the clock alone: its newest turn's settling past the title call's
+ * bound, in epoch milliseconds; none where it waits on no title.
+ */
+export function brainTitleEdge(parent: ConversationTarget, child: string): TitleEdge {
+  return Effect.gen(function* () {
+    if (!(yield* brainTitleAwaited(parent, child))) return undefined;
+    const settledAt = (yield* latestTurnsOf(parent.userId, [child])).get(child)?.settledAt;
+    return settledAt === undefined || settledAt === null
+      ? undefined
+      : settledAt.getTime() + Duration.toMillis(CODER.TITLE_TIMEOUT) + 1;
   });
 }
 

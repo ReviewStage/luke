@@ -2220,8 +2220,7 @@ export function codeReadOf(block: InboxCodeBlock, answer: TasksFileAnswer): Code
     code: {
       ref: { path: block.path, startLine: block.startLine, endLine: block.endLine },
       firstLine: file.firstLine,
-      // Note that the card colours its lines itself, so only their words are kept.
-      lines: file.lines.map((line) => line.map((run) => run.text).join("")),
+      lines: file.lines,
     },
   };
 }

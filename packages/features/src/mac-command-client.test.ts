@@ -1,28 +1,21 @@
 /**
  * mac-command-client.test.ts -- the Mac's side of the commands its account's agents queue, as the Mac observes it.
  *
- * The held read names the kinds this Mac runs and answers the commands the
- * service claimed for it, a command of a kind this build does not know
- * read as its id and kind alone rather than spoiling the read, and it
- * outlasts the service's hold before it gives up as nothing; a result is
- * posted as the service reads it, and is taken or not.
+ * The live read names the kinds this Mac runs and the account it is for,
+ * and reads a refused session as signed out; a claim answers the command
+ * granted or nothing; a result is posted as the service reads it, and is
+ * taken or not.
  *
  * Synthetic bearers, ids, and commands throughout.
  */
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  fakeCloudApi,
-  HTTP_STATUS,
-  type RecordedRequest,
-  recordingHttpClient,
-} from "@luke/wire/testing";
-import { Effect, Fiber } from "effect";
-import { TestClock } from "effect/testing";
+import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
+import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
-import { HostedMacCommandClient } from "./mac-command-client.js";
+import { HostedMacCommandClient, MAC_COMMAND_NOT_CLAIMED } from "./mac-command-client.js";
 import { MAC_COMMAND_KIND, type MacCommand, type MacCommandResult } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -35,8 +28,6 @@ const COMMAND: MacCommand = {
   command: "git status",
   timeoutSeconds: 60,
 };
-
-const NEWER_ID = "22222222-2222-4222-8222-222222222222";
 
 const RESULT: MacCommandResult = {
   exitCode: 0,
@@ -56,60 +47,6 @@ function client(): HostedMacCommandClient {
     }),
   });
 }
-
-/** Lets the client's promise steps run until it has asked, so the deadline is armed before the clock moves. */
-function untilAsked(requests: readonly RecordedRequest[]): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    while (requests.length === 0) yield* Effect.yieldNow;
-  });
-}
-
-it.effect("a held read names this Mac's kinds and answers the commands claimed for it", () =>
-  Effect.gen(function* () {
-    const newer = { id: NEWER_ID, kind: "hologram", timeoutSeconds: 60, beam: true };
-    const api = fakeCloudApi({
-      "GET /api/mac-commands": { answer: () => ({ commands: [COMMAND, newer] }) },
-    });
-
-    const kinds = [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER];
-    const waiting = yield* Effect.provide(client().waiting(kinds), api.layer);
-
-    assert.deepEqual(waiting, [COMMAND, { id: NEWER_ID, kind: "hologram" }]);
-    assert.deepEqual(api.credentials(), ["token-1"]);
-    assert.equal(api.requests()[0]?.searchParams.get("kinds"), "shell,browser");
-  }),
-);
-
-it.effect(
-  "a shell command from a service before kinds, which names none, is read as a shell command",
-  () =>
-    Effect.gen(function* () {
-      const { kind: _kind, ...older } = COMMAND;
-      const api = fakeCloudApi({
-        "GET /api/mac-commands": { answer: () => ({ commands: [older] }) },
-      });
-
-      const waiting = yield* Effect.provide(client().waiting([MAC_COMMAND_KIND.SHELL]), api.layer);
-
-      assert.deepEqual(waiting, [COMMAND]);
-    }),
-);
-
-it.effect("a held read outlasts the service's hold, then gives up as nothing", () =>
-  Effect.gen(function* () {
-    const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
-
-    const read = yield* Effect.forkChild(
-      Effect.provide(client().waiting([MAC_COMMAND_KIND.SHELL]), silent.layer),
-    );
-    yield* untilAsked(silent.requests);
-    yield* TestClock.adjust("34 seconds");
-    assert.equal(read.pollUnsafe(), undefined, "still held short of its deadline");
-    yield* TestClock.adjust("1 second");
-
-    assert.equal(yield* Fiber.join(read), undefined);
-  }),
-);
 
 it.effect("a result is posted as the service reads it, and is taken or not", () =>
   Effect.gen(function* () {
@@ -160,20 +97,26 @@ it.effect(
     }),
 );
 
-it.effect("a claim answers the command granted to this Mac, and nothing where it was not", () =>
-  Effect.gen(function* () {
-    const granted = fakeCloudApi({
-      "POST /api/mac-commands/claim": { answer: () => ({ command: COMMAND }) },
-    });
-    assert.deepEqual(yield* Effect.provide(client().claim(COMMAND_ID), granted.layer), COMMAND);
-    assert.deepEqual(JSON.parse(granted.requests()[0]?.body ?? ""), { id: COMMAND_ID });
+it.effect(
+  "a claim answers the command granted to this Mac, and not claimed where the service refused it",
+  () =>
+    Effect.gen(function* () {
+      const granted = fakeCloudApi({
+        "POST /api/mac-commands/claim": { answer: () => ({ command: COMMAND }) },
+      });
+      assert.deepEqual(yield* Effect.provide(client().claim(COMMAND_ID), granted.layer), COMMAND);
+      assert.deepEqual(JSON.parse(granted.requests()[0]?.body ?? ""), { id: COMMAND_ID });
 
-    const taken = fakeCloudApi({
-      "POST /api/mac-commands/claim": {
-        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-        status: HTTP_STATUS.NOT_FOUND,
-      },
-    });
-    assert.equal(yield* Effect.provide(client().claim(COMMAND_ID), taken.layer), undefined);
-  }),
+      const taken = fakeCloudApi({
+        "POST /api/mac-commands/claim": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+      assert.deepEqual(
+        yield* Effect.provide(client().claim(COMMAND_ID), taken.layer),
+        MAC_COMMAND_NOT_CLAIMED,
+        "a refused claim is told apart from one never answered",
+      );
+    }),
 );

@@ -67,16 +67,6 @@ function settingsOn(microphone: MicrophoneControl): SettingsPanelProps {
       onOpenLatest: ignore,
     },
     settings: settingsView({ voiceAvailable: microphone.voiceAvailable }),
-    shortcuts: {
-      voiceHotkeyHeld: false,
-      voiceChosen: false,
-      voiceOff: false,
-      onVoiceHotkeyChange: accepted,
-      stopChosen: false,
-      stopOff: false,
-      onStopHotkeyChange: accepted,
-      onCapture: ignore,
-    },
   };
 }
 

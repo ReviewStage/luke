@@ -7,10 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { MAIN_TAB } from "./use-main-tabs.js";
 import {
-  inColumn,
-  isPinnable,
   type OpenTask,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -541,7 +538,7 @@ test("a task that may draw no Inbox, holding no agent and nothing waiting, draws
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
 });
 
-test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin opening the Call in the task's column", () => {
+test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin let go too", () => {
   window.localStorage.setItem(
     "luke.sidePanel",
     JSON.stringify({
@@ -560,10 +557,7 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
-  assert.deepEqual(
-    panel.control().pins.map(({ tab }) => [tab, isPinnable(tab) && inColumn(tab)]),
-    [[MAIN_TAB.CALL, true]],
-  );
+  assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
 });
 
 test("a narrow room holds the open panel full screen alone, so the window's ways out of full screen shut it there, and a room widened again stands it beside the document", () => {

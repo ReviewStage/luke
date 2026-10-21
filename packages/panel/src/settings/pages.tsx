@@ -40,7 +40,7 @@ const SETTINGS_PAGE = {
     title: "Workspace",
     icon: <UsersIcon className="settings-icon" />,
   },
-  [SETTINGS_VIEW.CODING_AGENTS]: { title: "Coding agents", icon: <TerminalIcon /> },
+  [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <TerminalIcon /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
   [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <DocumentIcon /> },
   [SETTINGS_VIEW.VOICE]: { title: "Voice", icon: <SpeakerIcon /> },

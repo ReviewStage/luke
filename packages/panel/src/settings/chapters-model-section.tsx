@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
- * chapters-model-section.tsx -- Settings › Coding agents' Chapters group: the Claude model a Generate chapters the member presses runs on.
+ * chapters-model-section.tsx -- Settings › Agents' Chapters group: the Claude model a Generate chapters the member presses runs on.
  *
  * The choice is the account's, kept on the service beside the default model
  * (`@luke/features/chapters-model-choice`), and read by the service when

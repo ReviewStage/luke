@@ -25,7 +25,6 @@ import {
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
 import {
-  CallIcon,
   CommentsIcon,
   DocumentIcon,
   GearIcon,
@@ -826,8 +825,6 @@ function PlaceGlyph({
       return <CommentsIcon />;
     case LINK_PLACE.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
-    case LINK_PLACE.CALL:
-      return <CallIcon />;
     case LINK_PLACE.AGENT:
       return (
         <KnownAgentMark

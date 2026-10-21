@@ -45,6 +45,10 @@ import { SettingsStore } from "./settings-store.js";
  */
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+/** An agent on the open task, one on another task, and that other task. */
+const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
+const OTHER_TASK = "3c9e2a7d-5b1f-4e8c-a6d2-8f4b1e7c3a50";
+const OTHER_TASK_AGENT = "6e2a9d4b-1c7f-4a8e-b3d5-2f9c8e1a7b60";
 const SDP_OFFER =
   "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
 const SDP_ANSWER =
@@ -150,6 +154,11 @@ function subject(options: { videoOnCall?: boolean; avatar?: VideoAvatar } = {}) 
         },
         account: { agentTrace: undefined, voiceCapabilities: { liveSessions: source } },
         activeTaskId: () => TASK_ID,
+        // The open task's agent is on it; another task's agent, and one archived, are not.
+        agentTaskOf: (agentId) =>
+          Effect.succeed(
+            agentId === AGENT_ID ? TASK_ID : agentId === OTHER_TASK_AGENT ? OTHER_TASK : undefined,
+          ),
         showPlanDraft: () => undefined,
         showTaskActivity: () => undefined,
         showTaskCode: () => undefined,
@@ -189,7 +198,11 @@ function subject(options: { videoOnCall?: boolean; avatar?: VideoAvatar } = {}) 
     };
     const openCall = Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp: SDP_OFFER, taskId: TASK_ID }),
+        call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, {
+          sdp: SDP_OFFER,
+          taskId: TASK_ID,
+          agentId: AGENT_ID,
+        }),
       );
       const created = yield* Fiber.join(fiber);
       assert.ok(created);
@@ -203,7 +216,17 @@ function subject(options: { videoOnCall?: boolean; avatar?: VideoAvatar } = {}) 
         const bytes = JSON.stringify(value);
         return bytes.includes(TOKEN) || bytes.includes(SECOND_TOKEN);
       });
-    return { live, store, call, refusal, openCall, states, grants, tokenCrossedGateway };
+    return {
+      live,
+      store,
+      call,
+      refusal,
+      openCall,
+      states,
+      grants,
+      tokenCrossedGateway,
+      sockets: script.sockets,
+    };
   });
 }
 
@@ -291,6 +314,30 @@ it.effect("video asked for with no call standing asks nothing and answers so", (
     });
     assert.deepEqual(statuses(f.states), [LIVE_AVATAR_STATUS.OFF]);
   }),
+);
+
+it.effect(
+  "an offer into an agent of another task, or one the service no longer has, is refused and opens no session; one into the open task's agent names it to the service",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* subject();
+      for (const agentId of [OTHER_TASK_AGENT, "archived-agent"]) {
+        const refusal = yield* f.refusal(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, {
+          sdp: SDP_OFFER,
+          taskId: TASK_ID,
+          agentId,
+        });
+        assert.equal(refusal._tag, "RefusedRefusal");
+      }
+      assert.equal(f.sockets.length, 0);
+
+      const socket = yield* f.openCall;
+      const create = socket.sent
+        .map((data) => JSON.parse(data))
+        .find((frame) => frame.type === VOICE_SERVICE_FRAME.SESSION_CREATE);
+      assert.equal(create?.planId, TASK_ID);
+      assert.equal(create?.agentId, AGENT_ID);
+    }),
 );
 
 it.effect("the toggle refuses anything but a boolean", () =>

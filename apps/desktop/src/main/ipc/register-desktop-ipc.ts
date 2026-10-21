@@ -12,8 +12,6 @@ import { PUSH } from "@luke/host/contract";
 import { macBrowserTabsOver } from "@luke/host/mac-browser-tabs";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import {
   BrowserWindow,
   clipboard,
@@ -27,7 +25,6 @@ import {
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createBrowserViews } from "../window/browser-views";
-import { HOTKEY_RANK } from "../window/hotkey-registrar";
 import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserProcedures } from "./browser-acts";
@@ -64,7 +61,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     services: effectServices,
   } = services;
   const { launch } = config;
-  const { panels, voiceWindow, callWindow, hotkeys } = windows;
+  const { panels, voiceWindow, callWindow } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -76,7 +73,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     panels,
     voiceWindow,
     state,
-    setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     liveDiagnostics: () => operator.host.liveDiagnostics(),
     liveSession: operator.host,
@@ -254,12 +250,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
           },
           lastSettings: () => operator.settings(),
           sideEffects: clientSettingSideEffects({
-            hotkeys,
             applyLoginItem: windows.applyLoginItem,
             mediaDuck: native.mediaDuck,
           }),
-          stopChordHolder: (chord) =>
-            hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
         },
         tasks: {
           host: operator.host,
@@ -267,18 +260,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,
-          talkAboutTask: (taskId) => {
+          talkTo: (about) => {
             const voice = voiceWindow.current();
-            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, { taskId });
+            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, about);
           },
-          voiceReady: () => {
-            const snapshot = state.snapshot();
-            return (
-              snapshot.settings?.status.voiceAvailable === true &&
-              snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
-            );
-          },
-          callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
         },
         taskIssues: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },

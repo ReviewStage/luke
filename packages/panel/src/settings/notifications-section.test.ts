@@ -64,16 +64,6 @@ function settingsOn(notifications: NotificationsControl): SettingsPanelProps {
       onOpenLatest: ignore,
     },
     settings: settingsView(),
-    shortcuts: {
-      voiceHotkeyHeld: false,
-      voiceChosen: false,
-      voiceOff: false,
-      onVoiceHotkeyChange: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      stopChosen: false,
-      stopOff: false,
-      onStopHotkeyChange: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      onCapture: ignore,
-    },
   };
 }
 

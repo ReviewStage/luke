@@ -57,7 +57,7 @@ import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
- * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
+ * coding-agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on, a voice chat's as a Start's, there being no voice default of its own.
  *
  * The page is three groups under their own headings: this file's Default
  * model, the model a Generate chapters runs on (`chapters-model-section.tsx`),
@@ -97,7 +97,7 @@ const PAGE_LINE = {
   FAILED: "The default could not be read.",
   MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
   MODELS_NONE_MATCH: "No models match.",
-  SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
+  SIGNED_OUT: "Sign in to choose the model your agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 

@@ -953,17 +953,37 @@ function transcriptSteps(
 }
 
 /**
- * The source agent of the plan read as the account, its transcript cut and
+ * Where a Start puts its agent: a task, or a workspace with no task and the
+ * repository the agent clones there; an agent it is started from must
+ * stand in the same place.
+ */
+export type StartWhere =
+  | { readonly taskId: string }
+  | { readonly taskId: null; readonly organizationId: string; readonly repository: string };
+
+/** The repository the new agent clones in the place: the task's as it stands now, or the workspace place's own; none where the task names none. */
+const placeRepository = (userId: string, place: StartWhere) =>
+  Effect.gen(function* () {
+    if (place.taskId === null) return place.repository;
+    const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, place.taskId));
+    return Option.isSome(task) ? task.value.repository : null;
+  });
+
+/**
+ * The source agent of the place read as the account, on the plan or with
+ * no plan in the workspace, its transcript cut and
  * replayed as above, its work copied to a branch for the new agent under the
  * Start's key, and what the new agent is handed and runs on, the source's
  * files held to what fits beside `noteFiles`, the ones the Start's note
  * carries, within one message's bounds and named in the preamble past them;
- * refused as naming nothing where the account reaches no such agent on this
- * plan, and as invalid where the message named is none of its journals.
+ * refused as naming nothing where the account reaches no such agent in this
+ * place, so a source on another plan, or on none where the place is a
+ * plan's, is never dropped and started afresh, and as invalid where the
+ * message named is none of its journals.
  */
 export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  taskId: string,
+  place: StartWhere,
   from: CodingAgentStartFrom,
   noteFiles: readonly CodingAgentAttachment[],
   idempotencyKey: string,
@@ -971,14 +991,17 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const [found] = yield* hostedStoreOrUnavailable(
     listPublishedCodingAgentsById(userId, [from.agentId]),
   );
-  if (found === undefined || found.agent.taskId !== taskId) {
+  const inPlace =
+    found !== undefined &&
+    found.agent.taskId === place.taskId &&
+    (place.taskId !== null || found.agent.organizationId === place.organizationId);
+  if (!inPlace) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
   // An agent on its starter's own GitHub token is continued or forked by its starter alone, before its work is copied.
   if (!controlsAgent(userId, source)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
-  const repository = Option.isSome(task) ? task.value.repository : null;
+  const repository = yield* placeRepository(userId, place);
   const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
     lineageOf(userId, source, repository),
   );
@@ -1007,7 +1030,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const files = filesOf(records[0], noteFiles);
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
-  const copy = yield* copySourceWork(userId, source, forked, idempotencyKey);
+  const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);
   const inPullRequest = !forked && (yield* goesOnInPullRequest(userId, source, published));
   const edited =
     cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));

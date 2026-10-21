@@ -27,7 +27,6 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -107,63 +106,28 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("the Call tab draws each call's spoken lines as the developer's bubbles and Luke's messages, left out of the screen recording", () => {
-  const markup = renderToStaticMarkup(
-    createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
-      looks: NO_LOOKS,
-      tasks: tasksControl({
-        page: TASKS_PAGE.DOCUMENT,
-        activeTaskId: TASK.id,
-        region: { kind: DOCUMENT_REGION.READY, task: TASK },
-        mainTabs: { ...tasksControl().mainTabs, tab: MAIN_TAB.CALL },
-        transcript: {
-          region: {
-            kind: TRANSCRIPT_REGION.READY,
-            earlierOmitted: false,
-            calls: [
-              {
-                key: "call-1",
-                startedAt: 1_000,
-                live: true,
-                lukeEnded: false,
-                messages: [
-                  {
-                    id: "0",
-                    role: "user",
-                    parts: [{ type: "text", text: "Invites should expire." }],
-                  },
-                  {
-                    id: "1",
-                    role: "assistant",
-                    parts: [{ type: "text", text: "After how many days?" }],
-                  },
-                ],
-              },
-            ],
-          },
-          onRetry: () => undefined,
-        },
+test("a task whose column shows no tab offers a new voice chat and a new agent beside its plan, and a platform with no voice offers the agent alone", () => {
+  const drawn = (onNewVoiceChat: (() => void) | undefined) =>
+    renderToStaticMarkup(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          mainTabs: { ...tasksControl().mainTabs, tabs: [], tab: undefined },
+          onNewVoiceChat,
+        }),
       }),
-    }),
-  );
-
-  const page = document.createElement("div");
-  page.innerHTML = markup;
-  const call = page.querySelector('section.task-call.ph-no-capture[aria-label="Call"]');
-  assert.ok(call, "the Call tab, left out of the recording");
-  // The developer's line a bubble of their own, Luke's an assistant's message, as an agent's tab draws them.
-  assert.deepEqual(
-    [...call.querySelectorAll(".is-user, .is-assistant")].map((message) => [
-      message.classList.contains("is-user") ? "user" : "assistant",
-      message.querySelector("p")?.textContent,
-    ]),
-    [
-      ["user", "Invites should expire."],
-      ["assistant", "After how many days?"],
-    ],
-  );
-  assert.match(call.textContent ?? "", /Live/u);
+    );
+  const pane = (markup: string) => {
+    const page = document.createElement("div");
+    page.innerHTML = markup;
+    return [...page.querySelectorAll(".desktop-no-agent button")].map((each) => each.textContent);
+  };
+  assert.deepEqual(pane(drawn(() => undefined)), ["New voice chat", "New agent"]);
+  assert.deepEqual(pane(drawn(undefined)), ["New agent"]);
 });
 
 /** The Code tab as the task's page draws it over the code the task holds, and whether its work read did not land, as markup. */
@@ -934,7 +898,7 @@ async function chatTabMounted(ownChannel: boolean) {
             region: { kind: DOCUMENT_REGION.READY, task: TASK },
             mainTabs: {
               ...tasksControl().mainTabs,
-              tabs: [MAIN_TAB.CALL, MAIN_TAB.CHAT],
+              tabs: [MAIN_TAB.CHAT],
               tab: MAIN_TAB.CHAT,
             },
             chatView: { ...tasksControl().chatView, available: true, chat },
@@ -1119,8 +1083,8 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   const page = panelPage(SIDE_PANEL_TAB.PLAN, {
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, { agent: agentId }],
-      tab: MAIN_TAB.CALL,
+      tabs: [{ agent: agentId }],
+      tab: undefined,
       onClose: () => closed.push("column"),
     },
     sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },

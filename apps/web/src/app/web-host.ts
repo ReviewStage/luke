@@ -318,23 +318,17 @@ function portDependencies(
         [SETTING_SIDE_EFFECT.NONE]: nothing,
         [SETTING_SIDE_EFFECT.LOGIN_ITEM]: nothing,
         [SETTING_SIDE_EFFECT.VOICE]: nothing,
-        [SETTING_SIDE_EFFECT.TALK_HOTKEY]: nothing,
-        [SETTING_SIDE_EFFECT.STOP_HOTKEY]: nothing,
         [SETTING_SIDE_EFFECT.MEDIA_DUCK]: nothing,
       },
-      // A tab claims no global key, so no chord is ever held.
-      stopChordHolder: () => undefined,
     },
-    // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
+    // No voice stands in a tab, so an agent's Call press reaches none.
     tasks: {
       host,
       colourCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
       activeTaskId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutTask: nothing,
-      voiceReady: () => false,
-      callStanding: () => false,
+      talkTo: nothing,
     },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
@@ -417,8 +411,8 @@ const composedWeb = (
         node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
-      // No voice window and no talk key stand beside the panel.
-      operator.link({ sendToVoice: () => undefined, reapplyTalkHotkey: () => undefined });
+      // No voice window stands beside the panel.
+      operator.link({ sendToVoice: () => undefined });
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
       // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });

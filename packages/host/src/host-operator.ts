@@ -27,6 +27,7 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatAttachmentParams,
@@ -79,6 +80,7 @@ import {
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
+  codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
   codingAgentChatWriteAnswerViewSchema,
@@ -316,6 +318,7 @@ import type {
   SettingsResetScope,
 } from "@luke/settings";
 import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -395,12 +398,13 @@ export interface HostOperator {
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
   /**
-   * The peer's SDP offer, and the task the call is about, answered with the
-   * session the host created; a host that creates none answers nothing.
+   * The peer's SDP offer, and the agent the call speaks into with its task,
+   * answered with the session the host created; a host that creates none
+   * answers nothing.
    */
   createLiveSession(
     sdp: string,
-    taskId: string,
+    about: VoiceCallAbout,
   ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   /** The peer's hang-up of the session it names; one the host no longer holds is left alone. */
   endLiveSession(request: VoiceEndLiveSessionParams): Effect.Effect<void>;
@@ -481,8 +485,6 @@ export interface HostOperator {
   tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
-  /** The turn Luke is running on a task stopped on the service. */
-  tasksStopWork(taskId: string): Effect.Effect<void>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's pages, each by its newest version; or that the service did not answer. */
@@ -603,6 +605,8 @@ export interface HostOperator {
   codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+  /** The calls into one agent, each with its lines and its record; or why there is no answer. */
+  codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
   /** The account's automations, or one task's or one workspace's; or why there are none. */
   automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
@@ -1090,9 +1094,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
         Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
       ),
-    createLiveSession: (sdp, taskId) =>
+    createLiveSession: (sdp, { taskId, agentId }) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, taskId }),
+        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, taskId, agentId }),
         (answer) =>
           answer.ok
             ? Result.getSuccess(
@@ -1461,8 +1465,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
-    tasksStopWork: (taskId) =>
-      Effect.asVoid(client.call(GATEWAY_METHOD.TASKS_STOP_WORK, { taskId })),
     githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
     githubDisconnect: () =>
       Effect.map(
@@ -1715,7 +1717,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentStart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
-          taskId: params.taskId,
+          ...(params.taskId === undefined ? undefined : { taskId: params.taskId }),
           idempotencyKey: params.idempotencyKey,
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),
@@ -1801,6 +1803,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentPageAnswerViewSchema),
+      ),
+    codingAgentCalls: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CALLS, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentCallsAnswerViewSchema),
       ),
     automationList: (params) =>
       Effect.map(

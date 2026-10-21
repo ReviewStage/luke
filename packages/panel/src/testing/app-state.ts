@@ -49,7 +49,6 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       upToDate: false,
     },
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    hotkeys: { talkHeld: true },
     voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },

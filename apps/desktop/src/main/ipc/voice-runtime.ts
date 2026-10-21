@@ -4,12 +4,7 @@ import type { AppStateStore } from "@luke/host/client";
 import { PUSH, VOICE_RUNTIME_ACT_KIND } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
-import {
-  callInProgress,
-  IDLE_VOICE_VIEW,
-  VOICE_COMMAND,
-  withCallTranscriptChange,
-} from "@luke/voice/voice-view";
+import { withCallTranscriptChange } from "@luke/voice/voice-view";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
@@ -30,7 +25,6 @@ type LiveSessionActs = Pick<
   | "reportLiveTransport"
   | "reportLiveActivity"
   | "stopSpeaking"
-  | "tasksStopWork"
 >;
 
 export interface VoiceRuntimeDependencies {
@@ -42,31 +36,11 @@ export interface VoiceRuntimeDependencies {
   liveSession: LiveSessionActs;
   liveDiagnostics: () => Effect.Effect<Option.Option<LiveDiagnostics>>;
   recordProductEvent: RecordProductEvent;
-  /** Whether a panel is recording a chord, which holds the talk and stop presses. */
-  setShortcutCapturing: (capturing: boolean) => void;
 }
 
 type VoiceRuntimeActKind = (typeof VOICE_RUNTIME_ACT_KIND)[keyof typeof VOICE_RUNTIME_ACT_KIND];
 
 const voicePort = actPortFor<WebContents>();
-
-/** Stop Luke on a task (`luke.stop`): a call about it is told to stop, as the stop key always told it, and his turn on it is stopped on the service, call or no call. */
-function stopLuke(dependencies: VoiceRuntimeDependencies, named: string | undefined) {
-  const snapshot = dependencies.state.snapshot();
-  const view = snapshot.voice.view ?? IDLE_VOICE_VIEW;
-  const callTask = callInProgress(view) ? view.callTaskId : undefined;
-  const taskId = named ?? callTask ?? snapshot.tasks.activeTaskId;
-  if (taskId === undefined) return Effect.void;
-  if (callTask === taskId) {
-    const voice = dependencies.voiceWindow.current();
-    if (voice) {
-      windowPushes.push(voice.webContents, PUSH.VOICE_COMMAND, {
-        command: VOICE_COMMAND.STOP_SPEAKING,
-      });
-    }
-  }
-  return dependencies.liveSession.tasksStopWork(taskId);
-}
 
 export function voiceRuntimeProcedures(
   dependencies: VoiceRuntimeDependencies,
@@ -86,16 +60,16 @@ export function voiceRuntimeProcedures(
       },
     ),
     // The call card's way back, from the floating window or from a panel's
-    // own card, names no task: the call's is read here, so it cannot bring
-    // forward a task the call is not about.
-    [VOICE_RUNTIME_ACT_KIND.CALL_SHOW_TASK]: voicePort[
-      VOICE_RUNTIME_ACT_KIND.CALL_SHOW_TASK
+    // own card, names no agent: the call's is read here, so it cannot bring
+    // forward an agent the call does not speak into.
+    [VOICE_RUNTIME_ACT_KIND.CALL_SHOW_AGENT]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.CALL_SHOW_AGENT
     ].handler(({ context }) => {
       const { call, panel } = context.actor;
-      const taskId = state.snapshot().voice.view?.callTaskId;
-      if ((!call && !panel) || taskId === undefined) return;
+      const about = state.snapshot().voice.view?.call;
+      if ((!call && !panel) || about === undefined) return;
       panels.focusExpanded();
-      panels.broadcast(PUSH.SHOW_TASK, { taskId });
+      panels.broadcast(PUSH.SHOW_AGENT, { taskId: about.taskId, agentId: about.agentId });
     }),
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
@@ -103,7 +77,10 @@ export function voiceRuntimeProcedures(
       VOICE_RUNTIME_ACT_KIND.VOICE_CREATE_LIVE_SESSION
     ].effect(function* ({ input, context }) {
       if (!context.actor.voice) return undefined;
-      const created = yield* liveSession.createLiveSession(input.sdp, input.taskId);
+      const created = yield* liveSession.createLiveSession(input.sdp, {
+        taskId: input.taskId,
+        agentId: input.agentId,
+      });
       return Option.getOrUndefined(created);
     }),
     [VOICE_RUNTIME_ACT_KIND.VOICE_END_LIVE_SESSION]: voicePort[
@@ -124,7 +101,7 @@ export function voiceRuntimeProcedures(
       if (context.actor.voice) yield* liveSession.reportLiveActivity(input.idle);
       return undefined;
     }),
-    // The stop key, pressed in the voice window that owns the session; a
+    // Escape's stop, asked by the voice window that owns the session; a
     // panel has no session to stop and is answered false.
     [VOICE_RUNTIME_ACT_KIND.VOICE_STOP_SPEAKING]: voicePort[
       VOICE_RUNTIME_ACT_KIND.VOICE_STOP_SPEAKING
@@ -132,12 +109,6 @@ export function voiceRuntimeProcedures(
       if (!context.actor.voice) return false;
       return yield* liveSession.stopSpeaking();
     }),
-    [VOICE_RUNTIME_ACT_KIND.LUKE_STOP]: voicePort[VOICE_RUNTIME_ACT_KIND.LUKE_STOP].effect(
-      function* ({ input, context }) {
-        const { voice, panel, call } = context.actor;
-        if (voice || panel || call) yield* stopLuke(dependencies, input.taskId);
-      },
-    ),
     [VOICE_RUNTIME_ACT_KIND.VOICE_DIAGNOSTICS]: voicePort[
       VOICE_RUNTIME_ACT_KIND.VOICE_DIAGNOSTICS
     ].effect(function* () {
@@ -157,7 +128,7 @@ export function voiceRuntimeProcedures(
 
 export function voiceRuntimeReports(
   dependencies: VoiceRuntimeDependencies,
-): Pick<ReportHandlers, "reportVoiceView" | "setShortcutCapturing"> {
+): Pick<ReportHandlers, "reportVoiceView"> {
   const { panels, voiceWindow } = dependencies;
   return {
     // The voice window's snapshot: written to the document, from which every
@@ -182,10 +153,6 @@ export function voiceRuntimeReports(
           exchange_kind: countedKind,
         });
       }
-    },
-    setShortcutCapturing(context, capturing) {
-      if (!panels.owns(context.sender)) return;
-      dependencies.setShortcutCapturing(capturing);
     },
   };
 }

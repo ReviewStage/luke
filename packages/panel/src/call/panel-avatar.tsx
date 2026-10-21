@@ -1,12 +1,12 @@
 /**
- * panel-avatar.tsx -- Luke's avatar as the panel draws it: his voice from the panel's root, and his video at the top of the call's own Call tab and on the call card.
+ * panel-avatar.tsx -- Luke's avatar as the panel draws it: his voice from the panel's root, and his video at the foot of the call's own agent's tab and on the call card.
  *
  * The panel runs the avatar's session (`call-avatar.ts`) for as long as main
  * hands it a grant, whichever tab it shows and while it is hidden, because
  * the avatar's voice is what the developer hears: the voice window's own
  * element is muted while the avatar plays. So the voice is played from the
- * panel's root, and only the video is drawn in the Call tab, on the plan
- * the call is about, and on the call card wherever the window docks it.
+ * panel's root, and only the video is drawn in the tab of the agent the call
+ * speaks into, and on the call card wherever the window docks it.
  * Both draw the one track the session published, each on an element of its
  * own, so a second view costs no second subscription and never drifts from
  * the first.
@@ -15,12 +15,12 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { callTabVideoStatus } from "@luke/ui/call-card-model";
+import { agentCallVideoStatus } from "@luke/ui/call-card-model";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useAct } from "../act.js";
 import { useExperiment } from "../use-app-state.js";
-import { useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
+import { useStandingVoiceView, useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
 import { avatarViewShareAtom } from "./avatar-view.js";
 import {
   type CallAvatarTracks,
@@ -57,21 +57,21 @@ export function PanelAvatarVoice(): React.JSX.Element {
 }
 
 /**
- * The video at the top of one plan's Call tab: drawn while that plan's call
- * is in progress and the Video calls experiment is on, as the tile while the
- * avatar stands and as the strip once video is off. Video off, Video on, and
- * Restart video ask main to take the avatar down or put it up again on the
- * call standing.
+ * The video at the foot of one agent's tab: drawn while a call into that
+ * agent is in progress and the Video calls experiment is on, as the tile
+ * while the avatar stands and as the strip once video is off. Video off,
+ * Video on, and Restart video ask main to take the avatar down or put it up
+ * again on the call standing.
  */
-export function CallTabVideo({ taskId }: { taskId: string }): React.JSX.Element | null {
+export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Element | null {
   const { tell } = useAct();
-  const { view } = useVoiceView();
+  const view = useStandingVoiceView();
   const avatar = useVoiceAvatar();
   const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
   return (
     <CallVideoTile
       video={useAvatarTracks().video}
-      status={callTabVideoStatus({ view, avatar, taskId, videoCalls })}
+      status={agentCallVideoStatus({ view, avatar, agentId, videoCalls })}
       onSetVideo={(on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on })}
     />
   );
@@ -79,7 +79,7 @@ export function CallTabVideo({ taskId }: { taskId: string }): React.JSX.Element 
 
 /**
  * The avatar as the panel's call card draws it, on the same track, status,
- * and toggle as the Call tab, or nothing while the card has no video to
+ * and toggle as the agent's tab, or nothing while the card has no video to
  * offer.
  */
 export function useCallCardVideo(): CallCardVideo | undefined {
