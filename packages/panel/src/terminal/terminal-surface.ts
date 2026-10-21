@@ -22,9 +22,10 @@ import { terminalFindTints, terminalTheme } from "./terminal-theme.js";
  * It draws with WebGL, and with xterm's DOM renderer where WebGL is not to be
  * had, the DOM renderer's rules reaching the page as adopted sheets
  * (`./adopted-styles.ts`). It draws in the window's monospace face, or, while
- * a web page is still fetching that face, in the system's until it lands,
- * so its cells are never measured in one face and drawn in another, which
- * would draw the screen past its box. Wide characters are measured as
+ * a web page is still fetching that face, in the system faces the stack
+ * falls back to until it lands, so its cells are never measured in one face
+ * and drawn in another, which would draw the screen past its box. Wide
+ * characters are measured as
  * Unicode 11 measures them, so an emoji or a CJK character in a prompt takes
  * the two cells a shell expects. It fits its box whenever the box changes,
  * once a frame at most, and says so only when that changes its size in
@@ -153,30 +154,47 @@ function monospaceFont(host: Element): string {
   return getComputedStyle(host).getPropertyValue(FONT_TOKEN).trim() || FALLBACK_FONT;
 }
 
-/**
- * Whether the face given has loaded, which a page answers for a web font
- * only once something has drawn in it; the desktop's faces are the
- * system's, loaded already.
- */
-function faceLoaded(face: string): boolean {
-  return !("fonts" in document) || document.fonts.check(face);
+/** A face at the terminal's size, as the page's font set reads one. */
+function sized(family: string): string {
+  return `${TERMINAL_LOOK.fontSize}px ${family}`;
 }
 
-/** Calls `then` once the face given has loaded; a face that fails to load never calls it. */
-function onFaceLanded(face: string, then: () => void): void {
-  document.fonts.load(face).then(then, () => undefined);
+/**
+ * Whether every face of the stack given has loaded, which a page answers for
+ * a web font only once something has drawn in it; the desktop's faces are
+ * the system's, loaded already.
+ */
+function faceLoaded(family: string): boolean {
+  return !("fonts" in document) || document.fonts.check(sized(family));
+}
+
+/**
+ * The stack given without the faces still loading: the faces the page holds
+ * already, the system's, so the stand-in is the same monospace the stack
+ * falls back to rather than the browser's bare default.
+ */
+function loadedFaces(family: string): string {
+  const held = family
+    .split(",")
+    .map((each) => each.trim())
+    .filter((each) => each !== "" && faceLoaded(each));
+  return held.length === 0 ? FALLBACK_FONT : held.join(", ");
+}
+
+/** Calls `then` once the stack given has loaded; a face that fails to load never calls it. */
+function onFaceLanded(family: string, then: () => void): void {
+  document.fonts.load(sized(family)).then(then, () => undefined);
 }
 
 export function mountTerminal(host: HTMLElement, props: TerminalProps): TerminalHandle {
   host.classList.add(SURFACE_CLASS);
   const stopAdopting = adoptInlineStyles(host);
   const family = monospaceFont(host);
-  const face = `${TERMINAL_LOOK.fontSize}px ${family}`;
-  // Note that a face still on its way is stood in for by the system's, because the terminal measures its cells as it opens.
-  const landed = faceLoaded(face);
+  // Note that a face still on its way is stood in for by the stack's faces the page holds, because the terminal measures its cells as it opens.
+  const landed = faceLoaded(family);
   const terminal = new Terminal({
     ...TERMINAL_LOOK,
-    fontFamily: landed ? family : FALLBACK_FONT,
+    fontFamily: landed ? family : loadedFaces(family),
     theme: terminalTheme(host),
   });
   terminal.attachCustomKeyEventHandler((event) => {
@@ -210,7 +228,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   // A face that lands later is drawn in from then, its cells measured again as a change of face measures them, and the screen fitted to them.
   let mounted = true;
   if (!landed) {
-    onFaceLanded(face, () => {
+    onFaceLanded(family, () => {
       if (!mounted) return;
       terminal.options.fontFamily = family;
       fit.fit();

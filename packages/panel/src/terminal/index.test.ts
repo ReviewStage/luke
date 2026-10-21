@@ -49,6 +49,7 @@ afterEach(() => {
   mounted?.unmount();
   mounted = undefined;
   document.body.innerHTML = "";
+  Reflect.deleteProperty(document, "fonts");
 });
 
 /** A terminal mounted in a host of its own, with what it sent the shell and what the window heard. */
@@ -138,23 +139,27 @@ function drawnFace(host: HTMLElement): string | undefined {
   return rows?.match(/font-family: ([^;]+);/)?.[1];
 }
 
-/** A host whose window's monospace stack is a web font, as the web app's profile names it. */
+/** The web app's monospace stack: its own web font, then the system's faces. */
+const WEB_MONO = '"JetBrains Mono Variable", ui-monospace, Menlo, monospace';
+
+/** A host whose window's monospace stack is the web app's. */
 function webFontHost(): HTMLElement {
   const host = document.createElement("div");
-  host.style.setProperty("--luke-font-mono", '"JetBrains Mono Variable", monospace');
+  host.style.setProperty("--luke-font-mono", WEB_MONO);
   document.body.append(host);
   return host;
 }
 
 const QUIET = { onInput: () => undefined, onResize: () => undefined, onLink: () => undefined };
 
-test("a face the page is still fetching is stood in for by the system's monospace, and drawn in once it lands", async () => {
+test("a face the page is still fetching is stood in for by the system faces the stack falls back to, and drawn in once it lands", async () => {
   const landed = Promise.withResolvers<FontFace[]>();
   const asked: string[] = [];
   Object.defineProperty(document, "fonts", {
     configurable: true,
     value: {
-      check: () => false,
+      // The web font is the one face still on its way; the system's are held.
+      check: (face: string) => !face.includes("JetBrains Mono Variable"),
       load: (face: string) => {
         asked.push(face);
         return landed.promise;
@@ -164,14 +169,17 @@ test("a face the page is still fetching is stood in for by the system's monospac
   const host = webFontHost();
   mounted = terminal.mount(host, QUIET);
 
-  assert.equal(drawnFace(host), "monospace", "the cells are measured in a face the page holds");
+  assert.equal(
+    drawnFace(host),
+    "ui-monospace, Menlo, monospace",
+    "the cells are measured in faces the page holds, never the browser's bare default",
+  );
   landed.resolve([]);
   await landed.promise;
   await Promise.resolve();
 
-  assert.equal(drawnFace(host), '"JetBrains Mono Variable", monospace');
-  assert.deepEqual(asked, ['12px "JetBrains Mono Variable", monospace']);
-  Reflect.deleteProperty(document, "fonts");
+  assert.equal(drawnFace(host), WEB_MONO);
+  assert.deepEqual(asked, [`12px ${WEB_MONO}`]);
 });
 
 test("a face already loaded is drawn in at once, and nothing is fetched", () => {
@@ -189,7 +197,6 @@ test("a face already loaded is drawn in at once, and nothing is fetched", () => 
   const host = webFontHost();
   mounted = terminal.mount(host, QUIET);
 
-  assert.equal(drawnFace(host), '"JetBrains Mono Variable", monospace');
+  assert.equal(drawnFace(host), WEB_MONO);
   assert.deepEqual(asked, []);
-  Reflect.deleteProperty(document, "fonts");
 });
