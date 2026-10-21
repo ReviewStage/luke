@@ -344,4 +344,12 @@ export interface RunnerEventBatch {
  * ten minutes, its timeout an hour), so five minutes leaves room for a
  * heartbeat Luke did not take, and costs one small post each.
  */
-export const RUNNER_HEARTBEAT = { EVERY_MS: 5 * 60 * 1_000 } as const;
+export const RUNNER_HEARTBEAT = {
+  EVERY_MS: 5 * 60 * 1_000,
+  /**
+   * How long one heartbeat waits on Luke's answer before it is let go, well
+   * inside the interval, so a post Luke never answers cannot hold back the
+   * next one.
+   */
+  TIMEOUT_MS: 30 * 1_000,
+} as const;

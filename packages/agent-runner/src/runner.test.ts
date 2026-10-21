@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Cause, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { EventsUndelivered } from "./events.js";
@@ -300,6 +301,46 @@ it.effect(
       assert.equal(heartbeats(), 2, "a launch that ended posts no heartbeat");
       assert.ok(luke.bearers.every((header) => header === `Bearer ${BEARER}`));
     }),
+);
+
+it.effect("lets a heartbeat Luke never answers go, and posts the next one an interval on", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke([], "Working on the first message.");
+    let hung = 0;
+    // Luke holds the first heartbeat open, answering nothing until the runner lets it go.
+    const stalling: typeof luke = {
+      ...luke,
+      layer: fakeHttpClientLayer((url, init) => {
+        if (hung === 0 && JSON.parse(String(init.body)).events.length === 0) {
+          hung += 1;
+          return new Promise<Response>((_, reject) =>
+            init.signal?.addEventListener("abort", () => reject(new Error("let go"))),
+          );
+        }
+        return luke.respond(url, init);
+      }),
+    };
+    const { prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, stalling);
+    const heartbeats = () =>
+      luke.bodies.filter((body) => JSON.parse(body).events.length === 0).length;
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* luke.seen;
+    yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS));
+    for (let step = 0; step < 500 && hung === 0; step += 1) yield* Effect.yieldNow;
+    yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS));
+    yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS));
+    for (let step = 0; step < 500 && heartbeats() === 0; step += 1) yield* Effect.yieldNow;
+    const afterStall = heartbeats();
+    yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
+    yield* Queue.take(prompted);
+    yield* Queue.take(prompted);
+    yield* release;
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+    assert.equal(hung, 1);
+    assert.equal(afterStall, 1, "the heartbeat after the one Luke held went out");
+  }),
 );
 
 it.effect("interrupts a turn a wakeup started when Luke stops it", () =>
