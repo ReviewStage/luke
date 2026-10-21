@@ -156,7 +156,7 @@ import {
 } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
-import { codeExcerpt } from "./task-code.js";
+import { codeExcerpt } from "./task-code-excerpt.js";
 import { followTaskList } from "./task-list-follow.js";
 import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
 import {
@@ -181,8 +181,8 @@ import {
  * (`board-follow.ts`); the panel saves the board's scene through here and
  * the view takes the board as the service answered it. The code an agent
  * puts on screen during a call arrives on the call's socket with its lines,
- * read by the service from the agent's checkout, and is coloured here
- * (`task-code.ts`) and drawn in place; nothing of the repository is read on
+ * read by the service from the agent's checkout, and is cut to what its card draws here
+ * (`task-code-excerpt.ts`) and drawn in place; nothing of the repository is read on
  * this Mac. Every code the task's agents showed is read from the service
  * with the document, and again as the record's code part moves, so a task
  * opened after a restart or a switch shows it; each code a call shows lands

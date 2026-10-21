@@ -42,8 +42,8 @@ fi
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
 # `@luke/host` and every door of it a browser loads are walked the same way:
-# `/effect`, `/client`, `/act-port`, `/service-layer` and
-# `/agent-notices`, which the web app runs the host in a tab through, and
+# `/effect`, `/client`, `/act-port`, `/service-layer`, `/agent-notices` and
+# `/task-code`, which the web app runs the host in a tab through, and
 # `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
 # (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
 # `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
@@ -77,6 +77,7 @@ node --input-type=module -e '
         "app-state.ts",
         "bridge.ts",
         "contract/index.ts",
+        "task-code.ts",
       ],
       forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,

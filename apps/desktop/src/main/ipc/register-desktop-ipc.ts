@@ -6,7 +6,6 @@ import path from "node:path";
 import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
-import { highlightSnippet } from "@luke/host";
 import {
   createActPortHandler,
   type PlatformActProcedures,
@@ -63,6 +62,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     notices,
     testNotification,
     avatar,
+    colourCode,
     run,
     services: effectServices,
   } = services;
@@ -281,7 +281,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
-          colourCode: highlightSnippet,
+          colourCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,

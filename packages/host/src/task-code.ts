@@ -1,38 +1,20 @@
-import type { ShownCode } from "@luke/features/task-wire";
 import type { CodeToken } from "@luke/features/tasks-view";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { Clock, Duration, Effect } from "effect";
 import type { HighlighterCore } from "shiki/core";
+import { plainCodeLines } from "./task-code-remote.js";
 
 /**
- * task-code.ts -- a transcript's fenced block coloured in this process, and the part of a snippet Luke showed that the Code tab's card draws.
+ * task-code.ts -- a transcript's fenced block coloured, in both of GitHub's themes, for the window to draw as spans.
  *
- * Luke names code by place through the brain's `show_code`, and the
- * service reads the lines from the brain session's checkout and sends
- * them whole (`ShownCode`); nothing is read from this Mac's disk. The Code
- * tab's card colours its lines itself, in the diff bundle
- * (`code-snippet.tsx`), so only the part it draws is cut here
- * (`codeExcerpt`), as a File tab, a page's source, and a file of a message
- * colour theirs (`@luke/panel`'s `whole-file.tsx`). What else is done here
- * is a fenced block's colouring, which runs in this process rather than in the
- * window, because the window's content policy refuses WebAssembly and its
- * bundle has a budget; Shiki's JavaScript regex engine runs here and the
- * window draws spans. Every run carries its colour in both of GitHub's
- * themes, so the window follows the appearance as it changes without asking
- * for the code again.
+ * A fenced block is coloured outside the window, because the window's
+ * content policy refuses WebAssembly and its bundle has a budget; Shiki's
+ * JavaScript regex engine runs here and the window draws spans. The desktop
+ * runs this in a process of its own (`task-code-remote.ts`), so it never
+ * holds main's event loop, and the web in the tab's host. Every run carries
+ * its colour in both of GitHub's themes, so the window follows the
+ * appearance as it changes without asking for the code again.
  */
-
-/**
- * How much of a window the Code tab's card for it draws: the lines pointed
- * at with this many of the file on either side, or, for a file shown from
- * its top, its head. Note that the rest of the window is left here rather
- * than in the window, because the view carrying every code shown on a task
- * is told to the window whole.
- */
-const CODE_EXCERPT_LINES = {
-  CONTEXT: 3,
-  HEAD: 24,
-} as const;
 
 /** The themes the code is coloured in, one per appearance. */
 const THEME = { DARK: "github-dark-default", LIGHT: "github-light-default" } as const;
@@ -129,7 +111,7 @@ function colouredLines(
   language: string | undefined,
   lines: readonly string[],
 ): Effect.Effect<CodeToken[][]> {
-  const plain = () => lines.map((text) => (text === "" ? [] : [{ text }]));
+  const plain = () => plainCodeLines(lines.join("\n"));
   if (language === undefined) return Effect.succeed(plain());
   return Effect.map(sharedHighlighter, (core) => {
     if (core === undefined) return plain();
@@ -158,28 +140,6 @@ function languageOfFence(
   return Effect.map(sharedHighlighter, (core) =>
     core?.getLoadedLanguages().includes(lower) === true ? lower : undefined,
   );
-}
-
-/**
- * The part of a window the Code tab's card draws: the lines pointed at and a
- * few either side, or the window's head for a whole file. Note that lines
- * pointed at past the window, as past a file's end, draw the window's head
- * too, because the service answered real lines for them and a card with
- * none would drop them.
- */
-export function codeExcerpt(code: ShownCode): ShownCode {
-  const { startLine, endLine } = code.ref;
-  const head = { ...code, lines: code.lines.slice(0, CODE_EXCERPT_LINES.HEAD) };
-  if (startLine === undefined || endLine === undefined) return head;
-  const lastLine = code.firstLine + code.lines.length - 1;
-  const from = Math.max(code.firstLine, startLine - CODE_EXCERPT_LINES.CONTEXT);
-  const to = Math.min(lastLine, endLine + CODE_EXCERPT_LINES.CONTEXT);
-  if (from > to) return head;
-  return {
-    ...code,
-    firstLine: from,
-    lines: code.lines.slice(from - code.firstLine, to - code.firstLine + 1),
-  };
 }
 
 /** The colouring the window asks for, over one shared highlighter. */

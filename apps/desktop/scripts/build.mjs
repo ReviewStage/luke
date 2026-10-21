@@ -304,6 +304,21 @@ await Promise.all([
     sourcemap: "external",
     logLevel: "info",
   }),
+  // The code colouring process main forks with `utilityProcess`
+  // (`src/main/services/task-code-colouring.ts`), its own bundle so Shiki,
+  // its themes and its grammars ride in it alone and never in main's.
+  build({
+    entryPoints: [path.join(appRoot, "src/utility/task-code.ts")],
+    outfile: path.join(outputRoot, "task-code.js"),
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    target: "node22",
+    external: ["electron"],
+    plugins: sentryPlugins(),
+    sourcemap: "external",
+    logLevel: "info",
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/preload/index.ts")],
     outfile: path.join(outputRoot, "preload.js"),
