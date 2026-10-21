@@ -12,8 +12,8 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
 import {
-  assignUnassignedTask,
-  beginTaskWork,
+  assignUnassignedTaskCommitted,
+  beginTaskWorkCommitted,
   readTask,
   readTaskWorkspace,
 } from "@luke/database/models/task-store";
@@ -1008,20 +1008,23 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
   // further along stands; a move that fails is logged, never the Start's failure. A blank agent
   // was handed no work, so its task stands where it is.
+  // The Start answers the last transaction it committed in, which Realtime delivers after every
+  // one before it, so a client waiting on it sees the agent and its task's standing alike.
+  let committed = txid;
   if (landing.task !== undefined) {
     if (handed !== null) {
-      yield* beginTaskWork(userId, landing.task.id).pipe(
-        Effect.asVoid,
-        Effect.catch(logStoreFailure),
+      const begun = yield* beginTaskWorkCommitted(userId, landing.task.id).pipe(
+        Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none())),
       );
+      if (Option.isSome(begun)) committed = begun.value.txid;
     }
     // Its starter is on a task no one was, where they started it by hand, a blank agent among them;
     // an automation's run assigns no one.
     if (ask.automationOrigin === undefined) {
-      yield* assignUnassignedTask(userId, landing.task.id).pipe(
-        Effect.asVoid,
-        Effect.catch(logStoreFailure),
+      const assigned = yield* assignUnassignedTaskCommitted(userId, landing.task.id).pipe(
+        Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none())),
       );
+      if (Option.isSome(assigned)) committed = assigned.value.txid;
     }
   }
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
@@ -1047,7 +1050,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
     has_task: ask.taskId !== null,
   });
-  return txid === undefined ? { agent, created } : { agent, created, txid };
+  return committed === undefined ? { agent, created } : { agent, created, txid: committed };
 });
 
 /** A Start as a request reached the service, answered: the agent's summary, and whether this request made it or found it under its key. */
