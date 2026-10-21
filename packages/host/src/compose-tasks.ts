@@ -149,11 +149,13 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
+  confirmWrite,
   LIVE_GONE,
   type LiveBroken,
   type LiveClient,
   openRealtimeClient,
   type SealedRead,
+  type TxWait,
 } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
@@ -852,6 +854,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one follow of the account's sidebar sections and pinned repositories, from the first refresh after a launch or a sign-in until a sign-out. */
   const sidebarFollow = yield* FiberHandle.make<void>();
+  /** The sidebar follow's wait for a write's transaction while it is subscribed over Realtime; none while it polls or is let go. */
+  let sidebarTxWait: TxWait | undefined;
 
   /**
    * Follows the account's sidebar over Realtime where nothing follows it
@@ -880,6 +884,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           poll: (after) => seal(true, after),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
+          onTxWait: (wait) => {
+            sidebarTxWait = wait;
+          },
         },
         sealed,
       );
@@ -1860,7 +1867,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // The service answers the pins as they then stand, so the view takes its
-    // word rather than the window's guess.
+    // word rather than the window's guess, once the followed sidebar has the
+    // pin's transaction, so a delivery from before it draws nothing back.
     [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksPinRepositoryParamsSchema)(unparsedWire(params));
@@ -1873,12 +1881,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const answer = yield* served(client.pinRepository(repository, pinned));
             if (answer === undefined) return { changed: false };
+            yield* confirmWrite(sidebarTxWait, answer.txid);
             write({ repositoryPins: answer.pins });
             return { changed: true };
           }),
         );
       }),
-    // The service answers the sections as they then stand, as it does the pins.
+    // The service answers the sections as they then stand, as it does the pins, and waits on the followed sidebar as a pin does.
     [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWriteSectionParamsSchema)(unparsedWire(params));
@@ -1891,7 +1900,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const written = yield* served(client.writeTaskSection(asked));
             if (written === undefined) return { changed: false };
-            const { txid: _txid, ...sections } = written;
+            const { txid, ...sections } = written;
+            yield* confirmWrite(sidebarTxWait, txid);
             write({ taskSections: sections });
             return { changed: true };
           }),

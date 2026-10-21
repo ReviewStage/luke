@@ -218,6 +218,8 @@ interface FakeService extends TasksClient {
   sections: TaskSections | undefined;
   /** Every change to the sections the service was asked for, in order. */
   sectionWrites: TaskSectionWrite[];
+  /** The transaction a pin's or a section's write answers, where a test sets one; none as a write that changed no row. */
+  sidebarTxid: string | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -543,6 +545,7 @@ function fakeService(tasks: Task[]): FakeService {
     pinsFail: false,
     sections: undefined,
     sectionWrites: [],
+    sidebarTxid: undefined,
     get memberships() {
       return memberships;
     },
@@ -846,13 +849,17 @@ function fakeService(tasks: Task[]): FakeService {
         service.pins = pinned
           ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
           : others;
-        return { pins: service.pins };
+        const txid = service.sidebarTxid;
+        return txid === undefined ? { pins: service.pins } : { pins: service.pins, txid };
       }),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
       Effect.sync(() => {
         service.sectionWrites.push(write);
-        return service.sections;
+        const txid = service.sidebarTxid;
+        return service.sections === undefined || txid === undefined
+          ? service.sections
+          : { ...service.sections, txid };
       }),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -1669,6 +1676,65 @@ it.effect(
         last()?.repositoryPins?.map((pin) => pin.repository),
         ["acme/web", "acme/relay"],
       );
+    }),
+);
+
+it.effect(
+  "a pin or a section's write answers once the followed sidebar has its transaction, at once where it names none, and at once before the sidebar is followed",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, settled } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      service.sections = { sections: [launch], entries: [] };
+
+      // Before the first refresh nothing follows the sidebar, so a write's transaction is not waited on.
+      service.sidebarTxid = "40";
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, {
+          repository: "acme/relay",
+          pinned: true,
+        }),
+        { changed: true },
+      );
+      assert.deepEqual(service.realtime.awaitingTxids(), []);
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+
+      service.sidebarTxid = "41";
+      const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
+      service.sections = { sections: [launch], entries: [placed] };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      const placing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place));
+      yield* settled;
+      assert.deepEqual(service.realtime.awaitingTxids(), ["41"]);
+      assert.equal(placing.pollUnsafe(), undefined, "the write waits for its transaction");
+      service.realtime.arrive("41");
+      assert.deepEqual(yield* Fiber.join(placing), { changed: true });
+      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+
+      service.sidebarTxid = "42";
+      const pinning = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
+      );
+      yield* settled;
+      assert.deepEqual(service.realtime.awaitingTxids(), ["42"]);
+      service.realtime.arrive("42");
+      assert.deepEqual(yield* Fiber.join(pinning), { changed: true });
+
+      // A write that changed no row names no transaction, so there is nothing to wait for.
+      service.sidebarTxid = undefined;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
+        { changed: true },
+      );
+      assert.deepEqual(service.realtime.awaitingTxids(), []);
     }),
 );
 
