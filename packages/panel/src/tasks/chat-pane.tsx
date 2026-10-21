@@ -65,7 +65,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * chat-pane.tsx -- one place of the window's Chat at reading size: For you, or a channel's messages with their threads.
  *
  * A message is a row led by its author's mark, an agent's own glyph as its
- * tab wears it, Luke's initial in his blue, a person's initial, then a line
+ * tab wears it, or a person's photo or initial, then a line
  * naming the author and when it was posted, and under it the
  * blocks it carries: Markdown as the transcript draws it, a link by its
  * label, a code block by the file and lines it points at as a transcript
@@ -329,7 +329,7 @@ function Byline({
 
 /**
  * The face a message leads with, in a column of its own at a card's size: the
- * author's photo, Luke, or the agent's harness. A message continuing its
+ * person's photo or initial, as a circle, or the agent's own mark, as a rounded square. A message continuing its
  * author's run leads with its time instead, shown while it is hovered, as
  * Slack's grouped messages do.
  */
@@ -353,7 +353,7 @@ function Face({
   }
   return (
     <span className="chat-face">
-      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} tiled />
+      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
     </span>
   );
 }

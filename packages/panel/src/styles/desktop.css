@@ -5175,10 +5175,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* A place's glyph (#, @, a document) stands at the size an actor's row
-   mark does beside it, as a menu's glyph does. */
+   mark does beside it, as a menu's glyph does, in the muted ink. A task's
+   status mark keeps the colour its status gives it. */
 .chat-rail .inbox-row-mark > svg {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
+}
+
+.chat-rail .inbox-row-mark > svg:not(.luke-task-status-mark) {
   color: var(--luke-color-text-muted);
 }
 
@@ -5276,10 +5280,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .chat-face {
   display: flex;
   padding-top: var(--luke-space-2);
-}
-
-.chat-face :is(.actor-mark, .luke-avatar) {
-  border-radius: 22%;
 }
 
 /* A continued message's time stands in its face's column, shown only while

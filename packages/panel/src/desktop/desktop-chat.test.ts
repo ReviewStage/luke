@@ -1151,3 +1151,22 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
   assert.match(count?.textContent ?? "", /^1 unread/u);
 });
+
+test("the rail's rows draw in the sidebar's ink, and a message's face is the app's own mark, never tiled", () => {
+  const page = mount((chat) => chat);
+  const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];
+  assert.ok(rows.length > 0, "the rail holds rows");
+  assert.deepEqual(
+    [...new Set(rows.map((each) => each.getAttribute("data-ink")))],
+    ["sidebar"],
+    "every rail row wears the sidebar's ink",
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const faces = [...page.querySelectorAll(".chat-face .actor-mark")];
+  assert.ok(faces.length > 0, "messages lead with faces");
+  assert.deepEqual(
+    faces.filter((each) => each.getAttribute("data-tiled") === "true"),
+    [],
+    "no face stands on a tile outside a pile",
+  );
+});
