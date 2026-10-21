@@ -6,11 +6,13 @@ import {
   CODING_AGENT_BOUNDS,
   codingAgentAnswerSchema,
   codingAgentArchiveRequestSchema,
+  codingAgentBeforeSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
   codingAgentMessageAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOlderAnswerSchema,
   codingAgentOverviewChecksAnswerSchema,
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
@@ -346,16 +348,48 @@ export const codingAgentTranscriptKeySchema = EffectSchema.Struct({
 export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Type;
 
 /**
- * A followed transcript's next page, as the window hears it pushed: the
- * messages past the last page pushed, the first from the start, with where
- * the agent stands as it was read; or why there is none.
+ * A followed transcript's page as the window hears it pushed, with where the
+ * agent stands as it was read; or why there is none. The follow opens with
+ * the transcript's `newest` page, which carries `before`, where the next
+ * older page is read below (absent where nothing older stands), and each
+ * later page is what moved past the last. `caughtUp` says the page came
+ * back short, so every message written by then is told.
  */
+export const codingAgentTranscriptPageSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    ...codingAgentMessagesAnswerSchema.fields,
+    newest: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+    before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+    caughtUp: EffectSchema.Boolean,
+  }),
+  failed,
+]);
+
+export type CodingAgentTranscriptPage = typeof codingAgentTranscriptPageSchema.Type;
+
+/** A followed transcript's next page, as the window hears it pushed. */
 export const codingAgentTranscriptChangedSchema = EffectSchema.Struct({
   transcript: codingAgentTranscriptKeySchema,
-  page: codingAgentMessagesAnswerViewSchema,
+  page: codingAgentTranscriptPageSchema,
 });
 
 export type CodingAgentTranscriptChanged = typeof codingAgentTranscriptChangedSchema.Type;
+
+/** The page of a followed transcript below the oldest message a window holds, as the window asks it: the transcript, and the `before` its last page named. */
+export const codingAgentTranscriptOlderParamsSchema = EffectSchema.Struct({
+  ...codingAgentTranscriptKeySchema.fields,
+  before: codingAgentBeforeSchema,
+});
+
+export type CodingAgentTranscriptOlderParams = typeof codingAgentTranscriptOlderParamsSchema.Type;
+
+/** An older page of a transcript, as the window hears it: its messages, oldest first, and where the page older still is read below; or why there is none. */
+export const codingAgentTranscriptOlderAnswerSchema = EffectSchema.Union([
+  codingAgentOlderAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentTranscriptOlderAnswer = typeof codingAgentTranscriptOlderAnswerSchema.Type;
 
 /** Messaging an agent, as the window asks it: the agent, and the message request the service takes, its key the window's own. */
 export const codingAgentMessageParamsSchema = EffectSchema.Struct({

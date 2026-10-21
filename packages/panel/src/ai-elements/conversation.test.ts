@@ -57,13 +57,13 @@ function scroll(box: HTMLElement, top: number): void {
   });
 }
 
-/** Draws a log of `lines` in `root`. */
-function draw(root: Root, lines: readonly string[]): void {
+/** Draws a log of `lines` in `root`, asking for older lines through `onNearTop` where one is handed. */
+function draw(root: Root, lines: readonly string[], onNearTop?: () => void): void {
   act(() =>
     root.render(
       createElement(
         Conversation,
-        null,
+        { onNearTop },
         createElement(
           ConversationContent,
           null,
@@ -75,11 +75,11 @@ function draw(root: Root, lines: readonly string[]): void {
 }
 
 /** Draws a log of `lines`, then lays its box out, so what follows is heard from a log at rest. */
-function mount(lines: readonly string[]) {
+function mount(lines: readonly string[], onNearTop?: () => void) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  draw(root, lines);
+  draw(root, lines, onNearTop);
   const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
   const layout: StandInBox = { height: 300, writes: [] };
   layOut(box, layout);
@@ -125,4 +125,42 @@ test("a log the browser shifts down to hold its place, as lines above it grow, s
   layout.writes.splice(0);
   act(() => relayout());
   assert.deepEqual(layout.writes, [500], "the log is taken the rest of the way to its end");
+});
+
+/** Stands in for each line's place in the log: 50px a line, one under another. */
+function linesLaidOut(): void {
+  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const siblings = this.parentElement === null ? [] : [...this.parentElement.children];
+    return siblings.indexOf(this) * 50;
+  });
+}
+
+test("lines put before the first keep the line the reader was on where it stood, and the log asks for them as the reader nears its top", () => {
+  linesLaidOut();
+  const asked: string[] = [];
+  const older = () => void asked.push("older");
+  const { root, box, layout } = mount(["c", "d", "e", "f"], older);
+  scroll(box, 120);
+  asked.splice(0);
+  scroll(box, 30);
+  assert.deepEqual(asked, ["older"], "a reader scrolling up near the top asks for older lines");
+
+  layout.writes.splice(0);
+  layout.height = 400;
+  draw(root, ["a", "b", "c", "d", "e", "f"], older);
+  // "c" stood 30px above the box's top; two lines of 50px landed above it.
+  assert.deepEqual(layout.writes, [130], "the line the reader was on stays where it stood");
+  const first = box.querySelector("p:nth-child(3)") as HTMLElement;
+  assert.equal(first.offsetTop - box.scrollTop, -30);
+});
+
+test("a log that follows its newest line stays on it as lines are put before the first", () => {
+  linesLaidOut();
+  const { root, layout } = mount(["c", "d"], () => undefined);
+  layout.writes.splice(0);
+  layout.height = 400;
+  draw(root, ["a", "b", "c", "d"], () => undefined);
+  assert.deepEqual(layout.writes, [400]);
 });

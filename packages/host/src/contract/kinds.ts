@@ -117,6 +117,8 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
   /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
   CODING_AGENTS_PART: "codingAgents.part",
+  /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
+  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",

@@ -1607,6 +1607,7 @@ function AgentTranscriptView({
   endReason = FAILURE_REASON.OTHER,
   onOpenApiKeys,
   onRetry,
+  onOlder,
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
@@ -1643,6 +1644,8 @@ function AgentTranscriptView({
   /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
   onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
+  /** Reads the messages older than the first held, which the log asks for as the reader nears its top; none where none stand. */
+  onOlder?: (() => void) | undefined;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
@@ -1721,7 +1724,7 @@ function AgentTranscriptView({
     const task = carded || blank ? undefined : first;
     return (
       <LiveDoors value={live}>
-        <Conversation>
+        <Conversation onNearTop={onOlder}>
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
             {placed.map(({ message, said, read }, index) => (
@@ -2047,12 +2050,18 @@ function AgentTabView({
                   working={working}
                   sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
                   startedAt={startedAt}
-                  ended={endLineParts(agent.status, transcript.failure, starter, continuable)}
+                  ended={
+                    // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
+                    transcript.pages === 0
+                      ? undefined
+                      : endLineParts(agent.status, transcript.failure, starter, continuable)
+                  }
                   endReason={endLineReason(transcript.failure, starter)}
                   onOpenApiKeys={onOpenApiKeys}
                   endPress={endPress}
                   endTrail={endTrail}
                   onRetry={transcript.onRetry}
+                  onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
                   overComposer
                   calls={calls}
                 />
@@ -2253,6 +2262,9 @@ export function AgentTab({
     agentId: agent.id,
     shown,
     caughtUp: transcript.caughtUp,
+    whole: !transcript.hasOlder,
+    olderFailed: transcript.olderFailed,
+    loadOlder: transcript.loadOlder,
     pages: transcript.pages,
     settled: !agentStillWriting(agent.status),
     drawn: (messageId) => messages.some((message) => message.id === messageId),
@@ -2455,8 +2467,9 @@ export function AgentSubagentTab({
               working={agentStillWriting(status)}
               sessionStarting={status === CODING_AGENT_STATUS.STARTING}
               startedAt={shown ? transcript.runStartedAt : undefined}
-              ended={endLineParts(status, transcript.failure)}
+              ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
               onRetry={transcript.onRetry}
+              onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
             />
           </WholePartsProvider>
         </AgentPicturesProvider>

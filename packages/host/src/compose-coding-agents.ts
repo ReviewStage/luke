@@ -27,6 +27,8 @@ import {
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
+  type CodingAgentTranscriptOlderAnswer,
+  type CodingAgentTranscriptPage,
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
@@ -55,6 +57,7 @@ import {
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   codingAgentTranscriptKeySchema,
+  codingAgentTranscriptOlderParamsSchema,
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -151,6 +154,8 @@ export type CodingAgentClient = Pick<
   | "startFrom"
   | "messagesNow"
   | "agentPart"
+  | "messagesNewest"
+  | "messagesBefore"
   | "agentTranscriptLive"
   | "message"
   | "choose"
@@ -541,7 +546,7 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const { transcript, key } = yield* agentTranscriptOf(params);
-        const tell = (page: CodingAgentMessagesAnswerView) =>
+        const tell = (page: CodingAgentTranscriptPage) =>
           Effect.sync(() =>
             kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
           );
@@ -550,12 +555,25 @@ function composed(
               transcripts,
               key,
               // The window draws a followed page, so its heavy parts come cut, each fetched whole as it opens.
-              (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
+              {
+                newest: () => asked(client.messagesNewest(key.agentId, key.callId, true)),
+                after: (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
+              },
               tell,
             )
           : tell(UNANSWERED);
         yield* FiberMap.run(followed, key, follow);
         return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, callId, before } = yield* read(
+          codingAgentTranscriptOlderParamsSchema,
+          params,
+          "reading an older page names the transcript and where to read below",
+        );
+        const answer = yield* asked(client.messagesBefore(agentId, before, callId, true));
+        return carried<CodingAgentTranscriptOlderAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
