@@ -83,7 +83,6 @@ import { startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
   eveFor,
-  standsStopped,
   stoppedForGood,
   stopsForGood,
   summaryOf,
@@ -106,6 +105,7 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { archiveAskedStatus } from "./archive-settle.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
@@ -523,14 +523,14 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * the row names under its lock, so one changed meanwhile is the one
      * confirmed.
      *
-     * An archive stops every coding agent of the plan first, as a Stop and
-     * an agent's own archive stop one, then archives them with the plan
-     * under its lock (`updateTask`), each read again under its
-     * conversation's lock. An eve that refuses a Stop, an agent still coming
-     * up or with a message awaiting its turn, which no Stop can name yet, or
-     * one handed a message after it was stopped, leaves the plan and every
-     * agent standing and the archive refused as not ready, so it is asked
-     * again a moment later.
+     * A plan is archived no longer; an archive an older build asks for
+     * stops every coding agent of the plan first, as a Stop stops one, then
+     * settles the plan instead, and an unarchive puts it back to work
+     * (`archive-settle.ts`); a status named beside either is the one
+     * written. An eve that refuses a Stop, or an agent still coming up or
+     * with a message awaiting its turn, which no Stop can name yet, leaves
+     * the plan and every agent standing and the archive refused as not
+     * ready, so it is asked again a moment later.
      */
     update: plans.update.effect(function* ({ input, context }) {
       const { userId, request } = context;
@@ -582,6 +582,18 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           { discard: true },
         );
       }
+      // Note that the archive stamp is never written, because a task is archived no longer: the request settles the task, or puts it back to work.
+      const status =
+        changes.status !== undefined || changes.archived === undefined
+          ? changes.status
+          : yield* hostedStoreOrUnavailable(
+              archiveAskedStatus(
+                userId,
+                taskId,
+                (yield* reachedTask(userId, taskId)).status,
+                changes.archived,
+              ),
+            );
       const task = yield* updateTaskCommitted(
         userId,
         taskId,
@@ -593,13 +605,11 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             : { repository: reached.repository, githubAccess: reached.githubAccess }),
           ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
           ...("pinPosition" in changes ? { pinPosition: changes.pinPosition } : undefined),
-          ...("archived" in changes ? { archived: changes.archived } : undefined),
-          ...(changes.status === undefined ? undefined : { status: changes.status }),
+          ...(status === undefined ? undefined : { status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
           ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
-        archiving ? standsStopped : undefined,
       ).pipe(
         Effect.catch((failure) =>
           failure._tag === "MoveRefused"

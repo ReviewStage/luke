@@ -739,6 +739,7 @@ const findTaskHeader = SqlSchema.findOneOption({
     userId: Schema.String,
     name: Schema.String,
     repository: Schema.NullOr(Schema.String),
+    status: taskStatusSchema,
     archived: Schema.Boolean,
   }),
   execute: ({ userId, taskId }) =>
@@ -749,6 +750,7 @@ const findTaskHeader = SqlSchema.findOneOption({
           userId: task.userId,
           name: task.name,
           repository: task.repository,
+          status: task.status,
           archived: sql<boolean>`${task.archivedAt} is not null`,
         })
         .from(task)
@@ -1086,6 +1088,8 @@ export interface TaskHeader {
   readonly ownerId: string;
   readonly name: string;
   readonly repository: string | null;
+  /** Where the task stands. */
+  readonly status: TaskStatus;
   readonly archived: boolean;
 }
 
@@ -1106,6 +1110,7 @@ export function readTaskHeader(
       ownerId: row.userId,
       name: row.name,
       repository: row.repository,
+      status: row.status,
       archived: row.archived,
     })),
   );

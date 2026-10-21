@@ -15,6 +15,7 @@ import {
   latestTurnsOf,
   lineSendersOf,
   readCodingAgent,
+  recordCodingAgentPublished,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
@@ -44,12 +45,14 @@ import {
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_FAILURE,
   CODING_AGENT_PAYER,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -1697,7 +1700,7 @@ test("create_task links the GitHub and Linear issues named, each read through th
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Unread"), []);
 });
 
-test("update_task links, relates, and unlinks a task's issues by name, answers the issues it then links, refuses one the task does not link, and an archived task takes none", async () => {
+test("update_task links, relates, and unlinks a task's issues by name, answers the issues it then links, and refuses one the task does not link", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const bob = agents.teammates.userId;
   const caller = await agentOn(bob, tasks.invitations);
@@ -1744,11 +1747,6 @@ test("update_task links, relates, and unlinks a task's issues by name, answers t
     repository: null,
     unlinkIssues: ["#8"],
   });
-  await call(CODER_TOOL.UPDATE_TASK, { taskId, archived: true });
-  const archived = await call(CODER_TOOL.UPDATE_TASK, {
-    taskId,
-    unlinkIssues: [`${RELAY_FULL_NAME}#7`],
-  });
 
   assert.deepEqual(keysAndKeywords(relinked), [
     [`${RELAY_FULL_NAME}#7`, TASK_ISSUE_RELATION.PART_OF],
@@ -1767,10 +1765,6 @@ test("update_task links, relates, and unlinks a task's issues by name, answers t
   assert.deepEqual(notLinked, {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: TASK_ISSUE_REFUSAL.NOT_LINKED("ENG-1"),
-  });
-  assert.deepEqual(archived, {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: UPDATE_TASK_REFUSAL.ARCHIVED,
   });
   assert.deepEqual(
     Option.getOrThrow(await database.run(readTask(bob, taskId))).issueLinks.map(({ key }) => key),
@@ -2035,99 +2029,97 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
   assert.equal(teammates.title, null, "a refused archive renames nothing");
 });
 
-test("update_task refuses to archive a task while an agent on it still works, then archives the teammate's task for the caller's starter with its agents, as the Archive task menu does, answers a call run again as done, and brings both back", async () => {
+test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, stamps no archive and leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  const turnId = await turnOn(agents.teammates, false);
+  await turnOn(agents.teammates, false);
   const billing = Option.getOrThrow(
     await database.run(readTask(agents.teammates.userId, tasks.billing)),
   );
-  const answered = (archived: boolean, already: boolean) => ({
+  const answered = (status: string, already: boolean) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
     task: {
       id: tasks.billing,
       key: `TW-${billing.task.number}`,
-      status: TASK_STATUS.TODO,
+      status,
       priority: TASK_PRIORITY.NONE,
       assignee: null,
       name: "Billing",
       repository: RELAY_FULL_NAME,
-      archived,
+      archived: false,
       pinned: false,
       mention: `[@Billing](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing})`,
     },
     already,
   });
-  const archivedAt = async () =>
-    Option.getOrThrow(await database.run(readTask(agents.teammates.userId, tasks.billing))).task
-      .archivedAt;
-  const listedBy = async (userId: string) =>
-    (await database.run(listTasks(userId))).map((listed) => listed.id);
+  const standing = async () => {
+    const read = Option.getOrThrow(
+      await database.run(readTask(agents.teammates.userId, tasks.billing)),
+    ).task;
+    return {
+      status: read.status,
+      archivedAt: read.archivedAt,
+      finished: read.completedAt !== undefined,
+    };
+  };
   const archive = (archived: boolean, key: string) =>
     call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, archived }, key);
-
   const agentArchive = async () =>
     Option.getOrThrow(
       await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id)),
-    ).archivedBy;
-
-  assert.deepEqual(await archive(true, "call-0"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: UPDATE_TASK_REFUSAL.AGENTS_WORKING,
-  });
-  assert.equal(await archivedAt(), undefined, "a refused archive leaves the task standing");
-  assert.equal(await agentArchive(), null, "and its agent unarchived and at work");
-  const target = {
-    userId: agents.teammates.userId,
-    conversationId: agents.teammates.conversationId,
-  };
-  await database.run(
-    writer.consume(target, {
-      conversationId: sessionKey(target.conversationId),
-      turnId,
-      kind: BRAIN_RUN_EVENT.TURN_ENDED,
-      sequence: 2,
-      status: BRAIN_REQUEST_STATUS.SUCCEEDED,
-      responseIds: [],
-      at: NOW,
-    }),
-  );
-
-  assert.deepEqual(await archive(true, "call-1"), answered(true, false));
-  const stamped = await archivedAt();
-  assert.ok(stamped !== undefined);
-  assert.deepEqual(await agentArchive(), {
-    by: CODING_AGENT_ARCHIVER.MEMBER,
-    userId: agents.caller.userId,
-    withTask: true,
-  });
-  // Every member of the workspace reads it archived, its owner among them, as after the menu's.
-  assert.ok(!(await listedBy(agents.caller.userId)).includes(tasks.billing));
-  assert.ok(!(await listedBy(agents.teammates.userId)).includes(tasks.billing));
-  // list_tasks leaves it out unless asked, and then names it archived, so it is found to bring back.
+    ).archivedAt;
   const listedIds = (listed: WireRecord) =>
     Array.isArray(listed.tasks)
-      ? listed.tasks.flatMap((each) => (isRecord(each) ? [[each.id, each.archived]] : []))
+      ? listed.tasks.flatMap((each) => (isRecord(each) ? [each.id] : []))
       : [];
-  assert.deepEqual(listedIds(await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill" })), []);
-  assert.deepEqual(
-    listedIds(await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill", includeArchived: true })),
-    [[tasks.billing, true]],
-  );
-  assert.deepEqual(await archive(true, "call-2"), answered(true, true));
-  assert.equal(await archivedAt(), stamped, "a second archive keeps the first stamp");
-  // An archived task takes no new name, as the menu's rename refuses one, unless the same call brings it back.
-  assert.deepEqual(
-    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, name: "Seats" }, "call-3"),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_TASK_REFUSAL.ARCHIVED },
-  );
 
-  assert.deepEqual(await archive(false, "call-4"), answered(false, false));
-  assert.equal(await archivedAt(), undefined);
-  assert.ok((await listedBy(agents.teammates.userId)).includes(tasks.billing));
-  assert.equal(await agentArchive(), null, "its agent comes back with it");
-  assert.deepEqual(await archive(false, "call-5"), answered(false, true));
+  assert.deepEqual(await archive(true, "call-1"), answered(TASK_STATUS.CANCELED, false));
+  assert.deepEqual(await standing(), {
+    status: TASK_STATUS.CANCELED,
+    archivedAt: undefined,
+    finished: true,
+  });
+  assert.equal(
+    await agentArchive(),
+    null,
+    "its agent, still at work, is neither stopped nor archived",
+  );
+  // Every member still lists it, where list_tasks narrows to the status it settled in.
+  assert.deepEqual(
+    listedIds(
+      await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill", status: TASK_STATUS.CANCELED }),
+    ),
+    [tasks.billing],
+  );
+  assert.deepEqual(await archive(true, "call-2"), answered(TASK_STATUS.CANCELED, true));
+
+  assert.deepEqual(await archive(false, "call-3"), answered(TASK_STATUS.IN_PROGRESS, false));
+  assert.deepEqual(await standing(), {
+    status: TASK_STATUS.IN_PROGRESS,
+    archivedAt: undefined,
+    finished: false,
+  });
+
+  await database.run(
+    recordCodingAgentPublished(agents.teammates.userId, agents.teammates.id, {
+      number: 7,
+      title: "Seat billing",
+      url: `https://github.com/${RELAY_FULL_NAME}/pull/7`,
+      state: PULL_REQUEST_STATE.MERGED,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 1,
+      deletions: 0,
+      changedFiles: 1,
+      mergedAt: NOW,
+    }),
+  );
+  assert.deepEqual(await archive(true, "call-4"), answered(TASK_STATUS.DONE, false));
+  // A task already settled keeps its status under an archive asked again.
+  await database.run(
+    updateTask(agents.teammates.userId, tasks.billing, { status: TASK_STATUS.CANCELED }),
+  );
+  assert.deepEqual(await archive(true, "call-5"), answered(TASK_STATUS.CANCELED, true));
 });
 
 test("update_task renames a task, pins it for the caller's starter alone, sets its repository only where the workspace's installation reaches it and clears it, and renames the caller's own task, as the member's menu does", async () => {
@@ -2179,7 +2171,7 @@ test("update_task renames a task, pins it for the caller's starter alone, sets i
   assert.equal(own.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(own));
 });
 
-test("update_task refuses to archive the task the caller works on, and refuses a task of another workspace its starter is also in, a stranger's, an id that names no task, and a call that names no change, changing none of them", async () => {
+test("update_task refuses a task of another workspace its starter is also in, a stranger's, an id that names no task, and a call that names no change, changing none of them", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
@@ -2190,7 +2182,6 @@ test("update_task refuses to archive the task the caller works on, and refuses a
   const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
   const archive = (taskId: string) => call(CODER_TOOL.UPDATE_TASK, { taskId, archived: true });
 
-  assert.deepEqual(await archive(tasks.invitations), rejected(UPDATE_TASK_REFUSAL.OWN_TASK));
   assert.deepEqual(await archive(tasks.elsewhere), rejected(UPDATE_TASK_REFUSAL.NO_TASK));
   assert.deepEqual(await archive(strangersTask), rejected(UPDATE_TASK_REFUSAL.NO_TASK));
   assert.deepEqual(await archive(randomUUID()), rejected(UPDATE_TASK_REFUSAL.NO_TASK));
@@ -2883,19 +2874,6 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
     sectionId: growth,
   });
   assert.equal(both.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(both));
-  // An archived task takes no section, unless the same call brings it back.
-  await database.run(updateTask(teammates.userId, taskIds.invitations, { archived: true }));
-  assert.deepEqual(await move(taskIds.invitations, growth), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: UPDATE_TASK_REFUSAL.ARCHIVED,
-  });
-  const back = await call(CODER_TOOL.UPDATE_TASK, {
-    taskId: taskIds.invitations,
-    archived: false,
-    sectionId: growth,
-  });
-  assert.equal(back.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(back));
-  await move(taskIds.invitations, null, "call-out");
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     section: { id: growth, title: "Growth" },

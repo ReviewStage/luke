@@ -1462,6 +1462,28 @@ const findAgentsOfTasks = SqlSchema.findAll({
     ),
 });
 
+/** One agent of the task, archived or not, whose pull request GitHub reported merged, where the account reaches the task. */
+const findMergedAgentOfTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .where(
+          and(
+            eq(task.id, taskId),
+            taskReachableBy(userId),
+            agentSeenBy(userId),
+            isNotNull(sql`${codingAgent.published} ->> 'mergedAt'`),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 const findPublishedAgentsById = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
@@ -2078,6 +2100,14 @@ export function recordCodingAgentPublished(
   published: StoredPullRequest | null,
 ): CodingAgentStoreEffect<void> {
   return updateAgentPublished({ userId, agentId, published });
+}
+
+/** Whether any coding agent on the task, archived ones among them, has a pull request GitHub reported merged; false for a task the account does not reach. */
+export function taskHasMergedPullRequest(
+  userId: string,
+  taskId: string,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.map(findMergedAgentOfTask({ userId, taskId }), Option.isSome);
 }
 
 /** The pull request the agent's row keeps as GitHub last answered, whole; null before a read found one, and for an agent the account does not reach. */

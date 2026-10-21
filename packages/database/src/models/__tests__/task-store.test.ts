@@ -401,6 +401,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           ownerId: dean,
           name: SHARED_TASK.name,
           repository: null,
+          status: TASK_STATUS.TODO,
           archived: false,
         };
 
@@ -409,9 +410,9 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
         assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
 
-        yield* updateTask(dean, taskId, { archived: true });
+        yield* updateTask(dean, taskId, { archived: true, status: TASK_STATUS.IN_PROGRESS });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        assert.deepEqual(header, { ...started, archived: true });
+        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS, archived: true });
         // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
@@ -419,6 +420,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           ownerId: whole.ownerId,
           name: whole.task.name,
           repository: whole.task.repository,
+          status: whole.task.status,
           archived: whole.task.archivedAt !== undefined,
         });
       }),
