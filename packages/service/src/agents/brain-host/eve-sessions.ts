@@ -236,7 +236,7 @@ export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];
 /**
  * Why a coding agent's native runtime did not take a call, where that is
  * why it failed: its conversation runs on a native harness that this
- * function has no way to launch or write to (the eve apps', until P11b), or
+ * function has no way to launch or write to, nor to relay to one that can, or
  * whose sandbox image is still being prepared. eve never answers one;
  * nothing falls through to eve in its place.
  */

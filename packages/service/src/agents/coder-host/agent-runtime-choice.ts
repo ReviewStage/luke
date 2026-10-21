@@ -7,8 +7,9 @@
  * - Claude Code, paid for by the account's Claude plan, for an account in
  *   `LUKE_NATIVE_AGENT_ACCOUNTS`, on a Claude model Claude Code runs (no
  *   fast variant), where the account keeps a Claude setup-token and this
- *   function can launch the runner (`NativeAgentSessions`; TODO(P11b): the
- *   eve apps cannot yet, so an agent their tools start decides eve).
+ *   function reaches a harness (`NativeAgentSessions`: a web function's own,
+ *   or the eve apps' relay to one, so a Start from the planner or an eve
+ *   agent decides as the panel's does).
  * - eve, exactly as today, for everything else, with no payer recorded.
  *
  * The choice is written on the agent as it is made and never changes: a

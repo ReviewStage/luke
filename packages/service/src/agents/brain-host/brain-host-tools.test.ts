@@ -20,7 +20,7 @@ import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/
 import { writePage } from "@luke/database/models/plan-pages";
 import { createTask, openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { firstMessageParts, START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
@@ -34,6 +34,7 @@ import {
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_PAYER,
   CODING_AGENT_STATUS,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -85,11 +86,13 @@ import {
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
 import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
+import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { AgentBrowser, agentBrowserOver } from "../browser/agent-browser.js";
 import { BROWSER_TOOL, BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
 import { CHAT_TOOL_REFUSAL } from "../coder-host/chat.js";
 import { ASK_REFUSAL } from "../coder-host/chat-ask.js";
 import { HELD_DOORS } from "../coder-host/chat-notify.js";
+import { NATIVE_SESSION_PREFIX } from "../coder-host/native-runtime.js";
 import { STEER_OUTCOME } from "../coder-host/steer.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import {
@@ -101,6 +104,7 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
+  STOP_AGENT_TOOL,
   UPDATE_AGENT_REFUSAL,
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_REFUSAL,
@@ -424,6 +428,78 @@ test("a message to the plan's agent steers its session as the deployment acting 
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.NO_SERVICE },
   );
   assert.equal(eve.sent.length, 1);
+});
+
+test("the planner's message_agent and stop_agent reach a Claude Code agent through the web's relay, as the planner's app reaches one, acting for its starter and the member speaking, and eve hears nothing of it", async () => {
+  const opener = await database.createUser();
+  const member = await database.createUser();
+  const task = await taskConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(task.workspaceId, member));
+  const started = Option.getOrThrow(
+    await database.run(
+      createCodingAgent(opener, {
+        taskId: task.taskId,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        planSnapshot: "# Teammate invitations",
+        prompt: null,
+        repository: RELAY_FULL_NAME,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+      }),
+    ),
+  );
+  const target = { userId: opener, conversationId: started.agent.conversationId };
+  const session = `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`;
+  assert.equal(await database.run(claimRuntimeSession(target, session, new Date(NOW))), true);
+  const eve = await fakeCoderEve(task.workspaceId);
+  const relay = await database.run(nativeRelayFake());
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, task, Layer.merge(eve.services, relay.layer), [], member);
+
+  const sent = await call(MESSAGE_AGENT_TOOL.name, {
+    agentId: started.agent.id,
+    text: INSTRUCTION,
+  });
+  assert.equal(sent.delivery, STEER_OUTCOME.SENT, JSON.stringify(sent));
+  // A turn under way, which the Stop names by its own id.
+  const turnId = randomUUID();
+  const coderWriter = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
+  await database.run(
+    Effect.gen(function* () {
+      yield* coderWriter.enqueueTurn(target, {
+        turnId,
+        origin: TURN_ORIGIN.TYPED,
+        eveTurnId: turnId,
+      });
+      yield* coderWriter.consume(target, {
+        conversationId: sessionKey(target.conversationId),
+        turnId,
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: NOW,
+      });
+    }),
+  );
+  const stopped = await call(STOP_AGENT_TOOL.name, { agentId: started.agent.id }, "call-2");
+  assert.equal(stopped.stopped, true, JSON.stringify(stopped));
+
+  assert.deepEqual(
+    relay.heard.map(({ call, runtime, account, names }) => [call, runtime, account, names]),
+    [
+      ["send", "claude_code", opener, session],
+      ["cancel", "claude_code", member, `${session}:${turnId}`],
+    ],
+  );
+  assert.deepEqual(eve.sent, []);
+  await relay.dispose();
 });
 
 test("a member speaking in the plan conversation a teammate opened messages the teammate's agent: eve is reached as the deployment acting for the member, on the starter's session, and the line stands under the starter", async () => {

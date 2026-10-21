@@ -6,13 +6,17 @@
  * on the runtime built here over the deployment's services
  * (`@luke/service/runtime`) rather than reaching into the website's, with
  * the agent's browser beside them (`agentBrowserServices`), which the
- * `browser` tool drives.
+ * `browser` tool drives, and the native harnesses as this app reaches them
+ * (`nativeRelayLayer`): relayed to the web function that launches the
+ * runner, since this app bundles none.
  */
 
 import {
   type AgentBrowser,
   agentBrowserServices,
 } from "@luke/service/agents/browser/agent-browser";
+import { nativeRelayLayer } from "@luke/service/agents/coder-host/native-relay";
+import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { sentryReportingLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
 import { Effect, Layer, ManagedRuntime } from "effect";
@@ -23,7 +27,10 @@ import { Effect, Layer, ManagedRuntime } from "effect";
  * the first hook of a cold start builds the layer and every later one reuses it.
  */
 let standing:
-  | ManagedRuntime.ManagedRuntime<WebServices | AgentBrowser, WebServicesError>
+  | ManagedRuntime.ManagedRuntime<
+      WebServices | AgentBrowser | NativeAgentSessions,
+      WebServicesError
+    >
   | undefined;
 
 /**
@@ -37,7 +44,12 @@ export function runAgent<A, E>(
   effect: Effect.Effect<A, E, WebServices | AgentBrowser>,
 ): Promise<A> {
   standing ??= ManagedRuntime.make(
-    Layer.merge(agentBrowserServices.pipe(Layer.provideMerge(webServices)), sentryReportingLayer),
+    Layer.merge(
+      Layer.mergeAll(agentBrowserServices, nativeRelayLayer()).pipe(
+        Layer.provideMerge(webServices),
+      ),
+      sentryReportingLayer,
+    ),
   );
   return standing.runPromise(Effect.withErrorReporting(effect, { defectsOnly: true }));
 }

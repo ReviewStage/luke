@@ -66,7 +66,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * router itself, for every composition a route, the deployment, the agent
  * doors, and the planner's tools wrap their eve in, and for the paths that
  * run through them: a Start, a message from the composer or an Inbox answer,
- * and a Stop. Where no harness is provided, as in the eve apps, the Claude
+ * and a Stop. Where no harness is provided, nor a relay to one, the Claude
  * Code agent is refused by name and nothing reaches eve. Synthetic accounts
  * and words throughout; the store is PGlite.
  */
@@ -488,7 +488,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where no native harness is provided, as in the eve apps, a Claude Code agent is refused by name and eve hears nothing",
+      "where no native harness is provided, nor a relay to one, a Claude Code agent is refused by name and eve hears nothing",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -617,7 +617,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               on: "eve",
             },
             {
-              name: "no harness here (P11b)",
+              name: "no harness here, nor a relay to one",
               cohort: true,
               token: true,
               model: "anthropic/claude-opus-5.5",

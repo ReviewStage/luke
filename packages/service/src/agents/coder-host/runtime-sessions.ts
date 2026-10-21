@@ -20,16 +20,13 @@
  *   eve's sessions go to eve exactly as before.
  *
  * The native harnesses are a service of the function's own
- * (`NativeAgentSessions`, `native-agent-sessions.ts`), which only the web
- * functions that can launch the runner provide. Where it is not provided,
- * a native conversation is refused by name (`RUNTIME_REFUSAL.NOT_HERE`):
- * nothing falls through to eve, which would run it on another payer.
- *
- * TODO(P11b): the eve apps (the planner's tools in `apps/luke`, an eve
- * agent's in `apps/dev`) provide no `NativeAgentSessions`, so from there a
- * native agent is refused as `not_here` and a Start decides eve
- * (`agent-runtime-choice.ts`). P11b, `feat(agents): native agents reachable
- * from the planner and eve agents`, gives them a way to reach one.
+ * (`NativeAgentSessions`): the harnesses themselves in the web functions
+ * that ship the runner (`native-agent-sessions.ts`), and in the eve apps
+ * (the planner's tools in `apps/luke`, an eve agent's in `apps/dev`) a relay
+ * to those functions under the deployment's own secret (`native-relay.ts`).
+ * Where neither is provided, or the relay has no secret or origin, a native
+ * conversation is refused by name (`RUNTIME_REFUSAL.NOT_HERE`): nothing
+ * falls through to eve, which would run it on another payer.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -68,7 +65,7 @@ export interface NativeAgentSessionsService {
   ) => Option.Option<Effect.Effect<AgentSessions<BrainHostTurn>>>;
 }
 
-/** The native harnesses a function can launch and write to: provided by the web functions that ship the runner. */
+/** The native harnesses a function can launch and write to: the harnesses in the web functions that ship the runner, a relay to them in the eve apps. */
 export class NativeAgentSessions extends Context.Service<
   NativeAgentSessions,
   NativeAgentSessionsService
