@@ -329,7 +329,7 @@ function rightClickTab(name: string): void {
   });
 }
 
-test("an agent's tab offers Open terminal on its right-click and its bar's ⋯, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
+test("an agent's tab offers Open terminal on its right-click, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     main: { agent: WORKING.id },
@@ -341,22 +341,12 @@ test("an agent's tab offers Open terminal on its right-click and its bar's ⋯, 
     null,
     "the composer wears no Terminal chip",
   );
-  // The chosen tab's ⋯ in the column's bar says ⌘J, which opens the same terminal from here.
-  const more = document.querySelector<HTMLButtonElement>(
-    ".desktop-task-main .desktop-toolbar .toolbar-tab-actions button",
-  );
-  assert.ok(more, "the bar shows the agent's tab's ⋯");
-  act(() => more.click());
-  const fromMore = menuItem("Open terminal");
-  assert.equal(fromMore.hint, "⌘J");
-  await fromMore.press();
-  assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
-  // The chosen tab's right-click says ⌘J too.
+  // The chosen tab's right-click says ⌘J, which opens the same terminal from here.
   rightClickTab("Invite flow");
   const fromChosen = menuItem("Open terminal");
   assert.equal(fromChosen.hint, "⌘J");
   await fromChosen.press();
-  assert.deepEqual(task.shown.at(-1), { terminal: WORKING.id });
+  assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
   // Another agent's tab opens its own terminal, which ⌘J would not from here, so it says no shortcut.
   rightClickTab("Expiry job");
   const fromOther = menuItem("Open terminal");

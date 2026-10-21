@@ -1602,12 +1602,19 @@ function AgentTranscriptView({
   const cards = delegation?.cards;
   const chat = delegation?.chat;
   const live = useMemo(() => ({ cards, chat }), [cards, chat]);
-  // Where each call begins and ends among the rows, and what of the call heard here no row holds yet.
-  const places = useMemo(() => callPlaces(messages, calls), [messages, calls]);
+  // Where each call begins and ends among the rows drawn, a line that reached a turn drawn inside it, and what of the calls heard here no row holds yet.
+  const places = useMemo(
+    () =>
+      callPlaces(
+        placing.placed.map(({ message, arrived }) => ({ ...message, arrived })),
+        calls,
+      ),
+    [placing, calls],
+  );
   // Note that the clock is the minute's own, so a call's day moves on with it while the rows hold.
   const now = useMinute();
   const heard = places.heard;
-  if (messages.length > 0 || heard !== undefined) {
+  if (messages.length > 0 || heard.length > 0) {
     const { todos, first, opening, placed, open } = placing;
     // The plan is the first of the developer's messages, unless the agent
     // was handed a prompt in its place, which is the developer's message as
@@ -1671,10 +1678,10 @@ function AgentTranscriptView({
                 <CallClose call={places.closes.get(message.id)} />
               </Fragment>
             ))}
-            {heard === undefined ? null : (
-              <>
-                <CallOpen call={heard.opened ? undefined : heard.call} now={now} />
-                {heard.lines.map((line) => (
+            {heard.map((tail) => (
+              <Fragment key={tail.call.key}>
+                <CallOpen call={tail.opened ? undefined : tail.call} now={now} />
+                {tail.lines.map((line) => (
                   <SteadyAgentMessage
                     key={line.id}
                     message={heardLine(line)}
@@ -1684,9 +1691,9 @@ function AgentTranscriptView({
                     delegation={delegation}
                   />
                 ))}
-                <CallClose call={heard.call.live ? undefined : heard.call} />
-              </>
-            )}
+                <CallClose call={tail.call.live ? undefined : tail.call} />
+              </Fragment>
+            ))}
             {working ? (
               <WorkingLine
                 startedAt={startedAt}

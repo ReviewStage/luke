@@ -514,10 +514,6 @@ function PlanDocument({
   // a hook that only the ready page reached would be one more hook than
   // the reading page had, which React refuses by unmounting the window.
   const [refusal, setRefusal] = useState<{ taskId: string; note: string } | undefined>(undefined);
-  // The one slot the toolbar keeps for a ⋯: the task's on its tab, and on
-  // another the chosen tab's own, drawn there from the tab (`strip-tabs.tsx`).
-  // Held above the states with no document for the same reason.
-  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // The task as the list names it, its owner, agents, and pull requests
   // among it, which its card and its banner read. Held above the states
   // with no document for the same reason.
@@ -955,7 +951,6 @@ function PlanDocument({
                             keys={tasks.shown && !sideFocused}
                             shown={tasks.shown}
                             chat={chatOn && tasks.chatView.available}
-                            actionsSlot={actionsSlot}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
                             onOpenOnMac={terminalDoors.onOpenOnMac}
                             onNewVoiceChat={tasks.onNewVoiceChat}
@@ -1006,8 +1001,7 @@ function PlanDocument({
                               />
                             </>
                           )}
-                          {/* The chosen tab's own ⋯ stands in its slot, and the task's beside it. */}
-                          <span ref={setActionsSlot} className="toolbar-tab-actions" />
+                          {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. */}
                           <TaskActions tasks={tasks} task={task} button onRename={rename.begin} />
                         </Fragment>
                         <SummaryButton layout={summaryLayout} cardId={summaryCard} />

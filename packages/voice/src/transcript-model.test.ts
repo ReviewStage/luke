@@ -364,9 +364,39 @@ test("a teammate's call drawn from what was heard, while its record holds fewer 
   );
 });
 
-/** A row of an agent's transcript said on the call given, as the record holds it. */
-function spokenRow(id: string, call: string): { id: string; metadata: Record<string, string> } {
-  return { id, metadata: { channel: "voice", voice_session_id: call } };
+/** A row of an agent's transcript said on the call given, as the record holds it, its words as given. */
+function spokenRow(id: string, call: string, words = "Words said.") {
+  return {
+    id,
+    metadata: { channel: "voice", voice_session_id: call },
+    parts: [{ type: "text", text: words }],
+  };
+}
+
+/** The words of a call standing, as the voice window reports its lines. */
+function standing(session: string, said: readonly string[]) {
+  return {
+    call: CALL,
+    callTranscript: {
+      voiceSessionId: session,
+      lines: said.map((words, index) => ({
+        rowId: `row-${index}`,
+        speaker: index % 2 === 0 ? TRANSCRIPT_SPEAKER.USER : TRANSCRIPT_SPEAKER.ASSISTANT,
+        words,
+        startMs: index * 1_000,
+        endMs: index * 1_000 + 900,
+      })),
+    },
+  };
+}
+
+/** The calls a region over the held heard calls draws, the record holding none. */
+function heardOnly(heard: readonly HeardCall[]) {
+  const region = transcriptRegion({
+    transcript: { status: TASKS_READ.READY, transcript: { calls: [], earlierOmitted: false } },
+    heard,
+  });
+  return region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
 }
 
 test("an agent's transcript begins each call before its first line and closes an ended one after its last, and a typed row between stays inside", () => {
@@ -386,7 +416,7 @@ test("an agent's transcript begins each call before its first line and closes an
 
   assert.deepEqual([...places.opens.keys()], ["said-1"]);
   assert.deepEqual([...places.closes.keys()], ["said-3"]);
-  assert.equal(places.heard, undefined);
+  assert.deepEqual(places.heard, []);
 });
 
 test("the call standing grows at the transcript's foot with the lines no row holds yet, under its divider only where no row of it stands above", () => {
@@ -421,19 +451,91 @@ test("the call standing grows at the transcript's foot with the lines no row hol
 
   const none = callPlaces([{ id: "typed-0" }], calls);
   assert.equal(
-    none.heard?.opened,
+    none.heard[0]?.opened,
     false,
     "no row of the call stands, so its divider leads the lines heard",
   );
-  assert.deepEqual(none.heard?.lines.map(messageText), [
+  assert.deepEqual(none.heard[0]?.lines.map(messageText), [
     "Walk me through it.",
     "It starts in the router.",
   ]);
   assert.equal(none.opens.size, 0);
 
-  const one = callPlaces([{ id: "typed-0" }, spokenRow("said-1", LIVE_CALL)], calls);
+  const one = callPlaces(
+    [{ id: "typed-0" }, spokenRow("said-1", LIVE_CALL, "Walk me through")],
+    calls,
+  );
   assert.deepEqual([...one.opens.keys()], ["said-1"]);
-  assert.equal(one.heard?.opened, true);
-  assert.deepEqual(one.heard?.lines.map(messageText), ["It starts in the router."]);
+  assert.equal(one.heard[0]?.opened, true);
+  assert.deepEqual(
+    one.heard[0]?.lines.map(messageText),
+    ["It starts in the router."],
+    "a row still growing holds the line it began",
+  );
   assert.equal(one.closes.size, 0, "a call still standing has not closed");
+});
+
+test("a call whose lines reached a turn while it ran begins before, and ends after, the turn's row that draws them", () => {
+  const [stored] = STORED.calls;
+  assert.ok(stored);
+  const region = transcriptRegion({
+    transcript: {
+      status: TASKS_READ.READY,
+      transcript: { calls: [{ ...stored, id: EARLIER_CALL }], earlierOmitted: false },
+    },
+    heard: [],
+  });
+  const calls = region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
+  const turn = {
+    id: "turn-1",
+    arrived: [spokenRow("said-1", EARLIER_CALL), spokenRow("said-2", EARLIER_CALL)],
+  };
+  const places = callPlaces([{ id: "typed-0" }, turn, { id: "typed-3" }], calls);
+
+  assert.deepEqual([...places.opens.keys()], ["turn-1"]);
+  assert.deepEqual([...places.closes.keys()], ["turn-1"]);
+});
+
+test("each call heard here that the rows do not hold yet keeps its own tail, in the order the calls began, so a quick redial hides neither", () => {
+  const first = heardCalls({
+    held: [],
+    voice: standing(EARLIER_CALL, ["Make them expire.", "After seven days."]),
+    agentId: AGENT,
+    now: 5_000,
+  });
+  const ended = heardCalls({ held: first, voice: NO_CALL, agentId: AGENT, now: 6_000 });
+  const both = heardCalls({
+    held: ended,
+    voice: standing(LIVE_CALL, ["And withdrawn ones?"]),
+    agentId: AGENT,
+    now: 7_000,
+  });
+  const places = callPlaces([{ id: "typed-0" }], heardOnly(both));
+
+  assert.deepEqual(
+    places.heard.map((tail) => [tail.call.key, tail.lines.map(messageText)]),
+    [
+      [EARLIER_CALL, ["Make them expire.", "After seven days."]],
+      [LIVE_CALL, ["And withdrawn ones?"]],
+    ],
+  );
+});
+
+test("a heard line the record wrote as two rows counts as held, and a later line no row holds stands at the foot", () => {
+  const heard = heardCalls({
+    held: [],
+    voice: standing(LIVE_CALL, [
+      "Walk me through how the job finds stale invites.",
+      "It reads the oldest first.",
+    ]),
+    agentId: AGENT,
+    now: 9_000,
+  });
+  const rows = [
+    spokenRow("said-1", LIVE_CALL, "Walk me through how"),
+    spokenRow("said-2", LIVE_CALL, "the job finds stale invites."),
+  ];
+  const places = callPlaces(rows, heardOnly(heard));
+
+  assert.deepEqual(places.heard[0]?.lines.map(messageText), ["It reads the oldest first."]);
 });

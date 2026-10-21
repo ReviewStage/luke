@@ -223,49 +223,49 @@ function pressBarMore(bar: HTMLElement): string[] {
   return items;
 }
 
-test("an agent's tab and a subagent's put their right-click's content actions, and none of the tab's keeping, behind their bar's ⋯", async () => {
+test("a subagent's tab puts its right-click's content actions, and none of the tab's keeping, behind its bar's ⋯, while an agent's tab keeps every action on its right-click and the column's toolbar draws no ⋯ of its own", async () => {
   const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
   const { main, side } = bars(container);
-  for (const [bar, expected] of [
-    [
-      main,
-      [
-        "Rename",
-        "Open terminal",
-        "Run",
-        "Copy link",
-        "Copy concise transcript",
-        "Copy full transcript",
-        "Archive agent",
-      ],
-    ],
-    [side, ["Copy link", "Copy concise transcript", "Copy full transcript"]],
-  ] as const) {
-    const fromRightClick = rightClickChosen(bar);
-    const fromMore = pressBarMore(bar);
-    assert.deepEqual(fromMore, expected);
-    // The same items as the right-click's, less the tab's own keeping, which stays there.
-    assert.deepEqual(
-      fromMore,
-      fromRightClick.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", ""))),
-    );
-    assert.ok(
-      fromRightClick.includes("Close others") || fromRightClick.includes("Close others (off)"),
-    );
+  const fromRightClick = rightClickChosen(side);
+  const fromMore = pressBarMore(side);
+  assert.deepEqual(fromMore, ["Copy link", "Copy concise transcript", "Copy full transcript"]);
+  // The same items as the right-click's, less the tab's own keeping, which stays there.
+  assert.deepEqual(
+    fromMore,
+    fromRightClick.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", ""))),
+  );
+  assert.ok(
+    fromRightClick.includes("Close others") || fromRightClick.includes("Close others (off)"),
+  );
+
+  assert.equal(
+    main.querySelector(".toolbar-tab-actions"),
+    null,
+    "the column keeps no tab's ⋯ slot",
+  );
+  const agentItems = rightClickChosen(main);
+  for (const item of [
+    "Rename",
+    "Open terminal",
+    "Copy link",
+    "Copy concise transcript",
+    "Copy full transcript",
+    "Archive agent",
+  ]) {
+    assert.ok(agentItems.includes(item), `the agent's right-click offers ${item}`);
   }
 });
 
-test("the task's own ⋯ stands in the column's toolbar beside the chosen tab's slot, on every tab", async () => {
+test("the column's toolbar draws one ⋯, the task's own, on every tab", async () => {
   for (const main of [{ agent: AGENT.id }, { draft: "draft-1" }] as const) {
     const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.BOARD });
-    const toolbar = bars(container).main.closest(".desktop-toolbar");
-    assert.ok(toolbar?.querySelector('button[aria-label="Task actions"]'), "the task's ⋯ stands");
-    assert.equal(
-      slotButtons(bars(container).main).some(
-        (button) => button.getAttribute("aria-label") === "Task actions",
+    const toolbar = bars(container).main;
+    assert.deepEqual(
+      [...toolbar.querySelectorAll('button[aria-label$="actions"]')].map((button) =>
+        button.getAttribute("aria-label"),
       ),
-      false,
-      "and not in the tab's own slot",
+      ["Task actions"],
+      `one ⋯ beside ${JSON.stringify(main)}, the task's`,
     );
     act(() => roots.pop()?.unmount());
     container.remove();
@@ -283,9 +283,10 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
   for (const chosen of without) {
     const container = await mountEveryTab(chosen);
     const { main, side } = bars(container);
+    assert.equal(main.querySelector(".toolbar-tab-actions"), null, "the column keeps no tab's ⋯");
     for (const bar of [main, side]) {
       const label = bar.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
-      assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
+      if (bar === side) assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
       assert.ok(rightClickChosen(bar).length > 0, `the ${label} tab answers a right-click`);
     }
     assert.equal(container.querySelector(".tab [aria-haspopup]"), null, "no tab wears a ⋯");

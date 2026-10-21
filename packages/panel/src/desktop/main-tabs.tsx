@@ -52,10 +52,9 @@ import { TabStrip } from "./tab-strip.js";
  * to it. The strip is the side panel's in every way: the same pills, the
  * same hover and chosen fills, dragged and stepped along, closed by ×,
  * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
- * right-click (`strip-tabs.tsx`). The toolbar's ⋯ acts on the chosen tab: on
- * an agent's its Rename, its Open terminal, its transcript's copies, and its
- * Archive, standing in the one slot the toolbar keeps for it beside the
- * task's own ⋯, left empty on a tab with nothing of the kind.
+ * right-click (`strip-tabs.tsx`). A tab's own actions, on an agent's its
+ * Rename, its Open terminal, its transcript's copies, and its Archive, are
+ * its right-click menu's alone: the toolbar's one ⋯ is the task's.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
@@ -158,14 +157,13 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, whose menu and toolbar ⋯ offer the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
+/** An agent's tab, whose menu offers the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
 function AgentMenuTab({
   agent,
   agents,
   look,
   doors,
   shown,
-  slot,
   terminals,
 }: {
   agent: CodingAgentSummary;
@@ -173,7 +171,6 @@ function AgentMenuTab({
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
-  slot: HTMLElement | null;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenOnMac">;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, { label: look.label, shown, terminals });
@@ -184,7 +181,6 @@ function AgentMenuTab({
         doors={{ ...doors, ...actions.doors }}
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
-        slot={slot}
       />
       {actions.dialog}
     </>
@@ -388,7 +384,6 @@ export function MainTabStrip({
   pins,
   keys,
   shown,
-  actionsSlot,
   onOpenTerminal,
   onOpenOnMac,
   chat,
@@ -411,8 +406,6 @@ export function MainTabStrip({
   keys: boolean;
   /** Whether the task's page is on screen, which a tab's Archive asks its question on. */
   shown: boolean;
-  /** The toolbar's slot the chosen tab's ⋯ stands in, beside the task's own. */
-  actionsSlot: HTMLElement | null;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
   /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository or the platform has no Mac terminal. */
@@ -493,12 +486,7 @@ export function MainTabStrip({
       >
         {strip.map((entry) =>
           entry.agent === undefined ? (
-            <DoorsTab
-              key={tabKey(entry.tab)}
-              look={entry.look}
-              doors={doorsOf(entry)}
-              slot={actionsSlot}
-            />
+            <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry)} />
           ) : (
             <AgentMenuTab
               key={tabKey(entry.tab)}
@@ -507,7 +495,6 @@ export function MainTabStrip({
               look={entry.look}
               doors={doorsOf(entry)}
               shown={shown}
-              slot={actionsSlot}
               terminals={{ onOpenTerminal, onOpenOnMac }}
             />
           ),
