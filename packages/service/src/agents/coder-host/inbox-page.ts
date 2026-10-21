@@ -36,7 +36,10 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
  *
  * The account's read is the same hold over the account's open items, the
  * desktop's one read that stands whichever task is open: it is what says an
- * item landed while the developer was elsewhere. It names every task holding
+ * item landed while the developer was elsewhere. Its hold covers the
+ * reader's own settled items still unread too, which each task's To do
+ * count holds, so reading one, or its agent writing on it again, moves the
+ * count at once. It names every task holding
  * an item too, settled ones included, read once per answer rather than on
  * each look: a task's list moves with its open items, since every item
  * opens before it settles, and what moves it alone, such as an archive, is

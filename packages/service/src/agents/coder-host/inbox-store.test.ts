@@ -26,7 +26,7 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
+import { ACCOUNT_CHAT_REASON, type AccountInboxTask } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -1517,6 +1517,101 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         );
         const unmoved = yield* taskInboxPast(teammate, taskId, INBOX_CURSOR_START);
         assert.equal(unmoved.cursor, theirs.cursor, "the teammate's inbox stands where it stood");
+      }),
+  );
+
+  it.effect(
+    "each task the account's read lists counts what is the reader's to do, their own open or unread items on a task not archived, alike live and held, its held read waking as a settled one is read or written on again, and no one counts another's",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const taskId = agent.taskId ?? "";
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const stranger = yield* openUser;
+        yield* openWorkspace(stranger);
+        const agentOn = (userId: string, onTask: string) =>
+          Effect.gen(function* () {
+            const started = yield* createCodingAgent(userId, {
+              taskId: onTask,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/relay",
+              planSnapshot: null,
+              prompt: null,
+            });
+            assert.ok(Option.isSome(started));
+            return { userId, taskId: onTask, agentId: started.value.agent.id };
+          });
+        const teammates = yield* agentOn(teammate, taskId);
+        const shelved = yield* startTask(owner, { name: "Shelved work" });
+        const shelvedAgent = yield* agentOn(owner, shelved.id);
+
+        // The owner's open ask and open notice, both unread, are theirs to do.
+        yield* postedId(agent, "ask");
+        assert.ok(
+          Result.isSuccess(
+            yield* postInboxItem(agent, {
+              ...SETTINGS,
+              key: "notice",
+              response: { type: INBOX_RESPONSE.NONE },
+            }),
+          ),
+        );
+        // A thread they answered, which its agent writes on again, and one they answered and read, which is done.
+        const followed = yield* postedId(agent, "followed");
+        const seen = yield* postedId(agent, "seen");
+        for (const id of [followed, seen]) {
+          assert.ok(Option.isSome(yield* answerInboxItem(owner, id, 1, DONE, randomUUID())));
+        }
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "One more thing.")));
+        // A teammate's agent asks on the same task, and an archived task holds the owner's unread item.
+        yield* postedId(teammates, "theirs");
+        yield* postedId(shelvedAgent, "shelved");
+        yield* updateTask(owner, shelved.id, { archived: true });
+
+        const toDoOf = (answer: { readonly plans: readonly AccountInboxTask[] }) =>
+          new Map(answer.plans.map((plan) => [plan.planId, plan.toDo]));
+        for (const reader of [owner, teammate, stranger]) {
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START, { archived: true });
+          const live = yield* liveAnswerOf(reader, held.readAt);
+          assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        }
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        assert.deepEqual(
+          toDoOf(held),
+          new Map([
+            [taskId, 3],
+            [shelved.id, 0],
+          ]),
+          "the ask, the notice, and the thread written on again; never the archived task's",
+        );
+        assert.equal(
+          toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
+          1,
+          "the teammate counts their own ask alone",
+        );
+        assert.deepEqual((yield* accountInboxPast(stranger, INBOX_CURSOR_START)).plans, []);
+
+        // Reading the settled thread wakes the held read, and it is the owner's to do no longer.
+        yield* markInboxItemRead(owner, followed);
+        const read = yield* accountInboxPast(owner, held.cursor, { archived: true });
+        assert.notEqual(read.cursor, held.cursor);
+        assert.equal(toDoOf(read).get(taskId), 2);
+        // Its agent writing on it again wakes it once more.
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "And another.")));
+        const written = yield* accountInboxPast(owner, read.cursor, { archived: true });
+        assert.notEqual(written.cursor, read.cursor);
+        assert.equal(toDoOf(written).get(taskId), 3);
+        assert.equal(
+          toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
+          1,
+          "the owner's reads move nothing of the teammate's count",
+        );
       }),
   );
 });

@@ -863,6 +863,32 @@ it.effect(
 );
 
 it.effect(
+  "a task's To do count is handed the window, and one moving alone, as the reader's read of a settled item moves it, is written again while the Dock's badge stays on what waits",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      const answer = (toDo: number) =>
+        f.answerInbox({
+          items: [waitingItem(ITEM_A, { startedBy: ACCOUNT_ID })],
+          plans: [{ planId: TASK_ID, items: 3, toDo, updatedAt: READ_AT }],
+          cursor: "1",
+          readAt: READ_AT,
+        });
+      answer(2);
+      yield* settled;
+      answer(1);
+      yield* settled;
+
+      assert.deepEqual(
+        f.holding.map((holdings) => holdings.map((holding) => holding.toDo)),
+        [[], [2], [1]],
+      );
+      assert.equal(f.badges.at(-1), 1);
+    }),
+);
+
+it.effect(
   "an item whose starter the service does not say waits on the account, as every item did before",
   () =>
     Effect.gen(function* () {

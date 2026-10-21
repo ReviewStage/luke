@@ -1157,6 +1157,38 @@ function tasklessWaiting(userId: string) {
   );
 }
 
+/**
+ * Whether the item is the reader's to do, as the Inbox's To do lists it:
+ * posted by an agent they started, and open or unread for them, on a task
+ * they have not archived. Note that a settled item counts while it is
+ * unread, such as a thread its agent wrote on again after it was answered.
+ */
+function toDoFor(userId: string): SQL<boolean> {
+  return sql<boolean>`(${eq(inboxItem.userId, userId)} and ${isNull(task.archivedAt)} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or ${unreadFor(userId)}))`;
+}
+
+/** How many of a group's items are the reader's to do (`toDoFor`), as a number rather than a `bigint`. */
+function toDoCount(userId: string): SQL<number> {
+  return sql<number>`(count(*) filter (where ${toDoFor(userId)}))::int`;
+}
+
+/**
+ * The reader's own settled items still unread on the tasks of their
+ * workspaces they have not archived: what To do lists beside the open items,
+ * so their read marks and their agents' new messages move the account's
+ * cursor as an open item's change does.
+ */
+function accountUnreadSettled(userId: string) {
+  return and(
+    isNotNull(inboxItem.taskId),
+    taskReachableBy(userId),
+    eq(inboxItem.userId, userId),
+    ne(inboxItem.status, INBOX_STATUS.OPEN),
+    isNull(task.archivedAt),
+    unreadFor(userId),
+  );
+}
+
 const AccountRequestSchema = Schema.Struct({ userId: Schema.String });
 
 /** One open item as the account's read carries it, with its agent as its row names it now. */
@@ -1264,7 +1296,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** Where every item the account's read names stands, a task's or an agent's with no task. Note that the task is joined on the left, because an item with no task has none to join. */
+/** Where every item the account's read names or counts stands: a task's or an agent's with no task open, and the reader's own settled ones still unread, which its tasks' To do counts. Note that the task is joined on the left, because an item with no task has none to join. */
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
@@ -1274,15 +1306,16 @@ const findWaitingStamps = SqlSchema.findAll({
         .select(stampColumns(userId))
         .from(inboxItem)
         .leftJoin(task, eq(task.id, inboxItem.taskId))
-        .where(or(accountWaiting(userId), tasklessWaiting(userId)))
+        .where(or(accountWaiting(userId), tasklessWaiting(userId), accountUnreadSettled(userId)))
         .orderBy(...LATEST_FIRST),
     ),
 });
 
-/** One task holding items as the account's read lists it: how many, and when the latest changed. */
+/** One task holding items as the account's read lists it: how many, how many are the reader's to do, and when the latest changed. */
 const TaskItemsRowSchema = Schema.Struct({
   taskId: Schema.String,
   items: Schema.Number,
+  toDo: Schema.Number,
   updatedAt: InstantColumnSchema,
 });
 
@@ -1291,9 +1324,10 @@ const LATEST_ITEM = max(inboxItem.updatedAt);
 
 /**
  * Every task of the account's workspaces that holds an item, open or
- * settled, whichever member's agent posted it, the task whose item changed
- * latest first: those it has not archived, and the archived ones too where
- * `archived` asks.
+ * settled, whichever member's agent posted it, with how many of them are
+ * the reader's to do (`toDoFor`), the task whose item changed latest first:
+ * those it has not archived, and the archived ones too where `archived`
+ * asks.
  */
 const findTasksWithItems = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, archived: Schema.Boolean }),
@@ -1301,7 +1335,12 @@ const findTasksWithItems = SqlSchema.findAll({
   execute: ({ userId, archived }) =>
     Database.use((db) =>
       db
-        .select({ taskId: inboxItem.taskId, items: count(), updatedAt: LATEST_ITEM })
+        .select({
+          taskId: inboxItem.taskId,
+          items: count(),
+          toDo: toDoCount(userId),
+          updatedAt: LATEST_ITEM,
+        })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
         .where(and(taskReachableBy(userId), archived ? undefined : isNull(task.archivedAt)))
@@ -1424,6 +1463,7 @@ export function accountInboxLiveStatements(
     .select({
       ...liveSelection({ planId: inboxItem.taskId }),
       items: LIVE_COUNT.as("items"),
+      toDo: toDoCount(userId).as("toDo"),
       updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
     })
     .from(inboxItem)
@@ -3534,7 +3574,8 @@ export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly 
 
 /**
  * Every task the account has not archived that holds an inbox item,
- * waiting or settled, with how many and when the latest changed, the
+ * waiting or settled, with how many, how many are the reader's to do, and
+ * when the latest changed, the
  * task whose item changed latest first: what the desktop's Inbox lists;
  * the archived ones among them where `archived` asks, which its Archived
  * tab lists.

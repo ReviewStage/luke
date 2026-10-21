@@ -236,16 +236,17 @@ function TaskInboxTab({
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const show = useTaskInboxShow();
   const { act } = useAct();
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: task.workspaceId,
-    // Note that a task's own Inbox offers no Mark all as read.
-  });
   const closeItem = useInboxCloser({ act, onHeard: tasks.agents.onRetryList });
   // Note that the task's read draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
   const groups = [
     { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
   ];
+  const marks = useInboxReadMarks({
+    act,
+    workspaceId: task.workspaceId,
+    // Note that a task's own Inbox offers no Mark all as read.
+    toDo: { groups, holdings: tasks.inboxTasks, readerId: tasks.me },
+  });
   const items = groups.flatMap((group) => group.items);
   const counts = inboxCounts(groups, tasks.me);
   const filter = {

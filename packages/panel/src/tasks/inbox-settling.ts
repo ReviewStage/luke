@@ -9,7 +9,7 @@ import {
   type InboxMessage,
   type InboxReply,
 } from "@luke/features/inbox-wire";
-import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo } from "react";
 import { appStateNow } from "../use-app-state.js";
@@ -61,6 +61,13 @@ import { appStateNow } from "../use-app-state.js";
  * the item changed since, or once a held read that held the item as marked
  * holds it otherwise, at the same change: a mark made since, another
  * window's, whose word stands.
+ *
+ * The sidebar's Inbox counts what To do lists from main's count of each
+ * task's to do (`useSettledToDo`), which moves only once main hears of an
+ * answer or a mark, so both are laid over it too: an item the window
+ * answered counts no longer while main still lists it open, and a mark on a
+ * settled item of the reader's moves its task's count by one while main's
+ * word on that task stands as it was when the mark was made.
  */
 
 /** What the window sent on an item. */
@@ -86,12 +93,48 @@ interface Settling {
 }
 
 /**
+ * What a read mark on a settled item of the reader's moves of its task's
+ * To do count as main counts it: the task, whether main counts the item,
+ * as it was unread, and main's word on the task as the mark was made, which
+ * the move stands over until main's word changes.
+ */
+export interface InboxToDoMark {
+  readonly taskId: string;
+  readonly wasUnread: boolean;
+  readonly counted: Pick<AppInboxTaskHolding, "updatedAt"> & { readonly toDo: number };
+}
+
+/** Whether two marks were made over the same word of main's on the same task. */
+function sameCounted(one: InboxToDoMark, other: InboxToDoMark): boolean {
+  return (
+    one.taskId === other.taskId &&
+    one.counted.toDo === other.counted.toDo &&
+    one.counted.updatedAt === other.counted.updatedAt
+  );
+}
+
+/**
+ * A mark made again over the same word of main's as the item's last one:
+ * main still counts the item as it did under the last, so the new one moves
+ * the count from there rather than from what the last mark drew.
+ */
+function markedAgain(mark: InboxReadMark, last: Mark | undefined): InboxReadMark {
+  const before = last?.toDo;
+  if (mark.toDo === undefined || before === undefined || !sameCounted(before, mark.toDo)) {
+    return mark;
+  }
+  return { ...mark, toDo: { ...mark.toDo, wasUnread: before.wasUnread } };
+}
+
+/**
  * A read mark the window made that the reads may not hold yet: whether the
- * item now reads as unread, and when it last changed as it was marked.
+ * item now reads as unread, when it last changed as it was marked, and what
+ * it moves of its task's To do count, where it moves it.
  */
 export interface InboxReadMark {
   readonly unread: boolean;
   readonly updatedAt: number;
+  readonly toDo?: InboxToDoMark | undefined;
 }
 
 /** Whether an item is unread for the reader; an item from a service before read state reads as read. */
@@ -204,9 +247,10 @@ function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): Readonl
   if ("mark" in change) {
     const next = new Map(marks);
     for (const [itemId, mark] of change.mark.marks) {
+      const again = markedAgain(mark, next.get(itemId));
       // Note that an item marked again moves to the newest place, so the oldest marks go first.
       next.delete(itemId);
-      next.set(itemId, { ...mark, made: change.mark.made, taken: false, held: false });
+      next.set(itemId, { ...again, made: change.mark.made, taken: false, held: false });
     }
     return new Map([...next].slice(-KEPT_MARKS));
   }
@@ -547,6 +591,59 @@ export function useSettledWaiting(
     if (mainWithout.size > 0) change({ mainWithout });
   }, [change, mainWithout]);
   return laid.value;
+}
+
+/**
+ * Whether a mark's move stands over main's count of its task: main has heard
+ * of the item as it was marked, its task's latest change no earlier than the
+ * item's, so the mark changes what main counts, and main's word on the task
+ * is still what it was as the mark was made.
+ */
+function toDoMoveStands(mark: InboxReadMark, holding: AppInboxTaskHolding): boolean {
+  const counted = mark.toDo?.counted;
+  return (
+    counted !== undefined &&
+    mark.updatedAt <= counted.updatedAt &&
+    holding.toDo === counted.toDo &&
+    holding.updatedAt === counted.updatedAt
+  );
+}
+
+/**
+ * How many items To do lists across the tasks given, as main counts each
+ * task's to do, with the window's own answers and marks laid over it until
+ * main hears of them: an answered item main still lists open counts no
+ * longer, `waiting` being main's open items and `settled` those it still
+ * counts once the window's answers are laid (`useSettledWaiting`), and a
+ * mark moves its task's count while it stands (`toDoMoveStands`), from
+ * what main counts of the item to what the mark says. None where
+ * main's word carries no count, from a service before it.
+ */
+export function useSettledToDo(
+  holdings: readonly AppInboxTaskHolding[],
+  waiting: readonly AppInboxTask[],
+  settled: readonly AppInboxTask[],
+): number | undefined {
+  const { marks } = useBook();
+  return useMemo(() => {
+    const counted = new Map<string, AppInboxTaskHolding & { readonly toDo: number }>();
+    for (const holding of holdings) {
+      if (holding.toDo === undefined) return undefined;
+      counted.set(holding.taskId, { ...holding, toDo: holding.toDo });
+    }
+    const openIn = (tasks: readonly AppInboxTask[]) =>
+      tasks.reduce((sum, task) => sum + (counted.has(task.taskId) ? task.items.length : 0), 0);
+    let total = [...counted.values()].reduce((sum, holding) => sum + holding.toDo, 0);
+    total -= openIn(waiting) - openIn(settled);
+    for (const mark of marks.values()) {
+      const holding = mark.toDo === undefined ? undefined : counted.get(mark.toDo.taskId);
+      if (holding === undefined || mark.toDo === undefined || !toDoMoveStands(mark, holding)) {
+        continue;
+      }
+      total += Number(mark.unread) - Number(mark.toDo.wasUnread);
+    }
+    return Math.max(0, total);
+  }, [holdings, waiting, settled, marks]);
 }
 
 /** The signed-in member, as an answer names who gave it; none where the account names no id. */

@@ -586,7 +586,7 @@ function sameAutomations(
   );
 }
 
-/** Whether two answers list the same tasks holding items, alike in order, count, and instant. */
+/** Whether two answers list the same tasks holding items, alike in order, count, To do count, and instant: a read mark moves the To do count alone. */
 function sameTasks(one: readonly AccountInboxTask[], other: readonly AccountInboxTask[]): boolean {
   return (
     one.length === other.length &&
@@ -596,6 +596,7 @@ function sameTasks(one: readonly AccountInboxTask[], other: readonly AccountInbo
         was !== undefined &&
         was.planId === task.planId &&
         was.items === task.items &&
+        was.toDo === task.toDo &&
         was.updatedAt === task.updatedAt
       );
     })

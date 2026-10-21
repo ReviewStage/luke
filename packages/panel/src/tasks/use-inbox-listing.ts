@@ -202,14 +202,18 @@ export function useInboxListing(
           },
         ]
       : [];
-  // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
-  const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
   // The archived tasks' items stand under Archived alone, which counts what main says each holds whether or not it is read yet.
   const standing: readonly InboxGroup[] = [
     ...taskEntries,
     ...tasklessGroups([...waitingTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
+  // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
+  const marks = useInboxReadMarks({
+    act,
+    workspaceId: tasks.workspace?.id,
+    toDo: { groups: standing, holdings, readerId: tasks.me },
+  });
   const entries = showArchived ? archivedEntries : standing;
   // The list's search, which narrows what it lists, never what it counts.
   const [query, setQuery] = useState("");
