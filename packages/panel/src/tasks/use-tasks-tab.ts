@@ -99,6 +99,7 @@ import {
   type PendingRenames,
   type PendingRepositoryPin,
   type PendingRepositoryPins,
+  type PendingStatuses,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
   pendingMark,
@@ -117,16 +118,19 @@ import {
   settleFailedNote,
   sidebarTasks,
   startFailureNote,
+  statusedView,
   TASK_MARK,
   TASKS_PAGE,
   type TaskMark,
   type TasksPage,
   tasksPage,
+  undoStillDue,
   unsettledAgentPins,
   unsettledMarks,
   unsettledPinPositions,
   unsettledRenames,
   unsettledRepositoryPins,
+  unsettledStatuses,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -1247,6 +1251,9 @@ export function useTasksTab(input: {
   // A pin or an archive given here stands until main's view carries it, as a name does.
   const [marks, setMarks] = useState<PendingMarks>(new Map());
   useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
+  // A status given here stands until main's view carries it, apart from the pins and archives.
+  const [statuses, setStatuses] = useState<PendingStatuses>(new Map());
+  useEffect(() => setStatuses((held) => unsettledStatuses(held, viewed)), [viewed]);
   // A repository's pin given here stands until main's view carries it, as a
   // task's does. Note that a sign-out lets every one go, because a pin names
   // a repository rather than a row of this account's own, so one left
@@ -1305,7 +1312,10 @@ export function useTasksTab(input: {
   }, [accountSignedIn, setClosedTabs]);
   const renamed = useMemo(() => renamedView(viewed, renames), [viewed, renames]);
   const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
-  const marked = useMemo(() => markedView(drafted, marks), [drafted, marks]);
+  const marked = useMemo(
+    () => statusedView(markedView(drafted, marks), statuses),
+    [drafted, marks, statuses],
+  );
   const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
   // else that finds a task, the palette, the inbox, and the history, finds
@@ -2176,11 +2186,8 @@ export function useTasksTab(input: {
   // back where it was only while no later press replaced it. Answers which
   // tasks the service kept and how many it refused.
   const sendStatuses = (changes: readonly StatusChange[]) => {
-    const asked = changes.map(({ taskId, status }) => ({
-      taskId,
-      next: { ...marks.get(taskId), status },
-    }));
-    setMarks(
+    const asked = changes.map(({ taskId, status }) => ({ taskId, next: { status } }));
+    setStatuses(
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
     );
     const answers = asked.map(({ taskId, next }) =>
@@ -2188,11 +2195,11 @@ export function useTasksTab(input: {
     );
     return Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
-      setMarks(
+      setStatuses(
         (held) =>
           new Map(
-            [...held].filter(([pending, mark]) =>
-              refused.every((each) => each.taskId !== pending || each.next !== mark),
+            [...held].filter(([pending, status]) =>
+              refused.every((each) => each.taskId !== pending || each.next !== status),
             ),
           ),
       );
@@ -2229,13 +2236,22 @@ export function useTasksTab(input: {
         tone: TOAST_TONE.DONE,
         action: {
           label: UNDO_LABEL,
-          onPress: () => restoreNow.current(undo.filter(({ taskId }) => landed.includes(taskId))),
+          onPress: () =>
+            restoreNow.current(
+              undo.filter(({ taskId }) => landed.includes(taskId)),
+              status,
+            ),
         },
       });
     });
   };
-  const restoreStatuses = (changes: readonly StatusChange[]) => {
-    sendStatuses(changes).then(({ refused }) => {
+  // Note that an Undo puts back only the tasks still at the status it
+  // undoes, so a status chosen since, on the Board or the task's chip,
+  // stands.
+  const restoreStatuses = (changes: readonly StatusChange[], settled: SettledStatus) => {
+    const due = undoStillDue(changes, settled, tasks.tasks);
+    if (due.length === 0) return;
+    sendStatuses(due).then(({ refused }) => {
       if (refused === 0) return;
       toast({
         words: STATUS_RESTORE_FAILED_NOTE,
@@ -2444,8 +2460,15 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
+  // A status chosen here supersedes one a press drew and main's view has
+  // yet to carry, which is let go so the view's answer is drawn.
   const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
+    if (standing.status !== undefined) {
+      setStatuses((held) =>
+        held.has(taskId) ? new Map([...held].filter(([pending]) => pending !== taskId)) : held,
+      );
+    }
     return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing }).catch(() => false);
   };
 
