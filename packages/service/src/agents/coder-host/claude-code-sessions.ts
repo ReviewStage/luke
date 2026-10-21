@@ -31,7 +31,6 @@ import { Effect, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
-import type { AgentSessions } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -41,6 +40,7 @@ import {
   type RunnerSessionsOptions,
   runnerSessions,
 } from "./runner-sessions.js";
+import type { NativeSessions } from "./runtime-sessions.js";
 
 export { RUNNER_ENDED, runnerBearerDigest, runnerEnded } from "./runner-sessions.js";
 
@@ -153,5 +153,5 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
 /** The sessions for one account, over the calling fiber's services. */
 export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: ClaudeCodeSessionsOptions,
-): Effect.Effect<AgentSessions<Turn>, never, ClaudeCodeServices> =>
+): Effect.Effect<NativeSessions<Turn>, never, ClaudeCodeServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);

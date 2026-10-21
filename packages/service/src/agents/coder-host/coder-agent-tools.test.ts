@@ -47,6 +47,8 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_PAYER,
+  CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -2923,6 +2925,165 @@ test("update_agent renames a teammate's agent, moves it to a model the catalog o
     await database.run(readCodingAgent(otherWorkspaces.userId, otherWorkspaces.id)),
   );
   assert.equal(theirs.title, null);
+});
+
+/**
+ * The catalog the runtime tests read: a Claude model with its fast version
+ * and two windows, another Claude model, and a GPT model, as the panel's
+ * chip test reads the same (`packages/panel/src/tasks/agent-model-chip.test.ts`).
+ */
+const SONNET = "anthropic/claude-sonnet-5.5";
+const RUNTIME_CATALOG: readonly OfferedModel[] = [
+  {
+    id: OPUS,
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+    contextWindows: { standardTokens: 200_000, longTokens: 1_000_000 },
+  },
+  {
+    id: OPUS_FAST,
+    name: "Claude Opus 5.5 Fast",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["high"],
+  },
+  {
+    id: SONNET,
+    name: "Claude Sonnet 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+  { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
+];
+
+/** An agent of the account's on the task, on Claude Code and paid for by the account's Claude plan. */
+async function claudeCodeAgentOn(userId: string, taskId: string): Promise<StartedAgent> {
+  return claimed(userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId,
+    planSnapshot: "# Billing",
+    prompt: null,
+    runtime: CODING_AGENT_RUNTIME.CLAUDE_CODE,
+    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  });
+}
+
+test("list_models for a Claude Code agent lists its Claude models alone, no fast version, while a start's list and an eve agent's list every model, as they did", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const onClaudeCode = await claudeCodeAgentOn(agents.teammates.userId, tasks.billing);
+  const call = await peerCaller(
+    hostOf(true),
+    agents.caller,
+    eve.services,
+    modelCatalogOf(RUNTIME_CATALOG),
+  );
+  const ids = (listed: WireRecord) =>
+    Array.isArray(listed.models) ? listed.models.map((model) => isRecord(model) && model.id) : [];
+
+  const forStart = await call(CODER_TOOL.LIST_MODELS, {});
+  const forEve = await call(CODER_TOOL.LIST_MODELS, { agentId: agents.teammates.id });
+  const forClaudeCode = await call(CODER_TOOL.LIST_MODELS, { agentId: onClaudeCode.id });
+
+  assert.deepEqual(ids(forStart), [OPUS, OPUS_FAST, SONNET, SOL]);
+  assert.deepEqual(forEve, forStart);
+  assert.deepEqual(ids(forClaudeCode), [OPUS, SONNET]);
+  assert.deepEqual(forClaudeCode.default, forStart.default);
+
+  // A GPT default is offered to a start, and is not one a Claude Code agent may move to.
+  await database.run(
+    writeAccountPreferences(agents.caller.userId, { codingAgent: { model: SOL, effort: "low" } }),
+  );
+  const offeredFor = async (input: WireBoundaryInput) => {
+    const listed = await call(CODER_TOOL.LIST_MODELS, input);
+    return isRecord(listed.default) ? listed.default.offered : undefined;
+  };
+  assert.deepEqual(
+    [await offeredFor({}), await offeredFor({ agentId: onClaudeCode.id })],
+    [true, false],
+  );
+  assert.deepEqual(await call(CODER_TOOL.LIST_MODELS, { agentId: agents.otherWorkspaces.id }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+  });
+});
+
+test("update_agent refuses a Claude Code agent a GPT model, a fast version, and a context window, each in words and with nothing written, takes a Claude model, and leaves an eve agent's choices as they were", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const onClaudeCode = await claudeCodeAgentOn(agents.teammates.userId, tasks.billing);
+  const call = await peerCaller(
+    hostOf(true),
+    agents.caller,
+    eve.services,
+    modelCatalogOf(RUNTIME_CATALOG),
+  );
+  const stored = async (agent: StartedAgent) =>
+    Option.getOrThrow(await database.run(readCodingAgent(agent.userId, agent.id)));
+
+  const refusals = [];
+  for (const change of [
+    { model: SOL, effort: "high" },
+    { model: OPUS_FAST, effort: "high" },
+    { model: OPUS, effort: "high", contextWindow: "standard" },
+    { model: SONNET, effort: "low", contextWindow: "long" },
+  ]) {
+    refusals.push(
+      await call(CODER_TOOL.UPDATE_AGENT, {
+        agentId: onClaudeCode.id,
+        title: "Not this",
+        ...change,
+      }),
+    );
+  }
+  assert.deepEqual(refusals, [
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Claude Code, which runs Claude models alone; choose one of those, or start a new agent on another model.",
+    },
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Claude Code, which runs no fast version of a model; choose the model itself.",
+    },
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Claude Code, which manages its own context; leave contextWindow out.",
+    },
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Claude Code, which manages its own context; leave contextWindow out.",
+    },
+  ]);
+  const unchanged = await stored(onClaudeCode);
+  assert.deepEqual([unchanged.title, unchanged.model, unchanged.effort], [null, OPUS, "high"]);
+
+  const moved = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: onClaudeCode.id,
+    model: SONNET,
+    effort: "low",
+  });
+  assert.equal(moved.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(moved));
+  const after = await stored(onClaudeCode);
+  assert.deepEqual([after.model, after.effort], [SONNET, "low"]);
+
+  // An eve agent still moves to a fast version, another provider's model, and the standard window.
+  for (const change of [
+    { model: OPUS_FAST, effort: "high" },
+    { model: OPUS, effort: "high", contextWindow: "standard" },
+    { model: SOL, effort: "low" },
+  ]) {
+    const changed = await call(CODER_TOOL.UPDATE_AGENT, {
+      agentId: agents.teammates.id,
+      ...change,
+    });
+    assert.equal(changed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(changed));
+  }
+  assert.equal((await stored(agents.teammates)).model, SOL);
 });
 
 test("read_task reads a teammate's task of the caller's workspace with its plan as saved, an archived one too, cuts a long plan on a line, and reads no task of another workspace", async () => {

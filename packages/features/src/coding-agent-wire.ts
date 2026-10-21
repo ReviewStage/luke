@@ -160,6 +160,29 @@ export const CODING_AGENT_PAYER = {
 
 export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER];
 
+/**
+ * What answers a coding agent's conversation, as its conversation's row
+ * records it: eve, as every agent ran before the native harnesses, or the
+ * provider's own harness, Claude Code or Codex, which Luke launches in the
+ * agent's sandbox. The store's own vocabulary spells the same words
+ * (`@luke/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
+ */
+export const CODING_AGENT_RUNTIME = {
+  EVE: "eve",
+  CLAUDE_CODE: "claude_code",
+  CODEX: "codex",
+} as const;
+
+export type CodingAgentRuntime = (typeof CODING_AGENT_RUNTIME)[keyof typeof CODING_AGENT_RUNTIME];
+
+/** The runtimes that are a provider's own harness rather than eve, which an agent's summary names. */
+export const NATIVE_CODING_AGENT_RUNTIMES = [
+  CODING_AGENT_RUNTIME.CLAUDE_CODE,
+  CODING_AGENT_RUNTIME.CODEX,
+] as const;
+
+export type NativeCodingAgentRuntime = (typeof NATIVE_CODING_AGENT_RUNTIMES)[number];
+
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
@@ -620,6 +643,12 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   /** The context window the agent runs on where it is the standard one; absent for the model's whole window. */
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
+  /**
+   * The provider's own harness the agent runs on, which narrows the models
+   * its chip offers (`agent-runtime-models.ts`); absent for an agent on eve,
+   * and from a service older than it.
+   */
+  runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_CODING_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** Epoch milliseconds the agent was started. */
