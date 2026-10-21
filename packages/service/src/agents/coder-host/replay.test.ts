@@ -45,6 +45,7 @@ const source: CodingAgent = {
   branch: null,
   startBranch: null,
   title: "Build the store",
+  personaName: null,
   archivedAt: null,
   archivedBy: null,
   disabledServers: [],

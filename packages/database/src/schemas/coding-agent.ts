@@ -237,6 +237,8 @@ export const codingAgent = pgTable(
     startBranch: text("start_branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
     title: text("title"),
+    /** The human name the agent was given as it was created, a first name no other agent of its task wears (`@luke/features/agent-persona`); null for an agent from before names were given, named by its title. */
+    personaName: text("persona_name"),
     /** The newest model step of the agent's own conversation; null before its first. */
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
     /** When eve last compacted the agent's own conversation; null where it never has. */
