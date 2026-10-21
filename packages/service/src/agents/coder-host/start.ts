@@ -33,7 +33,6 @@ import {
   stepsBytes,
   summaryBytes,
 } from "@luke/features/agent-replay";
-import { runtimeModelId } from "@luke/features/agent-runtime-models";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -92,8 +91,11 @@ import {
 import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { anthropicFastAccess } from "./account-keys.js";
-import { type AgentRuntimeChoice, agentRuntimeChoice } from "./agent-runtime-choice.js";
+import {
+  type AgentRuntimeChoice,
+  accountFastOffer,
+  agentRuntimeChoice,
+} from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import {
@@ -424,7 +426,7 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<AccountModelChoices, HostedRefusal, DatabaseServices | ModelCatalog> {
   const stored = (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent;
-  const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(userId));
+  const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(userId));
   const catalog = yield* ModelCatalog;
   const read = yield* catalog.read.pipe(
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
@@ -434,7 +436,7 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
   );
   return {
-    offered: offeredToAccount(read, fastAccess),
+    offered: offeredToAccount(read, fastOffer),
     defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE,
   };
 });
@@ -950,8 +952,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       // A continue keeps its source's human name, as the same teammate going on.
       personaName: continued ? (from.source.personaName ?? undefined) : undefined,
       idempotencyKey: ask.idempotencyKey,
-      // A fast version on a harness with no fast mode runs as its base model.
-      model: runtimeModelId(choice.model, runtime.runtime),
+      model: choice.model,
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,

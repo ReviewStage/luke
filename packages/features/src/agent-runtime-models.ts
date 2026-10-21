@@ -84,13 +84,6 @@ function isFastId(modelId: string): boolean {
   return modelId.endsWith(FAST_ID_SUFFIX);
 }
 
-/** The catalog id an agent on the runtime runs the model given as: its base model where the runtime runs no fast version, else the id itself. */
-export function runtimeModelId(modelId: string, runtime: CodingAgentRuntime | undefined): string {
-  return runtimeModelRule(runtime).fast || !isFastId(modelId)
-    ? modelId
-    : modelId.slice(0, -FAST_ID_SUFFIX.length);
-}
-
 /**
  * The models an agent on the runtime may move to, of those offered: its
  * provider's alone, no fast version where it runs none, and no context

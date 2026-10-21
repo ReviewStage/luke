@@ -10,8 +10,9 @@
  *   (`NativeAgentSessions`: a web function's own, or the eve app's relay to
  *   one, so a Start from an eve agent decides as the panel's does).
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
- *   GPT model, a fast version running as its base model since Codex has no
- *   fast mode, where the account keeps a ChatGPT sign-in (`chatgpt_oauth`)
+ *   GPT model; Codex has no fast mode, so an account whose ChatGPT plan pays
+ *   is offered no GPT fast version (`accountFastOffer`), where the account
+ *   keeps a ChatGPT sign-in (`chatgpt_oauth`)
  *   that OpenAI has not signed out and the deployment can still open.
  *
  * Where a plan is offered, Settings' choice for that harness decides: the
@@ -41,7 +42,12 @@ import {
 import { Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
-import { providerModelOf } from "../../providers/model-catalog.js";
+import {
+  type AccountFastOffer,
+  type ModelCatalog,
+  providerModelOf,
+} from "../../providers/model-catalog.js";
+import { anthropicFastAccess } from "./account-keys.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
 /** What a new agent runs on, and who pays for it; no payer for an agent on eve outside a plan's offer, as before payers were recorded. */
@@ -130,4 +136,20 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   const plan = yield* keptPlan(userId, provider.provider, ring);
   if (plan === undefined) return ON_EVE;
   return plan.forAgents ? onPlanOf(provider.provider) : yield* evePayer(userId, provider.provider);
+});
+
+/**
+ * Which fast versions the account is offered (`offeredToAccount`): by the
+ * Anthropic key its steps run on, and whether its ChatGPT plan pays for its
+ * GPT agents, as Start would choose it here, since Codex runs no fast mode
+ * and a Fast it cannot run is never offered.
+ */
+export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<AccountFastOffer, StoreFailure, DatabaseServices | ModelCatalog> {
+  const anthropic = yield* anthropicFastAccess(userId);
+  const environment = yield* Effect.serviceOption(HostedEnvironment);
+  const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
+  const plan = yield* keptPlan(userId, MODEL_PROVIDER.OPENAI, ring);
+  return { anthropic, chatGptPlan: plan?.forAgents === true };
 });

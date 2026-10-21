@@ -17,7 +17,7 @@
 
 import { failureKind } from "@luke/runtime/effect";
 import { Effect } from "effect";
-import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
+import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
@@ -45,8 +45,8 @@ export function modelsProcedures(seams: ModelsProcedureSeams) {
         ),
         Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
       );
-      const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(context.userId));
-      return { models: offeredToAccount(models, fastAccess) };
+      const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(context.userId));
+      return { models: offeredToAccount(models, fastOffer) };
     }),
   };
 }

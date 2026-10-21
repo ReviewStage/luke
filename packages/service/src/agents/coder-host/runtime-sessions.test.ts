@@ -66,7 +66,7 @@ import {
   runnerChoiceApplied,
   sessionsRouter,
 } from "./runtime-sessions.js";
-import { startCodingAgent } from "./start.js";
+import { accountModelChoices, startCodingAgent } from "./start.js";
 import { STEER_OUTCOME, steerCodingAgent } from "./steer.js";
 import { type EveReach, eveFor, stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -990,7 +990,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan, a fast GPT model among them; a sign-in OpenAI signed out, none, or a function with no harness starts on eve as today, with no payer, and a Claude agent is untouched",
+      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a sign-in OpenAI signed out, none, or a function with no harness starts on eve as today, with no payer, and a Claude agent is untouched",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -998,13 +998,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               name: "GPT, signed in",
               chatGpt: "signed_in",
               model: "openai/gpt-5.5",
-              native: true,
-              on: "codex",
-            },
-            {
-              name: "a fast GPT model",
-              chatGpt: "signed_in",
-              model: "openai/gpt-5.5-fast",
               native: true,
               on: "codex",
             },
@@ -1213,7 +1206,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs every GPT model on Codex, a fast version as its base model, and API key runs on eve on the OpenAI API key, or Luke's key where none was saved",
+      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex, and API key runs on eve on the OpenAI API key, or Luke's key where none was saved",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1224,7 +1217,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               | typeof PROVIDER_KEY_PROVIDER.ANTHROPIC
               | undefined;
             readonly model: string;
-            readonly runs: string;
             readonly recorded: readonly [string, CodingAgentPayer | null];
           }[] = [
             {
@@ -1232,15 +1224,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: true,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
               model: "openai/gpt-5.5",
-              runs: "openai/gpt-5.5",
-              recorded: ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
-            },
-            {
-              name: "Subscription, a fast version",
-              forAgents: true,
-              apiKey: undefined,
-              model: "openai/gpt-5.5-fast",
-              runs: "openai/gpt-5.5",
               recorded: ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
             },
             {
@@ -1248,7 +1231,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
               model: "openai/gpt-5.5",
-              runs: "openai/gpt-5.5",
               recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
             },
             {
@@ -1256,7 +1238,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
               model: "openai/gpt-5.5-fast",
-              runs: "openai/gpt-5.5-fast",
               recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
             },
             {
@@ -1264,7 +1245,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.ANTHROPIC,
               model: "openai/gpt-5.5",
-              runs: "openai/gpt-5.5",
               recorded: ["eve", CODING_AGENT_PAYER.LUKE],
             },
           ];
@@ -1297,12 +1277,65 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               yield* readCodingAgentRouting(owner, started.agent.id),
             );
             assert.deepEqual([routing.runtime, routing.payer], each.recorded, each.name);
-            assert.equal(started.agent.model, each.runs, each.name);
+            assert.equal(started.agent.model, each.model, each.name);
             assert.deepEqual(
               [heard(eve), heard(codex)],
               each.recorded[0] === "codex" ? [[], ["open"]] : [["open"], []],
               each.name,
             );
+          }
+        }),
+    );
+
+    it.effect(
+      "with the ChatGPT plan selected no GPT fast version is offered, its base model saying so, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before",
+      () =>
+        Effect.gen(function* () {
+          for (const forAgents of [true, false]) {
+            const { owner, workspaceId } = yield* openStarter(false, "signed_in");
+            if (!forAgents) {
+              yield* setProviderKeyForAgents(
+                owner,
+                PROVIDER_KEY_PROVIDER.OPENAI,
+                PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+                false,
+              );
+            }
+            const { eve, codex, native } = runtimes();
+            const layers = Layer.mergeAll(
+              githubReaching(INSTALLATIONS).layer,
+              CATALOG,
+              environment(),
+              native,
+            );
+            const choices = yield* accountModelChoices(owner).pipe(Effect.provide(layers));
+            const gpt = choices.offered.filter((model) => model.provider === MODEL_PROVIDER.OPENAI);
+            const started = yield* Effect.result(
+              startCodingAgent(
+                routedSessions(eve.sessions, owner),
+                owner,
+                startIn(workspaceId, "openai/gpt-5.5-fast"),
+              ).pipe(Effect.provide(layers)),
+            );
+
+            if (forAgents) {
+              assert.deepEqual(
+                gpt.map((model) => [model.id, model.fastWithheldByPlan]),
+                [["openai/gpt-5.5", true]],
+              );
+              assert.ok(Result.isFailure(started));
+              assert.deepEqual([heard(eve), heard(codex)], [[], []]);
+            } else {
+              assert.deepEqual(
+                gpt.map((model) => [model.id, model.fastWithheldByPlan]),
+                [
+                  ["openai/gpt-5.5", undefined],
+                  ["openai/gpt-5.5-fast", undefined],
+                ],
+              );
+              assert.ok(Result.isSuccess(started));
+              assert.equal(started.success.agent.model, "openai/gpt-5.5-fast");
+            }
           }
         }),
     );
