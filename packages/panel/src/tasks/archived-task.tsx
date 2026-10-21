@@ -63,10 +63,13 @@ export function ArchivedComposerNote({
   stop,
   archivedBy,
   words = ARCHIVED_TASK_COPY.COMPOSER,
+  action = ARCHIVED_TASK_COPY.UNARCHIVE,
 }: {
   onUnarchive: () => void;
   /** Why nothing is sent, where the box it stands in sends something other than a message, as an Inbox item's answer. */
   words?: string;
+  /** What the press that brings it back says, where what is archived is no task, as a chat's topic. */
+  action?: string;
   /** Who archived the agent and why, where the agent itself was archived and the service said. */
   archivedBy?: ArchivedByReading | undefined;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
@@ -94,7 +97,7 @@ export function ArchivedComposerNote({
               </Button>
             )}
             <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onUnarchive}>
-              {ARCHIVED_TASK_COPY.UNARCHIVE}
+              {action}
             </Button>
           </>
         }

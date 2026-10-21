@@ -193,9 +193,9 @@ body,
 }
 
 /* A place standing alone in a narrow room leads its head with the way back,
-   so its name keeps the room left and what is said beside it gives way; a
-   topic's menu stays at the head's end, the only way to edit or archive it. */
-.desktop-shell[data-room="narrow"] .chat-head > h2 ~ :not(.chat-head-actions) {
+   so its name keeps the room left and what is said beside it gives way; its
+   menu stays at the head's end, the only way to edit or archive a topic. */
+.desktop-shell[data-room="narrow"] .chat-head-meta {
   display: none;
 }
 
@@ -5260,8 +5260,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   color: var(--luke-color-text-muted);
 }
 
-/* Its buttons end as far in from the rail's edge as the Inbox list's do. */
+/* Its buttons end as far in from the rail's edge as the Inbox list's do.
+   The rail is a list's column, never a page's width, so Send feedback draws
+   its glyph alone, named still (`FoldingButton`), leaving Chat's title and
+   its tag their room. */
 .chat-rail-bar {
+  --luke-fold: folded;
   padding-right: var(--column-inset);
 }
 
@@ -5286,13 +5290,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-/* A chat not read yet has no rail, so what stands in its place (a wait, a
-   failure, or no chat at all) takes the whole view rather than the rail's
-   column, and in a plan's Chat tab the whole column, centred in it. */
-.chat-view > .chat-stream:only-child {
-  grid-column: 1 / -1;
-}
-
 .task-chat {
   flex: 1;
 }
@@ -5301,10 +5298,37 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding-left: var(--column-inset);
 }
 
-/* A topic's menu stands at the head's end, past its name and purpose. */
-.chat-head-actions {
-  flex: none;
-  margin-inline-start: auto;
+/* A place's name is the toolbar's title, and what is said of it (a topic's
+   purpose) follows on its baseline, giving way first as the head narrows. */
+.chat-head .desktop-toolbar-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--luke-space-8);
+}
+
+.chat-head .desktop-toolbar-title {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.chat-head-meta {
+  display: flex;
+  min-width: 0;
+  flex: 0 1000 auto;
+}
+
+/* A task's channel is named by its task's glyph before its name, wherever
+   Chat names it (`chat-channel-name.tsx`): set inline on the words'
+   baseline, at the size a menu's glyph stands. */
+.chat-channel-glyph {
+  display: inline-flex;
+  margin-right: 0.3em;
+  vertical-align: -0.125em;
+}
+
+.chat-channel-glyph > svg {
+  width: 1em;
+  height: 1em;
 }
 
 /* The stream's body, the block a log's lines stand in (`ConversationContent`). */

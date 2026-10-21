@@ -1201,8 +1201,8 @@ function ViewOptions({
   );
 }
 
-/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread. */
-function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
+/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread; Chat's view menu offers the same. */
+export function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
   return [
     {
       label: MARK_ALL_READ,
@@ -1382,15 +1382,21 @@ export function ShowEmpty({
 export function InboxListSkeleton({
   rows = SKELETON_ROWS.length,
   context = false,
+  reading = READING_ITEMS,
+  list = TAB_WORDS.INBOX,
 }: {
   /** How many placeholder rows stand, at most five. */
   rows?: number;
   /** Whether each row holds a block for its context before its time, as an item row given a `context` draws it. */
   context?: boolean;
+  /** What a reader hears is being read, where the list is another's than the Inbox's, as Chat's rail. */
+  reading?: string;
+  /** What the list is called, where it is another's than the Inbox's. */
+  list?: string;
 }): React.JSX.Element {
   return (
-    <SkeletonRegion label={READING_ITEMS}>
-      <List label={TAB_WORDS.INBOX}>
+    <SkeletonRegion label={reading}>
+      <List label={list}>
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}

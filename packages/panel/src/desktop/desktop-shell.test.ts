@@ -1069,7 +1069,7 @@ function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
   return placeRow(page, "Chat");
 }
 
-test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
+test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what needs the developer in the Inbox's words, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   assert.equal(chatRow(mount(false)), undefined, "no chat is available");
   act(() => root?.unmount());
@@ -1080,7 +1080,7 @@ test("the sidebar's Chat row stands only while the account has Chat on and a cha
   const page = mount(false, false, { chatView: view });
   await settle();
   const row = chatRow(page);
-  assert.equal(row?.textContent, "Chat4 waiting on you");
+  assert.equal(row?.textContent, "Chat4 need you");
   assert.equal(row?.getAttribute("aria-current"), null);
   act(() => row?.click());
   assert.equal(opened, 1);

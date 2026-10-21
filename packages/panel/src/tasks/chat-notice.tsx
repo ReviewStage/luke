@@ -6,18 +6,13 @@ import {
   knownBlock,
 } from "@luke/features/chat-wire";
 import { Button } from "@luke/ui";
-import {
-  CHAT_PLACE,
-  type ChatNames,
-  type ChatPlace,
-  channelLabel,
-  chatWho,
-} from "@luke/ui/chat-model";
+import { CHAT_PLACE, type ChatNames, type ChatPlace, chatWho } from "@luke/ui/chat-model";
 import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { FadingWords } from "../fading-words.js";
 import { useChatActor } from "./chat-actors.js";
+import { ChannelName } from "./chat-channel-name.js";
 import { RelativeTime } from "./relative-time.js";
 import { SentWords } from "./skill-chip.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -28,7 +23,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * A line the chat steered into a coding agent's turn is no message of the
  * developer's, so it never draws as their bubble. It draws as a card across
  * the column instead, washed in Luke's blue, headed by its sender's mark,
- * name, the channel the message was posted in, its place in the
+ * name, the channel the message was posted in, named as Chat names it
+ * (`chat-channel-name.tsx`), its place in the
  * workspace's chat as `m 41`, and how long ago it was posted, with Open in
  * Chat at the head's end, which opens the window's Chat on that channel.
  * Its body is the message as the chat holds it, Markdown as the transcript
@@ -95,11 +91,14 @@ export function ChatNoticeCard({
       ? undefined
       : chatWho(doors.chat, doors.names, held.authorId);
   const where =
-    channel === undefined || doors === undefined
-      ? undefined
-      : channel.kind === CHANNEL_KIND.DM
-        ? "direct message"
-        : `in #${channelLabel(doors.chat, doors.names, channel)}`;
+    channel === undefined || doors === undefined ? undefined : channel.kind === CHANNEL_KIND.DM ? (
+      "direct message"
+    ) : (
+      <>
+        {"in "}
+        <ChannelName chat={doors.chat} names={doors.names} channel={channel} />
+      </>
+    );
   // Note that a message of no Markdown, a link or a picture alone, keeps the notice's own words.
   const fromChat = held === undefined ? "" : heldWords(held);
   const shownWords = fromChat === "" ? chatNoticeWords(words) : fromChat;
@@ -119,7 +118,7 @@ export function ChatNoticeCard({
             <ActorRef actor={actorOf(who.member.id)} />
           ))}
         <FadingWords className="chat-notice-place">
-          {where === undefined ? null : `${where} · `}m {notice.chat_seq}
+          {where === undefined ? null : <>{where} · </>}m {notice.chat_seq}
           {held === undefined ? null : (
             <>
               {" · "}

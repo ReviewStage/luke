@@ -4,6 +4,7 @@ import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { CodeRef } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
@@ -39,7 +40,13 @@ import {
 } from "@luke/ui/chat-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
-import { AtSignIcon, HashIcon, MailOpenIcon, MessagesSquareIcon } from "lucide-react";
+import {
+  AtSignIcon,
+  HashIcon,
+  MailOpenIcon,
+  MessagesSquareIcon,
+  SlidersHorizontalIcon,
+} from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorStack, actorCard } from "../actor-ref.js";
@@ -47,13 +54,17 @@ import { useAppCommand } from "../app-commands.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useColumnSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor, useChatNames } from "../tasks/chat-actors.js";
+import { channelTitle } from "../tasks/chat-channel-name.js";
 import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
+import { VIEW_OPTIONS } from "../tasks/inbox-columns.js";
+import { InboxListSkeleton, markAllEntries } from "../tasks/inbox-list.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { keptSkills } from "../tasks/repository-skills.js";
@@ -84,22 +95,31 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * It stands in the plan's place beside the sidebar, whose Chat row is
  * marked while it does, as the window's Inbox (`desktop-inbox.tsx`) does.
  * The rail is drawn from the sidebar's own pieces: For you at its head,
- * counting what waits on the developer, then the channels, then the direct
- * messages, each group under its heading as Settings' page list's are
- * (`.section-heading`), each row counting what in it the developer has not read and
- * in the unread weight while anything is (`chat-model.ts`). A direct
- * message's row leads with the other member's mark and is named by who it
- * is with. Each row behaves as a sidebar task's and an Inbox item's do: it
- * hangs its card while the pointer rests on it, a task's channel ends in its
- * task's mark, and a right-click, a hover button, or a swipe marks it read;
- * each task group is headed as the sidebar heads the same tasks, and a
- * group's ⋯ marks every place in it read. A press on a row shows its place in
- * the pane beside the rail (`chat-pane.tsx`). A direct message between two
- * others draws both of its two, and an agent's wears its failed mark at the
- * row's end as its sidebar row does. The agents are named from the plans'
- * summaries, the way the sidebar names them, from the lines the chat read
- * carries where those name more, and from a read of each agent drawn past
- * both (`useChatNames`). With nothing read, it says
+ * counting what needs the developer in the Inbox's words (`NEEDS_YOU`),
+ * then the channels, the tasks', and the direct messages, each group under
+ * the sidebar's own group header (`SidebarGroupHeader`), each row wearing
+ * the Inbox's unread dot and the unread weight while anything in it is
+ * unread (`chat-model.ts`). A direct message's row leads with the other
+ * member's mark and is named by who it is with; a direct message between
+ * two others draws both of its two, and an agent's wears its failed mark at
+ * the row's end as its sidebar row does. Each row behaves as a
+ * sidebar task's and an Inbox item's do: it hangs its card while the
+ * pointer rests on it, a task's channel ends in its task's mark, and a
+ * right-click, a hover button, or a swipe marks it read; each task group is
+ * headed as the sidebar heads the same tasks, and a group's ⋯ marks every
+ * place in it read. Its bar is a page's
+ * toolbar, as the Inbox's list's is: Chat's title and its Experimental
+ * tag, then View options (Show archived channels, which lists the archived
+ * channels as the Inbox's Archived scope does, and Mark all as read), New
+ * channel, and Send feedback; it stands from the first frame, over
+ * placeholder rows while the chat is read. A press on a row shows its
+ * place in the pane beside the rail (`chat-pane.tsx`), whose head ends on
+ * the channel's menu, as an Inbox item's bar ends on the item's: Mark as
+ * read and Copy link for every channel, Open task for a task's, and Edit
+ * and Archive, or Bring back, for a topic. The agents are named from the
+ * plans' summaries, the way the sidebar names them, from the lines the
+ * chat read carries where those name more, and from a read of each agent
+ * drawn past both (`useChatNames`). With nothing read, it says
  * so under Chat's glyph. Any row of the sidebar leaves it for the plan it
  * stood over; Escape does not, as it does not leave the Inbox, so a stray
  * press never loses the place being read. Chat narrower than the Inbox's
@@ -205,8 +225,17 @@ function useTaskDoors(
   return (taskId) => doors.get(taskId);
 }
 
-/** What the way back from a place to the rail says, in a narrow room. */
+/** What Chat is called: its toolbar's title, and the way back from a place to the rail in a narrow room. */
 const CHAT_LIST = "Chat";
+
+/** What a reader hears while the chat is read, under the rail's placeholder rows. */
+const READING_CHAT = "Reading chat…";
+
+/** What View options' toggle of the archived channels is called. */
+const SHOW_ARCHIVED = "Show archived channels";
+
+/** What a task channel's menu opens its task with. */
+const OPEN_TASK = "Open task";
 
 /**
  * The way back's pill, which says where it goes and names Back's chord
@@ -254,10 +283,10 @@ function drawnWidth(width: number): string {
 const UNREAD_WORDS = "Unread";
 const UNREAD_NOUN = { one: "unread", many: "unread" } as const;
 
-/** What For you's row says under its name. */
-const NOTHING_WAITS = "Nothing waits on you";
-function waitingWords(count: number): string {
-  return `${count} ${count === 1 ? "waits" : "wait"} on you`;
+/** What For you's row says under its name, in the Inbox's words. */
+function needsYouWords(count: number): string {
+  if (count === 0) return NEEDS_YOU.NONE;
+  return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
 /** The keys of the rail's groups no task's group names. */
@@ -291,8 +320,18 @@ interface RailGroupsShown {
   readonly trail: readonly RailGroupShown[];
 }
 
-/** The rail's groups in order, as the sidebar's stand: the channels, the tasks' as the sidebar groups the tasks, then the archived folded and the direct messages, each run drawn as its own list so a key is only ever its own group's. */
-function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
+/**
+ * The rail's groups in order, as the sidebar's stand: the channels, the
+ * tasks' as the sidebar groups the tasks, then the archived and the direct
+ * messages, each run drawn as its own list so a key is only ever its own
+ * group's. The archived stand while View options shows them, and otherwise
+ * only the one shown, so a channel archived while it is read keeps its row.
+ */
+function railGroups(
+  rail: ReturnType<typeof chatRail>,
+  showArchived: boolean,
+  current: (row: ChatRailRow) => boolean,
+): RailGroupsShown {
   const held = (group: RailGroupShown) => group.rows.length > 0;
   return {
     lead: [
@@ -324,8 +363,8 @@ function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
         key: RAIL_GROUP.ARCHIVED,
         name: "Archived",
         glyph: <ArchiveIcon />,
-        rows: rail.archived,
-        foldedAtFirst: true,
+        rows: showArchived ? rail.archived : rail.archived.filter(current),
+        foldedAtFirst: false,
       } satisfies RailGroupShown,
       {
         space: RAIL_SPACE.RAIL,
@@ -879,8 +918,13 @@ function ChatView({
   const hidden = hiddenColumns(chatRoom, view.listed);
   // A place standing alone steps back to the rail by Escape too, as the Inbox's item does.
   useAppCommand(APP_COMMAND.CHAT_LIST, hidden.list ? view.onList : undefined);
+  const [showArchived, setShowArchived] = useState(false);
+  const railWidth = single ? undefined : drawnWidth(width);
   const rail = read === undefined ? undefined : chatRail(read.answer, names, taskGrouping(tasks));
-  const groups = rail === undefined ? undefined : railGroups(rail);
+  const groups =
+    rail === undefined
+      ? undefined
+      : railGroups(rail, showArchived, (each) => shows(view.place, each));
   useChannelKeys({
     groups,
     folded: folds.folded,
@@ -899,21 +943,34 @@ function ChatView({
         {CHAT_FAILED}
       </ErrorState>
     ) : view.available ? (
-      <SpinnerRegion label="Loading chat" />
+      <div className="chat-rail-body">
+        <InboxListSkeleton reading={READING_CHAT} list={CHAT_LIST} />
+      </div>
     ) : (
       <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
     );
     return (
       <div className="chat-view">
-        <section className="chat-stream" aria-label="Chat">
-          <header className="desktop-toolbar" />
+        <nav className="chat-rail" aria-label={CHAT_LIST} style={{ width: railWidth }}>
+          {/* Note that New channel stands but takes no press until the chat is read, since a channel opened against no chat would go nowhere. */}
+          <RailBar onNew={undefined} viewOptions={undefined} />
           {standIn}
-        </section>
+        </nav>
+        {dialogs.dialog}
       </div>
     );
   }
   const chat = read.answer;
   const forYouGroups = copyChat === undefined ? [] : [[copyChat]];
+  // Every place's row, archived or not, which the menus read what is unread from.
+  const places = [
+    ...rail.channels,
+    ...rail.tasks.flatMap((each) => each.rows),
+    ...rail.archived,
+    ...rail.direct,
+  ];
+  const unreadIn = (channel: ChatChannel) =>
+    places.some((each) => each.channel.id === channel.id && each.unread > 0);
   const row = (each: ChatRailRow) => (
     <RailRow
       key={each.channel.id}
@@ -948,25 +1005,29 @@ function ChatView({
         className="chat-rail"
         aria-label="Chat"
         hidden={hidden.list}
-        style={{ width: single ? undefined : drawnWidth(width) }}
+        style={{ width: railWidth }}
       >
-        <header className="desktop-toolbar chat-rail-bar">
-          <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Chat</h1>
-          </div>
-          <div className="desktop-toolbar-actions">
-            <Tooltip label={NEW_CHANNEL}>
-              <IconButton icon={<PlusIcon />} label={NEW_CHANNEL} onClick={dialogs.askNew} />
-            </Tooltip>
-          </div>
-        </header>
+        <RailBar
+          onNew={dialogs.askNew}
+          viewOptions={
+            <ChatViewOptions
+              shown={view.open}
+              archived={showArchived}
+              onArchived={setShowArchived}
+              unread={places.some((each) => each.unread > 0)}
+              onMarkAll={() =>
+                view.onRead(places.flatMap((each) => (each.unread > 0 ? [each.channel.id] : [])))
+              }
+            />
+          }
+        />
         <ScrollArea fade={SCROLL_FADE.START}>
           <div className="chat-rail-body">
             <ul className="sidebar-tasks">
               <PlaceRow
                 mark={<AtSignIcon />}
                 title="For you"
-                preview={rail.forYou === 0 ? NOTHING_WAITS : waitingWords(rail.forYou)}
+                preview={needsYouWords(rail.forYou)}
                 at={undefined}
                 now={now}
                 unread={false}
@@ -997,11 +1058,20 @@ function ChatView({
         openLink={openLink}
         onPost={view.onPost}
         onAnswer={view.onAnswer}
-        channelActions={(channel) =>
-          channel.kind === CHANNEL_KIND.TOPIC ? (
-            <TopicActions channel={channel} dialogs={dialogs} shown={view.open} />
-          ) : undefined
-        }
+        channelActions={(channel) => (
+          <ChannelActions
+            key={channel.id}
+            channel={channel}
+            title={channelTitle(chat, names, channel)}
+            unread={unreadIn(channel)}
+            dialogs={dialogs}
+            shown={view.open}
+            onMarkRead={() => view.onRead([channel.id])}
+            onOpenTask={tasks.onSelect}
+          />
+        )}
+        onOpen={view.onChoose}
+        onBringBack={dialogs.askArchive}
         readPicture={view.readPicture}
         taskDoors={taskDoors}
         lead={
@@ -1021,19 +1091,129 @@ function ChatView({
   );
 }
 
-/** A topic's menu at its head's end: edit its name and purpose and archive it, or bring an archived one back. */
-function TopicActions({
-  channel,
-  dialogs,
-  shown,
+/** The rail's bar, a page's toolbar: Chat's title and its Experimental tag, then the view's menu where the chat is read, New channel, and Send feedback. */
+function RailBar({
+  onNew,
+  viewOptions,
 }: {
-  channel: ChatChannel;
-  dialogs: ChannelDialogs;
+  /** Opens New channel's question; none while no chat is read, which leaves the press disabled. */
+  onNew: (() => void) | undefined;
+  viewOptions: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <header className="desktop-toolbar chat-rail-bar">
+      <div className="desktop-toolbar-heading">
+        <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
+        <ExperimentTag />
+      </div>
+      <div className="desktop-toolbar-actions">
+        {viewOptions}
+        <Tooltip label={NEW_CHANNEL}>
+          <IconButton
+            icon={<PlusIcon />}
+            label={NEW_CHANNEL}
+            disabled={onNew === undefined}
+            onClick={onNew}
+          />
+        </Tooltip>
+        <SendFeedbackButton experiment={EXPERIMENT.CHAT} />
+      </div>
+    </header>
+  );
+}
+
+/** The rail's view menu, as the Inbox's list offers its own: Show archived channels, checked while they stand, and Mark all as read at its foot. */
+function ChatViewOptions({
+  shown,
+  archived,
+  onArchived,
+  unread,
+  onMarkAll,
+}: {
   shown: boolean;
+  archived: boolean;
+  onArchived: (archived: boolean) => void;
+  unread: boolean;
+  onMarkAll: () => void;
 }): React.JSX.Element {
   const menu = useMenu(shown);
-  const label = `#${channel.name ?? ""} actions`;
-  const groups = topicActionGroups(channel, dialogs);
+  return (
+    <>
+      <Tooltip label={VIEW_OPTIONS}>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={VIEW_OPTIONS}
+          menu={menu.drawn}
+          groups={[
+            [
+              {
+                label: SHOW_ARCHIVED,
+                icon: <ArchiveIcon />,
+                checked: archived,
+                onSelect: () => onArchived(!archived),
+              },
+            ],
+            markAllEntries({ unread, onMarkAll }),
+          ]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * A channel's menu at its head's end, as an Inbox item's bar ends on the
+ * item's: Mark as read while anything in it is unread, and Copy link, for
+ * every channel; Open task for a task's; and for a topic, Edit and Archive,
+ * or Bring back once archived.
+ */
+function ChannelActions({
+  channel,
+  title,
+  unread,
+  dialogs,
+  shown,
+  onMarkRead,
+  onOpenTask,
+}: {
+  channel: ChatChannel;
+  /** The channel's name in words, which the menu is named by. */
+  title: string;
+  unread: boolean;
+  dialogs: ChannelDialogs;
+  shown: boolean;
+  onMarkRead: () => void;
+  onOpenTask: (taskId: string) => void;
+}): React.JSX.Element {
+  const menu = useMenu(shown);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.CHAT, channelId: channel.id });
+  const taskStatus = useTaskStatus(channel.planId);
+  const label = `${title} actions`;
+  const read: MenuAction = {
+    ...markReadItem({ unread: true, onMark: onMarkRead }),
+    disabled: !unread,
+  };
+  const { planId } = channel;
+  const own: MenuAction[][] =
+    channel.kind === CHANNEL_KIND.TOPIC
+      ? topicActionGroups(channel, dialogs)
+      : channel.kind === CHANNEL_KIND.TASK && planId !== undefined
+        ? [
+            [
+              {
+                label: OPEN_TASK,
+                icon: <PlanGlyph status={taskStatus} />,
+                onSelect: () => onOpenTask(planId),
+              },
+            ],
+          ]
+        : [];
+  const groups = [[read], copyLink === undefined ? [] : [copyLink], ...own].filter(
+    (group) => group.length > 0,
+  );
   return (
     <>
       <Tooltip label="Channel actions">

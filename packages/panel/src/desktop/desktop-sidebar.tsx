@@ -1153,7 +1153,11 @@ function SidebarChatRow({
     <NavItem
       icon={<MessagesSquareIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
-      count={{ value: waiting, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT }}
+      count={{
+        value: waiting,
+        noun: waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many,
+        tone: NAV_COUNT_TONE.ACCENT,
+      }}
       onClick={onOpen}
     >
       Chat
