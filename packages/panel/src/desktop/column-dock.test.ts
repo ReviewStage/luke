@@ -12,8 +12,10 @@ import { useColumnDock } from "./column-dock.js";
  * its foot, and never a thread's reply box open among the messages above it,
  * nor a composer left in a hidden pane. Beside the work, where only the
  * folded sidebar's card reads it, the composer docks only where it reaches
- * under the card, past a rail narrower than the card. jsdom lays nothing
- * out, so each box is staged where the window lays it.
+ * under the card, past a rail narrower than the card. A part landing after
+ * the column stands, a to-do list over an agent's composer, raises the dock
+ * at the frame after it lands. jsdom lays nothing out, so each box is staged
+ * where the window lays it, and each frame is the test's.
  */
 
 let root: Root | undefined;
@@ -92,13 +94,8 @@ function RailShell({ narrow }: { narrow: boolean }): React.JSX.Element {
   );
 }
 
-/** Draws `shell` in the room given, over a rail ending where given, answering the dock it writes on the document's root. */
-function dockOf(
-  shell: (props: { narrow: boolean }) => React.JSX.Element,
-  narrow: boolean,
-  railEnd = 212,
-): string {
-  const boxes = staged(railEnd);
+/** Lays each element out where `boxes` stages it by its `data-staged` name, and nowhere else. */
+function stage(boxes: ReadonlyMap<string, Staged>): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -111,6 +108,15 @@ function dockOf(
       height: box.bottom - box.top,
     });
   });
+}
+
+/** Draws `shell` in the room given, over a rail ending where given, answering the dock it writes on the document's root. */
+function dockOf(
+  shell: (props: { narrow: boolean }) => React.JSX.Element,
+  narrow: boolean,
+  railEnd = 212,
+): string {
+  stage(staged(railEnd));
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(createElement(shell, { narrow })));
@@ -131,4 +137,46 @@ test("beside the work, a rail narrower than the folded sidebar's card leaves the
 
 test("beside the work, a rail as wide as the card holds it over its rows, and the composer beside it docks nothing", () => {
   assert.equal(dockOf(ChatShell, false, 300), "0px");
+});
+
+/** An agent's page in a narrow room, its composer at its foot and, where it stands, the to-do list over it. */
+function AgentShell({ todos }: { todos: boolean }): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, false, true, "agent");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell" },
+    createElement(
+      "div",
+      { className: "agent-page", "data-staged": "page" },
+      todos
+        ? createElement("div", { className: "agent-todos-dock", "data-staged": "todos" })
+        : null,
+      createElement("div", { className: "agent-composer", "data-staged": "composer" }),
+    ),
+  );
+}
+
+test("a to-do list landing over an agent's composer raises the dock at the frame after it lands", async () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
+  stage(
+    new Map([
+      ["page", { left: 0, right: 1000, top: 0, bottom: 800 }],
+      ["todos", { left: 0, right: 1000, top: 600, bottom: 700 }],
+      ["composer", { left: 0, right: 1000, top: 700, bottom: 800 }],
+    ]),
+  );
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(AgentShell, { todos: false })));
+  const dock = () => document.documentElement.style.getPropertyValue("--column-dock");
+  assert.equal(dock(), "100px", "the composer alone docks");
+
+  await act(async () => root?.render(createElement(AgentShell, { todos: true })));
+  act(() => {
+    for (const heard of frames.splice(0)) heard(0);
+  });
+
+  assert.equal(dock(), "200px", "the to-do list over it docks with it");
 });

@@ -1434,8 +1434,9 @@ export function useMentionPicker({
   ];
 
   // The list stands by the word's line, on the side asked, inside the room's width.
+  // Note that the room is measured only while the list is shown, since a measure in a draw lays out the whole window.
   const box = room.current;
-  const placed = box?.getBoundingClientRect();
+  const placed = shown ? box?.getBoundingClientRect() : undefined;
   const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): MenuPlace => {
     const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
     return side === MENTION_MENU_SIDE.BELOW
