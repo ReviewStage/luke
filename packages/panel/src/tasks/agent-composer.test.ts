@@ -500,7 +500,7 @@ test("a call that begins mid-dictation ends it, keeping the words said, and the 
   assert.equal(composerEditor(box.container).textContent, "the invite page");
 });
 
-test("a clip still being read as a call begins keeps its strip and its Cancel until its words land, then the row holds the call", async () => {
+test("a clip still being read as a call begins keeps its strip and its Cancel beside the call's controls until its words land, then the row holds the call", async () => {
   let land: (answer: { text: string }) => void = ignore;
   const box = await mountedForCall(
     () =>
@@ -516,6 +516,10 @@ test("a clip still being read as a call begins keeps its strip and its Cancel un
   await box.draw(true);
   assert.ok(box.container.querySelector(".dictation-strip"), "the reading still shows");
   assert.ok(box.container.querySelector('button[aria-label="Cancel"]'), "and can still be let go");
+  assert.ok(
+    box.container.querySelector('button[aria-label="End call"]'),
+    "while the call's controls stand beside it",
+  );
 
   await act(async () => land({ text: "the members list" }));
   await settle();
