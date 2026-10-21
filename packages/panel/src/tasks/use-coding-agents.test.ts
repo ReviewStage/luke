@@ -446,7 +446,7 @@ test("on an agent's own page, its agent is continued and forked through the page
   act(() => {
     draft = tab.control().onForkDraft(fork);
   });
-  assert.equal(tab.control().draft?.fork, fork, "the page holds the fork's draft");
+  assert.deepEqual(tab.control().draft?.fork, fork, "the page holds the fork's draft");
   await act(async () => {
     failed = await tab.control().startFork(draft, fork, "", undefined, [], []);
   });
@@ -666,7 +666,8 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
     failed = await tab.control().startFork(joined, fork, ` ${words} `, undefined, [notes], []);
   });
   assert.equal(failed?.text, "The agent could not be started. Try again.");
-  assert.equal(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
+  // Note that the fork kept is the same fork, though the tab hands back the one it already held where its fields are the same (`useSteadyDoors`).
+  assert.deepEqual(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
   await act(async () => {
     failed = await tab.control().startFork(joined, fork, "", undefined, [], []);
   });

@@ -34,7 +34,7 @@ import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
+import { ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
@@ -647,7 +647,6 @@ export function DesktopVersionHistory({
   history,
   subject,
   account,
-  call,
   onExit,
   onRestored,
 }: {
@@ -657,8 +656,6 @@ export function DesktopVersionHistory({
   subject: VersionSubject;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
-  /** The call card, while the window is to draw one. */
-  call: CallCardInput | undefined;
   onExit: () => void;
   onRestored: () => void;
 }): React.JSX.Element {
@@ -844,7 +841,7 @@ export function DesktopVersionHistory({
             </ScrollArea>
           </section>
         </div>
-        <ColumnFoot call={call} />
+        <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
       </nav>

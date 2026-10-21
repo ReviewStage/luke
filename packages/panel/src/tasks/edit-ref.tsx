@@ -21,7 +21,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { agentGlyphState, providerOf } from "./coding-agent-model.js";
-import { agoText } from "./task-time.js";
+import { agoText, useMinute } from "./task-time.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 
 /**
@@ -58,12 +58,16 @@ export interface EditAgents {
 /** Who reads a plan's edits, as a place hands them over: the members are the directory's. */
 export type TaskReader = Pick<EditReader, "readerId" | "owner">;
 
-/** What a place knows to name a plan's edits: who reads them, who last changed each section, its agents, and the minute it counts from. */
+/**
+ * What a place knows to name a plan's edits: who reads them, who last
+ * changed each section, and its agents. Note that it holds no clock: a line
+ * that says how long ago reads the minute itself, so the minute draws that
+ * line again and not every section that names an edit.
+ */
 export interface EditPlace {
   readonly reader: EditReader;
   readonly sections: readonly PlanSectionEdit[];
   readonly agents: EditAgents | undefined;
-  readonly now: number;
 }
 
 /** The agent an edit names, among the task's agents, archived or not; none where the edit names none or the list holds no such agent. */
@@ -97,18 +101,18 @@ function callWords(owner: Actor | undefined): string {
 }
 
 /** Luke's card's line: whose call he wrote on, where he did, and how long ago. */
-function lukeSub(edit: PlanLastEdit, place: EditPlace): string {
-  const ago = agoText(edit.at, place.now);
+function lukeSub(edit: PlanLastEdit, place: EditPlace, now: number): string {
+  const ago = agoText(edit.at, now);
   if (!edit.duringCall) return ago;
   return `During ${callWords(editCallOwner(edit, place.reader))} · ${ago}`;
 }
 
 /** What an actor last did in the plan, in a card's line; none where no section's last change is theirs. */
-function latestLine(actor: Actor, place: EditPlace, ago: boolean): string | undefined {
+function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): string | undefined {
   const activity = latestActivity(place.sections, actor);
   if (activity === undefined) return undefined;
   const words = activityWords(activity);
-  return ago ? `${words} · ${agoText(activity.at, place.now)}` : words;
+  return ago ? `${words} · ${agoText(activity.at, now)}` : words;
 }
 
 /** A person named in a line: their card says what they last did in the plan; someone the window cannot name hangs their own. */
@@ -125,9 +129,10 @@ function PersonRef({
   possessive?: boolean;
   faceOnly?: boolean;
 }): React.JSX.Element {
+  const now = useMinute();
   const card =
     actor.kind === ACTOR_KIND.PERSON ? (
-      <PersonCard actor={actor} latest={latestLine(actor, place, true)} />
+      <PersonCard actor={actor} latest={latestLine(actor, place, now, true)} />
     ) : undefined;
   return (
     <ActorRef
@@ -152,12 +157,16 @@ function WriterRef({
   sentence: boolean;
   faceOnly: boolean;
 }): React.JSX.Element | null {
+  const now = useMinute();
   const agent = agentOf(edit, place.agents);
   const actor = writerOf(edit, place);
   if (actor === undefined) return null;
   if (actor.kind === ACTOR_KIND.LUKE) {
     const card = (
-      <LukeCard sub={lukeSub(edit, place)} latest={latestLine(LUKE_ACTOR, place, false)} />
+      <LukeCard
+        sub={lukeSub(edit, place, now)}
+        latest={latestLine(LUKE_ACTOR, place, now, false)}
+      />
     );
     return <ActorRef actor={actor} card={card} faceOnly={faceOnly} />;
   }
