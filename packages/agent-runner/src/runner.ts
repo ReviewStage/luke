@@ -144,6 +144,8 @@ function queryOptions(
     hooks: { Stop: [{ hooks: [onStop] }] },
   };
   if (config.effort !== undefined) options.effort = config.effort;
+  // Note that a headless CLI runs fast mode only where its flag settings opt in.
+  if (config.fast === true) options.settings = { fastMode: true };
   if (config.resume !== undefined) options.resume = config.resume;
   return options;
 }
@@ -228,14 +230,17 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
       return;
     }
     case INPUT_LINE.MODEL: {
-      const { model, effort } = value;
+      const { model, effort, fast } = value;
       if (model !== undefined) yield* control("setModel", () => launch.session.setModel(model));
       if (effort !== undefined && !isClaudeEffort(effort)) {
         yield* Effect.logWarning("agent-runner: skipped an effort Claude Code does not take");
-      } else if (effort !== undefined) {
-        yield* control("applyFlagSettings", () =>
-          launch.session.applyFlagSettings({ effortLevel: effort }),
-        );
+      }
+      const settings = {
+        ...(effort !== undefined && isClaudeEffort(effort) ? { effortLevel: effort } : undefined),
+        ...(fast === undefined ? undefined : { fastMode: fast }),
+      };
+      if (Object.keys(settings).length > 0) {
+        yield* control("applyFlagSettings", () => launch.session.applyFlagSettings(settings));
       }
       return;
     }

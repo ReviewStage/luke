@@ -4,9 +4,10 @@
  * An agent on eve may move to any model the catalog offers its account, a
  * fast version or the standard window among them. An agent on a provider's
  * own harness runs that provider's models alone, through the harness's own
- * CLI: Claude Code takes Claude models, never a fast version, and no choice
- * of context window, since the CLI manages its context itself; Codex takes
- * GPT models on the same terms. A runtime's rule is one row of
+ * CLI, and no choice of context window, since the CLI manages its context
+ * itself: Claude Code takes Claude models, a fast version among them, which
+ * it runs as the base model with its own fast mode on; Codex takes GPT
+ * models, never a fast version, since it has no fast mode. A runtime's rule is one row of
  * `NATIVE_MODEL_RULE`; a runtime with no row is eve's, which offers everything.
  * Start is not narrowed here: it offers every model, and what it starts on
  * decides the runtime (`agent-runtime-choice.ts`).
@@ -39,7 +40,7 @@ const ANY_MODEL: RuntimeModelRule = {
 const NATIVE_MODEL_RULE: Partial<Record<CodingAgentRuntime, RuntimeModelRule>> = {
   claude_code: {
     provider: MODEL_PROVIDER.ANTHROPIC,
-    fast: false,
+    fast: true,
     contextWindow: false,
     name: "Claude Code",
   },
@@ -81,6 +82,13 @@ function providerWord(modelId: string): string {
 /** Whether a catalog id names a model's fast version. */
 function isFastId(modelId: string): boolean {
   return modelId.endsWith(FAST_ID_SUFFIX);
+}
+
+/** The catalog id an agent on the runtime runs the model given as: its base model where the runtime runs no fast version, else the id itself. */
+export function runtimeModelId(modelId: string, runtime: CodingAgentRuntime | undefined): string {
+  return runtimeModelRule(runtime).fast || !isFastId(modelId)
+    ? modelId
+    : modelId.slice(0, -FAST_ID_SUFFIX.length);
 }
 
 /**

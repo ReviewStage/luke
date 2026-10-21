@@ -199,15 +199,21 @@ function openMenuOn(runtime: CodingAgentRuntime | undefined): {
   return { models: listed, foot };
 }
 
-test("on a Claude Code agent the menu offers Claude models alone, no Fast switch, and no Context row, while an eve agent's offers every model with both", () => {
+test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither, while an eve agent's offers every model with both", () => {
   const claudeCode = openMenuOn(CODING_AGENT_RUNTIME.CLAUDE_CODE);
+  const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX);
   const eve = openMenuOn(undefined);
 
   assert.equal(claudeCode.models.length, 2, claudeCode.models.join(" | "));
   assert.match(claudeCode.models[0] ?? "", /Opus 5\.5/u);
   assert.match(claudeCode.models[1] ?? "", /Sonnet 5\.5/u);
   assert.match(claudeCode.foot, /Effort/u);
-  assert.doesNotMatch(claudeCode.foot, /Fast|Context/u);
+  assert.match(claudeCode.foot, /Fast/u);
+  assert.doesNotMatch(claudeCode.foot, /Context/u);
+
+  assert.equal(codex.models.length, 1, codex.models.join(" | "));
+  assert.match(codex.models[0] ?? "", /GPT-6\.1 Sol/u);
+  assert.doesNotMatch(codex.foot, /Fast|Context/u);
 
   assert.equal(eve.models.length, 3, eve.models.join(" | "));
   assert.match(eve.models[2] ?? "", /GPT-6\.1 Sol/u);

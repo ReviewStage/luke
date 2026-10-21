@@ -431,7 +431,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(api.commands.length, 1);
       assert.deepEqual(linesOf(api.commands[0]).slice(2), [
         // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
-        { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
+        { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", fast: false, effort: "low" },
         {
           type: INPUT_LINE.MESSAGE,
           uuid: lineId,
@@ -444,7 +444,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a change of model and effort reaches the running runner as a model line alone, and a session with no runner takes nothing",
+    "a change of model and effort reaches the running runner as a model line alone, a fast version as its base model with fast mode on, and a session with no runner takes nothing",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -456,7 +456,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         yield* updateCodingAgentChoice(userId, agent.id, {
-          model: "anthropic/claude-sonnet-5.5",
+          model: "anthropic/claude-opus-5.5-fast",
           effort: "low",
         });
 
@@ -469,7 +469,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual([retuned, elsewhere], [RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE]);
         assert.equal(api.commands.length, 1);
         assert.deepEqual(linesOf(api.commands[0]).slice(2), [
-          { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
+          { type: INPUT_LINE.MODEL, model: "claude-opus-5-5", fast: true, effort: "low" },
         ]);
       }),
   );

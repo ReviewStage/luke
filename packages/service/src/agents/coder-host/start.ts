@@ -33,13 +33,13 @@ import {
   stepsBytes,
   summaryBytes,
 } from "@luke/features/agent-replay";
+import { runtimeModelId } from "@luke/features/agent-runtime-models";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
-  type CodingAgentPayer,
   type CodingAgentStartFrom,
   type CodingAgentStartRequest,
   type CodingAgentSummary,
@@ -390,8 +390,6 @@ export type StartAsk = StartPlace & {
   readonly serverWords?: string | undefined;
   /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
   readonly branch?: string | undefined;
-  /** Who Start picked to pay for this one agent; none for the account's default (`agentRuntimeChoice`). */
-  readonly payer?: CodingAgentPayer | undefined;
   /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
 };
@@ -837,8 +835,8 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
  * whatever the account's routing would choose: a call reaches eve alone
  * (`voice/opening.ts` refuses an agent on any other runtime). Every
  * other Start is decided by the account's routing (`agentRuntimeChoice`),
- * with its payer, after the blank case: the payer the ask picked where it
- * picked one, the account's default otherwise, a continue and a fork alike.
+ * with its payer, after the blank case: the credential Settings chose, a
+ * continue and a fork alike.
  */
 function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
   if (ask.blank === true || ask.call === true) {
@@ -847,7 +845,7 @@ function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
       payer: undefined,
     });
   }
-  return agentRuntimeChoice(userId, model, ask.payer);
+  return agentRuntimeChoice(userId, model);
 }
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
@@ -952,7 +950,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       // A continue keeps its source's human name, as the same teammate going on.
       personaName: continued ? (from.source.personaName ?? undefined) : undefined,
       idempotencyKey: ask.idempotencyKey,
-      model: choice.model,
+      // A fast version on a harness with no fast mode runs as its base model.
+      model: runtimeModelId(choice.model, runtime.runtime),
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
@@ -1115,7 +1114,6 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     note: note === "" ? undefined : note,
     blank: request.blank,
     call: request.call,
-    payer: request.payer,
     summaryModel,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };

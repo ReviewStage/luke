@@ -772,6 +772,12 @@ const CATALOG = modelCatalogOf([
     efforts: ["low", "medium", "high", "max"],
   },
   {
+    id: "anthropic/claude-opus-5.5-fast",
+    name: "Claude Opus 5.5 (Fast)",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+  },
+  {
     id: "openai/gpt-5.5",
     name: "GPT-5.5",
     provider: MODEL_PROVIDER.OPENAI,
@@ -984,7 +990,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a fast GPT model, a sign-in OpenAI signed out, none, or a function with no harness starts on eve as today, with no payer, and a Claude agent is untouched",
+      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan, a fast GPT model among them; a sign-in OpenAI signed out, none, or a function with no harness starts on eve as today, with no payer, and a Claude agent is untouched",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1000,7 +1006,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               chatGpt: "signed_in",
               model: "openai/gpt-5.5-fast",
               native: true,
-              on: "eve",
+              on: "codex",
             },
             {
               name: "signed out",
@@ -1099,7 +1105,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the plan is offered, a payer picked at Start is honoured and else the plan's default decides: the plan runs on Claude Code, and the API key, or Luke's key where none was saved, on eve; with no plan connected a pick changes nothing",
+      "where the Claude plan is offered, Settings' choice alone decides: Subscription runs every Claude model on Claude Code, a fast version with its own fast mode, and API key runs on eve on the API key, or Luke's key where none was saved; with no plan connected nothing changes",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1107,63 +1113,63 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             readonly plan: boolean;
             readonly forAgents: boolean;
             readonly apiKey: boolean;
-            readonly picked: CodingAgentPayer | undefined;
+            readonly model: string;
             readonly recorded: readonly [string, CodingAgentPayer | null];
           }[] = [
             {
-              name: "the override to the API key",
+              name: "Subscription, an API key saved too",
               plan: true,
               forAgents: true,
               apiKey: true,
-              picked: CODING_AGENT_PAYER.API_KEY,
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
-            },
-            {
-              name: "the override with no API key saved",
-              plan: true,
-              forAgents: true,
-              apiKey: false,
-              picked: CODING_AGENT_PAYER.LUKE,
-              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
-            },
-            {
-              name: "the default off, an API key saved",
-              plan: true,
-              forAgents: false,
-              apiKey: true,
-              picked: undefined,
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
-            },
-            {
-              name: "the default off, no API key",
-              plan: true,
-              forAgents: false,
-              apiKey: false,
-              picked: undefined,
-              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
-            },
-            {
-              name: "the default off, the plan picked",
-              plan: true,
-              forAgents: false,
-              apiKey: true,
-              picked: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+              model: "anthropic/claude-opus-5.5",
               recorded: ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
-              name: "no plan connected, the plan picked",
-              plan: false,
+              name: "Subscription, a fast version",
+              plan: true,
               forAgents: true,
               apiKey: false,
-              picked: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-              recorded: ["eve", null],
+              model: "anthropic/claude-opus-5.5-fast",
+              recorded: ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
-              name: "no plan connected, an API key saved, nothing picked",
+              name: "API key, saved",
+              plan: true,
+              forAgents: false,
+              apiKey: true,
+              model: "anthropic/claude-opus-5.5",
+              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+            },
+            {
+              name: "API key, a fast version",
+              plan: true,
+              forAgents: false,
+              apiKey: true,
+              model: "anthropic/claude-opus-5.5-fast",
+              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+            },
+            {
+              name: "the plan off, no API key",
+              plan: true,
+              forAgents: false,
+              apiKey: false,
+              model: "anthropic/claude-opus-5.5",
+              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
+            },
+            {
+              name: "no plan connected, an API key saved",
               plan: false,
               forAgents: true,
               apiKey: true,
-              picked: undefined,
+              model: "anthropic/claude-opus-5.5",
+              recorded: ["eve", null],
+            },
+            {
+              name: "no plan connected, a fast version",
+              plan: false,
+              forAgents: true,
+              apiKey: false,
+              model: "anthropic/claude-opus-5.5-fast",
               recorded: ["eve", null],
             },
           ];
@@ -1186,15 +1192,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               environment(),
               native,
             );
-            const started = yield* startCodingAgent(routedSessions(eve.sessions, owner), owner, {
-              ...startIn(workspaceId, "anthropic/claude-opus-5.5"),
-              payer: each.picked,
-            }).pipe(Effect.provide(layers));
+            const started = yield* startCodingAgent(
+              routedSessions(eve.sessions, owner),
+              owner,
+              startIn(workspaceId, each.model),
+            ).pipe(Effect.provide(layers));
 
             const routing = Option.getOrThrow(
               yield* readCodingAgentRouting(owner, started.agent.id),
             );
             assert.deepEqual([routing.runtime, routing.payer], each.recorded, each.name);
+            assert.equal(started.agent.model, each.model, each.name);
             assert.deepEqual(
               [heard(eve), heard(claudeCode)],
               each.recorded[0] === "claude_code" ? [[], ["open"]] : [["open"], []],
@@ -1205,7 +1213,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the ChatGPT plan is offered, a payer picked at Start is honoured and else its default decides: the plan runs on Codex, and the OpenAI API key, or Luke's key where none was saved, on eve",
+      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs every GPT model on Codex, a fast version as its base model, and API key runs on eve on the OpenAI API key, or Luke's key where none was saved",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1215,56 +1223,48 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               | typeof PROVIDER_KEY_PROVIDER.OPENAI
               | typeof PROVIDER_KEY_PROVIDER.ANTHROPIC
               | undefined;
-            readonly picked: CodingAgentPayer | undefined;
+            readonly model: string;
+            readonly runs: string;
             readonly recorded: readonly [string, CodingAgentPayer | null];
           }[] = [
             {
-              name: "the default, on",
+              name: "Subscription, an API key saved too",
+              forAgents: true,
+              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
+              model: "openai/gpt-5.5",
+              runs: "openai/gpt-5.5",
+              recorded: ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
+            },
+            {
+              name: "Subscription, a fast version",
               forAgents: true,
               apiKey: undefined,
-              picked: undefined,
+              model: "openai/gpt-5.5-fast",
+              runs: "openai/gpt-5.5",
               recorded: ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
             },
             {
-              name: "the plan picked",
-              forAgents: true,
+              name: "API key, saved",
+              forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
-              picked: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
-              recorded: ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
-            },
-            {
-              name: "the override to the API key",
-              forAgents: true,
-              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
-              picked: CODING_AGENT_PAYER.API_KEY,
+              model: "openai/gpt-5.5",
+              runs: "openai/gpt-5.5",
               recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
             },
             {
-              name: "the override with only an Anthropic API key saved",
-              forAgents: true,
+              name: "API key, a fast version on eve",
+              forAgents: false,
+              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
+              model: "openai/gpt-5.5-fast",
+              runs: "openai/gpt-5.5-fast",
+              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+            },
+            {
+              name: "the plan off, only an Anthropic API key saved",
+              forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.ANTHROPIC,
-              picked: CODING_AGENT_PAYER.LUKE,
-              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
-            },
-            {
-              name: "the default off, an OpenAI API key saved",
-              forAgents: false,
-              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
-              picked: undefined,
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
-            },
-            {
-              name: "the default off, the plan picked",
-              forAgents: false,
-              apiKey: undefined,
-              picked: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
-              recorded: ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
-            },
-            {
-              name: "the Claude plan picked for a GPT model is no pick of the ChatGPT plan",
-              forAgents: true,
-              apiKey: undefined,
-              picked: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+              model: "openai/gpt-5.5",
+              runs: "openai/gpt-5.5",
               recorded: ["eve", CODING_AGENT_PAYER.LUKE],
             },
           ];
@@ -1287,15 +1287,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               environment(),
               native,
             );
-            const started = yield* startCodingAgent(routedSessions(eve.sessions, owner), owner, {
-              ...startIn(workspaceId, "openai/gpt-5.5"),
-              payer: each.picked,
-            }).pipe(Effect.provide(layers));
+            const started = yield* startCodingAgent(
+              routedSessions(eve.sessions, owner),
+              owner,
+              startIn(workspaceId, each.model),
+            ).pipe(Effect.provide(layers));
 
             const routing = Option.getOrThrow(
               yield* readCodingAgentRouting(owner, started.agent.id),
             );
             assert.deepEqual([routing.runtime, routing.payer], each.recorded, each.name);
+            assert.equal(started.agent.model, each.runs, each.name);
             assert.deepEqual(
               [heard(eve), heard(codex)],
               each.recorded[0] === "codex" ? [[], ["open"]] : [["open"], []],
