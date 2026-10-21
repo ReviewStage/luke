@@ -180,6 +180,7 @@ import {
   type TranscriptFollows,
   transcriptFollows,
 } from "./transcript-follow.js";
+import { workspacesMoves } from "./workspaces-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
@@ -224,10 +225,13 @@ import {
  * answered to the tab that asks for it and held nowhere here.
  *
  * The workspaces the account is a member of are carried on the view beside
- * the tasks and read apart from them, so the tasks never wait on them: on
- * the first refresh after a launch or a sign-in, when the panel comes
- * forward, at most once a minute either way, and after a workspace call
- * moved them. A workspace made, renamed, or given a photo, a GitHub
+ * the tasks and followed apart from them over Neon Realtime, so the tasks
+ * never wait on them: from the first refresh after a launch or a sign-in
+ * until a sign-out, each change drawn as it lands, a teammate's and the
+ * browser's among them. Whether the account's GitHub is connected is read
+ * once beside them, and again when the panel comes forward, at most once a
+ * minute, since it is measured against the clock and cannot be followed. A
+ * workspace made, renamed, or given a photo, a GitHub
  * organization connected or disconnected, a removal of a member, a
  * member's role changed, a handover, and a leave are carried to the
  * service on the developer's word, and a workspace's members and a
@@ -348,12 +352,12 @@ function withWorkers(
 type TaskMarkStamps = Pick<Task, "pinnedAt" | "pinPosition" | "archivedAt">;
 
 /**
- * How long a read of the account's workspaces stands before a refresh or the
- * panel coming forward reads them again. Note that a teammate's change or an
- * organization connected in the browser reaches this Mac only on a read, and
- * a panel brought forward over and over is not a reason to read each time.
+ * How long a read of whether the account's GitHub is connected stands
+ * before a refresh or the panel coming forward reads it again. Note that a
+ * connection made in the browser reaches this Mac only on a read, and a
+ * panel brought forward over and over is not a reason to read each time.
  */
-const WORKSPACES_READ_EVERY = Duration.minutes(1);
+const GITHUB_READ_EVERY = Duration.minutes(1);
 
 /** A GitHub page asked behind a closed gate, or of a service that did not answer, which opens nothing. */
 const GITHUB_PAGE_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
@@ -465,7 +469,7 @@ export type TasksClient = Pick<
   /** The account's workspaces, the ones it may join, and their members. */
   workspaces: Pick<
     HostedWorkspaceClient,
-    | "list"
+    | "live"
     | "create"
     | "rename"
     | "setPhoto"
@@ -873,65 +877,81 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   });
 
-  /**
-   * When the workspaces were last asked for, none since a sign-out; and the
-   * latest read started, which a sign-out also moves past, so a read that
-   * answers after a later one began or across a sign-out is dropped.
-   */
-  let workspacesAskedAt: number | undefined;
-  let workspacesRead = 0;
+  /** The one follow of the account's workspaces, from the first refresh after a launch or a sign-in until a sign-out. */
+  const workspacesFollow = yield* FiberHandle.make<void>();
 
   /**
-   * Reads the account's workspaces, and whether its GitHub is connected
-   * beside them, apart from the tasks, which never wait on it. Note that the
-   * connection is read with the workspaces, because both move in the
-   * browser and the panel coming forward is when either is read again; each
-   * lands on the view as soon as it is read, so a slow connection read never
-   * holds back the workspaces. A failed read keeps what it last read, as a
-   * failed list read keeps the tasks.
-   *
-   * Note that only the latest read started is drawn, because reads overlap
-   * (a refresh, a write's read after it) and an older one answering last
-   * would put back what a write since then moved.
-   *
-   * Note that the read says it is reading only after none or a failed one,
-   * because a read that answers what is held tells the window nothing.
+   * Follows the account's workspaces over Realtime where nothing follows
+   * them yet (`workspaces-follow.ts`), polled while Realtime fails them, and
+   * draws each change as it lands, a teammate's and the browser's among
+   * them. Note that there is no other read of them: a seal the service did
+   * not answer, or a follow that stopped, is sealed again on the board's
+   * backoff while the gate stands open, and what was drawn stays meanwhile.
    */
-  const readWorkspaces = Effect.gen(function* () {
-    workspacesRead += 1;
-    const read = workspacesRead;
-    workspacesAskedAt = yield* Clock.currentTimeMillis;
-    const current = () => read === workspacesRead;
+  const followWorkspaces = Effect.gen(function* () {
     if (view.workspacesStatus !== TASKS_READ.READY) {
       write({ workspacesStatus: TASKS_READ.READING });
     }
-    const workspaces = Effect.tap(client.workspaces.list(), (answer) =>
-      Effect.sync(() => {
-        if (!current()) return;
-        // A read that did not answer leaves the workspaces stale, so the next refresh reads them again at once.
-        if (answer === undefined) {
-          workspacesAskedAt = undefined;
-          write({ workspacesStatus: TASKS_READ.FAILED });
-        } else {
-          write({ workspaces: answer.workspaces, workspacesStatus: TASKS_READ.READY });
-        }
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    const seal = (poll: boolean, after?: string) =>
+      userId === undefined
+        ? Effect.succeed(LIVE_SIGNED_OUT)
+        : Effect.map(served(client.workspaces.live(userId, poll, after)), (sealed) =>
+            "ok" in sealed ? (sealed.ok ? sealed.answer : { failure: sealed.failure }) : sealed,
+          );
+    /** One seal followed until it stops, which fails it so the backoff seals it again. */
+    const attempt = Effect.gen(function* () {
+      const sealed = yield* seal(false);
+      if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
+      const moves = workspacesMoves(
+        {
+          seal: () => seal(false),
+          poll: (after) => seal(true, after),
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+        },
+        sealed,
+      );
+      yield* Stream.runForEach(moves, (workspaces) =>
+        Effect.sync(() => write({ workspaces, workspacesStatus: TASKS_READ.READY })),
+      ).pipe(Effect.ignore);
+      return yield* Effect.fail(WORKSPACE_CALL_FAILURE.UNANSWERED);
+    });
+    // A session that is no longer the account's is signed out, which no seal mends.
+    const followed = attempt.pipe(
+      Effect.retry({
+        schedule: BOARD_BACKOFF,
+        while: (why) => why !== LIVE_SIGNED_OUT.failure && gate(),
       }),
+      Effect.ignore,
     );
-    const github = Effect.tap(client.github.status(), (read) =>
-      Effect.sync(() => {
-        if (current() && read.ok) write({ github: read.answer });
-      }),
-    );
-    yield* served(Effect.all([workspaces, github], { concurrency: "unbounded", discard: true }));
+    yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: true });
   });
 
-  /** Reads the workspaces where none was asked for since a sign-out, or the last ask is older than its bound. */
-  const readWorkspacesWhenStale = Effect.gen(function* () {
+  /**
+   * When whether GitHub is connected was last asked, none since a sign-out;
+   * and the latest read started, which a sign-out and a disconnection also
+   * move past, so a read that answers after either is dropped.
+   */
+  let githubAskedAt: number | undefined;
+  let githubRead = 0;
+
+  /** Reads whether the account's GitHub is connected; a failed read keeps what it last read. */
+  const readGithub = Effect.gen(function* () {
+    githubRead += 1;
+    const read = githubRead;
+    githubAskedAt = yield* Clock.currentTimeMillis;
+    const status = yield* served(client.github.status());
+    if (read === githubRead && status.ok) write({ github: status.answer });
+  });
+
+  /** Reads the connection where none was asked for since a sign-out, or the last ask is older than its bound. */
+  const readGithubWhenStale = Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const fresh =
-      workspacesAskedAt !== undefined &&
-      now - workspacesAskedAt < Duration.toMillis(WORKSPACES_READ_EVERY);
-    if (!fresh) yield* readWorkspaces;
+      githubAskedAt !== undefined && now - githubAskedAt < Duration.toMillis(GITHUB_READ_EVERY);
+    if (!fresh) yield* readGithub;
   });
 
   // A failed read keeps the pins it last read, as a failed list read keeps the tasks.
@@ -1660,36 +1680,30 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * One workspace call, then the workspaces read again, whatever it
-   * answered, since a refusal can find them already moved elsewhere: after a
-   * workspace made, a disconnection, or a removal. The tasks a leave takes
-   * out of the list move with the followed list.
+   * One workspace call. The workspaces it moved arrive over the follow, and
+   * the tasks a leave takes out of the list move with the followed list.
    */
   function workspaceCall<Answer>(
     call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
   ): Effect.Effect<WorkspaceCallResult<Answer>> {
-    return Effect.tap(served(call), () => readWorkspaces);
+    return served(call);
   }
 
   /**
-   * A write whose answer is the workspace as it then stands, then the
-   * workspaces read again. Note that the workspace the service answered
-   * lands on the view before the read after it, because that read may fail
-   * and keep the workspace as it was, and one that answers is the newer word.
+   * A write whose answer is the workspace as it then stands, drawn at once;
+   * the follow carries the same change a moment later.
    */
   function workspaceWrite(
     call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
   ): Effect.Effect<TasksWorkspaceAnswer> {
     return Effect.gen(function* () {
       const written = yield* served(call);
-      if (written.ok) {
-        const answered = written.answer;
-        write({
-          workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
-        });
-      }
-      yield* readWorkspaces;
-      return written.ok ? { workspace: written.answer } : { failure: written.failure };
+      if (!written.ok) return { failure: written.failure };
+      const answered = written.answer;
+      write({
+        workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
+      });
+      return { workspace: answered };
     });
   }
 
@@ -1734,9 +1748,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   const methods: GatewayMethodTable = {
-    // The workspaces are read beside the tasks rather than before them, and
-    // only where the last read is stale: the first refresh after a launch or
-    // a sign-in reads them, and the rest seldom.
+    // The workspaces are followed beside the tasks rather than read before
+    // them, from the first refresh after a launch or a sign-in; GitHub's
+    // connection is read beside them where the last read is stale.
     [GATEWAY_METHOD.TASKS_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
@@ -1758,14 +1772,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             if (taskId !== undefined) yield* readPages(taskId);
           }),
         );
-        yield* Effect.all([tasks, readWorkspacesWhenStale], { concurrency: "unbounded" });
+        yield* followWorkspaces;
+        yield* Effect.all([tasks, readGithubWhenStale], { concurrency: "unbounded" });
         return {};
       }),
-    // The panel coming forward, which may follow a teammate's change or an
-    // installation made on GitHub, read no oftener than the bound allows.
+    // The panel coming forward, which may follow GitHub connected in the
+    // browser, reads the connection no oftener than the bound allows; the
+    // workspaces are followed and need no read.
     [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
       Effect.gen(function* () {
-        if (gate()) yield* readWorkspacesWhenStale;
+        if (gate()) yield* readGithubWhenStale;
         return {};
       }),
     [GATEWAY_METHOD.TASKS_OPEN]: (params) =>
@@ -2468,30 +2484,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // The browser connects or disconnects GitHub, so the panel coming
-    // forward again reads the connection and the workspaces whatever the
-    // bound says.
+    // forward again reads the connection whatever the bound says.
     [GATEWAY_METHOD.GITHUB_CONNECT]: () =>
       Effect.gen(function* () {
         if (!gate()) return carried<TasksGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
         const page = yield* served(client.github.connect());
-        workspacesAskedAt = undefined;
+        githubAskedAt = undefined;
         return carried<TasksGitHubPageAnswer>(
           page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
         );
       }),
     // The view takes the connection the service answers at once, so Settings
-    // reads disconnected without waiting for the next workspaces read.
+    // reads disconnected without waiting for the next read of it.
     [GATEWAY_METHOD.GITHUB_DISCONNECT]: () =>
       Effect.gen(function* () {
         if (!gate()) return carried<TasksGitHubDisconnectAnswer>(GITHUB_PAGE_UNANSWERED);
         const disconnected = yield* served(client.github.disconnect());
-        workspacesAskedAt = undefined;
+        githubAskedAt = undefined;
         if (!disconnected.ok) {
           return carried<TasksGitHubDisconnectAnswer>({ failure: disconnected.failure });
         }
-        // Note that a workspaces read started before the answer is made stale,
-        // because the GitHub status it read may predate the unlink.
-        workspacesRead += 1;
+        // Note that a read started before the answer is made stale, because
+        // the status it read may predate the unlink.
+        githubRead += 1;
         write({ github: disconnected.answer });
         return carried<TasksGitHubDisconnectAnswer>({ connection: disconnected.answer });
       }),
@@ -2505,8 +2520,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           made.ok ? { workspace: made.answer } : { failure: made.failure },
         );
       }),
-    // A rename moves no task, so the workspaces alone are read again, and
-    // the new name arrives on the document with them.
+    // A rename moves no task: the answered workspace lands at once, and the
+    // follow carries the same name a moment later.
     [GATEWAY_METHOD.WORKSPACES_RENAME]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceRenameParamsSchema)(unparsedWire(params));
@@ -2520,8 +2535,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // A photo moves no task either, so it is a rename's twin: the answered
-    // workspace, its photo's new version or none, lands, and the
-    // workspaces are read again; the window's tiles read the photo by it.
+    // workspace, its photo's new version or none, lands; the window's tiles
+    // read the photo by it.
     [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspacePhotoSetParamsSchema)(unparsedWire(params));
@@ -2535,8 +2550,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // The install address is answered to the caller that opens it and held
-    // nowhere: the connection lands in the browser, and the workspaces read
-    // after it, as the panel comes forward, carry the organization.
+    // nowhere: the connection lands in the browser, and the follow carries
+    // the organization.
     [GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
@@ -2560,16 +2575,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // Vercel Connect's address is answered to the caller that opens it and
-    // held nowhere: the grant lands in the browser, and the workspaces read
-    // after it, as the panel comes forward, carry the connection.
+    // held nowhere: the grant lands in the browser, and the follow carries
+    // the connection.
     [GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("connecting Linear names a workspace");
         if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
         const begun = yield* served(client.workspaces.linearConnect(read.success.workspaceId));
-        // The sign-in finishes in the browser, so the panel coming forward again reads the workspaces whatever the bound says.
-        workspacesAskedAt = undefined;
         return carried<TasksWorkspaceGitHubConnectAnswer>(
           begun.ok ? { url: begun.answer } : { failure: begun.failure },
         );
@@ -2674,8 +2687,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
         );
       }),
-    // A role changed moves no task, so the workspaces alone are read again,
-    // as after a removal.
+    // A role changed moves no task; the follow carries it, as a removal's.
     [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceMemberRoleParamsSchema)(unparsedWire(params));
@@ -2693,7 +2705,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // Note that a handover changes the account's own role in the workspace,
     // which the view's workspaces carry and every owner's and admin's act is
-    // drawn from, so the workspaces are read again; it moves no task.
+    // drawn from, and which the follow carries; it moves no task.
     [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceTransferParamsSchema)(unparsedWire(params));
@@ -2836,10 +2848,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);
+      yield* FiberHandle.clear(workspacesFollow);
       yield* serial(
         Effect.sync(() => {
-          workspacesAskedAt = undefined;
-          workspacesRead += 1;
+          githubAskedAt = undefined;
+          githubRead += 1;
           view = idleView();
           publish();
         }),
