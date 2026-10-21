@@ -223,6 +223,8 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.APPLY_PATCH,
   CODER_TOOL.SHOW_IMAGE,
   CODER_TOOL.SHOW_CODE,
+  // The browser runs in the sandbox, which its call opens first.
+  CODER_TOOL.BROWSER,
 ]);
 
 /** What a chat post's input is read for here: the types of its blocks, an image's among them. */
