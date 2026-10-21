@@ -10,6 +10,7 @@ import {
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { lapsedSandboxLeases, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask } from "@luke/database/models/task-store";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
@@ -20,7 +21,7 @@ import {
   type TerminalSummary,
 } from "@luke/features/terminal-wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Clock, type Context, Effect, Layer, Option, Queue, Result } from "effect";
+import { Clock, type Context, Duration, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -281,6 +282,30 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         assert.equal(woken, false, "nothing but the resume path wakes the sandbox");
         assert.deepEqual(resumed.body, { sandbox: SANDBOX_STATE.RUNNING });
         assert.deepEqual(sandbox.asked.at(-1), { what: "resume", sessionId });
+      }),
+  );
+
+  it.effect(
+    "a resume holds the sandbox it wakes, so the lease sweep stops it once nobody attaches",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent } = yield* openAgent;
+        const sandbox = scriptedSandbox(SANDBOX_STATE.STOPPED);
+        const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox.layer);
+        const at = new Date(yield* Clock.currentTimeMillis);
+        const heldBefore = yield* sandboxHeld(agent.conversationId, at);
+
+        const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
+
+        assert.equal(resumed.status, 200);
+        assert.equal(heldBefore, false);
+        assert.equal(yield* sandboxHeld(agent.conversationId, at), true);
+        const lapsedBefore = new Date(at.getTime() + Duration.toMillis(Duration.hours(1)));
+        const lapsed = yield* lapsedSandboxLeases(lapsedBefore, lapsedBefore, 50, lapsedBefore);
+        assert.ok(
+          lapsed.some((lease) => lease.conversationId === agent.conversationId),
+          "a resume nobody attached to lapses for the lease sweep",
+        );
       }),
   );
 

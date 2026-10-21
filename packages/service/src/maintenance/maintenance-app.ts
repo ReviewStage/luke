@@ -30,6 +30,7 @@ import {
   VOICE_ORPHAN_SWEEP,
   VOICE_SESSION_LIMIT_MS,
 } from "../voice/orphan-sweep.js";
+import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
@@ -102,6 +103,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepNativeSandboxes: (now) =>
       sweepNativeSandboxes(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
+    sweepEveSandboxes: (now) =>
+      sweepEveSandboxes(new Date(now)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     sweepNativeWakeups: (now) =>

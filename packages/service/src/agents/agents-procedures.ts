@@ -50,6 +50,7 @@ import {
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
+import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { readAgentTranscript } from "@luke/database/models/transcript-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
@@ -62,7 +63,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { AGENT_START_STATUS } from "@luke/features/contract";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import { Clock, Effect, type Layer, Option, Result } from "effect";
+import { Clock, Duration, Effect, type Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
 import { changesPeople, namedReviewOptions } from "../github/github-people.js";
@@ -131,6 +132,15 @@ export interface AgentsProcedureSeams extends EveReach, PublishedReach, SandboxS
 /** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
 const WORKSPACE_AGENTS_LIMIT = 50;
 
+/**
+ * How long a developer's resume holds the sandbox it wakes: the Terminal
+ * relay's idle bound (`terminal/relay.ts`'s `TERMINAL_RELAY_BOUNDS.IDLE`),
+ * since a resume is a Terminal about to attach, whose own lease takes over
+ * within seconds; one that never attaches is stopped by the lease sweep once
+ * this lapses past its grace, rather than at Vercel's timeout.
+ */
+const RESUME_HOLD = Duration.minutes(5);
+
 /** A choice the catalog refused is an invalid request, on the wire. */
 const choiceOrInvalid = <A, E, R>(
   effect: Effect.Effect<A, E | ModelChoiceRefused, R>,
@@ -187,23 +197,32 @@ const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The agent the path names, still standing, and the eve session its sandbox
- * is tagged with, or none where the agent has not run yet. An archived agent
+ * The agent the path names, still standing: its conversation, which a
+ * sandbox's lease is held on, and the eve session its sandbox is tagged
+ * with, or none where the agent has not run yet. An archived agent
  * is gone, as its tab is, and one on its starter's own GitHub token gives its
  * sandbox to its starter alone.
  */
-const reachedSession = /* @__PURE__ */ Effect.fnUntraced(function* (
+const reachedAgentSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   id: string,
-): Effect.fn.Return<string | undefined, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<
+  { readonly conversationId: string; readonly sessionId: string | undefined },
+  HostedRefusal,
+  DatabaseServices
+> {
   const { agent } = yield* reachedAgentById(userId, id);
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
   const [session] = yield* hostedStoreOrUnavailable(
     standingSessionsOf(agent.userId, [agent.conversationId]),
   );
-  return session?.sessionId;
+  return { conversationId: agent.conversationId, sessionId: session?.sessionId };
 });
+
+/** The eve session alone of the agent the path names, as `reachedAgentSession` reads it. */
+const reachedSession = (userId: string, id: string) =>
+  Effect.map(reachedAgentSession(userId, id), ({ sessionId }) => sessionId);
 
 /**
  * A sandbox Vercel could not be asked about, as the upstream's refusal a
@@ -576,8 +595,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     }),
     /** The agent's sandbox resumed from its snapshot, the developer's click and nothing else, answering where it stands after. */
     sandboxResume: signedIn.sandboxResume.effect(function* ({ input, context }) {
-      const sessionId = yield* reachedSession(context.userId, input.id);
+      const { conversationId, sessionId } = yield* reachedAgentSession(context.userId, input.id);
       if (sessionId === undefined) return { sandbox: SANDBOX_STATE.STARTING };
+      // The resume is held before it is asked, so a sandbox woken for a Terminal that never attaches is stopped by the lease sweep.
+      const now = yield* Clock.currentTimeMillis;
+      yield* hostedStoreOrUnavailable(
+        holdSandbox(conversationId, new Date(now + Duration.toMillis(RESUME_HOLD))),
+      );
       return yield* inSandbox(
         Effect.gen(function* () {
           const sandbox = yield* AgentSandbox;
