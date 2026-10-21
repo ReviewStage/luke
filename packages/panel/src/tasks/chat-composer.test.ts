@@ -16,7 +16,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { ChatComposer } from "./chat-composer.js";
+import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
 
 /**
  * Chat's box as the developer works it, alike with the agent's box and the
@@ -56,6 +56,14 @@ async function settle(): Promise<void> {
   });
 }
 
+/** What a box standing alone offers: no member, no task, and no channel, only the dates. */
+const NO_MENTIONS: ChatComposerMentions = {
+  source: { taskId: "", taskName: "", workspace: "", repository: null, text: () => "" },
+  members: { people: [], agents: [] },
+  channels: [],
+  crowded: () => false,
+};
+
 /** What a box is drawn with: where it posts, and what its send answers. */
 interface Drawn {
   readonly channelId: string;
@@ -81,7 +89,7 @@ function page(workspace?: string) {
         channelId: box.channelId,
         replyTo: box.replyTo,
         label: box.label,
-        targets: [],
+        mentions: NO_MENTIONS,
         keywords: [],
         compact: box.replyTo !== undefined,
         onSend: (text) => box.onSend(text),

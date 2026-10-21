@@ -10,6 +10,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_SECTION_ICON_KIND, type TaskSectionIcon } from "@luke/features/task-section-wire";
 import { test } from "vitest";
 import {
@@ -18,8 +19,8 @@ import {
   channelLabel,
   channelThreads,
   chatKeywords,
+  chatMentionables,
   chatRail,
-  chatTargets,
   chatWho,
   continuesRun,
   FOR_YOU_REASON,
@@ -28,6 +29,7 @@ import {
   messageMarkdown,
   postsIn,
   reachedIn,
+  toldPastBound,
   topicName,
   topicNameProblem,
 } from "./chat-model.js";
@@ -429,30 +431,33 @@ test("a dictation in the chat listens for every person still here by name, each 
   assert.equal(new Set(words).size, words.length, "each word once");
 });
 
-test("every member is offered by name as the link their chip writes, an agent under its task, and none before the workspace is known", () => {
+test("every member but the reader is offered by name, a person by their account and an agent by its id under its task, and every standing channel that is no DM", () => {
   const chat = {
     ...chatOf(0, []),
-    members: chatOf(0, []).members.map((member) =>
-      member.id === AGENT ? { ...member, planId: TASK_ID } : member,
-    ),
-  };
-  const place = { workspace: "acme", repository: null };
-  const offered = chatTargets(chat, NAMES, place).filter((target) => target.sigil === "@");
-  assert.deepEqual(
-    offered.map((target) => [target.name, target.detail, target.markdown]),
-    [
-      [
-        "Invite emails",
-        "Teammate invitations",
-        `[@Invite emails](https://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID})`,
-      ],
-      ["Maria Chen", undefined, "[@Maria Chen](https://tryluke.dev/acme/person/user-maria)"],
+    members: [
+      ...chatOf(0, []).members.map((member) =>
+        member.id === AGENT ? { ...member, planId: TASK_ID } : member,
+      ),
+      { id: HELPER, kind: MEMBER_KIND.HUMAN, name: "Gone Person", userId: "user-gone", left: true },
     ],
-  );
+  };
+  const offered = chatMentionables(chat, NAMES);
+  assert.deepEqual(offered.people, [{ memberId: MARIA, userId: "user-maria", name: "Maria Chen" }]);
+  assert.deepEqual(offered.agents, [
+    {
+      memberId: AGENT,
+      agentId: AGENT_ID,
+      name: "Invite emails",
+      task: { id: TASK_ID, name: "Teammate invitations" },
+    },
+  ]);
   assert.deepEqual(
-    chatTargets(chat, NAMES, undefined).filter((target) => target.sigil === "@"),
-    [],
-    "a member is written as a link alone, so none is offered before the workspace is known",
+    offered.channels.map((channel) => [channel.name, channel.taskId, channel.detail]),
+    [
+      ["alpha", undefined, undefined],
+      ["invites", TASK_ID, "Teammate invitations"],
+      ["general", undefined, undefined],
+    ],
   );
 });
 
@@ -463,11 +468,10 @@ test("a composer offers only the members a post in its channel reaches: its task
       member.id === AGENT ? { ...member, planId: TASK_ID } : member,
     ),
   };
-  const place = { workspace: "acme", repository: null };
-  const offered = (channel: ChatChannel) =>
-    chatTargets(chat, NAMES, place, channel)
-      .filter((target) => target.sigil === "@")
-      .map((target) => target.name);
+  const offered = (channel: ChatChannel) => {
+    const { people, agents } = chatMentionables(chat, NAMES, channel);
+    return [...agents, ...people].map((member) => member.name);
+  };
   assert.deepEqual(offered(TASK_CHANNEL), ["Invite emails", "Maria Chen"]);
   assert.deepEqual(offered(GENERAL), ["Maria Chen"]);
   assert.deepEqual(offered(TOPIC), ["Maria Chen"]);
@@ -478,6 +482,56 @@ test("a composer offers only the members a post in its channel reaches: its task
   const { planId: _planId, ...noTask } = taskless;
   assert.equal(reachedIn(noTask, GENERAL), true);
   assert.equal(reachedIn(noTask, TASK_CHANNEL), false);
+});
+
+test("a post addresses more members than it tells only past the bound, each member it reaches counted once and the reader not at all, a reply's thread counted after its mentions, and never in a direct message", () => {
+  const more = ["Ada", "Bo", "Cy"].map((name) => ({
+    id: `member-${name}`,
+    kind: MEMBER_KIND.HUMAN,
+    name,
+    userId: `user-${name}`,
+    left: false,
+  }));
+  const chat = { ...chatOf(0, []), members: [...chatOf(0, []).members, ...more] };
+  const place = { workspace: "acme", repository: null };
+  const person = (userId: string, name: string) =>
+    mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, name, place);
+  const three = [
+    person("user-maria", "Maria Chen"),
+    person("user-Ada", "Ada"),
+    person("user-Bo", "Bo"),
+  ].join(" ");
+  const agent = mentionMarkdown(
+    { kind: MENTION_KIND.AGENT, agentId: AGENT_ID },
+    "Invite emails",
+    place,
+  );
+  assert.equal(
+    toldPastBound(chat, GENERAL, `${three} ${person("user-dean", "Dean")} ${three}`),
+    false,
+    "the reader, and a member named again, add no one",
+  );
+  assert.equal(toldPastBound(chat, GENERAL, `${three} ${person("user-Cy", "Cy")}`), true);
+  assert.equal(
+    toldPastBound(chat, TOPIC, `${three} ${agent}`),
+    false,
+    "an agent a topic does not reach is told nothing there",
+  );
+  assert.equal(
+    toldPastBound(chat, WITH_MARIA, `${three} ${person("user-Cy", "Cy")}`),
+    false,
+    "a direct message tells its other member alone",
+  );
+  assert.equal(
+    toldPastBound(chat, GENERAL, three, [MARIA, ME]),
+    false,
+    "a thread's author already mentioned, and the reader, add no one",
+  );
+  assert.equal(
+    toldPastBound(chat, GENERAL, three, ["member-Cy"]),
+    true,
+    "a thread's replier past three mentions is not told",
+  );
 });
 
 test("a topic's name is written as a channel's, and refused where it breaks the grammar or another channel, general among them, holds it", () => {
