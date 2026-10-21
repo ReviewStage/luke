@@ -5,6 +5,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
+import type { ConversationRuntime } from "../storage-vocabulary.js";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -12,7 +13,7 @@ import {
   type VoiceCloseReason,
   type VoiceSegmentRole,
 } from "../voice-vocabulary.js";
-import { readCodingAgent } from "./coding-agent-store.js";
+import { readCodingAgent, readCodingAgentRouting } from "./coding-agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { HANDED_TO_SWEEP_AT, readTask } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
@@ -99,14 +100,16 @@ interface EarlierCallsClaim extends VoiceSessionTaskClaim {
 
 /**
  * An agent the account reaches, as a call into it is checked and opened:
- * the task it works on, whether it is archived, and its conversation under
- * the member who started it, which the call's turns and record are written
- * to whoever is calling.
+ * the task it works on, whether it is archived, what answers its
+ * conversation, and that conversation under the member who started it,
+ * which the call's turns and record are written to whoever is calling.
  */
 export interface HeldVoiceAgent {
   readonly agentId: string;
   readonly taskId: string | null;
   readonly archived: boolean;
+  /** What answers the agent's conversation; eve for a conversation from before the column. A call reaches eve alone. */
+  readonly runtime: ConversationRuntime;
   readonly conversation: ConversationTarget;
 }
 
@@ -595,18 +598,20 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         Option.match({ onNone: () => undefined, onSome: (stored) => stored.task }),
       ),
     heldAgent: (input) =>
-      Effect.map(
-        readCodingAgent(input.userId, input.agentId),
-        Option.match({
-          onNone: () => undefined,
-          onSome: (agent): HeldVoiceAgent => ({
-            agentId: agent.id,
-            taskId: agent.taskId,
-            archived: agent.archivedAt !== null,
-            conversation: { userId: agent.userId, conversationId: agent.conversationId },
-          }),
-        }),
-      ),
+      Effect.gen(function* () {
+        const agent = yield* readCodingAgent(input.userId, input.agentId);
+        if (Option.isNone(agent)) return undefined;
+        // An agent deleted between the two reads is none the call reaches.
+        const routing = yield* readCodingAgentRouting(input.userId, input.agentId);
+        if (Option.isNone(routing)) return undefined;
+        return {
+          agentId: agent.value.id,
+          taskId: agent.value.taskId,
+          archived: agent.value.archivedAt !== null,
+          runtime: routing.value.runtime,
+          conversation: { userId: agent.value.userId, conversationId: agent.value.conversationId },
+        } satisfies HeldVoiceAgent;
+      }),
     owned: (input) =>
       Effect.map(
         findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),

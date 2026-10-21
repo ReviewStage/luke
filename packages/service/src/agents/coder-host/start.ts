@@ -22,6 +22,7 @@ import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
 } from "@luke/database/schemas/coding-agent";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
   type NoteFiles,
@@ -815,6 +816,19 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   return made;
 });
 
+/**
+ * The runtime a new agent's conversation is recorded on. A blank Start is
+ * always eve's, whatever the account's routing would choose: only a voice
+ * chat starts blank, its first words are spoken, and a call reaches eve
+ * alone (`voice/opening.ts` refuses an agent on any other runtime). Every
+ * other Start leaves the store's default, eve, until the account's routing
+ * (#4313's `agentRuntimeChoice`) decides it here, after the blank case.
+ */
+function startRuntimeOf(ask: StartAsk): ConversationRuntime | undefined {
+  if (ask.blank === true) return CONVERSATION_RUNTIME.EVE;
+  return undefined;
+}
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
@@ -908,6 +922,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
+      runtime: startRuntimeOf(ask),
       githubAccess: reached?.access,
       startBranch: branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
