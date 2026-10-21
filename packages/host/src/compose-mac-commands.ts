@@ -13,7 +13,7 @@ import {
   type MacCommandResult,
   type MacShellResult,
 } from "@luke/features/mac-command-wire";
-import { Config, Duration, Effect, FiberSet, Option, Schema, Stream } from "effect";
+import { Config, Duration, Effect, FiberSet, Option, Schedule, Schema, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
@@ -61,6 +61,12 @@ const IDLE = Duration.seconds(5);
 const LISTENING_EVERY = Duration.seconds(15);
 /** How long after a read went unanswered, or a follow stopped for good, it is asked again. */
 const LIVE_RESTART = Duration.seconds(5);
+/**
+ * How a claim the service did not answer is asked again: a second apart, a
+ * few times, well inside the service's thirty-second claim window, since
+ * the rows that named it may not change again to say so.
+ */
+const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 
 /** The login shell when the environment names none: macOS's own default. */
 const DEFAULT_SHELL = "/bin/zsh";
@@ -195,9 +201,10 @@ export function composeMacCommands(
      * The unclaimed commands followed (`live-follow.ts`, which polls the
      * service, held, where Realtime is off or fails) until the gate shuts or
      * the session signs out, each new one claimed by its id, the earliest
-     * queued first. A command is claimed once per follow, whatever the
-     * service answered, and forgotten once it leaves the rows, so the ids
-     * this keeps are only those still waiting.
+     * queued first. A claim the service did not answer is asked again a few
+     * times (`CLAIM_RETRY`); past that, or once the service answered, a
+     * command is not claimed again in this follow, and it is forgotten once
+     * it leaves the rows, so the ids this keeps are only those still waiting.
      */
     const followed = (running: FiberSet.FiberSet, userId: string, first: MacCommandsLiveAnswer) =>
       Effect.suspend(() => {
@@ -207,8 +214,15 @@ export function composeMacCommands(
             const fresh = commands.filter((command) => !tried.has(command.id));
             tried = new Set(commands.map((command) => command.id));
             for (const command of fresh) {
-              const claimed = yield* asked(client.claim(command.id));
-              if (claimed !== undefined) yield* taken(running, [claimed]);
+              const claimed = yield* asked(client.claim(command.id)).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced(CLAIM_RETRY.every),
+                  times: CLAIM_RETRY.times,
+                  until: (answer) => answer !== undefined,
+                }),
+              );
+              // Note that a claim refused, or never answered, runs nothing: the command is another Mac's, or its call has given up.
+              if (claimed !== undefined && "id" in claimed) yield* taken(running, [claimed]);
             }
           });
         const rows = liveRows(

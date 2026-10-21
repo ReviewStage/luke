@@ -22,10 +22,14 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * and held until they move) for the account it started for, claims each it
  * hears of by its id, and says it listens. No call fails: a read refused as
  * signed out is `LIVE_SIGNED_OUT` and any other unanswered a failure the
- * caller asks again, a claim not granted is nothing, and a presence or a
- * result not taken is false, its call having given up on it. A browser
+ * caller asks again, a claim refused is `MAC_COMMAND_NOT_CLAIMED` and one
+ * unanswered nothing, and a presence or a result not taken is false, its
+ * call having given up on it. A browser
  * command's result, which may carry an image, is posted to its own route.
  */
+
+/** What a claim the service refused answers: another Mac took the command, or it waited past the claim window. */
+export const MAC_COMMAND_NOT_CLAIMED = { claimed: false } as const;
 
 export interface HostedMacCommandClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
@@ -99,11 +103,24 @@ export class HostedMacCommandClient {
     );
   }
 
-  /** One command heard of live, claimed for this Mac; nothing where another took it, it waited too long, or the claim was not answered. */
-  claim(id: string): Effect.Effect<MacCommand | undefined, never, HttpClient.HttpClient> {
+  /**
+   * One command heard of live, claimed for this Mac; `MAC_COMMAND_NOT_CLAIMED`
+   * where the service refused it (another took it, or it waited too long),
+   * and nothing where the claim was not answered, which the caller may ask
+   * again.
+   */
+  claim(
+    id: string,
+  ): Effect.Effect<
+    MacCommand | typeof MAC_COMMAND_NOT_CLAIMED | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
     return askHosted(this.#hosted.macCommands.claim, { id }).pipe(
-      Effect.map((answer): MacCommand | undefined => answer.command),
-      Effect.orElseSucceed(() => undefined),
+      Effect.map((answer): MacCommand => answer.command),
+      Effect.catch((failed) =>
+        Effect.succeed(failed._tag === "HostedRefused" ? MAC_COMMAND_NOT_CLAIMED : undefined),
+      ),
     );
   }
 

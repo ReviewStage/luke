@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { MAC_COMMAND_NOT_CLAIMED } from "@luke/features";
 import {
   LIVE_POLL_URL,
   LIVE_SIGNED_OUT,
@@ -70,7 +71,10 @@ const settled = Effect.repeat(Effect.yieldNow, { times: 200 });
  * stood held until they move; a claim granted once per command; and every
  * read, presence, and result the Mac sent, as the service would observe it.
  */
-function scriptedService(options: { readonly signedOut?: boolean } = {}) {
+function scriptedService(
+  options: { readonly signedOut?: boolean; readonly unansweredClaims?: number } = {},
+) {
+  let unanswered = options.unansweredClaims ?? 0;
   const waiting: (MacCommand & { readonly queuedAt: number })[] = [];
   let version = 0;
   const reads: { readonly userId: string; readonly kinds: readonly MacCommandKind[] }[] = [];
@@ -102,11 +106,16 @@ function scriptedService(options: { readonly signedOut?: boolean } = {}) {
     claim: (id) =>
       Effect.sync(() => {
         claims.push(id);
+        // A claim lost on its way, as a network fault loses one, reaches nothing.
+        if (unanswered > 0) {
+          unanswered -= 1;
+          return undefined;
+        }
         const at = waiting.findIndex((command) => command.id === id);
-        if (at < 0) return undefined;
+        if (at < 0) return MAC_COMMAND_NOT_CLAIMED;
         const [claimed] = waiting.splice(at, 1);
         version += 1;
-        if (claimed === undefined) return undefined;
+        if (claimed === undefined) return MAC_COMMAND_NOT_CLAIMED;
         const { queuedAt: _queuedAt, ...command } = claimed;
         return command;
       }),
@@ -277,5 +286,26 @@ it.effect("a read the service signs out follows nothing, and is asked again afte
 
     assert.deepEqual(service.claims, []);
     assert.deepEqual(service.beats, []);
+  }),
+);
+
+it.effect("a claim the service never heard is asked again, and the command runs", () =>
+  Effect.gen(function* () {
+    const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+    const service = scriptedService({ unansweredClaims: 2 });
+    service.queue(COMMAND, NOW);
+    const composer = yield* subject(service, spawner, { enabled: true, signedIn: true });
+
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* composer.lifetime;
+        yield* settled;
+        yield* TestClock.adjust("3 seconds");
+        yield* settled;
+      }),
+    );
+
+    assert.deepEqual(service.claims, [COMMAND.id, COMMAND.id, COMMAND.id]);
+    assert.ok(service.settledResults.has(COMMAND.id), "it ran once the claim got through");
   }),
 );

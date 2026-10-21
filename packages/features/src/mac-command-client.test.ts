@@ -15,7 +15,7 @@ import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
-import { HostedMacCommandClient } from "./mac-command-client.js";
+import { HostedMacCommandClient, MAC_COMMAND_NOT_CLAIMED } from "./mac-command-client.js";
 import { MAC_COMMAND_KIND, type MacCommand, type MacCommandResult } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -97,20 +97,26 @@ it.effect(
     }),
 );
 
-it.effect("a claim answers the command granted to this Mac, and nothing where it was not", () =>
-  Effect.gen(function* () {
-    const granted = fakeCloudApi({
-      "POST /api/mac-commands/claim": { answer: () => ({ command: COMMAND }) },
-    });
-    assert.deepEqual(yield* Effect.provide(client().claim(COMMAND_ID), granted.layer), COMMAND);
-    assert.deepEqual(JSON.parse(granted.requests()[0]?.body ?? ""), { id: COMMAND_ID });
+it.effect(
+  "a claim answers the command granted to this Mac, and not claimed where the service refused it",
+  () =>
+    Effect.gen(function* () {
+      const granted = fakeCloudApi({
+        "POST /api/mac-commands/claim": { answer: () => ({ command: COMMAND }) },
+      });
+      assert.deepEqual(yield* Effect.provide(client().claim(COMMAND_ID), granted.layer), COMMAND);
+      assert.deepEqual(JSON.parse(granted.requests()[0]?.body ?? ""), { id: COMMAND_ID });
 
-    const taken = fakeCloudApi({
-      "POST /api/mac-commands/claim": {
-        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-        status: HTTP_STATUS.NOT_FOUND,
-      },
-    });
-    assert.equal(yield* Effect.provide(client().claim(COMMAND_ID), taken.layer), undefined);
-  }),
+      const taken = fakeCloudApi({
+        "POST /api/mac-commands/claim": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+      assert.deepEqual(
+        yield* Effect.provide(client().claim(COMMAND_ID), taken.layer),
+        MAC_COMMAND_NOT_CLAIMED,
+        "a refused claim is told apart from one never answered",
+      );
+    }),
 );
