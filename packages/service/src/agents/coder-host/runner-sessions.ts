@@ -706,11 +706,22 @@ export const runnerSessions = <
           if (Result.isFailure(resumed)) {
             if (resumed.failure.status !== SNAPSHOT_GONE_STATUS) return yield* resumed.failure;
             // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
-            // it is deleted and the session goes on in a fresh one, a clean checkout of the repository
-            // with the session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
-            // gone). The harness's own session files went with the old filesystem, so none is resumed.
-            yield* api.deleteSandbox(found.value.name);
+            // the session goes on in a fresh one, a clean checkout of the repository under the
+            // session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
+            // gone). The harness's own session files went with the old filesystem, so none is
+            // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
+            // that fails (the image still preparing, a clone refused) leaves the session standing
+            // for the next message to try again rather than retired.
             yield* openedSandbox(agent, sessionId, sent);
+            yield* api
+              .deleteSandbox(found.value.name)
+              .pipe(
+                Effect.catch((failure) =>
+                  Effect.logWarning(
+                    `An expired ${harness.name} sandbox was not deleted: ${failure.message}`,
+                  ),
+                ),
+              );
             return accepted;
           }
           const running = resumed.success.currentSessionId;

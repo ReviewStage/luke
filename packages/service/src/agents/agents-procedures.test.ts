@@ -25,9 +25,9 @@ import { SqlClient } from "effect/sql";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
-import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
+import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import { agentsProcedures } from "./agents-procedures.js";
-import { SessionSandboxes } from "./session-sandboxes.js";
+import { type SandboxStopReach, SessionSandboxes } from "./session-sandboxes.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
@@ -163,6 +163,7 @@ const standing = (
     deleteFor: () => Effect.die("the terminals routes delete no sandbox"),
     stopFor: () => Effect.die("the terminals routes stop no sandbox"),
   }),
+  keepAwake: SandboxStopReach["keepAwake"] = keepAwakeDetached,
 ) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<SqlClient.SqlClient | Database>().pipe(
@@ -183,6 +184,7 @@ const standing = (
         eveOrigin: () => undefined,
         sandbox,
         sessionSandboxes,
+        keepAwake,
       }),
     });
     // SAFETY: the terminal procedures yield the store and the network alone, which is all a test provides of the web runtime's services.
@@ -432,6 +434,36 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
           assert.notEqual(Option.getOrThrow(stored).archivedAt, null);
         }
       }),
+  );
+
+  it.effect("a stop that runs after the agent was unarchived leaves its sandbox up", () =>
+    Effect.gen(function* () {
+      const { userId, agent } = yield* openAgent;
+      const sandboxes = yield* scriptedSessionSandboxes();
+      const held: Effect.Effect<void, never, never>[] = [];
+      const call = yield* standing(
+        new Map([["Bearer owner", userId]]),
+        scriptedSandbox(SANDBOX_STATE.RUNNING).layer,
+        // The stop is kept back, as a function slow to reach Vercel runs it, until the agent is back.
+        sandboxes.layer,
+        (work) => Effect.sync(() => void held.push(work as Effect.Effect<void, never, never>)),
+      );
+      const context = yield* Effect.context<Database | SqlClient.SqlClient>();
+
+      const archived = yield* call(agentOf(agent.id), "Bearer owner", {
+        method: "PATCH",
+        body: { archived: true },
+      });
+      const restored = yield* call(agentOf(agent.id), "Bearer owner", {
+        method: "PATCH",
+        body: { archived: false },
+      });
+      for (const work of held) yield* Effect.provideContext(work, context);
+
+      assert.deepEqual([archived.status, restored.status], [200, 200]);
+      assert.equal(held.length, 1);
+      assert.equal(yield* Queue.size(sandboxes.stops), 0);
+    }),
   );
 
   it.effect("an agent that opened no sandbox is archived with nothing to stop", () =>
