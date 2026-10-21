@@ -172,3 +172,41 @@ test("a press held into the list and let go there leaves the list's first click 
   act(() => inbox.click());
   assert.deepEqual(window.went, [0], "the first click in the list goes to its step");
 });
+
+test("a touch held on Back opens its list and no hint over it, and Android's own contextmenu before the hold's timer spends the hold, so the lift takes no step", () => {
+  vi.useFakeTimers();
+  const window = mount(BACK);
+  const touchDown = () =>
+    act(() => {
+      window.back.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          pointerType: "touch",
+          isPrimary: true,
+        }),
+      );
+    });
+  touchDown();
+  act(() => vi.advanceTimersByTime(1000));
+  assert.ok(document.querySelector('[role="menu"]'), "the held touch opened the list");
+  assert.equal(document.querySelector('[role="tooltip"]'), null, "and no hint stands over it");
+  act(() => {
+    document.body.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }),
+    );
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  touchDown();
+  act(() => vi.advanceTimersByTime(300));
+  act(() => {
+    window.back.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const end = new TouchEvent("touchend", { bubbles: true, cancelable: true });
+  act(() => {
+    window.back.dispatchEvent(end);
+  });
+  assert.equal(end.defaultPrevented, true, "the lift makes no click of its own");
+  assert.deepEqual(window.pressed, []);
+});

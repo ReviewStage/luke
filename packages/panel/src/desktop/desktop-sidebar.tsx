@@ -295,6 +295,8 @@ function HistoryButton({
   return (
     <span
       className="title-bar-history"
+      // A long press here opens the list, so the tooltip's own hold for its hint leaves it be.
+      data-long-press=""
       onPointerDown={(event) => {
         if (able) hold.start(event, openList, { mouse: true });
       }}
@@ -319,6 +321,11 @@ function HistoryButton({
           onClick={onPress}
           onContextMenu={(event) => {
             event.preventDefault();
+            // Note that a hold that opened the list already is not opened twice, and Android's
+            // own contextmenu, which may come before the hold's timer, spends the hold, so the
+            // finger's lift takes no step as well.
+            if (hold.held.current) return;
+            if (hold.counting()) hold.claim();
             openList();
           }}
         />
