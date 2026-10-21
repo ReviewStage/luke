@@ -1,0 +1,1 @@
+ALTER TABLE "account_provider_key" ADD COLUMN "limit_resets_at" timestamp with time zone;

@@ -54,6 +54,8 @@ export const accountProviderKey = pgTable(
      * the default and nothing reads it.
      */
     forAgents: boolean("for_agents").notNull().default(true),
+    /** When a plan's reached usage limit resets, where its provider said; null for every other status. */
+    limitResetsAt: timestamptz("limit_resets_at"),
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [

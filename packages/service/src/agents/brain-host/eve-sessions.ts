@@ -228,6 +228,10 @@ export const PLAN_REFUSAL = {
   SIGNED_OUT: "signed_out",
   UNREADABLE: "unreadable",
   UNREACHABLE: "unreachable",
+  /** The plan's usage limit refused its last turn and has not reset. */
+  LIMIT_REACHED: "limit_reached",
+  /** The provider said the account is not eligible to run on its plan. */
+  INELIGIBLE: "ineligible",
 } as const;
 
 export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];

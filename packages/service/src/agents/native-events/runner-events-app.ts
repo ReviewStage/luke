@@ -11,12 +11,20 @@ import {
   type NativeProjectionRow,
   withNativeProjection,
 } from "@luke/database/models/native-projection-store";
+import { setPlanStatus } from "@luke/database/models/provider-key-store";
 import {
   type ConversationTarget,
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  type ProviderKeyKind,
+  type ProviderKeyProvider,
+} from "@luke/features/provider-key-wire";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import {
@@ -107,7 +115,26 @@ interface Applying {
   readonly reasoningEffort: string;
   readonly writer: StoreWriter;
   readonly read: NativeReader;
+  /** Who pays for the agent, as recorded as it started; none for an agent from before payers. */
+  readonly payer: CodingAgentPayer | undefined;
 }
+
+/** The row each plan is kept in, which a turn's word on the plan is written to; a key's payer has none. */
+const PLAN_ROW: Partial<
+  Record<
+    CodingAgentPayer,
+    { readonly provider: ProviderKeyProvider; readonly kind: ProviderKeyKind }
+  >
+> = {
+  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+  },
+  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: {
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+  },
+};
 
 /** What one post applied: how many events, and the number of the last event the conversation has applied. */
 interface Applied {
@@ -229,6 +256,20 @@ function landWrite(
       );
     case NATIVE_WRITE.COMPACTED:
       return recordCodingAgentCompaction(target.userId, applying.agentId, new Date(now));
+    case NATIVE_WRITE.PLAN_STATUS: {
+      // Note that the plan's row is the starter's, whose plan pays, and an agent a key pays for writes none.
+      const row = applying.payer === undefined ? undefined : PLAN_ROW[applying.payer];
+      if (row === undefined) return Effect.void;
+      return setPlanStatus(
+        target.userId,
+        row.provider,
+        row.kind,
+        write.status,
+        write.resetsAt === undefined ? undefined : new Date(write.resetsAt),
+        new Date(write.turnOpenedAt ?? now),
+        new Date(now),
+      );
+    }
   }
 }
 
@@ -346,6 +387,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     reasoningEffort: agent.value.effort,
     writer,
     read: reader,
+    payer: Option.getOrUndefined(routing)?.payer ?? undefined,
   };
   const applied = yield* hostedStoreOrUnavailable(
     withNativeProjection(target, runnerTokenDigest(bearer), (held) =>

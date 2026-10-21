@@ -65,6 +65,10 @@ export const PROVIDER_KEY_STATUS = {
   UNREADABLE: "unreadable",
   /** A subscription credential no provider has answered yet: it is kept unchecked, since Luke never calls a provider on a plan itself. */
   UNVERIFIED: "unverified",
+  /** A plan whose usage limit refused an agent's turn; it pays again once the limit resets, which `limitResetsAt` says where the provider said. */
+  LIMIT_REACHED: "limit_reached",
+  /** A ChatGPT account OpenAI answered is not eligible to run Codex on its plan. */
+  INELIGIBLE: "ineligible",
 } as const;
 
 export type ProviderKeyStatus = (typeof PROVIDER_KEY_STATUS)[keyof typeof PROVIDER_KEY_STATUS];
@@ -134,6 +138,8 @@ const providerKeySummarySchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(PROVIDER_KEY_STATUS)),
   /** When the status was last set, in epoch milliseconds. */
   statusAt: countedNumber,
+  /** When a plan's reached limit resets, in epoch milliseconds, where the provider said; absent otherwise. */
+  limitResetsAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type ProviderKeySummary = typeof providerKeySummarySchema.Type;

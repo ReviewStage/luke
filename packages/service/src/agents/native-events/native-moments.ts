@@ -1,4 +1,5 @@
 import type { BrainRunUsage, ToolCallSettlement } from "@luke/features/brain";
+import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import type { UnparsedWireValue } from "@luke/wire";
 
 /**
@@ -51,6 +52,12 @@ export const NATIVE_MOMENT = {
   COMPACTED: "compacted",
   /** The plan's limit refused the harness, until when where it says; `refused` false is the limit lifting. */
   RATE_LIMIT: "rate_limit",
+  /**
+   * How the provider answered a model turn on the plan that pays for the
+   * agent: it ran, or it refused the sign-in, the plan's limit, or the
+   * account. Its row takes it where the agent runs on a plan.
+   */
+  PLAN: "plan",
   /** The model turn ended with work still in flight: the turn is waiting, not over. */
   WAITING: "waiting",
   /** The launch ended: the turn under way is over, as `ending` says. */
@@ -67,6 +74,15 @@ export const NATIVE_ENDING = {
   FAILED: "failed",
 } as const;
 type NativeEnding = (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING];
+
+/** How a turn found the plan, as its row keeps it (`setPlanStatus`). */
+export const PLAN_STATUS = {
+  VERIFIED: PROVIDER_KEY_STATUS.VERIFIED,
+  INVALID: PROVIDER_KEY_STATUS.INVALID,
+  LIMIT_REACHED: PROVIDER_KEY_STATUS.LIMIT_REACHED,
+  INELIGIBLE: PROVIDER_KEY_STATUS.INELIGIBLE,
+} as const;
+export type PlanStatus = (typeof PLAN_STATUS)[keyof typeof PLAN_STATUS];
 
 export type NativeMoment =
   | { readonly kind: typeof NATIVE_MOMENT.LINE_ACCEPTED; readonly clientId: string }
@@ -99,7 +115,10 @@ export type NativeMoment =
       readonly refused: boolean;
       /** Which limit and when it resets, in the harness's own words, kept for the turn's failure. */
       readonly detail: string;
+      /** When the limit resets, in epoch milliseconds, where the harness said. */
+      readonly resetsAt?: number;
     }
+  | { readonly kind: typeof NATIVE_MOMENT.PLAN; readonly status: PlanStatus }
   | { readonly kind: typeof NATIVE_MOMENT.WAITING }
   | {
       readonly kind: typeof NATIVE_MOMENT.ENDED;

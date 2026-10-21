@@ -231,6 +231,10 @@ export const CHATGPT_ACCESS = {
   SIGNED_OUT: "signed_out",
   /** OpenAI could not be asked, or answered nothing usable; nothing changed and it may be tried again. */
   UNREACHABLE: "unreachable",
+  /** An agent's turn found the plan's usage limit reached, and the reset it named, where it named one, has not passed. */
+  LIMIT_REACHED: "limit_reached",
+  /** OpenAI answered an agent's turn that the account is not eligible to run Codex on its plan. */
+  INELIGIBLE: "ineligible",
 } as const;
 
 export type ChatGptAccess =
@@ -473,9 +477,19 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
       if (Option.isNone(locked)) return { outcome: CHATGPT_ACCESS.NONE };
       const row = locked.value;
       if (row.status === PROVIDER_KEY_STATUS.INVALID) return { outcome: CHATGPT_ACCESS.SIGNED_OUT };
+      if (row.status === PROVIDER_KEY_STATUS.INELIGIBLE)
+        return { outcome: CHATGPT_ACCESS.INELIGIBLE };
       const credentials = openCredentials(ring, userId, row);
       if (credentials === undefined) return { outcome: CHATGPT_ACCESS.UNREADABLE };
       const now = yield* DateTime.nowAsDate;
+      // Note that a limit with no reset named holds until a turn finds it lifted, which needs a launch, so only a named reset still ahead refuses.
+      if (
+        row.status === PROVIDER_KEY_STATUS.LIMIT_REACHED &&
+        row.limitResetsAt !== null &&
+        row.limitResetsAt.getTime() > now.getTime()
+      ) {
+        return { outcome: CHATGPT_ACCESS.LIMIT_REACHED };
+      }
       const dueAt = now.getTime() + Duration.toMillis(Duration.max(margin, REFRESH_MARGIN));
       if (row.accessExpiresAt !== null && row.accessExpiresAt.getTime() > dueAt) {
         return {

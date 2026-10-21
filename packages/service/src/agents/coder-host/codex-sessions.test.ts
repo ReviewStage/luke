@@ -20,6 +20,7 @@ import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-s
 import {
   listProviderKeyRows,
   saveProviderKey,
+  setPlanStatus,
   setProviderKeyStatus,
 } from "@luke/database/models/provider-key-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -496,6 +497,63 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(invalid.sandboxes.every((sandbox) => sandbox.deleted));
         assert.deepEqual(invalid.commands, []);
         assert.equal(openai.state.renewals, 0);
+      }),
+  );
+
+  it.effect(
+    "a plan whose limit a turn reached refuses the launch by name until the reset it named, then launches; an account OpenAI said is not eligible refuses by name; neither starts a runner while refused",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const { userId, agent } = yield* openAgent;
+        yield* signIn(userId, 60);
+        const now = yield* DateTime.nowAsDate;
+        yield* setPlanStatus(
+          userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          PROVIDER_KEY_STATUS.LIMIT_REACHED,
+          new Date(now.getTime() + 30 * 60_000),
+          now,
+          now,
+        );
+        const limited = runnerSandboxApi();
+        const limitedSessions = yield* sessionsFor(userId).pipe(Effect.provide(services(limited)));
+        assert.deepEqual(yield* limitedSessions.open(message(agent, "Go.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+        });
+        assert.deepEqual(limited.commands, []);
+
+        yield* TestClock.adjust("31 minutes");
+        const reset = runnerSandboxApi();
+        const resetSessions = yield* sessionsFor(userId).pipe(
+          Effect.provide(services(reset, openAi())),
+        );
+        const reopened = yield* resetSessions.open(message(agent, "Go."));
+        assert.equal(reopened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.notDeepEqual(reset.commands, []);
+
+        yield* setPlanStatus(
+          userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          PROVIDER_KEY_STATUS.INELIGIBLE,
+          undefined,
+          yield* DateTime.nowAsDate,
+          yield* DateTime.nowAsDate,
+        );
+        const ineligible = runnerSandboxApi();
+        const ineligibleSessions = yield* sessionsFor(userId).pipe(
+          Effect.provide(services(ineligible)),
+        );
+        assert.deepEqual(yield* ineligibleSessions.open(message(agent, "Go on.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.INELIGIBLE,
+        });
+        assert.deepEqual(ineligible.commands, []);
       }),
   );
 
