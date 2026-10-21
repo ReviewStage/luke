@@ -1,3 +1,4 @@
+import { useAtomSet } from "@effect/atom-react";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -28,6 +29,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { Duration, Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import {
@@ -38,6 +40,7 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -519,6 +522,9 @@ export function readAgentById(
   );
 }
 
+/** A pause of the milliseconds handed, as an atom whose work is the wait, on the renderer's runtime. */
+const preparingPause = () => rendererRuntime.fn((ms: number) => Effect.sleep(Duration.millis(ms)));
+
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return (
@@ -585,6 +591,12 @@ export function useCodingAgents(input: {
   const writer = useDraftWriter();
   const draft = taskId === undefined ? undefined : taskDraft(heldDraft, keptDraft);
   const [note, setNote] = useState<{ taskId: string; note: Failure } | undefined>(undefined);
+  // A Start's and a message's pauses before asking again while the agent's image is prepared, each
+  // its own atom, so one's pause never cuts the other's short (`image-preparing.ts`).
+  const [startPauseAtom] = useState(preparingPause);
+  const [messagePauseAtom] = useState(preparingPause);
+  const startPause = useAtomSet(startPauseAtom, { mode: "promise" });
+  const messagePause = useAtomSet(messagePauseAtom, { mode: "promise" });
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
@@ -704,6 +716,7 @@ export function useCodingAgents(input: {
           (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
         ),
       () => setNote({ taskId: on, note: { reason: FAILURE_REASON.OTHER, text: PREPARING_IMAGE } }),
+      startPause,
     ).then((answer) => {
       setStarting(false);
       // The word that the image was being prepared goes once the Start is answered; a refusal says its own.
@@ -1026,6 +1039,7 @@ export function useCodingAgents(input: {
             (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
           ),
         () => undefined,
+        messagePause,
       );
       if (!("failure" in answer)) {
         setList((was) =>

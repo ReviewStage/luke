@@ -271,20 +271,22 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       });
       state = projected.state;
       writes.push(...projected.writes);
+      // A turn starting takes the servers mentioned to the agent since its last turn started, as
+      // eve's turn start does (`agent-runtime/servers.ts`), and keeps them for its calls at Luke's
+      // MCP server, which hands them whatever the switches say (`integrations/connection-door.ts`).
+      // They are taken event by event, so a turn that starts and ends within one batch takes its
+      // own, never the next turn's.
+      for (const write of projected.writes) {
+        if (write.kind !== NATIVE_WRITE.ENQUEUE) continue;
+        const taken = yield* takeCodingAgentMentionedServers(
+          applying.target.userId,
+          applying.target.conversationId,
+        );
+        state = withTurnServers(state, write.turnId, taken);
+      }
     }
     for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
     yield* landWrites(applying, writes, now);
-    // A turn starting takes the servers mentioned to the agent since its last turn started, as
-    // eve's turn start does (`agent-runtime/servers.ts`), and keeps them for its calls at Luke's
-    // MCP server, which hands them whatever the switches say (`integrations/connection-door.ts`).
-    for (const write of writes) {
-      if (write.kind !== NATIVE_WRITE.ENQUEUE || state.turn?.id !== write.turnId) continue;
-      const taken = yield* takeCodingAgentMentionedServers(
-        applying.target.userId,
-        applying.target.conversationId,
-      );
-      state = withTurnServers(state, write.turnId, taken);
-    }
     const last = events.at(-1)?.sequence;
     const result = {
       applied: { applied: events.length, sequence: last ?? held.sequence } satisfies Applied,

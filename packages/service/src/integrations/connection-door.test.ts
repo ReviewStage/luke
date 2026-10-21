@@ -326,10 +326,25 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           { sequence: 2, message: { type: RUNNER_EVENT.ACCEPTED, uuid: randomUUID() } },
         ]);
         const inTheNextTurn = yield* listIssues;
+        // A turn that starts and ends within one batch takes its own mentions, never the next turn's.
+        yield* dispatchMentioningServers(
+          member.userId,
+          member.agentId,
+          [LINEAR],
+          Effect.succeed(true),
+        );
+        yield* postEvents(member.bearer, [
+          { sequence: 3, message: { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED } },
+          { sequence: 4, message: { type: RUNNER_EVENT.ACCEPTED, uuid: randomUUID() } },
+          { sequence: 5, message: { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED } },
+          { sequence: 6, message: { type: RUNNER_EVENT.ACCEPTED, uuid: randomUUID() } },
+        ]);
+        const afterABatchedTurn = yield* listIssues;
 
         assert.equal(beforeTheTurn.status, "rejected");
         assert.notEqual(inTheTurn.status, "rejected");
         assert.equal(inTheNextTurn.status, "rejected");
+        assert.equal(afterABatchedTurn.status, "rejected");
       }),
   );
 
