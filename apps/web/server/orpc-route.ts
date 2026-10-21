@@ -4,6 +4,7 @@ import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-sea
 import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
 import { hostedAdminSeams } from "@luke/service/admin/admin-route";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
+import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
@@ -20,9 +21,9 @@ import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router"
 import type { Route } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { waitUntil } from "@vercel/functions";
-import { type Context, Effect } from "effect";
-import { withNativeAgents } from "./native-agents.js";
-import { runWeb } from "./runtime.js";
+import type { Context, Layer } from "effect";
+import { nativeAgents } from "./native-agents.js";
+import { webServicesWith } from "./runtime.js";
 
 /**
  * The route every hosted path on the oRPC router answers through: the hosted
@@ -46,8 +47,7 @@ import { runWeb } from "./runtime.js";
  */
 export function routeFromHostedFetch(
   answer: HostedFetch,
-  readServices: () => Promise<Context.Context<WebServices>> = () =>
-    runWeb(Effect.context<WebServices>()),
+  beside?: Layer.Layer<NativeAgentSessions, never, WebServices>,
 ): Route {
   const refuseCrossSite = cookieOriginGuard(process.env);
   let reading: Promise<Context.Context<WebServices>> | undefined;
@@ -55,7 +55,7 @@ export function routeFromHostedFetch(
     fetch: sentryReportedFetch(async (request) => {
       const refusal = refuseCrossSite(request);
       if (refusal !== undefined) return refusal;
-      reading ??= readServices();
+      reading ??= webServicesWith(beside);
       const attempt = reading;
       let services: Context.Context<WebServices>;
       try {
@@ -88,5 +88,5 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
 /** The deployment's hosted oRPC route, with the native harnesses its agent procedures reach (`native-agents.ts`). */
 export const orpcRoute: Route = routeFromHostedFetch(
   hostedFetch(hostedRouter(DEPLOYMENT_SEAMS)),
-  withNativeAgents,
+  nativeAgents,
 );

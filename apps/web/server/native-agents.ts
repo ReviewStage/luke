@@ -19,13 +19,11 @@ import { fileURLToPath } from "node:url";
 import { agentSandboxImageFromTemplate } from "@luke/service/agents/agent-sandbox-image";
 import { nativeAgentSessionsLayer } from "@luke/service/agents/coder-host/native-agent-sessions";
 import { runnerBundleFromDirectory } from "@luke/service/agents/coder-host/runner-bundle";
-import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
-import type { WebServices } from "@luke/service/runtime";
-import { type Context, Effect, Layer } from "effect";
+import { Layer } from "effect";
 import { runWeb } from "./runtime.js";
 
 /** The harnesses over the web runtime, the bundle read beside this function's entry. */
-const nativeAgents = nativeAgentSessionsLayer({ run: runWeb }).pipe(
+export const nativeAgents = nativeAgentSessionsLayer({ run: runWeb }).pipe(
   Layer.provide(
     Layer.merge(
       runnerBundleFromDirectory(dirname(fileURLToPath(import.meta.url))),
@@ -33,10 +31,3 @@ const nativeAgents = nativeAgentSessionsLayer({ run: runWeb }).pipe(
     ),
   ),
 );
-
-/** The deployment's services with the native harnesses beside them, read from the one web runtime. */
-export function withNativeAgents(): Promise<Context.Context<WebServices | NativeAgentSessions>> {
-  return runWeb(
-    Effect.context<WebServices | NativeAgentSessions>().pipe(Effect.provide(nativeAgents)),
-  );
-}
