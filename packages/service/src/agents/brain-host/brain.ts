@@ -40,6 +40,13 @@ import {
 import { runShowCode, SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
+import type { AgentBrowser } from "../browser/agent-browser.js";
+import {
+  BROWSER_TOOL,
+  type BrowserCall,
+  browserModelOutput,
+  runBrowserTool,
+} from "../browser/browser-tool.js";
 import { CHAT_TOOLS } from "../coder-host/chat.js";
 import {
   type CodingAgentCall,
@@ -282,6 +289,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - show_code puts lines of a file in the task's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. Its note says in a sentence or two what those lines do for the plan and what to notice, for the developer reading the plan later. A note names another file, a pull request, or an issue as a Markdown link to its page, such as [store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>) of the task's repository, so the developer sees a chip that opens it. To walk through code, make a few calls in order, each a focused range with its own note, rather than one long window. Code is on screen only from a call in this turn, so when the developer asks to see code again or says they cannot see it, call show_code again rather than saying it is up.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the task's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - run_on_mac runs a shell command on the developer's own Mac, from their home folder, without asking them: their local checkouts and uncommitted work, installed tools, running servers. Use it for what only the Mac has, and run_in_repository for the task's code. When it answers not-run, say why. ${COMMAND_DESCRIPTION_INSTRUCTION}
+- browser drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over: open a page, read it with a snapshot, click, type, and see it with a screenshot. Use it for what the developer should see or help with: a flow to show them, a preview, or a page that needs them, such as a sign-in or MFA they finish in its tab. Take a snapshot for the refs before you click or type on an element. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them. When it answers not-run, say why.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - load_skill loads one of the task's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
 - edit_plan writes notes into the plan in the background, as above.
@@ -361,6 +369,8 @@ export interface HostedToolDeclaration {
 /** What one brain tool call runs under: the task the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, the task's coding agents, and Luke in the workspace's chat, nothing where Chat is off for the task's owner. */
 export interface BrainCall {
   readonly task: PlanDocumentBinding;
+  /** The browser in the session's sandbox, and the conversation its tabs belong to: the task's. */
+  readonly browser: BrowserCall;
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
   readonly agents: CodingAgentCall;
@@ -382,8 +392,9 @@ interface BrainTool {
   ) => Effect.Effect<WireRecord, never, BrainToolServices>;
 }
 
-/** What a brain tool call may reach: the store, the network for public research, GitHub through the App for the checkout, and the catalog a start's choice is checked against. */
-type BrainToolServices =
+/** What a brain tool call may reach: the store, the network for public research, GitHub through the App for the checkout, the catalog a start's choice is checked against, and the browser in the session's sandbox. */
+export type BrainToolServices =
+  | AgentBrowser
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
@@ -437,6 +448,11 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     ...RUN_ON_MAC_TOOL,
     run: (call, input) =>
       Effect.map(runOnMacTool(call.task.userId, input), (result) => ({ ...result })),
+  },
+  {
+    ...BROWSER_TOOL,
+    run: (call, input) =>
+      Effect.map(runBrowserTool(call.browser, input), (result) => ({ ...result })),
   },
   {
     ...SEARCH_WEB_TOOL,
@@ -646,7 +662,7 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.BRAIN_W
 export const WORKER_INSTRUCTIONS = `
 You do one job for an engineering assistant working on a task with a developer, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-Read the task's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. run_on_mac runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
+Read the task's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. run_on_mac runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. browser drives the browser in Luke's sandbox, whose tabs the developer can watch and take over: use it only where the job asks for a page in it, take a snapshot for the refs before you click, and while the developer drives a tab, leave it be. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;
@@ -725,13 +741,19 @@ export function brainToolSet(): ToolSet {
 
 /**
  * What the model is shown of a planning call's result: a look at the board
- * or at one of the plan's pictures as its image, and anything else as the
- * JSON it is.
+ * or at one of the plan's pictures as its image, a browser call's
+ * screenshots as images beside its result, and anything else as the JSON it
+ * is.
  */
 export function tasksModelOutput(name: string, output: UnparsedWireValue): ToolModelOutput {
-  return name === LOOK_AT_PICTURE_TOOL.name
-    ? pictureLookModelOutput(output)
-    : lookModelOutput(output);
+  switch (name) {
+    case LOOK_AT_PICTURE_TOOL.name:
+      return pictureLookModelOutput(output);
+    case BROWSER_TOOL.name:
+      return browserModelOutput(output);
+    default:
+      return lookModelOutput(output);
+  }
 }
 
 /** Why a brain tool call ran nothing, in words the model can act on. */

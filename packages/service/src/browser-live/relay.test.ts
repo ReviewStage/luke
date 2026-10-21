@@ -189,6 +189,10 @@ function world(
       row = undefined;
     },
     driveAs: (userId: string, heldUntil: Date) => setDriver(userId, heldUntil),
+    /** Moves the tab onto the target given, as a browser that started afresh reopens it. */
+    reopenAs: (targetId: string) => {
+      if (row !== undefined) row = { ...row, tab: { ...row.tab, targetId } };
+    },
   };
 }
 
@@ -581,6 +585,93 @@ it.effect(
         BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.NOT_OPENED],
       ]);
       assert.deepEqual(unopened.commands, [], "no browser is reached for an agent that never ran");
+    }),
+);
+
+it.effect(
+  "a tab its browser reopened on a new target as it started afresh is cast on that target, not closed as gone",
+  () =>
+    Effect.gen(function* () {
+      const reopened = "page-reopened";
+      const { peer, browser, commands } = yield* liveBrowser({
+        pages: [{ targetId: reopened, url: "https://example.test/start", title: "Start" }],
+      });
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      // The connection reopens the kept tab on a new target, as `connectRestoring` does after a resume.
+      const deps: BrowserLiveDependencies = {
+        ...store.deps,
+        browser: {
+          connect: (sessionId) =>
+            Effect.andThen(
+              Effect.sync(() => store.reopenAs(reopened)),
+              browser.connect(sessionId),
+            ),
+        },
+      };
+
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), deps)),
+      );
+
+      const attach = commands.find((command) => command.method === "Target.attachToTarget");
+      assert.deepEqual(attach?.params, { targetId: reopened, flatten: true });
+      assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.CLOSED), []);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
+  "a tab the member stopped reaching while its browser was reached is never cast, and a store that could not say closes as unavailable",
+  () =>
+    Effect.gen(function* () {
+      const revoked = yield* liveBrowser();
+      const revokedPanel = yield* scriptedViewer;
+      const revokedStore = world(revoked.browser);
+      yield* Effect.scoped(
+        relayBrowserTab(revokedPanel.viewer, ASK, reachedTab(undefined), {
+          ...revokedStore.deps,
+          browser: {
+            connect: (sessionId) =>
+              Effect.andThen(
+                Effect.sync(() => revokedStore.close()),
+                revoked.browser.connect(sessionId),
+              ),
+          },
+        }),
+      );
+      assert.deepEqual(revokedPanel.closed, [
+        BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.GONE],
+      ]);
+      assert.ok(!revoked.commands.some((command) => command.method === "Page.startScreencast"));
+
+      const failing = yield* liveBrowser();
+      const failingPanel = yield* scriptedViewer;
+      const failingStore = world(failing.browser);
+      let connected = false;
+      yield* Effect.scoped(
+        relayBrowserTab(failingPanel.viewer, ASK, reachedTab(undefined), {
+          ...failingStore.deps,
+          readTab: (...args) =>
+            connected ? Effect.fail("store unavailable") : failingStore.deps.readTab(...args),
+          browser: {
+            connect: (sessionId) =>
+              Effect.andThen(
+                Effect.sync(() => {
+                  connected = true;
+                }),
+                failing.browser.connect(sessionId),
+              ),
+          },
+        }),
+      );
+      assert.deepEqual(failingPanel.closed, [
+        BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE],
+      ]);
+      assert.ok(!failing.commands.some((command) => command.method === "Page.startScreencast"));
     }),
 );
 

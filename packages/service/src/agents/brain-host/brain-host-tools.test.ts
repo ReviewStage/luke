@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { listTaskBrowserTabs } from "@luke/database/models/agent-browser-tabs";
 import {
   ensureMember,
   ensureTaskChannel,
@@ -72,12 +73,20 @@ import {
   pictureNotLooked,
 } from "../../tasks/picture-look.js";
 import {
+  fakeBridgePty,
+  fakeCdpPeer,
+  fakeSandboxApi,
+  noSandboxBrowserLayer,
+} from "../../testing/agent-browser-fake.js";
+import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
 import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
+import { AgentBrowser, agentBrowserOver } from "../browser/agent-browser.js";
+import { BROWSER_TOOL, BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
 import { CHAT_TOOL_REFUSAL } from "../coder-host/chat.js";
 import { ASK_REFUSAL } from "../coder-host/chat-ask.js";
 import { HELD_DOORS } from "../coder-host/chat-notify.js";
@@ -197,6 +206,7 @@ function toolContext(
   auth: SessionAuth,
   name: string,
   callId = "call-1",
+  getSandbox: EveToolContext["getSandbox"] = unreached("getSandbox"),
 ): EveToolContext {
   return {
     session: { id, auth, turn: { id: "turn_0", sequence: 0 } },
@@ -206,7 +216,7 @@ function toolContext(
     messages: [],
     getToken: unreached("getToken"),
     requireAuth: unreached("requireAuth"),
-    getSandbox: unreached("getSandbox"),
+    getSandbox,
   };
 }
 
@@ -217,7 +227,10 @@ async function callerOn(
   services: Layer.Layer<GitHubApp | HttpClient.HttpClient> = NO_GITHUB,
   catalog: readonly OfferedModel[] = [],
   speaker?: string,
+  browser?: Layer.Layer<AgentBrowser>,
 ): Promise<(name: string, input: WireRecord, callId?: string) => Promise<WireRecord>> {
+  // SAFETY: the browser's double stands for the sandbox, so the session's sandbox is opened and never read.
+  const sandboxOpened = (async () => ({})) as unknown as EveToolContext["getSandbox"];
   const id = sessionId();
   const opened = seat(target);
   // A teammate speaks into the session the conversation's opener started, under its own principal.
@@ -239,9 +252,21 @@ async function callerOn(
   return (name, input, callId) =>
     database.run(
       host
-        .runTool(name, binding, input, toolContext(id, auth, name, callId))
+        .runTool(
+          name,
+          binding,
+          input,
+          toolContext(id, auth, name, callId, browser === undefined ? undefined : sandboxOpened),
+        )
         .pipe(
-          Effect.provide(Layer.mergeAll(services, modelCatalogOf(catalog), NO_WORKSPACE_LINEAR)),
+          Effect.provide(
+            Layer.mergeAll(
+              services,
+              modelCatalogOf(catalog),
+              NO_WORKSPACE_LINEAR,
+              browser ?? noSandboxBrowserLayer,
+            ),
+          ),
         ),
     );
 }
@@ -747,6 +772,36 @@ test("Luke looks at a picture of the call's plan as a member speaking in it: the
     ],
   });
   assert.deepEqual(refused, pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
+});
+
+test("Luke opens a page in the browser in its own sandbox, whose tab is kept as the task's, and the model is shown the result", async () => {
+  const task = await taskConversation();
+  const peer = await database.run(fakeCdpPeer({ pages: [] }));
+  // The sandbox stands under whatever session the caller runs, as eve tags the root's.
+  const { api } = fakeSandboxApi({ status: "running", sessionId: "any" });
+  const browser = Layer.succeed(
+    AgentBrowser,
+    agentBrowserOver({ ...api, listTagged: () => api.listTagged("any") }, fakeBridgePty(peer)),
+  );
+  const call = await callerOn(brainHost(seams), task, NO_GITHUB, [], undefined, browser);
+
+  const opened = await call(BROWSER_TOOL.name, {
+    actions: [{ action: "open", url: "http://localhost:3000/" }],
+  });
+
+  assert.equal(opened.status, BROWSER_TOOL_STATUS.RAN);
+  assert.deepEqual(opened.tabs, [{ tab: "page-1", url: "http://localhost:3000/", title: "" }]);
+  const listed = Option.getOrThrow(
+    await database.run(listTaskBrowserTabs(task.userId, task.taskId)),
+  );
+  assert.deepEqual(
+    listed.map(({ tab, agent }) => ({ targetId: tab.targetId, address: tab.address, agent })),
+    [{ targetId: "page-1", address: "http://localhost:3000/", agent: null }],
+  );
+  assert.deepEqual(tasksModelOutput(BROWSER_TOOL.name, unparsedWire(opened)), {
+    type: "json",
+    value: opened,
+  });
 });
 
 test("end_call is the one planning tool eve is told ends its turn, so the model is asked for no step after the goodbye it was told to add nothing to", () => {

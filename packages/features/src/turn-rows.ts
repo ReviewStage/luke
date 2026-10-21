@@ -38,6 +38,8 @@ export const CALL_KIND = {
   COMMAND: "command",
   /** A command an agent ran on the developer's own Mac (`run_on_mac`), drawn as a command with where it ran beside it. */
   MAC_COMMAND: "mac-command",
+  /** Actions an agent took in the browser in its own sandbox (`browser`), its line saying what it did and in which tab, with where it ran beside it. */
+  BROWSER: "browser",
   READ_FILE: "read-file",
   WRITE_FILE: "write-file",
   EDIT: "edit",
@@ -109,6 +111,7 @@ export type CallKind = (typeof CALL_KIND)[keyof typeof CALL_KIND];
 export const CALL_WORDS = {
   [CALL_KIND.COMMAND]: { verb: "Ran", code: true },
   [CALL_KIND.MAC_COMMAND]: { verb: "Ran", code: true },
+  [CALL_KIND.BROWSER]: { verb: "Used the browser", code: false },
   [CALL_KIND.READ_FILE]: { verb: "Read", code: true },
   [CALL_KIND.WRITE_FILE]: { verb: "Wrote", code: true },
   [CALL_KIND.EDIT]: { verb: "Edited", code: true },
@@ -164,6 +167,45 @@ export const CALL_WORDS = {
 /** What a row of a call that ran on the developer's own Mac says of where it ran, beside its line. */
 const ON_YOUR_MAC = "On your Mac";
 
+/** What a row of a call in the agent's own browser says of where it ran, beside its line. */
+const IN_THE_BROWSER = "Browser";
+
+/** What each of the browser's actions says it did, on a browser call's line. */
+const BROWSER_ACTION_WORDS: Readonly<Record<string, string>> = {
+  list: "listed the tabs",
+  open: "opened",
+  navigate: "went to a page",
+  back: "went back",
+  forward: "went forward",
+  click: "clicked",
+  type: "typed",
+  key: "pressed a key",
+  scroll: "scrolled",
+  wait: "waited",
+  screenshot: "took a screenshot",
+  snapshot: "read the page",
+  console: "read the console",
+  close: "closed",
+};
+
+/**
+ * What a browser call's line says it did, in place of its kind's verb: each
+ * action it named once, in the order first named, and "in" where the tab it
+ * acted on follows as the subject; nothing where it named no action this
+ * build knows, so the kind's own verb stands.
+ */
+export function browserCallWords(
+  actions: readonly string[],
+  tabNamed: boolean,
+): string | undefined {
+  const said = [...new Set(actions.flatMap((action) => BROWSER_ACTION_WORDS[action] ?? []))].join(
+    ", ",
+  );
+  if (said === "") return undefined;
+  const line = `${said.charAt(0).toUpperCase()}${said.slice(1)}`;
+  return tabNamed ? `${line} in` : line;
+}
+
 /**
  * How a call about one coding agent says what it did where its row names
  * the agent by its chip: the verb alone, the chip standing in the place of
@@ -206,7 +248,8 @@ export function isCommandKind(kind: CallKind): boolean {
  * agent's starter, whom a row that knows them draws in these words' place.
  */
 export function callPlace(kind: CallKind): string | undefined {
-  return kind === CALL_KIND.MAC_COMMAND ? ON_YOUR_MAC : undefined;
+  if (kind === CALL_KIND.MAC_COMMAND) return ON_YOUR_MAC;
+  return kind === CALL_KIND.BROWSER ? IN_THE_BROWSER : undefined;
 }
 
 /** What a call's line says: the verb, or a described command's purpose, then the subject, and whether the subject is code. */
@@ -220,7 +263,9 @@ export interface CallLine {
  * How a call's line reads: its kind's verb before its subject; or, for a
  * command the model said the purpose of, those plain words in the verb's
  * place, as Claude Code and Cursor name a command, and the command's first
- * line after them as its preview, the whole of it in the row's body.
+ * line after them as its preview, the whole of it in the row's body; or,
+ * for a browser call, what it did (`browserCallWords`) before the tab's
+ * title, which is words.
  */
 export function callLine(
   kind: CallKind,
@@ -229,6 +274,7 @@ export function callLine(
 ): CallLine {
   const words = CALL_WORDS[kind];
   if (description === undefined) return { verb: words.verb, subject, code: words.code };
+  if (kind === CALL_KIND.BROWSER) return { verb: description, subject, code: false };
   return {
     verb: description,
     subject: subject === undefined ? undefined : firstLine(subject),

@@ -98,6 +98,7 @@ import {
   type BrainHostTurn,
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
+import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
@@ -1271,6 +1272,76 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(look.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
         assert.deepEqual(look.output, { status: PICTURE_LOOK_STATUS.LOOKED });
         assert.equal(JSON.stringify(page).includes(answer.image), false);
+      }),
+  );
+
+  it.effect(
+    "an agent's browser call keeps its steps and the tabs it acted on in the transcript, and never a screenshot's picture",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
+        const picture = "/9j/4AAQSkZJRgABAQAAAQABAAD";
+        const input = { actions: [{ action: "screenshot", tab: "tab-1" }] };
+        const answer = {
+          status: BROWSER_TOOL_STATUS.RAN,
+          steps: [
+            {
+              action: "screenshot",
+              status: "done",
+              tab: "tab-1",
+              image: { mime: "image/jpeg", data: picture, width: 1280, height: 800 },
+            },
+          ],
+          skipped: 0,
+          tabs: [{ tab: "tab-1", url: "http://localhost:3000/", title: "Shop" }],
+        };
+
+        const call = { callId: "call-browser", toolName: CODER_TOOL.BROWSER };
+        const at = { turnId: "turn_0", sequence: 0, stepIndex: 0 };
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+          stamped({ type: "step.started", data: { ...at, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: { ...at, actions: [{ kind: "tool-call", ...call, input }] },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              ...at,
+              status: "completed",
+              result: { kind: "tool-result", ...call, output: answer },
+            },
+          }),
+          stamped({ type: "step.completed", data: { ...at, finishReason: "tool-calls" } }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+        ];
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const browsed = page.messages.flatMap((message) => message.parts).find(isToolUIPart);
+        assert.ok(browsed);
+        assert.equal(browsed.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+        assert.deepEqual(browsed.output, {
+          ...answer,
+          steps: [
+            {
+              action: "screenshot",
+              status: "done",
+              tab: "tab-1",
+              image: { mime: "image/jpeg", width: 1280, height: 800 },
+            },
+          ],
+        });
+        assert.equal(JSON.stringify(page).includes(picture), false);
       }),
   );
 

@@ -411,6 +411,18 @@ interface WorkWords {
 }
 
 /** The repository named in the examples of an agent with none of its own. */
+/**
+ * What a coding agent is told of `browser`, the Chromium in its own sandbox
+ * whose tabs the developer watches and may take over: for what the
+ * developer should see or help with, while a throwaway check of its own
+ * work stays on the sandbox's Playwright, which leaves no tab behind.
+ */
+const BROWSER_WORDS = `## Your browser
+
+\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+
+`;
+
 const EXAMPLE_REPOSITORY = "acme/app";
 
 /** Where an agent with a repository works: its checkout, its branch, its commits, its pull request, and its checks. */
@@ -451,7 +463,7 @@ Once your pull request is open, what happens on it after your turn ends reaches 
 
 When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. Start the app with \`bash\`, which keeps a server running in the background while your turn lasts, then screenshot it with Playwright, whose \`playwright\` command, package, and Chromium are installed: \`playwright screenshot --wait-for-timeout=2000 http://localhost:3000 /tmp/home.png\`, or, for a page that needs a click, a viewport, or a dark color scheme, a short CommonJS script of your own that requires \`playwright\`, run with \`NODE_PATH="$(npm root -g)" node shot.cjs\` so it finds the installed package rather than one of the checkout's. An Electron app runs here too, on the X display \`xvfb-run -a\` gives it: fetch its binary first, which an install on Linux often skips, with \`node node_modules/electron/install.js\` from the app's own folder, then start it with \`--disable-gpu\`, without which its window never draws, or drive it from such a script with Playwright's \`_electron.launch\`, choosing its window by URL, since the first one open may be a hidden one. Look at the picture with \`read_file\`, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words. Everything you start stops when your turn ends.
 
-`,
+${BROWSER_WORDS}`,
     search: `Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page it found with \`${CODER_TOOL.READ_WEB_PAGE}\` when a fact lies outside the repository, such as a library's documentation. A query leaves for the public web, so never put the repository's code, names, or paths into one.
 
 `,
@@ -484,7 +496,7 @@ function sandboxWords(
 
 You have a sandbox of your own, with no repository in it, which opens the first time you use it. Every \`bash\` command starts in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in, in a fresh shell; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written. No GitHub credential is set in it, so never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.
 
-## How to work
+${BROWSER_WORDS}## How to work
 
 Where the ${words.brief} is unclear, say so plainly in your final message rather than guessing at a larger job. Where what you were asked for is a plan, a proposal, a design, or research, ${writeUpPlace(brief, taskLink !== null)}.
 
@@ -581,7 +593,7 @@ Never print a credential, a token, or the contents of an environment file, in a 
 export function coderWorkerInstructions(): string {
   return `You do one job for a coding agent, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it. Every \`bash\` command starts there, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put the repository's code, names, or paths into a query: the repository is private and a search is public. \`run_on_mac\` runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has.
+The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it. Every \`bash\` command starts there, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put the repository's code, names, or paths into a query: the repository is private and a search is public. \`run_on_mac\` runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has. \`${CODER_TOOL.BROWSER}\` drives the agent's own browser, whose tabs the developer can watch and take over: use it only where the job asks for a page in it, take a snapshot for the refs before you click, and while the developer drives a tab, leave it be.
 
 You read and you never write the checkout: run no command that edits a file, stages, commits, pushes, installs, or changes the checkout's state, since the agent and other workers are reading the same tree. Where the developer connected ${INTEGRATION_NAMES_SAID}, you may read it with \`connection_search\` and \`connection_execute\`; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 

@@ -27,13 +27,13 @@ import {
 import type { GitHubApp } from "../../github/github-app.js";
 import { taskWorkspace } from "../../github/workspace-repository.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
-import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
+import { providerModelOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { PLAN_SAVE_REFUSAL } from "../../tasks/plan-notes.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
+import { browserSessionOf } from "../browser/agent-browser.js";
 import { CHAT_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../coder-host/plan-edit.js";
@@ -52,6 +52,7 @@ import {
 } from "./bounds.js";
 import {
   BRAIN_INSTRUCTIONS,
+  type BrainToolServices,
   brainToolDeclarations,
   EVE_DELEGATION_TOOL,
   type HostedToolDeclaration,
@@ -199,11 +200,7 @@ export interface BrainHost extends HostAdmission {
     binding: HostedToolBinding,
     input: UnparsedWireValue,
     context: EveToolContext,
-  ): Effect.Effect<
-    WireRecord,
-    QueryError | Schema.SchemaError,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
-  >;
+  ): Effect.Effect<WireRecord, QueryError | Schema.SchemaError, BrainToolServices>;
   /**
    * The model one inference runs on and the effort it is asked for, as a
    * coding agent's step is told its own, the meter spent for the account
@@ -521,6 +518,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             ? undefined
             : {
                 task: { userId: caller, taskId: task.task.id },
+                // The browser in the root's sandbox, a worker's its parent's, and its tabs the task's.
+                browser: {
+                  browserSession: browserSessionOf(context.session),
+                  conversationId: standing.success.target.conversationId,
+                  openSandbox: () => context.getSandbox(),
+                },
                 // The repository as the row holds it now, so a task given one mid-conversation reads it on its next call.
                 repository: {
                   task: { userId: caller, taskId: task.task.id },

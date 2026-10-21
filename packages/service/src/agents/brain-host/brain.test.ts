@@ -38,6 +38,7 @@ import type { ToolContext as EveToolContext } from "eve/tools";
 import type { GitHubApp } from "../../github/github-app.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
+import { noSandboxBrowserLayer } from "../../testing/agent-browser-fake.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import {
   SCRIPTED_BRAIN_REPLY,
@@ -328,7 +329,16 @@ const brainTurn = (
             unparsedWire(call.input as WireBoundaryInput),
             toolContext(session, call.toolName),
           )
-          .pipe(Effect.provide(Layer.mergeAll(services, modelCatalogOf([]), NO_WORKSPACE_LINEAR)));
+          .pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                services,
+                modelCatalogOf([]),
+                NO_WORKSPACE_LINEAR,
+                noSandboxBrowserLayer,
+              ),
+            ),
+          );
         yield* relay({
           type: "action.result",
           data: {
