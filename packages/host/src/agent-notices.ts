@@ -137,6 +137,9 @@ const ENDED_WORD = {
   [CODING_AGENT_STATUS.FAILED]: "failed",
 } as const;
 
+/** How many pushes of the followed list in a row may leave out an agent only a Start answered before the ledger lets it go. */
+const UNNAMED_PUSHES_KEPT = 2;
+
 /** What kind of event a notice tells of. */
 export const NOTICE_KIND = {
   AGENT_END: "agent-end",
@@ -619,6 +622,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const unseen = new Set<string>();
     /** The agents on plans the followed list last named, so one it stops naming is known to have left it rather than not reached it yet. */
     let followedAgents = new Set<string>();
+    /** How many pushes in a row have left out each agent the list has not named yet, as one only a Start answered. */
+    const unnamedPushes = new Map<string, number>();
     const ends = yield* Queue.unbounded<TurnEnd>();
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
@@ -1091,14 +1096,22 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeFollowed: (agents, taskIds) => {
         const held = new Set(taskIds);
         // The list names every agent on its plans but the archived, so one it named and no longer
-        // does takes its dot with it. One only a Start answered is kept until the list names it, since
-        // a push of the plans may carry agents from before that Start.
+        // does takes its dot with it. One only a Start answered is kept through a push or two that
+        // leave it out, since a push of the plans may carry agents from before that Start, and let go
+        // after that, as one archived before the list ever named it.
         const named = new Set(agents.map((agent) => agent.id));
-        forget(
-          (agent, agentId) =>
-            agent.taskId === null ||
-            (held.has(agent.taskId) && (named.has(agentId) || !followedAgents.has(agentId))),
-        );
+        forget((agent, agentId) => {
+          if (agent.taskId === null) return true;
+          if (!held.has(agent.taskId)) return false;
+          if (named.has(agentId)) return true;
+          if (followedAgents.has(agentId)) return false;
+          const pushes = (unnamedPushes.get(agentId) ?? 0) + 1;
+          unnamedPushes.set(agentId, pushes);
+          return pushes <= UNNAMED_PUSHES_KEPT;
+        });
+        for (const agentId of unnamedPushes.keys()) {
+          if (named.has(agentId) || !ledger.has(agentId)) unnamedPushes.delete(agentId);
+        }
         followedAgents = named;
         notices.observeAgents(agents);
       },

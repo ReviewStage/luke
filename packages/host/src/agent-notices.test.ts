@@ -313,6 +313,27 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an agent a Start answered that the list never names, as one archived before it did, is let go after a few pushes with its dot",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      yield* settled;
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+
+      notices.observeFollowed([], [TASK_ID]);
+      notices.observeFollowed([], [TASK_ID]);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID], "kept through a push or two that predate it");
+      notices.observeFollowed([], [TASK_ID]);
+      assert.deepEqual(f.unseen.at(-1), []);
+    }),
+);
+
 /**
  * Every step the inbox read has to take, taken: the accounts' stream hands
  * the account on, the read it switched to asks, and the look writes what
