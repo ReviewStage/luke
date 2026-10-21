@@ -10,6 +10,7 @@ import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } fro
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
+import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 import { planDocumentSchema, planSectionEditSchema } from "./task-wire.js";
@@ -119,7 +120,7 @@ export const VOICE_SERVICE_FRAME = {
   /** The service's answer once its sideband stands on that session again. */
   SESSION_ATTACHED: "session.attached",
   /**
-   * One of the three frames the desktop sends after the handshake in this
+   * One of the frames the desktop sends after the handshake in this
    * vocabulary: whether its peer has gone quiet, as the renderer's own idle
    * window reads it. The service's exchange decides the idle close against
    * the appends it made itself, so the report crosses to it; the relay reads
@@ -142,6 +143,16 @@ export const VOICE_SERVICE_FRAME = {
    * so it is no report and nothing past its type is read.
    */
   SESSION_HANG_UP: "session.hangup",
+  /**
+   * A line the developer typed into the agent's composer while this call is
+   * up on that agent. The host decides it belongs to the call, never the
+   * voice window, and the service's exchange writes it down as typed, hands
+   * it to the agent, and speaks the agent's reply: GPT-Live takes no user
+   * text item under client delegation, so the line is never appended to the
+   * session as the developer's own words. Read by the service like the
+   * reports, and forwarded nowhere.
+   */
+  SESSION_TYPED: "session.typed",
   /**
    * The service's frame to the desktop after the handshake: the task's
    * document as its notetaker is writing it,
@@ -396,10 +407,23 @@ export const sessionHangUpFrameSchema = Schema.Struct({
 
 export type SessionHangUpFrame = typeof sessionHangUpFrameSchema.Type;
 
+/**
+ * A line typed into the call: its words as the composer sent them, mentions
+ * written as their labels, bounded as a message to an agent is. Nothing of
+ * an attachment rides here: the call hands on words alone.
+ */
+export const sessionTypedFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_TYPED),
+  text: text(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+});
+
+export type SessionTypedFrame = typeof sessionTypedFrameSchema.Type;
+
 /** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
 export const sessionReportFrameSchema = Schema.Union([
   sessionActivityFrameSchema,
   sessionStopFrameSchema,
+  sessionTypedFrameSchema,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;

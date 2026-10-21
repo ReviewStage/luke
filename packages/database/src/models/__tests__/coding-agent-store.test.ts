@@ -378,6 +378,43 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
   );
 });
 
+it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) => {
+  it.effect(
+    "a line typed into a call into the agent is its ask's, and a turn receiving the same words never takes it as a line awaiting a turn",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.SPOKEN,
+          eveTurnId: "turn_0",
+        });
+        const text = "Use the fixture branch.";
+        yield* writer.writeTypedCallLine(target, {
+          clientId: "typed-line-1",
+          text,
+          metadata: {
+            author: MESSAGE_AUTHOR.DEVELOPER,
+            channel: MESSAGE_CHANNEL.TYPED,
+            voice_session_id: randomUUID(),
+            from_ms: 900,
+          },
+          sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+        });
+        assert.deepEqual(
+          Result.map(yield* writer.takeAwaitingLine(target, { text, turnId }), (ids) => ids.length),
+          Result.succeed(0),
+        );
+      }),
+  );
+});
+
 /** A settled turn of the conversation, with usage recorded, as the relay leaves one. */
 const settledTurn = (userId: string, conversationId: string) =>
   Effect.gen(function* () {

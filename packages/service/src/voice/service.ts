@@ -617,8 +617,10 @@ export class VoiceService {
             }),
           ),
         // The device's reports reach the exchange: its idle, which the
-        // exchange decides the idle close on; and its stop, which the exchange
-        // answers with the one instruction it appends itself. With no exchange
+        // exchange decides the idle close on; its stop, which the exchange
+        // answers with the one instruction it appends itself; and a line the
+        // developer typed into the call, which the exchange hands the agent
+        // and whose reply it speaks. With no exchange
         // standing a report is read and goes nowhere.
         onDeviceReport:
           exchange === undefined
@@ -630,6 +632,9 @@ export class VoiceService {
                     return;
                   case VOICE_SERVICE_FRAME.SESSION_STOP:
                     exchange.service.stopSpeaking();
+                    return;
+                  case VOICE_SERVICE_FRAME.SESSION_TYPED:
+                    exchange.service.typeLine(report.text);
                     return;
                 }
               },

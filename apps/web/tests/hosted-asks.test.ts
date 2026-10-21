@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
+import { storeWriter } from "@luke/database/models/writer";
 import { conversations } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import { ASK_ORIGIN } from "@luke/features";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Schema } from "effect";
 import { afterAll } from "vitest";
 
@@ -135,6 +137,48 @@ it.effect(
       assert.deepEqual(
         await database.run(askEffects.unendedSpoken(other, conversationId, since)),
         [],
+      );
+    }),
+);
+
+it.effect(
+  "a re-attached call reads back which of its asks a line typed into the call made, by the typed row standing under the ask's id, and which a delegation made",
+  () =>
+    Effect.promise(async () => {
+      const owner = await database.createUser();
+      const conversationId = await conversation(owner);
+      const target = { userId: owner, conversationId };
+      const writer = await database.run(storeWriter({ tools: {} }));
+      await database.run(
+        writer.writeTypedCallLine(target, {
+          clientId: "typed-line-1",
+          text: "Use the fixture branch.",
+          metadata: {
+            author: MESSAGE_AUTHOR.DEVELOPER,
+            channel: MESSAGE_CHANNEL.TYPED,
+            voice_session_id: randomUUID(),
+            from_ms: 900,
+          },
+          sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+        }),
+      );
+      const spoken = (clientId: string, revision: number) =>
+        asks.record({
+          ...write(owner, conversationId, clientId),
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW + revision),
+          voice: { sessionId: "voice-typed", revision },
+        });
+      await spoken("item_delegated", 1);
+      await spoken("typed-line-1", 2);
+
+      const asked = await database.run(askEffects.spokenIn(owner, "voice-typed"));
+      assert.deepEqual(
+        asked.map((ask) => [ask.clientId, ask.typed]),
+        [
+          ["item_delegated", false],
+          ["typed-line-1", true],
+        ],
       );
     }),
 );

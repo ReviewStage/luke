@@ -2301,16 +2301,26 @@ device untouched except `session.input_audio.append` and
 Luke's never transit the service; and from the device nothing forwarded at
 all (`frames.ts`): the hang-up (`SESSIONS_HANG_UP_FRAMES`), the Mac's
 `session.hangup` or an older build's own `session.close`, is read as an ask
-for the close the exchange sends itself (below), and two frames in the
+for the close the exchange sends itself (below), and three frames in the
 service's own vocabulary (`SESSIONS_REPORT_FRAMES`) are read here and handed
 to the exchange rather than forwarded: `session.activity`, the peer's idle
-report, and `session.stop`, the stop key, which the exchange answers with the
+report; `session.typed`, a line the developer typed into the agent's
+composer while the call is up on that agent, which the host, never the
+voice window, hands the call; and `session.stop`, the stop key, which the exchange answers with the
 one instruction it appends itself (`STOP_SPEAKING_INSTRUCTION`, which stands
 on the service alone) and by blocking every exchange of the session: no reply
 delegated before the press is spoken, and each run still under way is
 cancelled through `stopAsk`, the voice told silently (`STOPPED_RUN_NOTE`)
-only once the cancel was taken. So no device appends anything to a session,
-and no sentence of a device's composing reaches one through this route. Any other device frame — an older build's own append, the
+only once the cancel was taken. A typed line is no append of the device's
+either: GPT-Live takes no user text item under client delegation, so the
+exchange (`LiveSessionService.typeLine`) writes the line once as the
+developer's typed row, naming the call and the instant it was typed at,
+hands it to the agent as an ask of the session's next revision whose reply
+it speaks session-wide (`delegation_id: null`), and tells the voice of it in
+a `session.thinking.append` with its mentions as their labels, so the voice
+neither answers nor delegates it itself. So no device appends anything to a
+session, and no instruction of a device's composing reaches one through
+this route. Any other device frame — an older build's own append, the
 microphone switch that never crosses this socket, an unreadable frame —
 closes that device's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
 rather than dropping it, so a device still running an exchange of its own is

@@ -21,6 +21,7 @@ import {
   type QueryError,
 } from "../core/query.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
+import { MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../voice-vocabulary.js";
 import {
   type ConversationTarget,
@@ -113,6 +114,13 @@ interface SpokenRowWrite extends SpokenUtteranceSpan {
   readonly speaker: TranscriptSpeaker;
 }
 
+/** A line the developer typed into the call, under the id the service minted for its ask, at the instant on the call's clock it was typed. */
+interface TypedRowWrite {
+  readonly rowId: string;
+  readonly text: string;
+  readonly atMs: number;
+}
+
 export interface VoiceWriter {
   /** Consumes one server event of the live session's stream. */
   consume(
@@ -136,6 +144,16 @@ export interface VoiceWriter {
   attachSpokenAsk(
     target: VoiceTarget,
     attach: SpokenAskAttach,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
+  /**
+   * A line the developer typed into the call: one typed row, sent by the
+   * member on the call, naming the session and the instant it was typed at,
+   * so Luke's words after it read as following it. Nothing of it is a
+   * segment, since nothing of it was said.
+   */
+  writeTypedRow(
+    target: VoiceTarget,
+    row: TypedRowWrite,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
 }
 
@@ -391,9 +409,36 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
     );
   }
 
+  function writeTypedRow(
+    target: VoiceTarget,
+    row: TypedRowWrite,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices> {
+    return Effect.gen(function* () {
+      const voiceSession = yield* findVoiceSession({
+        userId: target.userId,
+        liveSessionId: target.liveSessionId,
+      });
+      if (Option.isNone(voiceSession)) return NO_SESSION;
+      return yield* upserted(
+        store.writeTypedCallLine(target.conversation, {
+          clientId: row.rowId,
+          text: row.text,
+          metadata: {
+            author: MESSAGE_AUTHOR.DEVELOPER,
+            channel: MESSAGE_CHANNEL.TYPED,
+            voice_session_id: voiceSession.value.id,
+            from_ms: Math.max(0, Math.round(row.atMs)),
+          },
+          sender: { kind: MESSAGE_SENDER.MEMBER, userId: target.userId },
+        }),
+      );
+    });
+  }
+
   return {
     upsertSpokenRow,
     attachSpokenAsk,
+    writeTypedRow,
     consume: (target, event) =>
       Effect.gen(function* () {
         switch (event.type) {

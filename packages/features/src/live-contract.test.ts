@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { LIVE_VOICE } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { test } from "vitest";
+import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import {
   AVATAR_FRAME_BOUNDS,
   AVATAR_STOP_REASON,
@@ -14,6 +15,7 @@ import {
   isHostedVoiceServiceAddress,
   sessionCreatedFrameFromWire,
   sessionOpeningFrameFromWire,
+  sessionReportFrameFromWire,
   VOICE_SERVICE_FRAME,
 } from "./live-contract.js";
 import { VIDEO_AVATAR } from "./video-avatar.js";
@@ -218,6 +220,26 @@ test("every avatar frame without its request id is refused, the answers included
     avatarUnavailableFrameFromWire({
       type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
       reason: AVATAR_UNAVAILABLE_REASON.ERROR,
+    }),
+    undefined,
+  );
+});
+
+test("a line typed into the call is a report carrying its words, trimmed, and one with no words or past a message's bound is refused", () => {
+  const typed = VOICE_SERVICE_FRAME.SESSION_TYPED;
+  assert.deepEqual(
+    sessionReportFrameFromWire({ type: typed, text: "  Use the fixture branch. " }),
+    {
+      type: typed,
+      text: "Use the fixture branch.",
+    },
+  );
+  assert.equal(sessionReportFrameFromWire({ type: typed, text: "   " }), undefined);
+  assert.equal(sessionReportFrameFromWire({ type: typed }), undefined);
+  assert.equal(
+    sessionReportFrameFromWire({
+      type: typed,
+      text: "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
     }),
     undefined,
   );
