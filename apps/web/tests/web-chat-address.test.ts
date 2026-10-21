@@ -82,7 +82,7 @@ it.effect(
         assert.equal(addressBar(), "/personal/chat");
 
         await pressRow("members-schema");
-        assert.ok(panel.shows("# members-schema"), "the channel chosen is shown");
+        assert.ok(panel.shows("#members-schema"), "the channel chosen is shown");
         assert.equal(addressBar(), `/personal/chat/${SCHEMA_CHANNEL}`);
 
         // A wide room's Chat is one step whichever place it shows, so the channel takes For you's entry in place.
@@ -90,12 +90,12 @@ it.effect(
 
         const again = await reloadedHere();
         await vi.waitFor(() =>
-          assert.ok(again.shows("# members-schema"), "a reload reopens the channel its step saved"),
+          assert.ok(again.shows("#members-schema"), "a reload reopens the channel its step saved"),
         );
         assert.equal(addressBar(), `/personal/chat/${SCHEMA_CHANNEL}`);
 
         const reloaded = await loadedAt(`/personal/chat/${SCHEMA_CHANNEL}`);
-        assert.ok(reloaded.shows("# members-schema"), "a channel's address opens it");
+        assert.ok(reloaded.shows("#members-schema"), "a channel's address opens it");
         assert.equal(addressBar(), `/personal/chat/${SCHEMA_CHANNEL}`);
 
         const stale = await loadedAt(`/personal/chat/${GONE_CHANNEL}`);
