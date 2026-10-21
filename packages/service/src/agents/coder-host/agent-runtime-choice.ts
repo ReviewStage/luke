@@ -14,15 +14,16 @@
  *   (`chatgpt_oauth`) that OpenAI has not signed out and the deployment can
  *   still open.
  *
- * Where the Claude plan is offered, the payer is the one Start picked for
- * this agent, else the account's default: the plan where its row's "Use my
- * Claude plan for coding agents" is on, eve's payer where it is off. eve's
- * payer is the account's own Anthropic API key where it saved one, and
- * Luke's key where it did not, since that is the key eve's steps run on
- * (`account-keys.ts`), so a pick of either names eve and the payer recorded
- * is the one eve bills. The ChatGPT plan, where offered, pays as before
- * (P25 brings it the same pick). Where no plan is offered, the agent runs on
- * eve exactly as before, with no payer recorded, whatever was picked.
+ * Where a plan is offered, the payer is the one Start picked for this
+ * agent, else the account's default: the plan where its row's "Use my
+ * Claude plan" or "Use my ChatGPT plan for coding agents" is on, eve's
+ * payer where it is off. eve's payer is the account's own API key for the
+ * model's provider where it saved one, and Luke's key where it did not,
+ * since that is the key eve's steps run on (`account-keys.ts`), so a pick of
+ * either names eve and the payer recorded is the one eve bills. A pick of
+ * the other provider's plan is no pick of this one's. Where no plan is
+ * offered, the agent runs on eve exactly as before, with no payer recorded,
+ * whatever was picked.
  *
  * The choice is written on the agent as it is made and never changes: a
  * plan that later runs out or is disconnected pauses the agent, and never
@@ -101,19 +102,24 @@ const keptPlan = (
         );
       });
 
-/** eve's payer for the account's Claude agents: its own Anthropic API key where it saved one, Luke's where it did not. */
+/** The plan's runtime and payer for a model of the provider's: Claude Code for Anthropic's, Codex for OpenAI's. */
+const onPlanOf = (provider: string): AgentRuntimeChoice =>
+  provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
+
+/** eve's payer for the account's agents on the provider's models: its own API key for that provider where it saved one, Luke's where it did not. */
 const evePayer = Effect.fnUntraced(function* (
   userId: string,
+  provider: string,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure, DatabaseServices> {
   const keys = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
-  const own = keys.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
+  const own = keys.some((row) => row.provider === provider);
   return {
     runtime: CONVERSATION_RUNTIME.EVE,
     payer: own ? CODING_AGENT_PAYER.API_KEY : CODING_AGENT_PAYER.LUKE,
   };
 });
 
-/** The runtime and payer of a new agent of the account's on the model given, the payer Start picked honoured where the Claude plan is offered, as above. */
+/** The runtime and payer of a new agent of the account's on the model given, the payer Start picked honoured where a plan is offered, as above. */
 export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   model: string,
@@ -129,8 +135,7 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   const ring = environment.value.providerKeyEncryptionKeys;
   const plan = yield* keptPlan(userId, provider.provider, ring);
   if (plan === undefined) return ON_EVE;
-  if (provider.provider !== MODEL_PROVIDER.ANTHROPIC) return ON_CODEX;
-  const onPlan =
-    picked === undefined ? plan.forAgents : picked === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
-  return onPlan ? ON_CLAUDE_CODE : yield* evePayer(userId);
+  const onPlan = onPlanOf(provider.provider);
+  const chosen = picked === undefined ? plan.forAgents : picked === onPlan.payer;
+  return chosen ? onPlan : yield* evePayer(userId, provider.provider);
 });

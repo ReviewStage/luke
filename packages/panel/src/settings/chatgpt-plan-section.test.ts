@@ -79,6 +79,15 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       return Promise.resolve(done(signInAnswer));
     case ACT_KIND.CHATGPT_SIGN_IN_CANCEL:
       return Promise.resolve(done(undefined));
+    case ACT_KIND.PROVIDER_KEYS_FOR_AGENTS:
+      held = {
+        keys: [],
+        subscriptions: (held.subscriptions ?? []).map((one) => ({
+          ...one,
+          forAgents: request.payload.forAgents,
+        })),
+      };
+      return Promise.resolve(done(held));
     case ACT_KIND.PROVIDER_KEYS_REMOVE:
       held = unconfirmed ? { keys: [], revocationUnconfirmed: true } : { keys: [] };
       return Promise.resolve(done(held));
@@ -246,4 +255,38 @@ test("a sign-in OpenAI has since ended asks to connect again", async () => {
   const group = codexGroup(page) ?? assert.fail("no Codex group");
   assert.match(group.textContent ?? "", /ChatGPT ended this sign-in\./u);
   assert.ok(button(group, "Continue with ChatGPT"));
+});
+
+const planSwitch = (within: Element) => within.querySelector<HTMLElement>('[role="switch"]');
+
+test("a connected sign-in's switch stands on, and turning it off sends the change by the ChatGPT kind and draws the service's word; a sign-in OpenAI ended shows no switch", async () => {
+  held = { keys: [], subscriptions: [{ ...CONNECTED, status: PROVIDER_KEY_STATUS.INVALID }] };
+  const ended = codexGroup(await mount()) ?? assert.fail("no Codex group");
+  assert.equal(planSwitch(ended), null, "nothing to turn on a sign-in that can't pay");
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  held = { keys: [], subscriptions: [CONNECTED] };
+  const group = codexGroup(await mount()) ?? assert.fail("no Codex group");
+  const toggle = planSwitch(group) ?? assert.fail("no plan switch");
+  assert.match(group.textContent ?? "", /Use my ChatGPT plan for coding agents/u);
+  assert.equal(toggle.getAttribute("aria-checked"), "true");
+
+  act(() => toggle.click());
+  await settle();
+
+  assert.deepEqual(
+    sent
+      .filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_FOR_AGENTS)
+      .map((each) => each.payload),
+    [
+      {
+        provider: PROVIDER_KEY_PROVIDER.OPENAI,
+        kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+        forAgents: false,
+      },
+    ],
+  );
+  assert.equal(planSwitch(group)?.getAttribute("aria-checked"), "false");
 });

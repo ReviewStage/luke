@@ -605,9 +605,10 @@ const START_BRANCH = Schema.String.check(
   Schema.isPattern(/^[^\s~^:?*[\\]+$/u),
 );
 
-/** A payer a start may pick for its one agent: the Claude plan, or eve's payer by either name. */
+/** A payer a start may pick for its one agent: the Claude or ChatGPT plan, or eve's payer by either name. */
 const START_PAYER = Schema.Literals([
   CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
   CODING_AGENT_PAYER.API_KEY,
   CODING_AGENT_PAYER.LUKE,
 ]);
@@ -678,9 +679,10 @@ const START_AGENT_INPUT = Schema.Struct({
     describeWire(
       START_PAYER,
       "Who pays for this one agent: claude_plan for the member's Claude plan, which runs it on " +
-        "Claude Code, or api_key or luke, which run it as today on the member's own API key " +
-        "where they saved one and on Luke's key where they did not. Leave it out for the " +
-        "member's default; a plan is used only where it is connected and the model is Claude's.",
+        "Claude Code, chatgpt_plan for the member's ChatGPT plan, which runs it on Codex, or " +
+        "api_key or luke, which run it as today on the member's own API key where they saved " +
+        "one and on Luke's key where they did not. Leave it out for the member's default; a " +
+        "plan is used only where it is connected and the model is its provider's.",
     ),
   ),
   from: Schema.optionalKey(
