@@ -195,7 +195,7 @@ export function joinWorkspaceChat(
 }
 
 /** The account's own member of the workspace's chat, read and never made; nothing where it has not joined or is not in the workspace. */
-function joinedAs(
+export function joinedMember(
   userId: string,
   organizationId: string,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
@@ -219,7 +219,7 @@ export function workspaceChatPast(
 ): ChatStoreEffect<Option.Option<ChatAnswer>> {
   return Effect.gen(function* () {
     const after = cursor - 1;
-    const self = yield* joinedAs(userId, organizationId);
+    const self = yield* joinedMember(userId, organizationId);
     if (Option.isNone(self)) return Option.none();
     yield* heldUntilMoved(userId, organizationId, after);
     const past = yield* chatPast(userId, organizationId, self.value.id, after);

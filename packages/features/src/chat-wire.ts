@@ -550,7 +550,7 @@ export const editChannelInputSchema = EffectSchema.Struct({
  * whether it has left, an archived agent or plan, which is still named in
  * the messages it wrote.
  */
-const chatMemberSchema = EffectSchema.Struct({
+export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
   /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
@@ -568,7 +568,7 @@ const chatMemberSchema = EffectSchema.Struct({
 export type ChatMember = typeof chatMemberSchema.Type;
 
 /** A channel as a reader sees one: its kind, its name, the plan it is of, the two members of a DM, and whether it is archived. */
-const chatChannelSchema = EffectSchema.Struct({
+export const chatChannelSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(CHANNEL_KIND)),
   name: EffectSchema.optionalKey(EffectSchema.String),
@@ -588,7 +588,7 @@ const chatChannelSchema = EffectSchema.Struct({
 export type ChatChannel = typeof chatChannelSchema.Type;
 
 /** An ask as a message carries it: its key and revision, where it stands, what it asks, the answer and its answerer, and why its poster resolved it. */
-const chatMessageAskSchema = EffectSchema.Struct({
+export const chatMessageAskSchema = EffectSchema.Struct({
   key: EffectSchema.String,
   revision: countedNumber,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
@@ -606,7 +606,7 @@ const chatMessageAskSchema = EffectSchema.Struct({
  * thread root it replies to, its author, its body, the members it mentions,
  * when it was posted, and the ask it carries.
  */
-const chatMessageSchema = EffectSchema.Struct({
+export const chatMessageSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   seq: countedNumber,
   touchedSeq: countedNumber,
