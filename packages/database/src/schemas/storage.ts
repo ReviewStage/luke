@@ -1,5 +1,6 @@
 import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
 import {
+  MESSAGE_ROLE,
   type MessageRole,
   type StoredMessageMetadata,
   TURN_STATUS,
@@ -7,7 +8,7 @@ import {
   type TurnStatus,
 } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
-import { sql } from "drizzle-orm";
+import { type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
@@ -125,6 +126,22 @@ export const conversations = pgTable(
 );
 
 /**
+ * That a row of `messages` is a user line no turn owns yet: the rows the
+ * awaiting-line reads look among (`message-reads.ts`'s
+ * `newestAwaitingLineAt`), and the predicate of the partial index they are
+ * read through. The role is inlined rather than bound, because an index
+ * predicate is DDL, which takes no bound parameter, and a read that bound it
+ * would match the index only in a plan made for that one value, never in the
+ * generic plan of a statement prepared once and run again.
+ */
+export function turnlessUserLine(table: {
+  readonly role: SQLWrapper;
+  readonly turnId: SQLWrapper;
+}): SQL {
+  return sql`(${table.role} = ${sql.raw(`'${MESSAGE_ROLE.USER}'`)} and ${table.turnId} is null)`;
+}
+
+/**
  * One `UIMessage` per row. A message in flight is mutable until
  * `finished_at` is set, and its tool parts are written before the tool runs
  * and completed after, so the row is the write-ahead record a resume reads;
@@ -209,6 +226,11 @@ export const messages = pgTable(
     index("messages_conversation_revision")
       .on(table.conversationId, table.revision)
       .where(sql`${table.revision} is not null`),
+    // The awaiting-line reads find a conversation's user lines no turn owns, a few among its every
+    // row, which a scan of the conversation's sequence would read through to the last.
+    index("messages_awaiting_line")
+      .on(table.conversationId, table.seq)
+      .where(turnlessUserLine(table)),
   ],
 );
 
