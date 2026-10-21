@@ -25,9 +25,12 @@ import {
   type StripTab,
   type SubagentStripTab,
   sameTab,
+  stampedViewed,
   TAB_WORDS,
   type TerminalStripTab,
+  type ViewedAt,
   viewedLast,
+  withoutViewedAt,
 } from "@luke/ui/tab-strip-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
@@ -336,6 +339,13 @@ const RECENT_KEPT = 20;
  */
 const TASKS_KEPT = 500;
 
+/**
+ * How many tabs a task keeps the time it last viewed, the latest viewed
+ * (`use-idle-tabs.ts`). Note that a tab past it counts as viewed when next
+ * stamped, which only keeps it open longer.
+ */
+const VIEWED_KEPT = 50;
+
 /** A fixed kind as it is kept: one of today's, or one retired, which reads and is then let go (`settled`). An agent's, which an earlier version kept here, reads and is let go the same way. */
 const sidePanelTabSchema = Schema.Literals([
   ...SIDE_PANEL_TABS,
@@ -419,7 +429,8 @@ const stripPinSchema = Schema.Union([
  * order opened. A kind is in `opened` or `closed` or neither. The tabs
  * viewed and the order are kept as the chosen tab is, of fixed and Changes
  * tabs alone, since no other stands again across a launch. `inboxSeen` is the
- * items that waited in its inbox at its last read, by id. `pinned` is what an
+ * items that waited in its inbox at its last read, by id. `viewedAt` is when
+ * each tab was last viewed, kept of the kept kinds alone. `pinned` is what an
  * earlier version pinned in the strip, read once into the sidebar's pins and
  * written no more.
  */
@@ -431,6 +442,7 @@ const taskTabsSchema = Schema.Struct({
   order: Schema.optional(Schema.Array(anyTabSchema)),
   changes: Schema.optional(Schema.Array(changesTabSchema)),
   inboxSeen: Schema.optional(Schema.Array(Schema.String)),
+  viewedAt: Schema.optional(Schema.Array(Schema.Struct({ tab: anyTabSchema, at: Schema.Number }))),
 });
 
 /** A task's own choices as the hook holds them: today's kinds alone, its open Changes tabs, and tabs viewed and an order that may hold any tab, which the record keeps only the kept kinds of. */
@@ -443,6 +455,8 @@ interface TaskTabs {
   readonly changes?: readonly ChangesStripTab[] | undefined;
   /** The items that waited in the task's inbox at its last read, by id; none before its first. */
   readonly inboxSeen?: readonly string[] | undefined;
+  /** When each tab was last viewed on the task, the latest last (`use-idle-tabs.ts`). */
+  readonly viewedAt?: readonly ViewedAt<SidePanelTab>[] | undefined;
 }
 
 /**
@@ -675,6 +689,15 @@ export interface SidePanelControl {
   onCloseBrowsers: () => void;
   /** Says the Browser tab's page was opened at the address, which the tab opens its view on when it is drawn again; one opened already keeps its first. */
   onBrowserOpened: (browserId: string, address: string) => void;
+  /** When each of the open task's tabs was last viewed (`use-idle-tabs.ts`). */
+  viewedAt: readonly ViewedAt<SidePanelTab>[];
+  /** Stamps the tabs viewed at `at` on the task given, and each of `standing` not stamped yet. */
+  onViewedAt: (
+    taskId: string,
+    viewed: readonly SidePanelTab[],
+    standing: readonly SidePanelTab[],
+    at: number,
+  ) => void;
 }
 
 function clampWidth(width: number): number {
@@ -727,6 +750,9 @@ const NO_CHANGES: readonly ChangesStripTab[] = [];
 
 /** A task no tab was opened or moved on. */
 const NO_ORDER: readonly SidePanelTab[] = [];
+
+/** A task none of whose tabs was stamped viewed. */
+const NO_STAMPS: readonly ViewedAt<SidePanelTab>[] = [];
 
 /** The task's order, none until a tab is first opened or moved on it. */
 function orderOn(held: HeldState, taskId: string | undefined): readonly SidePanelTab[] {
@@ -886,14 +912,30 @@ function withViewed(
   });
 }
 
-/** The state with the tab gone from those viewed on the task. */
+/** The state with the tab gone from those viewed on the task, and its stamp of when with it, so a tab opened again counts as viewed anew. */
 function withoutViewed(held: HeldState, taskId: string | undefined, tab: SidePanelTab): HeldState {
-  const recent = taskTabs(held, taskId).recent ?? [];
-  if (!recent.some((each) => sameTab(each, tab))) return held;
+  const { recent = [], viewedAt = NO_STAMPS } = taskTabs(held, taskId);
+  const stamps = withoutViewedAt(viewedAt, tab);
+  if (!recent.some((each) => sameTab(each, tab)) && stamps === viewedAt) return held;
   return withTaskTabs(held, taskId, (was) => ({
     ...was,
     recent: recent.filter((each) => !sameTab(each, tab)),
+    ...(stamps === viewedAt ? undefined : { viewedAt: stamps }),
   }));
+}
+
+/** The state with the tabs stamped viewed on the task (`stampedViewed`). */
+function withViewedAt(
+  held: HeldState,
+  taskId: string | undefined,
+  viewed: readonly SidePanelTab[],
+  standing: readonly SidePanelTab[],
+  at: number,
+): HeldState {
+  return withTaskTabs(held, taskId, (was) => {
+    const viewedAt = stampedViewed(was.viewedAt ?? NO_STAMPS, viewed, standing, at, VIEWED_KEPT);
+    return viewedAt === undefined ? was : { ...was, viewedAt };
+  });
 }
 
 /** The state with the agent's Changes tab open on the task, after those open there; as it was where it already is. */
@@ -1504,7 +1546,7 @@ function panelChoice(tab: typeof anyTabSchema.Type): tab is FixedSidePanelTab | 
 function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
   return Object.fromEntries(
     Object.entries(tasks ?? {}).map(
-      ([task, { opened, closed, recent, order, changes, inboxSeen }]) => [
+      ([task, { opened, closed, recent, order, changes, inboxSeen, viewedAt }]) => [
         task,
         {
           opened: opened.filter(current),
@@ -1513,6 +1555,13 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
           ...(order === undefined ? undefined : { order: order.filter(panelChoice) }),
           ...(changes === undefined ? undefined : { changes }),
           ...(inboxSeen === undefined ? undefined : { inboxSeen }),
+          ...(viewedAt === undefined
+            ? undefined
+            : {
+                viewedAt: viewedAt.flatMap(({ tab, at }) =>
+                  panelChoice(tab) ? [{ tab, at }] : [],
+                ),
+              }),
         },
       ],
     ),
@@ -1604,17 +1653,21 @@ function storedTasks(tasks: HeldState["tasks"]): NonNullable<SidePanelState["tas
   };
   return Object.fromEntries(
     Object.entries(tasks).map(
-      ([task, { opened, closed, recent = [], order = [], changes, inboxSeen }]) => [
-        task,
-        {
-          opened,
-          closed,
-          recent: kept(recent),
-          order: kept(order),
-          changes: changes === undefined || changes.length === 0 ? undefined : changes,
-          inboxSeen,
-        },
-      ],
+      ([task, { opened, closed, recent = [], order = [], changes, inboxSeen, viewedAt = [] }]) => {
+        const stamps = viewedAt.flatMap(({ tab, at }) => (keptChoice(tab) ? [{ tab, at }] : []));
+        return [
+          task,
+          {
+            opened,
+            closed,
+            recent: kept(recent),
+            order: kept(order),
+            changes: changes === undefined || changes.length === 0 ? undefined : changes,
+            inboxSeen,
+            viewedAt: stamps.length === 0 ? undefined : stamps,
+          },
+        ] as const;
+      },
     ),
   );
 }
@@ -2160,6 +2213,11 @@ export function useSidePanel(
       }),
     [update],
   );
+  const onViewedAt = useCallback(
+    (on: string, viewed: readonly SidePanelTab[], standing: readonly SidePanelTab[], at: number) =>
+      update((held) => withViewedAt(held, on, viewed, standing, at)),
+    [update],
+  );
   const browsers = useMemo(() => drawnBrowsers(state, taskId), [state, taskId]);
   return {
     open: shown,
@@ -2210,5 +2268,7 @@ export function useSidePanel(
     onOpenBrowser,
     onCloseBrowsers,
     onBrowserOpened,
+    viewedAt: taskTabs(state, taskId).viewedAt ?? NO_STAMPS,
+    onViewedAt,
   };
 }
