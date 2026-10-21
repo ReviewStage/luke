@@ -80,6 +80,9 @@ let written: (readonly TaskSectionWrite[])[] = [];
 /** The account's sections the page is drawn over. */
 let sections: TaskSections = NO_TASK_SECTIONS;
 
+/** Whether the service keeps the changes of where a task stands sent. */
+let keeps = true;
+
 beforeEach(() => {
   opened = [];
   closed = 0;
@@ -87,6 +90,7 @@ beforeEach(() => {
   marked = [];
   written = [];
   sections = NO_TASK_SECTIONS;
+  keeps = true;
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
@@ -169,7 +173,7 @@ async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLEle
       boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
       onSetTaskStanding: (taskId, standing) => {
         sent.push([taskId, standing]);
-        return Promise.resolve(true);
+        return Promise.resolve(keeps);
       },
       onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
       onWriteSections: (writes) => written.push(writes),
@@ -588,10 +592,12 @@ test("a row dragged out of Pinned onto Todo is unpinned and sent todo, and one d
 
   dragRow(page, "ACME-44", "Todo");
   dragRow(page, "ACME-36", "Pinned");
+  await act(async () => undefined);
 
+  // Note that the unpin waits on the status being kept, so it lands after the pin sent at once.
   assert.deepEqual(marked, [
-    ["t-44", TASK_MARK.UNPIN],
     ["t-36", TASK_MARK.PIN],
+    ["t-44", TASK_MARK.UNPIN],
   ]);
   assert.deepEqual(sent, [["t-44", { status: TASK_STATUS.TODO }]]);
 });
@@ -608,6 +614,7 @@ test("a row dragged into a section is kept there, and one dragged out of its sec
 
   dragRow(page, "ACME-40", "Launch week");
   dragRow(page, "ACME-42", "Backlog");
+  await act(async () => undefined);
 
   assert.deepEqual(
     written.map((writes) =>
@@ -633,4 +640,54 @@ test("a Board display kept before its cards offered Agents and Needs you draws t
 
   assert.match(card?.textContent ?? "", /2 need you/, "the card says what waits on the reader");
   assert.equal(card?.querySelector(".tasks-board-key"), null, "the key stays off, as kept");
+});
+
+/** The section writes sent, each as its kind, its task, and its section. */
+function writesSent(): unknown[] {
+  return written.map((writes) =>
+    writes.map((write) => [
+      write.kind,
+      "taskId" in write ? write.taskId : undefined,
+      "sectionId" in write ? write.sectionId : undefined,
+    ]),
+  );
+}
+
+test("a row dragged out of its section onto a status the service refuses stays in its section and pinned", async () => {
+  const LAUNCH = "a1b2c3d4-0000-4000-8000-000000000002";
+  sections = {
+    sections: [{ id: LAUNCH, workspaceId: ACME.id, title: "Launch week", createdAt: 1 }],
+    entries: [{ taskId: "t-42", sectionId: LAUNCH, addedAt: 1 }],
+  };
+  keeps = false;
+  const page = await mountPage();
+  layRowsOut(page);
+
+  dragRow(page, "ACME-42", "Backlog");
+  dragRow(page, "ACME-44", "Backlog");
+  await act(async () => undefined);
+
+  assert.deepEqual(sent, [
+    ["t-42", { status: TASK_STATUS.BACKLOG }],
+    ["t-44", { status: TASK_STATUS.BACKLOG }],
+  ]);
+  assert.deepEqual(written, [], "the row keeps its section");
+  assert.deepEqual(marked, [], "the row keeps its pin");
+  assert.match(document.body.textContent ?? "", /Couldn't change the task/);
+});
+
+test("a section holding no task stands in the List, empty, and a row dragged into it is kept there", async () => {
+  const LATER = "a1b2c3d4-0000-4000-8000-000000000003";
+  sections = {
+    sections: [{ id: LATER, workspaceId: ACME.id, title: "Later", createdAt: 1 }],
+    entries: [],
+  };
+  const page = await mountPage();
+  layRowsOut(page);
+  assert.deepEqual(groups(page)[1], ["Later", []]);
+  assert.match(page.textContent ?? "", /Drag tasks here/);
+
+  dragRow(page, "ACME-40", "Later");
+
+  assert.deepEqual(writesSent(), [[["place", "t-40", LATER]]]);
 });

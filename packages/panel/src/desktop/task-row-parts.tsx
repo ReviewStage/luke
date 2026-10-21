@@ -68,15 +68,24 @@ export function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
   return priorityOf(task) === standing.priority;
 }
 
-/** Sends a task a change of where it stands, unless it stands there already, and says so where the service did not keep it. */
+/**
+ * Sends a task a change of where it stands, unless it stands there already,
+ * and says so where the service did not keep it. What must follow only a
+ * change kept, `onKept`, runs once the service keeps it, or at once where
+ * the task already stands there, and never where it was refused.
+ */
 export function useStandingDoor(
   tasks: Pick<TasksControl, "onSetTaskStanding">,
-): (task: TaskSummary, standing: TaskStanding) => void {
+): (task: TaskSummary, standing: TaskStanding, onKept?: () => void) => void {
   const toast = useToast();
-  return (task, standing) => {
-    if (standsAt(task, standing)) return;
+  return (task, standing, onKept) => {
+    if (standsAt(task, standing)) {
+      onKept?.();
+      return;
+    }
     void tasks.onSetTaskStanding(task.id, standing).then((kept) => {
-      if (!kept) toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      if (kept) onKept?.();
+      else toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     });
   };
 }

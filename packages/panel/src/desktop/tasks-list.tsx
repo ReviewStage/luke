@@ -147,6 +147,10 @@ const UNREAD_LINE = "Your tasks could not be read.";
 /** What the List says where the filter and the view leave no task standing. */
 const NONE_STANDING = "No tasks match this view";
 
+/** What a group with no task says, and a section with none where rows are dragged into it, as the sidebar's says. */
+const NO_TASKS = "No tasks";
+const DRAG_HERE = "Drag tasks here";
+
 /** What a group of pinned tasks is called. */
 const PINNED = "Pinned";
 
@@ -412,7 +416,7 @@ interface ListDrops {
 function listDrops(
   tasks: TasksControl,
   groups: readonly TasksGroup[],
-  setStanding: (task: TaskSummary, standing: TaskStanding) => void,
+  setStanding: (task: TaskSummary, standing: TaskStanding, onKept?: () => void) => void,
 ): ListDrops {
   const pins = groups.find((group) => group.head.kind === TASKS_GROUP.PINNED)?.tasks ?? [];
   const move = (group: TasksGroup) => {
@@ -436,17 +440,21 @@ function listDrops(
     const onto = groups.find((each) => zoneOf(each.head) === zone)?.head;
     if (task === undefined || onto === undefined) return;
     // A task stands in one place, so one carried out of Pinned is unpinned, and one carried out of its section leaves it.
+    const fromPins = group.head.kind === TASKS_GROUP.PINNED;
     const leaving: TaskSectionWrite[] =
       group.head.kind === TASKS_GROUP.SECTION && onto.kind !== TASKS_GROUP.SECTION
         ? leaveSection(tasks, task.id)
         : [];
-    if (group.head.kind === TASKS_GROUP.PINNED) tasks.onMarkTask(task.id, TASK_MARK.UNPIN);
+    const leave = () => {
+      if (fromPins) tasks.onMarkTask(task.id, TASK_MARK.UNPIN);
+      if (leaving.length > 0) tasks.onWriteSections(leaving);
+    };
     switch (onto.kind) {
       case TASKS_GROUP.PINNED: {
         // Note that the task lands as one pinned now, with no place of its own yet, as the sidebar pins one dragged into Pinned.
         const { pinPosition: _position, ...rest } = task;
         const moving: TaskSummary = { ...rest, pinnedAt: Date.now() };
-        if (leaving.length > 0) tasks.onWriteSections(leaving);
+        leave();
         tasks.onMarkTask(task.id, TASK_MARK.PIN);
         const positions = pinPositionsForInsert(pins, moving, at, pinPlaceOf);
         tasks.onMovePins(pinMoves(positions));
@@ -458,19 +466,19 @@ function listDrops(
             each.head.kind === TASKS_GROUP.SECTION && each.head.sectionId === onto.sectionId,
         );
         const entries = target === undefined ? [] : drawnEntries(tasks, target, onto.sectionId);
+        leave();
         tasks.onWriteSections(placeWrites(entries, task.id, onto.sectionId, at, Date.now()));
         return;
       }
+      // Note that a row leaves Pinned or its section only once its new status or priority is kept, so a refused change leaves it where it stood.
       case TASKS_GROUP.STATUS:
-        if (leaving.length > 0) tasks.onWriteSections(leaving);
-        setStanding(task, { status: onto.status });
+        setStanding(task, { status: onto.status }, leave);
         return;
       case TASKS_GROUP.PRIORITY:
-        if (leaving.length > 0) tasks.onWriteSections(leaving);
-        setStanding(task, { priority: onto.priority });
+        setStanding(task, { priority: onto.priority }, leave);
         return;
       default:
-        if (leaving.length > 0) tasks.onWriteSections(leaving);
+        leave();
     }
   };
   return { move, dropOut };
@@ -698,7 +706,7 @@ function TasksListGroup({
       ) : null}
       {folded ? null : group.tasks.length === 0 ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          No tasks
+          {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
         </Text>
       ) : (
         <ul
