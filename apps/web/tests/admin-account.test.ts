@@ -15,11 +15,12 @@ import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-w
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
+import { AccountScreen } from "@luke/panel/admin/screens/account";
 import { EXPERIMENT } from "@luke/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { AccountScreen } from "../src/admin/screens/account";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-account.test.ts -- one account's page names the account, marks an
@@ -206,15 +207,17 @@ async function openAccount(response: Response | undefined): Promise<Opened> {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(AccountScreen, {
-        id: ID,
-        windowDays: 30,
-        onWindowDaysChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onBack: () => backs.push(backs.length),
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(AccountScreen, {
+          id: ID,
+          windowDays: 30,
+          onWindowDaysChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onBack: () => backs.push(backs.length),
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return { page, backs };

@@ -16,6 +16,9 @@
  */
 
 import "@luke/panel/styles/shell.css";
+import { AccountAvatar, type ViewerAccount } from "@luke/panel/admin/chrome/page-header";
+import { ADMIN_PLACES } from "@luke/panel/admin/chrome/places";
+import { type AdminTab, plainLeftClick, tabHref } from "@luke/panel/admin/routing";
 import { LukeIdentity } from "@luke/panel/desktop/luke-identity";
 import { SHELL_ROOM } from "@luke/panel/shell-room";
 import { useStageRoom } from "@luke/panel/stage-room";
@@ -40,9 +43,6 @@ import { accountLabel } from "@luke/ui/account-initials";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { LogOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type AdminTab, plainLeftClick, tabHref } from "../routing";
-import { AccountAvatar, type ViewerAccount } from "./page-header";
-import { ADMIN_PLACES } from "./places";
 
 /** What the toggle names for a reader: the sidebar's way back, or its way away. */
 const SIDEBAR_TOGGLE_LABEL = {
