@@ -1469,12 +1469,31 @@ function madeOrStanding(
 }
 
 /**
- * The workspace's member for the subject, minted the first time it is asked
- * for under the workspace's lock, its ordinal the next of its kind. Nothing where the account is not in the workspace or the
- * subject is not of it: a person not in it, or an agent or a plan of
- * another workspace.
+ * The subject's member where it already stands and the subject is still of
+ * the workspace, read by its key and without the workspace's lock; nothing
+ * where it must be minted or the subject is not of the workspace.
  */
-export function ensureMember(
+function standingMember(
+  organizationId: string,
+  subject: ChatMemberSubject,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    const key = { organizationId, kind: subject.kind, subjectId: subjectId(subject) };
+    const standing = yield* findMemberOfSubject(key);
+    if (Option.isNone(standing)) return standing;
+    // A person is asked of again each time, because one who left the workspace keeps a row for the messages they wrote.
+    if (
+      subject.kind === MEMBER_KIND.HUMAN &&
+      !(yield* subjectInWorkspace(organizationId, subject))
+    ) {
+      return Option.none();
+    }
+    return standing;
+  });
+}
+
+/** The subject's member made under the workspace's lock, or the one a racing join made first, as `ensureMember` says. */
+function mintMember(
   userId: string,
   organizationId: string,
   subject: ChatMemberSubject,
@@ -1511,6 +1530,52 @@ export function ensureMember(
       return Option.some(row);
     }),
   );
+}
+
+/**
+ * The workspace's member for the subject, minted the first time it is asked
+ * for under the workspace's lock, its ordinal the next of its kind. Nothing where the account is not in the workspace or the
+ * subject is not of it: a person not in it, or an agent or a plan of
+ * another workspace. Note that a member already standing is read by its key
+ * and takes no lock, because every write of the chat asks for its writer's
+ * member, and the lock is what serializes the workspace's mints alone.
+ */
+export function ensureMember(
+  userId: string,
+  organizationId: string,
+  subject: ChatMemberSubject,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    const standing = yield* standingMember(organizationId, subject);
+    if (Option.isSome(standing)) return standing;
+    return yield* mintMember(userId, organizationId, subject);
+  });
+}
+
+/**
+ * The subject's member, read by its key and never made; nothing where the
+ * account is not in the workspace, the subject has no member, or a person
+ * is no longer of it.
+ */
+export function joinedMemberOf(
+  userId: string,
+  organizationId: string,
+  subject: ChatMemberSubject,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return yield* standingMember(organizationId, subject);
+  });
+}
+
+/** The member of the workspace by its id, read by its key; nothing where the account is not in the workspace or no such member is. */
+export function memberIn(
+  userId: string,
+  organizationId: string,
+  memberId: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return readerIn(userId, organizationId, memberId);
 }
 
 /** Every member of the workspace, the ones who left among them, in the order they joined; none where the account is not in it. */
@@ -3174,6 +3239,73 @@ export function workspaceChatLiveStatements(
     channels: liveStatementOf(channels),
     messages: liveStatementOf(messages),
     reads: liveStatementOf(reads),
+  });
+}
+
+const ChatStampSchema = Schema.Struct({
+  nextSeq: Schema.NullOr(Schema.Number),
+  revision: Schema.NullOr(Schema.Number),
+  readSeq: Schema.NullOr(Schema.Number),
+  channelReads: Schema.Number,
+  channelReadSeqs: Schema.Number,
+  chatOn: Schema.Boolean,
+});
+
+/**
+ * Where what the live statements read of a workspace's chat stands for a
+ * reader, each part read by its key: the workspace's next place, which
+ * every post and every change to a message takes; its chat's revision,
+ * which every change to its roster and channels takes (`workspaceChat`);
+ * the reader's own cursor; how many channel cursors it keeps and their
+ * sum, which only grows, since a cursor never moves back and one goes only
+ * with its channel; and whether the account has Chat on.
+ */
+const findChatStamp = SqlSchema.findOne({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    memberId: Schema.String,
+  }),
+  Result: ChatStampSchema,
+  execute: ({ userId, organizationId, memberId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          nextSeq: sql<
+            number | null
+          >`(select ${workspaceChat.nextSeq} from ${workspaceChat} where ${workspaceChat.organizationId} = ${organizationId})`,
+          revision: sql<
+            number | null
+          >`(select ${workspaceChat.revision} from ${workspaceChat} where ${workspaceChat.organizationId} = ${organizationId})`,
+          readSeq: sql<
+            number | null
+          >`(select ${chatMember.readSeq} from ${chatMember} where ${chatMember.id} = ${memberId})`,
+          channelReads: sql<number>`(select count(*)::int from ${chatRead} where ${chatRead.memberId} = ${memberId})`,
+          channelReadSeqs: sql<number>`(select coalesce(sum(${chatRead.readSeq}), 0)::int from ${chatRead} where ${chatRead.memberId} = ${memberId})`,
+          chatOn: sql<boolean>`${chatOnFor(userId)}`,
+        })
+        .from(organization)
+        .where(eq(organization.id, organizationId)),
+    ),
+});
+
+/**
+ * Where the workspace's chat stands for the reader, as `findChatStamp`
+ * reads it, as one word a held poll compares between looks: it moves
+ * whenever what the live statements answer the reader may have; nothing
+ * where the account is not in the workspace.
+ */
+export function workspaceChatStamp(
+  userId: string,
+  reader: ChatMemberRow,
+): ChatStoreEffect<Option.Option<string>> {
+  return Effect.gen(function* () {
+    const { organizationId } = reader;
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    const stamp = yield* findChatStamp({ userId, organizationId, memberId: reader.id }).pipe(
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    return Option.some(JSON.stringify(Object.values(stamp)));
   });
 }
 
