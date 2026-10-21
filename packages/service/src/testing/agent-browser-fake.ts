@@ -20,7 +20,9 @@ import { type Cause, Effect, Layer, Queue, Redacted, Ref, Schema, Stream } from 
 import {
   AgentBrowser,
   agentBrowserOver,
+  BROWSER_UNREACHABLE,
   type BrowserSandboxApi,
+  BrowserUnreachable,
   type CdpEvent,
   type PageTarget,
 } from "../agents/browser/agent-browser.js";
@@ -307,3 +309,13 @@ export function agentBrowserTestLayer(
   const { api } = fakeSandboxApi({ status: "running", sessionId });
   return Layer.succeed(AgentBrowser, agentBrowserOver(api, fakeBridgePty(peer)));
 }
+
+/**
+ * `AgentBrowser` for an agent that has opened no sandbox: every call is
+ * refused as not reachable. The double a suite provides where its agent
+ * never reaches a browser.
+ */
+export const noSandboxBrowserLayer: Layer.Layer<AgentBrowser> = Layer.succeed(AgentBrowser, {
+  ensure: () => Effect.fail(new BrowserUnreachable({ reason: BROWSER_UNREACHABLE.NOT_OPENED })),
+  connect: () => Effect.fail(new BrowserUnreachable({ reason: BROWSER_UNREACHABLE.NOT_OPENED })),
+});

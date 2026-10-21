@@ -33,7 +33,13 @@ import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import type { CodeRef } from "@luke/features/task-wire";
-import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
+import {
+  browserCallWords,
+  CALL_KIND,
+  type CallKind,
+  commandDescription,
+  pageName,
+} from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
 import { fileRefText } from "@luke/voice/code-pane-model";
 import {
@@ -76,7 +82,7 @@ export interface ToolCallView {
   readonly kind: CallKind;
   /** The thing the call was done to, after its kind's verb. */
   readonly subject: string;
-  /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; absent where it said none. */
+  /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; for a browser call, what it did (`browserCallWords`); absent where there are none. */
   readonly description?: string;
   readonly input: ToolBlock;
   /** Nothing while the call has not answered. */
@@ -167,6 +173,46 @@ const TIMED_OUT_NOTE = "(killed at its timeout)";
 
 /** The status `run_on_mac` answers with when the Mac ran nothing. */
 const MAC_COMMAND_NOT_RUN = "not-run";
+
+/** The status `browser` answers with when it ran nothing. */
+const BROWSER_NOT_RUN = "not-run";
+
+/** The actions a browser call named, by name, in the order its input lists them. */
+function browserActions(input: WireValue | undefined): readonly string[] {
+  const actions = isRecord(input) && Array.isArray(input.actions) ? input.actions : [];
+  return actions.flatMap((action: WireValue) => {
+    const name = stringAt(action, "action");
+    return name === undefined ? [] : [name];
+  });
+}
+
+/**
+ * The tab a browser call acted on last, as its row names it: by the title
+ * its answer gives the tab, or its page where it has none; while the call
+ * runs, by the page it opened or went to last; nothing where it named none.
+ */
+function browserTabName(
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): string | undefined {
+  const tabs = isRecord(output) && Array.isArray(output.tabs) ? output.tabs : [];
+  const last: WireValue | undefined = tabs.at(-1);
+  const title = stringAt(last, "title")?.trim();
+  if (title !== undefined && title !== "") return title;
+  const shown = stringAt(last, "url");
+  if (shown !== undefined && shown !== "") return pageName(shown);
+  if (output !== undefined) return undefined;
+  const actions = isRecord(input) && Array.isArray(input.actions) ? input.actions : [];
+  const opened = actions.flatMap((action: WireValue) => stringAt(action, "url") ?? []).at(-1);
+  return opened === undefined ? undefined : pageName(opened);
+}
+
+/** A browser call's answer: why it ran nothing where it ran nothing, and every step as its JSON otherwise. */
+function browserOutput(output: WireValue): ToolBlock {
+  return stringAt(output, "status") === BROWSER_NOT_RUN
+    ? textBlock(stringAt(output, "reason") ?? "")
+    : jsonBlock(output);
+}
 
 /** A command the Mac ran: as a terminal would have shown it, its timeout said where it was killed; or why it was not run. */
 function macCommandOutput(output: WireValue): ToolBlock {
@@ -563,6 +609,17 @@ function knownToolView(
         ...(description === undefined ? undefined : { description }),
         input: { kind: TOOL_BLOCK.COMMAND, text: command },
         output: output === undefined ? undefined : macCommandOutput(output),
+      };
+    }
+    case AGENT_TOOL.BROWSER: {
+      const tab = browserTabName(input, output);
+      const words = browserCallWords(browserActions(input), tab !== undefined);
+      return {
+        kind: CALL_KIND.BROWSER,
+        subject: words === undefined ? "" : (tab ?? ""),
+        ...(words === undefined ? undefined : { description: words }),
+        input: input === undefined ? textBlock("") : jsonBlock(input),
+        output: output === undefined ? undefined : browserOutput(output),
       };
     }
     case AGENT_TOOL.READ_FILE:

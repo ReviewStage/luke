@@ -50,7 +50,7 @@ import {
   WireValueSchema,
 } from "../../core.js";
 import type { RelayFrame, RelaySocket } from "../../terminal/relay.js";
-import { SandboxPty, type SandboxPtyService } from "../sandbox-pty.js";
+import { SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
   type SandboxUnavailable,
@@ -523,3 +523,11 @@ export const agentBrowserLayer: Layer.Layer<
     return agentBrowserOver(api, yield* SandboxPty);
   }),
 );
+
+/**
+ * The service over the PTY as the deployment reaches it, on the runtime's
+ * HTTP client: what each eve root composes into its runtime over the
+ * deployment's services, so the `browser` tool reaches the agent's browser.
+ */
+export const agentBrowserServices: Layer.Layer<AgentBrowser, never, HttpClient.HttpClient> =
+  agentBrowserLayer.pipe(Layer.provide(sandboxPtyLayer));

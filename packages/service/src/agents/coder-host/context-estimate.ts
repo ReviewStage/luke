@@ -17,6 +17,7 @@ import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
+import { BROWSER_TOOL } from "../browser/browser-tool.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -223,6 +224,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.RUN_ON_MAC]: {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
+  },
+  [CODER_TOOL.BROWSER]: {
+    description: BROWSER_TOOL.description,
+    inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
   },
   [CODER_TOOL.SHOW_IMAGE]: {
     description: SHOW_IMAGE_TOOL.description,
