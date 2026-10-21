@@ -137,14 +137,19 @@ it.effect(
         status: CODING_AGENT_STATUS.STARTING,
         turnId: null,
       };
+      const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
       let sent = 0;
       const api = fakeCloudApi({
         "POST /api/plans": {
           answer: () => {
             sent += 1;
-            return sent === 1
-              ? { plan: task, agent }
-              : { plan: task, agentRefusal: { error: HOSTED_API_ERROR.INVALID_REQUEST } };
+            if (sent === 1) return { plan: task, agent };
+            return sent === 2
+              ? { plan: task, agentRefusal: { error: HOSTED_API_ERROR.INVALID_REQUEST } }
+              : {
+                  plan: task,
+                  agentRefusal: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, resetsAt },
+                };
           },
         },
       });
@@ -155,6 +160,7 @@ it.effect(
 
       const started = yield* Effect.provide(client().create(request), api.layer);
       const refused = yield* Effect.provide(client().create(request), api.layer);
+      const limited = yield* Effect.provide(client().create(request), api.layer);
       const planned = yield* Effect.provide(
         client().create({ ...request, planning: true }),
         api.layer,
@@ -165,10 +171,22 @@ it.effect(
         ok: true,
         answer: { task, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
       });
+      // A plan's reached limit keeps the reset the service named, as a Start on its own does.
+      assert.deepEqual(limited, {
+        ok: true,
+        answer: {
+          task,
+          agent: { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
+        },
+      });
       assert.deepEqual(planned, { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(
         api.requests().map((each) => JSON.parse(each.body ?? "{}")),
         [
+          {
+            repository: "acme/relay",
+            agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+          },
           {
             repository: "acme/relay",
             agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },

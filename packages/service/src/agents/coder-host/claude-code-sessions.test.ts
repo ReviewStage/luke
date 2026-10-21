@@ -345,10 +345,23 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         yield* TestClock.adjust("31 minutes");
         const reset = runnerSandboxApi();
-        assert.equal((yield* openOn(reset)).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const live = yield* sessionsFor(userId, { next: 0 }, null).pipe(
+          Effect.provide(services(reset)),
+        );
+        const reopened = yield* live.open(message(agent, "Go."));
+        assert.ok(reopened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(reset.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
 
+        // Another agent's turn finds the plan refused: a message to this live runner is refused too, and nothing is written to it.
         yield* markPlan(PROVIDER_KEY_STATUS.INVALID);
+        const written = linesOf(reset.commands[0]).length;
+        assert.deepEqual(yield* live.send(reopened.sessionId, message(agent, "Also the emails.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+        });
+        assert.equal(linesOf(reset.commands[0]).length, written);
+
         const refused = runnerSandboxApi();
         assert.deepEqual(yield* openOn(refused), {
           outcome: EVE_SEND_OUTCOME.FAILED,
