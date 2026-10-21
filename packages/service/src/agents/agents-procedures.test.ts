@@ -162,6 +162,7 @@ const standing = (
   sessionSandboxes: Layer.Layer<SessionSandboxes> = Layer.succeed(SessionSandboxes, {
     deleteFor: () => Effect.die("the terminals routes delete no sandbox"),
     stopFor: () => Effect.die("the terminals routes stop no sandbox"),
+    keepAliveFor: () => Effect.die("the terminals routes keep no sandbox alive"),
   }),
 ) =>
   Effect.gen(function* () {

@@ -18,7 +18,10 @@
  * connection closes as idle once nobody has typed in it for the bound,
  * whatever its sandbox's other terminals do, and the sweep stops the
  * sandbox once the lease every terminal moved on has lapsed past its grace.
- * While a terminal is connected, the GitHub token at the sandbox's firewall
+ * While a terminal is connected it also keeps the sandbox alive past its
+ * short timeout, every keep-alive interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`,
+ * `agents/sandbox-keep-alive.ts`), so a developer typing after the agent's
+ * turn ended is never cut off by it. While a terminal is connected, the GitHub token at the sandbox's firewall
  * is kept fresh on the rule the agent's own steps keep it by, claimed
  * through the lease so two windows mint one token between them; a renewal
  * that fails gives its claim back, is logged, and is tried again at the
@@ -126,6 +129,8 @@ export interface RelayDependencies {
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
+  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
+  readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
   /** Claims the token's renewal on the running sandbox session, once per lease per session within the refresh rule. */
   readonly claimRenewal: (
     conversationId: string,
@@ -362,6 +367,13 @@ export function relayTerminal(
     const attachedAt = yield* now;
     const lastTyped = yield* Ref.make(attachedAt.getTime());
     yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
+    // The sandbox is kept alive from the attach for as long as the connection stands, which nobody typing ends.
+    const { sessionId } = agent;
+    yield* Effect.forkScoped(
+      Effect.repeat(deps.keepAlive(sessionId), {
+        schedule: Schedule.spaced(CODER.SANDBOX_KEEP_ALIVE_EVERY),
+      }),
+    );
     // Note that the desktop's frames are read from here on into a queue of the relay's own, because the first renewal waits on the desktop leaving while what it typed waits for the shell.
     const fromDevice = yield* Queue.make<RelayFrame, Cause.Done>();
     const held = yield* Ref.make<number | undefined>(0);
