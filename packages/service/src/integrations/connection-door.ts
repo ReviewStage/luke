@@ -34,6 +34,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { readNativeProjection } from "@luke/database/models/native-projection-store";
 import { CONNECTION_TOOL } from "@luke/features/agent-tools";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -45,11 +46,12 @@ import {
   WireValueSchema,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
 import type { AdmittedConversation } from "../agents/brain-host/conversation.js";
+import { heldProjection, turnServersOf } from "../agents/native-events/native-projection.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { closestToolNames, rankConnectionTools, toolSignature } from "./connection-search.js";
@@ -210,12 +212,40 @@ function admissionOf(admitted: AdmittedConversation): IntegrationAdmission {
   return Effect.succeed(Result.succeed(admitted));
 }
 
+/**
+ * The servers the native turn under way took as it started, mentioned to
+ * the agent since its last turn (`native-events/runner-events-app.ts`),
+ * which its calls are handed whatever the switches say, as an eve turn's
+ * are; none where none was taken, or where the projection cannot be read,
+ * so a passing store failure costs the call a mention, never a switch.
+ */
+function turnMentionsOf(
+  admitted: AdmittedConversation,
+): Effect.Effect<readonly string[], never, DatabaseServices> {
+  return readNativeProjection(admitted.target).pipe(
+    Effect.map(
+      Option.match({
+        onNone: (): readonly string[] => [],
+        onSome: (saved) => turnServersOf(heldProjection(saved)),
+      }),
+    ),
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning(`a native turn's mentioned servers were not read: ${causeKind(cause)}`),
+        [],
+      ),
+    ),
+  );
+}
+
 /** The connections a coding agent's turn is handed, each with what the model is told of it. */
 function handedConnections(
   admitted: AdmittedConversation,
 ): Effect.Effect<readonly HandedConnection[], never, ConnectionDoorServices> {
   return Effect.map(
-    turnServers(admissionOf(admitted), CONNECTION_POLICY.AGENT_SWITCHES),
+    Effect.flatMap(turnMentionsOf(admitted), (mentioned) =>
+      turnServers(admissionOf(admitted), CONNECTION_POLICY.AGENT_SWITCHES, mentioned),
+    ),
     (standing) =>
       standing.on
         ? standing.connections.map((connection) => ({

@@ -30,7 +30,7 @@ import {
 } from "./channel.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { coderInstructions } from "./instructions.js";
+import { CODER_HARNESS, coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
@@ -237,6 +237,83 @@ test("the deployment's retire of a session, which a delete a browser asked for e
       { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
       `${method} ${route}`,
     );
+  }
+});
+
+test("a Claude Code agent is told of Claude Code's own tools and never of Luke's it is not offered, and an eve agent of Luke's as before", () => {
+  // The tools Claude Code owns in place of Luke's, as eve's instructions name Luke's.
+  const LUKES = [
+    "`bash`",
+    "`read_file`",
+    "`write_file`",
+    "`apply_patch`",
+    "`glob`",
+    "`grep`",
+    `\`${CODER_TOOL.SLEEP}\``,
+    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
+    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    "`write_todos`",
+    "`delegate`",
+    "task_wait",
+  ];
+  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool"];
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const repository of ["Acme/Relay", null]) {
+      for (const memberToken of [false, true]) {
+        const args = [
+          repository,
+          brief,
+          true,
+          TASK_ADDRESS,
+          undefined,
+          true,
+          null,
+          memberToken,
+        ] as const;
+        const eve = coderInstructions(...args);
+        const claudeCode = coderInstructions(...args, CODER_HARNESS.CLAUDE_CODE);
+        const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
+        assert.deepEqual(
+          LUKES.filter((tool) => claudeCode.includes(tool)),
+          [],
+          label,
+        );
+        assert.ok(
+          LUKES.some((tool) => eve.includes(tool)),
+          label,
+        );
+        assert.deepEqual(
+          // An agent with no repository is offered no skills.
+          CLAUDE_CODES.filter(
+            (tool) => !claudeCode.includes(tool) && (repository !== null || tool !== "Skill tool"),
+          ),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CLAUDE_CODES.filter((tool) => eve.includes(tool)),
+          [],
+          label,
+        );
+        // The tools that touch Luke stay Luke's, under their own names.
+        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+          assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
+        }
+      }
+    }
+    const watching = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.CLAUDE_CODE,
+    );
+    assert.ok(watching.includes("run_in_background") && watching.includes("Monitor"), brief);
   }
 });
 

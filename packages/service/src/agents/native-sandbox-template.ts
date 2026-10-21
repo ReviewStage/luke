@@ -312,13 +312,16 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
 
 /**
  * The template as a launch waits on it: read every `POLL` while it is
- * being prepared, for at most `WAIT`, and answered as it then stands.
+ * being prepared, for at most `wait` (`WAIT` unless the caller names less),
+ * and answered as it then stands.
  */
-export const awaitTemplate = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
+export const awaitTemplate = (
+  api: VercelSandboxApi,
+  build: ImageBuild,
+  wait: Duration.Duration = NATIVE_TEMPLATE.WAIT,
+): TemplateRead =>
   Effect.gen(function* () {
-    const reads = Math.floor(
-      Duration.toMillis(NATIVE_TEMPLATE.WAIT) / Duration.toMillis(NATIVE_TEMPLATE.POLL),
-    );
+    const reads = Math.floor(Duration.toMillis(wait) / Duration.toMillis(NATIVE_TEMPLATE.POLL));
     let read = yield* advanceTemplate(api, build);
     for (let waited = 0; read.state === TEMPLATE_STATE.PREPARING && waited < reads; waited += 1) {
       yield* Effect.sleep(NATIVE_TEMPLATE.POLL);

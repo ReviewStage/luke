@@ -423,6 +423,11 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
       return undefined;
     }
     case INPUT_LINE.STOP: {
+      // A stop for another launch's turn is not this launch's to take.
+      if (value.launch !== undefined && value.launch !== launch.context.config.firstSequence) {
+        yield* Effect.logWarning("agent-runner: skipped a stop for another launch");
+        return undefined;
+      }
       if (launch.turnId === undefined) return ended(RUNNER_END.STOPPED);
       launch.stopping = true;
       yield* launch.server

@@ -78,6 +78,24 @@ const findProjectionSequence = SqlSchema.findOneOption({
     ),
 });
 
+const findProjection = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ projection: Schema.NullOr(WireValueSchema) }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ projection: conversations.nativeProjection })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
 const saveProjectionRow = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -136,5 +154,19 @@ export function readNativeSequence(
 ): Effect.Effect<Option.Option<number>, NativeProjectionFailure, DatabaseServices> {
   return Effect.map(findProjectionSequence(target), (row) =>
     Option.flatMap(row, ({ sequence }) => Option.fromNullishOr(sequence)),
+  );
+}
+
+/**
+ * The projection's state as last saved, unread, for a reader outside the
+ * events route (the MCP server reads which servers the turn under way took);
+ * nothing before the first save, or for a conversation the account does not
+ * hold or that was cleared.
+ */
+export function readNativeProjection(
+  target: ConversationTarget,
+): Effect.Effect<Option.Option<WireValue>, NativeProjectionFailure, DatabaseServices> {
+  return Effect.map(findProjection(target), (row) =>
+    Option.flatMap(row, ({ projection }) => Option.fromNullishOr(projection)),
   );
 }

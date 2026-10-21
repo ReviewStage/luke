@@ -12,6 +12,7 @@ import {
   RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentByKey,
+  readCodingAgentRouting,
   renameCodingAgent,
   taskNamesOf,
   unarchiveCodingAgentFrom,
@@ -103,7 +104,7 @@ import {
   validateModelChoice,
 } from "../providers/model-catalog.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
-import { agentStarterName, controlsAgent } from "./agent-reach.js";
+import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { AgentSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
@@ -319,6 +320,10 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     "Not sent: that agent's task is archived, so its agents take no message until a member unarchives it.",
   AGENT_ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
+  IMAGE_PREPARING:
+    "Not sent: that agent's sandbox image is still being prepared; the same message in a minute or two is taken.",
+  NATIVE_NOT_HERE:
+    "Not sent: that agent runs on Claude Code, which cannot be reached from here yet; a member reaches it from the agent's own tab.",
 } as const;
 
 /** How the task tools word a priority. */
@@ -373,6 +378,8 @@ export const STOP_AGENT_REFUSAL = {
   NO_SERVICE: "Not stopped: this deployment cannot reach the coding agents' service.",
   UNAVAILABLE:
     "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
+  NATIVE_NOT_HERE:
+    "Not stopped: that agent runs on Claude Code, which cannot be reached from here yet; a member stops it from the agent's own tab.",
 } as const;
 
 /** The most characters of a page's HTML a read answers, about ten thousand tokens: the rest is counted, never sent. */
@@ -417,6 +424,8 @@ export const START_CODING_AGENT_REFUSAL = {
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
   ARCHIVED: "Not started: this task is archived; a member unarchives it first.",
+  IMAGE_PREPARING:
+    "Not started: the agent's sandbox image is still being prepared; start it again in a minute or two.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -445,6 +454,12 @@ export const LIST_MODELS_REFUSAL = {
   UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
 } as const;
 
+/** Whether the caller may write to the agent under the plan's policy (`agent-reach.ts`'s `writesToAgent`), its payer read now. */
+const writesAsPlanPolicy = (userId: string, agent: CodingAgent) =>
+  Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
+    writesToAgent(userId, agent, Option.isSome(routing) ? routing.value.payer : null),
+  );
+
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
@@ -452,6 +467,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_CODING_AGENT_REFUSAL.GITHUB_UNANSWERED],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.TASK_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_CODING_AGENT_REFUSAL.IMAGE_PREPARING],
 ]);
 
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
@@ -461,6 +477,8 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_TOOL_REFUSAL.RETIRED],
   [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_TOOL_REFUSAL.NO_AGENT],
   [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, CODING_AGENT_TOOL_REFUSAL.IMAGE_PREPARING],
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE, CODING_AGENT_TOOL_REFUSAL.NATIVE_NOT_HERE],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
@@ -1565,6 +1583,11 @@ export function runMessageAgent(
       if (!controlsAgent(callerUserId(caller), agent)) {
         return agentToolRejected(`Not sent: only ${yield* agentStarterName(agent)} can do this.`);
       }
+      if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
+        return agentToolRejected(
+          `Not sent: ${yield* agentStarterName(agent)}'s own plan pays for that agent, so only they and their agents can message it.`,
+        );
+      }
       const sent = yield* steerCodingAgent(eve, call.writer, callerUserId(caller), agent, {
         ...line,
         clientKey: call.clientKey,
@@ -2181,6 +2204,9 @@ export function runUpdateTask(
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
 function stopRefusalWords(refusal: HostedRefusal, eve: AgentSessions | undefined): string {
   if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
+  if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
+    return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
+  }
   return eve === undefined ? STOP_AGENT_REFUSAL.NO_SERVICE : STOP_AGENT_REFUSAL.UNAVAILABLE;
 }
 
@@ -2245,6 +2271,11 @@ export function runStopAgent(
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
       if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
+      if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
+        return agentToolRejected(
+          `Not stopped: ${yield* agentStarterName(agent)}'s own plan pays for that agent, so only they and their agents can stop it.`,
+        );
+      }
       const stop = yield* Effect.result(stopOf(eve, call.writer, agent, call.clientKey));
       if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure, eve));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or

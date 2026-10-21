@@ -109,6 +109,10 @@ export const CODING_AGENT_CALL_FAILURE = {
   TASK_ARCHIVED: "plan-archived",
   /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
   NOT_PERMITTED: "not-permitted",
+  /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
+  AGENT_IMAGE_PREPARING: "agent-image-preparing",
+  /** The agent runs on Claude Code, which this part of Luke cannot reach yet. */
+  NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
 } as const;
 
 export type CodingAgentCallFailure =

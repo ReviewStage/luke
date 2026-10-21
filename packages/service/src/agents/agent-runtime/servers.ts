@@ -231,6 +231,7 @@ const workspaceHoldsLinear = (conversationId: string) =>
 export function turnServers(
   admission: ServerAdmission,
   policy: ConnectionPolicy,
+  turnMentions: readonly string[] = [],
 ): Effect.Effect<ServerStanding, never, DatabaseServices | IntegrationConnect | GitHubApp> {
   return Effect.gen(function* () {
     const admitted = yield* admission;
@@ -260,7 +261,8 @@ export function turnServers(
     const agent = yield* readCodingAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
-    const mentioned = yield* takenMentions(policy, userId, conversationId);
+    // A native turn took its mentions as it started and names them here (`turnMentions`); an eve turn takes them now.
+    const mentioned = [...turnMentions, ...(yield* takenMentions(policy, userId, conversationId))];
     const connections = handed.filter(
       ({ connectionName }) =>
         !disabledServers.includes(connectionName) || mentioned.includes(connectionName),

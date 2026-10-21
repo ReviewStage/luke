@@ -22,6 +22,7 @@ import {
   hostedCarriesBearer,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { admitsPlanWriter } from "../agent-reach.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -32,6 +33,7 @@ import {
   eveSessions,
 } from "../brain-host/eve-sessions.js";
 import { deploymentEve } from "../deployment-eve.js";
+import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
   codingAgentStatusOf,
@@ -97,16 +99,23 @@ export function eveFor<Turn extends BrainHostTurn = never>(
   request: Request,
   account: string,
   mount: EveMount = EVE_MOUNT.CODER,
-): Effect.Effect<AgentSessions<NoInfer<Turn>>, HostedRefusal, HttpClient.HttpClient> {
+): Effect.Effect<
+  AgentSessions<NoInfer<Turn>>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  // A coding agent's session is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
+  const routed = (eve: AgentSessions<NoInfer<Turn>>) =>
+    mount === EVE_MOUNT.CODER ? routedSessions(eve, account) : Effect.succeed(eve);
   return Effect.gen(function* () {
     if (hostedCarriesBearer(request)) {
       const authorization = Redacted.make(request.headers.get("authorization") ?? "");
-      if (reach.eve !== undefined) return reach.eve(authorization);
+      if (reach.eve !== undefined) return yield* routed(reach.eve(authorization));
       const origin = reach.eveOrigin();
       if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* eveSessions<Turn>({ origin, caller: { authorization }, mount });
+      return yield* routed(yield* eveSessions<Turn>({ origin, caller: { authorization }, mount }));
     }
-    if (reach.eveAs !== undefined) return reach.eveAs(account);
+    if (reach.eveAs !== undefined) return yield* routed(reach.eveAs(account));
     // Note that a runtime without the deployment's environment refuses a cookie's request as
     // unavailable on purpose, as one whose environment names no secret does: the deployment acts
     // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
@@ -196,6 +205,8 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   account: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  // An agent its starter's plan pays for is stopped by those the plan's policy admits.
+  yield* admitsPlanWriter(account, agent);
   yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
 });
 
@@ -211,7 +222,11 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * again as it first ran.
  */
 export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eveOf: Effect.Effect<Pick<AgentSessions, "cancel">, HostedRefusal, HttpClient.HttpClient>,
+  eveOf: Effect.Effect<
+    Pick<AgentSessions, "cancel">,
+    HostedRefusal,
+    HttpClient.HttpClient | DatabaseServices
+  >,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key?: string,
@@ -238,7 +253,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     );
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    return yield* Effect.fail(failedCallRefusal(cancelled));
   }
   const accepted = cancelled.outcome === EVE_CANCEL_OUTCOME.ACCEPTED;
   const at = yield* DateTime.nowAsDate;

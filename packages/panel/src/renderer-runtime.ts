@@ -13,7 +13,7 @@
  */
 
 import { scheduleTask } from "@effect/atom-react/RegistryContext";
-import { type Context, Layer } from "effect";
+import { type Context, Duration, Effect, Layer } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -44,3 +44,12 @@ export const rendererRegistry = AtomRegistry.make({ scheduleTask });
  */
 export const rendererServicesNow = (): Context.Context<never> =>
   AsyncResult.getOrThrow(rendererRegistry.get(rendererRuntime));
+
+/**
+ * A pause of the milliseconds handed, as a fiber of its own on the
+ * renderer's services, for a promise-shaped caller that waits between tries
+ * (`tasks/image-preparing.ts`): each pause stands alone, so one never cuts
+ * another short.
+ */
+export const rendererPause = (ms: number): Promise<void> =>
+  Effect.runPromiseWith(rendererServicesNow())(Effect.sleep(Duration.millis(ms)));

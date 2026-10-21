@@ -1,11 +1,12 @@
+import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { cookieOriginGuard } from "@luke/service/http/origin-guard";
 import { sentryReportedFetch } from "@luke/service/observability/sentry";
 import type { Route, WebRoutes } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { waitUntil } from "@vercel/functions";
-import { Effect } from "effect";
+import type { Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import { runWeb } from "./runtime.js";
+import { webServicesWith } from "./runtime.js";
 
 type WebHandler = (request: Request) => Promise<Response>;
 
@@ -35,14 +36,17 @@ type WebHandler = (request: Request) => Promise<Response>;
  * is captured as it is thrown to the platform, and what a request queued is
  * sent under Vercel's `waitUntil` after the answer has left.
  */
-export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
+export function routeFromHttpRouter(
+  routes: WebRoutes<WebServices>,
+  beside?: Layer.Layer<NativeAgentSessions, never, WebServices>,
+): Route {
   const refuseCrossSite = cookieOriginGuard(process.env);
   let building: Promise<WebHandler> | undefined;
   return {
     fetch: sentryReportedFetch(async (request) => {
       const refusal = refuseCrossSite(request);
       if (refusal !== undefined) return refusal;
-      building ??= runWeb(Effect.context<WebServices>()).then((context) => {
+      building ??= webServicesWith(beside).then((context) => {
         const { handler } = HttpRouter.toWebHandler(routes, { disableLogger: true });
         return (incoming: Request) => handler(incoming, context);
       });

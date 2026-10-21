@@ -42,7 +42,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import { controlsAgent } from "../agent-reach.js";
+import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -54,6 +54,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**
@@ -135,10 +136,9 @@ export const STEER_OUTCOME = {
 
 export type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
 
-/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and anything else is an outage. A session eve no longer runs is no refusal: the message opens a fresh one. */
+/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and a failure is read by `failedCallRefusal`, an outage unless a native harness said why. A session eve no longer runs is no refusal: the message opens a fresh one. */
 const REFUSAL_OF_SEND_OUTCOME = {
   [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
-  [EVE_SEND_OUTCOME.FAILED]: HOSTED_REFUSAL.UNAVAILABLE,
 } as const;
 
 /**
@@ -249,6 +249,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
 > {
   // An agent on its starter's own GitHub token takes words from its starter alone.
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  // An agent its starter's plan pays for takes words from those the plan's policy admits.
+  yield* admitsPlanWriter(userId, agent);
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const repeated = yield* hostedStoreOrUnavailable(
@@ -304,6 +306,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     conversationId: agent.conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
     message: eveContent(line.text, line.attachments ?? [], mentioned),
+    // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
+    lineId: sentLineId(line.clientKey),
   };
   // Note that a session eve no longer runs, or none at all, is no refusal: the words open a fresh
   // session over the same conversation, which claims its record forward from the one that ended and
@@ -314,6 +318,10 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
         .send(sessionId, message)
         .pipe(Effect.catchTag("EveUnreachable", unreached));
       if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
+      if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
+        refused = failedCallRefusal(sent);
+        return false;
+      }
       if (sent.outcome !== EVE_SEND_OUTCOME.RETIRED) {
         refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
         return false;
@@ -322,7 +330,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     }
     const opened = yield* eve.open(message).pipe(Effect.catchTag("EveUnreachable", unreached));
     if (opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
-      refused = HOSTED_REFUSAL.UNAVAILABLE;
+      refused = failedCallRefusal(opened);
       return false;
     }
     // Note that the fresh session claims the record here, still under the conversation's lock, rather

@@ -70,6 +70,12 @@ export const HOSTED_API_ERROR = {
   /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
   /**
+   * The agent runs on a native harness whose sandbox image is still being
+   * prepared, so it could not start or take the message yet; nothing was
+   * written, and the same request a little later, under the same key, is taken.
+   */
+  AGENT_IMAGE_PREPARING: "agent-image-preparing",
+  /**
    * The agent runs on a native harness (Claude Code or Codex) that this part
    * of Luke cannot reach yet, such as a call, which runs on eve alone; nothing
    * was written or charged. It is reached from the agent's own tab.
