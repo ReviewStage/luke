@@ -402,7 +402,7 @@ export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
  * stands, which the window reads its title, harness, automation, and task
  * from among the agents it already lists.
  */
-export const taskOriginSchema = EffectSchema.Struct({
+const taskOriginSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals([PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
