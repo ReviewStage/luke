@@ -120,9 +120,9 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
-import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
-import { SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -560,7 +560,7 @@ function taskRows(
     const creator = creatorOf(task);
     const createdBy = task.createdBy?.name ?? null;
     return {
-      ...tabLook({ kind: TAB_KIND.PLAN, name: task.name }),
+      ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
       detail: taskDetail(task, archived),
       workspace: elsewhere,
       endMark:
@@ -815,11 +815,13 @@ function panelTabRows(
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
+  const plan = openPlanStanding(tasks);
   return SIDE_PANEL_TABS.map((tab) => {
-    const look = tabLook({ kind: TAB_KIND.PANEL, tab });
-    const label = `Show ${look.label.toLowerCase()}`;
+    // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
+    const { icon } = tabLook({ kind: TAB_KIND.PANEL, tab, plan });
+    const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
     const pick = () => shownOverHistory(tasks, () => tasks.sidePanel.onChoose(tab));
-    return { icon: look.icon, label, terms: [label], onChoose: () => show(pick) };
+    return { icon, label, terms: [label], onChoose: () => show(pick) };
   });
 }
 

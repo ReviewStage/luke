@@ -126,20 +126,12 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 }
 
 /**
- * The longest page whose source the procedure colours. Note that a longer
- * one is drawn plain rather than cut, as a transcript's long block is,
- * because colouring holds the host's thread for about a millisecond per
- * hundred characters.
+ * A page's HTML as its tab's source reads it: line by line, plain, since the
+ * panel draws it as every code is, through Pierre's diffs, which colours it
+ * (`@luke/panel`'s `whole-file.tsx`).
  */
-const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
-
-/** A page's HTML as its tab's source draws it: line by line, coloured as HTML where it is short enough to colour, plain past that. */
-function pageSourceLines(
-  html: string,
-  colourCode: TasksProceduresDependencies["colourCode"],
-): Effect.Effect<CodeLines> {
-  if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
-  return Effect.succeed(html.split("\n").map((text) => (text === "" ? [] : [{ text }])));
+function pageSourceLines(html: string): CodeLines {
+  return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
 }
 
 /** Whether an address the host answered parses and stands on the service's own origin. */
@@ -462,7 +454,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         const answer = yield* host.tasksPage(input);
         if (!("page" in answer)) return answer;
-        const lines = yield* pageSourceLines(answer.page.html, dependencies.colourCode);
+        const lines = pageSourceLines(answer.page.html);
         return { lines } satisfies TasksPageSourceAnswer;
       },
     ),

@@ -32,6 +32,7 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { chatOption, useChatMentionPicker } from "./chat-mention-picker.js";
 import { ComposerField } from "./composer-field.js";
+import { useDatePicker } from "./date-picker.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { useMentionDoors } from "./task-mentions.js";
@@ -278,6 +279,9 @@ function EditorChatComposer({
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
+  // A date chip in the box opens its picker over the card, as the agent box's does.
+  const card = useRef<HTMLDivElement>(null);
+  const datePicker = useDatePicker(card);
   const [dropping, setDropping] = useState(false);
   const {
     draft,
@@ -314,6 +318,7 @@ function EditorChatComposer({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
+      ref={card}
       className="chat-composer"
       data-compact={String(compact === true)}
       data-dropping={dropping ? "" : undefined}
@@ -335,6 +340,7 @@ function EditorChatComposer({
       }}
     >
       {mentions.menu}
+      {datePicker.popover}
       <PromptInput onSubmit={send}>
         <AttachedFileChips
           files={attachmentChips(attachments)}
@@ -372,7 +378,13 @@ function EditorChatComposer({
           mentions={{
             onTrigger: mentions.onMemberTrigger,
             onChannelTrigger: mentions.onChannelTrigger,
-            chip: (mention) => <MentionNodeChip mention={mention} doors={doors} />,
+            chip: (mention, node) => (
+              <MentionNodeChip
+                mention={mention}
+                doors={doors}
+                edit={{ node, pickDate: datePicker.open }}
+              />
+            ),
             pasted: () => undefined,
           }}
           // Note that a thread's box is opened by a press, so it takes the caret; a place's foot leaves it where it is.

@@ -731,7 +731,11 @@ function PlanDocument({
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
             shownCode: shownCode ?? [],
-            task: { name: listedCard.name, card: taskCardOf(tasks, listedCard, now) },
+            task: {
+              name: listedCard.name,
+              status: listedCard.status,
+              card: taskCardOf(tasks, listedCard, now),
+            },
           }),
     [agents, conversation, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
   );
@@ -1094,6 +1098,7 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         plan={documentBody}
+                        task={{ name: task.name, status: listed.status }}
                         inbox={{
                           body: inboxBody,
                           waiting: inbox.board.open.length,

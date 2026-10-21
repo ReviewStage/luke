@@ -43,7 +43,6 @@ function draw(look: LinesLook): HTMLDivElement {
         lines: LINES,
         pointed: { path: "src/a.ts", startLine: 11, endLine: 11 },
         scrollerRef: scroller,
-        above: createElement("p", null, "Show lines 1–9"),
       }),
     ),
   );
@@ -66,10 +65,6 @@ test("wrapped lines scroll up and down alone, in the box the caller is handed", 
   assert.equal(
     scroller.querySelector("[data-pointed='true'] .code-line-number")?.textContent,
     "11",
-  );
-  assert.equal(
-    scroller.querySelector(".code-lines")?.firstElementChild?.textContent,
-    "Show lines 1–9",
   );
 });
 

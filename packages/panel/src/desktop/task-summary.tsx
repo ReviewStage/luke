@@ -35,7 +35,7 @@ import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, newestFileNote } from "../tasks/file-ref.js";
 import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { PageCard } from "../tasks/page-card.js";
-import { TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -479,6 +479,7 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
       files,
       changes,
       pages: tasks.pages ?? [],
+      plan: openPlanStanding(tasks),
     }),
     ...agentEntries(mainTabs, agents),
   ];

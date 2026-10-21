@@ -536,7 +536,7 @@ interface TabRead {
 export function FileViewMenu(props: ComponentProps<typeof FileMenu>): React.JSX.Element {
   return (
     <>
-      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
+      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true }} />
       <FileMenu {...props} />
     </>
   );
@@ -632,12 +632,15 @@ export function FileView({
   // Every read of the tab's file asks it at the tab's commit, where one pins it.
   const readAt: ReadFileWindow = (window) =>
     readFile(commit === undefined ? window : { ...window, ref: commit });
-  // The whole text, for a copy or a download, read raw through the tab's
-  // door in one read, the window it names standing for nothing.
+  // The whole text, for a copy or a download: the text the tab draws, so a
+  // copy holds the lines shown at the commit they were read at, or, before
+  // the tab holds it, read raw through the tab's door in one read.
   const readText = (): Promise<WholeText> =>
-    readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
-      kind: WHOLE_TEXT.UNREAD,
-    }));
+    read.kind === FILE_READ.READY
+      ? Promise.resolve({ kind: WHOLE_TEXT.READ, text: read.text })
+      : readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
+          kind: WHOLE_TEXT.UNREAD,
+        }));
 
   // The tree and the breadcrumbs hear each folder in the tree's own words.
   const readFolderListing: ReadFolder = useCallback(

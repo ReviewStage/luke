@@ -337,6 +337,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
   const control = tab.controlOf("Invoice export");
   const task = (name: string): BriefTask => ({
     name,
+    status: undefined,
     card: createElement("span", { "data-task-card-probe": "" }, `${name}, its card`),
   });
   act(() => tab.draw(control, tab.cardsOf(control, task("First draft"))));

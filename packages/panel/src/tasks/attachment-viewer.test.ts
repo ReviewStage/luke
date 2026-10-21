@@ -2,14 +2,18 @@
 
 import assert from "node:assert/strict";
 import type { FileChip } from "@luke/features/attachment-model";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { ImageView } from "@luke/ui/image-zoom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
+import { FindScope } from "../find-in-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
+import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { IMAGE_OPENING, type ImageOpening } from "./use-image-zoom.js";
 
@@ -362,4 +366,89 @@ test("the zoom buttons name the bare keys that do the same", () => {
     document.querySelector(`button[aria-label="${label}"]`)?.getAttribute("aria-keyshortcuts");
   assert.equal(named("Zoom in"), "=");
   assert.equal(named("Zoom out"), "-");
+});
+
+test("a text file opened over the window is drawn as every code is, numbered from its first line, a Windows line break opening no line of its own", async () => {
+  const notes: FileChip = {
+    name: "notes.ts",
+    mediaType: "text/plain",
+    url: `data:text/plain;base64,${btoa("const a = 1;\r\nconst b = 2;\r\n")}`,
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  act(() =>
+    root.render(
+      onRegistry(
+        registry,
+        createElement(AttachmentViewer, {
+          files: [notes],
+          at: 0,
+          onAt: () => undefined,
+          onClose: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await wholeFileDrawn(document.body);
+
+  assert.deepEqual(wholeFileLines(document.body), ["1 const a = 1;", "2 const b = 2;"]);
+  assert.ok(
+    document.querySelector(".attachment-viewer-lines .whole-file")?.closest(".ph-no-capture"),
+  );
+});
+
+test("a text file opened over a tab leaves the tab's find its own, the file's words found by none", async () => {
+  vi.stubGlobal("CSS", { highlights: new Map() });
+  vi.stubGlobal("Highlight", Set);
+  // jsdom lays nothing out, so a range has no box to scroll to.
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+  const notes: FileChip = {
+    name: "notes.ts",
+    mediaType: "text/plain",
+    url: `data:text/plain;base64,${btoa("const seat = 1;\nconst seats = 2;\n")}`,
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  act(() =>
+    root.render(
+      onRegistry(
+        registry,
+        createElement(
+          FindScope,
+          { active: true, subject: { task: "task-1", tab: { file: "plan.md" } } },
+          createElement("p", null, "One seat in the tab"),
+          createElement(AttachmentViewer, {
+            files: [notes],
+            at: 0,
+            onAt: () => undefined,
+            onClose: () => undefined,
+          }),
+        ),
+      ),
+    ),
+  );
+  await wholeFileDrawn(document.body);
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  const field =
+    document.querySelector<HTMLInputElement>('search.find-bar input[aria-label="Find"]') ??
+    assert.fail("the tab's find bar stands open");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "seat");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.equal(
+    document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent,
+    "1 of 1",
+  );
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  vi.unstubAllGlobals();
 });

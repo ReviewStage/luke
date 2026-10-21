@@ -34,7 +34,7 @@ import {
   type RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import type { TaskBoardLiveAnswer } from "@luke/features/live-wire";
+import type { TaskBoardLiveAnswer, TaskRecordLiveAnswer } from "@luke/features/live-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import {
@@ -165,6 +165,10 @@ interface FakeService extends TasksClient {
   boards: Record<string, Board>;
   /** Each task's board sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
   boardSeals: Record<string, TaskBoardLiveAnswer>;
+  /** Each task's pages and calls sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
+  recordSeals: Record<string, TaskRecordLiveAnswer>;
+  /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
+  readonly recordReads: string[];
   /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
   readonly images: Record<string, string | undefined>;
   /** Each task's transcript, by task id; a task with none answers no transcript, as a service that did not answer. */
@@ -350,6 +354,8 @@ function fakeService(tasks: Task[]): FakeService {
     reads: [],
     boards: {},
     boardSeals: {},
+    recordSeals: {},
+    recordReads: [],
     images: {},
     transcripts: {},
     works: {},
@@ -374,7 +380,11 @@ function fakeService(tasks: Task[]): FakeService {
     readRevision: (_taskId, seq) => Effect.sync(() => service.revisions[seq]),
     pages: [],
     pageLines: {},
-    readPages: (taskId) => Effect.sync(() => service.pageLines[taskId]),
+    readPages: (taskId) =>
+      Effect.sync(() => {
+        service.recordReads.push("pages");
+        return service.pageLines[taskId];
+      }),
     pictures: new Map(),
     // The service keeps a picture under the next id, and refuses one more where the plan holds two, a bound small enough to reach.
     keepPicture: (taskId, picture) =>
@@ -764,7 +774,18 @@ function fakeService(tasks: Task[]): FakeService {
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
           : { ok: true, answer: sealed };
       }),
-    readTranscript: (taskId) => Effect.sync(() => service.transcripts[taskId]),
+    recordLive: (taskId) =>
+      Effect.sync(() => {
+        const sealed = service.recordSeals[taskId];
+        return sealed === undefined
+          ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
+          : { ok: true, answer: sealed };
+      }),
+    readTranscript: (taskId) =>
+      Effect.sync(() => {
+        service.recordReads.push("transcript");
+        return service.transcripts[taskId];
+      }),
     readWork: (taskId, before) =>
       Effect.sync(() => {
         service.workReads.push(before === undefined ? taskId : `${taskId}:${before}`);
@@ -3399,6 +3420,100 @@ it.effect(
       assert.deepEqual(realtime.subscribed(), ["board-1"]);
 
       // Leaving the task lets the subscription go.
+      yield* call(GATEWAY_METHOD.TASKS_CLOSE);
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+/** A task's pages and calls sealed for following, named by the round they were sealed in. */
+function sealedRecord(round: number): TaskRecordLiveAnswer {
+  const query = (part: string) => ({
+    capability: `${part}-${round}`,
+    queryFingerprint: part,
+    expiresAt: 3_600_000,
+  });
+  return {
+    url: "wss://realtime.example/v1",
+    queries: { pages: query("pages"), calls: query("calls") },
+  };
+}
+
+/** One call about the task as its row delivers it, ended at `closedAt` or standing. */
+function callRow(lastSegment: number, closedAt: number | null) {
+  return {
+    id: "call-1",
+    closedAt,
+    closeReason: closedAt === null ? null : "remote_hangup",
+    usage: null,
+    model: "gpt-realtime",
+    lastSegment,
+    spoken: 0,
+  };
+}
+
+it.effect(
+  "the open task's pages are read again as their mark moves and its transcript once an ended call's does, not on the call's activity, while its end reads the work now and once more after its writes settle",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.works[INVITES] = { turns: [] };
+      service.recordSeals[INVITES] = sealedRecord(0);
+      const realtime = fakeBoardRealtime();
+      const { call, tasks } = yield* subject(service, { openLive: () => realtime.client });
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(realtime.subscribed().toSorted(), ["calls-0", "pages-0"]);
+      const taken = () => service.recordReads.splice(0).toSorted();
+      const worked = () => service.workReads.splice(0);
+      taken();
+      worked();
+      const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
+        Effect.andThen(
+          Effect.sync(() => {
+            realtime.deliver("pages-0", pages);
+            realtime.deliver("calls-0", calls);
+          }),
+          boardSettled,
+        );
+      const page = (version: number) => ({ pageId: "page-1", version });
+
+      // The first delivery reads every part, since the reads the task opened with may have missed it.
+      yield* deliver([page(1)], []);
+      assert.deepEqual(taken(), ["pages", "transcript"]);
+      assert.deepEqual(worked(), []);
+
+      yield* deliver([page(2)], []);
+      assert.deepEqual(taken(), ["pages"]);
+
+      // A call's words landing while it stands, and its activity, read nothing.
+      yield* deliver([page(2)], [callRow(3, null)]);
+      tasks.showActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        planId: INVITES,
+        notes: false,
+      });
+      yield* boardSettled;
+      assert.deepEqual(taken(), []);
+      assert.deepEqual(worked(), []);
+
+      // Its end reads the work, and again once a turn's later writes have had time to land, but not the transcript.
+      tasks.callEnded(INVITES);
+      yield* boardSettled;
+      assert.deepEqual(worked(), [INVITES]);
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* boardSettled;
+      assert.deepEqual(worked(), [INVITES]);
+      assert.deepEqual(taken(), []);
+
+      // Its end, and its last words after, each read the transcript as the ended call's mark moves.
+      yield* deliver([page(2)], [callRow(3, 5_000)]);
+      assert.deepEqual(taken(), ["transcript"]);
+      yield* deliver([page(2)], [callRow(4, 5_000)]);
+      assert.deepEqual(taken(), ["transcript"]);
+      assert.deepEqual(worked(), []);
+
+      // Leaving the task lets the subscriptions go.
       yield* call(GATEWAY_METHOD.TASKS_CLOSE);
       assert.deepEqual(realtime.subscribed(), []);
     }),

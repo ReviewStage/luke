@@ -20,7 +20,6 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
-  type InboxReplyKind,
   inboxAnswerHeard,
   knownBlock,
   knownResponse,
@@ -1731,7 +1730,6 @@ const WITHDRAWN = "Withdrawn";
 const ASK_PRESS = {
   DONE: "Mark done",
   NOT_DONE: "Couldn't do it",
-  ANSWER: "Answer",
 } as const;
 
 /** What an open ask's presses send, and what they are drawn with. */
@@ -1776,8 +1774,8 @@ function AskPress({
  * in other words; a `do`'s steps as
  * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
  * an `answer`'s fields, whose values attach to the reply as they are
- * filled, with no press, a form filled in part sending what was filled, or
- * its Answer, whose reply's words are the answer.
+ * filled, with no press, a form filled in part sending what was filled;
+ * nothing for an `answer` of words alone, whose reply's words are the answer.
  */
 function AskControls({
   ask,
@@ -1788,10 +1786,8 @@ function AskControls({
   /** The item's title, which stands as the one step of a to-do that names none. */
   title: string;
   doors: AskDoors;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { draft, disabled, onDraft } = doors;
-  const press = (reply: InboxReplyKind) =>
-    onDraft({ ...draft, press: draft.press === reply ? undefined : reply });
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
@@ -1859,16 +1855,8 @@ function AskControls({
       );
     }
     case INBOX_ASK.ANSWER:
-      return ask.fields === undefined ? (
-        <div className="inbox-ask-presses">
-          <AskPress
-            label={ASK_PRESS.ANSWER}
-            pressed={draft.press === INBOX_REPLY.ANSWERED}
-            disabled={disabled}
-            onPress={() => press(INBOX_REPLY.ANSWERED)}
-          />
-        </div>
-      ) : (
+      // An ask of words alone has no controls: the box's line is its answer.
+      return ask.fields === undefined ? null : (
         <div className="inbox-ask-fields">
           <FormFields
             form={{ fields: ask.fields }}
@@ -2170,9 +2158,10 @@ function AskBox({
 }
 
 /**
- * The open question's controls at the top of the draft reply's card, over
- * the note, with no head of their own, since the agent's message says what
- * it asks: an Enter on an option or in a field sends the card. Where the
+ * The open question's controls as the draft reply's card's body, over its
+ * foot, with no card, border, or head of their own, since the agent's
+ * message says what it asks: an Enter on an option or in a field sends the
+ * card. Where the
  * item is put away with its task, they stand in the agent's message
  * instead, as a card of their own whose controls take nothing.
  */
@@ -2537,7 +2526,11 @@ function Crumbs({
     holder.kind === INBOX_HOLDER.TASK
       ? {
           label: holder.task.name,
-          glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name }).icon,
+          glyph: tabLook({
+            kind: TAB_KIND.PLAN,
+            name: holder.task.name,
+            status: holder.task.status,
+          }).icon,
           hint: holder.task.name,
           card: doors.taskCard,
           onPress: () => onOpenHolder?.(),
@@ -2652,6 +2645,8 @@ export function InboxPane({
   // The open question's controls stand in the draft reply, over its note: a thread's open ask's, or an older item's response's.
   const asking = thread === undefined ? undefined : openAskOf(thread);
   const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
+  // Note that an ask of words alone has no controls, so the box stands plain and its words answer it.
+  const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   // Note that a note asks nothing back but a nod, so it waits on no one's answer and wears no marker.
   const marked = knownResponse(item.response) && item.response.type !== INBOX_RESPONSE.NONE;
   // Note that an item put away with its task draws its question in the agent's message instead, taking nothing, since no draft stands to hold it.
@@ -2668,7 +2663,7 @@ export function InboxPane({
           />
         </DraftQuestion>
       ) : undefined
-    ) : openAsk === undefined ? undefined : (
+    ) : openAsk === undefined || wordsAlone ? undefined : (
       <DraftQuestion held={archived} pane={pane}>
         <AskControls
           ask={openAsk}
@@ -2686,7 +2681,6 @@ export function InboxPane({
           readerId={readerId}
           control={control}
           agent={by.subject.agent}
-          agentName={by.subject.name}
           thread={thread}
           controls={question}
           skills={agents.readSkills}

@@ -216,7 +216,6 @@ let previews: DiffViewProps[] = [];
 
 /** The diff bundle, a chunk of its own the panel imports, stood in for at its importer. */
 const DIFF_STAND_IN: DiffViewModule = {
-  colourLines: () => Promise.resolve(undefined),
   mount: (_host, props) => {
     previews.push(props);
     return { update: () => undefined, unmount: () => undefined };

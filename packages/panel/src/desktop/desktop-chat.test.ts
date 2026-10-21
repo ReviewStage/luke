@@ -852,6 +852,40 @@ test("words after an @ that read as a date offer it first, said as its chip says
   }
 });
 
+test("a date chip in the chat box opens its picker, and a day picked there names it anew in place", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "ship @tomorrow");
+    pressInComposer(box, "Enter");
+    act(() => box.querySelector<HTMLElement>('[data-kind="date"]')?.click());
+    await act(async () => undefined);
+    const dialog = box.querySelector<HTMLElement>('[role="dialog"]');
+    assert.ok(dialog, "the picker is open");
+    const start = dialog.querySelector<HTMLInputElement>('input[aria-label="Start"]')?.value;
+    act(() =>
+      dialog.querySelector<HTMLElement>('button[aria-label="Friday, October 23, 2026"]')?.click(),
+    );
+    act(() =>
+      (dialog.contains(document.activeElement) ? document.activeElement : dialog)?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      ),
+    );
+    await act(async () => undefined);
+
+    assert.equal(start, "Oct 20, 2026");
+    assert.equal(box.querySelector('[role="dialog"]'), null);
+    assert.deepEqual(
+      [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent),
+      ["Friday"],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("an @ word that reads as a date lists it before the members it matches, and words after a name that name no date open no list", () => {
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   try {

@@ -22,3 +22,16 @@ test("a page joins the messages held: one heard again is replaced in place, a ne
   );
   assert.equal(applyMessagesPage(held, []), held);
 });
+
+test("a page saying again what is held keeps the messages held, so only one that changed is drawn again", () => {
+  const held = [message("a", "first"), message("b", "second")];
+
+  assert.equal(
+    applyMessagesPage(held, [message("a", "first"), message("b", "second")]),
+    held,
+    "a transcript heard again whole, as it was, is the one held",
+  );
+  const amended = applyMessagesPage(held, [message("a", "first"), message("b", "second, amended")]);
+  assert.equal(amended[0], held[0], "a message heard again as it was is the one held");
+  assert.deepEqual(amended[1]?.parts, [{ type: "text", text: "second, amended" }]);
+});

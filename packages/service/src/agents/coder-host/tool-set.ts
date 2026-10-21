@@ -1,5 +1,5 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { CLAUDE_CODE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { WireValueSchema } from "@luke/wire";
@@ -290,7 +290,8 @@ const CODER_TASK_TOOL = {
  * The coding agent's tools as stored rows are held to them, built once for
  * the deployment, with the retired web reads a transcript written before
  * still names, Claude Code's own tools, which an agent running on Claude Code
- * calls under their CLI names (`native-projection.ts`), and the Linear
+ * calls under their CLI names, Codex's own work, which an agent running on
+ * Codex does under its items' names (`../native-events/`), and the Linear
  * connection's calls beside them (`../connection-tools.ts`), which the agent
  * and its workers alike make.
  */
@@ -302,6 +303,7 @@ export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
       ...Object.values(CODER_TASK_TOOL),
       ...Object.values(RETIRED_CODER_TOOL),
       ...Object.values(CLAUDE_CODE_TOOL),
+      ...Object.values(CODEX_TOOL),
     ]),
   ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),
   ...connectionToolEntries(),

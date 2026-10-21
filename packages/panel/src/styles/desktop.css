@@ -3837,16 +3837,15 @@ ul.actor-stack {
   padding: 0;
 }
 
-/* The open question's controls at the top of the draft's card, over its
-   note, with no head of their own, since the agent's message says what it
-   asks; a hairline between them and the note. */
+/* The open question's controls as the draft's card's body, over its foot,
+   with no card, border, or head of their own, since the agent's message
+   says what it asks. */
 .inbox-draft-ask {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-4);
 }
 
 /* Put away with its task, the question stands in the agent's message as a
@@ -3855,14 +3854,6 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-overlay);
-}
-
-/* A thread's Reply names its chord after its words, in its own ink a step
-   quieter, since the button's fill is the text's own colour. */
-.inbox-answer-actions .luke-button .shortcut {
-  margin-left: var(--luke-space-6);
-
-  --shortcut-ink: color-mix(in srgb, currentColor 60%, transparent);
 }
 
 /* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back

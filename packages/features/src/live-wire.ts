@@ -282,6 +282,54 @@ export const taskBoardLiveRowsSchema = EffectSchema.Struct({
 export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
 
 /**
+ * An open task's pages and calls sealed for following: the address, and one
+ * statement a part, each a mark that moves as its rows do and carries none
+ * of their words: the pages agents showed (`pages`) and the calls about the
+ * task (`calls`). The desktop reads a part again once its mark moves,
+ * rather than when a call's activity or end suggests it might have; the
+ * board is followed on its own (`taskBoardLiveAnswerSchema`). The service
+ * answers `not-found` for a task the account does not reach, and
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
+ */
+export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    pages: sealedLiveQuerySchema,
+    calls: sealedLiveQuerySchema,
+  }),
+});
+
+export type TaskRecordLiveAnswer = typeof taskRecordLiveAnswerSchema.Type;
+
+/** One page shown on the task as its row delivers it: its newest version's number. */
+const taskPageLiveRowSchema = EffectSchema.Struct({
+  pageId: EffectSchema.String,
+  version: EffectSchema.Finite,
+});
+
+/** One call about the task as its row delivers it: when and how it ended, null while it stands; what it metered and its model; its last fragment; and how many rows the voice wrote for it. */
+const taskCallLiveRowSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  closedAt: EffectSchema.NullOr(EffectSchema.Finite),
+  closeReason: EffectSchema.NullOr(EffectSchema.String),
+  usage: EffectSchema.NullOr(
+    EffectSchema.Struct({ seconds: EffectSchema.Finite, confirmed: EffectSchema.Boolean }),
+  ),
+  model: EffectSchema.NullOr(EffectSchema.String),
+  lastSegment: EffectSchema.Finite,
+  spoken: EffectSchema.Finite,
+});
+
+/** The task's pages and calls as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+export const taskRecordLiveRowsSchema = EffectSchema.Struct({
+  pages: EffectSchema.Array(taskPageLiveRowSchema),
+  calls: EffectSchema.Array(taskCallLiveRowSchema),
+});
+
+export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
+
+/**
  * A coding agent's transcript, or one of its workers', sealed for
  * following: the address, and the statements a page past the reader's
  * cursor is read from, which move where the service's held read would wake
