@@ -168,3 +168,24 @@ export const CLAUDE_CODE_TOOL = {
 
 /** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_inbox` is Luke's `read_inbox`. */
 export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
+
+/**
+ * Codex's own work, by the type of the app-server item that does it (its
+ * todo list by its own name, since Codex reports it as the turn's plan
+ * rather than as an item), which a coding agent running on Codex does in
+ * place of Luke's shell, file, search, todo, and delegation tools. Its
+ * transcript stores each under this name; a call to Luke's own MCP server is
+ * stored under Luke's tool's name (`CODEX_LUKE_MCP_SERVER`), and a call to
+ * any other MCP server as `mcpToolCall`.
+ */
+export const CODEX_TOOL = {
+  COMMAND_EXECUTION: "commandExecution",
+  FILE_CHANGE: "fileChange",
+  MCP_TOOL_CALL: "mcpToolCall",
+  WEB_SEARCH: "webSearch",
+  TODO_LIST: "todoList",
+  SUBAGENT: "collabAgentToolCall",
+} as const;
+
+/** The name Codex knows Luke's MCP server by (`mcp_servers.luke`): its calls are Luke's tools. */
+export const CODEX_LUKE_MCP_SERVER = "luke";

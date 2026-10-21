@@ -2,6 +2,7 @@ import { RUNNER_EVENT } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   readCodingAgentOfConversation,
+  readCodingAgentRouting,
   recordCodingAgentCompaction,
   recordCodingAgentNativeSession,
 } from "@luke/database/models/coding-agent-store";
@@ -14,6 +15,7 @@ import {
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import {
@@ -38,8 +40,9 @@ import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
-import { claudeCodeMoments, type HeldCallName } from "./claude-code-moments.js";
-import type { NativeMoment } from "./native-moments.js";
+import { claudeCodeMoments } from "./claude-code-moments.js";
+import { codexMoments } from "./codex-moments.js";
+import type { NativeHeld, NativeMoment } from "./native-moments.js";
 import {
   heldProjection,
   NATIVE_WRITE,
@@ -56,8 +59,9 @@ import {
  * posts a batch again until Luke takes it. A bearer no standing coding
  * agent's conversation holds, a retired one's among them, is refused before
  * the body is read (`../luke-mcp/bearer.ts`). The batch is read as moments
- * (`claude-code-moments.ts`; Codex's notifications are read beside it by a
- * reader of their own), folded into the store writer's events
+ * by the reader of the harness the conversation runs on
+ * (`claude-code-moments.ts`, `codex-moments.ts`), folded into the store
+ * writer's events
  * (`native-projection.ts`), and written under the conversation's lock in
  * one transaction with the number of the last event applied, so an event
  * already applied is passed over: a batch posted again, or two posts
@@ -89,11 +93,9 @@ const readBatch = Schema.decodeUnknownOption(RunnerEventBatchSchema);
 
 /**
  * How a harness's messages are read: one message, as its runner posted it,
- * as the moments of the run, with the calls the projection holds by name.
- * Claude Code's is the one reader yet; Codex's notifications are read by
- * another of the same shape.
+ * as the moments of the run, with what the projection holds as it is read.
  */
-type NativeReader = (message: WireValue, heldCallName: HeldCallName) => readonly NativeMoment[];
+type NativeReader = (message: WireValue, held: NativeHeld) => readonly NativeMoment[];
 
 /** What the batch is applied for: the conversation, its agent, and what that agent runs on. */
 interface Applying {
@@ -120,7 +122,7 @@ export interface RunnerEnded {
 
 /** What the route reads a batch with and tells of a launch's end. */
 export interface RunnerEventsOptions {
-  /** How the conversation's harness's messages are read; Claude Code's where left out. */
+  /** How every conversation's messages are read; by the harness each conversation runs on where left out. */
   readonly read?: NativeReader;
   /**
    * Told once a batch that holds a launch's END has landed, after its
@@ -256,7 +258,12 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     const writes: NativeWrite[] = [];
     const reports: string[] = [];
     for (const { sequence, message } of events) {
-      const moments = applying.read(message, (callId) => state.turn?.calls[callId]);
+      const held: NativeHeld = {
+        callName: (callId) => state.turn?.calls[callId],
+        session: state.session,
+        sequence,
+      };
+      const moments = applying.read(message, held);
       const projected = projectMoments(state, moments, {
         conversationId: applying.target.conversationId,
         sequence,
@@ -283,7 +290,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
 
 /** POST: one batch of a runner's events, admitted by its bearer and applied once. */
 const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* (
-  read: NativeReader,
+  read: NativeReader | undefined,
   ended: RunnerEventsOptions["ended"],
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
@@ -304,6 +311,13 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     readCodingAgentOfConversation(target.userId, target.conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const routing = yield* hostedStoreOrUnavailable(
+    readCodingAgentRouting(target.userId, agent.value.id),
+  );
+  const runtime = Option.map(routing, (row) => row.runtime);
+  const reader =
+    read ??
+    (Option.contains(runtime, CONVERSATION_RUNTIME.CODEX) ? codexMoments : claudeCodeMoments);
   const body = yield* readBodyBytesEffect(MAX_BODY_BYTES);
   const batch = readBatch(yield* parseJsonBytes(body));
   if (Option.isNone(batch)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -314,7 +328,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     model: agent.value.model,
     reasoningEffort: agent.value.effort,
     writer,
-    read,
+    read: reader,
   };
   const applied = yield* hostedStoreOrUnavailable(
     withNativeProjection(target, runnerTokenDigest(bearer), (held) =>
@@ -331,9 +345,9 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, applied.value.applied);
 });
 
-/** The group: the one events path, read as Claude Code's unless told otherwise, and the hosted vocabulary's own refusal for any other. */
+/** The group: the one events path, read as the conversation's harness's unless told otherwise, and the hosted vocabulary's own refusal for any other. */
 export function runnerEventsApp(options: RunnerEventsOptions = {}): WebRoutes<DatabaseServices> {
-  const endpoint = runnerEventsEndpoint(options.read ?? claudeCodeMoments, options.ended);
+  const endpoint = runnerEventsEndpoint(options.read, options.ended);
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, RUNNER_EVENTS_PATH, hostedRefusing(endpoint)),
     hostedNotFoundRoute,
