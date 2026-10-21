@@ -22,6 +22,7 @@ import {
   FOR_YOU_REASON,
   forYou,
   postsIn,
+  reachedIn,
   topicName,
   topicNameProblem,
 } from "./chat-model.js";
@@ -366,6 +367,30 @@ test("every member is offered by name as the link their chip writes, an agent an
     [],
     "a member is written as a link alone, so none is offered before the workspace is known",
   );
+});
+
+test("a composer offers only the members a post in its channel reaches: its task's agent and Luke in the task's channel, people alone in the general one and a topic, and a DM's own two", () => {
+  const chat = {
+    ...chatOf(0, []),
+    members: chatOf(0, []).members.map((member) =>
+      member.id === AGENT ? { ...member, planId: TASK_ID } : member,
+    ),
+  };
+  const place = { workspace: "acme", repository: null };
+  const offered = (channel: ChatChannel) =>
+    chatTargets(chat, NAMES, place, channel)
+      .filter((target) => target.sigil === "@")
+      .map((target) => target.name);
+  assert.deepEqual(offered(TASK_CHANNEL), ["Invite emails", "Luke", "Maria Chen"]);
+  assert.deepEqual(offered(GENERAL), ["Maria Chen"]);
+  assert.deepEqual(offered(TOPIC), ["Maria Chen"]);
+  assert.deepEqual(offered(WITH_AGENT), ["Invite emails"]);
+  // An agent on no task is reached in the general channel, where it talks.
+  const taskless = chat.members.find((member) => member.id === AGENT);
+  assert.ok(taskless !== undefined);
+  const { planId: _planId, ...noTask } = taskless;
+  assert.equal(reachedIn(noTask, GENERAL), true);
+  assert.equal(reachedIn(noTask, TASK_CHANNEL), false);
 });
 
 test("a topic's name is written as a channel's, and refused where it breaks the grammar or another channel, general among them, holds it", () => {

@@ -429,19 +429,44 @@ function mentionOf(member: ChatMember): ChatMemberMention | undefined {
 }
 
 /**
+ * Whether a post in the channel reaches the member, as the service holds
+ * the chat to its tasks (`chat-store.ts`): a person in any channel; a
+ * task's Luke and its agents in that task's own channel alone, and an
+ * agent on no task in the general channel; and in a DM, its own two. A
+ * member a post cannot reach hears nothing of it, so naming them there
+ * names no one.
+ */
+export function reachedIn(member: ChatMember, channel: ChatChannel): boolean {
+  if (channel.kind === CHANNEL_KIND.DM) return channel.members?.includes(member.id) ?? false;
+  if (member.kind === MEMBER_KIND.HUMAN) return true;
+  if (channel.kind === CHANNEL_KIND.TASK) {
+    return member.planId !== undefined && member.planId === channel.planId;
+  }
+  return (
+    channel.kind === CHANNEL_KIND.GENERAL &&
+    member.kind === MEMBER_KIND.AGENT &&
+    member.planId === undefined
+  );
+}
+
+/**
  * What the composer offers to name: every member who has not left but the
  * reader, by name, each with the link a chip writes them as in the
- * workspace's place, and every channel standing that is not a DM. Note that
- * a member is offered only where that place is known, since a member is
- * written as their link and nothing else.
+ * workspace's place, and every channel standing that is not a DM. Where
+ * the composer posts in a channel, only the members a post there reaches
+ * are offered (`reachedIn`), so an agent is never named where it cannot
+ * hear it. Note that a member is offered only where that place is known,
+ * since a member is written as their link and nothing else.
  */
 export function chatTargets(
   chat: ChatAnswer,
   names: ChatNames,
   place: MentionPlace | undefined,
+  channel?: ChatChannel,
 ): readonly ChatTarget[] {
   const members = chat.members
     .filter((member) => !member.left && member.id !== chat.self)
+    .filter((member) => channel === undefined || reachedIn(member, channel))
     .flatMap((member): readonly ChatTarget[] => {
       const mention = mentionOf(member);
       if (mention === undefined || place === undefined) return [];

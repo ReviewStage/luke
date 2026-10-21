@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   archiveIdleCodingAgent,
   awaitingLinesOfReached,
@@ -1303,19 +1304,47 @@ function agentLine(sender: CodingAgent, text: string): string {
 }
 
 /**
+/**
  * The note an agent a coding agent starts is handed: which agent started it,
  * how to report back, and that the developer's inbox is its starter's, so
  * what it would post there goes to its starter, who relays what the
- * developer must see, then the note it was given.
+ * developer must see, then the note it was given. Where the two share a
+ * task's chat, the report goes there, to the starter's mention link, as
+ * every word between a task's agents does (`coder-host/instructions.ts`);
+ * otherwise it goes back by message.
  */
-function startedByNote(starter: CodingAgent, note: string | undefined): string {
+function startedByNote(
+  starter: CodingAgent,
+  note: string | undefined,
+  starterInChat: string | undefined,
+): string {
+  const report =
+    starterInChat === undefined
+      ? `To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with that id. `
+      : `It is ${starterInChat} in your task's chat: report back to it there, with that mention link in your words, ` +
+        `never with ${AGENT_TOOL.MESSAGE_AGENT}. `;
   const lead =
     `You were started by another coding agent of your workspace, ${agentIntroduction(starter)}, ` +
-    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with that id. ` +
+    `not by the developer. ${report}` +
     "The developer's inbox is that agent's to keep: post nothing to it, and send that agent what " +
     "you would have posted there instead, a pull request ready for review, a decision, a question, " +
     "or something only the developer can do by hand.";
   return note === undefined ? lead : `${lead}\n\n${note}`;
+}
+
+/**
+ * The starter's mention link, as the task's chat names it, where an agent
+ * it starts lands on its own task and Chat is on for the account both run
+ * as, so the two share the task's chat; nothing otherwise.
+ */
+function starterInChat(
+  starter: CodingAgent,
+  taskId: string,
+): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    if (starter.taskId !== taskId || !(yield* chatEnabledFor(starter.userId))) return undefined;
+    return agentMention(starter, yield* workspaceStepOf(starter.userId, starter.organizationId));
+  });
 }
 
 /** The agent as a start answers it: its id, what it runs on, where it stands now, and whether it is on the caller's own task, which a window that opens the caller's task alone reads to link it or not. */
@@ -1716,9 +1745,6 @@ export function runStartAgent(
   const ownTask = callerTask(caller);
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
-  // An agent a coding agent starts hears who started it.
-  const byAgent = caller.kind === AGENT_CALLER.AGENT;
-  const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   const userId = callerUserId(caller);
   return orStoreRefusal(
     Effect.gen(function* () {
@@ -1743,6 +1769,16 @@ export function runStartAgent(
       const place: StartWhere | undefined =
         landing?.success.place ?? (taskId === null ? undefined : { taskId });
       if (place === undefined) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
+      // An agent a coding agent starts hears who started it, and where to report back: in the
+      // chat of the task they share, where Chat is on for the account both run as.
+      const byAgent = caller.kind === AGENT_CALLER.AGENT;
+      const shared =
+        byAgent && place.taskId !== null
+          ? yield* starterInChat(caller.agent, place.taskId)
+          : undefined;
+      const note = byAgent
+        ? startedByNote(caller.agent, asked.success.note, shared)
+        : asked.success.note;
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         ...place,
         idempotencyKey: call.clientKey,

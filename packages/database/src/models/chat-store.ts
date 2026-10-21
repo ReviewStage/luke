@@ -81,8 +81,11 @@ import { isWorkspaceMember, taskReachableBy, workspaceReachableBy } from "./work
  * under the `workspace_chat` row's lock, so the places posts take are
  * contiguous however many land at once and a post rolled back takes none.
  * A person reads every channel of the workspace, every DM included, so
- * the people of a workspace can follow its agents talking; an agent or a
- * planner reads every channel but a DM, and the DMs it is one of. Only a
+ * the people of a workspace can follow its agents talking. An agent or a
+ * planner is scoped to its task: it reads and posts in its task's channel
+ * alone, or an agent on no task in the general channel, and the DMs it is
+ * one of, so the agents of one task never talk across into another's; a
+ * mention of one outside the channel it is posted in names no one. Only a
  * DM's two members post in it. A member's
  * unread is what it may see that someone else posted or changed past its
  * cursor in each channel, the greater of the place it read that channel to
@@ -1151,35 +1154,147 @@ function lockedFor(userId: string, organizationId: string): ChatStoreEffect<bool
 
 /**
  * The condition that the reader may see the channel a statement reads:
- * every channel for a person; any but a DM, and a DM it is one of, for an
- * agent or a planner.
+ * every channel for a person; its home (`homeOf`), and a DM it is one of,
+ * for an agent or a planner.
  */
 function visibleTo(reader: ChatMemberRow): SQL {
   if (reader.kind === MEMBER_KIND.HUMAN) return sql`true`;
   return (
     or(
-      ne(chatChannel.kind, CHANNEL_KIND.DM),
+      homeOf(reader),
       eq(chatChannel.dmAMemberId, reader.id),
       eq(chatChannel.dmBMemberId, reader.id),
     ) ?? sql`false`
   );
 }
 
-/** Whether the author may post in the channel: any but a DM, and a DM it is one of. */
-function postsIn(author: ChatMemberRow, channel: ChatChannelRow): boolean {
-  if (channel.kind !== CHANNEL_KIND.DM) return true;
-  return channel.dmAMemberId === author.id || channel.dmBMemberId === author.id;
+/**
+ * The condition that an agent's row stands and meets the condition given.
+ * Note that the row must stand, so an agent whose row is gone has no home
+ * anywhere, rather than reading as one on no plan.
+ */
+function agentRowWhere(agentId: Column | string, condition: SQL): SQL {
+  return sql`exists (select 1 from ${codingAgent} where ${codingAgent.id} = ${agentId} and ${condition})`;
+}
+
+/**
+ * The condition that the channel a statement reads is the home of an agent
+ * or a planner, the one channel of the workspace's it talks in: a
+ * planner's plan channel, an agent's task's channel, or the general
+ * channel for an agent on no task, as its row reads when the statement
+ * runs.
+ */
+function homeOf(member: ChatMemberRow): SQL {
+  if (member.kind === MEMBER_KIND.LUKE) {
+    if (member.taskId === null) return sql`false`;
+    return (
+      and(eq(chatChannel.kind, CHANNEL_KIND.TASK), eq(chatChannel.taskId, member.taskId)) ??
+      sql`false`
+    );
+  }
+  if (member.agentId === null) return sql`false`;
+  return (
+    or(
+      and(
+        eq(chatChannel.kind, CHANNEL_KIND.TASK),
+        agentRowWhere(member.agentId, sql`${codingAgent.taskId} = ${chatChannel.taskId}`),
+      ),
+      and(
+        eq(chatChannel.kind, CHANNEL_KIND.GENERAL),
+        agentRowWhere(member.agentId, isNull(codingAgent.taskId)),
+      ),
+    ) ?? sql`false`
+  );
+}
+
+/** The condition that a member is one the channel is home to, as `homeOf` reads each: its plan's Luke and agents, or the agents on no plan for the general channel; none for another. */
+function homeTo(channel: Pick<ChatChannelRow, "kind" | "taskId">): SQL {
+  if (channel.kind === CHANNEL_KIND.GENERAL) {
+    return (
+      and(
+        eq(chatMember.kind, MEMBER_KIND.AGENT),
+        agentRowWhere(chatMember.agentId, isNull(codingAgent.taskId)),
+      ) ?? sql`false`
+    );
+  }
+  if (channel.kind !== CHANNEL_KIND.TASK || channel.taskId === null) return sql`false`;
+  return (
+    or(
+      and(eq(chatMember.kind, MEMBER_KIND.LUKE), eq(chatMember.taskId, channel.taskId)),
+      and(
+        eq(chatMember.kind, MEMBER_KIND.AGENT),
+        agentRowWhere(chatMember.agentId, eq(codingAgent.taskId, channel.taskId)),
+      ),
+    ) ?? sql`false`
+  );
+}
+
+/** The members a channel is home to (`homeTo`), every person of the workspace beside them, in the order the roster lists them. */
+const findHomeMembers = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    kind: Schema.Literals(Object.values(CHANNEL_KIND)),
+    taskId: Schema.NullOr(Schema.String),
+  }),
+  Result: ChatMemberRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MEMBER_COLUMNS)
+        .from(chatMember)
+        .where(
+          and(
+            eq(chatMember.organizationId, key.organizationId),
+            or(eq(chatMember.kind, MEMBER_KIND.HUMAN), homeTo(key)),
+          ),
+        )
+        .orderBy(asc(chatMember.joinedAt), asc(chatMember.kind), asc(chatMember.ordinal)),
+    ),
+});
+
+/** The condition that the author may post in the channel a statement reads: a person any but a DM; an agent or a planner where it may see it; and anyone a DM it is one of. */
+function postableBy(author: ChatMemberRow): SQL {
+  if (author.kind !== MEMBER_KIND.HUMAN) return visibleTo(author);
+  return (
+    or(
+      ne(chatChannel.kind, CHANNEL_KIND.DM),
+      eq(chatChannel.dmAMemberId, author.id),
+      eq(chatChannel.dmBMemberId, author.id),
+    ) ?? sql`false`
+  );
+}
+
+/** Whether the channel of the member's workspace meets the condition. */
+function channelWhere(
+  member: ChatMemberRow,
+  channelId: string,
+  condition: SQL,
+): ChatStoreEffect<boolean> {
+  return Effect.map(
+    Database.use((db) =>
+      db
+        .select({ id: chatChannel.id })
+        .from(chatChannel)
+        .where(
+          and(
+            eq(chatChannel.organizationId, member.organizationId),
+            eq(chatChannel.id, channelId),
+            condition,
+          ),
+        ),
+    ),
+    (rows) => rows.length > 0,
+  );
+}
+
+/** Whether the author may post in the channel, which must be of its workspace: as `postableBy` reads it. */
+function postsIn(author: ChatMemberRow, channelId: string): ChatStoreEffect<boolean> {
+  return channelWhere(author, channelId, postableBy(author));
 }
 
 /** Whether the reader may see the channel, which must be of its workspace: as `visibleTo` reads it. */
 function seesChannel(reader: ChatMemberRow, channelId: string): ChatStoreEffect<boolean> {
-  return Effect.map(
-    findChannelInWorkspace({ organizationId: reader.organizationId, channelId }),
-    Option.match({
-      onNone: () => false,
-      onSome: (channel) => reader.kind === MEMBER_KIND.HUMAN || postsIn(reader, channel),
-    }),
-  );
+  return channelWhere(reader, channelId, visibleTo(reader));
 }
 
 /** A page's size as asked, held between one and the bound a read answers with. */
@@ -1344,6 +1459,24 @@ export function agentMembersOf(
         { taskId: row.taskId ?? undefined, name: row.title ?? row.model },
       ]),
     );
+  });
+}
+
+/**
+ * The members of the workspace a channel is home to, the people of the
+ * workspace beside them: the agents of the channel's plan, its Luke, and
+ * for the general channel the agents on no plan, the archived ones and those
+ * who left among them, since what they wrote stays; none where the account
+ * is not in the workspace.
+ */
+export function homeRoster(
+  userId: string,
+  channel: ChatChannelRow,
+): ChatStoreEffect<readonly ChatMemberRow[]> {
+  return Effect.gen(function* () {
+    const { organizationId, kind, taskId } = channel;
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
+    return yield* findHomeMembers({ organizationId, kind, taskId });
   });
 }
 
@@ -1717,11 +1850,20 @@ function placePost(
     });
     const channel = yield* findChannelInWorkspace({ organizationId, channelId });
     if (Option.isNone(channel)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
-    if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+    if (!(yield* postsIn(author.value, channelId))) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
     // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
-    const named = yield* Effect.forEach(post.subjects ?? [], ({ subject, label }) =>
+    const found = yield* Effect.forEach(post.subjects ?? [], ({ subject, label }) =>
       Effect.map(subjectMember(userId, organizationId, subject), (found) => ({ label, found })),
+    );
+    // An agent or a planner the channel is not home to hears nothing of it, so naming one names no one.
+    const named = yield* Effect.forEach(found, (each) =>
+      Effect.map(
+        Option.isNone(each.found)
+          ? Effect.succeed(false)
+          : seesChannel(each.found.value, channelId),
+        (sees) => (sees ? each : { label: each.label, found: Option.none<ChatMemberRow>() }),
+      ),
     );
     return Result.succeed({
       author: author.value,

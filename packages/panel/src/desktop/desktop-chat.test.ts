@@ -7,6 +7,7 @@ import {
   CHAT_ASK,
   CHAT_BOUNDS,
   CHAT_IMAGE_TYPE,
+  type ChatAnswer,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
@@ -184,7 +185,7 @@ function railRow(page: HTMLElement, name: string): HTMLButtonElement {
   return row;
 }
 
-test("Chat opens on For you, whose open asks come first, the oldest first, then the direct message and the mention waiting on the developer, beside a rail counting what each place holds unread", () => {
+test("Chat opens on For you, whose open asks come first, the oldest first, then the mentions waiting on the developer, beside a rail counting what each place holds unread", () => {
   const page = mount();
   assert.deepEqual(rail(page), [
     "▸ For you (4)",
@@ -195,15 +196,15 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "billing-export",
     "teammate-invitations •",
     "# Direct messages",
-    "Invite emails •",
     "Luke",
+    "Invite emails",
     "Add teammate invitations",
     "Maria Chen",
   ]);
   assert.deepEqual(stream(page), [
     "Add teammate invitations in #teammate-invitations",
     "Invite emails in #teammate-invitations",
-    "Invite emails direct message",
+    "Invite emails in #teammate-invitations",
     "Luke in #teammate-invitations",
   ]);
 });
@@ -214,9 +215,11 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   assert.equal(page.querySelector(".chat-head h2")?.textContent, "# teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
+    "Invite emails",
     "Add teammate invitations",
     "Invite emails",
     "Add teammate invitations",
+    "Invite emails",
     "Luke",
     "Invite emails",
     "Dean Stratakos",
@@ -228,7 +231,8 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   assert.equal(toggle?.textContent, "2 replies");
   assert.equal(toggle?.querySelectorAll(".actor-stack .actor-mark").length, 2);
   act(() => toggle?.click());
-  assert.deepEqual(stream(page).slice(0, 4), [
+  assert.deepEqual(stream(page).slice(0, 5), [
+    "Invite emails",
     "Add teammate invitations",
     "Invite emails",
     "  ↳ Add teammate invitations",
@@ -236,15 +240,26 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   ]);
 });
 
+/** The id of the developer's DM with Invite emails, the fixture's second agent. */
+function dmWithInviteEmails(answer: ChatAnswer): string {
+  const agent = answer.members.find((member) => member.name === "Invite emails");
+  const dm = answer.channels.find(
+    (channel) => channel.kind === CHANNEL_KIND.DM && channel.members?.includes(agent?.id ?? ""),
+  );
+  return dm?.id ?? "";
+}
+
 test("an ask posted in a direct message is listed among For you's asks as a direct message, never as a channel", () => {
   const page = mount((chat) => ({
     ...chat,
     answer: {
       ...chat.answer,
+      // The developer opened a DM with the agent, which an agent answers in, so its ask stands there.
       messages: chat.answer.messages.map((message) =>
         message.seq === 47
           ? {
               ...message,
+              channelId: dmWithInviteEmails(chat.answer),
               ask: {
                 key: "take-invite-file",
                 revision: 1,
@@ -1050,9 +1065,10 @@ test("an agent's line names it by its title alone, as every place of the window 
   const opened: ReadLink[] = [];
   const page = mount((chat) => chat, undefined, undefined, opened);
   act(() => railRow(page, "teammate-invitations").click());
-  const [byline] = [...page.querySelectorAll(".chat-message .chat-byline")];
+  const byline = [...page.querySelectorAll(".chat-message .chat-byline")].find(
+    (each) => each.querySelector(".chat-byline-name")?.textContent === "Add teammate invitations",
+  );
   assert.ok(byline);
-  assert.equal(byline.querySelector(".chat-byline-name")?.textContent, "Add teammate invitations");
   assert.doesNotMatch(byline.textContent ?? "", /@/u, "no handle beside it");
   const name = byline.querySelector<HTMLButtonElement>(".chat-byline-name button");
   assert.ok(name, "the agent's name is a press");
