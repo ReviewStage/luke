@@ -1893,9 +1893,9 @@
    --spring-fast, about the beat its action waits; a still pointer jumps.
    While the agent is active it rocks about its tip, and fades once it is
    not. A click presses it once it has arrived, with a ripple at the point;
-   typing bobs it. It is drawn accent on an on-accent line over a dark
-   edge, with a soft dark shadow, so it reads on any page: an accent button,
-   a light page, or a dark one. The rock and the bob are endless loops held by
+   typing bobs it. It is a compact neutral arrowhead on a soft neutral halo,
+   lighter over a dark page, so it reads on any page, an accent button
+   included. The rock and the bob are endless loops held by
    --loop-motion, so their periods may be literals (docs/DESIGN.md). */
 .cloud-browser-stage {
   position: relative;
@@ -1947,29 +1947,35 @@
 
 .cloud-browser-cursor-arrow {
   display: block;
-  width: var(--luke-space-20);
-  height: var(--luke-space-20);
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
   overflow: visible;
+  fill: var(--agent-pointer);
+  stroke: var(--agent-pointer);
+  stroke-width: 1.5;
   stroke-linejoin: round;
-  filter: drop-shadow(
-      0 calc(var(--luke-space-2) / 2) calc(var(--luke-space-2) / 2) var(--luke-color-shadow-deep)
-    )
-    drop-shadow(0 var(--luke-space-2) var(--luke-space-4) var(--luke-color-shadow-deep));
   transform-origin: 0 0;
 }
 
-/* The near-black every palette keeps alike, light or dark, for the edge
-   that holds the arrow apart from the page under it. */
-.cloud-browser-cursor-edge {
-  fill: var(--luke-color-tooltip);
-  stroke: var(--luke-color-tooltip);
-  stroke-width: 3.5;
+.cloud-browser-cursor[data-ground="dark"] .cloud-browser-cursor-arrow {
+  fill: var(--agent-pointer-on-dark);
+  stroke: var(--agent-pointer-on-dark);
 }
 
-.cloud-browser-cursor-body {
-  fill: var(--luke-color-accent);
-  stroke: var(--luke-color-on-accent);
-  stroke-width: 1.5;
+.cloud-browser-cursor[data-ground="dark"] .cloud-browser-cursor-ripple {
+  border-color: var(--agent-pointer-on-dark);
+}
+
+/* The soft halo behind the arrowhead, centred a little inside it from the
+   tip, which holds it apart from whatever the page draws under it. */
+.cloud-browser-cursor-halo {
+  position: absolute;
+  top: calc(var(--luke-space-6) - var(--luke-space-40) / 2);
+  left: calc(var(--luke-space-6) - var(--luke-space-40) / 2);
+  width: var(--luke-space-40);
+  height: var(--luke-space-40);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--agent-pointer-halo), transparent);
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
@@ -1989,7 +1995,7 @@
   width: var(--luke-space-24);
   height: var(--luke-space-24);
   margin: calc(var(--luke-space-24) / -2);
-  border: var(--luke-space-2) solid var(--luke-color-accent);
+  border: calc(var(--luke-space-2) / 2) solid var(--agent-pointer);
   border-radius: 50%;
   opacity: 0;
   animation: cloud-browser-cursor-ripple var(--duration-shape) ease-out var(--duration-fast)

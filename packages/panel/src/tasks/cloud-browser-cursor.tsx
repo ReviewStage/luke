@@ -6,7 +6,9 @@
  * CSS pixels of its visible area, and the tab's live read carries the last
  * one (`AgentBrowserTab.cursor`). The arrow stands at that point scaled onto
  * the drawn page, and glides there over `--duration-fast` on
- * `--spring-fast`, about the beat, so it arrives as the action lands. While
+ * `--spring-fast`, about the beat, so it arrives as the action lands. It is
+ * drawn as a compact neutral arrowhead on a soft halo, as Codex draws its
+ * agent's, in a lighter grey over a dark page (`onDarkPage`). While
  * the agent is active on the tab it rocks gently about its tip, a loop
  * `--loop-motion` holds still; a click presses it, with a soft ripple at
  * the point, and typing bobs it. It fades once the agent has done nothing
@@ -34,11 +36,11 @@ import { usePrefersReducedMotion } from "../use-reduced-motion.js";
 /** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
 export const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
 
-/** The arrow's outline, its tip at (1.5, 1.5), where the view box starts. */
-const ARROW = "M1.5 1.5v15.2l4.1-3.7 2.9 6.1 2.7-1.3-2.9-6h5.6z";
+/** The arrowhead's outline: a triangle pointing up and to the left, its tail notched, its tip at (1, 1), where the view box starts. */
+const ARROW = "M1 1 15 6.2 9.2 9.2 6.2 15z";
 
-/** How far the arrow reaches from its tip, in CSS pixels: `--luke-space-20`, its drawn size. */
-const ARROW_REACH = 20;
+/** How far the arrow reaches from its tip, in CSS pixels: `--luke-space-16`, its drawn size. */
+const ARROW_REACH = 16;
 
 /** The drawn page's size in CSS pixels of the panel. */
 export interface CloudBrowserCursorFrame {
@@ -81,12 +83,15 @@ export function CloudBrowserCursor({
   lastActedAt,
   frame,
   hidden,
+  onDarkPage,
 }: {
   cursor: AgentBrowserTabCursor | undefined;
   /** Epoch milliseconds the agent last acted on the tab. */
   lastActedAt: number;
   frame: CloudBrowserCursorFrame;
   hidden: boolean;
+  /** Whether the page is dark where the pointer stands, which draws it lighter. */
+  onDarkPage: boolean;
 }): React.JSX.Element | null {
   const still = usePrefersReducedMotion();
   const idle = useIdle(Math.max(lastActedAt, cursor?.at ?? 0));
@@ -109,19 +114,19 @@ export function CloudBrowserCursor({
       data-kind={cursor.kind}
       data-flip-x={flipX ? "" : undefined}
       data-flip-y={flipY ? "" : undefined}
+      data-ground={onDarkPage ? "dark" : undefined}
       style={style}
     >
+      <span className="cloud-browser-cursor-halo" />
       <div className="cloud-browser-cursor-rock">
         {/* Keyed by the move, so each click presses afresh. */}
         <svg
           key={cursor.at}
           className="cloud-browser-cursor-arrow"
-          viewBox="1.5 1.5 20 20"
+          viewBox="1 1 16 16"
           aria-hidden="true"
         >
-          {/* A dark edge under the accent arrow and its light line, so it reads on any page, accent buttons and dark pages alike. */}
-          <path className="cloud-browser-cursor-edge" d={ARROW} />
-          <path className="cloud-browser-cursor-body" d={ARROW} />
+          <path d={ARROW} />
         </svg>
       </div>
       {cursor.kind === BROWSER_CURSOR_KIND.CLICK && shown && !still ? (

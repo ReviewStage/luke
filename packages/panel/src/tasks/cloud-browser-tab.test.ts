@@ -247,7 +247,7 @@ test("a listed cloud Browser tab stands in the strip, stays chosen while the lis
   assert.equal(current().tab, SIDE_PANEL_TAB.PLAN, "a tab the service no longer lists gives way");
 });
 
-test("a cloud Browser tab's pane waits quietly for the page, draws it once a frame arrives, and takes the tab over and hands it back", async () => {
+test("a cloud Browser tab's pane spins while it waits for the page, draws it once a frame arrives, and takes the tab over and hands it back", async () => {
   const sent: unknown[] = [];
   let listener: BrowserLiveListener | undefined;
   fakeAppPlatform({
@@ -281,7 +281,12 @@ test("a cloud Browser tab's pane waits quietly for the page, draws it once a fra
   );
   await settle();
   assert.ok(listener, "the pane opened its view");
-  assert.equal(status(), "Waiting for the page");
+  // The window's own spinner stands while the page is on its way, its words for a screen reader alone.
+  await vi.waitFor(() => assert.equal(status(), "Waiting for the page"));
+  assert.ok(
+    document.querySelector(".cloud-browser-notice .luke-spinner-ring"),
+    "the spinner is drawn",
+  );
   assert.ok(
     document.querySelector("section.ph-no-capture"),
     "the pane is left out of the recording",

@@ -189,3 +189,23 @@ test("where motion is reduced the agent's pointer is held still: it neither rock
   assert.ok(drawn.hasAttribute("data-still"), "held still");
   assert.equal(drawn.querySelector(".cloud-browser-cursor-ripple"), null, "no ripple");
 });
+
+test("over a dark page the agent's pointer is drawn in its lighter grey, and over a light one in its own", async () => {
+  let shade = 0;
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: () => undefined,
+    getImageData: (_x: number, _y: number, width: number, height: number) => ({
+      data: new Uint8ClampedArray(width * height * 4).fill(shade),
+    }),
+  } as unknown as CanvasRenderingContext2D);
+  const { redraw } = await paneOf(CLICKED);
+  assert.equal(pointer()?.dataset.ground, "dark", "a black page reads as dark");
+
+  shade = 255;
+  await redraw({
+    ...CLICKED,
+    lastActedAt: NOW,
+    cursor: { x: 100, y: 100, kind: "move", viewport: { width: 1280, height: 800 }, at: NOW },
+  });
+  assert.equal(pointer()?.dataset.ground, undefined, "a white page reads as light");
+});
