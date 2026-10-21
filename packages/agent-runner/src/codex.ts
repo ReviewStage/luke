@@ -42,6 +42,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { Effect, Exit, Option, Queue, Redacted, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
@@ -161,9 +162,15 @@ function toml(value: string): string {
  * App-server's argv: the documented ChatGPT-plan provider, the Luke MCP
  * server with its bearer read from the environment and its tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
- * every MCP call, as P16 found), the sandbox with network on, and commands
- * inheriting the core variables without the token or the bearer. Nothing in
- * argv is secret.
+ * every MCP call, as P16 found), the sandbox with network on and the
+ * checkout's `.git` writable, and commands inheriting the core variables
+ * without the token or the bearer. Nothing in argv is secret.
+ *
+ * Note that workspace-write keeps `.git` read-only under every writable root
+ * (openai/codex#15505), and with `never` nothing escalates, so without its
+ * own writable root an agent could not commit. Granting `.git` itself keeps
+ * the sandbox on: commands still never see the token, and app-server's own
+ * git calls run with hooks and fsmonitor disabled.
  */
 function appServerArgs(config: CodexConfig): string[] {
   const provider = `model_providers.${CHATGPT_PROVIDER.ID}`;
@@ -182,6 +189,7 @@ function appServerArgs(config: CodexConfig): string[] {
     ["approval_policy", toml("never")],
     ["sandbox_mode", toml("workspace-write")],
     ["sandbox_workspace_write.network_access", "true"],
+    ["sandbox_workspace_write.writable_roots", `[${toml(join(config.cwd, ".git"))}]`],
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
     [

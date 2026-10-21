@@ -203,6 +203,7 @@ it.effect(
         'approval_policy="never"',
         'sandbox_mode="workspace-write"',
         "sandbox_workspace_write.network_access=true",
+        `sandbox_workspace_write.writable_roots=["${CONFIG.cwd}/.git"]`,
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
         'shell_environment_policy.exclude=["ACCESS_TOKEN", "LUKE_RUNNER_TOKEN"]',
