@@ -2448,6 +2448,128 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "a line the voice says on a call names on the agent's page the turn its ask ran in, with the steps begun before the ask where it joined a typed turn under way, said before the ask bound (read again once it does), while that turn ran, or three minutes after it settled alike, and the turn's journal names the same turn; a line whose ask learned no turn names none",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, {}),
+          );
+        const opening = codingTurn("turn_0", "turn.completed");
+        yield* relayed(opening.slice(0, opening.findIndex((e) => e.type === "step.completed") + 1));
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-call" }),
+        );
+        const lineId = `line-${delegationId}`;
+        yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "Where are you with the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        const said = (clientId: string, text: string, delegation: string) =>
+          writer.upsertSpokenRow(target, {
+            role: MESSAGE_ROLE.ASSISTANT,
+            clientId,
+            text,
+            metadata: {
+              author: MESSAGE_AUTHOR.VOICE_MODEL,
+              channel: MESSAGE_CHANNEL.VOICE,
+              delegation_id: delegation,
+            },
+          });
+        const pageAfter = (cursor: typeof CURSOR_START) =>
+          transcriptPast(target, CODER_TOOL_SET, cursor, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+        // The voice says it is checking before eve has steered the ask in, so before it binds, and a
+        // tab following the transcript reads that line then.
+        yield* said("said-early", "Checking now.", delegationId);
+        const early = yield* pageAfter(CURSOR_START);
+        assert.deepEqual(
+          early.messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).at(-1)
+            ?.readFrom,
+          undefined,
+        );
+        session.auth = { current: spokenSeat(target).current, initiator: auth.initiator };
+        const tail = steeredTail("turn_0", "The developer asked where the invites are.", [
+          "delivery-call",
+        ]);
+        yield* relayed(tail.slice(0, 2));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+
+        // The voice answers the ask while the turn it joined still runs, as on a call into a busy agent.
+        yield* said("said-mid-turn", "The table is built; the tests run now.", delegationId);
+        yield* relayed(tail.slice(2));
+        const turnId = hostTurnId(sessionId, "turn_0");
+        assert.equal((yield* turnRow(turnId))?.status, TURN_STATUS.SETTLED);
+        // And again three minutes after the turn settled, past the window the stored row names it in.
+        yield* TestClock.adjust(Duration.minutes(3));
+        yield* said("said-later", "The tests passed, by the way.", delegationId);
+        // A line following an ask the voice handed on that never reached a turn.
+        const unbound = `dl_${randomUUID()}`;
+        yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: unbound,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* said("said-unbound", "I couldn't reach it.", unbound);
+
+        // The tab reads the early line again past its cursor, now naming the turn its ask joined.
+        const reread = (yield* pageAfter(early.cursor)).messages.find((message) =>
+          message.parts.some((part) => isTextUIPart(part) && part.text === "Checking now."),
+        );
+        assert.deepEqual(reread?.readFrom, { turnId, afterStep: 1 });
+        const page = yield* pageAfter(CURSOR_START);
+        const spoken = page.messages.filter(
+          (message) =>
+            message.role === MESSAGE_ROLE.ASSISTANT &&
+            "channel" in message.metadata &&
+            message.metadata.channel === MESSAGE_CHANNEL.VOICE,
+        );
+        assert.deepEqual(
+          spoken.map((message) => [message.parts, message.readFrom]),
+          [
+            [[{ type: "text", text: "Checking now.", state: "done" }], { turnId, afterStep: 1 }],
+            [
+              [{ type: "text", text: "The table is built; the tests run now.", state: "done" }],
+              { turnId, afterStep: 1 },
+            ],
+            [
+              [{ type: "text", text: "The tests passed, by the way.", state: "done" }],
+              { turnId, afterStep: 1 },
+            ],
+            [[{ type: "text", text: "I couldn't reach it.", state: "done" }], undefined],
+          ],
+        );
+        const journals = page.messages.filter(
+          (message) => message.role === MESSAGE_ROLE.ASSISTANT && !spoken.includes(message),
+        );
+        assert.deepEqual(
+          journals.map((message) => message.turnId),
+          [turnId],
+        );
+      }),
+  );
+
+  it.effect(
     "a line typed to the agent while a call's spoken turn runs joins that turn and is taken as the developer's awaiting row where it arrived, not written again, while the turn's own line stays the transcript's",
     () =>
       Effect.gen(function* () {

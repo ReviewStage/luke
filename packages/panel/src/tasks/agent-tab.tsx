@@ -123,6 +123,7 @@ import {
   settledPlanEdits,
   sidebarCallIds,
   spokenMessages,
+  type TurnRead,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -237,7 +238,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * each exchange reads as a conversation: the developer's line, what the
  * voice said, and the turn whose words it read aloud folded closed under
  * that, its reasoning, calls, written answer, and how long it worked one
- * press away (`spokenMessages`), so an answer is not read twice. The list
+ * press away (`spokenMessages`), so an answer is not read twice; on a call
+ * into a busy agent, only the work after the ask joined its turn. The list
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
@@ -1144,7 +1146,7 @@ export function AgentMessage({
   delegation,
   todos = NO_TODOS,
   briefTitle,
-  said = false,
+  said,
   sender,
   origin,
   arrived = NO_ARRIVED,
@@ -1170,8 +1172,8 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Whether the voice read its words aloud on a call, its lines drawn ahead of it (`spokenMessages`), so once it has finished all of it folds closed under them, its words and how long it worked inside the fold. */
-  said?: boolean;
+  /** How much of it the voice read aloud on a call (`spokenMessages`): all of it, its lines drawn ahead of it, or the work after a call's ask joined it, its lines drawn where the ask arrived; once it has finished that much folds closed under them, its words and how long it worked inside the fold. None where the voice read nothing of it. */
+  said?: TurnRead | undefined;
   /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
@@ -1299,11 +1301,14 @@ export function AgentMessage({
       >
         {index === 0 ? named : null}
         <MessageContent>
-          <TranscriptRows rows={stretch.rows} trailer={said && ends ? foot : undefined}>
+          <TranscriptRows
+            rows={stretch.rows}
+            trailer={said !== undefined && ends ? foot : undefined}
+          >
             {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
           </TranscriptRows>
         </MessageContent>
-        {said || !ends ? null : foot}
+        {said !== undefined || !ends ? null : foot}
         {ends ? <ForkedToLine messageId={message.id} /> : null}
       </Message>
     );
@@ -1661,7 +1666,7 @@ function AgentTranscriptView({
         <Conversation>
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
-            {placed.map(({ message, said }, index) => (
+            {placed.map(({ message, said, read }, index) => (
               <Fragment key={message.id}>
                 {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
                   <CallOpen key={call.key} call={call} now={now} />
@@ -1684,7 +1689,7 @@ function AgentTranscriptView({
                   taskId={message === plan ? taskId : undefined}
                   lead={lead}
                   moving={working && index === placed.length - 1}
-                  said={said.length > 0 && !(working && index === placed.length - 1)}
+                  said={working && index === placed.length - 1 ? undefined : read}
                   forkCut={forkCutOf(message, open)}
                   delegation={delegation}
                   todos={todos}
