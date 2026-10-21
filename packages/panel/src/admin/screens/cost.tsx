@@ -3,7 +3,7 @@
  */
 
 import type { AdminCost, AdminCostAccount, AdminCostModel } from "@luke/features/admin-cost-wire";
-import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import {
   BADGE_TONE,
   Badge,
@@ -27,7 +27,7 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
-import { ADMIN_READ, adminReadFailure, useAdminRead } from "../use-admin-read.js";
+import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 const COST_ERROR = "The cost endpoint did not answer.";
 

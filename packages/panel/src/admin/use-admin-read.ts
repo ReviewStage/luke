@@ -1,6 +1,6 @@
-import type { AdminQuery } from "@luke/features/admin-wire";
+import { ADMIN_REFUSED, type AdminQuery, type AdminReadProcedure } from "@luke/features/admin-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ADMIN_REFUSED, AdminReadRefused, useAdminDoors } from "./admin-doors.js";
+import { AdminReadRefused, useAdminDoors } from "./admin-doors.js";
 
 /**
  * What one admin read resolved to: the gate's refusals stay distinct here, and
@@ -22,19 +22,6 @@ export type AdminRead<T> =
  * never branches.
  */
 export type AdminReader<T> = (signal: AbortSignal) => Promise<T>;
-
-/** The admin reads a screen asks, by their procedure's name. */
-export const ADMIN_READ = {
-  COST: "cost",
-  DAY: "day",
-  METRICS: "metrics",
-  RELIABILITY: "reliability",
-  USER: "user",
-  USERS: "users",
-  WORKSPACES: "workspaces",
-} as const;
-
-type AdminReadProcedure = (typeof ADMIN_READ)[keyof typeof ADMIN_READ];
 
 /**
  * The question a read asks, the procedure and its query: what the hook reads

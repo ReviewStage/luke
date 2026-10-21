@@ -8,7 +8,12 @@
  * decide, and comes back as the panel's own answer. Nothing is held here.
  */
 
-import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
+import {
+  ADMIN_PAGE_PATH,
+  type AdminFavoriteParams,
+  type AdminReadAnswer,
+  type AdminReadParams,
+} from "@luke/features/admin-wire";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
@@ -95,6 +100,8 @@ export interface TasksProceduresDependencies {
     tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
+    adminRead(params: AdminReadParams): Effect.Effect<AdminReadAnswer>;
+    adminFavorite(params: AdminFavoriteParams): Effect.Effect<boolean>;
     tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
     tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
     tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
@@ -333,6 +340,25 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       const url = adminPage(dependencies.serviceBaseUrl);
       if (url === undefined) return yield* Effect.fail(errors.REFUSED());
       yield* Effect.tryPromise({ try: () => openExternal(url), catch: () => errors.REFUSED() });
+    }),
+    // An admin read goes to the service under the account's session and
+    // comes back to the window that asked, as it came; the service's gate,
+    // not this port, decides who may read it.
+    [TASKS_ACT_KIND.ADMIN_READ]: actPort[TASKS_ACT_KIND.ADMIN_READ].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.adminRead(input);
+    }),
+    [TASKS_ACT_KIND.ADMIN_FAVORITE]: actPort[TASKS_ACT_KIND.ADMIN_FAVORITE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.adminFavorite(input);
     }),
     // Disconnecting asks the host, which asks the service under the Mac's
     // session; no page opens, so no browser account stands in for the Mac's.

@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
+  HostedAdminClient,
   HostedAutomationClient,
   HostedCodingAgentClient,
   HostedFactoryWorldClient,
@@ -178,6 +179,10 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           github: new HostedGitHubConnectionClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
+            sessionCredential: account.sessionCredential,
+          }),
+          admin: new HostedAdminClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
             sessionCredential: account.sessionCredential,
           }),
         },
