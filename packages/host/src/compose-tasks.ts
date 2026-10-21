@@ -149,11 +149,13 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
+  confirmWrite,
   LIVE_GONE,
   type LiveBroken,
   type LiveClient,
   openRealtimeClient,
   type SealedRead,
+  type TxWait,
 } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
@@ -515,6 +517,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The one live follow of the open task's board; running another interrupts it. */
   const boardFollow = yield* FiberHandle.make<void>();
 
+  /** The open task's board follow's wait on a save's transaction, while it stands over Realtime; none while polled or let go. */
+  let boardWait: { readonly taskId: string; readonly wait: TxWait } | undefined;
   /** The tasks whose board's mark moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
 
@@ -1029,6 +1033,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         first: Answer,
       ) => Stream.Stream<Moved, LiveBroken>;
       readonly moved: (moved: Moved) => void;
+      /** Hears the follow's wait on a write's transaction while it stands over Realtime (`liveRows`). */
+      readonly onTxWait?: (wait: TxWait | undefined) => void;
     },
   ) {
     const following = () => gate() && view.activeTaskId === taskId;
@@ -1061,6 +1067,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           poll: (after) => sealedFor(true, after),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
+          ...(read.onTxWait === undefined ? undefined : { onTxWait: read.onTxWait }),
         },
         sealed,
       );
@@ -1094,10 +1101,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** Follows `taskId`'s board live while it is the open task: the board read again once its mark moves, and on each seal's first delivery. */
   function followBoard(taskId: string) {
+    // The wait this follow handed out, so a follow let go clears only its own.
+    let handed: TxWait | undefined;
     return followLive(taskId, {
       seal: (userId, poll, after) => client.boardLive(taskId, userId, poll, after),
       moves: boardMoves,
       moved: () => Queue.offerUnsafe(boardReads, taskId),
+      onTxWait: (wait) => {
+        if (wait !== undefined) {
+          handed = wait;
+          boardWait = { taskId, wait };
+        } else if (boardWait !== undefined && boardWait.wait === handed) {
+          boardWait = undefined;
+        }
+      },
     });
   }
 
@@ -2354,14 +2371,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return yield* invalid("saving a board names a task and its scene");
         const { taskId, elements, appliedDrawing, image } = read.success;
         if (!gate() || view.activeTaskId !== taskId) return { saved: false };
-        return yield* serial(
+        const saved = yield* serial(
           Effect.gen(function* () {
-            const saved = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
-            if (saved === undefined) return { saved: false };
-            if (view.activeTaskId === taskId) write({ board: saved.board });
-            return { saved: true };
+            const answer = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
+            if (answer !== undefined && view.activeTaskId === taskId)
+              write({ board: answer.board });
+            return answer;
           }),
         );
+        if (saved === undefined) return { saved: false };
+        // Note that the save is answered once the board's follow has seen its transaction, outside `serial` so the wait holds up nothing else.
+        yield* confirmWrite(boardWait?.taskId === taskId ? boardWait.wait : undefined, saved.txid);
+        return { saved: true };
       }),
   };
 
