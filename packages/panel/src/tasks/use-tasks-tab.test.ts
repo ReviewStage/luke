@@ -2765,9 +2765,14 @@ test("a chat toast's View opens Chat, and the channel its message stands in once
     AtomRegistryModule.make(),
   );
   await settle();
+  act(() => tab.control().chatView.onShow({ kind: CHAT_PLACE.CHANNEL, channelId: "other" }));
   act(() => tab.control().chatView.onShowMessage(messageId));
   assert.equal(tab.control().chatView.open, true);
-  assert.deepEqual(tab.control().chatView.place, FOR_YOU, "For you stands until the read lands");
+  assert.deepEqual(
+    tab.control().chatView.place,
+    FOR_YOU,
+    "For you, which lists the message, stands until the read lands, rather than the channel shown before",
+  );
   stream.push({
     self: me,
     readSeq: 0,

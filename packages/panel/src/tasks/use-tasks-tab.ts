@@ -1453,7 +1453,7 @@ export function useTasksTab(input: {
         : held,
     );
   }, [shownChannel, heldAnswer, liveRun]);
-  // A message a toast's View asked for opens its channel once a read holds it; till then Chat stands where it was opened, For you listing it.
+  // A message a toast's View asked for opens its channel once a read holds it; till then Chat stands on For you, which lists it.
   const chatSeek = standIn?.kind === STAND_IN.CHAT ? standIn.seek : undefined;
   useEffect(() => {
     if (chatSeek === undefined) return;
@@ -3331,12 +3331,8 @@ export function useTasksTab(input: {
       }),
       onShowMessage: guard((messageId: string) => {
         setHistoryFor(undefined);
-        setStandIn((held) => ({
-          kind: STAND_IN.CHAT,
-          place: held?.kind === STAND_IN.CHAT ? held.place : FOR_YOU,
-          listed: false,
-          seek: messageId,
-        }));
+        // Note that For you stands while the read is sought, since it lists the message, where the channel shown before need not.
+        setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU, listed: false, seek: messageId });
       }),
       onPost: (post) =>
         liveRun
