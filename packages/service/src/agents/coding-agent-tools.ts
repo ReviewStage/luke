@@ -2584,9 +2584,10 @@ export function runListModels(
       const choices = yield* Effect.result(accountModelChoices(callerUserId(caller)));
       if (Result.isFailure(choices)) return agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE);
       const { offered, defaultChoice } = choices.success;
+      const listed = runtimeModels(offered, runtime);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        models: runtimeModels(offered, runtime).map((model) => ({
+        models: listed.map((model) => ({
           id: model.id,
           name: modelLabel(model.id, offered),
           efforts: [...model.efforts],
@@ -2595,7 +2596,8 @@ export function runListModels(
           model: defaultChoice.model,
           modelName: modelLabel(defaultChoice.model, offered),
           effort: defaultChoice.effort,
-          offered: Result.isSuccess(validateModelChoice(offered, defaultChoice)),
+          // Whether the default is among the models listed: for the agent named, one it may move to.
+          offered: Result.isSuccess(validateModelChoice(listed, defaultChoice)),
         },
       };
     }),

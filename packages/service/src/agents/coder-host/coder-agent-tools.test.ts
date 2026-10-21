@@ -2990,6 +2990,19 @@ test("list_models for a Claude Code agent lists its Claude models alone, no fast
   assert.deepEqual(forEve, forStart);
   assert.deepEqual(ids(forClaudeCode), [OPUS, SONNET]);
   assert.deepEqual(forClaudeCode.default, forStart.default);
+
+  // A GPT default is offered to a start, and is not one a Claude Code agent may move to.
+  await database.run(
+    writeAccountPreferences(agents.caller.userId, { codingAgent: { model: SOL, effort: "low" } }),
+  );
+  const offeredFor = async (input: WireBoundaryInput) => {
+    const listed = await call(CODER_TOOL.LIST_MODELS, input);
+    return isRecord(listed.default) ? listed.default.offered : undefined;
+  };
+  assert.deepEqual(
+    [await offeredFor({}), await offeredFor({ agentId: onClaudeCode.id })],
+    [true, false],
+  );
   assert.deepEqual(await call(CODER_TOOL.LIST_MODELS, { agentId: agents.otherWorkspaces.id }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,

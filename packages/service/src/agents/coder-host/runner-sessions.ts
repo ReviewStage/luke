@@ -673,7 +673,10 @@ export const runnerSessions = <
             // harness's lines (the agent's model and effort as they stand, a renewed credential)
             // go ahead of the message, which a change since the launch takes effect from.
             yield* renewCredential(target, agent, live.sandboxSessionId);
-            const ahead = yield* harness.ahead(agent, live.stamp);
+            // Note that the choice is read again just before it is written, because a change
+            // handed to the runner since the read above (`retune`) must not be undone by this
+            // message's stale line; what is left is the moment between this read and the write.
+            const ahead = yield* harness.ahead(yield* agentOf(message.conversationId), live.stamp);
             yield* api.writeStdin(
               live.sandboxSessionId,
               live.commandId,
