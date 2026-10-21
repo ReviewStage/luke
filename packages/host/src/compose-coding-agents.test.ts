@@ -1784,6 +1784,32 @@ it.effect(
 );
 
 it.effect(
+  "a transcript followed again while the service answers no read at all stays followed, and reads on once the service is back",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      yield* followedOnce(harness);
+      const { pages } = harness;
+      harness.pageNow({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      harness.pageNewest({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* TestClock.adjust("40 seconds");
+      yield* settled;
+
+      const back = pageNow("3:0", { holds: false, text: "Back again." });
+      harness.pageNow(back);
+      harness.pageNewest(newestPage("3:0", "Back again.", "40"));
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      const told = pages().at(-1);
+      assert.ok(isRecord(told) && isRecord(told.page));
+      assert.ok(!("failure" in told.page));
+      assert.ok(JSON.stringify(told.page.messages).includes("Back again."));
+    }),
+);
+
+it.effect(
   "a sign-out, a switch of account, and an agent archived each let go of what was held, so the next follow reads the newest page",
   () =>
     Effect.gen(function* () {

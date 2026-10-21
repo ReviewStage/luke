@@ -357,6 +357,19 @@ test("a follow whose first page is the window the host held draws it at once and
   );
 });
 
+test("a transcript the account no longer reaches draws nothing the host held of it", () => {
+  const { follower, push } = scriptedFollower();
+  const { seen, draw } = drawn(follower);
+
+  draw(true);
+  push(AGENT, { ...newestOf(["m-1", "m-2"], "1"), held: true });
+  push(AGENT, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+
+  assert.deepEqual(seen.current?.messages, []);
+  assert.equal(seen.current?.hasOlder, false);
+  assert.equal(seen.current?.failed, true);
+});
+
 test("a follow let go before its first page landed is timed by no span", () => {
   const spans: PanelSpan[] = [];
   const uninstall = installPanelSpanRecorder((span) => spans.push(span));

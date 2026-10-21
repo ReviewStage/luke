@@ -232,7 +232,12 @@ function meets(held: readonly CodingAgentMessage[], page: CodingAgentTranscriptP
 
 /** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
 function joined(was: Held, page: CodingAgentTranscriptPage): Held {
-  if ("failure" in page) return { ...was, failed: true };
+  // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
+  if ("failure" in page) {
+    return page.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
+      ? { ...fresh(was.transcript), pages: was.pages, failed: true }
+      : { ...was, failed: true };
+  }
   // Note that a newest page that does not meet what is held replaces it, older pages and all, rather than leave a gap.
   const replaces =
     page.newest === true && (was.messages.length === 0 || !meets(was.messages, page));

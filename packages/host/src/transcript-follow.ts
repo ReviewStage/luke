@@ -429,10 +429,15 @@ export function followTranscript<Key>(
         const answer = yield* reads.after(window.cursor);
         // Note that a held cursor the service refuses, gone or stale, is let go untold, and the follow opens on the newest page as one holding nothing does; the window joins it or takes it in place of what it drew.
         if (fromHeld && unanswered(answer)) {
-          fromHeld = false;
           yield* memory.forget;
           const newest = yield* readNewest;
-          if ("failure" in newest) return;
+          if ("failure" in newest) {
+            if (newest.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+            // Note that a service that answers neither read is down rather than refusing the cursor, so the follow stays and tries both again, as any page it did not answer is read again.
+            wake = Effect.sleep(RESEAL);
+            continue;
+          }
+          fromHeld = false;
           window = newest;
           heard(newest.messages);
           wake = Effect.void;
