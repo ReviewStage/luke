@@ -243,6 +243,8 @@ interface FakeService extends TasksClient {
   installUrl: string;
   /** Whether the workspaces are not sealed, as a service that did not answer. */
   workspacesFail: boolean;
+  /** Whether the service answers the workspaces' seals and polls as signed out, as a changed session does. */
+  workspacesSignedOut: boolean;
   /** The name another Mac renames a workspace to just after this one's rename answers, where one does. */
   renamedAgain: string | undefined;
   /** Realtime as the service's deployment holds it: each subscription to the workspaces is told the table as it stands, and again on every change. */
@@ -537,6 +539,7 @@ function fakeService(tasks: Task[]): FakeService {
     },
     installUrl: INSTALL_URL,
     workspacesFail: false,
+    workspacesSignedOut: false,
     renamedAgain: undefined,
     members: {},
     former: {},
@@ -585,6 +588,8 @@ function fakeService(tasks: Task[]): FakeService {
         Effect.sync(() => {
           service.reads.push(poll === true ? "workspaces-poll" : "workspaces-live");
           if (service.workspacesFail) return UNANSWERED_WORKSPACE;
+          if (service.workspacesSignedOut)
+            return { ok: false, failure: LIVE_SIGNED_OUT.failure } as const;
           if (poll !== true) return { ok: true, answer: WORKSPACES_SEALED } as const;
           const rows = workspacesLiveRows(service.memberships);
           const { workspaces, installations } = WORKSPACES_SEALED.queries;
@@ -2465,6 +2470,32 @@ it.effect(
       service.memberships = [PERSONAL, RELAY];
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
+    }),
+);
+
+it.effect(
+  "a workspaces reseal refused as signed out stops the follow, rather than sealing the old account again on the backoff",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+
+      const before = service.reads.length;
+      service.workspacesSignedOut = true;
+      service.realtime.fail("workspaces");
+      yield* TestClock.adjust(Duration.minutes(5));
+      yield* settled;
+
+      assert.deepEqual(
+        service.reads.slice(before),
+        ["workspaces-live"],
+        "the reseal refused as signed out is the last ask: the old account is not sealed again on the backoff",
+      );
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME], "what was drawn stays");
     }),
 );
 
