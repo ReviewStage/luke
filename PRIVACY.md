@@ -1008,6 +1008,13 @@ leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked. Each recording carries Luke's version and whether it is a released
 build or a development one; only a released build records at all.
 
+**Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
+small, downscaled still of a tab or page you visited, taken by the app as you
+settle on it and as ⌃Tab leaves it. Those stills stay in that window's memory
+while it is open, a few at a time: they are never written to disk and never
+reach our service, a trace, a counted event, or the voice window, and the
+screen recording leaves them out, as it leaves out a Browser tab's still.
+
 **Browser tabs.** With the Browser tab experiment on, a Browser tab opens a
 web page you choose, your own `localhost` included, in a view of its own on
 your Mac. Luke does not see, store, log, or count the page, its address, or

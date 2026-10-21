@@ -52,6 +52,7 @@ import { DesktopShell } from "./desktop/desktop-shell.js";
 import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs.js";
 import { ListedAutomations } from "./desktop/listed-automations.js";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse.js";
+import { TabSwitcher } from "./desktop/tab-switcher.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
 import { GitHubConnectProvider } from "./github-connect.js";
 import { stepTitle } from "./history-titles.js";
@@ -858,6 +859,13 @@ function AppWindow(): React.JSX.Element {
                           readFiles={(taskId) =>
                             act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
                           }
+                        />
+                        {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in. */}
+                        <TabSwitcher
+                          available={!accountGated}
+                          tab={tab}
+                          onTabChange={changeTab}
+                          tasks={tasks}
                         />
                       </div>
                     </ListedAutomations>

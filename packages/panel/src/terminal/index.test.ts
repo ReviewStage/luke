@@ -90,6 +90,16 @@ test("a Command chord passes to the window, and the shell hears nothing of it", 
   assert.equal(palette.defaultPrevented, false);
 });
 
+test("⌃Tab and ⌃⇧Tab pass to the window's tab switcher, and the shell hears no Tab of them", () => {
+  const terminal = mountTerminal();
+  const on = terminal.press({ key: "Tab", keyCode: 9, ctrlKey: true });
+  const back = terminal.press({ key: "Tab", keyCode: 9, ctrlKey: true, shiftKey: true });
+  terminal.press({ key: "Tab", keyCode: 9 });
+  terminal.done();
+  assert.deepEqual(terminal.heard.slice(0, 2), [on, back]);
+  assert.deepEqual(terminal.sent, ["\t"]);
+});
+
 test("Shift+Return sends a line feed where Return sends a carriage return", () => {
   const terminal = mountTerminal();
   terminal.press({ ...ENTER, shiftKey: true });

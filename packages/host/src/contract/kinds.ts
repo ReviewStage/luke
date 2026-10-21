@@ -524,6 +524,11 @@ export const WINDOW_SURFACE_ACT_KIND = {
   /** A picture put on the clipboard as a PNG, as a copy from Preview puts one. */
   WINDOW_COPY_IMAGE: "window.copyImage",
   WINDOW_SAVE_FILE: "window.saveFile",
+  /**
+   * A downscaled still of part of the asking panel, as ⌃Tab's card previews a
+   * tab it left: answered to that panel alone and kept nowhere else.
+   */
+  WINDOW_CAPTURE: "window.capture",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 

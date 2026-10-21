@@ -299,6 +299,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onSelect: ignore,
     onRestoreTask: ignore,
     onShowAgent: ignore,
+    onShowColumnTab: ignore,
+    onShowPanelTab: ignore,
     onShowSource: ignore,
     onShowTask: ignore,
     onShowMention: ignore,
