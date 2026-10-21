@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "vitest";
 
 /**
@@ -152,6 +152,21 @@ test("the web's dark accent ink reads at AA on every dark ground it stands on", 
   for (const ground of ["--luke-color-ground", "--luke-color-surface", "--luke-color-well"]) {
     const behind = dark.get(ground) ?? "";
     assert.ok(contrastOf(ink, behind) >= 4.5, `${ink} on ${ground} (${behind})`);
+  }
+});
+
+test("no component draws words in the accent's fill, which the web's light page cannot read", () => {
+  const components = new URL("../components/", import.meta.url);
+  const sheets = readdirSync(components, { recursive: true, encoding: "utf8" }).filter((path) =>
+    path.endsWith(".css"),
+  );
+  for (const path of sheets) {
+    const source = readFileSync(new URL(path, components), "utf8");
+    assert.doesNotMatch(
+      source,
+      /(?:^|[\s;{])color\s*:\s*var\(--luke-color-accent\)/,
+      `${path} draws words in --luke-color-accent; words take --luke-color-accent-text`,
+    );
   }
 });
 
