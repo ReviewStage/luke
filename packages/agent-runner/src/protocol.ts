@@ -84,6 +84,17 @@ export const INPUT_LINE = {
   TOKEN: "token",
 } as const;
 
+/**
+ * The argument that starts the runner's bundle as Codex's token command rather
+ * than as a launch: `node <bundle> codex-token <tokenUrl>`, which prints the
+ * plan's access token Luke answers, and nothing else, on stdout.
+ */
+export const CODEX_TOKEN_COMMAND = "codex-token";
+
+/** What Luke's token route answers a runner: the plan's access token, good for at least the route's margin. */
+export const RunnerTokenAnswerSchema = Schema.Struct({ accessToken: Schema.String });
+export type RunnerTokenAnswer = typeof RunnerTokenAnswerSchema.Type;
+
 /** The image types the Messages API takes in a base64 image block. */
 export const IMAGE_MEDIA_TYPE = {
   PNG: "image/png",
@@ -153,6 +164,16 @@ export const CodexConfigSchema = Schema.Struct({
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
   mcpUrl: Schema.String,
+  /**
+   * Where the runner asks Luke for the plan's access token, under its bearer
+   * (`/api/agents/runner-token`). Where it is given, app-server takes its
+   * token from the runner's `codex-token` command (Codex's provider `auth`),
+   * which Codex runs again as its cached token ages and after a 401, so a
+   * turn outlives any one token; `ACCESS_TOKEN` is then neither read nor
+   * handed to app-server. Absent, app-server reads `ACCESS_TOKEN` once as
+   * it starts, as for test mode's API key.
+   */
+  tokenUrl: Schema.optionalKey(Schema.String),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 
@@ -210,9 +231,10 @@ const ModelLineSchema = Schema.Struct({
   effort: Schema.optionalKey(Schema.Union([EffortSchema, CodexEffortSchema])),
 });
 /**
- * A refreshed ChatGPT access token, for a Codex launch: the runner restarts
- * app-server with it and resumes the thread before the next turn it starts,
- * never during one. The one line that carries a secret: never logged, echoed
+ * A refreshed ChatGPT access token, for a Codex launch that reads
+ * `ACCESS_TOKEN` (no `tokenUrl`): the runner restarts app-server with it and
+ * resumes the thread before the next turn it starts, never during one. A
+ * launch with a `tokenUrl` withholds it and takes nothing from it. The one line that carries a secret: never logged, echoed
  * or posted, and taken out of every event. A Claude Code launch skips it.
  */
 const TokenLineSchema = Schema.Struct({

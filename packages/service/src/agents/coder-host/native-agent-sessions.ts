@@ -7,6 +7,7 @@
  * its events to the events route and calls Luke's tools at the MCP server,
  * both under the deployment's own origin; numbers its events from one past
  * the last the store applied of its conversation (`readNativeSequence`);
+ * asks the token route for the plan's token, on Codex;
  * and runs under Luke's coder instructions, worded for the harness, which
  * names the tools it owns by its own names (`instructions.ts`): Claude
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
@@ -24,6 +25,7 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import { LUKE_MCP_PATH } from "../luke-mcp/app.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
+import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { agentCiReadable, agentCoAuthor } from "./checkout.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
@@ -117,9 +119,10 @@ export function nativeAgentSessionsLayer(
           if (origin === undefined) return Option.none();
           if (runtime === CONVERSATION_RUNTIME.CODEX) {
             return Option.some(
-              codexSessions(optionsFor(account, origin, CODER_HARNESS.CODEX)).pipe(
-                Effect.provideContext(context),
-              ),
+              codexSessions({
+                ...optionsFor(account, origin, CODER_HARNESS.CODEX),
+                tokenUrl: new URL(RUNNER_TOKEN_PATH, origin).href,
+              }).pipe(Effect.provideContext(context)),
             );
           }
           return Option.some(

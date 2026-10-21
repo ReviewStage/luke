@@ -62,6 +62,10 @@
           "dest": "/api/default.js?route=agents/runner-events"
         },
         {
+          "src": "/api/agents/runner-token",
+          "dest": "/api/default.js?route=agents/runner-token"
+        },
+        {
           "src": "/api/github/install",
           "dest": "/api/default.js?route=github/install"
         },

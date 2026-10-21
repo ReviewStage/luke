@@ -61,6 +61,7 @@ export function makeFakeLuke(options: {
   };
   return {
     layer: fakeHttpClientLayer(respond),
+    respond,
     applied,
     bearers,
     bodies,
