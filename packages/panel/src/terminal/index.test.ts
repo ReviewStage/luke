@@ -130,3 +130,66 @@ test("without WebGL a palette colour is drawn by its class, never by a style att
   assert.ok(cell.classList.contains("xterm-fg-0"));
   assert.equal(cell.getAttribute("style"), null);
 });
+
+/** The face the screen's rows are drawn in, as the DOM renderer's own rules name it. */
+function drawnFace(host: HTMLElement): string | undefined {
+  const rules = [...host.querySelectorAll("style")].map((style) => style.textContent ?? "");
+  const rows = rules.find((text) => text.includes(".xterm-rows {"));
+  return rows?.match(/font-family: ([^;]+);/)?.[1];
+}
+
+/** A host whose window's monospace stack is a web font, as the web app's profile names it. */
+function webFontHost(): HTMLElement {
+  const host = document.createElement("div");
+  host.style.setProperty("--luke-font-mono", '"JetBrains Mono Variable", monospace');
+  document.body.append(host);
+  return host;
+}
+
+const QUIET = { onInput: () => undefined, onResize: () => undefined, onLink: () => undefined };
+
+test("a face the page is still fetching is stood in for by the system's monospace, and drawn in once it lands", async () => {
+  const landed = Promise.withResolvers<FontFace[]>();
+  const asked: string[] = [];
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: {
+      check: () => false,
+      load: (face: string) => {
+        asked.push(face);
+        return landed.promise;
+      },
+    },
+  });
+  const host = webFontHost();
+  mounted = terminal.mount(host, QUIET);
+
+  assert.equal(drawnFace(host), "monospace", "the cells are measured in a face the page holds");
+  landed.resolve([]);
+  await landed.promise;
+  await Promise.resolve();
+
+  assert.equal(drawnFace(host), '"JetBrains Mono Variable", monospace');
+  assert.deepEqual(asked, ['12px "JetBrains Mono Variable", monospace']);
+  Reflect.deleteProperty(document, "fonts");
+});
+
+test("a face already loaded is drawn in at once, and nothing is fetched", () => {
+  const asked: string[] = [];
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: {
+      check: () => true,
+      load: (face: string) => {
+        asked.push(face);
+        return Promise.resolve([]);
+      },
+    },
+  });
+  const host = webFontHost();
+  mounted = terminal.mount(host, QUIET);
+
+  assert.equal(drawnFace(host), '"JetBrains Mono Variable", monospace');
+  assert.deepEqual(asked, []);
+  Reflect.deleteProperty(document, "fonts");
+});
