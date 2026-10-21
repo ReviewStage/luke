@@ -272,6 +272,9 @@ export const codingAgent = pgTable(
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one task's agents in the order they were started.
     index("coding_agent_task_created").on(table.taskId, table.createdAt),
+    // Every Luke tool call, runner event, and session route finds the agent its conversation is;
+    // one agent per conversation, since an agent is started on a conversation of its own.
+    uniqueIndex("coding_agent_conversation").on(table.conversationId),
     // A workspace's agents with no task are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
     // The agents with no task, which the sidebar lists across the account's workspaces, are read

@@ -1535,6 +1535,42 @@ const deleteAgentPin = SqlSchema.void({
     ),
 });
 
+/**
+ * The columns of an agent that a caller holding only its conversation most
+ * often needs: who it is, who started it, its task, repository, title, and
+ * archive. Note that these leave out the plan's text and the prompt, the bulk
+ * of a row, since every Luke tool call an agent makes reads its agent.
+ */
+const CODING_AGENT_HEADER_COLUMNS = {
+  id: codingAgent.id,
+  userId: codingAgent.userId,
+  taskId: codingAgent.taskId,
+  repository: codingAgent.repository,
+  title: codingAgent.title,
+  archivedAt: codingAgent.archivedAt,
+} as const;
+
+const CodingAgentHeaderRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
+  repository: Schema.NullOr(Schema.String),
+  title: Schema.NullOr(Schema.String),
+  archivedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+const findAgentHeaderOfConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: CodingAgentHeaderRowSchema,
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_HEADER_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
+    ),
+});
+
 const findAgentOfConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: CodingAgentRowSchema,
@@ -2359,7 +2395,7 @@ export function readRunnerTokenConversation(
     const found = yield* findRunnerTokenConversation({ runnerTokenHash });
     if (Option.isNone(found)) return found;
     const { userId, conversationId } = found.value;
-    const agent = yield* findAgentOfConversation({ userId, conversationId });
+    const agent = yield* findAgentHeaderOfConversation({ userId, conversationId });
     return Option.isSome(agent) ? found : Option.none();
   });
 }
@@ -2404,6 +2440,24 @@ export function readCodingAgentOfConversation(
   conversationId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgentOfConversation({ userId, conversationId });
+}
+
+/** An agent as far as its header reads it (`CODING_AGENT_HEADER_COLUMNS`). */
+export type CodingAgentHeader = Pick<
+  CodingAgent,
+  "id" | "userId" | "taskId" | "repository" | "title" | "archivedAt"
+>;
+
+/**
+ * The header of the agent whose conversation this is, for a caller that needs
+ * no more of it than who it is, its task, repository, title, and archive;
+ * nothing where `readCodingAgentOfConversation` answers nothing.
+ */
+export function readCodingAgentHeaderOfConversation(
+  userId: string,
+  conversationId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentHeader>> {
+  return findAgentHeaderOfConversation({ userId, conversationId });
 }
 
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */

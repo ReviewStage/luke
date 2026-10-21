@@ -31,7 +31,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  readCodingAgentOfConversation,
+  readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
 import {
@@ -169,7 +169,7 @@ function routed<Turn extends BrainHostTurn>(
   /** The route of the conversation's calls, read now. */
   const routeOf = (conversationId: string) =>
     Effect.gen(function* () {
-      const agent = yield* readCodingAgentOfConversation(account, conversationId);
+      const agent = yield* readCodingAgentHeaderOfConversation(account, conversationId);
       if (Option.isNone(agent)) return TO_EVE;
       const routing = yield* readCodingAgentRouting(account, agent.value.id);
       const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;

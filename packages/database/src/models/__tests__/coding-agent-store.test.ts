@@ -64,6 +64,8 @@ import {
   nativeRuntimesOfReached,
   pinCodingAgent,
   readCodingAgent,
+  readCodingAgentHeaderOfConversation,
+  readCodingAgentOfConversation,
   readCodingAgentPublished,
   readCodingAgentRouting,
   readNativeRunStanding,
@@ -101,6 +103,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And an agent with no repository, started blank, which a call names.
  * And how an agent is run: its runtime, its harness's session, its
  * runner's bearer digest, and who pays for it.
+ * And the agent a conversation is, one at most, read by its header.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -1984,5 +1987,96 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
       }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) => {
+  const startIn = (starter: string, organizationId: string) =>
+    Effect.map(
+      createCodingAgent(starter, {
+        taskId: null,
+        organizationId,
+        planSnapshot: null,
+        prompt: "Sweep the flaky tests.",
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: "acme/api",
+        title: "Flaky tests",
+      }),
+      (started) => Option.getOrThrow(started).agent,
+    );
+
+  it.effect(
+    "a conversation's agent header reads its agent for the workspace's members alone, and none once the reader left",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const stranger = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const agent = yield* startIn(starter, workspace);
+        const header = {
+          id: agent.id,
+          userId: starter,
+          taskId: null,
+          repository: "acme/api",
+          title: "Flaky tests",
+          archivedAt: null,
+        };
+
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(starter, agent.conversationId),
+          Option.some(header),
+        );
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(teammate, agent.conversationId),
+          Option.some(header),
+        );
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(stranger, agent.conversationId),
+          Option.none(),
+        );
+        assert.deepEqual(
+          yield* readCodingAgentOfConversation(stranger, agent.conversationId),
+          Option.none(),
+        );
+
+        yield* leaveWorkspace(workspace, teammate);
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(teammate, agent.conversationId),
+          Option.none(),
+        );
+      }),
+  );
+
+  it.effect("a second agent on a conversation an agent already has is refused", () =>
+    Effect.gen(function* () {
+      const starter = yield* openAccount;
+      const workspace = yield* openWorkspace(starter);
+      const agent = yield* startIn(starter, workspace);
+      const db = yield* Database;
+
+      const second = yield* Effect.exit(
+        db.insert(codingAgent).values({
+          organizationId: workspace,
+          userId: starter,
+          conversationId: agent.conversationId,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          idempotencyKey: randomUUID(),
+        }),
+      );
+
+      assert.ok(second._tag === "Failure");
+      assert.deepEqual(
+        Option.map(
+          yield* readCodingAgentOfConversation(starter, agent.conversationId),
+          (read) => read.id,
+        ),
+        Option.some(agent.id),
+      );
+    }),
   );
 });

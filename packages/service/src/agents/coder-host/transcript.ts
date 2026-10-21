@@ -14,7 +14,7 @@ import {
   linePlacesOf,
   lineSendersOf,
   readCodingAgentContext,
-  readCodingAgentOfConversation,
+  readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
   readDelegation,
   turnUsagesOf,
@@ -597,7 +597,7 @@ function ownTitleWindow(
   since: Date,
 ): TranscriptEffect<Option.Option<Date>> {
   return Effect.gen(function* () {
-    const own = yield* readCodingAgentOfConversation(target.userId, target.conversationId);
+    const own = yield* readCodingAgentHeaderOfConversation(target.userId, target.conversationId);
     if (Option.isNone(own) || own.value.title !== null) return Option.none();
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const newest = turns.get(target.conversationId);

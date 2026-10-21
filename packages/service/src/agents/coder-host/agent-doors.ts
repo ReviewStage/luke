@@ -15,6 +15,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   hasRepository,
+  readCodingAgentHeaderOfConversation,
   readCodingAgentOfConversation,
 } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
@@ -208,15 +209,27 @@ function boardRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** The coding agent the admitted conversation is, or the refusal that it is none. */
+/** The agent a read found, or the refusal that the conversation is none. */
+function foundOrRefused<A>(found: Option.Option<A>) {
+  return Option.match(found, {
+    onNone: () => Result.fail(CODER_REFUSAL.NO_AGENT),
+    onSome: (agent) => Result.succeed(agent),
+  });
+}
+
+/** The coding agent the admitted conversation is, whole, or the refusal that it is none. */
 function agentOfConversation(admitted: AdmittedConversation) {
   return Effect.map(
     readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
-    (found) =>
-      Option.match(found, {
-        onNone: () => Result.fail(CODER_REFUSAL.NO_AGENT),
-        onSome: (agent) => Result.succeed(agent),
-      }),
+    foundOrRefused,
+  );
+}
+
+/** The header of the coding agent the admitted conversation is, for a tool that needs no more of it, or the refusal that it is none. */
+function agentHeaderOfConversation(admitted: AdmittedConversation) {
+  return Effect.map(
+    readCodingAgentHeaderOfConversation(admitted.target.userId, admitted.target.conversationId),
+    foundOrRefused,
   );
 }
 
@@ -228,7 +241,7 @@ export function runAgentEditPlan(
   sandbox: InboxSandboxDoor,
 ): Effect.Effect<PlanEditResult, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentOfConversation(admitted);
+    const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return planEditRejected(found.failure);
     const { id: agentId, taskId } = found.success;
     if (taskId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
@@ -247,7 +260,7 @@ export function runAgentLookAtPicture(
   input: UnparsedWireValue,
 ): Effect.Effect<PictureLookResult, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentOfConversation(admitted);
+    const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return pictureNotLooked(found.failure);
     const { taskId } = found.success;
     if (taskId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
@@ -287,7 +300,7 @@ export function runAgentComment(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentOfConversation(admitted);
+    const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return commentToolRejected(found.failure);
     const { id: agentId, taskId } = found.success;
     if (taskId === null) return commentToolRejected(COMMENT_TOOL_REFUSAL.TASKLESS);
@@ -311,7 +324,7 @@ export function runAgentShowPage(
   sandbox: InboxSandboxDoor,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentOfConversation(admitted);
+    const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return showPageRejected(found.failure);
     const { taskId } = found.success;
     if (taskId === null) return showPageRejected(SHOW_PAGE_REFUSAL.TASKLESS);
@@ -352,7 +365,7 @@ export function runAgentChat(
   call: ChatCall,
 ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   return Effect.gen(function* () {
-    const found = yield* agentOfConversation(admitted);
+    const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
     if (!(yield* chatEnabledFor(admitted.target.userId))) {
       return chatRejected(CHAT_TOOL_REFUSAL.OFF);
@@ -459,7 +472,7 @@ export function runAgentShowCode(
   sandbox: () => Promise<RepositorySandbox>,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentOfConversation(admitted);
+    const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return showCodeRejected(found.failure);
     const { repository } = found.success;
     // Note that eve offers the tool to no agent with no repository (`repositoryToolsOf`); a harness is offered it always, and this refuses it.
@@ -485,7 +498,7 @@ export function runAgentBoard(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentOfConversation(admitted);
+    const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return boardRejected(found.failure);
     const { taskId } = found.success;
     if (taskId === null) return boardRejected(BOARD_REFUSAL.TASKLESS);
