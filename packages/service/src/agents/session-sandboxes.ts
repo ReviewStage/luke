@@ -40,8 +40,7 @@ import {
 } from "@luke/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { CODER } from "./coder-host/bounds.js";
-import { keepAliveExtension } from "./sandbox-keep-alive.js";
+import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
   RUNNING_STATUS,
@@ -98,10 +97,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
         for (const sandbox of sandboxes) {
           const running = sandbox.currentSessionId;
           if (sandbox.status !== RUNNING_STATUS || running === undefined) continue;
-          // A sandbox opened before the cap reopens each session on its old timeout, which Vercel reapplies at every resume.
-          if (sandbox.timeout !== undefined && sandbox.timeout > CODER.SANDBOX_TIMEOUT_MS) {
-            yield* api.updateTimeout(sandbox.name, CODER.SANDBOX_TIMEOUT_MS);
-          }
+          yield* capSandboxTimeout(api, sandbox);
           const lifetime = yield* api.getSession(running);
           // The sandbox's record can lag its session's, which is the one whose end counts.
           if (lifetime === undefined || lifetime.status !== RUNNING_STATUS) continue;

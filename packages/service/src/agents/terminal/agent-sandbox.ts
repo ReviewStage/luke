@@ -29,6 +29,7 @@ import {
 import { Context, Effect, Layer, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { GitHubTokenAccess } from "../../github/github-app.js";
+import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
   type InteractiveShell,
@@ -294,6 +295,8 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);
         if (sandbox === undefined || state === SANDBOX_STATE.RUNNING) return state;
+        // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+        yield* capSandboxTimeout(api, sandbox);
         return stateOf(yield* api.resume(sandbox.name));
       }),
   };
