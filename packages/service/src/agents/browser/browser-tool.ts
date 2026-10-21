@@ -396,18 +396,12 @@ function withMacImage(run: BrowserAgentRun, image: MacCommandImage | undefined):
   return { ...run, steps };
 }
 
-/** The actions that leave a tab's page as it was, so an address and title read before them still stand. */
-const PAGE_KEEPING: ReadonlySet<string> = new Set([
-  BROWSER_AGENT_ACTION.SCREENSHOT,
-  BROWSER_AGENT_ACTION.CONSOLE,
-  BROWSER_AGENT_ACTION.WAIT,
-]);
-
 /**
  * The tabs a Mac's run acted on, each with the address and title the run
- * last read of it, a list's or a snapshot's, where nothing after that read
- * could have moved its page; any other tab is left out, since the Mac
- * answers no page beside its steps.
+ * read of it, a list's or a snapshot's, where that read was the last step on
+ * the tab; any other tab is left out, since the Mac answers no page beside
+ * its steps and a page may move under any other step, a redirect while it
+ * waits among them.
  */
 function macTabs(steps: readonly BrowserAgentStep[]): readonly ShownTab[] {
   const seen = new Map<string, PageTarget>();
@@ -417,8 +411,7 @@ function macTabs(steps: readonly BrowserAgentStep[]): readonly ShownTab[] {
       for (const tab of step.tabs) seen.set(tab.tab, { targetId: tab.tab, ...tab });
     } else if (step.action === BROWSER_AGENT_ACTION.SNAPSHOT) {
       seen.set(step.tab, { targetId: step.tab, url: step.url, title: step.title });
-    } else if (!PAGE_KEEPING.has(step.action)) {
-      // Note that a click, a key, or a navigation may have moved the page since it was read.
+    } else {
       seen.delete(step.tab);
     }
   }

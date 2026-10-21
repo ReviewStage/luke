@@ -664,11 +664,8 @@ it.layer(getTestDB())("the browser tool on the developer's Mac", (it) => {
           action: BROWSER_AGENT_ACTION.WAIT,
           timeoutMs: 30_000,
         }));
-        const actions = [
-          { action: BROWSER_AGENT_ACTION.SNAPSHOT, tab: "mac-1" },
-          { action: BROWSER_AGENT_ACTION.CLICK, ref: "e3" },
-          ...waits,
-        ];
+        // The snapshot reads the sign-in page; the waits after it may see it redirect.
+        const actions = [{ action: BROWSER_AGENT_ACTION.SNAPSHOT, tab: "mac-1" }, ...waits];
         const output = {
           steps: [
             {
@@ -680,7 +677,6 @@ it.layer(getTestDB())("the browser tool on the developer's Mac", (it) => {
               text: 'button "Sign in" [e3]',
               truncated: false,
             },
-            { action: BROWSER_AGENT_ACTION.CLICK, status: BROWSER_STEP_STATUS.DONE, tab: "mac-1" },
             ...waits.map(() => ({
               action: BROWSER_AGENT_ACTION.WAIT,
               status: BROWSER_STEP_STATUS.DONE,
@@ -695,10 +691,7 @@ it.layer(getTestDB())("the browser tool on the developer's Mac", (it) => {
           settleMacBrowserResult(userId, command.id, { output }),
         );
 
-        assert.ok(
-          taken.timeoutSeconds >= 8 * 30 + 2 * 20,
-          "the Mac may take every action's own bound",
-        );
+        assert.ok(taken.timeoutSeconds >= 8 * 30 + 20, "the Mac may take every action's own bound");
         assert.deepEqual(ran(result).tabs, []);
       }),
   );
