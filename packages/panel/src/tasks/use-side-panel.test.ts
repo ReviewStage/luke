@@ -6,6 +6,7 @@ import { fakeActPortAnswering, type SentPortAct } from "@luke/panel/testing/app-
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { installPressIntent } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   type OpenTask,
@@ -608,4 +609,71 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
       `the ${room} room shows the Inbox with no panel over it`,
     );
   }
+});
+
+test("a link opens its tab as the panel's preview, and the next link takes its place, so a run of links read leaves one tab", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel.control().preview, { changes: AGENT });
+  assert.deepEqual(panel.control().tab, { changes: AGENT });
+
+  act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
+  assert.deepEqual(panel.control().tab, { changes: OTHER_AGENT });
+  assert.deepEqual(
+    panel.control().changes,
+    [{ changes: OTHER_AGENT }],
+    "the first preview gave way",
+  );
+});
+
+test("a preview kept stands as a tab of its own, so the next link opens beside it rather than in its place", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  act(() => panel.control().onKeep({ changes: AGENT }));
+  assert.equal(panel.control().preview, undefined);
+
+  act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+  assert.deepEqual(panel.control().changes, [{ changes: AGENT }, { changes: OTHER_AGENT }]);
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
+});
+
+test("a link to a tab standing as one of its own only chooses it, and a fixed kind opens as chosen, never as a preview", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onChoose({ changes: AGENT }));
+  act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel.control().tab, { changes: AGENT });
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT }, "the preview still stands");
+
+  act(() => panel.control().onPreview(SIDE_PANEL_TAB.PLAN));
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
+  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
+  assert.equal(panel.control().changes.length, 2);
+});
+
+test("a link pressed with ⌘ opens a tab of its own, as a double-click keeps a preview", () => {
+  const stop = installPressIntent(window);
+  try {
+    const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+    const link = document.body.appendChild(document.createElement("a"));
+    link.addEventListener("click", () => panel.control().onPreview({ changes: AGENT }));
+    act(() => {
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+    });
+    assert.deepEqual(panel.control().tab, { changes: AGENT });
+    assert.equal(panel.control().preview, undefined, "⌘ keeps it");
+    act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
+    assert.deepEqual(panel.control().changes, [{ changes: AGENT }, { changes: OTHER_AGENT }]);
+  } finally {
+    stop();
+  }
+});
+
+test("a preview closed lets its preview go, so the same tab opened again by a chosen door stands as a tab of its own", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  act(() => panel.control().onClose({ changes: AGENT }));
+  act(() => panel.control().onChoose({ changes: AGENT }));
+  assert.equal(panel.control().preview, undefined);
 });

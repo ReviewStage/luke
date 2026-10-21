@@ -459,10 +459,11 @@ export function changesTabOf(
 /**
  * Opens an agent's Pull request tab, the one that stands for its pull
  * request (`changesTabOf`), on the view given: the conversation its pull
- * request's chip asks for, or the files a link to its changes does.
+ * request's chip asks for, or the files a link to its changes does. A chip
+ * is a link, so the tab opens as the panel's preview (`onPreview`).
  */
 export function showPullRequest(
-  panel: Pick<SidePanelControl, "changes" | "onChoose" | "onPullRequestView">,
+  panel: Pick<SidePanelControl, "changes" | "onPreview" | "onPullRequestView">,
   agents: CodingAgentsControl,
   agentId: string,
   view: PullRequestView,
@@ -470,7 +471,7 @@ export function showPullRequest(
 ): void {
   const tab = changesTabOf(agents, agentId, panel.changes, number);
   panel.onPullRequestView(tab, view);
-  panel.onChoose(tab);
+  panel.onPreview(tab);
 }
 
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open, the Plan's the task's own where it is known. */
@@ -675,7 +676,9 @@ function stripTabs(input: {
     ...drawn,
     unread: unread.some((each) => sameTab(each, tab)),
     selected: chosen(tab),
+    preview: panel.preview !== undefined && sameTab(tab, panel.preview),
     onSelect: () => panel.onChoose(tab),
+    onKeep: () => panel.onKeep(tab),
   });
   // The Inbox counts what waits on the developer after its name, dimmed as a
   // model's effort is after the model's, so an item posted while the
@@ -2087,40 +2090,48 @@ export function SidePanel({
           }
           subject={{ task: taskId, tab }}
         >
-          <TabContent
-            tab={tab}
-            taskId={taskId}
-            repository={repository}
-            board={board}
-            shownCode={shownCode}
-            codeFailed={codeFailed}
-            files={files}
-            pages={taskPages}
-            agents={agents}
-            standings={standings}
-            shown={keys}
-            findActive={keys && focused}
-            onOpenTarget={onOpenTarget}
-            onWorkerStatus={views.onWorkerStatus}
-            onWorkerHeld={views.onWorkerHeld}
-            onOpenFile={panel.onOpenFile}
-            fileTree={fileTree}
-            onBrowseFile={panel.onBrowseFile}
-            onFileHistory={panel.onFileHistory}
-            onFoldNote={panel.onFoldNote}
-            onCloseTab={panel.onClose}
-            pullRequestViews={panel.pullRequestViews}
-            onPullRequestView={panel.onPullRequestView}
-            shellsList={shellsList}
-            browsers={browsers}
-            onBrowserOpened={panel.onBrowserOpened}
-            cloudBrowsers={cloudBrowsers}
-            plan={plan}
-            inbox={inbox?.body}
-            chat={chat}
-            onTabActions={handTabActions}
-            onRunOnMac={macTerminalDoors.onOpenOnMac}
-          />
+          {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
+          <div
+            className="side-panel-keeps"
+            onInputCapture={() => {
+              if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
+            }}
+          >
+            <TabContent
+              tab={tab}
+              taskId={taskId}
+              repository={repository}
+              board={board}
+              shownCode={shownCode}
+              codeFailed={codeFailed}
+              files={files}
+              pages={taskPages}
+              agents={agents}
+              standings={standings}
+              shown={keys}
+              findActive={keys && focused}
+              onOpenTarget={onOpenTarget}
+              onWorkerStatus={views.onWorkerStatus}
+              onWorkerHeld={views.onWorkerHeld}
+              onOpenFile={panel.onPreviewFile}
+              fileTree={fileTree}
+              onBrowseFile={panel.onBrowseFile}
+              onFileHistory={panel.onFileHistory}
+              onFoldNote={panel.onFoldNote}
+              onCloseTab={panel.onClose}
+              pullRequestViews={panel.pullRequestViews}
+              onPullRequestView={panel.onPullRequestView}
+              shellsList={shellsList}
+              browsers={browsers}
+              onBrowserOpened={panel.onBrowserOpened}
+              cloudBrowsers={cloudBrowsers}
+              plan={plan}
+              inbox={inbox?.body}
+              chat={chat}
+              onTabActions={handTabActions}
+              onRunOnMac={macTerminalDoors.onOpenOnMac}
+            />
+          </div>
         </FindScope>
       )}
     </PanelFrame>

@@ -145,6 +145,7 @@ import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
+import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
@@ -2717,6 +2718,14 @@ export function useTasksTab(input: {
     setHistoryFor(undefined);
     sidePanel.onShow(taskId, tab);
   };
+  // A link to a tab of the task standing opens it as the panel's preview, as
+  // any link pressed there does; one to another task's, or pressed with ⌘,
+  // goes there and opens it as a tab of its own.
+  const linkPanelTab = (taskId: string, tab: SidePanelTab) => {
+    const here = taskId === tasks.activeTaskId && standIn === undefined && historyFor === undefined;
+    if (here && !pressedWithCommand()) sidePanel.onPreview(tab);
+    else showPanelTab(taskId, tab);
+  };
 
   // Note that a pull request two of the open task's agents share opens in the tab already open on it, whichever agent it stands under, as the panel's own door picks it (`changesTabOf`), so a link never stands a second tab on one pull request.
   // Only a tab the task draws is taken, its agent one of the task's agents at hand: not an archived agent's, nor one of a page the panel stands beside instead.
@@ -2788,7 +2797,7 @@ export function useTasksTab(input: {
         });
         return;
       case LINK_PLACE.PAGE:
-        showPanelTab(place.planId, { page: place.pageId });
+        linkPanelTab(place.planId, { page: place.pageId });
         return;
       // A turn of Luke's own work on the task is drawn nowhere now, so its link opens the task's plan.
       case LINK_PLACE.TURN:
@@ -2803,19 +2812,19 @@ export function useTasksTab(input: {
           return;
         }
         showColumnTab(place.planId, { agent: place.agentId });
-        showPanelTab(place.planId, {
+        linkPanelTab(place.planId, {
           subagent: place.callId,
           delegation: { agent: place.agentId, task: "" },
         });
         return;
       case LINK_PLACE.CHANGES:
-        showPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
+        linkPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
         return;
       // A review thread opens its agent's Pull request tab on the view the link names, which takes the ask once drawn; each ask is its own.
       case LINK_PLACE.PULL_REQUEST_THREAD: {
         const changes = sharedChangesAgent(place.planId, place.agentId);
         sidePanel.onPullRequestView({ changes }, place.view);
-        showPanelTab(place.planId, { changes });
+        linkPanelTab(place.planId, { changes });
         setThreadReveal((last) => ({
           agentId: changes,
           threadId: place.threadId,

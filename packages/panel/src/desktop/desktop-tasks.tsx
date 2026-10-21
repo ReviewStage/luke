@@ -505,8 +505,8 @@ function PlanDocument({
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     lines === undefined
-      ? tasks.sidePanel.onOpenFile({ path })
-      : tasks.sidePanel.onOpenFile(
+      ? tasks.sidePanel.onPreviewFile({ path })
+      : tasks.sidePanel.onPreviewFile(
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
         );
@@ -551,13 +551,13 @@ function PlanDocument({
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
-        return sidePanel.onChoose({ page: target.page });
+        return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
         return tasks.onShowTask(target.task);
       case TOOL_TARGET.SHOWN_CODE: {
         // The lines are read at the commit Luke read them at, as the Code tab's snippet opens them.
         const showing = tasks.shownCode?.find((each) => each.callId === target.call);
-        return sidePanel.onOpenFile(target.ref, showing?.code.commit);
+        return sidePanel.onPreviewFile(target.ref, showing?.code.commit);
       }
     }
   };
@@ -570,7 +570,7 @@ function PlanDocument({
     status: CodingAgentStatus,
   ) => {
     views.onWorkerStatus(callId, status);
-    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+    sidePanel.onPreview({ subagent: callId, delegation: { agent, task } });
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
