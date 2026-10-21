@@ -280,10 +280,17 @@ const UNFOLD_SLACK = 2;
  * while their names do not fit its width. The width the names take is
  * measured from the options as they stand, drawn or folded (`optionsWidth`),
  * a folded name read by its own width (`foldedNames`), so a change that makes them fit, a tighter step's
- * padding among them, unfolds the bar at once. It is measured on every draw,
- * before the frame is painted, and whenever the bar or an option resizes.
+ * padding among them, unfolds the bar at once. It is measured before the
+ * frame is painted as it first draws and whenever the options' names or the
+ * bar's look change (`drawn`), and whenever the bar or an option resizes.
+ * Note that a draw changing neither reads nothing, because measuring lays out
+ * the whole window, and a bar is drawn again with everything around it.
  */
-function useFoldTogether(on: boolean, bar: React.RefObject<HTMLDivElement | null>): boolean {
+function useFoldTogether(
+  on: boolean,
+  bar: React.RefObject<HTMLDivElement | null>,
+  drawn: string,
+): boolean {
   const [folded, setFolded] = useState(false);
   const measure = useCallback(() => {
     const element = bar.current;
@@ -291,7 +298,8 @@ function useFoldTogether(on: boolean, bar: React.RefObject<HTMLDivElement | null
     const named = optionsWidth(element) + (folded ? foldedNames(element) : 0);
     setFolded(folded ? named > element.clientWidth - UNFOLD_SLACK : named > element.clientWidth);
   }, [on, bar, folded]);
-  useLayoutEffect(measure);
+  useLayoutEffect(measure, [measure, drawn]);
+  // Note that the options are found afresh as they change, so one that joined is watched too.
   useLayoutEffect(() => {
     const element = bar.current;
     if (!on || element === null || !("ResizeObserver" in globalThis)) return undefined;
@@ -299,7 +307,7 @@ function useFoldTogether(on: boolean, bar: React.RefObject<HTMLDivElement | null
     resized.observe(element);
     for (const option of element.children) resized.observe(option);
     return () => resized.disconnect();
-  }, [on, bar, measure]);
+  }, [on, bar, measure, drawn]);
   return on && folded;
 }
 
@@ -423,6 +431,25 @@ function standing(
   return [look, size, inset, ...items.map((item) => item.value)].join("\n");
 }
 
+/** What a bar folding together is measured by: the options standing, their glyphs, names, and counts, and how the bar draws them; a change in any may fold or unfold it without resizing the bar. */
+function namesDrawn(
+  items: readonly ChoiceItem<string>[],
+  look: ChoiceBarLook,
+  size: ChoiceBarSize,
+  inset: ChoiceBarInset,
+): string {
+  const words = (count: ChoiceItem<string>["count"]) => {
+    if (count === undefined) return "";
+    return isParts(count)
+      ? count.map((part) => `${part.glyph ?? ""}${part.text}`).join(" ")
+      : count;
+  };
+  const named = items.map((item) =>
+    [item.value, item.icon === undefined ? "" : "glyph", item.label, words(item.count)].join("\t"),
+  );
+  return [look, size, inset, ...named].join("\n");
+}
+
 /** The bar over `items`, `value` chosen. */
 export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): React.JSX.Element {
   const {
@@ -442,7 +469,12 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     ...appAttributes
   } = props;
   const thumb = useThumb(value, standing(items, look, size, inset));
-  const folded = useFoldTogether(fold === CHOICE_BAR_FOLD.TOGETHER, thumb.bar);
+  const together = fold === CHOICE_BAR_FOLD.TOGETHER;
+  const folded = useFoldTogether(
+    together,
+    thumb.bar,
+    together ? namesDrawn(items, look, size, inset) : "",
+  );
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
