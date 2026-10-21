@@ -48,6 +48,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, sentLineId } from "@luke/database/models/ids";
+import { keptLineParts } from "@luke/database/models/line-files";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -158,6 +159,7 @@ import {
   inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
+import { lineFileIdOf } from "@luke/features/line-file-wire";
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionLinksIn, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -4269,6 +4271,90 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
   /** Where an agent's Stop lands. */
   const AGENT_STOP = "/api/agents/stop";
+
+  it.effect(
+    "a file a line carried is kept beside the conversation and named in its row, served to whoever may read the agent as the same bytes a row written inline before still carries, and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, agent, target, ask, fetch } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        const png = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(PNG).toString("base64"),
+        };
+        const notes = {
+          name: "notes.txt",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          data: Buffer.from("ship the copy fix\n").toString("base64"),
+        };
+        const inline = (file: { readonly mediaType: string; readonly data: string }) =>
+          `data:${file.mediaType};base64,${file.data}`;
+        // A row from before the move, its files inline, as the backfill finds it.
+        yield* transcriptRow(target, 100, MESSAGE_ROLE.USER, [
+          text("Earlier files."),
+          ...[png, notes].map((file) => ({
+            type: "file",
+            mediaType: file.mediaType,
+            filename: file.name,
+            url: inline(file),
+          })),
+        ]);
+        const sent = yield* ask(
+          messageAs(owner, agent.id, {
+            text: "Look at these.",
+            attachments: [png, notes],
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
+
+        const page = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0", wait: "none" })),
+        );
+        const filesOf = (words: string) => {
+          const row = page.messages.find((message) =>
+            message.parts.some((part) => isRecord(part) && part.text === words),
+          );
+          return (row?.parts ?? []).flatMap((part) =>
+            isRecord(part) && part.type === "file" && isWireString(part.url) ? [part.url] : [],
+          );
+        };
+        const inlineUrls = filesOf("Earlier files.");
+        const keptUrls = filesOf("Look at these.");
+        assert.deepEqual(
+          inlineUrls,
+          [inline(png), inline(notes)],
+          "the older row reads as it stood",
+        );
+        assert.equal(keptUrls.length, 2);
+        assert.ok(
+          keptUrls.every((url) => !url.startsWith("data:")),
+          "no bytes ride the new row",
+        );
+
+        const at = (bearer: string | undefined, url: string) =>
+          request(AGENT_PICTURE, bearer, { id: agent.id, picture: lineFileIdOf(url) ?? "" });
+        const drawn = yield* Effect.forEach(keptUrls, (url) =>
+          Effect.gen(function* () {
+            const served = yield* fetch(at(owner, url));
+            assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+            const bytes = Buffer.from(yield* Effect.promise(() => served.arrayBuffer()));
+            return `data:${served.headers.get("content-type")};base64,${bytes.toString("base64")}`;
+          }),
+        );
+        assert.deepEqual(drawn, inlineUrls, "either shape draws the same files");
+        const [first = ""] = keptUrls;
+        assert.deepEqual(
+          yield* ask(at(other, first)),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          "not a member",
+        );
+      }),
+  );
 
   it.effect(
     "over a browser's session cookie a message reaches the agent as the deployment acting for the cookie's account, and over the bearer as ever over the bearer",
@@ -9765,6 +9851,47 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         assert.deepEqual(files, [...shots.slice(0, -1), "new.png"]);
         assert.match(parts.replay?.preamble ?? "", /could not be passed on: screen-9\.png\./u);
+      }),
+  );
+
+  it.effect(
+    "the files a source's first message carried that the service kept beside its conversation are attached again as their bytes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const data = Buffer.from(PNG).toString("base64");
+        const source = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: task.id,
+            planSnapshot: null,
+            prompt: "Match this screen.",
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: RELAY_FULL_NAME,
+          }),
+        ).agent;
+        const kept = yield* keptLineParts(
+          { userId: owner, conversationId: source.conversationId },
+          [
+            { type: "text", text: "Match this screen." },
+            {
+              type: "file",
+              mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+              filename: "screen.png",
+              url: `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`,
+            },
+          ],
+        );
+        yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, kept);
+
+        yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+        );
+
+        const handed = JSON.stringify(eve.opened.at(-1)?.message);
+        assert.deepEqual(openedWithFiles(eve).files, ["screen.png"]);
+        assert.ok(handed.includes(data), "its bytes, read back from where they were kept");
       }),
   );
 

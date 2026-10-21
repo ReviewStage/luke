@@ -68,7 +68,10 @@ export const ownedByTaskAlone = (table: {
  * A conversation's picture is keyed by the SHA-256 of its bytes within its
  * conversation, so the same picture answered twice is one row, and keeps
  * the size in pixels its header states, so a reader holds its place before
- * its bytes arrive. Every other owner's row names no conversation, so the
+ * its bytes arrive. A file a developer's line to the conversation carried
+ * is kept the same way (`models/line-files.ts`), an image, a PDF, or a
+ * text file, with a size in pixels only where it is a picture whose header
+ * states one. Every other owner's row names no conversation, so the
  * key, unique over both columns, holds it to nothing.
  *
  * A plan's picture is owned by its task directly: it names its task and no
@@ -184,10 +187,10 @@ export const attachment = pgTable(
       "attachment_plan_comment_file",
       sql`${table.planCommentId} is null or (${table.taskId} is not null and ${table.organizationId} is not null and ${table.name} is not null and ${table.position} is not null and octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)})`,
     ),
-    // A conversation's picture carries its hash and its size in pixels.
+    // A conversation's file carries its hash, and its size in pixels whole or not at all: a tool's picture always has one, and a file a line carried only where it is a picture whose header states it.
     check(
       "attachment_conversation_picture",
-      sql`${table.conversationId} is null or (${table.sha256} is not null and ${table.width} is not null and ${table.height} is not null)`,
+      sql`${table.conversationId} is null or (${table.sha256} is not null and (${table.width} is null) = (${table.height} is null))`,
     ),
     // An inbox item's file is of a kind, held to its kind's bound, and only an answer's or a message's file has a name and a place, and only a message's names a message; no other owner's has a kind.
     check(

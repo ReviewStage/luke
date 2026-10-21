@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachmentType,
+} from "@luke/features/coding-agent-wire";
+import {
   CONVERSATION_PICTURE_BOUNDS,
   type KeptPicture,
 } from "@luke/features/conversation-picture-wire";
 import { type InboxImageType, inboxImageTypeSchema } from "@luke/features/inbox-wire";
-import { and, eq, sum } from "drizzle-orm";
+import { and, eq, isNotNull, sum } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
@@ -36,9 +40,9 @@ export interface PictureToKeep {
   readonly height: number;
 }
 
-/** A kept picture as a read answers it: the type it is served under, and its bytes. */
+/** A kept picture, or a file a line carried, as a read answers it: the type it is served under, and its bytes. */
 export interface StoredPicture {
-  readonly contentType: InboxImageType;
+  readonly contentType: CodingAgentAttachmentType;
   readonly bytes: Uint8Array;
 }
 
@@ -66,7 +70,14 @@ const findByHash = SqlSchema.findOneOption({
       db
         .select(KEPT_COLUMNS)
         .from(attachment)
-        .where(and(eq(attachment.conversationId, conversationId), eq(attachment.sha256, sha256))),
+        .where(
+          and(
+            eq(attachment.conversationId, conversationId),
+            eq(attachment.sha256, sha256),
+            // A file a line carried that is no picture keeps no size, and no tool's picture is it.
+            isNotNull(attachment.width),
+          ),
+        ),
     ),
 });
 
@@ -108,7 +119,10 @@ const insertPicture = SqlSchema.findAll({
 
 const findPicture = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
-  Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
+  Result: Schema.Struct({
+    contentType: Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    bytes: Schema.Uint8Array,
+  }),
   execute: ({ conversationId, id }) =>
     Database.use((db) =>
       db
@@ -173,7 +187,7 @@ export function keepConversationPicture(
   });
 }
 
-/** One kept picture of the conversation: its type and its bytes; nothing where the conversation keeps no such picture. */
+/** One kept picture of the conversation, or a file one of its lines carried (`line-files.ts`): its type and its bytes; nothing where the conversation keeps no such row. */
 export function readConversationPicture(
   conversationId: string,
   id: string,

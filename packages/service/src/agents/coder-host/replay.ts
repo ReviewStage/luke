@@ -5,6 +5,7 @@ import {
   lineSendersOf,
   listPublishedCodingAgentsById,
 } from "@luke/database/models/coding-agent-store";
+import { keptLineFiles } from "@luke/database/models/line-files";
 import {
   listMessagesBefore,
   listMessagesPast,
@@ -36,6 +37,7 @@ import {
   type CodingAgentStartFrom,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { lineFileIdOf } from "@luke/features/line-file-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
@@ -348,15 +350,20 @@ function attachmentOf(
   url: string,
   mediaType: string,
   name: string,
+  kept: ReadonlyMap<string, string>,
 ): CodingAgentAttachment | undefined {
+  if (!ATTACHMENT_TYPES.has(mediaType)) return undefined;
   const prefix = `data:${mediaType};base64,`;
-  if (!url.startsWith(prefix) || !ATTACHMENT_TYPES.has(mediaType)) return undefined;
+  const keptId = lineFileIdOf(url);
+  const data =
+    keptId !== undefined
+      ? kept.get(keptId)
+      : url.startsWith(prefix)
+        ? url.slice(prefix.length)
+        : undefined;
+  if (data === undefined) return undefined;
   // SAFETY: the type was checked against the vocabulary just above.
-  return {
-    name,
-    mediaType: mediaType as CodingAgentAttachmentType,
-    data: url.slice(prefix.length),
-  };
+  return { name, mediaType: mediaType as CodingAgentAttachmentType, data };
 }
 
 /** The files a source's prompt carried, as the new agent takes them up: those attached again, and the names of those that cannot be. */
@@ -379,6 +386,7 @@ function filesBytes(files: readonly CodingAgentAttachment[]): number {
 function filesOf(
   first: StoredMessageRecord | undefined,
   noteFiles: readonly CodingAgentAttachment[],
+  kept: ReadonlyMap<string, string>,
 ): SourceFiles {
   const files = (first?.message.parts ?? []).filter(isFileUIPart);
   const attachments: CodingAgentAttachment[] = [];
@@ -387,7 +395,7 @@ function filesOf(
   let bytes = filesBytes(noteFiles);
   for (const file of files) {
     const name = file.filename ?? file.mediaType;
-    const attached = attachmentOf(file.url, file.mediaType, name);
+    const attached = attachmentOf(file.url, file.mediaType, name, kept);
     const size = attached === undefined ? 0 : base64Bytes(attached.data);
     const fits =
       count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
@@ -1027,7 +1035,10 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
   // A source handed the plan carries files only where its own note did, so its first message is read either way.
-  const files = filesOf(records[0], noteFiles);
+  const kept = yield* hostedStoreOrUnavailable(
+    keptLineFiles(source.conversationId, records[0]?.message.parts ?? []),
+  );
+  const files = filesOf(records[0], noteFiles, kept);
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);

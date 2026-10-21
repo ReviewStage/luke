@@ -25,6 +25,7 @@
     "./models/coding-agent-store": "./src/models/coding-agent-store.js",
     "./models/columns": "./src/models/columns.js",
     "./models/conversation-pictures": "./src/models/conversation-pictures.js",
+    "./models/line-files": "./src/models/line-files.js",
     "./models/content-addressed": "./src/models/content-addressed.js",
     "./models/github-connection-store": "./src/models/github-connection-store.js",
     "./models/hosted-store": "./src/models/hosted-store.js",

@@ -82,6 +82,10 @@
           "dest": "/api/default.js?route=github/webhook"
         },
         {
+          "src": "/api/maintenance/inline-attachments",
+          "dest": "/api/default.js?route=maintenance/inline-attachments"
+        },
+        {
           "src": "/api/maintenance/provider-keys-rewrap",
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
         },

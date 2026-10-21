@@ -90,7 +90,7 @@ import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { ArchivedComposerNote } from "./archived-task.js";
-import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
+import { SentFileChips } from "./attached-file-chips.js";
 import { CallCheckpoint, CallEnded } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice.js";
@@ -1209,7 +1209,7 @@ export function AgentMessage({
     const shown = inboxLineWords(words);
     return (
       <Message from={message.role} data-message-id={message.id}>
-        <AttachedFileChips files={messageFileChips(message)} />
+        <SentFileChips message={message} />
         {words === "" ? null : (
           <MessageContent>
             <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>

@@ -3,6 +3,7 @@ import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
+import { lineFileIdOf } from "@luke/features/line-file-wire";
 import {
   type DataUIPart,
   type FileUIPart,
@@ -18,9 +19,11 @@ import { Schema as EffectSchema, Option } from "effect";
  * attached-file-parts.ts -- the files a developer attached to a coding agent's message as the journal keeps them, and as eve's receipt of them reads back for matching.
  *
  * The journal keeps the words as the row's first part, empty where there
- * are none, and every file after it as the SDK's file part over a `data:`
- * URL, a text file under `text/plain`, so the transcript draws a thumbnail
- * or a name for each from the row alone. eve is handed each text file
+ * are none, and every file after it as the SDK's file part, a text file
+ * under `text/plain`: handed here over a `data:` URL, and written with its
+ * bytes kept beside the conversation and its URL naming them
+ * (`line-files.ts`), so the transcript draws a name for each from the row
+ * alone and reads its bytes apart. eve is handed each text file
  * inlined under a heading and a fence (`packages/service/src/agents/attached-files.ts`),
  * and its receipt lists a line's parts the way it was handed them, so a
  * line is matched by its words, each text file inlined, and each image and
@@ -118,21 +121,29 @@ export function lineParts(
   ];
 }
 
+/** The base64 a file part carries: its own `data:` URL's, or the kept row's its URL names, among those read for it. */
+function fileBase64Of(url: string, keptTexts: ReadonlyMap<string, string>): string | undefined {
+  const kept = lineFileIdOf(url);
+  return kept === undefined ? base64Of(url) : keptTexts.get(kept);
+}
+
 /**
  * A line's parts as eve's receipt lists them, in the order eve was handed
  * them: the words where there are any, what it mentioned, each text file
  * inlined, then each image and PDF by its mark; nothing for a row with no
- * words part.
+ * words part. A text file kept beside the conversation (`line-files.ts`) is
+ * inlined from `keptTexts`, its base64 by its row's id.
  */
 export function receivedPartsOf(
   parts: readonly UIMessage["parts"][number][],
+  keptTexts: ReadonlyMap<string, string> = new Map(),
 ): readonly string[] | undefined {
   const [words, ...rest] = parts;
   if (words === undefined || !isTextUIPart(words)) return undefined;
   const files = rest.filter(isFileUIPart);
   const texts = files.flatMap((part) => {
     if (part.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT) return [];
-    const base64 = base64Of(part.url);
+    const base64 = fileBase64Of(part.url, keptTexts);
     return base64 === undefined ? [] : [inlinedFile(part.filename ?? "", textOf(base64))];
   });
   const marks = files.flatMap((part) =>

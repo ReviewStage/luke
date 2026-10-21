@@ -64,6 +64,11 @@ const AgentPicturesContext = createContext<AgentPictureDoor | undefined>(undefin
 /** Hands the transcript under it the door its pictures are read through. */
 export const AgentPicturesProvider = AgentPicturesContext.Provider;
 
+/** The door the transcript's pictures are read through, or nothing outside an agent's transcript. */
+export function useAgentPictures(): AgentPictureDoor | undefined {
+  return useContext(AgentPicturesContext);
+}
+
 /**
  * The door to an agent's pictures, or a worker's where `callId` names the
  * delegation that started it; the cache keeps a worker's under its call, as

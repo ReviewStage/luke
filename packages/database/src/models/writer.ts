@@ -66,6 +66,7 @@ import {
   TurnUsageColumnSchema,
 } from "./columns.js";
 import { sentLineId } from "./ids.js";
+import { keptLineParts, keptLineTexts } from "./line-files.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 
 /**
@@ -1356,6 +1357,11 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
   const createdAt = context.now;
   const placedAt = yield* placedInstant(context, metadata, createdAt);
+  // A developer's row keeps the files it carried beside the conversation, and names them.
+  const parts =
+    row.message.role === MESSAGE_ROLE.USER
+      ? yield* keptLineParts(context.target, row.message.parts)
+      : row.message.parts;
   const inserted = yield* insertMessageRow({
     userId: context.target.userId,
     conversationId: context.target.conversationId,
@@ -1363,7 +1369,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     turnId: nullable(row.turnId),
     clientId: row.clientId,
     role: row.message.role,
-    parts: row.message.parts,
+    parts,
     metadata: nullable(metadata),
     createdAt,
     placedAt,
@@ -2284,11 +2290,12 @@ const stepsBegun = (context: WriterContext, turnId: string): Write<number | null
 function coalescedRun<Row extends { readonly parts: Parts }>(
   awaiting: readonly Row[],
   received: string,
+  keptTexts: ReadonlyMap<string, string>,
 ): readonly Row[] {
   for (let start = 0; start < awaiting.length; start += 1) {
     const pieces: string[] = [];
     for (const [offset, row] of awaiting.slice(start).entries()) {
-      const parts = receivedPartsOf(row.parts);
+      const parts = receivedPartsOf(row.parts, keptTexts);
       if (parts === undefined) break;
       pieces.push(...parts);
       const joined = pieces.join(COALESCED_LINE_SEPARATOR);
@@ -2312,13 +2319,14 @@ function coalescedRun<Row extends { readonly parts: Parts }>(
 function coalescedRunWithin<Row extends { readonly parts: Parts }>(
   awaiting: readonly Row[],
   received: string,
+  keptTexts: ReadonlyMap<string, string>,
 ): readonly Row[] {
   const fenced = `${COALESCED_LINE_SEPARATOR}${received}${COALESCED_LINE_SEPARATOR}`;
   for (let start = 0; start < awaiting.length; start += 1) {
     let run: readonly Row[] = [];
     const pieces: string[] = [];
     for (const [offset, row] of awaiting.slice(start).entries()) {
-      const parts = receivedPartsOf(row.parts);
+      const parts = receivedPartsOf(row.parts, keptTexts);
       if (parts === undefined) break;
       pieces.push(...parts);
       const joined = pieces.join(COALESCED_LINE_SEPARATOR);
@@ -2414,12 +2422,17 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, WriteFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
+  // A line's text files are kept beside the conversation, and eve's receipt inlines them.
+  const keptTexts = yield* keptLineTexts(
+    context.target.conversationId,
+    awaiting.flatMap((line) => line.parts),
+  );
   const run =
     "clientId" in take
       ? awaiting.filter((line) => line.clientId === take.clientId)
       : take.beside
-        ? coalescedRunWithin(awaiting, take.text)
-        : coalescedRun(awaiting, take.text);
+        ? coalescedRunWithin(awaiting, take.text, keptTexts)
+        : coalescedRun(awaiting, take.text, keptTexts);
   const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({

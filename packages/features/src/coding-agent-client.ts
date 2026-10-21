@@ -1070,11 +1070,12 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * One picture a tool answered an agent, or one of its workers where
-   * `callId` names the delegation call, fetched under the account: its
-   * bytes in base64 under the media type the service kept, as an inbox
-   * image is; not found where the agent is not one the account reaches or
-   * its transcript keeps no such picture; unanswered for anything else.
+   * One picture a tool answered an agent, or a file a line to it carried,
+   * or one of its workers' where `callId` names the delegation call,
+   * fetched under the account: its bytes in base64 under the media type the
+   * service kept, as an inbox file is; not found where the agent is not one
+   * the account reaches or its transcript keeps no such row; unanswered for
+   * anything else.
    */
   agentPicture(
     agentId: string,
@@ -1093,7 +1094,7 @@ export class HostedCodingAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readImage(answer.response);
+        return readInboxFile(answer.response);
       },
     );
   }
