@@ -29,8 +29,9 @@
  * the next sweep.
  *
  * Every call is bounded so the sweep's minute holds: a few pages of the
- * list, a set number of sandboxes read against the store, and a set number
- * of stops. What is asked of Vercel is a page, a tag, and a session; what is
+ * list, a set number of sandboxes read against the store, taken from a
+ * window that moves along the list from one sweep to the next, and a set
+ * number of stops. What is asked of Vercel is a page, a tag, and a session; what is
  * logged of a failure is its status.
  */
 
@@ -70,7 +71,7 @@ export const EVE_SANDBOX_SWEEP = {
   GRACE: Duration.minutes(5),
   /** The most pages of running sandboxes one sweep reads, each the API's widest. */
   MAX_PAGES: 4,
-  /** The most eve sandboxes one sweep reads against the store; the rest wait for the next minute. */
+  /** The most eve sandboxes one sweep reads against the store; the rest wait for a later sweep's window. */
   MAX_SANDBOXES: 40,
   /** The most sandboxes one sweep stops. */
   MAX_STOPS: 10,
@@ -133,7 +134,7 @@ function eveSandboxOf(sandbox: ListedSandbox): EveSandbox | undefined {
   return { sessionId, running: sandbox.currentSessionId };
 }
 
-/** The running eve sandboxes, from at most `MAX_PAGES` pages and no more than `MAX_SANDBOXES`. */
+/** The running eve sandboxes on at most `MAX_PAGES` pages, in the order listed. */
 const runningEveSandboxes = (api: VercelSandboxApi, order: ListOrder) =>
   Effect.gen(function* () {
     const found: EveSandbox[] = [];
@@ -145,10 +146,29 @@ const runningEveSandboxes = (api: VercelSandboxApi, order: ListOrder) =>
         if (eve !== undefined) found.push(eve);
       }
       cursor = listed.next;
-      if (cursor === undefined || found.length >= EVE_SANDBOX_SWEEP.MAX_SANDBOXES) break;
+      if (cursor === undefined) break;
     }
-    return found.slice(0, EVE_SANDBOX_SWEEP.MAX_SANDBOXES);
+    return found;
   });
+
+/**
+ * The `MAX_SANDBOXES` of the listed ones this sweep reads against the store:
+ * a window that moves on by its own width each time a sweep lists from the
+ * same end, wrapping round. Note that it moves, because the sandboxes that
+ * keep running, every agent at work and every one a lease holds, would
+ * otherwise fill a window fixed at either end for as long as they ran, and
+ * an orphan listed past it would never be read. Every eve sandbox on the
+ * pages either end lists is so read within a few minutes, with no cursor
+ * kept between sweeps.
+ */
+function windowAt(found: readonly EveSandbox[], now: Date): readonly EveSandbox[] {
+  const width = EVE_SANDBOX_SWEEP.MAX_SANDBOXES;
+  if (found.length <= width) return found;
+  // The list's end alternates by the minute (`listOrderAt`), so each end's sweeps come every other minute.
+  const sweepsFromThisEnd = Math.floor(now.getTime() / 120_000);
+  const start = (sweepsFromThisEnd * width) % found.length;
+  return [...found.slice(start), ...found.slice(0, start)].slice(0, width);
+}
 
 /** Whether the sandbox, read afresh, has moved on from the list: gone, down, or in another session. Vercel not answering counts as moved on. */
 const movedOn = (api: VercelSandboxApi, sandbox: EveSandbox) =>
@@ -224,7 +244,7 @@ export const sweepEveSandboxes = /* @__PURE__ */ Effect.fn("web/sweepEveSandboxe
   }
   const budget: StopBudget = { remaining: EVE_SANDBOX_SWEEP.MAX_STOPS };
   const endings = yield* Effect.forEach(
-    listed.success,
+    windowAt(listed.success, now),
     (sandbox) => endSandbox(api, sandbox, now, budget),
     { concurrency: EVE_SANDBOX_SWEEP.CONCURRENCY },
   );

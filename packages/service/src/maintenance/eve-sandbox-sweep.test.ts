@@ -285,6 +285,31 @@ it.layer(getTestDB())("the eve sandbox sweep", (it) => {
       }),
   );
 
+  it.effect(
+    "an orphan listed past the window at both ends, among sandboxes that keep running, is reached as the window moves along",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        // Sandboxes no agent runs in keep running sweep after sweep, as agents at work do.
+        const running = EVE_SANDBOX_SWEEP.MAX_SANDBOXES * 2 + 10;
+        for (let each = 0; each < running; each += 1) api.sandboxes.push(eveSandbox());
+        const agent = yield* openAgent({ status: TURN_STATUS.SETTLED, at: LONG_AGO });
+        const middle = eveSandbox(agent.sessionId);
+        api.sandboxes.splice(EVE_SANDBOX_SWEEP.MAX_SANDBOXES + 5, 0, middle);
+
+        const sweeps = 6;
+        for (let minute = 0; minute < sweeps && middle.status === "running"; minute += 1) {
+          yield* sweepEveSandboxes(new Date(NOW.getTime() + minute * 60_000)).pipe(
+            Effect.provide(api.layer),
+          );
+        }
+
+        assert.equal(middle.status, "stopped");
+        assert.deepEqual(api.stopped, [middle.currentSessionId]);
+      }),
+  );
+
   it.effect("a list Vercel refused sweeps nothing and fails nothing after it", () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
