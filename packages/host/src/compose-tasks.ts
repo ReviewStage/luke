@@ -434,6 +434,15 @@ function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is
   return "failure" in sealed;
 }
 
+/** The parts of an open task read apart from its document, each laid over the view as it lands. */
+const OPENED_PART = {
+  BOARD: "board",
+  CODE: "code",
+  PAGES: "pages",
+} as const;
+
+type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
+
 /**
  * The panel's tasks as one concern. The view is told to every client whole
  * whenever it moves, and exactly one task is active at a time: opening or
@@ -981,17 +990,52 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
+   * Each of the open task's parts read apart from its document, by the
+   * number of reads of it started and of the newest laid over the view, so
+   * a read that left before a newer one, or before a write of the part,
+   * never lands over it (`laidNow`).
+   */
+  const partReads: Record<OpenedPart, { started: number; laid: number }> = {
+    [OPENED_PART.BOARD]: { started: 0, laid: 0 },
+    [OPENED_PART.CODE]: { started: 0, laid: 0 },
+    [OPENED_PART.PAGES]: { started: 0, laid: 0 },
+  };
+
+  /** Numbers a read of the part as it starts. */
+  function partReadStarted(part: OpenedPart): number {
+    partReads[part].started += 1;
+    return partReads[part].started;
+  }
+
+  /** Whether the read numbered `read` is still the newest of the part to land, which it then is; false where a newer one, or a write, landed first. */
+  function laidNow(part: OpenedPart, read: number): boolean {
+    if (read < partReads[part].laid) return false;
+    partReads[part].laid = read;
+    return true;
+  }
+
+  /** Marks a write of the part, which every read that left before it is older than. */
+  function partWritten(part: OpenedPart): void {
+    laidNow(part, partReadStarted(part));
+  }
+
+  /** The open's part reads still out, one per part, a newer open's taking the place of the last. */
+  const openedParts = yield* FiberMap.make<OpenedPart, void>();
+
+  /**
    * Reads what the active task's page draws, its document, board, code, and
-   * pages, all at once, and tells the window the document with every other
-   * part already answered in one view, so the page lands whole rather than a
-   * part at a time, each reflowing what the one before laid out. A part that
-   * answers after the document never holds it back: those still out land
-   * together, in one view more. A copy of the same task already held stays
-   * drawn while the reads are out and through a document read that failed,
-   * so a save redraws in place; a failed board, code, or pages read keeps
-   * what is held of it, as their own reads do. The document and the code say
-   * they are reading only where nothing of them is held, which a switch has
-   * already told (`TASKS_OPEN`).
+   * pages, all at once, and tells the window the document with every part
+   * that answered before it in one view, so the page lands whole rather than
+   * a part at a time, each reflowing what the one before laid out. A part
+   * answering after the document is laid over the view as it lands, on its
+   * own, so neither the document nor another part waits for it, and the
+   * lock (`serial`), held for the document's read alone as before, waits on
+   * none of them. A copy of the same task already held stays drawn while the
+   * reads are out and through a document read that failed, so a save
+   * redraws in place; a failed board, code, or pages read keeps what is held
+   * of it, as their own reads do. The document and the code say they are
+   * reading only where nothing of them is held, which a switch has already
+   * told (`TASKS_OPEN`).
    */
   function readOpened(taskId: string) {
     return Effect.gen(function* () {
@@ -1000,58 +1044,59 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         ...(held === undefined ? { document: { status: TASKS_READ.READING } } : undefined),
         ...(view.codeStatus === TASKS_READ.READY ? undefined : { codeStatus: TASKS_READ.READING }),
       });
-      const parts = [
-        yield* openedPart(served(client.readBoard(taskId)), (was, board) =>
-          board === undefined ? was : { ...was, board },
-        ),
-        yield* openedPart(served(client.readCode(taskId)), withCodeRead),
-        yield* openedPart(served(client.readPages(taskId)), withPagesRead),
-      ];
-      // Note that the document is read beside the parts rather than ahead of them, so a part as quick as it rides along.
+      /** The parts that answered before the document, each laid with it where still the newest of its part. */
+      const early: { part: OpenedPart; read: number; lay: (was: TasksView) => TasksView }[] = [];
+      let documentLanded = false;
+      const readPart = <A, E>(
+        part: OpenedPart,
+        ask: Effect.Effect<A, E, HttpClient.HttpClient>,
+        lay: (was: TasksView, answer: A) => TasksView,
+      ) => {
+        const read = partReadStarted(part);
+        // Note that a part landing before the document waits for it, which holds the lock as it is read,
+        // and one landing after takes the lock only to lay itself over the view, never for its read.
+        const landed = (answer: A) =>
+          Effect.suspend(() =>
+            documentLanded
+              ? serial(
+                  Effect.sync(() => {
+                    if (view.activeTaskId !== taskId || !laidNow(part, read)) return;
+                    view = lay(view, answer);
+                    publish();
+                  }),
+                )
+              : Effect.sync(() => {
+                  early.push({ part, read, lay: (was) => lay(was, answer) });
+                }),
+          );
+        return FiberMap.run(openedParts, part, Effect.ignore(Effect.flatMap(served(ask), landed)));
+      };
+      yield* readPart(OPENED_PART.BOARD, client.readBoard(taskId), (was, board) =>
+        board === undefined ? was : { ...was, board },
+      );
+      yield* readPart(OPENED_PART.CODE, client.readCode(taskId), withCodeRead);
+      yield* readPart(OPENED_PART.PAGES, client.readPages(taskId), withPagesRead);
+      // Note that the document is read beside the parts, a fiber of its own, so a part as quick as it lands with it.
       const opened = yield* Fiber.join(yield* Effect.forkChild(served(client.open(taskId))));
       // Another task opened while these reads were out: their answers are not the panel's any more.
       if (view.activeTaskId !== taskId) return;
       let read: TasksView = { ...view, document: documentAfter(opened, held) };
-      const late: (typeof parts)[number]["late"][] = [];
-      for (const part of parts) {
-        const laid = part.early(read);
-        if (laid === undefined) late.push(part.late);
-        else read = laid;
+      for (const part of early.splice(0)) {
+        if (laidNow(part.part, part.read)) read = part.lay(read);
       }
+      documentLanded = true;
       view = read;
       publish();
-      if (late.length === 0) return;
-      const lays = yield* Effect.all(late, { concurrency: "unbounded" });
-      if (view.activeTaskId !== taskId) return;
-      view = lays.reduce((was, lay) => lay(was), view);
-      publish();
     });
-  }
-
-  /**
-   * One part of an open's reads, started at once beside the document's: laid
-   * over the view `early` where it has already answered, as the document
-   * lands, else answered `late`, as what lays it over the view then.
-   */
-  function openedPart<A, E, R>(
-    read: Effect.Effect<A, E, R>,
-    lay: (was: TasksView, answer: A) => TasksView,
-  ) {
-    return Effect.map(Effect.forkChild(read), (fiber) => ({
-      early: (was: TasksView): TasksView | undefined => {
-        const exit = fiber.pollUnsafe();
-        return exit !== undefined && Exit.isSuccess(exit) ? lay(was, exit.value) : undefined;
-      },
-      late: Effect.map(Fiber.join(fiber), (answer) => (was: TasksView) => lay(was, answer)),
-    }));
   }
 
   /** Reads the active task's board; a failed read keeps the board drawn. */
   function readBoard(taskId: string) {
     return Effect.gen(function* () {
+      const read = partReadStarted(OPENED_PART.BOARD);
       const board = yield* served(client.readBoard(taskId));
       if (board === undefined || view.activeTaskId !== taskId) return;
-      write({ board });
+      if (laidNow(OPENED_PART.BOARD, read)) write({ board });
     });
   }
 
@@ -1089,8 +1134,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function readPages(taskId: string) {
     return Effect.gen(function* () {
+      const read = partReadStarted(OPENED_PART.PAGES);
       const pages = yield* served(client.readPages(taskId));
-      if (view.activeTaskId !== taskId) return;
+      if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.PAGES, read)) return;
       view = withPagesRead(view, pages);
       publish();
     });
@@ -1107,8 +1153,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       if (view.activeTaskId === taskId && view.codeStatus !== TASKS_READ.READY) {
         write({ codeStatus: TASKS_READ.READING });
       }
+      const read = partReadStarted(OPENED_PART.CODE);
       const stored = yield* served(client.readCode(taskId));
-      if (view.activeTaskId !== taskId) return;
+      if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.CODE, read)) return;
       view = withCodeRead(view, stored);
       publish();
     });
@@ -2507,8 +2554,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             // The follow standing as the save goes out, which alone may see its transaction.
             const sentUnder = boardWait?.taskId === taskId ? boardWait.wait : undefined;
             const answer = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
-            if (answer !== undefined && view.activeTaskId === taskId)
+            if (answer !== undefined && view.activeTaskId === taskId) {
+              partWritten(OPENED_PART.BOARD);
               write({ board: answer.board });
+            }
             return { answer, sentUnder };
           }),
         );

@@ -1090,3 +1090,23 @@ test("what an agent's transcript said of it before its task's agents were read s
     [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
   );
 });
+
+test("what an agent's transcript said before its task's agents were read outlasts a read of them that failed, and stands over the one that lands", async () => {
+  const tab = mount({ taskId: TASK, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await tab.mount();
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
+  assert.equal(tab.control().agents, undefined, "the read failed");
+
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, {
+    agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }],
+  });
+  act(() => tab.control().onRetryList());
+  await settle();
+
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
+    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+  );
+});

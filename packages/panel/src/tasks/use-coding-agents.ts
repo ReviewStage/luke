@@ -662,8 +662,16 @@ export function useCodingAgents(input: {
   // What transcript pages said of their agents before the list was read: a
   // tab follows its agent from the id alone, so a page may land first, and
   // it knows the agent's run and title better than the list's answer does,
-  // which is laid under it once it lands (`withHeard`).
-  const heardBeforeList = useRef(new Map<string, HeardOfAgent>());
+  // which is laid under it once a read of it lands (`withHeard`). What was
+  // heard is kept through a read that failed, and is the open task's, or
+  // the page's agent's, alone: another's list lets it go.
+  const subject = taskId ?? agentId;
+  const heardBeforeList = useRef<{ subject: string | undefined; heard: Map<string, HeardOfAgent> }>(
+    { subject, heard: new Map() },
+  );
+  if (heardBeforeList.current.subject !== subject) {
+    heardBeforeList.current = { subject, heard: new Map() };
+  }
   const listedNow = useRef(false);
   listedNow.current = held !== undefined;
 
@@ -674,8 +682,8 @@ export function useCodingAgents(input: {
     listRead(latest.current.acts.act, taskId, agentId).then(
       (answer) => {
         if (!live) return;
-        const heard = heardBeforeList.current;
-        heardBeforeList.current = new Map();
+        const { heard } = heardBeforeList.current;
+        if (!("failure" in answer)) heardBeforeList.current.heard = new Map();
         setList((was) =>
           "failure" in answer
             ? {
@@ -1291,7 +1299,7 @@ export function useCodingAgents(input: {
   );
 
   const onTitle = useCallback((agentId: string, title: string | null) => {
-    if (!listedNow.current) heardOf(heardBeforeList.current, agentId, { title });
+    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { title });
     setList((was) =>
       was.agents === undefined ||
       !was.agents.some((agent) => agent.id === agentId && agent.title !== title)
@@ -1306,7 +1314,7 @@ export function useCodingAgents(input: {
   // Every transcript page says where its agent stands, mostly as it stood:
   // the list is kept as it was then, so the window is not drawn again for it.
   const onStatus = useCallback((agentId: string, run: AgentRun) => {
-    if (!listedNow.current) heardOf(heardBeforeList.current, agentId, { run });
+    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { run });
     setList((was) => {
       if (was.agents === undefined) return was;
       const agents = withAgentRun(was.agents, agentId, run);
