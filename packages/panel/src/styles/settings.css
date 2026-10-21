@@ -668,3 +668,135 @@
     width: min(100%, 200px);
   }
 }
+
+/* Settings › Agents' harnesses (`agent-auth-section.tsx`): a connected row's
+   button and a saved credential's label each end in the complete green's
+   check. The dialog stands its subtitle over a radio card per credential:
+   the card's head a radio, its label and check, and what it says at the
+   head's end (Get key), its controls under them, and the checked card
+   ringed as ChoiceList's checked row is. */
+.agent-auth-check {
+  display: inline-flex;
+  color: var(--luke-color-complete);
+}
+
+.agent-auth-check > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.agent-auth-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+}
+
+.agent-auth-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.agent-auth-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  border-radius: var(--luke-control-radius);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border);
+}
+
+.agent-auth-card[data-checked="true"] {
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+}
+
+.agent-auth-card[data-disabled="true"] {
+  opacity: 0.55;
+}
+
+.agent-auth-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-8);
+}
+
+.agent-auth-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--luke-color-text);
+  font: inherit;
+  font-weight: var(--luke-weight-medium);
+  cursor: pointer;
+}
+
+[data-luke-profile="desktop"] .agent-auth-radio,
+.agent-auth-radio:disabled {
+  cursor: default;
+}
+
+/* An unsaved credential's radio cannot be picked, so its ring steps back while its label stays readable. */
+.agent-auth-radio:disabled > .luke-choice-control {
+  opacity: 0.4;
+}
+
+.agent-auth-radio > .luke-choice-control {
+  margin-top: 0;
+}
+
+.agent-auth-aside {
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-auth-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+.agent-auth-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+  min-height: var(--luke-control-height);
+}
+
+.agent-auth-facts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+  min-width: 0;
+  color: var(--luke-color-text-muted);
+}
+
+.agent-auth-presses {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-control-gap);
+}
+
+/* The field takes the line's room, its eye or pencil and ⋯ beside it. */
+.agent-auth-field {
+  display: flex;
+  flex: 1 1 var(--luke-select-field-width);
+  align-items: center;
+  gap: var(--luke-space-4);
+  min-width: 0;
+}
+
+.agent-auth-field > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.luke-button .agent-auth-check {
+  margin-left: var(--luke-space-4);
+}

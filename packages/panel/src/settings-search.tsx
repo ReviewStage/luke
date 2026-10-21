@@ -249,26 +249,26 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The account's own provider keys, which are the account's on the service: drawn once an account is signed in.
+    // The harnesses' rows, each holding the account's plan and API key for it on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
-          label: "Anthropic API key",
+          label: "Claude Code",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
-            "Anthropic API key",
-            "api keys byok own key claude billing provider credential",
+            "Claude Code",
+            "anthropic api key byok own key claude plan subscription setup-token max pro billing provider credential",
           ],
         }
       : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
-          label: "OpenAI API key",
+          label: "Codex",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
-            "OpenAI API key",
-            "api keys byok own key gpt codex billing provider credential",
+            "Codex",
+            "openai api key byok own key gpt chatgpt plan subscription billing provider credential",
           ],
         }
       : undefined,
