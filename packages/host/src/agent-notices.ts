@@ -19,17 +19,15 @@ import {
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { linkLabels } from "@luke/features/mention-link";
 import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TasksView } from "@luke/features/tasks-view";
-import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
+import { Context, Duration, Effect, Queue, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 import type { ChatShown } from "./contract/agents.js";
 
 /** A look at the account inbox that heard no answer for the account still signed in. */
-const UNANSWERED_LOOK = "unanswered";
 
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, fed by the plan list followed live, the follow of what waits across the account, and the notification, toast, and badge they announce by.
@@ -291,9 +289,6 @@ function guardedDoors(
   };
 }
 
-/** How long a read of what waits that went unanswered rests before it is asked again. */
-const INBOX_RETRY = Duration.seconds(30);
-
 export interface AgentNoticesDependencies {
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
   readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
@@ -313,8 +308,8 @@ export interface AgentNoticesDependencies {
   accountId: () => string | undefined;
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
-  /** What waits across the account past a cursor, as the host answers it: the inbox read's one read. */
-  readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
+  /** What waits across the account, followed for as long as the stream is run: each answer the host tells as it moves. */
+  followAccountInbox: () => Stream.Stream<CodingAgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
   accounts: Stream.Stream<string | undefined>;
   /** Where each task's waiting items, and every task holding an item, are written, for the window's Inbox. */
@@ -334,8 +329,6 @@ export interface AgentNoticesDependencies {
   openChat: (workspaceId: string) => void;
   /** Whether the window offers Chat, without which nothing waiting in chat is counted or announced. */
   chatOn: () => boolean;
-  /** How long a read of what waits that went unanswered rests before it is asked again. */
-  inboxRetry?: Duration.Duration;
   report: (line: string) => void;
 }
 
@@ -614,7 +607,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     dependencies: AgentNoticesDependencies,
   ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
     const { readPullRequest, taskName, open, onUnseenChanged, report } = dependencies;
-    const interval = dependencies.inboxRetry ?? INBOX_RETRY;
     const doors = guardedDoors(yield* AgentNoticeDoors, report);
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
@@ -931,13 +923,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     }
 
     /**
-     * What waits for one account, read for as long as it stays signed in:
+     * What waits for one account, followed for as long as it stays signed in:
      * whatever the last account left is let go first, and nobody's is
-     * nothing to read. Note that an answer is let go where the account it
-     * was read for is no longer signed in, because the read may land in the
-     * tick before the change ends it, and the next read waits
-     * `INBOX_RETRY` rather than asking again at once for an account that
-     * has left.
+     * nothing to follow. Note that an answer is let go where the account it
+     * was told for is no longer signed in, because it may land in the tick
+     * before the change ends the follow, and one telling why there is none
+     * says nothing: the host seals the follow again itself.
      */
     const waitingOf = (reader: string | undefined): Effect.Effect<void> =>
       Effect.suspend(() => {
@@ -945,30 +936,21 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         seenRevision.clear();
         publishWaiting({ items: [], plans: [] }, []);
         if (reader === undefined) return Effect.void;
-        let cursor = INBOX_CURSOR_START;
-        // A read left unanswered, or answered for an account that has since left, is no answer: it is asked again after `INBOX_RETRY`.
-        const look = Effect.gen(function* () {
-          const answer = yield* dependencies.readAccountInbox(cursor);
-          if (dependencies.signedInAs() !== reader || "failure" in answer) {
-            return yield* Effect.fail(UNANSWERED_LOOK);
-          }
-          cursor = answer.cursor;
-          observeWaiting(answer);
-        });
-        // A look that died is reported and asked again after `INBOX_RETRY`.
-        const reported = Effect.catchDefect(look, (defect) =>
-          Effect.andThen(
-            Effect.sync(() =>
-              report(
-                `the inbox read failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+        // An answer that throws is reported rather than left to end the follow, which would never resume.
+        const look = (answer: CodingAgentAccountInboxAnswerView) =>
+          Effect.catchDefect(
+            Effect.sync(() => {
+              if (dependencies.signedInAs() !== reader || "failure" in answer) return;
+              observeWaiting(answer);
+            }),
+            (defect) =>
+              Effect.sync(() =>
+                report(
+                  `the inbox answer could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+                ),
               ),
-            ),
-            Effect.fail(UNANSWERED_LOOK),
-          ),
-        );
-        // An answered read is followed at once by the next, held from its cursor.
-        // The schedule never runs out, so no failure is left once it is retried.
-        return Effect.forever(Effect.ignore(Effect.retry(reported, Schedule.spaced(interval))));
+          );
+        return Stream.runForEach(dependencies.followAccountInbox(), look);
       });
 
     /** One agent as an answer carried it, against where the ledger last had it. */
@@ -1127,8 +1109,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       },
     };
 
-    // Each account's inbox read in turn, the read held for the last one
-    // ended as the next is signed in, so nothing of one is read for another.
+    // Each account's inbox followed in turn, the follow for the last one
+    // ended as the next is signed in, so nothing of one is told for another.
     yield* Effect.forkScoped(
       Stream.runDrain(
         Stream.switchMap(Stream.changes(dependencies.accounts), (reader) =>

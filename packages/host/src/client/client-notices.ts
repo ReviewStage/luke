@@ -2,8 +2,9 @@
  * client-notices.ts -- the agent notices as a client links them: read from the document and the host, written back into the document, and shown through the doors and the presenter the platform hands in.
  */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
 import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
-import { Effect, FiberSet, type Scope, Stream } from "effect";
+import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   type AgentNoticeDoors,
   type AgentNotices,
@@ -26,7 +27,9 @@ type NoticeHost = Pick<
   | "codingAgentList"
   | "codingAgentPage"
   | "codingAgentPullRequest"
-  | "codingAgentAccountInbox"
+  | "codingAgentAccountInboxFollow"
+  | "codingAgentAccountInboxUnfollow"
+  | "onAccountInboxChanged"
   | "onAccountChanged"
   | "tasksRefresh"
   | "workspacesRefresh"
@@ -45,6 +48,25 @@ export interface ClientNoticesDependencies {
 /** Whose account this is, as the host keys it, or nobody: what tells another account from the same one renewed. */
 function accountKey(account: AccountSnapshot): string | undefined {
   return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+}
+
+/**
+ * What waits across the account, as the host tells it, followed while the
+ * stream runs: heard from before the follow is asked, so its first answer is
+ * never missed, and let go as the stream ends.
+ */
+function accountInboxOf(host: NoticeHost): Stream.Stream<CodingAgentAccountInboxAnswerView> {
+  return Stream.callback<CodingAgentAccountInboxAnswerView>((queue) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => host.onAccountInboxChanged((answer) => Queue.offerUnsafe(queue, answer))),
+        (unsubscribe) => Effect.sync(unsubscribe),
+      );
+      yield* Effect.acquireRelease(host.codingAgentAccountInboxFollow(), () =>
+        host.codingAgentAccountInboxUnfollow(),
+      );
+    }),
+  );
 }
 
 /**
@@ -92,7 +114,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     },
     onAccountChanged: (listener) =>
       host.onAccountChanged((account) => listener(accountKey(account))),
-    readAccountInbox: (after) => host.codingAgentAccountInbox({ after }),
+    followAccountInbox: () => accountInboxOf(host),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
     chatOn: () =>

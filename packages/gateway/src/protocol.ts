@@ -321,8 +321,15 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  /** What waits on the developer across the account's tasks past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
-  CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
+  /**
+   * What waits on the developer across the account, followed from now until
+   * it is let go or the account signs out: every open inbox item, heard as
+   * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
+   * over. Main's own follow, which no window asks.
+   */
+  CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
+  /** The account inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
+  CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
@@ -687,6 +694,8 @@ export const GATEWAY_EVENT = {
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
   /** One followed plan's or agent's inbox, its items whole or why there are none, each time it changes while it is followed. */
   INBOX_CHANGED: "inbox.changed",
+  /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
+  ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
