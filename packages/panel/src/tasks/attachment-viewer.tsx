@@ -16,8 +16,8 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import { useId } from "react";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { useId, useState } from "react";
+import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
 import { CodeLinesView, type LinesLook } from "./code-lines.js";
 import { FileTypeIcon } from "./file-type-icon.js";
@@ -112,15 +112,25 @@ function CopyTextButton({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-/** Copy for a picture, put on the clipboard as a copy from Preview puts one, answered on its glyph as every copy button is. */
+/**
+ * Copy for a picture, put on the clipboard as a copy from Preview puts one,
+ * answered on its glyph as every copy button is. Note that the answer is
+ * shown only beside the picture it was for, because the button stands
+ * while the files are walked and a copy may land after the next is shown.
+ */
 function CopyImageButton({ url }: { url: string }): React.JSX.Element {
-  const { state, copyImage } = useCopyFeedback();
+  const { state: copyState, copyImage } = useCopyFeedback();
+  const [copied, setCopied] = useState<string | undefined>();
+  const state: CopyState = copied === url ? copyState : "idle";
   return (
     <Tooltip label={copyHint(state, VIEWER_LABEL.COPY_IMAGE)}>
       <IconButton
         icon={<CopyGlyph state={state} />}
         label={VIEWER_LABEL.COPY_IMAGE}
-        onClick={() => copyImage(url)}
+        onClick={() => {
+          setCopied(url);
+          copyImage(url);
+        }}
       />
     </Tooltip>
   );

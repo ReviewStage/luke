@@ -32,8 +32,13 @@ type AdminDashboardWay = { readonly href: string } | { readonly open: () => void
 export interface AppPlatform {
   /** Puts the words on the system clipboard; rejects where the clipboard refused them. */
   copyText(words: string): Promise<void>;
-  /** Puts a picture on the system clipboard, given as a PNG's bytes in base64; rejects where the clipboard refused it. */
-  copyImage(png: string): Promise<void>;
+  /**
+   * Puts a picture on the system clipboard, given as the PNG's bytes in
+   * base64 still being drawn; rejects where the clipboard refused it. Note
+   * that the write is asked for at once and the bytes awaited inside it,
+   * because a browser takes a picture only in the press's own task.
+   */
+  copyImage(png: Promise<string>): Promise<void>;
   /** Saves the text as a file of the name given, where the person chooses; answers whether it was saved rather than declined. */
   saveFile(file: { readonly name: string; readonly text: string }): Promise<boolean>;
   /** Brings the panel forward, where the shell can. */

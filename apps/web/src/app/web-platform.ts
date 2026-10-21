@@ -46,11 +46,17 @@ export function downloadText(file: {
   return Promise.resolve(true);
 }
 
-/** Puts a PNG, its bytes in base64, on the browser's clipboard as a picture. */
-export function copyPng(png: string): Promise<void> {
-  const bytes = Uint8Array.from(atob(png), (each) => each.charCodeAt(0));
-  const item = new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) });
-  return navigator.clipboard.write([item]);
+/**
+ * Puts a PNG, its bytes in base64 once drawn, on the browser's clipboard as
+ * a picture. Note that the write is asked for now, with the picture still a
+ * promise, because Safari takes a write only in the press's own task.
+ */
+export function copyPng(png: Promise<string>): Promise<void> {
+  const blob = png.then((base64) => {
+    const bytes = Uint8Array.from(atob(base64), (each) => each.charCodeAt(0));
+    return new Blob([bytes], { type: "image/png" });
+  });
+  return navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 }
 
 /**

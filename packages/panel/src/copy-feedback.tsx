@@ -126,7 +126,7 @@ export function useCopyFeedback(): CopyFeedback {
   return {
     state: held.waiting ? landed : COPY_STATE.IDLE,
     copy: (words) => answer(() => appPlatform().copyText(words)),
-    copyImage: (url) => answer(() => pngBase64Of(url).then((png) => appPlatform().copyImage(png))),
+    copyImage: (url) => answer(() => appPlatform().copyImage(pngBase64Of(url))),
   };
 }
 

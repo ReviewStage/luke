@@ -366,12 +366,11 @@ test("the zoom buttons name the bare keys that do the same", () => {
   assert.equal(named("Zoom out"), "-");
 });
 
-test("Copy image puts the picture shown on the clipboard as its PNG, and its glyph turns to the check", async () => {
+test("Copy image puts the picture shown on the clipboard as its PNG, and its check stands beside that picture alone", async () => {
   const copied: string[] = [];
   fakeAppPlatform({
-    copyImage: (png) => {
-      copied.push(png);
-      return Promise.resolve();
+    copyImage: async (png) => {
+      copied.push(await png);
     },
   });
   const viewer = opened();
@@ -379,6 +378,13 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its gly
   viewer.press("Copy image");
   await act(async () => undefined);
   assert.deepEqual(copied, [PIXEL], "the PNG's own bytes, whatever the address says after them");
-  const glyph = document.querySelector('button[aria-label="Copy image"] .copy-glyph');
-  assert.equal(glyph?.getAttribute("data-state"), "copied");
+  const glyph = () =>
+    document
+      .querySelector('button[aria-label="Copy image"] .copy-glyph')
+      ?.getAttribute("data-state");
+  assert.equal(glyph(), "copied");
+  viewer.key("ArrowLeft");
+  assert.equal(glyph(), "idle", "the picture walked to was not the one copied");
+  viewer.key("ArrowRight");
+  assert.equal(glyph(), "copied", "back on the copied picture, the check stands again");
 });
