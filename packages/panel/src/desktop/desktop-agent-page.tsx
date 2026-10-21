@@ -294,7 +294,8 @@ export function DesktopAgentPage({
     archived: agent?.archivedAt !== undefined,
   });
   // The code a call into the agent showed, where it has no task to hold it.
-  const shownCode = agent?.planId == null ? tasks.agentCallCode(agentId) : undefined;
+  const held = tasks.agentCallCode;
+  const shownCode = agent?.planId == null && held?.agentId === agentId ? held.shownCode : undefined;
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.

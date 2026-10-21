@@ -303,7 +303,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     unreadTabs: [],
     board: undefined,
     shownCode: undefined,
-    agentCallCode: () => undefined,
+    agentCallCode: undefined,
     codeFailed: false,
     onRetryCode: ignore,
     pages: undefined,

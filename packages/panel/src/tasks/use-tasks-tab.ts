@@ -628,8 +628,8 @@ export interface TasksControl {
   board: Board | undefined;
   /** Every code the open task's agents showed, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: TasksView["shownCode"];
-  /** The code shown on calls into an agent with no task, oldest first, which that agent's page draws; none for any other agent. */
-  agentCallCode: (agentId: string) => TasksView["shownCode"];
+  /** The code shown on calls into an agent with no task, by that agent, which its page draws; none before such a call showed any. */
+  agentCallCode: TasksView["agentCallCode"];
   /** Whether the last read of the open task's code did not land, what is held still drawn. */
   codeFailed: boolean;
   /** Reads the open task's code again after a read that did not land. */
@@ -2473,8 +2473,7 @@ export function useTasksTab(input: {
   // Note that the call is read apart from who is heard on it, so the tab is not drawn again with every breath of a call.
   const standingCall = useStandingCall();
   // Note that a call into an agent with no task is no task's, though no task is open either.
-  const live =
-    standingCall?.taskId !== undefined && standingCall.taskId === tasks.activeTaskId;
+  const live = standingCall?.taskId !== undefined && standingCall.taskId === tasks.activeTaskId;
   // A Call press that would open a call into one agent while another's call
   // stands ends that call, so it asks first; the answer is the same press,
   // and Cancel leaves the call standing as it was. The question is the
@@ -3459,8 +3458,7 @@ export function useTasksTab(input: {
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
-    agentCallCode: (agentId) =>
-      tasks.agentCallCode?.agentId === agentId ? tasks.agentCallCode.shownCode : undefined,
+    agentCallCode: tasks.agentCallCode,
     codeFailed: tasks.codeStatus === TASKS_READ.FAILED,
     onRetryCode: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,

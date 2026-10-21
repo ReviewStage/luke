@@ -1685,7 +1685,7 @@ function CodePanelPage(): React.JSX.Element {
   return createElement(DesktopAgentPage, {
     tasks: {
       ...tasksControl({
-        agentCallCode: (agentId) => (agentId === AGENT_ID ? [showing] : undefined),
+        agentCallCode: { agentId: AGENT_ID, shownCode: [showing] },
       }),
       sidePanel,
     },
