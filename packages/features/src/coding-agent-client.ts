@@ -13,7 +13,6 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import { ACCOUNT_INBOX_ARCHIVED } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import {
@@ -25,7 +24,6 @@ import {
 } from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentCallsAnswerView,
@@ -105,7 +103,7 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
 } from "./inbox-wire.js";
-import type { ScopeInboxLiveAnswer } from "./live-wire.js";
+import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
   LIVE_SIGNED_OUT,
@@ -986,18 +984,28 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed, and every task holding items, the archived ones among them for the Inbox's Archived tab. */
-  accountInbox(
-    after: string,
-  ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.inbox.account,
-        { after, archived: ACCOUNT_INBOX_ARCHIVED.INCLUDE },
-        HOSTED_DEADLINE.HELD,
-      ),
-      {},
-    );
+  /**
+   * What waits on the developer across the account sealed for following
+   * over Neon Realtime, or with `poll` its rows inline, answered at once:
+   * unanswered for anything that went wrong, which the caller answers by
+   * asking again. Sealed for the account `userId` names, and signed out
+   * where the session is no longer that account's.
+   */
+  accountInboxLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AccountInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.catchIf(
+      askLive(this.#hosted.live.inbox, { [LIVE_USER_QUERY]: userId }, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, {}));
   }
 
   /**

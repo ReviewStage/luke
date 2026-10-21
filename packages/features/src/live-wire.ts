@@ -3,9 +3,6 @@ import {
   type AccountChatEntry,
   type AccountFailedRun,
   type AccountInboxAnswer,
-  type AccountInboxAutomation,
-  type AccountInboxEntry,
-  type AccountInboxTask,
   accountChatEntrySchema,
   accountFailedRunSchema,
   accountInboxAutomationSchema,
@@ -146,6 +143,8 @@ export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
+export type AccountInboxLiveAnswer = typeof accountInboxLiveAnswerSchema.Type;
+
 /** An item of an agent with no plan as its row delivers it: the workspace as the column holds it, null for none. */
 const tasklessLiveRowSchema = EffectSchema.Struct({
   ...accountTasklessEntrySchema.fields,
@@ -163,16 +162,19 @@ export const accountInboxLiveRowSchemas = {
   chatNotices: accountChatEntrySchema,
 } as const;
 
+/** Every part's rows as one delivery carries them, decoded whole where they arrive. */
+export const accountInboxLiveRowsSchema = EffectSchema.Struct({
+  items: EffectSchema.Array(accountInboxLiveRowSchemas.items),
+  planless: EffectSchema.Array(accountInboxLiveRowSchemas.planless),
+  plans: EffectSchema.Array(accountInboxLiveRowSchemas.plans),
+  automations: EffectSchema.Array(accountInboxLiveRowSchemas.automations),
+  failedRuns: EffectSchema.Array(accountInboxLiveRowSchemas.failedRuns),
+  chatAsks: EffectSchema.Array(accountInboxLiveRowSchemas.chatAsks),
+  chatNotices: EffectSchema.Array(accountInboxLiveRowSchemas.chatNotices),
+});
+
 /** Each part's rows, decoded. */
-export interface AccountInboxLiveRows {
-  readonly items: readonly AccountInboxEntry[];
-  readonly planless: readonly (typeof tasklessLiveRowSchema.Type)[];
-  readonly plans: readonly AccountInboxTask[];
-  readonly automations: readonly AccountInboxAutomation[];
-  readonly failedRuns: readonly AccountFailedRun[];
-  readonly chatAsks: readonly AccountChatEntry[];
-  readonly chatNotices: readonly AccountChatEntry[];
-}
+export type AccountInboxLiveRows = typeof accountInboxLiveRowsSchema.Type;
 
 /** How far back a run that failed to start is still carried to its automation's owner. */
 export const FAILED_RUN_WINDOW_MILLIS = 7 * 24 * 60 * 60 * 1000;
@@ -283,6 +285,22 @@ export function accountInboxOfLiveRows(
     chat: chatOfLiveRows(rows.chatAsks, rows.chatNotices),
   };
   return { ...answer, cursor: liveCursorOf(answer), readAt: now };
+}
+
+/**
+ * When the earliest failed run the rows carry at `now` ages out of the last
+ * week, in epoch milliseconds; none where they carry none. Nothing a live
+ * statement delivers says so, since Realtime follows no clock, so the
+ * follower builds the answer again then.
+ */
+export function nextFailedRunExpiry(
+  failedRuns: readonly AccountFailedRun[],
+  now: number,
+): number | undefined {
+  const expiries = failedRuns
+    .map((run) => run.failedAt + FAILED_RUN_WINDOW_MILLIS)
+    .filter((expiry) => expiry > now);
+  return expiries.length === 0 ? undefined : Math.min(...expiries);
 }
 
 /**

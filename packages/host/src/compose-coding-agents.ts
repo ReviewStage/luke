@@ -92,6 +92,7 @@ import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { type AccountInboxes, accountInboxes, accountInboxPast } from "./account-inbox-follow.js";
 import { followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -124,7 +125,8 @@ import {
  * the service answered whole. The transcript read is held open here while
  * the agent runs and nothing new stands, on a Neon Realtime subscription to
  * what its pages are read from (`transcript-follow.ts`), which a sign-out
- * lets go. What waits across the account is held the same way, and asked by
+ * lets go. What waits across the account is held the same way, on the
+ * account's own subscription (`account-inbox-follow.ts`), and asked by
  * main's own loop rather than a window's (`agent-notices.ts`). Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
@@ -186,7 +188,7 @@ export type CodingAgentClient = Pick<
   | "markInboxRead"
   | "taskInboxLive"
   | "agentInboxLive"
-  | "accountInbox"
+  | "accountInboxLive"
   | "inboxAttachment"
   | "agentPicture"
   | "chatPost"
@@ -212,7 +214,7 @@ export interface CodingAgentsDependencies {
 }
 
 export interface CodingAgentsComposer extends Composer {
-  /** Every transcript's and every plan's and agent's inbox subscription let go, as a sign-out lets them go. */
+  /** Every transcript's, every plan's and agent's inbox's, and the account inbox's subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
   /**
    * The task an agent is on, as the service reads it now, which a call into
@@ -266,6 +268,11 @@ export function composeCodingAgents(
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
+    const accounts = yield* accountInboxes({
+      seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: dependencies.kernel.now,
+    });
     const chats = yield* FiberMap.make<string>();
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
     return composed(
@@ -275,6 +282,7 @@ export function composeCodingAgents(
       followed,
       { inboxes, followed: inboxFollows },
       chats,
+      accounts,
     );
   });
 }
@@ -295,6 +303,8 @@ function composed(
   { inboxes, followed: inboxFollows }: ScopeFollows,
   /** Each workspace's chat main follows for its windows, one fiber each. */
   chats: FiberMap.FiberMap<string>,
+  /** What waits across the account, followed for main's read of it. */
+  accounts: AccountInboxes,
 ): CodingAgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
@@ -919,7 +929,9 @@ function composed(
           params,
           "reading what waits across the account names a cursor",
         );
-        const answer = yield* asked(client.accountInbox(after));
+        const userId = dependencies.accountId();
+        if (!gate() || userId === undefined) return UNANSWERED;
+        const answer = yield* accountInboxPast(accounts, userId, after);
         return carried<CodingAgentAccountInboxAnswerView>(answer);
       }),
   };
@@ -930,6 +942,7 @@ function composed(
     yield* FiberMap.clear(inboxFollows);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
+    for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
   });
 
   const agentTaskOf = (agentId: string) =>
