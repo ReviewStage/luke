@@ -6,7 +6,7 @@ import { PAGE_OWNER, PAGE_SHOWER, type PageOwner, type PageShower } from "@luke/
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
-import { user } from "../../schemas/auth.js";
+import { organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { planPageVersion } from "../../schemas/plan-page.js";
 import { conversations } from "../../schemas/storage.js";
@@ -335,7 +335,7 @@ it.layer(getTestDB())("a page read by its id", (it) => {
   );
 
   it.effect(
-    "an agent's deletion clears its name from a task's versions and keeps them whole, and is refused while it holds pages of its own on no task",
+    "an agent's deletion clears its name from a task's versions and keeps them whole, and takes its own pages on no task with it",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -351,16 +351,18 @@ it.layer(getTestDB())("a page read by its id", (it) => {
             shownByAgent(onIt),
           ),
         );
-        yield* writePage(
-          owner,
-          onAgent(apart),
-          { title: "Own", html: "<p>x</p>" },
-          shownByAgent(apart),
+        const own = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            onAgent(apart),
+            { title: "Own", html: "<p>x</p>" },
+            shownByAgent(apart),
+          ),
         );
         const db = yield* Database;
 
         yield* db.delete(codingAgent).where(eq(codingAgent.id, onIt));
-        const refused = yield* Effect.exit(db.delete(codingAgent).where(eq(codingAgent.id, apart)));
+        yield* db.delete(codingAgent).where(eq(codingAgent.id, apart));
 
         assert.deepEqual(yield* ownerColumnsOf(shown.id), [
           { version: 1, taskId: task.id, agentId: null },
@@ -369,8 +371,43 @@ it.layer(getTestDB())("a page read by its id", (it) => {
           Option.getOrThrow(yield* readPageVersion(owner, onTask(task.id), shown.id, 1)).html,
           "<p>1</p>",
         );
-        assert.ok(refused._tag === "Failure");
-        assert.equal((yield* listPages(owner, onAgent(apart))).length, 1);
+        assert.deepEqual(yield* ownerColumnsOf(own.id), []);
+      }),
+  );
+
+  it.effect(
+    "an account's deletion and a workspace's, cascading into an agent on no task, succeed and take its pages",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const leaving = yield* openAccount;
+        const staying = yield* openAccount;
+        const closing = yield* openWorkspace(staying);
+        const ownWorkspace = yield* openWorkspace(leaving);
+        const byAccount = yield* openAgent(leaving, ownWorkspace, null);
+        const byWorkspace = yield* openAgent(staying, closing, null);
+        const accountPage = Option.getOrThrow(
+          yield* writePage(
+            leaving,
+            onAgent(byAccount),
+            { title: "Mine", html: "<p>x</p>" },
+            shownByAgent(byAccount),
+          ),
+        );
+        const workspacePage = Option.getOrThrow(
+          yield* writePage(
+            staying,
+            onAgent(byWorkspace),
+            { title: "Ours", html: "<p>y</p>" },
+            shownByAgent(byWorkspace),
+          ),
+        );
+
+        yield* db.delete(user).where(eq(user.id, leaving));
+        yield* db.delete(organization).where(eq(organization.id, closing));
+
+        assert.deepEqual(yield* ownerColumnsOf(accountPage.id), []);
+        assert.deepEqual(yield* ownerColumnsOf(workspacePage.id), []);
       }),
   );
 });

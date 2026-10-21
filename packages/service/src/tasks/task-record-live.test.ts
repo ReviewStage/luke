@@ -17,7 +17,7 @@ import {
 } from "@luke/database/voice-vocabulary";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@luke/features/live-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
@@ -94,7 +94,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
 const heldRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     return {
-      pages: yield* listPages(reader, taskId),
+      pages: yield* listPages(reader, taskPageOwner(taskId)),
       code: Option.map(yield* readTaskCode(reader, taskId), (read) => read.code),
     };
   });
@@ -179,7 +179,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
         const shown = Option.getOrThrow(
           yield* writePage(
             owner,
-            task.id,
+            taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
             { kind: PAGE_SHOWER.LUKE },
           ),
@@ -191,7 +191,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           ["pages"],
           writePage(
             owner,
-            task.id,
+            taskPageOwner(task.id),
             { pageId: shown.id, title: "Invite funnel", html: "<p>Two</p>" },
             { kind: PAGE_SHOWER.LUKE },
           ),
@@ -226,7 +226,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           [],
           writePage(
             owner,
-            other.id,
+            taskPageOwner(other.id),
             { title: "Billing funnel", html: "<p>One</p>" },
             { kind: PAGE_SHOWER.LUKE },
           ),

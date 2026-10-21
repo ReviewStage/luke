@@ -278,24 +278,28 @@ const PULL_REQUEST_WORDS = {
 /**
  * Where an agent asked for a plan, a proposal, a design, or research puts
  * the write-up, rather than a document under `docs/` and a pull request to
- * land it: the plan, where it was handed one and so can edit it; a page,
- * where it works on a task; its final message, where it has neither.
+ * land it: the plan, where it was handed one and so can edit it; a page
+ * otherwise, on its task or, on none, on itself.
  */
 function writeUpPlace(brief: CodingAgentBrief, onTask: boolean): string {
   if (brief === CODING_AGENT_BRIEF.PLAN && onTask) {
     return `write it into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and put it in the developer's inbox`;
   }
-  if (onTask) {
-    return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and put it in the developer's inbox`;
-  }
-  return "write it in your final message";
+  return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and put it in the developer's inbox`;
 }
 
+/** How a page is shown, said alike to an agent on a task, whose page stands on the task, and to one on none, whose page stands on itself. */
+const PAGES_WORDS = `
+
+## Pages
+
+When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` by passing its \`path\`: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`;
+
 /**
- * What only an agent on a task is told of: a link that names the task, and
- * the task's pages, which a page is saved on, and the task's status, which
- * it keeps; an agent an automation started with no task has none of them,
- * so its instructions leave them out.
+ * What only an agent on a task is told of: a link that names the task, the
+ * task's whiteboard beside its pages, and the task's status, which it
+ * keeps; an agent an automation started with no task has none of them, so
+ * its instructions leave them out, and shows its pages on itself.
  * An agent on a task keeps the agents it starts on that task; one on none
  * has no task of its own to start them on, so it names one.
  */
@@ -305,11 +309,7 @@ const TASK_PLACE_WORDS = {
     olderLinks: ", `luke://folder/<path>/`, and `luke://plan/<id>#<heading>`",
     startAgent:
       " Start it on your own task, which is where a piece of this task's work belongs; start one on another task, or on a new task of its own, only for work unrelated to your task, or where the developer asked for that",
-    pages: `
-
-## Pages
-
-When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` by passing its \`path\`: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.
+    pages: `${PAGES_WORDS}
 
 To sketch a design, a flow, or how parts connect, draw it on the task's whiteboard with \`${CODER_TOOL.DRAW_ON_BOARD}\`, sending the whole diagram each time, and check it with \`${CODER_TOOL.LOOK_AT_BOARD}\` while the developer has the board open.`,
     status: `
@@ -326,7 +326,7 @@ Members and agents leave comment threads on the plan's text, each beside the wor
   taskless: {
     link: "",
     olderLinks: " and `luke://folder/<path>/`",
-    pages: "",
+    pages: PAGES_WORDS,
     comments: "",
     status: "",
     startAgent: ` You work on no task, so name the task to start it on by its id, or make one for it first with \`${CODER_TOOL.CREATE_TASK}\`, related work among it`,
@@ -386,7 +386,8 @@ function namingWords(repository: string, taskLink: string | null): string {
   const lines = `https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5`;
   const ownTask =
     taskLink === null
-      ? ""
+      ? `
+- A page you showed, which stands on you since you work on no task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](https://tryluke.dev/acme/agent/<your-id>/page/<page-id>)\`.`
       : `
 - Your task's plan, whose link is \`${taskLink}\`: \`[@<the task's name>](${taskLink})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${taskLink}#rollout)\`.
 - A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;

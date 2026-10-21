@@ -99,7 +99,7 @@ export const CODER_TOOL = {
   LOOK_AT_BOARD: AGENT_TOOL.LOOK_AT_BOARD,
 } as const;
 
-/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it, `look_at_picture`, which looks at a picture in its plan, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
+/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
 export type TaskTool =
   | typeof CODER_TOOL.EDIT_PLAN
   | typeof CODER_TOOL.SHOW_PAGE
@@ -119,8 +119,9 @@ const COMMENT_TASK_TOOLS = [
 const BOARD_TASK_TOOLS = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD] as const;
 
 /**
- * The task's tools an agent is offered: none for one on no task, as an
- * automation's run starts one, and all of them for one on a task, whether
+ * The task's tools an agent is offered: `show_page` alone for one on no
+ * task, as an automation's run starts one, whose pages stand on the agent
+ * itself, and all of them for one on a task, whether
  * it was handed the plan or a prompt, since New task starts every agent on
  * the developer's own words while Luke writes the plan beside it. Note that
  * each tool withheld is one its call would only be refused by (`host.ts`'s
@@ -128,7 +129,8 @@ const BOARD_TASK_TOOLS = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD] as
  * the same words (`instructions.ts`).
  */
 export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
-  if (agent.taskId === null) return new Set();
+  // A page stands on the agent itself where it works on no task, so every agent shows one.
+  if (agent.taskId === null) return new Set([CODER_TOOL.SHOW_PAGE]);
   return new Set([
     CODER_TOOL.EDIT_PLAN,
     CODER_TOOL.SHOW_PAGE,

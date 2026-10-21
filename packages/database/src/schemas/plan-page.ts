@@ -28,10 +28,12 @@ import { task } from "./task.js";
  * Rows go with their task, as its agents do (`coding_agent.task_id`). An
  * agent's deletion only clears its name from a task's versions, as a plan
  * revision's and a comment's are cleared, so a task's page never loses a
- * version from the middle of its run; the pages of an agent on no task have
- * no other owner, so whoever deletes the agent deletes them in the same
- * transaction, and the owner check refuses a deletion that forgot rather
- * than leave a page that belongs to nothing.
+ * version from the middle of its run. The pages of an agent on no task have
+ * no other owner, so they go with the agent however it goes, deleted itself
+ * or by its account's, workspace's, or conversation's deletion cascading
+ * into it: a trigger on `coding_agent` deletes them first
+ * (`20261021205954_plan_page_version_agent`), since no foreign key action
+ * tells the two kinds of row apart.
  */
 export const planPageVersion = pgTable(
   "plan_page_version",

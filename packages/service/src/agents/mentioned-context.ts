@@ -306,8 +306,10 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
   switch (mention.kind) {
     case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
-    case MENTION_KIND.PAGE:
       return mention.taskId === task?.id ? mention : undefined;
+    // A page of an agent on no task stands on no plan, so it is handed as another plan's is.
+    case MENTION_KIND.PAGE:
+      return "taskId" in mention && mention.taskId === task?.id ? mention : undefined;
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
     case MENTION_KIND.SERVER:
@@ -406,7 +408,7 @@ export function mentionedIds(words: string, task: Task | undefined): MentionedId
   const agents = new Set<string>();
   const people = new Set<string>();
   for (const { mention } of handedMentionsIn(words, task?.repository ?? null)) {
-    if (mention.kind === MENTION_KIND.PAGE && mention.taskId === task?.id)
+    if (mention.kind === MENTION_KIND.PAGE && "taskId" in mention && mention.taskId === task?.id)
       pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
     if (mention.kind === MENTION_KIND.PERSON) people.add(mention.userId);

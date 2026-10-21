@@ -56,7 +56,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -2727,7 +2727,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
     await database.run(
       writePage(
         bob,
-        tasks.billing,
+        taskPageOwner(tasks.billing),
         { title: "Seats", html: "<h1>One</h1>" },
         { kind: PAGE_SHOWER.LUKE },
       ),
@@ -2736,7 +2736,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   await database.run(
     writePage(
       bob,
-      tasks.billing,
+      taskPageOwner(tasks.billing),
       { pageId: shown.id, title: "Seats by month", html: rows },
       { kind: PAGE_SHOWER.LUKE },
     ),
@@ -2745,7 +2745,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
     await database.run(
       writePage(
         agents.otherWorkspaces.userId,
-        tasks.elsewhere,
+        taskPageOwner(tasks.elsewhere),
         { title: "Theirs", html: "<p/>" },
         { kind: PAGE_SHOWER.LUKE },
       ),

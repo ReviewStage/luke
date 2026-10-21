@@ -7,7 +7,7 @@ import { listPages, writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { pagesOfLiveRows, taskPagesLiveRowsSchema } from "@luke/features/live-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { taskPagesLiveStatements } from "./task-pages-live.js";
@@ -54,7 +54,7 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
         const task = yield* startTask(owner, { name: "Teammate invitations" });
         const other = yield* startTask(owner, { name: "Billing" });
         const agrees = Effect.gen(function* () {
-          const held = yield* listPages(owner, task.id);
+          const held = yield* listPages(owner, taskPageOwner(task.id));
           assert.deepEqual(yield* livePagesOf(owner, task.id), held);
           return held;
         });
@@ -63,27 +63,27 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
         const funnel = Option.getOrThrow(
           yield* writePage(
             owner,
-            task.id,
+            taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
             { kind: PAGE_SHOWER.LUKE },
           ),
         );
         yield* writePage(
           owner,
-          task.id,
+          taskPageOwner(task.id),
           { title: "Seat pricing", html: "<p>Seats</p>" },
           { kind: PAGE_SHOWER.AGENT, agentId: randomUUID() },
         );
         yield* writePage(
           owner,
-          other.id,
+          taskPageOwner(other.id),
           { title: "Another task's page", html: "<p>Elsewhere</p>" },
           { kind: PAGE_SHOWER.LUKE },
         );
         assert.equal((yield* agrees).length, 2);
         yield* writePage(
           owner,
-          task.id,
+          taskPageOwner(task.id),
           { pageId: funnel.id, title: "Invite funnel, revised", html: "<p>Two</p>" },
           { kind: PAGE_SHOWER.LUKE },
         );

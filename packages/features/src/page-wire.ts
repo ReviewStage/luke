@@ -115,3 +115,8 @@ export const PAGE_OWNER = {
 export type PageOwner =
   | { readonly kind: typeof PAGE_OWNER.TASK; readonly taskId: string }
   | { readonly kind: typeof PAGE_OWNER.AGENT; readonly agentId: string };
+
+/** The task as what its pages stand on. */
+export function taskPageOwner(taskId: string): PageOwner {
+  return { kind: PAGE_OWNER.TASK, taskId };
+}

@@ -24,7 +24,9 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *   pull request in one of that tab's views,
  *   `/changes/<conversation|files>/thread/<threadId>`, or a message,
  *   `/message/<messageId>`; a worker of Luke's own is `/plan/<id>/worker/<callId>`;
- * - an agent with no task, `/agent/<agentId>`, and a message of its own;
+ * - an agent with no task, `/agent/<agentId>`, a message of its own, and a
+ *   page it showed, which stands on it rather than a task,
+ *   `/agent/<agentId>/page/<pageId>`;
  * - the Inbox, `/inbox`, and an item in it under the task or the agent with
  *   no task that holds it, `/plan/<id>/inbox/<itemId>` or
  *   `/agent/<agentId>/inbox/<itemId>`, since the Inbox is read by its holders;
@@ -166,6 +168,11 @@ const linkPlaceSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.PAGE),
     planId: idSchema,
+    pageId: idSchema,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.PAGE),
+    agentId: idSchema,
     pageId: idSchema,
   }),
   EffectSchema.Struct({
@@ -320,7 +327,7 @@ function taskFields(taskId: string, rest: readonly string[]) {
   }
 }
 
-/** The steps after an agent's id, under its task where it has one: the agent itself, a worker, its Changes, or a message. */
+/** The steps after an agent's id, under its task where it has one: the agent itself, a worker, its Changes, a message, or, on no task, a page of its own. */
 function agentFields(taskId: string | undefined, agentId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   const task = taskId === undefined ? {} : { planId: taskId };
@@ -334,6 +341,8 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
   }
   if (id === undefined || more.length > 0) return undefined;
   if (step === STEP.MESSAGE) return { kind: LINK_PLACE.MESSAGE, ...task, agentId, messageId: id };
+  if (step === STEP.PAGE && taskId === undefined)
+    return { kind: LINK_PLACE.PAGE, agentId, pageId: id };
   if (step === STEP.INBOX && taskId === undefined) {
     return { kind: LINK_PLACE.INBOX_ITEM, agentId, itemId: id };
   }
@@ -421,7 +430,9 @@ function placePath(place: LinkPlace): readonly string[] {
     case LINK_PLACE.VERSION:
       return [STEP.PLAN, place.planId, STEP.VERSION, String(place.revision)];
     case LINK_PLACE.PAGE:
-      return [STEP.PLAN, place.planId, STEP.PAGE, place.pageId];
+      return "planId" in place
+        ? [STEP.PLAN, place.planId, STEP.PAGE, place.pageId]
+        : [STEP.AGENT, place.agentId, STEP.PAGE, place.pageId];
     case LINK_PLACE.TURN:
       return [STEP.PLAN, place.planId, STEP.WORK, String(place.at)];
     case LINK_PLACE.AGENT:

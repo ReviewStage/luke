@@ -35,7 +35,7 @@ import {
   taskRecordLiveAnswerSchema,
   workspaceChatLiveAnswerSchema,
 } from "@luke/features/live-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { sidebarLiveAnswerSchema } from "@luke/features/sidebar-live";
 import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
 import {
@@ -390,7 +390,7 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         const shown = Option.getOrThrow(
           yield* writePage(
             dana,
-            started.id,
+            taskPageOwner(started.id),
             { title: "Invite funnel", html: "<p>One</p>" },
             { kind: PAGE_SHOWER.LUKE },
           ),
