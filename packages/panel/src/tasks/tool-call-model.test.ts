@@ -519,27 +519,7 @@ test("a coding agent's hosted public reads draw as the web reads they are: a sea
   });
 });
 
-test("the planning model's own calls draw from their parts as a coding agent's do: a repository command by its command and purpose, its answer or why it ran nothing, a shown range by its file and lines, a question by its words", () => {
-  const ran = toolCallView({
-    tool: "run_in_repository",
-    input: { command: "ls src", description: "List the sources" },
-    output: { status: "ran", exitCode: 0, stdout: "queue.ts\n", stderr: "" },
-  });
-  assert.equal(ran.kind, CALL_KIND.COMMAND);
-  assert.equal(ran.subject, "ls src");
-  assert.equal(ran.description, "List the sources");
-  assert.deepEqual(ran.output, { kind: TOOL_BLOCK.TEXT, text: "queue.ts" });
-  const refused = toolCallView({
-    tool: "run_in_repository",
-    input: { command: "ls" },
-    output: { status: "not-run", reason: "Not run: the plan names no repository." },
-  });
-  // The service's reason already says it was not run, so its words stand as they are.
-  assert.deepEqual(refused.output, {
-    kind: TOOL_BLOCK.TEXT,
-    text: "Not run: the plan names no repository.",
-  });
-
+test("an agent's task calls draw from their parts: a shown range by its file and lines, a question by its words", () => {
   const shown = toolCallView({
     tool: "show_code",
     input: { path: "src/invites.ts", startLine: 12, endLine: 30 },

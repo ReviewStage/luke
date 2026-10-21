@@ -317,12 +317,6 @@ export const TASKS_ACT_KIND = {
   TASKS_BOARD_SAVE: "tasks.boardSave",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
-  /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
-  TASKS_WORK_EARLIER: "tasks.workEarlier",
-  /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
-  TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a task's conversation, or a brain worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
-  TASKS_MESSAGES: "tasks.messages",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   TASKS_FILE: "tasks.file",
   /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */

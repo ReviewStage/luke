@@ -52,12 +52,7 @@ import { listMessagesPast, sentLineStands } from "@luke/database/models/message-
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import {
-  openTaskConversation,
-  readTask,
-  savePlanText,
-  updateTask,
-} from "@luke/database/models/task-store";
+import { readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
@@ -337,9 +332,7 @@ const TASKS = "/api/plans";
 /** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
 const TASK = (taskId: string) => `${TASKS}/${taskId}`;
 /** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
-const TASK_STOP = (taskId: string) => `${TASK(taskId)}/stop`;
 /** Luke's own transcript of a task, served by the hosted oRPC router. */
-const TASK_MESSAGES = (taskId: string) => `${TASK(taskId)}/messages`;
 /** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
 const TASK_PATH =
   /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop|\/messages)?$/u;
@@ -961,27 +954,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a member deleting a plan a teammate planned on retires the teammate's eve session before the plan goes",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, task, eve, ask } = yield* openTask();
-        const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, task.id));
-        const sessionId = `wrun_${randomUUID()}`;
-        assert.equal(
-          yield* claimRuntimeSession({ userId: owner, conversationId }, sessionId, new Date()),
-          true,
-        );
-        yield* joinWorkspace(task.workspaceId, other);
-
-        const deleted = yield* ask(request(TASK(task.id), other, { method: "DELETE" }));
-
-        assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(eve.reset, [sessionId]);
-        assert.deepEqual(eve.resetAs, [`Bearer ${other}`], "a bearer's delete retires over it");
-      }),
-  );
-
-  it.effect(
     "a workspace's agents are listed newest first for a member, narrowed to a repository whatever its case, and refused for an account outside it or a list naming no workspace",
     () =>
       Effect.gen(function* () {
@@ -1598,7 +1570,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a plan's agents, inbox, and transcript are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
+    "a plan's agents and inbox are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
@@ -1621,16 +1593,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
         );
         const reads = (bearer: string, id: string) =>
-          [
-            request(TASK_AGENTS, bearer, { id }),
-            request(TASK_INBOX, bearer, { id }),
-            request(TASK_MESSAGES(id), bearer),
-          ] as const;
+          [request(TASK_AGENTS, bearer, { id }), request(TASK_INBOX, bearer, { id })] as const;
 
-        const [agents, inbox, transcript] = reads(owner, task.id);
+        const [agents, inbox] = reads(owner, task.id);
         readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(agents));
         readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(inbox));
-        readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(transcript));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
         for (const refused of [...reads(other, task.id), ...reads(owner, randomUUID())]) {
           assert.deepEqual(yield* ask(refused), notFound, refused.url);
@@ -4303,28 +4270,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   /** Where an agent's Stop lands. */
   const AGENT_STOP = "/api/agents/stop";
 
-  /** Luke's turn under way on the task's own conversation, its session recorded, as a typed ask leaves one: the session it runs in. */
-  const lukeRunning = (owner: string, taskId: string) =>
-    Effect.gen(function* () {
-      const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, taskId));
-      const target = { userId: owner, conversationId };
-      const sessionId = `wrun_${randomUUID()}`;
-      assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
-      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-      const turnId = randomUUID();
-      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
-      yield* writer.consume(target, {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
-        conversationId: sessionKey(conversationId),
-        turnId,
-        sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
-        at: 0,
-      });
-      return sessionId;
-    });
-
   it.effect(
     "over a browser's session cookie a message reaches the agent as the deployment acting for the cookie's account, and over the bearer as ever over the bearer",
     () =>
@@ -4410,12 +4355,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "over a browser's session cookie a task's delete stops its agent and retires its own session and the agent's as the deployment acting for the cookie's account, before the task goes",
+    "over a browser's session cookie a task's delete stops its agent and retires the agent's session as the deployment acting for the cookie's account, before the task goes",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
-        const taskSession = yield* lukeRunning(owner, task.id);
 
         const deleted = yield* ask(
           request(TASK(task.id), undefined, {
@@ -4427,44 +4371,22 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
         assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
-        assert.deepEqual(eve.reset.toSorted(), [taskSession, sessionId].toSorted());
-        assert.deepEqual(eve.resetAs, [deploymentFor(owner), deploymentFor(owner)]);
+        assert.deepEqual(eve.reset, [sessionId]);
+        assert.deepEqual(eve.resetAs, [deploymentFor(owner)]);
         assert.ok(Option.isNone(yield* readTask(owner, task.id)));
       }),
   );
 
   it.effect(
-    "over a browser's session cookie Luke's Stop on the task cancels his turn under way as the deployment acting for the cookie's account",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, ask } = yield* openTask({ eve });
-        const taskSession = yield* lukeRunning(owner, task.id);
-
-        const stopped = yield* ask(
-          request(TASK_STOP(task.id), undefined, {
-            method: "POST",
-            cookie: sessionCookieOf(owner),
-          }),
-        );
-
-        assert.deepEqual(stopped, { status: HOSTED_HTTP_STATUS.OK, body: {} });
-        assert.deepEqual(eve.cancelled, [[taskSession, "turn_0"]]);
-        assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
-      }),
-  );
-
-  it.effect(
-    "a teammate's session cookie messages and stops the owner's agent, stops Luke on the owner's task, and deletes it, each as the deployment acting for the teammate and never for the owner the rows name",
+    "a teammate's session cookie messages and stops the owner's agent and deletes its task, each as the deployment acting for the teammate and never for the owner the rows name",
     () =>
       Effect.gen(function* () {
         // An idle agent of the owner's, which the teammate messages.
         const messaged = yield* startedAgent(fakeEve(), { running: false });
         yield* joinWorkspace(messaged.task.workspaceId, messaged.other);
-        // A running agent of the owner's, and Luke at work on its task, which the teammate stops and then deletes.
+        // A running agent of the owner's, which the teammate stops, and then deletes its task.
         const stopped = yield* startedAgent(fakeEve(), { running: true });
         yield* joinWorkspace(stopped.task.workspaceId, stopped.other);
-        const taskSession = yield* lukeRunning(stopped.owner, stopped.task.id);
         const teammate = sessionCookieOf(stopped.other);
 
         const sent = yield* messaged.ask(
@@ -4482,9 +4404,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             cookie: teammate,
           }),
         );
-        const lukeStop = yield* stopped.ask(
-          request(TASK_STOP(stopped.task.id), undefined, { method: "POST", cookie: teammate }),
-        );
         const deleted = yield* stopped.ask(
           request(TASK(stopped.task.id), undefined, { method: "DELETE", cookie: teammate }),
         );
@@ -4494,24 +4413,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           messaged.eve.sent.map((each) => [each.authorization, each.sessionId]),
           [[deploymentFor(messaged.other), messaged.sessionId]],
         );
-        assert.deepEqual(
-          [agentStop.status, lukeStop.status],
-          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
-        );
+        assert.equal(agentStop.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
-        assert.deepEqual(stopped.eve.cancelled, [
-          [stopped.sessionId, "turn_0"],
-          [taskSession, "turn_0"],
-        ]);
-        assert.deepEqual(stopped.eve.cancelledAs, [
-          deploymentFor(stopped.other),
-          deploymentFor(stopped.other),
-        ]);
-        assert.deepEqual(stopped.eve.reset.toSorted(), [taskSession, stopped.sessionId].toSorted());
-        assert.deepEqual(stopped.eve.resetAs, [
-          deploymentFor(stopped.other),
-          deploymentFor(stopped.other),
-        ]);
+        assert.deepEqual(stopped.eve.cancelled, [[stopped.sessionId, "turn_0"]]);
+        assert.deepEqual(stopped.eve.cancelledAs, [deploymentFor(stopped.other)]);
+        assert.deepEqual(stopped.eve.reset, [stopped.sessionId]);
+        assert.deepEqual(stopped.eve.resetAs, [deploymentFor(stopped.other)]);
       }),
   );
 
@@ -4521,7 +4428,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: true });
-        yield* lukeRunning(owner, task.id);
         const cookie = sessionCookieOf(other);
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
@@ -4545,7 +4451,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             body: { archived: true },
           }),
           request(TASK(task.id), undefined, { method: "DELETE", cookie }),
-          request(TASK_STOP(task.id), undefined, { method: "POST", cookie }),
         ]) {
           const { pathname } = new URL(asked.url);
           assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
@@ -7498,7 +7403,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "a plain post steers nobody, a mention link steers the agent it names, Luke and a person are told no agent's way, and an @word that is no link names no one",
+    "a plain post steers nobody, a mention link steers the agent it names, a person is told no agent's way, and a task's Luke's link or an @word that is no link names no one",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -7513,7 +7418,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         );
         assert.deepEqual(mentioned.receipt, {
           told: [chat.links.second],
-          held: [chat.links.luke, chat.links.person],
+          held: [chat.links.person],
           left: [],
           unresolved: [],
         });
@@ -8349,7 +8254,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post to a person's or the task's Luke's link is refused, while their links in a post's words tell them, the Luke minted as he is named, each named back by its link",
+    "a post to a person's or a task's Luke's link is refused, while a person's link in a post's words tells them, named back by its link, and a Luke's tells no one and mints no Luke",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
@@ -8376,15 +8281,12 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const lukes = Effect.map(roster(chat.owner, workspace), (rows) =>
           rows.filter((row) => row.kind === MEMBER_KIND.LUKE),
         );
-        assert.deepEqual(yield* lukes, [], "no Luke is a member before he is named");
         const toLuke = yield* chat.post(chat.first, {
           text: `[@Luke](https://tryluke.dev/acme/plan/${chat.task.id}/luke) is the plan settled?`,
         });
-        const [luke] = yield* lukes;
-        assert.ok(luke !== undefined && "held" in toLuke);
-        assert.equal(luke.taskId, chat.task.id);
-        const lukeLink = (yield* memberNaming(luke)).link;
-        assert.deepEqual(toLuke.held, [lukeLink]);
+        assert.ok("held" in toLuke);
+        assert.deepEqual(toLuke.held, []);
+        assert.deepEqual(yield* lukes, [], "naming a task's Luke mints none");
       }),
   );
 

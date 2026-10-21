@@ -503,42 +503,6 @@ export function macCommandsOfLiveRows(
 }
 
 /**
- * A plan's planning conversation sealed for following: the address, and
- * its mark as one statement, one row that moves whenever a read past the
- * cursor would answer something new. The desktop holds its read of the
- * conversation and asks it once, unheld, each time the mark moves, rather
- * than holding a read the service looks again for on a clock. The service
- * answers `not-found` for a plan the account does not reach, and
- * `unavailable` where its deployment's Realtime is misconfigured, which the
- * desktop answers by asking again.
- */
-export const taskConversationLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema, workers: sealedLiveQuerySchema }),
-});
-
-export type TaskConversationLiveAnswer = typeof taskConversationLiveAnswerSchema.Type;
-
-/**
- * Where the conversation stands as its row delivers it, keyed by the plan:
- * the highest message sequence and the journal revision, and the newest
- * turn and its status (null before the first).
- */
-const taskConversationMarkSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  seq: EffectSchema.Finite,
-  revision: EffectSchema.Finite,
-  turnId: EffectSchema.NullOr(EffectSchema.String),
-  turnStatus: EffectSchema.NullOr(EffectSchema.String),
-});
-
-/** The conversation's mark as Realtime delivers it, one row or none for a plan the account no longer reaches, and its running workers' turns, a row each by id, in no order. */
-export const taskConversationLiveRowsSchema = EffectSchema.Struct({
-  mark: EffectSchema.Array(taskConversationMarkSchema),
-  workers: EffectSchema.Array(EffectSchema.Struct({ id: EffectSchema.String })),
-});
-
-/**
  * One plan's inbox, or one agent's, sealed for following: the address, and
  * its open items and its latest settled ones as one statement, as the held
  * read reads them, so an item settling moves in one change, with their

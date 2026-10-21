@@ -49,7 +49,7 @@ import type { CommentToolName } from "../../tasks/comment-tools.js";
 import type { PictureLookResult } from "../../tasks/picture-look.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
-import { standingContext } from "../agent-runtime/standing-context.js";
+import { type ChatSince, standingContext } from "../agent-runtime/standing-context.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import {
   BRAIN_HOST,
@@ -57,7 +57,6 @@ import {
   type BrainHostTurn,
   RELAY_TURN,
 } from "../brain-host/bounds.js";
-import type { ChatSince } from "../brain-host/chat.js";
 import {
   type AdmittedConversation,
   admitConversation,
@@ -70,7 +69,6 @@ import {
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../brain-host/eve-sessions.js";
-import type { SessionPromptRecord } from "../brain-host/host.js";
 import {
   foldedQuietly,
   type RelayAskSeams,
@@ -147,10 +145,9 @@ import {
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
  *
- * The same shape as the brain's host (`brain-host/host.ts`): eve is
- * the runtime and the event emitter, and the host is everything eve leaves
- * to its author. Who a session is for is the conversation admission the two
- * share; what differs is that every admitted conversation is a coding
+ * eve is the runtime and the event emitter, and the host is everything eve
+ * leaves to its author. Who a session is for is the conversation admission
+ * every host shares (`agent-runtime/host-core.ts`); what differs is that every admitted conversation is a coding
  * agent's, whose row names the model each step runs on, the repository its
  * sandbox checks out, and the plan its first message carried. The model is
  * read from the row at every step, so a later change to the row is the next
@@ -198,15 +195,19 @@ interface CoderSessionPrompt {
 }
 
 /**
- * What the coder project keeps of the session's prompt, beside the content
- * address the brain keeps (`brain-host/host.ts`): whether the
- * prompt said the repository's CI is readable, the co-author trailer it
- * handed where it handed one, the step its links wrote the workspace
- * under, and whether it told of the chat, which are what compose the same text again for a step's estimate
- * of it; a record kept before the step was keeps none, and its links are
- * composed under the workspace's id.
+ * What the coder project keeps of the session's prompt between the start
+ * that composed it and the turns that run under it, in eve's durable session
+ * state, because the prompt applies at session scope and the turn row must
+ * name the prompt the model actually reads: its content address, absent
+ * until the session has composed one; whether the prompt said the
+ * repository's CI is readable, the co-author trailer it handed where it
+ * handed one, the step its links wrote the workspace under, and whether it
+ * told of the chat, which are what compose the same text again for a step's
+ * estimate of it. A record kept before the step was keeps none, and its
+ * links are composed under the workspace's id.
  */
-export interface CoderSessionPromptRecord extends SessionPromptRecord {
+export interface CoderSessionPromptRecord {
+  readonly hash?: string;
   readonly ciReadable?: boolean;
   readonly coAuthor?: string;
   readonly workspace?: string;
@@ -757,8 +758,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     );
 
   /**
-   * The ask record every turn binds the voice's asks to, as the brain's
-   * relay does (`../brain-host/host.ts`): each ask eve delivered into the
+   * The ask record every turn binds the voice's asks to: each ask eve delivered into the
    * turn learns the turn it ran in, which is what ties the transcript's line
    * to it and what the voice follows the answer by, and a Stop the ask took
    * while it waited is carried the moment its turn starts, by the deployment

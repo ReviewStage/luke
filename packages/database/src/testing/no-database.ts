@@ -5,7 +5,6 @@ import * as SqlClient from "effect/sql/SqlClient";
 import type * as SqlConnection from "effect/sql/SqlConnection";
 import { SqlError, UnknownError } from "effect/sql/SqlError";
 import { databaseOverPgClient } from "../core/query.js";
-import type { HostedStoreTestRun } from "./hosted-store-database.js";
 
 const refused = () =>
   Effect.fail(
@@ -53,15 +52,3 @@ export const noDatabase = Layer.provideMerge(
   databaseOverPgClient,
   PgClient.layerFrom(refusingPgClient),
 ).pipe(Layer.provide(Reactivity.layer));
-
-/**
- * The runner a handler test hands the modules that now take one, over a
- * client that refuses every statement. Those tests stand a memory fake in
- * place of the store, so nothing they run reaches a connection; a statement
- * that did reach one is a test asking for a database it never opened, and
- * this is what makes that a failure rather than a silent read of nothing.
- * The store's own tests run against PGlite or Postgres through
- * `hosted-store-database.ts` instead.
- */
-export const runWithoutDatabase: HostedStoreTestRun = (effect) =>
-  Effect.runPromise(Effect.provide(effect, noDatabase));

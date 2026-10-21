@@ -6,7 +6,6 @@ import {
   PAGE_BOUNDS,
   type PageShower,
   type PageWrite,
-  pageHtmlSchema,
   pageTitleSchema,
 } from "@luke/features/page-wire";
 import { isSecretFile } from "@luke/features/task-wire";
@@ -28,11 +27,10 @@ import { logStoreFailure } from "../http/store-failure.js";
  *
  * A page is one self-contained HTML document, its scripts and styles inline
  * or from cdnjs, which the Mac draws in a sandbox that reaches no network
- * (`apps/desktop/src/main/window/page-protocol.ts`). The brain
- * writes it in the call as `html`; a coding agent, which builds pages as
- * files, names one in its sandbox as `path`, read here through the same door
- * its own file tools reach the sandbox by, bounded and never read whole past
- * the bound. Naming a page shown before writes its next version, and naming
+ * (`apps/desktop/src/main/window/page-protocol.ts`). A coding agent, which
+ * builds pages as files, names one in its sandbox as `path`, read here
+ * through the same door its own file tools reach the sandbox by, bounded and
+ * never read whole past the bound. Naming a page shown before writes its next version, and naming
  * none makes a new page, so an agent revises a page rather than piling up
  * copies of it. The answer carries the page's id and version, and its
  * mention ready to write (`../agents/written-mentions.ts`), and never the
@@ -59,9 +57,8 @@ export interface PageToolBinding {
 
 /** Why a call showed nothing, in words the model can act on. */
 export const SHOW_PAGE_REFUSAL = {
-  UNREADABLE: `Not shown: give a title of at most ${PAGE_BOUNDS.MAX_TITLE_CHARS} characters, and the page as either \`html\` or \`path\`, not both.`,
   UNREADABLE_PATH: `Not shown: give a title of at most ${PAGE_BOUNDS.MAX_TITLE_CHARS} characters and the \`path\` of the page's HTML file in your sandbox. Write the page as a file and pass its path; \`html\` is not taken.`,
-  NO_SANDBOX: "Not shown: you have no sandbox to read a path from. Send the page's HTML as `html`.",
+  NO_SANDBOX: "Not shown: you have no sandbox to read a path from.",
   SECRET: "Not shown: that file holds secrets, such as a `.env`, and is never shown.",
   NO_FILE: "Not shown: no such file in your sandbox:",
   EMPTY: "Not shown: the page is empty.",
@@ -73,22 +70,15 @@ export const SHOW_PAGE_REFUSAL = {
   UNAVAILABLE: "Not shown: the page could not be saved just now. The call may be made again.",
 } as const;
 
-const SHOW_PAGE_INPUT = Schema.Struct({
+/** An agent's input: the page is always a file in its sandbox, so `path` is required and there is no `html`. */
+const CODER_SHOW_PAGE_INPUT = Schema.Struct({
   title: describeWire(
     pageTitleSchema,
     "What the page is, in a few words: its tab's name in the developer's side panel.",
   ),
-  html: Schema.optionalKey(
-    describeWire(
-      pageHtmlSchema,
-      "The page as one whole HTML document, its scripts and styles inline. Send this or `path`.",
-    ),
-  ),
-  path: Schema.optionalKey(
-    describeWire(
-      Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1_024)),
-      "A file in your sandbox holding the page as one whole HTML document, relative to the checkout. Send this or `html`.",
-    ),
+  path: describeWire(
+    Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1_024)),
+    "A file in your sandbox holding the page as one whole HTML document, relative to the checkout.",
   ),
   page: Schema.optionalKey(
     describeWire(
@@ -98,36 +88,9 @@ const SHOW_PAGE_INPUT = Schema.Struct({
   ),
 });
 
-/** A coding agent's input: the page is always a file in its sandbox, so `path` is required and there is no `html`. */
-const CODER_SHOW_PAGE_INPUT = Schema.Struct({
-  title: SHOW_PAGE_INPUT.fields.title,
-  path: describeWire(
-    Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1_024)),
-    "A file in your sandbox holding the page as one whole HTML document, relative to the checkout.",
-  ),
-  page: SHOW_PAGE_INPUT.fields.page,
-});
-
-const readInput = readEither(SHOW_PAGE_INPUT);
 const readCoderInput = readEither(CODER_SHOW_PAGE_INPUT);
 
-/** The tool as an agent is offered it: its name, its words, and its input schema. */
-export const SHOW_PAGE_TOOL = {
-  name: AGENT_TOOL.SHOW_PAGE,
-  description:
-    "Show the developer an interactive HTML page in the task's side panel: a chart, a table to " +
-    "sort, a mockup of a screen, or a comparison they can click through, when it says more than " +
-    "a diagram or words would. The page is one self-contained HTML document: scripts and styles " +
-    "inline, and libraries only from https://cdnjs.cloudflare.com. It runs sealed off: it cannot " +
-    "fetch, post, open links or windows, store anything, or load images from the web, so put its " +
-    "data in the page. Never put a secret in a page. Call it again with the `page` it answered to " +
-    "replace that page with a new version rather than making another. Answers `accepted` with the " +
-    "page's id, its version, and its mention, the `[@title](link)` to name it by in your words, " +
-    "or `rejected` and why nothing was shown.",
-  inputSchema: SHOW_PAGE_INPUT,
-} as const;
-
-/** The tool as a coding agent is offered it: the same, but the page is named by `path` alone. */
+/** The tool as an agent is offered it: its name, its words, and its input schema, the page named by `path` alone. */
 export const CODER_SHOW_PAGE_TOOL = {
   name: AGENT_TOOL.SHOW_PAGE,
   description:
@@ -197,18 +160,14 @@ function readPageFile(
   }).pipe(Effect.catch(() => Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.UNAVAILABLE))));
 }
 
-/** The page's HTML as the call gave it: inline, or read from the path it names; the refusal where it gave neither, both, or a file that does not read. */
+/** The page's HTML as read from the path the call names; the refusal where there is no sandbox or the file does not read. */
 function htmlOf(
   binding: PageToolBinding,
-  given: { readonly html?: string; readonly path?: string },
+  path: string,
 ): Effect.Effect<Result.Result<string, string>> {
-  if ((given.html === undefined) === (given.path === undefined)) {
-    return Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.UNREADABLE));
-  }
-  if (given.html !== undefined) return Effect.succeed(Result.succeed(given.html));
   if (binding.sandbox === undefined)
     return Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.NO_SANDBOX));
-  return readPageFile(binding.sandbox, given.path ?? "");
+  return readPageFile(binding.sandbox, path);
 }
 
 /** Why HTML read from a file cannot be a page's: empty, or past the bound in characters. */
@@ -239,30 +198,17 @@ const pageMentionOf = (binding: PageToolBinding, pageId: string, title: string) 
     ),
   );
 
-/** One call of `show_page` under the task the service bound, by who makes it, Luke or a coding agent, answered as the result the model reads. */
+/** One call of `show_page` under the task the service bound, by the agent that makes it, answered as the result the model reads. */
 export function runShowPage(
   binding: PageToolBinding,
   input: UnparsedWireValue,
   shownBy: PageShower,
-  inputs: "html-or-path" | "path" = "html-or-path",
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const read: Result.Result<
-      {
-        readonly title: string;
-        readonly page?: string;
-        readonly html?: string;
-        readonly path?: string;
-      },
-      unknown
-    > = inputs === "path" ? readCoderInput(input) : readInput(input);
-    if (Result.isFailure(read)) {
-      return showPageRejected(
-        inputs === "path" ? SHOW_PAGE_REFUSAL.UNREADABLE_PATH : SHOW_PAGE_REFUSAL.UNREADABLE,
-      );
-    }
+    const read = readCoderInput(input);
+    if (Result.isFailure(read)) return showPageRejected(SHOW_PAGE_REFUSAL.UNREADABLE_PATH);
     const { title, page } = read.success;
-    const html = yield* htmlOf(binding, read.success);
+    const html = yield* htmlOf(binding, read.success.path);
     if (Result.isFailure(html)) return showPageRejected(html.failure);
     const refusal = htmlRefusal(html.success);
     if (refusal !== undefined) return showPageRejected(refusal);

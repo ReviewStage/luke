@@ -1,16 +1,16 @@
 /**
- * edge.ts -- the doors an eve root opens onto the agent runtime, built once for both roots over the root's own runner.
+ * edge.ts -- the doors an eve root opens onto the agent runtime, built over the root's own runner.
  *
- * eve drives a root's authored files through promise-shaped hooks, so each
+ * eve drives a root's authored files through promise-shaped hooks, so the
  * root's `host.ts` is a runtime edge and holds the doors those files call.
- * The planning root (`apps/luke/host.ts`) and the coding root (`apps/dev/host.ts`)
- * open the same three: a role's integrations, the skills a session starts
- * with, and a child session's relay. They differ by the role's profile
- * (`role.ts`) and by the two small facts a root hands in (`EdgeRoot`), so
- * the doors are built here and each root's are one call.
+ * The coding root (`apps/dev/host.ts`) opens three: a role's integrations,
+ * the skills a session starts with, and a child session's relay. They
+ * differ by the role's profile (`role.ts`) and by the two small facts a
+ * root hands in (`EdgeRoot`), so the doors are built here and the root's
+ * are one call.
  *
  * Nothing here runs an effect. The root hands in its own runner, which is
- * `runAgent` in production, as `productionBrainHostSeams` is handed one.
+ * `runAgent` in production.
  */
 
 import type { QueryError } from "@luke/database/core/query";

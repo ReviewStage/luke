@@ -341,7 +341,7 @@ test("a dictation in the chat listens for every person still here by name, each 
   assert.equal(new Set(words).size, words.length, "each word once");
 });
 
-test("every member is offered by name as the link their chip writes, an agent and a Luke under their task, and none before the workspace is known", () => {
+test("every member is offered by name as the link their chip writes, an agent under its task, a task's former Luke never, and none before the workspace is known", () => {
   const chat = {
     ...chatOf(0, []),
     members: chatOf(0, []).members.map((member) =>
@@ -358,7 +358,6 @@ test("every member is offered by name as the link their chip writes, an agent an
         "Teammate invitations",
         `[@Invite emails](https://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID})`,
       ],
-      ["Luke", "Teammate invitations", `[@Luke](https://tryluke.dev/acme/plan/${TASK_ID}/luke)`],
       ["Maria Chen", undefined, "[@Maria Chen](https://tryluke.dev/acme/person/user-maria)"],
     ],
   );
@@ -369,7 +368,7 @@ test("every member is offered by name as the link their chip writes, an agent an
   );
 });
 
-test("a composer offers only the members a post in its channel reaches: its task's agent and Luke in the task's channel, people alone in the general one and a topic, and a DM's own two", () => {
+test("a composer offers only the members a post in its channel reaches: its task's agent in the task's channel, people alone in the general one and a topic, and a DM's own two", () => {
   const chat = {
     ...chatOf(0, []),
     members: chatOf(0, []).members.map((member) =>
@@ -381,7 +380,7 @@ test("a composer offers only the members a post in its channel reaches: its task
     chatTargets(chat, NAMES, place, channel)
       .filter((target) => target.sigil === "@")
       .map((target) => target.name);
-  assert.deepEqual(offered(TASK_CHANNEL), ["Invite emails", "Luke", "Maria Chen"]);
+  assert.deepEqual(offered(TASK_CHANNEL), ["Invite emails", "Maria Chen"]);
   assert.deepEqual(offered(GENERAL), ["Maria Chen"]);
   assert.deepEqual(offered(TOPIC), ["Maria Chen"]);
   assert.deepEqual(offered(WITH_AGENT), ["Invite emails"]);

@@ -26,7 +26,7 @@ Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
 `apps/web/server/routes/`, the deployment shell beside them, the agents' eve
-apps, `apps/luke` and `apps/dev`, and build and release scripts. A React component, hook, or
+apps, `apps/dev`, and build and release scripts. A React component, hook, or
 DOM-free view model lives in `packages/ui` when more than one app can
 mount it, the panel every client mounts, the desktop's panel window and the
 web's tab alike, in `packages/panel`, the hosted service's logic in
@@ -236,29 +236,18 @@ request, so there is no request fiber to compose it into),
 function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
 its own process), each eve root's own module-scope memoized runtime,
-`apps/luke/runtime.ts` and `apps/dev/runtime.ts`, built over the
+`apps/dev/runtime.ts`, built over the
 same layer (`@luke/service/runtime`'s `webServices`) and holding its
 `runAgent`, the eve project's authored files —
-`apps/luke/agent.ts`, `apps/luke/channels/eve.ts`,
-`apps/luke/hooks/store.ts`, `apps/luke/instructions/prompt.ts`,
-`apps/luke/instructions/seed.ts`, and `apps/luke/tools/brain.ts` — each
-an edge because eve drives them through promise-shaped hooks of its own and
-an authored file is where this deployment runs what it hands eve — and
-`apps/luke/host.ts`, the one module those files share their host through,
-which composes the production seams over `HostedEnvironment` with
-`Effect.runSync` as it loads, because the channel's door takes the
-deployment's secret as a value and the environment read suspends on nothing —
-and the coding-agent eve project's authored files on the same terms —
 `apps/dev/agent.ts`, `apps/dev/channels/eve.ts`,
 `apps/dev/hooks/store.ts`, `apps/dev/instructions/prompt.ts`, and
 `apps/dev/sandbox.ts` (the sandbox selector, which eve calls as a
 promise when a tool first needs the sandbox and which runs the checkout
 there), each an edge because eve drives them through promise-shaped hooks of
 its own, and `apps/dev/host.ts`, the one module those files share their
-host through, composed with `Effect.runSync` as it loads for the same reason
-`apps/luke/host.ts` is. Not
+host through, composed with `Effect.runSync` as it loads. Not
 every seam in `packages/service/src/` is an effect down to its floor:
-`packages/service/src/agents/brain-host/production.ts`'s `spend` is
+`packages/service/src/agents/coder-host/production.ts`'s `spend` is
 the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
 `SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
 foreign boundaries the effects around them compose over rather than
@@ -320,7 +309,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
-  `apps/luke/evals/brain-host.eval.ts`, `apps/dev/evals/coder.eval.ts`, and
+  `apps/dev/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
   statement) so a suite or an offline eval still written on `node:assert` or a

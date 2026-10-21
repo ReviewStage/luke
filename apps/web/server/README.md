@@ -168,25 +168,22 @@ picture by its address (`@luke/features/plan-attachment-link`), which
 `savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
 deletes, a day on, a picture no save stamped.
 
-A task's conversation keeps the member who opened it as its `user_id`, the
-address its messages, turns, and asks are written under, and is reached by
-every member of the task's workspace: `conversationReachableBy` in
-`packages/database/src/models/recorded-session.ts` admits a member of the
-workspace of the task or coding agent naming the conversation, or naming its
-standing parent one hop up (a subagent's session), and the opener alone for a
-conversation no task or agent names, so a member who leaves the workspace
-leaves its conversations with it. The eve doors
-(`brain-host/door.ts`), the two hosts' admission (`brain-host/conversation.ts`,
-which answers the caller beside the conversation's owner), and the ask door
-all read it, so a member speaks into the session a teammate opened. From
-there the caller and the owner are two ids: the brain's inference
-and research are metered to the caller, not the conversation's owner, and
-the task, the board, every tool binding, an integration's grant, and a
+A coding agent's conversation keeps the member who started it as its
+`user_id`, the address its messages, turns, and asks are written under, and
+is reached by every member of the agent's workspace: `conversationReachableBy`
+in `packages/database/src/models/recorded-session.ts` admits a member of the
+workspace of the coding agent naming the conversation, or naming its standing
+parent one hop up (a subagent's session), and the opener alone for a
+conversation no agent names, so a member who leaves the workspace leaves its
+conversations with it. The eve door (`brain-host/door.ts`), the host's
+admission (`brain-host/conversation.ts`, which answers the caller beside the
+conversation's owner), and the ask door all read it, so a member speaks into
+the session a teammate opened. From there the caller and the owner are two
+ids: the task, the board, every tool binding, an integration's grant, and a
 worker's title are read, written, and metered as the caller, while the
 writer, the seed, and the relay address the owner's rows.
 A voice call is the caller's `voice_sessions` row and meter, landing in the
-task's one conversation, which `openTaskConversation` answers with its
-opener. A coding agent still runs on its starter's provider keys and GitHub
+conversation of the agent it speaks into. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left, and a workspace renamed or given a photo, through
@@ -365,29 +362,27 @@ at the `VOICE_SERVICE_PATH` path and the desktop posts feedback to
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
-The Vercel project is three services in one deployment, declared under `services`
+The Vercel project is two services in one deployment, declared under `services`
 in the repository root's `vercel.json`, which Vercel reads at the project's
 Root Directory (the repository root, so each service's `root` is relative to
 it) and only while the project's Framework Preset is Services. `web` is this
 app, rooted at `apps/web`, and carries the migrate-and-seed
 build, the install filter, the ignore rule, and the `routes` above unchanged.
-`luke` is the hosted brain, the standalone eve app at `apps/luke`
-(`apps/luke/README.md`), built by a plain `pnpm exec eve build` in that root,
-which writes the Build Output static-build reads back from it, so nothing
-relocates it and no variable of eve's own is set by hand.
-`dev` is the coding-agent service, a second standalone eve app at `apps/dev`
-built and deployed on the same terms (`packages/service/README.md`'s "The
+`dev` is the coding-agent service, the standalone eve app at `apps/dev`,
+built by a plain `pnpm exec eve build` in that root, which writes the Build
+Output static-build reads back from it, so nothing relocates it and no
+variable of eve's own is set by hand (`packages/service/README.md`'s "The
 coding-agent service").
 Public routing is the top-level `rewrites`:
-`/eve/coder/v1/*` enters the dev service, `/eve/v1/*` the luke service, and
-everything else the web service, and a
+`/eve/coder/v1/*` enters the dev service, and everything else the web
+service, and a
 service's own routes run only once a request has entered it. That is why the
 generated `/api/` rewrites live under the web service's `routes` and the
 generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
 level beside `services`: Vercel ignores one there rather than erroring, so a
 file generated into the old location would pass every check and 404 every
 `/api/` route in production. The project's
-environment variables reach all three services alike, and each service's own
+environment variables reach both services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
 `apps/web`, `packages`, the workspace manifests, or `vercel.json` deploys none
 of them. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
@@ -625,17 +620,16 @@ reaches eve included: a request that carries a bearer reaches eve over it,
 and one that carries only the cookie reaches eve as the deployment acting
 for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
 `eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
-automation run, a comment's ask of Luke, which the brain's door admits as
-the member's own principal, and a task's delete and the account's, which
+automation run, a comment's ask of an agent, and a task's delete and the account's, which
 retire the eve sessions of what they delete, all work in a browser. Note that a route
 file's choice of resolver is not a boundary, because every function holding
 a group answers every path the group declares, the one a client names in the
 dispatcher's `route-path` query among them; whom eve is reached as is chosen
 per request in the endpoint instead, so where a request lands changes
-nothing about it. The eve services under `/eve/v1/*` and
-`/eve/coder/v1/*` share the origin but never pass through this adaptor; they
-resolve the bearer alone (`hostedUserId`), or the deployment's own secret
-naming an account, and take no cookie. Every route
+nothing about it. The eve service under `/eve/coder/v1/*` shares the origin
+but never passes through this adaptor; it resolves the bearer alone
+(`hostedUserId`), or the deployment's own secret naming an account, and takes
+no cookie. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
@@ -850,7 +844,6 @@ separate service is deployed. Tests run against a fake OpenAI on loopback and an
 
 ## The agents
 
-Luke's planning brain is its own eve app, `apps/luke`, and the coding agent
-is another, `apps/dev`; their layout, deployment, and evals are in
-`apps/luke/README.md`, which `apps/dev` follows, and `packages/service/README.md`'s
-"The coding-agent service".
+Every agent is a coding agent, served by its own eve app, `apps/dev`; its
+layout, deployment, and evals are in `packages/service/README.md`'s "The
+coding-agent service".

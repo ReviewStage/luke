@@ -6,11 +6,9 @@ import {
   type AvatarUnavailableFrame,
   type AvatarUnavailableReason,
   type LiveSessionCreated,
-  type PlanDraftFrame,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
@@ -153,21 +151,14 @@ export interface LiveSessionHolderOptions {
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
   /**
-   * The service's notetaker sent a draft of the plan the standing task
-   * call is about: a draft for any other task, or from a session already
-   * ended, never reaches it. What the draft is shown as is the caller's.
-   */
-  onPlanDraft?: (draft: PlanDraftFrame) => void;
-  /**
-   * The service said what each part of Luke is doing on the standing
-   * task call, on the same terms as `onPlanDraft`. A task call's end
-   * is told as a snapshot with nothing doing, so none outlives the call.
+   * The service said what each part of the standing task call is doing:
+   * activity about any other task, or from a session already ended, never
+   * reaches it. A task call's end is told as a snapshot with nothing doing,
+   * so none outlives the call.
    */
   onTaskActivity?: (activity: TaskActivityFrame) => void;
-  /** Luke put code on screen on the standing task call, on the same terms as `onPlanDraft`. */
+  /** Luke put code on screen on the standing task call, on the same terms as `onTaskActivity`. */
   onTaskCode?: (code: TaskCodeFrame) => void;
-  /** A brain turn's work on the standing task call changed, on the same terms as `onPlanDraft`. */
-  onTaskWork?: (work: TaskWorkFrame) => void;
   /** The task call about the task named ended, so what it put on screen goes with it. */
   onTaskCallEnded?: (taskId: string) => void;
 }
@@ -467,10 +458,8 @@ export class LiveSessionHolder {
       // ends the session: the graceful close already closed it, and a session
       // lost or torn down with the holder's own scope closes it here.
       yield* Scope.addFinalizer(scope, sideband.close);
-      opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
       opened.onTaskActivity?.((activity) => this.#activity(session, activity));
       opened.onTaskCode?.((code) => this.#code(session, code));
-      opened.onTaskWork?.((work) => this.#work(session, work));
       opened.onTaskCallEnding?.((ending) => this.#ending(session, ending));
       opened.onAvatarStarted?.((started) => this.#avatarStarted(session, started));
       opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
@@ -805,12 +794,6 @@ export class LiveSessionHolder {
     return this.endSession(LIVE_SESSION_END_CAUSE.DRAIN);
   }
 
-  /** A draft of the plan the session is bound to, passed on while the session stands. */
-  #drafted(session: HeldSession, draft: PlanDraftFrame): void {
-    if (session.ended || draft.planId !== session.taskId) return;
-    this.#options.onPlanDraft?.(draft);
-  }
-
   /** The service's activity about the task the session is bound to, passed on while the session stands. */
   #activity(session: HeldSession, activity: TaskActivityFrame): void {
     if (session.ended || activity.planId !== session.taskId) return;
@@ -821,12 +804,6 @@ export class LiveSessionHolder {
   #code(session: HeldSession, code: TaskCodeFrame): void {
     if (session.ended || code.planId !== session.taskId) return;
     this.#options.onTaskCode?.(code);
-  }
-
-  /** A brain turn's work on the call about the task the session is bound to, passed on while the session stands. */
-  #work(session: HeldSession, work: TaskWorkFrame): void {
-    if (session.ended || work.planId !== session.taskId) return;
-    this.#options.onTaskWork?.(work);
   }
 
   /**

@@ -39,19 +39,11 @@ import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { workRowsOf } from "../tasks/work-model.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
-import {
-  ADD_SECTION,
-  type ChangesOffer,
-  changesOffers,
-  panelEntries,
-  taskWorkers,
-  workerCardReading,
-} from "./side-panel.js";
+import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
 /**
@@ -62,11 +54,11 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * `agentEntries`), under quiet headings: the task's Inbox, counting what
  * waits on the developer, and the panel's kinds the task has used, its
  * coding agents, each agent's pull request whose Changes tab the panel
- * opens, its subagents, and the files Luke showed on it. An agent or a subagent wears where it stands on its glyph,
+ * opens, and the files its agents showed on it. An agent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
  * beside the row to say it, and a file is drawn in a row the
  * file tree's own: its type's coloured icon, height, and type size. A row
- * opens what it names exactly as its "+" row does: a kind, a subagent, or a
+ * opens what it names exactly as its "+" row does: a kind or a
  * file opens the side panel on its tab, and an agent chooses its tab in the
  * column. An agent's row offers Archive agent on a right-click, and the
  * agents archived are folded under Archived at the foot of Coding agents
@@ -152,7 +144,6 @@ const SECTION_ORDER = [
   TABS_SECTION,
   AGENTS_SECTION,
   ADD_SECTION.PULL_REQUESTS,
-  ADD_SECTION.SUBAGENTS,
   ADD_SECTION.FILES,
   ADD_SECTION.PAGES,
 ] as const;
@@ -363,9 +354,8 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
 
 /**
  * The card each row hangs, the one its tab hangs where it has one: an
- * agent's its tab's card, read from what its tab last held; a subagent's
- * its tab's card, from the session the task's work holds; a file's its path
- * and Luke's note; a pull request's its title, number, and what it
+ * agent's its tab's card, read from what its tab last held; a file's its
+ * path and the agent's note; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
  * version; the Inbox's what waits. The panel's kinds hang none, as their
  * tabs hang none, since their names say all there is.
@@ -376,7 +366,6 @@ function withCards(
     tasks: TasksControl;
     inbox: InboxBoardView;
     held: HeldTranscripts;
-    workers: ReturnType<typeof taskWorkers>;
     files: readonly string[];
     changes: readonly ChangesOffer[];
     repository: string | null;
@@ -384,7 +373,7 @@ function withCards(
     onOpenAgent: (agentId: string) => void;
   },
 ): SummaryEntry[] {
-  const { tasks, inbox, held, workers, files, changes, repository, onOpenAgent } = input;
+  const { tasks, inbox, held, files, changes, repository, onOpenAgent } = input;
   const { agents, mainTabs } = tasks;
   const models = agents.models ?? [];
   const shown = tasks.shownCode ?? [];
@@ -397,15 +386,6 @@ function withCards(
       return { ...entry, card: <AgentTabCard name={label} models={models} read={read} /> };
     }
     if (row.id === INBOX_ROW) return { ...entry, card: <InboxCard inbox={inbox} /> };
-    if (row.section === ADD_SECTION.SUBAGENTS) {
-      const worker = workers.find((each) => each.call.id === row.id);
-      const untitled = worker?.session?.title === undefined;
-      const read = () => workerCardReading(worker, held);
-      const card = (
-        <AgentTabCard name={row.label} untitled={untitled} models={models} read={read} />
-      );
-      return { ...entry, card };
-    }
     if (row.section === ADD_SECTION.PULL_REQUESTS) {
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
@@ -445,8 +425,7 @@ function withCards(
  * used it; then the panel's kinds and what they hold, then the agents.
  */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: number) {
-  const { sidePanel, mainTabs, agents, work } = tasks;
-  const workers = taskWorkers(workRowsOf(work.conversation));
+  const { sidePanel, mainTabs, agents } = tasks;
   const files = shownFiles(tasks.shownCode ?? []);
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
@@ -475,7 +454,6 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
       kinds: sidePanel.used.filter(
         (kind) => kind !== SIDE_PANEL_TAB.COMMENTS && kind !== SIDE_PANEL_TAB.INBOX,
       ),
-      workers,
       files,
       changes,
       pages: tasks.pages ?? [],
@@ -483,7 +461,7 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
     }),
     ...agentEntries(mainTabs, agents),
   ];
-  return { rows, workers, files, changes };
+  return { rows, files, changes };
 }
 
 /** A panel kind's row with how many of its things it counts at its end, as the Inbox's row counts what waits. */
@@ -520,13 +498,12 @@ function summarySections(
   onOpenAgent: (agentId: string) => void,
   openComments: number | undefined,
 ): SummarySection[] {
-  const { rows, workers, files, changes } = summaryRows(tasks, inbox, openComments);
+  const { rows, files, changes } = summaryRows(tasks, inbox, openComments);
   const paths = files.map((ref) => ref.path);
   const entries = withCards(rows, {
     tasks,
     inbox,
     held,
-    workers,
     files: paths,
     changes,
     repository,

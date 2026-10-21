@@ -57,7 +57,7 @@ const ASK = {
 const CONVERSATION = "conversation-agent";
 const FRAME_DATA = "ZmFrZS1mcmFtZQ==";
 
-/** The tab as the store reads it, a coding agent's on the deployment's GitHub App, or Luke's where `agent` is null. */
+/** The tab as the store reads it, a coding agent's on the deployment's GitHub App unless another agent is named. */
 function reachedTab(agent: ReachedBrowserTab["agent"] | undefined): ReachedBrowserTab {
   return {
     tab: {
@@ -519,42 +519,25 @@ it.effect("a socket that closes hands back the takeover it took", () =>
   }),
 );
 
-it.effect(
-  "a watched coding agent's sandbox is held, and moved on as the panel acts; Luke's takes no lease",
-  () =>
-    Effect.gen(function* () {
-      const coder = yield* liveBrowser();
-      const panel = yield* scriptedViewer;
-      const store = world(coder.browser);
-      const { fiber } = yield* started(
-        coder.peer,
-        coder.commands,
-        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
-      );
-      assert.equal(store.holds.length, 1, "connecting holds the sandbox");
-      assert.ok((store.holds[0] ?? 0) > Duration.toMillis(BROWSER_LIVE_BOUNDS.IDLE));
-      yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY);
-      yield* panel.push(VIEWPORT);
-      yield* until(() => store.holds.length === 2);
-      assert.ok((store.holds[1] ?? 0) > (store.holds[0] ?? 0));
-      yield* panel.leave;
-      yield* Fiber.join(fiber);
-
-      const luke = yield* liveBrowser();
-      const lukePanel = yield* scriptedViewer;
-      const lukeStore = world(luke.browser, { reached: reachedTab(null) });
-      const lukeRelay = yield* started(
-        luke.peer,
-        luke.commands,
-        Effect.scoped(relayBrowserTab(lukePanel.viewer, ASK, reachedTab(null), lukeStore.deps)),
-      );
-      yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY);
-      yield* lukePanel.push(VIEWPORT);
-      yield* settle;
-      yield* lukePanel.leave;
-      yield* Fiber.join(lukeRelay.fiber);
-      assert.deepEqual(lukeStore.holds, []);
-    }),
+it.effect("a watched coding agent's sandbox is held, and moved on as the panel acts", () =>
+  Effect.gen(function* () {
+    const coder = yield* liveBrowser();
+    const panel = yield* scriptedViewer;
+    const store = world(coder.browser);
+    const { fiber } = yield* started(
+      coder.peer,
+      coder.commands,
+      Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+    );
+    assert.equal(store.holds.length, 1, "connecting holds the sandbox");
+    assert.ok((store.holds[0] ?? 0) > Duration.toMillis(BROWSER_LIVE_BOUNDS.IDLE));
+    yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY);
+    yield* panel.push(VIEWPORT);
+    yield* until(() => store.holds.length === 2);
+    assert.ok((store.holds[1] ?? 0) > (store.holds[0] ?? 0));
+    yield* panel.leave;
+    yield* Fiber.join(fiber);
+  }),
 );
 
 it.effect(

@@ -26,12 +26,10 @@ import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
-  TASK_WORK_STATE,
   TASKS_READ,
   type TaskCode,
   type TaskCodeShowing,
   type TasksView,
-  type TaskWorkTurn,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -569,36 +567,6 @@ test("a task started opens with the side panel shown on its plan, a refused star
   assert.equal(panel().open, false, "the late answer leaves the panel the developer hid");
 });
 
-test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {
-  const asked: unknown[] = [];
-  const page = {
-    messages: [],
-    cursor: "3:1",
-    status: CODING_AGENT_STATUS.RUNNING,
-    title: null,
-  };
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_MESSAGES]: (payload) => {
-        asked.push(payload);
-        return Promise.resolve(page);
-      },
-    },
-  );
-
-  const read = await tab.control().work.readWorker({
-    agentId: "plan-1",
-    after: "0:0",
-    callId: "call-0-0",
-  });
-
-  assert.deepEqual(asked, [{ taskId: "plan-1", after: "0:0", callId: "call-0-0" }]);
-  assert.deepEqual(read, page);
-});
-
-const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
-
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
 function _drawnBoard(number: number): Board {
   return {
@@ -634,46 +602,6 @@ function panelOf(tab: ReturnType<typeof mount>) {
   return { open, tab: shown };
 }
 
-/** One turn of Luke's brain on the open task. */
-const TURN: TaskWorkTurn = {
-  turnId: "turn-1",
-  startedAt: 1,
-  state: TASK_WORK_STATE.DONE,
-  earlierOmitted: false,
-  journal: [],
-  workers: [],
-};
-
-/** The open task's calls read back: none, and one with a line said on it. */
-const NO_CALLS: TasksView["transcript"] = {
-  status: TASKS_READ.READY,
-  transcript: { calls: [], earlierOmitted: false },
-};
-const _ONE_CALL: TasksView["transcript"] = {
-  status: TASKS_READ.READY,
-  transcript: {
-    calls: [
-      {
-        id: "5d7f9b1c-3e5a-4c7e-9a1b-3c5e7f9b1d3f",
-        startedAt: 1,
-        messages: [
-          { id: "0", role: "user", parts: [{ type: "text", text: "Invites should expire." }] },
-        ],
-      },
-    ],
-    earlierOmitted: false,
-  },
-};
-
-/** The open task read with nothing on it yet: an empty board, no code, no call, no work. */
-const _NOTHING_YET: TasksView = {
-  ...OPEN,
-  board: EMPTY_BOARD,
-  shownCode: [],
-  transcript: NO_CALLS,
-  work: [],
-};
-
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 const RUNNING_AGENT: CodingAgentSummary = {
@@ -691,28 +619,6 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-}
-
-/** Luke's start of a coding agent in the open task's work, as its call stands: still running, or answered. */
-function _startedAgent(
-  state: typeof TASK_WORK_STATE.RUNNING | typeof TASK_WORK_STATE.DONE,
-): TaskWorkTurn {
-  return {
-    ...TURN,
-    journal: [
-      {
-        type: "tool-start_coding_agent",
-        toolCallId: "call-start-1",
-        state: state === TASK_WORK_STATE.DONE ? "output-available" : "input-available",
-        input: {},
-      },
-    ],
-  };
-}
-
-/** How many times the task's agents were read. */
-function _listReads(tab: ReturnType<typeof mount>): number {
-  return tab.agentActs.filter((kind) => kind === ACT_KIND.CODING_AGENTS_LIST).length;
 }
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {

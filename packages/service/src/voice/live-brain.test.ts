@@ -2,22 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
-import { childConversationId } from "@luke/database/models/ids";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import {
-  insertConversation,
-  joinWorkspace,
-  openHostedStoreTestDatabase,
-  startTask,
-} from "@luke/database/testing";
-import type { TaskWorkTurn } from "@luke/features/tasks-view";
+import { insertConversation, openHostedStoreTestDatabase } from "@luke/database/testing";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
+  type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
@@ -31,7 +24,6 @@ import {
   Effect,
   Exit,
   Layer,
-  Option,
   Queue,
   Redacted,
   Scope,
@@ -41,12 +33,10 @@ import { SqlError, UnknownError } from "effect/sql/SqlError";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { DEPLOYMENT_PRESENCE, deploymentActor } from "../agents/brain-host/auth.js";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../agents/brain-host/bounds.js";
-import { BRAIN_DELEGATE_TOOL, BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
+import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
+import { deploymentActor } from "../agents/brain-host/auth.js";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import { askStanding } from "../agents/brain-host/brain-ask.js";
-import { DEPLOYMENT_TURNS } from "../agents/brain-host/channel.js";
-import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { ownedAuth } from "../agents/brain-host/door.js";
 import {
   type AgentSessions,
@@ -59,23 +49,18 @@ import {
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
 import {
-  SEARCH_WEB_REFUSAL,
-  SEARCH_WEB_STATUS,
-  SEARCH_WEB_TOOL,
-} from "../agents/public-research.js";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_STREAMS,
+  CODER_DEPLOYMENT_TURNS,
+} from "../agents/coder-host/channel.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { ASK_ORIGIN, TURN_SLOW_STEP, TURN_STATUS } from "../core.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { type RecordingSentry, recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { CALL_BACKEND } from "./call-backend.js";
-import {
-  type HostedLiveBrain,
-  type HostedLiveBrainOptions,
-  hostedLiveBrain,
-} from "./live-brain.js";
+import { type HostedLiveBrainOptions, hostedLiveBrain } from "./live-brain.js";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -92,10 +77,6 @@ afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
 
-/** A task the account starts, as the Tasks tab's new-task form saves one. */
-const TASK = {
-  name: "Teammate invitations",
-} as const;
 /**
  * The follow's bounds narrowed so a poll is milliseconds, with the bound left
  * wide: a turn's events land through the store, and the store on CI is one
@@ -115,10 +96,10 @@ const POLL_MS = 5;
 const QUIET_POLLS = { AFTER_END: 6, AFTER_REFUSAL: 4, AFTER_STOP: 8 } as const;
 const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
 
-// The relay's writer holds rows to the hosted set, as production's does, so a brain turn's research call is written.
+// The relay's writer holds rows to the agent's set, as production's does, so an agent turn's research call is written.
 const writer = await database.run(
   storeWriter({
-    tools: HOSTED_TOOL_SET,
+    tools: CODER_TOOL_SET,
   }),
 );
 const askEffects = askRecord();
@@ -221,7 +202,7 @@ interface Listening {
 
 interface Stand extends Listening {
   readonly eve: FakeEve;
-  readonly brain: HostedLiveBrain;
+  readonly brain: LiveBrain;
   readonly reports: string[];
   /** Sentry's reporter where the stand records Sentry, for a submission's own fiber, as the voice service's runtime provides it; empty otherwise. */
   readonly reporting: Context.Context<never>;
@@ -230,7 +211,7 @@ interface Stand extends Listening {
 }
 
 /** The brain's listener as the service stands one: the seams, the activity, and the settled steps kept apart, each with a wait on its count. */
-function listening(brain: HostedLiveBrain): Listening {
+function listening(brain: LiveBrain): Listening {
   const events: LiveBrainRunEvent[] = [];
   const activities: LiveBrainRunEvent[] = [];
   const steps: LiveBrainRunEvent[] = [];
@@ -284,7 +265,7 @@ async function stand(
       hostedLiveBrain({
         accountId,
         conversation: { userId: target.userId, conversationId },
-        backend: CALL_BACKEND.TASK,
+        backend: CALL_BACKEND,
         asks: { asks: record, eve: over ?? eve },
         store,
         writer,
@@ -622,9 +603,9 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
     [
       deploymentActor({
         secret: Redacted.make(DEPLOYMENT_SECRET),
-        admits: DEPLOYMENT_TURNS,
-        presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
-        streams: true,
+        admits: CODER_DEPLOYMENT_TURNS,
+        presents: CODER_DEPLOYMENT_PRESENCE,
+        streams: CODER_DEPLOYMENT_STREAMS,
       }),
     ],
     {
@@ -641,8 +622,13 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
       account: request.headers.get(BRAIN_HOST_HEADER.ACCOUNT),
       body: JSON.parse(await request.text()),
     });
+    // Note that the deployment's route transform hands the door eve's own path, as it does in production.
+    const routed = new Request(url.replace(`${EVE_MOUNT.CODER}/`, "/eve/"), {
+      method: request.method,
+      headers: request.headers,
+    });
     try {
-      await auth(request);
+      await auth(routed);
     } catch (error) {
       assert.ok(error instanceof ForbiddenError);
       return error.response;
@@ -654,7 +640,7 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
       eveSessions({
         origin: "https://luke.test",
         caller: { secret: Redacted.make(DEPLOYMENT_SECRET), account: target.userId },
-        mount: EVE_MOUNT.TASKS,
+        mount: EVE_MOUNT.CODER,
       }),
       door,
     ),
@@ -697,7 +683,7 @@ it.live(
       );
       const cancel = behind.seen.at(-1);
       assert.deepEqual(cancel, {
-        pathname: `/eve/v1/session/${sessionId}/cancel`,
+        pathname: `/eve/coder/v1/session/${sessionId}/cancel`,
         authorization: `Bearer ${DEPLOYMENT_SECRET}`,
         account: target.userId,
         body: { turnId: FIRST_EVE_TURN },
@@ -736,7 +722,7 @@ function workingStep(
           {
             kind: "tool-call",
             callId,
-            toolName: RUN_IN_REPOSITORY_TOOL.name,
+            toolName: AGENT_TOOL.BASH,
             input: { command: "pnpm test" },
           },
         ],
@@ -750,8 +736,8 @@ function workingStep(
         result: {
           kind: "tool-result",
           callId,
-          toolName: RUN_IN_REPOSITORY_TOOL.name,
-          output: { status: REPOSITORY_SHELL_STATUS.RAN, exitCode: 0, stdout: "ok\n", stderr: "" },
+          toolName: AGENT_TOOL.BASH,
+          output: { exitCode: 0, stdout: "ok\n", stderr: "" },
         },
       },
     }),
@@ -888,210 +874,6 @@ it.live(
     }),
 );
 
-/** The one call a brain turn makes, as eve names its input and its result. */
-interface BrainCall {
-  readonly toolName: string;
-  readonly input: unknown;
-  readonly output: unknown;
-}
-
-const SEARCH_WEB_CALL: BrainCall = {
-  toolName: SEARCH_WEB_TOOL.name,
-  input: { query: "invite link expiry best practice" },
-  output: {
-    status: SEARCH_WEB_STATUS.NO_RESULTS,
-    reason: SEARCH_WEB_REFUSAL.NO_RESULTS,
-    query: "invite link expiry best practice",
-  },
-};
-
-/** A brain turn as eve streams it: the spoken ask, one call and its result, and the reply. */
-function brainTurn(
-  turnId: string,
-  now: number,
-  call: BrainCall = SEARCH_WEB_CALL,
-): readonly MessageStreamEvent[] {
-  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-    stampedEveEvent(event, now);
-  const sequence = 0;
-  return [
-    stamped({ type: "turn.started", data: { turnId, sequence } }),
-    stamped({ type: "message.received", data: { turnId, sequence, message: "q" } }),
-    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
-    stamped({
-      type: "actions.requested",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        actions: [
-          { kind: "tool-call", callId: "call-1", toolName: call.toolName, input: call.input },
-        ],
-      },
-    }),
-    stamped({
-      type: "action.result",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        status: "completed",
-        result: {
-          kind: "tool-result",
-          callId: "call-1",
-          toolName: call.toolName,
-          output: call.output,
-        },
-      },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
-    }),
-    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
-    stamped({
-      type: "message.completed",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 1,
-        finishReason: "stop",
-        message: "Nothing public settles it. Who can withdraw an invite?",
-      },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
-    }),
-    stamped({ type: "turn.completed", data: { turnId, sequence } }),
-  ];
-}
-
-it.live(
-  "a planning call's ask lands in its plan's conversation, and a turn that ran a planning tool is followed to its reply rather than told as failed",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const taskConversation = yield* Effect.promise(() =>
-        database.run(
-          Effect.gen(function* () {
-            const task = yield* startTask(target.userId, TASK);
-            return Option.getOrThrow(yield* openTaskConversation(target.userId, task.id))
-              .conversationId;
-          }),
-        ),
-      );
-      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, taskConversation));
-      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
-      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
-      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      assert.deepEqual(
-        f.eve.opened.map((message) => message.conversationId),
-        [taskConversation],
-      );
-      const standing: RelayStanding = {
-        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
-        target: { userId: target.userId, conversationId: taskConversation },
-        turn: BRAIN_HOST_TURN.SPOKEN,
-        model: "scripted-model",
-        state: memoryRelayState(),
-      };
-      yield* Effect.promise(() => play(brainTurn(FIRST_EVE_TURN, NOW), standing));
-      yield* f.arrived(4);
-      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
-
-      assert.deepEqual(
-        f.events.map((event) => event.kind),
-        [
-          LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-          LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-          LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-          LIVE_BRAIN_RUN_EVENT.ENDED,
-        ],
-      );
-      const end = f.events.at(-1);
-      assert.equal(
-        end?.kind === LIVE_BRAIN_RUN_EVENT.ENDED && end.end,
-        LIVE_BRAIN_RUN_END.COMPLETED,
-      );
-      assert.deepEqual(f.reports, []);
-      yield* Effect.promise(() => f.stop());
-    }),
-);
-
-it.live(
-  "a member following a turn in the plan conversation a teammate opened is shown the model its worker ran on, read under the teammate who opened it",
-  () =>
-    Effect.gen(function* () {
-      const opener = yield* Effect.promise(() => database.createUser());
-      const member = yield* Effect.promise(() => database.createUser());
-      const target = yield* Effect.promise(() =>
-        database.run(
-          Effect.gen(function* () {
-            const task = yield* startTask(opener, TASK);
-            yield* joinWorkspace(task.workspaceId, member);
-            const opened = Option.getOrThrow(yield* openTaskConversation(opener, task.id));
-            return { userId: opener, conversationId: opened.conversationId };
-          }),
-        ),
-      );
-      // The worker's own session, started by the turn's call, ran a turn on the scripted model.
-      const child = {
-        userId: opener,
-        conversationId: childConversationId(target.conversationId, "call-1"),
-      };
-      yield* Effect.promise(() =>
-        database.run(openChildConversation(target, child.conversationId, "worker")),
-      );
-      const f = yield* Effect.promise(() =>
-        stand(target, QUICK, database.store, target.conversationId, askEffects, undefined, member),
-      );
-      const shown: TaskWorkTurn[] = [];
-      f.brain.onWork((work) => shown.push(work));
-      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
-      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
-      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
-      yield* Effect.promise(() =>
-        play(spokenTurn(FIRST_EVE_TURN, NOW), {
-          sessionId: `${sessionId}-worker`,
-          target: child,
-          turn: RELAY_TURN.CHILD,
-          model: "scripted-model",
-          state: memoryRelayState(),
-        }),
-      );
-      const events = brainTurn(FIRST_EVE_TURN, NOW, {
-        toolName: BRAIN_DELEGATE_TOOL.name,
-        input: { task: "Compare the two queue libraries." },
-        output: "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
-      });
-      const standing: RelayStanding = {
-        sessionId,
-        target,
-        turn: BRAIN_HOST_TURN.SPOKEN,
-        model: "scripted-model",
-        state: memoryRelayState(),
-      };
-      // A look finds the worker's call while the turn runs, so the next look reads its session.
-      const answered = events.findIndex((event) => event.type === "action.result") + 1;
-      yield* Effect.promise(() => play(events.slice(0, answered), standing));
-      yield* arrival(
-        (notify) => f.brain.onWork(notify),
-        () => shown.some((work) => work.workers.length > 0),
-        "the worker's call shown",
-      );
-      yield* Effect.promise(() => play(events.slice(answered), standing));
-      yield* f.arrived(4);
-      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
-
-      const [worker] = shown.at(-1)?.workers ?? [];
-      assert.equal(worker?.callId, "call-1");
-      assert.equal(worker?.model, "openai/scripted-model", "the model the worker's turn ran on");
-      yield* Effect.promise(() => f.stop());
-    }),
-);
-
 /** The relay's standing for an accepted ask's turn, as eve would stream it. */
 async function turnStanding(target: ConversationTarget, askId: string): Promise<RelayStanding> {
   return {
@@ -1102,34 +884,6 @@ async function turnStanding(target: ConversationTarget, askId: string): Promise<
     state: memoryRelayState(),
   };
 }
-
-it.live(
-  "a plan's first call sets the backend exploring once, and a call back explores nothing again",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const first = yield* Effect.promise(() => stand(target));
-      const joined = yield* Effect.promise(() =>
-        database.run(first.brain.join(`voice_${randomUUID()}`)),
-      );
-      assert.equal(joined.joined, false);
-      assert.equal(joined.runs.length, 1);
-      assert.deepEqual(
-        first.eve.opened.map((message) => message.message),
-        [BRAIN_EXPLORE_ASK],
-      );
-      yield* Effect.promise(() => first.stop());
-
-      const back = yield* Effect.promise(() => stand(target));
-      const rejoined = yield* Effect.promise(() =>
-        database.run(back.brain.join(`voice_${randomUUID()}`)),
-      );
-      assert.equal(rejoined.joined, true);
-      assert.deepEqual(back.eve.opened, []);
-      assert.deepEqual(back.eve.delivered, []);
-      yield* Effect.promise(() => back.stop());
-    }),
-);
 
 it.live(
   "hung up mid-turn, Luke's turn goes on: a call back is handed what he said with no call up, follows the turn from there without saying it again, and the call after finds nothing left",

@@ -162,7 +162,6 @@ import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
-import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
@@ -190,7 +189,6 @@ import {
 } from "./use-side-panel.js";
 import { chatFollowerOf, useWorkspaceChat } from "./use-workspace-chat.js";
 import { sayRestored } from "./version-view.js";
-import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model.js";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
 interface PendingSectionWrite {
@@ -596,21 +594,14 @@ export interface TasksControl {
   unreadTabs: readonly StripTab[];
   /** The open task's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
-  /** Every code Luke showed on the open task, oldest first: what the service keeps, and each a call shows as it shows it. */
+  /** Every code the open task's agents showed, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: TasksView["shownCode"];
-  /** Whether the last read of the open task's work and code did not land, what is held still drawn. */
-  workFailed: boolean;
-  /** Reads the open task's work and code again after a read that did not land. */
-  onRetryWork: () => void;
+  /** Whether the last read of the open task's code did not land, what is held still drawn. */
+  codeFailed: boolean;
+  /** Reads the open task's code again after a read that did not land. */
+  onRetryCode: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
-  /** What Luke's own brain ran on the open task, whose workers a subagent's tab reads. */
-  work: {
-    /** The open task's conversation with the brain as an agent's transcript is read; none before the first read lands. */
-    conversation: TasksView["conversation"];
-    /** Reads the brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
-    readWorker: TranscriptReader;
-  };
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
@@ -1469,43 +1460,6 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     keywords: dictationWords,
   });
-  // A subagent's tab is held to the task's work as an agent's is to its agents.
-  const workers = useMemo(
-    () => workerCallIds(workRowsOf(viewed.conversation)),
-    [viewed.conversation],
-  );
-  // An agent Luke started, archived, or brought back in the call moves in
-  // the work before it moves in the list, so the list is read again as the
-  // call answers, and the tab appears or leaves as it does after a Start or
-  // an Archive; a call already in the work when the plan opens is read with
-  // the plan.
-  const startedByLuke = useMemo(() => agentListCallIds(viewed.conversation), [viewed.conversation]);
-  const startsSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
-    taskId: undefined,
-    ids: new Set(),
-  });
-  const readAgents = agents.onRetryList;
-  useEffect(() => {
-    const seen = startsSeen.current;
-    const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && startedByLuke.some((callId) => !seen.ids.has(callId));
-    startsSeen.current = { taskId, ids: new Set(startedByLuke) };
-    if (landed) readAgents();
-  }, [startedByLuke, viewed.activeTaskId, readAgents]);
-  // A call of Luke's that made a new task, or made, deleted, or filled a section, changes the
-  // sidebar only once the tasks are read again, as one lands in the work of the task it was made on.
-  const sidebarByLuke = useMemo(() => sidebarCallIds(viewed.conversation), [viewed.conversation]);
-  const sidebarSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
-    taskId: undefined,
-    ids: new Set(),
-  });
-  useEffect(() => {
-    const seen = sidebarSeen.current;
-    const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && sidebarByLuke.some((callId) => !seen.ids.has(callId));
-    sidebarSeen.current = { taskId, ids: new Set(sidebarByLuke) };
-    if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [sidebarByLuke, viewed.activeTaskId, tell]);
   // An Untitled task takes its first agent's title on the service, and the
   // window hears no push for a task's row, so the tasks are read again as an
   // agent of the open task first holds a title while it stands Untitled.
@@ -1606,7 +1560,7 @@ export function useTasksTab(input: {
         ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld, taskChatHeld) }
         : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
-    inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
+    NO_IDS,
     inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
     inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : NO_IDS,
     // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by (`use-inbox-task-agents.ts`).
@@ -2749,8 +2703,9 @@ export function useTasksTab(input: {
       // Note that an agent's worker's tab is opened with no task words, since a link carries none; its own rows name its task once they land.
       // An agent's worker is drawn only while its agent's tab is open, so the agent's tab opens with it.
       case LINK_PLACE.WORKER:
+        // A task's own Luke's worker is drawn nowhere now, so its link opens the task's plan.
         if (place.agentId === undefined) {
-          showPanelTab(place.planId, { subagent: place.callId });
+          showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
           return;
         }
         showColumnTab(place.planId, { agent: place.agentId });
@@ -2906,16 +2861,6 @@ export function useTasksTab(input: {
   // which lets its draft go.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
-  // The brain's worker's tab reads its session as an agent's worker's tab does, the task standing in the agent's place.
-  const readWorker = useCallback<TranscriptReader>(
-    ({ agentId, after, callId }) =>
-      act(ACT_KIND.TASKS_MESSAGES, {
-        taskId: agentId,
-        after,
-        ...(callId === undefined ? undefined : { callId }),
-      }),
-    [act],
-  );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
       const at = openTabs.findIndex((each) => sameTab(each, tab));
@@ -2959,7 +2904,7 @@ export function useTasksTab(input: {
       return held === undefined || held.length > 0 || waiting;
     }
     if (isSubagentTab(tab))
-      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: workers });
+      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agentIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
@@ -3119,13 +3064,9 @@ export function useTasksTab(input: {
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
-    workFailed: tasks.workStatus === TASKS_READ.FAILED,
-    onRetryWork: () => tell(ACT_KIND.TASKS_REFRESH),
+    codeFailed: tasks.codeStatus === TASKS_READ.FAILED,
+    onRetryCode: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
-    work: {
-      conversation: tasks.conversation,
-      readWorker,
-    },
     agents,
     history: {
       ...history,

@@ -23,7 +23,6 @@ export const AGENT_TOOL = {
   QUEUE_QUESTION: "queue_question",
   WITHDRAW_QUESTION: "withdraw_question",
   SHOW_CODE: "show_code",
-  RUN_IN_REPOSITORY: "run_in_repository",
   DRAW_ON_BOARD: DRAW_ON_BOARD_TOOL_NAME,
   LOOK_AT_BOARD: LOOK_AT_BOARD_TOOL_NAME,
   // A look at one of the plan's pictures, the planning model's and a coding agent's.
@@ -68,7 +67,7 @@ export const AGENT_TOOL = {
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_INBOX: INBOX_TOOL.READ,
   OPEN_PULL_REQUEST: "open_pull_request",
-  // The workspace's chat, the planner's and every coding agent's.
+  // The workspace's chat, every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,
   READ_CHAT: CHAT_TOOL.READ,
   RESOLVE_ASK: CHAT_TOOL.RESOLVE,

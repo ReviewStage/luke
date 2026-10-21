@@ -372,17 +372,11 @@ export function DesktopAgentPage({
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,
-    workRows: [],
     held: views.held,
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
     shownCode: [],
   });
-  // An agent's workers are its delegations, read through its own transcript, so the panel's plan's work is none.
-  const work = {
-    conversation: undefined,
-    readWorker: control.readTranscript,
-  };
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {
     if (agentRepository === undefined) return;
@@ -497,7 +491,6 @@ export function DesktopAgentPage({
                           shownCode={undefined}
                           codeFailed={undefined}
                           pages={undefined}
-                          work={work}
                           agents={control}
                           openAgents={openAgents}
                           shownAgent={shown ? agentId : undefined}

@@ -68,7 +68,6 @@ import {
 } from "./coding-agent-view.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_WORKSPACE_QUERY,
@@ -111,7 +110,6 @@ import {
   type AgentTranscriptLiveAnswer,
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
-  type TaskConversationLiveAnswer,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
   type WorkspaceChatLiveAnswer,
@@ -732,36 +730,6 @@ export class HostedCodingAgentClient {
    * the account `userId` names, and signed out where the session is no
    * longer that account's.
    */
-  /**
-   * One task's planning conversation, its mark and running workers sealed
-   * for following over Neon Realtime, or with `poll` their rows inline:
-   * not found where the account reaches no such task, signed out where
-   * `userId` is not the bearer's own, and unanswered for anything else,
-   * which the caller answers by sealing it again.
-   */
-  taskConversationLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskConversationLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return Effect.catchIf(
-      askLive(
-        this.#hosted.live.taskConversation,
-        { id: taskId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
-  }
-
   agentTranscriptLive(
     agentId: string,
     userId: string,
@@ -781,87 +749,6 @@ export class HostedCodingAgentClient {
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),
     ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
-  }
-
-  /**
-   * One planning worker's transcript past the cursor, read at once rather
-   * than held, with whether the held read would have held on it: for a
-   * reader following the worker's live statements.
-   */
-  taskWorkerMessagesNow(
-    taskId: string,
-    callId: string,
-    after: string,
-  ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
-    const asked = askHosted(this.#hosted.messages.taskWorker, {
-      id: taskId,
-      call: callId,
-      after,
-      wait: TRANSCRIPT_NOW_QUERY.NONE,
-    });
-    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
-  }
-
-  /**
-   * One planning worker's transcript sealed for following over Neon
-   * Realtime, as an agent's worker's is, answered at once: not found where
-   * the account reaches no such plan, signed out where `userId` is not the
-   * bearer's own, and unanswered for anything else, which the caller
-   * answers by sealing it again.
-   */
-  taskWorkerTranscriptLive(
-    taskId: string,
-    callId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    AgentTranscriptLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return Effect.catchIf(
-      askLive(
-        this.#hosted.live.taskWorkerTranscript,
-        { id: taskId, call: callId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
-  }
-
-  /**
-   * One task's conversation as an agent's transcript is read, or a
-   * brain worker's where the call that started it is named: past the
-   * cursor, held by the service while a turn or the worker runs; with no
-   * cursor, its newest turns; with `before`, the turns before that one.
-   */
-  taskMessages(
-    taskId: string,
-    page: { after?: string; before?: string; unheld?: boolean },
-    callId?: string,
-  ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    const asked =
-      callId === undefined
-        ? askHosted(
-            this.#hosted.messages.task,
-            {
-              id: taskId,
-              ...(page.after === undefined ? undefined : { after: page.after }),
-              ...(page.before === undefined ? undefined : { before: page.before }),
-              ...(page.unheld === true ? { hold: "none" } : undefined),
-            },
-            HOSTED_DEADLINE.HELD,
-          )
-        : askHosted(
-            this.#hosted.messages.taskWorker,
-            { id: taskId, call: callId, after: page.after ?? CODING_AGENT_CURSOR_START },
-            HOSTED_DEADLINE.HELD,
-          );
-    return hostedAnswer(asked, ROW_REFUSALS);
   }
 
   /**

@@ -9,27 +9,22 @@ import {
 } from "./mention-link.js";
 
 /**
- * chat-mentions.ts -- whom a chat message names: the people, agents, and Lukes written as mention links, as a chip in any of the app's boxes writes one, and the member a post's `to` names.
+ * chat-mentions.ts -- whom a chat message names: the people and agents written as mention links, as a chip in any of the app's boxes writes one, and the member a post's `to` names.
  *
  * A chat message names a member the way every box of the app does, by its
  * mention link: a person's (`[@Ada Lovelace](https://tryluke.dev/acme/person/<userId>)`),
- * an agent's under its task or its workspace, and a Luke's under his task
- * (`…/plan/<taskId>/luke`). The links that name a person, an agent, or a
- * Luke address them; a link of any other kind, a file or a task, is a
+ * and an agent's under its task or its workspace. The links that name a
+ * person or an agent address them; a link of any other kind, a file, a task,
+ * or a task's Luke (`…/plan/<taskId>/luke`), whom no task has any more, is a
  * reference that addresses no one, and an `@word` outside any link is words.
  * A post's `to` names a member's DM by the same link, written whole or as
  * its bare address.
  */
 
-/** A mention that addresses a member of the chat: a person, an agent, or a task's Luke. */
+/** A mention that addresses a member of the chat: a person or an agent. */
 export type ChatMemberMention = Extract<
   Mention,
-  {
-    readonly kind:
-      | typeof MENTION_KIND.PERSON
-      | typeof MENTION_KIND.AGENT
-      | typeof MENTION_KIND.LUKE;
-  }
+  { readonly kind: typeof MENTION_KIND.PERSON | typeof MENTION_KIND.AGENT }
 >;
 
 /** A member written as a mention link, and the label it was written with, which stands for it where it names no member. */
@@ -38,13 +33,9 @@ interface ChatMentionedMember {
   readonly label: string;
 }
 
-/** Whether a mention addresses a member, which a file's or a task's does not. */
+/** Whether a mention addresses a member, which a file's, a task's, or a Luke's does not. */
 function addresses(mention: Mention): mention is ChatMemberMention {
-  return (
-    mention.kind === MENTION_KIND.PERSON ||
-    mention.kind === MENTION_KIND.AGENT ||
-    mention.kind === MENTION_KIND.LUKE
-  );
+  return mention.kind === MENTION_KIND.PERSON || mention.kind === MENTION_KIND.AGENT;
 }
 
 /**
@@ -73,8 +64,8 @@ export function chatMentionsIn(text: string): ChatMentions {
 }
 
 /**
- * The member a post's `to` names: a person's, an agent's, or a Luke's
- * mention link written whole, `[@Name](address)`, or its address alone;
+ * The member a post's `to` names: a person's or an agent's mention link
+ * written whole, `[@Name](address)`, or its address alone;
  * nothing for a `#name`, a link of any other kind, or words that are no link.
  */
 export function chatTargetMember(target: string): ChatMemberMention | undefined {
@@ -85,7 +76,7 @@ export function chatTargetMember(target: string): ChatMemberMention | undefined 
 }
 
 /**
- * The words with each person, agent, or Luke they name written as `@` and
+ * The words with each person or agent they name written as `@` and
  * its name alone, whether by a mention link or by its address written bare,
  * every other link left as written: what a chat notice's words mention
  * beside the members it names, which are the chat's to name and no one's

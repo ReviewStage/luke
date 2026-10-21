@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { noDatabase } from "@luke/database/testing/no-database";
@@ -7,7 +8,7 @@ import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
 import { LIVE_VOICE } from "@luke/live";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "@luke/service/agents/brain-host/bounds";
 import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
-import { sessionStarted } from "@luke/service/testing/live-events";
+import { delegated, heard, sessionStarted } from "@luke/service/testing/live-events";
 import {
   connect,
   fakeAccounts,
@@ -18,7 +19,7 @@ import {
 import type { AttachedSession } from "@luke/service/voice/live-exchange";
 import { listening, VoiceService, voiceServer } from "@luke/service/voice/service";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Cause, Deferred, Effect, Exit, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Option, Scope } from "effect";
 import { afterAll, afterEach, test, vi } from "vitest";
 import { voiceFunctionOptions } from "../server/voice/function";
 
@@ -127,12 +128,26 @@ it.effect(
         const task = yield* Effect.promise(() =>
           database.run(startTask(userId, { name: "Teammate invitations" })),
         );
+        const started = yield* Effect.promise(() =>
+          database.run(
+            createCodingAgent(userId, {
+              taskId: task.id,
+              idempotencyKey: "voice-function-agent",
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: null,
+              planSnapshot: null,
+              prompt: "Draft the invite email.",
+            }),
+          ),
+        );
+        const agent = Option.getOrThrow(started).agent;
         const openAi = yield* Effect.acquireRelease(
           Effect.promise(() => startFakeOpenAi()),
           (fake) => Effect.promise(() => fake.close()),
         );
         // The first request eve receives, which the test waits on rather than polling for; eve
-        // declines the explore, so nothing follows it.
+        // declines the ask, so nothing follows it.
         const firstAsk = Deferred.makeUnsafe<AskedOfEve>();
         const httpClient = fakeHttpClientLayer((url, init) => {
           const headers = new Headers(init.headers);
@@ -186,18 +201,21 @@ it.effect(
             voice: LIVE_VOICE.MARIN,
             input: [],
             planId: task.id,
+            agentId: agent.id,
           }),
         );
         const attach = yield* Effect.promise(() => openAi.nextAttach());
         const created = yield* Effect.promise(() => opened.reader.next());
         assert.equal(JSON.parse(created).type, VOICE_SERVICE_FRAME.SESSION_CREATED);
-        // The session starting sets the plan's first call exploring, which the exchange opens at eve.
-        yield* Effect.promise(() =>
-          sendText(attach.socket, JSON.stringify(sessionStarted(attach.sessionId))),
-        );
+        // The developer's first delegated ask opens the agent's session at eve.
+        yield* Effect.promise(async () => {
+          await sendText(attach.socket, JSON.stringify(sessionStarted(attach.sessionId)));
+          await sendText(attach.socket, JSON.stringify(heard("What needs me?", 1000, 2400)));
+          await sendText(attach.socket, JSON.stringify(delegated("dl_1", 2500)));
+        });
 
         assert.deepEqual(yield* Deferred.await(firstAsk), {
-          url: `${EVE_ORIGIN}/eve/v1/session`,
+          url: `${EVE_ORIGIN}/eve/coder/v1/session`,
           method: "POST",
           authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
           account: userId,

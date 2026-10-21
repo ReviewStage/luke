@@ -451,9 +451,7 @@ function withMessage(
         chat.members.find((member) =>
           mention.kind === MENTION_KIND.PERSON
             ? member.userId === mention.userId
-            : mention.kind === MENTION_KIND.AGENT
-              ? member.agentId === mention.agentId
-              : member.kind === MEMBER_KIND.LUKE && member.planId === mention.taskId,
+            : member.agentId === mention.agentId,
         )?.id ?? [],
     ),
   ];

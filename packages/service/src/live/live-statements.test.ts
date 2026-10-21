@@ -14,17 +14,12 @@ import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
-import {
-  agentFollowedBy,
-  taskFollowedBy,
-  transcriptLiveStatements,
-} from "../agents/coder-host/transcript-live.js";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
-import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
@@ -73,15 +68,7 @@ function liveStatements() {
     ),
   );
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
-  const conversation = Option.getOrThrow(taskConversationLiveStatements(USER_ID, randomUUID()));
   const chat = Option.getOrThrow(workspaceChatLiveStatements(USER_ID, READER));
-  const taskWorker = Option.getOrThrow(
-    transcriptLiveStatements(
-      { userId: USER_ID, conversationId: randomUUID() },
-      parent,
-      taskFollowedBy(randomUUID(), USER_ID),
-    ),
-  );
   const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
   const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
   return {
@@ -103,13 +90,7 @@ function liveStatements() {
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
     ),
-    ...Object.fromEntries(
-      Object.entries(conversation).map(([part, query]) => [`conversation.${part}`, query]),
-    ),
     ...Object.fromEntries(Object.entries(chat).map(([part, query]) => [`chat.${part}`, query])),
-    ...Object.fromEntries(
-      Object.entries(taskWorker).map(([part, query]) => [`taskWorker.${part}`, query]),
-    ),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
     ...Object.fromEntries(

@@ -172,8 +172,6 @@ test("the held message reads are reached at their public paths through the commi
   for (const path of [
     `/api/agents/${agent}/messages?after=0:0`,
     `/api/agents/${agent}/subagents/call-1/messages?after=0:0`,
-    `/api/plans/${agent}/messages`,
-    `/api/plans/${agent}/subagents/call-1/messages?after=0:0`,
     `/api/workspaces/chat?workspaceId=${agent}&after=0`,
   ]) {
     const unsigned = await dispatched(new Request(`${ORIGIN}${path}`), routes);
@@ -182,7 +180,7 @@ test("the held message reads are reached at their public paths through the commi
   }
   // A worker's transcript takes no write: matched at its public path, it is refused by method rather than not found.
   const posted = await dispatched(
-    new Request(`${ORIGIN}/api/plans/${agent}/subagents/call-1/messages`, {
+    new Request(`${ORIGIN}/api/agents/${agent}/subagents/call-1/messages`, {
       method: HTTP_METHOD.POST,
       headers: { authorization: "Bearer t" },
     }),

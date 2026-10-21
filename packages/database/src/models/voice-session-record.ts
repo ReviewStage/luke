@@ -93,9 +93,9 @@ interface VoiceSessionAgentClaim {
   agentId: string;
 }
 
-/** The calls whose words a new call reads back: the task's, or the agent's alone where the call names one. */
-interface EarlierCallsClaim extends VoiceSessionTaskClaim {
-  agentId?: string | undefined;
+/** The calls whose words a new call reads back: the agent's it names. */
+interface EarlierCallsClaim {
+  agentId: string;
 }
 
 /**
@@ -195,9 +195,8 @@ export interface VoiceSessionRecord {
   /** The live session named, where the account created it, with the task it was bound to: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
   /**
-   * What was said on the task's calls so far, or on the agent's alone where
-   * the claim names one, oldest first, adjacent words of one speaker on one
-   * call run together: the newest `EARLIER_CALL_SEGMENTS` segments, which is
+   * What was said on the agent's calls so far, oldest first, adjacent words
+   * of one speaker on one call run together: the newest `EARLIER_CALL_SEGMENTS` segments, which is
    * more than a session's startup history holds.
    */
   earlierCalls(input: EarlierCallsClaim): VoiceSessionRecordEffect<EarlierCallLine[]>;
@@ -296,8 +295,7 @@ const findOwnedSession = SqlSchema.findOneOption({
 });
 
 const EarlierCallsRequestSchema = Schema.Struct({
-  taskId: Schema.String,
-  agentId: Schema.NullOr(Schema.String),
+  agentId: Schema.String,
   limit: Schema.Number,
 });
 
@@ -327,11 +325,7 @@ const findEarlierSegments = SqlSchema.findAll({
         })
         .from(voiceTranscriptSegments)
         .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-        .where(
-          request.agentId === null
-            ? eq(voiceSessions.taskId, request.taskId)
-            : eq(voiceSessions.agentId, request.agentId),
-        )
+        .where(eq(voiceSessions.agentId, request.agentId))
         .orderBy(
           desc(voiceSessions.startedAt),
           desc(voiceSessions.id),
@@ -626,11 +620,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
       ),
     earlierCalls: (input) =>
       Effect.map(
-        findEarlierSegments({
-          taskId: input.taskId,
-          agentId: input.agentId ?? null,
-          limit: EARLIER_CALL_SEGMENTS,
-        }),
+        findEarlierSegments({ agentId: input.agentId, limit: EARLIER_CALL_SEGMENTS }),
         earlierLines,
       ),
     noteUsage: (input) =>

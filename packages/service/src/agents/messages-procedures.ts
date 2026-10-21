@@ -1,13 +1,10 @@
 /**
  * messages-procedures.ts -- the held message reads, and the writes on the same paths, as the hosted oRPC router answers them.
  *
- * Five reads the desktop holds open while nothing it reads has moved: one
+ * Three reads the desktop holds open while nothing it reads has moved: one
  * agent's transcript (`GET /api/agents/{id}/messages`) and its worker's
  * (`GET /api/agents/{id}/subagents/{call}/messages`), held while the agent
- * or the worker runs (`coder-host/transcript.ts`); one task's conversation
- * with the brain (`GET /api/plans/{id}/messages`) and its worker's
- * (`GET /api/plans/{id}/subagents/{call}/messages`), read as an agent's
- * transcript is; and a workspace's chat (`GET /api/workspaces/chat`), held
+ * or the worker runs (`coder-host/transcript.ts`); and a workspace's chat (`GET /api/workspaces/chat`), held
  * while nothing moved (`coder-host/chat-page.ts`). Each is a long-held JSON
  * procedure, its hold the store's own, unchanged: the handler adds no
  * deadline of its own, and the hold ends when the store's does, answering
@@ -31,7 +28,6 @@
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
-import { readTaskHeader } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -47,7 +43,7 @@ import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
 import { readEither } from "@luke/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import {
@@ -57,25 +53,12 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
-import {
-  BRAIN_POLL,
-  type BrainPage,
-  brainPageNow,
-  brainPagePast,
-  brainStatusNow,
-  brainTitleAwaited,
-  brainTitleEdge,
-  brainTurnsPage,
-  brainWorkerSession,
-} from "../tasks/brain-transcript.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { startedBlank } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
-  CURSOR_START,
   cursorOfWire,
   cursorToWire,
   delegationNow,
@@ -144,28 +127,6 @@ const cursorNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** The turn an older page is read before, or none for the newest; one that is no UUID names no turn, refused as a request that does not read. */
-const turnNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
-  before: string | undefined,
-): Effect.fn.Return<string | undefined, HostedRefusal> {
-  if (before === undefined) return undefined;
-  const read = readEither(wireUuidSchema)(unparsedWire(before));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return read.success;
-});
-
-/** The one word a task's read takes for `hold`: past the cursor in one look, never held. */
-const HOLD_NONE = "none";
-
-/** Whether a read past the cursor asks for one look rather than a hold; refused where `hold` names anything else. */
-const unheldNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
-  hold: string | undefined,
-): Effect.fn.Return<boolean, HostedRefusal> {
-  if (hold === undefined) return false;
-  if (hold !== HOLD_NONE) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return true;
-});
-
 /**
  * What a read of an ended agent, or of its worker, waits on for a title:
  * the worker named, or the agent's own or any of its workers' where none
@@ -231,19 +192,6 @@ function transcriptAnswer(
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
     ...(page.context === undefined ? undefined : { context: page.context }),
-  };
-}
-
-/** A page of a task's conversation as the wire answers it, every field the page holds carried as it is; a brain conversation is named by its task, so it carries no title. */
-function taskAnswer(
-  page: BrainPage | TranscriptPage,
-  title: string | null,
-): CodingAgentMessagesAnswer {
-  return {
-    ...page,
-    messages: wireMessages(page.messages),
-    cursor: cursorToWire(page.cursor),
-    title,
   };
 }
 
@@ -375,92 +323,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
       return transcriptAnswer(page, titles.get(conversationId) ?? null, holds, wakeIn);
-    }),
-
-    task: signedIn.task.effect(function* ({ input, context }) {
-      const taskId = yield* uuidNamed(input.id);
-      const after = yield* cursorNamed(input.after);
-      const before = yield* turnNamed(input.before);
-      const unheld = yield* unheldNamed(input.hold);
-      if ((after !== undefined && before !== undefined) || (unheld && after === undefined)) {
-        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      }
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { conversationId } = task.value;
-      if (conversationId === undefined) {
-        return taskAnswer(
-          { messages: [], cursor: CURSOR_START, status: CODING_AGENT_STATUS.COMPLETED },
-          null,
-        );
-      }
-      const target = { userId: context.userId, conversationId };
-      const page = yield* hostedStoreOrUnavailable(
-        after === undefined
-          ? brainTurnsPage(target, before)
-          : (unheld ? brainPageNow : brainPagePast)(target, cursorOfWire(after)),
-      );
-      return taskAnswer(page, null);
-    }),
-
-    taskWorker: signedIn.taskWorker.effect(function* ({ input, context }) {
-      const taskId = yield* uuidNamed(input.id);
-      const call = yield* callNamed(input.call);
-      const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
-      const now = readsNow(input.wait);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task) || task.value.conversationId === undefined) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      }
-      const parent = { userId: context.userId, conversationId: task.value.conversationId };
-      const session = yield* hostedStoreOrUnavailable(brainWorkerSession(parent, call));
-      if (session === undefined) {
-        // A tab opens the moment its call is made, a step before the journal holds the call; past the turn, none is none for good.
-        const status = yield* hostedStoreOrUnavailable(brainStatusNow(parent));
-        if (status !== CODING_AGENT_STATUS.RUNNING) {
-          return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        }
-        return transcriptAnswer(
-          { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
-          null,
-          now ? true : undefined,
-        );
-      }
-      const child = childConversationId(parent.conversationId, session);
-      const createdAt = new Date(yield* Clock.currentTimeMillis);
-      const worker = { userId: context.userId, conversationId: child };
-      const cursor = cursorOfWire(after);
-      const titleAwaited = brainTitleAwaited(parent, child);
-      const { page, holds, wakeIn } = now
-        ? yield* hostedStoreOrUnavailable(
-            transcriptNow(
-              worker,
-              HOSTED_TOOL_SET,
-              cursor,
-              { createdAt },
-              undefined,
-              titleAwaited,
-              brainTitleEdge(parent, child),
-            ),
-          )
-        : {
-            page: yield* hostedStoreOrUnavailable(
-              transcriptPast(
-                worker,
-                HOSTED_TOOL_SET,
-                cursor,
-                { createdAt },
-                undefined,
-                titleAwaited,
-                BRAIN_POLL,
-              ),
-            ),
-            holds: undefined,
-            wakeIn: undefined,
-          };
-      // The title is read after the page, since it lands beside the worker's start, which a held read may span.
-      const titles = yield* hostedStoreOrUnavailable(childTitlesOf(parent, [child]));
-      return transcriptAnswer(page, titles.get(child) ?? null, holds, wakeIn);
     }),
 
     chat: signedIn.chat.effect(function* ({ input, context }) {

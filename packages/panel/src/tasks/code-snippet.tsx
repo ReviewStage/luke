@@ -122,22 +122,35 @@ function SnippetNoteContent({
 /**
  * A snippet's own note, the Code tab card's: one note on the lines it
  * points at, or on every line it draws for a file shown from its top,
- * folded where the card folded it; none where Luke wrote none.
+ * folded where the card folded it; none where its agent wrote none.
  */
 export function useSnippetNote(
   code: SnippetLines,
-  shown: { readonly callId: string; readonly shownAt: number; readonly note: string | undefined },
+  shown: Pick<FileNote, "callId" | "turnId" | "agentId" | "shownAt"> & {
+    readonly note: string | undefined;
+  },
   taskId: string | undefined,
+  agentLabel?: FileNotes["agentLabel"],
 ): FileNotes | undefined {
   const [folded, setFolded] = useState<readonly string[]>([]);
   const lines = noteRange(code);
   if (shown.note === undefined || lines === undefined) return undefined;
   return {
-    notes: [{ callId: shown.callId, shownAt: shown.shownAt, note: shown.note, ...lines }],
+    notes: [
+      {
+        callId: shown.callId,
+        turnId: shown.turnId,
+        agentId: shown.agentId,
+        shownAt: shown.shownAt,
+        note: shown.note,
+        ...lines,
+      },
+    ],
     folded,
     onFold: (callId, fold) =>
       setFolded((was) => (fold ? [...was, callId] : was.filter((each) => each !== callId))),
     taskId,
+    agentLabel,
   };
 }
 

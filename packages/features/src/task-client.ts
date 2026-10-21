@@ -110,9 +110,7 @@ import {
   type TasksIssueUnlinkAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
-  type TaskWorkAnswer,
 } from "./tasks-view.js";
-import type { TaskTranscript } from "./transcript-wire.js";
 
 /**
  * task-client.ts -- the Tasks tab's side of the named tasks, as the host asks the service for them.
@@ -536,32 +534,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** What was said on one task's calls; nothing where the service did not answer it. */
-  readTranscript(
-    taskId: string,
-  ): Effect.Effect<TaskTranscript | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      Effect.map(
-        askHosted(this.#hosted.plans.transcript, { id: taskId }),
-        (answer) => answer.transcript,
-      ),
-    );
-  }
-
-  /** A page of one task's work as the service keeps it, the newest or the one before a turn, with every code shown on the newest; nothing where the service did not answer it. */
-  readWork(
-    taskId: string,
-    before?: string,
-  ): Effect.Effect<TaskWorkAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.plans.work, {
-        id: taskId,
-        ...(before === undefined ? undefined : { before }),
-      }),
-    );
-  }
-
-  /** Every code Luke showed on one task, oldest first; nothing where the service did not answer it. */
+  /** Every code the task's agents showed on it, oldest first; nothing where the service did not answer it. */
   readCode(
     taskId: string,
   ): Effect.Effect<TaskCodeAnswer | undefined, never, HttpClient.HttpClient> {
@@ -847,11 +820,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** Stops the turn Luke is running on a task. */
-  stopWork(taskId: string): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.ignore(askHosted(this.#hosted.plans.stop, { id: taskId }));
-  }
-
   /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
   restore(
     taskId: string,
@@ -883,7 +851,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** Deletes one task with its document and its conversation; whether the service deleted it. */
+  /** Deletes one task with its document and its agents' conversations; whether the service deleted it. */
   delete(taskId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return Effect.match(askHosted(this.#hosted.plans.delete, { id: taskId }), {
       onFailure: () => false,

@@ -95,10 +95,6 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_HISTORY: "/api/live/task-history",
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
-  /** One task's planning conversation under `?id=`, its mark and running workers sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
-  LIVE_TASK_CONVERSATION: "/api/live/task-conversation",
-  /** One planning worker's transcript under `?id=` (the plan) and `&call=` (the call that started it), sealed for following over Neon Realtime (GET), as an agent's worker's is, or `not-found` or `unavailable`. */
-  LIVE_TASK_WORKER_TRANSCRIPT: "/api/live/task-worker-transcript",
   /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
   LIVE_TASK_INBOX: "/api/live/task-inbox",
   /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
