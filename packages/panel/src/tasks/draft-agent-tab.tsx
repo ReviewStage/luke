@@ -58,7 +58,9 @@ import { useWorkingNow, WorkingLine } from "./working-time.js";
  * a draft on a Claude model shows beside its chip who pays for the agent
  * (`payer-field.tsx`): the plan, or the API key or Luke's key, standing on
  * the account's default until the developer picks one for this agent, and
- * the Start names the pick; elsewhere nothing changes.
+ * the Start names the payer the field shows, so a default changed in
+ * Settings since the keys were read never starts the agent on another;
+ * elsewhere nothing changes.
  *
  * A draft New task handed over (`use-coding-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
@@ -145,7 +147,8 @@ export function DraftAgentTab({
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
-    const payer = startPayer(offer, draft.payer);
+    // Note that the payer the field shows is the one sent, so the Start runs on what the developer saw.
+    const payer = shownPayer;
     const started =
       fork === undefined
         ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers, payer)

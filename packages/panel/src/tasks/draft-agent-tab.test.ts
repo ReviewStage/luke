@@ -637,6 +637,7 @@ async function payerTab(options: {
   keys: ProviderKeysAnswer;
   payer?: CodingAgentPayer;
   model?: string;
+  onDraftChange?: CodingAgentsControl["onDraftChange"];
 }) {
   let keysRead = 0;
   fakeActPort({
@@ -660,6 +661,9 @@ async function payerTab(options: {
         payers.push(args[5]);
         return Promise.resolve(undefined);
       },
+      ...(options.onDraftChange === undefined
+        ? undefined
+        : { onDraftChange: options.onDraftChange }),
     },
   );
   await settle();
@@ -670,11 +674,32 @@ async function payerTab(options: {
   return { ...tab, payers, field, keysRead: () => keysRead };
 }
 
-test("a cohort account with a Claude plan sees who pays beside the chip, standing on its default, and a Start on the default names no payer, so the service's default decides", async () => {
+test("a cohort account with a Claude plan sees who pays beside the chip, standing on its default, and a Start names the payer it shows", async () => {
   const tab = await payerTab({ cohort: true, keys: plannedKeys(true) });
   assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: Claude plan");
   await tab.send();
-  assert.deepEqual(tab.payers, [undefined]);
+  assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]);
+});
+
+test("picking another payer in the field hands it to the draft as its own", async () => {
+  const picks: unknown[] = [];
+  const tab = await payerTab({
+    cohort: true,
+    keys: plannedKeys(true),
+    onDraftChange: (change) => picks.push(change),
+  });
+  const field = tab.field() ?? assert.fail("no payer field");
+  act(() => field.click());
+  await settle();
+  const item =
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menuitemradio"], [role="menuitemcheckbox"], [role="menuitem"]',
+      ),
+    ].find((each) => each.textContent?.includes("API key")) ?? assert.fail("no API key item");
+  act(() => item.click());
+  await settle();
+  assert.deepEqual(picks, [{ payer: CODING_AGENT_PAYER.API_KEY }]);
 });
 
 test("a payer picked for the one agent is the one its Start names, and with the default off the field stands on the API key", async () => {

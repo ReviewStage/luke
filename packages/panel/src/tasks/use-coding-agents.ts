@@ -430,6 +430,7 @@ function taskDraft(
     disabledServers: held?.disabledServers ?? [],
     // Note that a fork is kept with the words too, so a relaunch keeps the draft a fork.
     ...forkOf(held === undefined ? kept?.place.fork : held.fork),
+    ...(held?.payer === undefined ? undefined : { payer: held.payer }),
     ...(held?.refused === undefined ? undefined : { refused: held.refused }),
   };
 }
