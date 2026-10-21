@@ -136,8 +136,8 @@ export function SidebarAgent({
   onPin?: ((pinned: boolean) => void) | undefined;
   /** Move to section, in the menu's group with Pin and Archive as a task's; none for an archived agent. */
   section?: MenuEntry | undefined;
-  /** Leaves the agent's page where it is the one standing, once its delete landed. */
-  onDeleted?: (() => void) | undefined;
+  /** Leaves the agent's page where it is the one standing, once its delete landed; every surface drawing the row names it, so none leaves a deleted agent's page up. */
+  onDeleted: () => void;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));

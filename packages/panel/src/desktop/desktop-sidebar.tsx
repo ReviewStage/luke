@@ -1990,6 +1990,7 @@ function SidebarColumn({
                             onOpen={() => context.onOpenAgent(row.agent.id)}
                             onPin={pinOf(tasks, row.agent)}
                             section={context.sectionEntry(row.agent)}
+                            onDeleted={context.onDeletedAgent(row.agent.id)}
                           />
                         ),
                       onDropRow: dropRow,

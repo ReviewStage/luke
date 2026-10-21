@@ -263,6 +263,7 @@ test("a draft waiting in the agent's box marks its row with the Draft pencil whi
               at: RUN.activityAt,
               shown: true,
               onOpen: () => undefined,
+              onDeleted: () => undefined,
             }),
           ),
         ),
