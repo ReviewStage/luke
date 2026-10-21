@@ -1469,6 +1469,41 @@ it.effect(
 );
 
 it.effect(
+  "messages the window's rows drew are held too, so a transcript followed again is told them and reads on past them",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const { call, asked, pages, sealTranscript, pageNow: script, pageNewest, realtime } = harness;
+      sealTranscript(SEALED_TRANSCRIPT);
+      const newest = newestPage("1:0", "Reading the invites.");
+      pageNewest(newest);
+      script(pageNow("1:0", { holds: true }));
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 1);
+      yield* settled;
+      const drawn = windowRow(2, "Writing the expiry.");
+      realtime.deliver("window", [drawn.row]);
+      realtime.deliver("windowParts", [drawn.part]);
+      yield* settled;
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+
+      const toldBefore = pages().length;
+      const askedBefore = asked.length;
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      const told = pages()[toldBefore];
+      assert.ok(isRecord(told) && isRecord(told.page) && Array.isArray(told.page.messages));
+      assert.equal(told.page.held, true);
+      assert.deepEqual(
+        told.page.messages.map((message) => (isRecord(message) ? message.id : undefined)),
+        [newest.messages[0]?.id, "m-2"],
+      );
+      assert.deepEqual(asked.slice(askedBefore), [`messages-now:${AGENT_ID}:2:0`]);
+    }),
+);
+
+it.effect(
   "a full page is followed by the next at once, and the short one after it is caught up",
   () =>
     Effect.gen(function* () {
