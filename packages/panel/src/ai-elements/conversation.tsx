@@ -49,6 +49,9 @@ import {
 /** How far from the bottom, in pixels, the list still counts as following the newest line: a rounding's worth, since any wider snapped a reader scrolling up through it back down on the next render. */
 const FOLLOW_SLACK_PX = 1;
 
+/** How near its top, in screens of the box, a log asks for the lines older than its first (`onNearTop`): one, so they land before the reader reaches them. */
+const NEAR_TOP_SCREENS = 1;
+
 /** Whether a list scrolled this far is at its newest line, so a new line should keep it there. */
 function followsNewest(list: {
   scrollTop: number;
@@ -80,6 +83,12 @@ export type ConversationProps = ComponentProps<"div"> & {
   subject?: string | undefined;
   /** The scroll box's ref, where the caller reads the box too; one of the log's own where none is handed. */
   list?: RefObject<HTMLDivElement | null> | undefined;
+  /**
+   * Asked for the lines older than its first, once the reader nears its top
+   * or its lines do not fill it; none where no older lines stand. Lines put
+   * before the first keep the reader's place.
+   */
+  onNearTop?: (() => void) | undefined;
 };
 
 export function Conversation({
@@ -87,6 +96,7 @@ export function Conversation({
   children,
   subject,
   list: handed,
+  onNearTop,
   ...props
 }: ConversationProps): ReactNode {
   const own = useRef<HTMLDivElement>(null);
@@ -103,7 +113,23 @@ export function Conversation({
   // What the last render left observed: the scroll box, and how many lines
   // stood in it ending in which, so a render that changed none of them
   // touches no layout.
-  const observed = useRef<{ box: HTMLDivElement; count: number; last: Element | null }>(undefined);
+  const observed = useRef<{
+    box: HTMLDivElement;
+    count: number;
+    first: HTMLElement | null;
+    last: Element | null;
+  }>(undefined);
+  // Where the first line stood from the top of the box as the reader last
+  // left it, so lines put before it keep it where it was: measured here
+  // rather than left to the browser's scroll anchoring, which anchors on
+  // nothing at the very top, where older lines are asked for.
+  const firstFromTop = useRef(0);
+  const nearTop = useRef(onNearTop);
+  nearTop.current = onNearTop;
+  /** Asks for older lines where the reader is near the top, or the lines do not fill the box. */
+  const askOlder = useCallback((element: HTMLDivElement) => {
+    if (element.scrollTop <= element.clientHeight * NEAR_TOP_SCREENS) nearTop.current?.();
+  }, []);
   // A line can grow a word or shrink, a card or a group closed, without the
   // list scrolling or this rendering, so one observer watches the scroll box
   // and the block its lines stand in: it keeps a log that follows its newest
@@ -147,13 +173,29 @@ export function Conversation({
     // The lines stand in the one block inside the area.
     const lines = element.firstElementChild;
     const count = lines?.childElementCount ?? 0;
+    const first = lines?.firstElementChild instanceof HTMLElement ? lines.firstElementChild : null;
     const last = lines?.lastElementChild ?? null;
     const held = observed.current;
-    if (held?.box === element && held.count === count && held.last === last) return;
-    observed.current = { box: element, count, last };
-    if (following.current) toEnd(element);
+    if (
+      held?.box === element &&
+      held.count === count &&
+      held.first === first &&
+      held.last === last
+    ) {
+      return;
+    }
+    observed.current = { box: element, count, first, last };
+    if (following.current) {
+      toEnd(element);
+    } else if (held?.box === element && held.first !== first && held.first?.isConnected === true) {
+      // Lines put before the first: the line that was first goes back where the reader left it.
+      element.scrollTop = held.first.offsetTop - firstFromTop.current;
+      lastTop.current = element.scrollTop;
+    }
+    if (first !== null) firstFromTop.current = first.offsetTop - element.scrollTop;
     resized.observe(element);
     if (lines !== null) resized.observe(lines);
+    askOlder(element);
   });
   const scrollToBottom = useCallback(() => {
     following.current = true;
@@ -166,13 +208,21 @@ export function Conversation({
   // takes it off its newest line: the browser shifts a log down of its own accord to hold its place
   // as lines above grow (scroll anchoring), a message's words drawn late
   // among them, and the observer then takes it the rest of the way down.
-  const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    const element = event.currentTarget;
-    const down = element.scrollTop >= lastTop.current;
-    lastTop.current = element.scrollTop;
-    following.current = followsNewest(element) || (following.current && down);
-    setAtBottom(following.current);
-  }, []);
+  const onScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      const element = event.currentTarget;
+      const down = element.scrollTop >= lastTop.current;
+      lastTop.current = element.scrollTop;
+      following.current = followsNewest(element) || (following.current && down);
+      setAtBottom(following.current);
+      const first = observed.current?.first;
+      if (first !== null && first !== undefined) {
+        firstFromTop.current = first.offsetTop - element.scrollTop;
+      }
+      if (!down) askOlder(element);
+    },
+    [askOlder],
+  );
   const scroll = useMemo<ConversationScroll>(
     () => ({ isAtBottom, list, scrollToBottom, onScroll }),
     [isAtBottom, list, scrollToBottom, onScroll],

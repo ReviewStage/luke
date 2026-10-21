@@ -1607,6 +1607,7 @@ function AgentTranscriptView({
   endReason = FAILURE_REASON.OTHER,
   onOpenApiKeys,
   onRetry,
+  onOlder,
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
@@ -1643,6 +1644,8 @@ function AgentTranscriptView({
   /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
   onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
+  /** Reads the messages older than the first held, which the log asks for as the reader nears its top; none where none stand. */
+  onOlder?: (() => void) | undefined;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
@@ -1721,7 +1724,7 @@ function AgentTranscriptView({
     const task = carded || blank ? undefined : first;
     return (
       <LiveDoors value={live}>
-        <Conversation>
+        <Conversation onNearTop={onOlder}>
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
             {placed.map(({ message, said, read }, index) => (
@@ -2019,6 +2022,7 @@ function AgentTabView({
     >
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
+<<<<<<< HEAD
           <WholePartsProvider value={wholeParts}>
             <MentionedServers value={mentioned}>
               <UndeliveredLines value={undelivered}>
@@ -2059,6 +2063,51 @@ function AgentTabView({
               </UndeliveredLines>
             </MentionedServers>
           </WholePartsProvider>
+=======
+          <MentionedServers value={mentioned}>
+            <UndeliveredLines value={undelivered}>
+              <AgentTranscriptView
+                messages={lines}
+                brief={agent.brief}
+                briefSender={starter === undefined ? undefined : starterActor}
+                origin={origin}
+                readerId={readerId}
+                taskId={agent.planId ?? undefined}
+                replay={replay}
+                delegation={{
+                  models,
+                  own: { model: agent.model, effort: agent.effort },
+                  starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                  onOpen: openSubagent,
+                  onOpenTarget: openTarget,
+                  cards,
+                  standings: transcript.subagents,
+                  chat,
+                  chatOn,
+                }}
+                reading={transcript.reading}
+                failed={transcript.failed}
+                working={working}
+                sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                startedAt={startedAt}
+                ended={
+                  // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
+                  transcript.pages === 0
+                    ? undefined
+                    : endLineParts(agent.status, transcript.failure, starter, continuable)
+                }
+                endReason={endLineReason(transcript.failure, starter)}
+                onOpenApiKeys={onOpenApiKeys}
+                endPress={endPress}
+                endTrail={endTrail}
+                onRetry={transcript.onRetry}
+                onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                overComposer
+                calls={calls}
+              />
+            </UndeliveredLines>
+          </MentionedServers>
+>>>>>>> 1d8d1c059 (feat(panel): open agent transcripts on their newest page)
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
@@ -2253,6 +2302,8 @@ export function AgentTab({
     agentId: agent.id,
     shown,
     caughtUp: transcript.caughtUp,
+    whole: !transcript.hasOlder,
+    loadOlder: transcript.loadOlder,
     pages: transcript.pages,
     settled: !agentStillWriting(agent.status),
     drawn: (messageId) => messages.some((message) => message.id === messageId),
@@ -2444,6 +2495,7 @@ export function AgentSubagentTab({
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
+<<<<<<< HEAD
           <WholePartsProvider value={wholeParts}>
             <AgentTranscriptView
               messages={lines}
@@ -2459,6 +2511,22 @@ export function AgentSubagentTab({
               onRetry={transcript.onRetry}
             />
           </WholePartsProvider>
+=======
+          <AgentTranscriptView
+            messages={lines}
+            lead={WORKER_LEAD}
+            origin={origin}
+            delegation={delegation}
+            reading={transcript.reading}
+            failed={transcript.failed}
+            working={agentStillWriting(status)}
+            sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+            startedAt={shown ? transcript.runStartedAt : undefined}
+            ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
+            onRetry={transcript.onRetry}
+            onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+          />
+>>>>>>> 1d8d1c059 (feat(panel): open agent transcripts on their newest page)
         </AgentPicturesProvider>
       </MacOwnerProvider>
     </section>
