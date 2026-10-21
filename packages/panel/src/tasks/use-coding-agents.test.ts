@@ -1092,11 +1092,19 @@ test("what an agent's transcript said of it before its task's agents were read s
 });
 
 test("what an agent's transcript said before its task's agents were read outlasts a read of them that failed, and stands over the one that lands", async () => {
+  let fail: (value: WireBoundaryInput) => void = () => undefined;
   const tab = mount({ taskId: TASK, repository: null });
-  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    new Promise<WireBoundaryInput>((resolve) => {
+      fail = resolve;
+    }),
+  );
   await tab.mount();
   act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
   act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
+  fail({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
   assert.equal(tab.control().agents, undefined, "the read failed");
 
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, {
