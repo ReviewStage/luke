@@ -386,6 +386,8 @@ interface StandingSession {
    * in the turn.
    */
   readonly askedRows: Set<string>;
+  /** The lines typed into the call so far, by the id the composer's send names each by, so a line sent again is taken once. */
+  readonly typedLines: Set<string>;
   /**
    * How much of each asked row's text its ask carried, as the row stood once
    * the ask was handed over: a row's text only grows by appending, so the
@@ -986,27 +988,37 @@ export class LiveSessionService {
 
   /**
    * A line the developer typed into the call rather than said, handed here
-   * by the host through the service's own frame. GPT-Live takes no user text
-   * item under client delegation, so the voice does not choose between
-   * answering and delegating it: it is written down once as the developer's
-   * typed row, handed to the agent as an ask of the session's own, its reply
-   * spoken session-wide as the run tells it, and the voice is told of it as
-   * quiet context. The ask takes the session's next revision, so it
-   * supersedes an older exchange and the next delegation supersedes it, and
-   * it claims no row of the ledger, so no later delegation carries it again.
-   * Answers whether a started session was there to take it.
+   * by the host through the service's own frame, under the id the composer's
+   * send names it by. GPT-Live takes no user text item under client
+   * delegation, so the voice does not choose between answering and
+   * delegating it: it is written down once as the developer's typed row,
+   * handed to the agent as an ask of the session's own, its reply spoken
+   * session-wide as the run tells it, and the voice is told of it as quiet
+   * context. The ask takes the session's next revision, so it supersedes an
+   * older exchange and the next delegation supersedes it. The developer's
+   * words since the last ask ride it as its context and are its rows, as a
+   * delegation's are, so neither a later delegation nor the call's end hands
+   * them on again; the typed line is no row of the ledger's, so none carries
+   * it again either. A line sent again under the same id, as a Retry after a
+   * lost answer sends it, is the same line and is taken once. Answers whether
+   * a started session was there to take it.
    */
-  typeLine(text: string): boolean {
+  typeLine(text: string, lineId: string): boolean {
     const session = this.#speakable();
     if (!session) return false;
+    if (session.typedLines.has(lineId)) return true;
+    session.typedLines.add(lineId);
     // The words said so far are on record before the typed line is, as before a delegation's ask.
     this.#flushRows(session);
     this.#voiceIn(session, VOICE_PHASE.HANDING_OFF);
+    for (const open of session.openAsks.values()) this.#claimLate(session, open);
+    const atMs = session.ledger.lastActivityMs() ?? session.lastDelegationOffsetMs;
+    const context = session.ledger.askContext(session.lastDelegationOffsetMs);
+    const rows = askRowsOf(context, session.askedRows, atMs);
+    this.#claim(session, rows, atMs);
     session.revisions += 1;
     const asked = { revision: session.revisions, stops: session.stops, at: this.#now() };
-    const rowId = this.#options.createId();
-    const atMs = session.ledger.lastActivityMs() ?? session.lastDelegationOffsetMs;
-    const said = renderAskContext(session.ledger.askContext(session.lastDelegationOffsetMs));
+    const said = renderAskContext(context);
     const question = [said, `${TYPED_ASK_LEAD} ${text}`].filter((part) => part !== "").join("\n");
     // The voice reads mentions as the words a chip draws, never their addresses; the agent and the
     // record keep the line as typed.
@@ -1016,21 +1028,24 @@ export class LiveSessionService {
     this.#start(
       Effect.gen({ self: this }, function* () {
         const written = yield* this.#record.writeTypedRow({
-          rowId,
+          rowId: lineId,
           voiceSessionId: session.sessionId,
           text,
           atMs,
         });
         if (!written) this.#reportUnwritten();
-        // The row's id is the submission's, so the ask's turn takes the row in by it.
+        // The line's id is the submission's, so the ask's turn takes the row in by it.
         const submission = yield* this.#brain.submitAsk({
-          submissionId: rowId,
+          submissionId: lineId,
           question,
           sessionId: session.sessionId,
           revision: asked.revision,
         });
+        const rowIds = rows.map((row) => row.rowId);
+        this.#markAsked(session, rowIds);
         if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
           this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_REFUSED, revision: asked.revision });
+          if (rowIds.length > 0) yield* this.#attachAsk(session, lineId, rowIds);
           this.#speakInto(session, null, submission.refusal);
           return;
         }
@@ -1038,6 +1053,7 @@ export class LiveSessionService {
         const exchange = this.#registerExchange(session, submission.runId, null, asked);
         session.holdingQuestion = false;
         if (!exchange.silenced) this.#handQuestion(session, null);
+        if (rowIds.length > 0) yield* this.#attachAsk(session, lineId, rowIds);
       }),
     );
     return true;
@@ -1166,6 +1182,7 @@ export class LiveSessionService {
         idleReported: false,
         idleTimer: undefined,
         askedRows: new Set(),
+        typedLines: new Set(),
         askedText: new Map(),
         settled: yield* Deferred.make<SidebandCloseResult>(),
         torn: yield* Deferred.make<void>(),

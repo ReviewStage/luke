@@ -225,21 +225,21 @@ test("every avatar frame without its request id is refused, the answers included
   );
 });
 
-test("a line typed into the call is a report carrying its words, trimmed, and one with no words or past a message's bound is refused", () => {
+test("a line typed into the call is a report carrying its words, trimmed, and its send's key, and one with no words, no key, or past a message's bound is refused", () => {
   const typed = VOICE_SERVICE_FRAME.SESSION_TYPED;
+  const clientKey = "send-1";
   assert.deepEqual(
-    sessionReportFrameFromWire({ type: typed, text: "  Use the fixture branch. " }),
-    {
-      type: typed,
-      text: "Use the fixture branch.",
-    },
+    sessionReportFrameFromWire({ type: typed, text: "  Use the fixture branch. ", clientKey }),
+    { type: typed, text: "Use the fixture branch.", clientKey },
   );
-  assert.equal(sessionReportFrameFromWire({ type: typed, text: "   " }), undefined);
-  assert.equal(sessionReportFrameFromWire({ type: typed }), undefined);
+  assert.equal(sessionReportFrameFromWire({ type: typed, text: "   ", clientKey }), undefined);
+  assert.equal(sessionReportFrameFromWire({ type: typed, clientKey }), undefined);
+  assert.equal(sessionReportFrameFromWire({ type: typed, text: "Hi." }), undefined);
   assert.equal(
     sessionReportFrameFromWire({
       type: typed,
       text: "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
+      clientKey,
     }),
     undefined,
   );

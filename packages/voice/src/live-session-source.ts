@@ -158,7 +158,7 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * nothing on this side appends it. Optional on the same terms as
    * `reportActivity`.
    */
-  typeLine?(text: string): void;
+  typeLine?(text: string, clientKey: string): void;
   /**
    * Asks the service standing between this peer and the session for the
    * session's close, in the service's own vocabulary: the service owns the
@@ -995,8 +995,12 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         },
         // A typed line rides the same socket, held through a gap like the stop:
         // the call it was typed into outlives the service's own recycle.
-        typeLine: (text) => {
-          const frame: SessionTypedFrame = { type: VOICE_SERVICE_FRAME.SESSION_TYPED, text };
+        typeLine: (text, clientKey) => {
+          const frame: SessionTypedFrame = {
+            type: VOICE_SERVICE_FRAME.SESSION_TYPED,
+            text,
+            clientKey,
+          };
           socket.send(JSON.stringify(frame));
         },
         // The hang-up rides the same socket, held through a gap like any send,

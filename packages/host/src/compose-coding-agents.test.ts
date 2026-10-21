@@ -659,7 +659,7 @@ function subject(
   options: {
     signedIn?: boolean;
     sendsNetwork?: boolean;
-    typeIntoCall?: (agentId: string, text: string) => boolean;
+    typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -1291,10 +1291,10 @@ it.effect(
   "a line typed while this Mac's call is up on the agent goes to the call and is not steered, and the tab hears the agent as it stands",
   () =>
     Effect.gen(function* () {
-      const typed: [string, string][] = [];
+      const typed: [string, string, string][] = [];
       const { call, asked } = yield* subject({
-        typeIntoCall: (agentId, text) => {
-          typed.push([agentId, text]);
+        typeIntoCall: (agentId, text, clientKey) => {
+          typed.push([agentId, text, clientKey]);
           return agentId === AGENT_ID;
         },
       });
@@ -1310,9 +1310,10 @@ it.effect(
           text: "Use the fixture branch.",
           clientKey: "send-1",
         }),
-        { agent: page },
+        // Running, as a steer's answer is: the call asks the line a moment after the frame leaves.
+        { agent: { ...page, status: CODING_AGENT_STATUS.RUNNING } },
       );
-      assert.deepEqual(typed, [[AGENT_ID, "Use the fixture branch."]]);
+      assert.deepEqual(typed, [[AGENT_ID, "Use the fixture branch.", "send-1"]]);
       assert.deepEqual(asked, [`page:${AGENT_ID}`]);
     }),
 );

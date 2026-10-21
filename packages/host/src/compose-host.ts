@@ -195,7 +195,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       accountId,
       client: codingAgentClient,
-      typeIntoCall: (agentId, text) => live.service.typeLine(agentId, text),
+      typeIntoCall: (agentId, text, clientKey) => live.service.typeLine(agentId, text, clientKey),
     });
     const automations = yield* composeAutomations({
       kernel,

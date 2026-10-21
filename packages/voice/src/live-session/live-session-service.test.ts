@@ -1065,6 +1065,11 @@ it.effect(
     }),
 );
 
+/** The delegation an append names, or nothing for an event that is no append. */
+function delegationOfAppend(event: LiveClientEvent) {
+  return "delegation_id" in event ? event.delegation_id : undefined;
+}
+
 it.effect(
   "a line typed into the call is written once as typed, handed to the agent as an ask whose question is more than the bare line, and its reply is spoken session-wide",
   () =>
@@ -1076,11 +1081,11 @@ it.effect(
       sideband.output("On it.", 900, 1400);
       yield* settle();
       const line = "Use the [@fixture branch](https://tryluke.dev/acme/plan/p1) instead.";
-      assert.ok(f.service.typeLine(line));
+      assert.ok(f.service.typeLine(line, "line-1"));
       yield* settle();
-      // One typed row, under the id the ask was submitted with, at the latest instant the call reached.
+      // One typed row, under the send's id, which the ask is submitted with, at the latest instant the call reached.
       assert.deepEqual(f.record.typed, [
-        { rowId: f.brain.asks[0]?.submissionId, voiceSessionId: "sess-1", text: line, atMs: 1400 },
+        { rowId: "line-1", voiceSessionId: "sess-1", text: line, atMs: 1400 },
       ]);
       assert.equal(f.brain.asks.length, 1);
       const ask = f.brain.asks[0];
@@ -1088,16 +1093,20 @@ it.effect(
       assert.notEqual(ask.question, line);
       assert.ok(ask.question.endsWith(line));
       assert.ok(ask.question.includes("Developer: Check the tests."));
+      assert.equal(ask.submissionId, "line-1");
       assert.equal(ask.sessionId, "sess-1");
-      // Nothing of it is the ledger's: no spoken row was attached to an ask for it.
-      assert.deepEqual(f.record.attached, []);
+      // The words said since the last ask are its context and its rows, as a delegation's are.
+      const spokenRow = f.record.rows.find((row) => row.speaker === TRANSCRIPT_SPEAKER.USER);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "line-1", voiceSessionId: "sess-1", rowIds: [spokenRow?.rowId] },
+      ]);
       // The voice is told of it quietly, the mention as its label, and nothing about it is said.
       const note = thought(sideband).find((content) => content?.includes("typed this line"));
       assert.ok(note?.endsWith("Use the fixture branch instead."));
       assert.deepEqual(said(sideband), []);
       assert.ok(
         appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).every(
-          (event) => event.delegation_id === null,
+          (event) => delegationOfAppend(event) === null,
         ),
       );
 
@@ -1105,7 +1114,7 @@ it.effect(
       yield* settle();
       const spoken = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.deepEqual(said(sideband), ["Switched to the fixture branch."]);
-      assert.equal(spoken[0]?.delegation_id, null);
+      assert.equal(spoken[0] && delegationOfAppend(spoken[0]), null);
     }),
 );
 
@@ -1114,7 +1123,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { f, sideband } = yield* askedRun();
-      assert.ok(f.service.typeLine("Never mind, do the other one."));
+      assert.ok(f.service.typeLine("Never mind, do the other one.", "line-1"));
       yield* settle();
       assert.deepEqual(
         f.brain.asks.map((ask) => ask.revision),
@@ -1142,7 +1151,7 @@ it.effect(
 it.effect("a line typed while no session has started is taken by nothing", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    assert.equal(f.service.typeLine("Hello?"), false);
+    assert.equal(f.service.typeLine("Hello?", "line-1"), false);
     yield* settle();
     assert.deepEqual(f.brain.asks, []);
     assert.deepEqual(f.record.typed, []);
@@ -1174,6 +1183,42 @@ it.effect(
       yield* settle();
       const spoken = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.deepEqual(said(sideband), ["Here is what I found."]);
-      assert.equal(spoken[0]?.delegation_id, null);
+      assert.equal(spoken[0] && delegationOfAppend(spoken[0]), null);
+    }),
+);
+
+it.effect(
+  "a typed line sent again under its send's id, as a Retry after a lost answer sends it, is written and asked once",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* f.open();
+      yield* settle();
+      assert.ok(f.service.typeLine("Use the fixture branch.", "line-1"));
+      assert.ok(f.service.typeLine("Use the fixture branch.", "line-1"));
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      assert.equal(f.record.typed.length, 1);
+      assert.ok(f.service.typeLine("Use the fixture branch.", "line-2"));
+      yield* settle();
+      assert.equal(f.brain.asks.length, 2);
+    }),
+);
+
+it.effect(
+  "the words a typed line's ask carried as its context are not handed on again when the call ends",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Check the tests.", 0, 800);
+      yield* settle();
+      assert.ok(f.service.typeLine("Then use the fixture branch.", "line-1"));
+      yield* settle();
+      sideband.closedBy("close_requested", 3);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      assert.ok(f.brain.asks[0]?.question.includes("Developer: Check the tests."));
     }),
 );

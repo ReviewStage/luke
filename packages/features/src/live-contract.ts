@@ -408,13 +408,16 @@ export const sessionHangUpFrameSchema = Schema.Struct({
 export type SessionHangUpFrame = typeof sessionHangUpFrameSchema.Type;
 
 /**
- * A line typed into the call: its words as the composer sent them, mentions
- * written as their labels, bounded as a message to an agent is. Nothing of
- * an attachment rides here: the call hands on words alone.
+ * A line typed into the call: its words as the composer sent them, bounded
+ * as a message to an agent is, and the composer's own key for the send,
+ * which a Retry after a lost answer carries again, so the service writes and
+ * asks the line once however often it is sent. Nothing of an attachment
+ * rides here: the call hands on words alone.
  */
 export const sessionTypedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_TYPED),
   text: text(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  clientKey: text(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
 });
 
 export type SessionTypedFrame = typeof sessionTypedFrameSchema.Type;

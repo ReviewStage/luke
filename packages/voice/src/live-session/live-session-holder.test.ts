@@ -170,8 +170,8 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   stopSpeaking: () => {
                     state.stops += 1;
                   },
-                  typeLine: (text: string) => {
-                    typed.push(text);
+                  typeLine: (text: string, clientKey: string) => {
+                    typed.push(`${clientKey}:${text}`);
                   },
                   onTaskActivity: (listener: (activity: TaskActivityFrame) => void) => {
                     activityListener = listener;
@@ -316,15 +316,15 @@ it.effect(
       });
       assert.ok(created);
       // Not started yet: nothing can hear it, so the line is the composer's to steer.
-      assert.equal(f.holder.typeLine(INVITES_AGENT, "Too early."), false);
+      assert.equal(f.holder.typeLine(INVITES_AGENT, "Too early.", "send-0"), false);
       f.sidebands[0]?.started(created.sessionId);
       yield* settle();
-      assert.equal(f.holder.typeLine("another-agent", "Not this call's."), false);
-      assert.equal(f.holder.typeLine(INVITES_AGENT, "Use the fixture branch."), true);
-      assert.deepEqual(f.typed, ["Use the fixture branch."]);
+      assert.equal(f.holder.typeLine("another-agent", "Not this call's.", "send-1"), false);
+      assert.equal(f.holder.typeLine(INVITES_AGENT, "Use the fixture branch.", "send-2"), true);
+      assert.deepEqual(f.typed, ["send-2:Use the fixture branch."]);
       f.sidebands[0]?.closedBy("close_requested", 3);
       yield* settle();
-      assert.equal(f.holder.typeLine(INVITES_AGENT, "After the call."), false);
-      assert.deepEqual(f.typed, ["Use the fixture branch."]);
+      assert.equal(f.holder.typeLine(INVITES_AGENT, "After the call.", "send-3"), false);
+      assert.deepEqual(f.typed, ["send-2:Use the fixture branch."]);
     }),
 );

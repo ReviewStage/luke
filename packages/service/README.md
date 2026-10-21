@@ -2314,7 +2314,11 @@ cancelled through `stopAsk`, the voice told silently (`STOPPED_RUN_NOTE`)
 only once the cancel was taken. A typed line is no append of the device's
 either: GPT-Live takes no user text item under client delegation, so the
 exchange (`LiveSessionService.typeLine`) writes the line once as the
-developer's typed row, naming the call and the instant it was typed at,
+developer's typed row, under the id a steer of the same send would write
+(`sentLineId` of the composer's key, so a Retry is the same line by either
+path), naming the call and the instant it was typed at, takes the
+developer's words since the last ask as its context and its rows, as a
+delegation does,
 hands it to the agent as an ask of the session's next revision whose reply
 it speaks session-wide (`delegation_id: null`), and tells the voice of it in
 a `session.thinking.append` with its mentions as their labels, so the voice

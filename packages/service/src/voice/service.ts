@@ -2,6 +2,7 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { sentLineId } from "@luke/database/models/ids";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { LIVE_CLIENT_EVENT } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
@@ -634,7 +635,8 @@ export class VoiceService {
                     exchange.service.stopSpeaking();
                     return;
                   case VOICE_SERVICE_FRAME.SESSION_TYPED:
-                    exchange.service.typeLine(report.text);
+                    // Under the id a steer of the same send would write, so a Retry, by either path, is one line.
+                    exchange.service.typeLine(report.text, sentLineId(report.clientKey));
                     return;
                 }
               },

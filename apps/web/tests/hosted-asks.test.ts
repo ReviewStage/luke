@@ -164,7 +164,8 @@ it.effect(
       );
       const spoken = (clientId: string, revision: number) =>
         asks.record({
-          ...write(owner, conversationId, clientId),
+          ...write(owner, conversationId),
+          clientId,
           origin: ASK_ORIGIN.SPOKEN,
           createdAt: new Date(NOW + revision),
           voice: { sessionId: "voice-typed", revision },

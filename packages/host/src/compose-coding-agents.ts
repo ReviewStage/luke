@@ -71,6 +71,7 @@ import {
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
   type ChaptersModelAnswerView,
@@ -198,7 +199,7 @@ export interface CodingAgentsDependencies {
    * one does (`LiveSessionHolder.typeLine`); answers whether the call took
    * it. None where this Mac holds no calls, and every line steers.
    */
-  typeIntoCall?: (agentId: string, text: string) => boolean;
+  typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
 }
 
 export interface CodingAgentsComposer extends Composer {
@@ -256,9 +257,11 @@ function composed(
   const asked = askedOf(dependencies, http);
 
   /**
-   * The agent as it stands now, as a message's answer carries it: read whole
-   * and answered as its summary, so the tab hears its status as it would from
-   * a steer.
+   * The agent as a line handed to its call leaves it, as a message's answer
+   * carries it: read whole and answered as its summary, running, as a steer's
+   * answer is read after the message was taken. The call writes and asks the
+   * line a moment after the frame leaves, so a read now could still say the
+   * agent is idle; the transcript's follow settles the status from there.
    */
   const agentAsItStands = (agentId: string): Effect.Effect<CodingAgentAgentAnswer> =>
     Effect.map(asked(client.agent(agentId)), (answer) => {
@@ -270,7 +273,7 @@ function composed(
         repository: _repository,
         ...agent
       } = answer.agent;
-      return { agent };
+      return { agent: { ...agent, status: CODING_AGENT_STATUS.RUNNING } };
     });
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
@@ -486,7 +489,10 @@ function composed(
         // A line with words, typed while this Mac's call is up on the agent, is the call's: the
         // service answers it aloud and writes it down as typed. Its files ride nowhere, since the
         // call hands on words alone; a line of files alone steers as it would with no call up.
-        if (request.text !== "" && dependencies.typeIntoCall?.(agentId, request.text) === true) {
+        if (
+          request.text !== "" &&
+          dependencies.typeIntoCall?.(agentId, request.text, request.clientKey) === true
+        ) {
           return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));
         }
         const answer = yield* asked(client.message(agentId, request));
