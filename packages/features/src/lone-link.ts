@@ -62,6 +62,12 @@ export type LoneLink =
       readonly pageId: string;
     }
   | {
+      readonly kind: typeof LONE_LINK.PAGE;
+      /** The coding agent on no task the page stands on. */
+      readonly agentId: string;
+      readonly pageId: string;
+    }
+  | {
       readonly kind: typeof LONE_LINK.CODE;
       /** `owner/name`. */
       readonly repo: string;
@@ -124,7 +130,9 @@ export function loneLinkOf(target: string): LoneLink | undefined {
   if (pullRequest !== undefined) return { kind: LONE_LINK.PULL_REQUEST, ...pullRequest };
   const place = readLink(target)?.place;
   if (place?.kind === LINK_PLACE.PAGE) {
-    return { kind: LONE_LINK.PAGE, taskId: place.planId, pageId: place.pageId };
+    return "planId" in place
+      ? { kind: LONE_LINK.PAGE, taskId: place.planId, pageId: place.pageId }
+      : { kind: LONE_LINK.PAGE, agentId: place.agentId, pageId: place.pageId };
   }
   return codeLinesOf(url);
 }

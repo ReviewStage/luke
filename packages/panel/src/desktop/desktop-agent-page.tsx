@@ -357,8 +357,8 @@ export function DesktopAgentPage({
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  // Note that an inbox call is the one row of a coding agent's own that opens a tab, and a task's archive the one that opens
-  // another task, as the sidebar opens it, a worker's opening through its delegation.
+  // Note that an inbox call and a page are the rows of a coding agent's own that open a tab, and a task's archive the one
+  // that opens another task, as the sidebar opens it, a worker's opening through its delegation.
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
     if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
@@ -367,6 +367,8 @@ export function DesktopAgentPage({
     // Code Luke showed on its call opens in the Code tab, its showings' one place on a page no task's File tab reads for.
     if (target.kind === TOOL_TARGET.SHOWN_CODE && shownCode !== undefined)
       sidePanel.onChoose(SIDE_PANEL_TAB.CODE);
+    // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
+    if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose({ page: target.page });
   };
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
@@ -520,7 +522,7 @@ export function DesktopAgentPage({
                           board={undefined}
                           shownCode={shownCode}
                           codeFailed={undefined}
-                          pages={undefined}
+                          pages={tasks.agentView.pages}
                           agents={control}
                           openAgents={openAgents}
                           shownAgent={shown ? agentId : undefined}

@@ -19,7 +19,7 @@ import {
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { boardAnswerSchema, boardSaveAnswerSchema } from "@luke/features/board-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
 import { PLAN_HEADING } from "@luke/features/plan-template";
@@ -1914,7 +1914,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const page = Option.getOrThrow(
           yield* writePage(
             owner,
-            taskId,
+            taskPageOwner(taskId),
             { title: "Invite funnel", html: "<p>v1</p>" },
             { kind: PAGE_SHOWER.LUKE },
           ),

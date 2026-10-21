@@ -392,7 +392,7 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
   }
 });
 
-test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of none", () => {
+test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of its own pages alone", () => {
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
@@ -405,7 +405,7 @@ test("an agent on a task is told of the task's links, pages, and comments, and o
       words.includes(COMMENTS),
     ];
     assert.deepEqual(told(onTask), [true, true, true], brief);
-    assert.deepEqual(told(taskless), [false, false, false], brief);
+    assert.deepEqual(told(taskless), [false, true, false], brief);
     assert.ok(taskless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
     assert.ok(!taskless.includes("luke://plan/"), "nor an older message's plan link");
   }
@@ -426,7 +426,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent on a task is offered edit_plan, show_page, the comment tools, and the whiteboard's, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
+test("an agent on a task is offered edit_plan, show_page, the comment tools, and the whiteboard's, whether it was handed the plan or a prompt, and one an automation started with no task show_page alone, its pages standing on itself", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -447,7 +447,7 @@ test("an agent on a task is offered edit_plan, show_page, the comment tools, and
   const automation = { taskId: null, prompt: "Sweep the flaky tests." };
   assert.deepEqual(offered(handedItsTask), all);
   assert.deepEqual(offered(handedPrompt), all);
-  assert.deepEqual(offered(automation), []);
+  assert.deepEqual(offered(automation), [CODER_TOOL.SHOW_PAGE]);
 });
 
 test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
@@ -489,19 +489,18 @@ test("every agent on a task is told to keep its task's status with update_task, 
   }
 });
 
-test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, a page, or its final message", () => {
+test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, or a page, on its task or on itself", () => {
   const NO_DOCUMENT = "never commit the write-up as a document";
   const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;
   const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
-  const MESSAGE = "write it in your final message";
   const told = (brief: CodingAgentBrief, taskLink: string | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, taskLink);
     assert.ok(words.includes(NO_DOCUMENT), brief);
-    return [words.includes(PLAN), words.includes(PAGE), words.includes(MESSAGE)];
+    return [words.includes(PLAN), words.includes(PAGE)];
   };
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true, false]);
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, true]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, true]);
 });
 
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {

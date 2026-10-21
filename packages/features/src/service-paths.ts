@@ -91,6 +91,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_RECORD: "/api/live/task-record",
   /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_PAGES: "/api/live/task-pages",
+  /** One coding agent's own pages, on no task, under `?id=`, on the terms a task's are. */
+  LIVE_AGENT_PAGES: "/api/live/agent-pages",
   /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
   /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */

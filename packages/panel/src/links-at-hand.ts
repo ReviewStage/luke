@@ -231,7 +231,15 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
   if (agentId !== undefined) {
     const page = at.pageWorkspace;
     const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
-    return [at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home)];
+    const own = at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home);
+    // A page the agent showed on itself, open in the panel beside it, is at hand under the agent's link, first where the panel holds the keys.
+    const tab = tasks.sidePanel.open ? tasks.sidePanel.tab : undefined;
+    if (tab === undefined || !isPageTab(tab)) return [own];
+    const shown: LinkAtHand = {
+      link: { workspace: home, place: { kind: LINK_PLACE.PAGE, agentId, pageId: tab.page } },
+      thing: LINK_THING.PAGE,
+    };
+    return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
   }
   // A person's page is theirs in the workspace it opened in, which their link names.
   const { userId, workspaceId } = tasks.personView;

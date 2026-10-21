@@ -14,6 +14,7 @@ import {
   type AdminReadAnswer,
   type AdminReadParams,
 } from "@luke/features/admin-wire";
+import { pagePlaceId } from "@luke/features/page-wire";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
@@ -173,7 +174,7 @@ function adminPage(serviceBaseUrl: string): string | undefined {
 
 export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
-  /** How many streams stand open of each plan's pages. */
+  /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
   const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
   /** How many streams stand open of each task's Browser tabs. */
   const openBrowserTabs: OpenFollows<TasksBrowserTabsAnswer> = MutableHashMap.empty();
@@ -519,12 +520,14 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         const pages = followedStream(
           {
-            keyOf: (scope: TaskPagesFollow) => scope.taskId,
+            keyOf: (scope: TaskPagesFollow) => pagePlaceId(scope),
             follow: host.tasksPagesFollow,
             unfollow: host.tasksPagesUnfollow,
             onChanged: host.onTaskPagesChanged,
             valueOf: (changed: TaskPagesFollowed, scope: TaskPagesFollow) =>
-              changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+              pagePlaceId(changed) === pagePlaceId(scope)
+                ? Option.some(changed.view)
+                : Option.none(),
           },
           openPages,
           input,

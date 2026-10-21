@@ -18,7 +18,7 @@ import {
   readCodingAgentOfConversation,
 } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result, Stream } from "effect";
 import type { HttpClient } from "effect/http";
@@ -316,7 +316,7 @@ export function runAgentComment(
   );
 }
 
-/** Runs one `show_page` call on the agent's task, a page's path read from its sandbox through the door given. */
+/** Runs one `show_page` call on the agent's task, or on the agent itself where it works on none, a page's path read from its sandbox through the door given. */
 export function runAgentShowPage(
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
@@ -325,16 +325,18 @@ export function runAgentShowPage(
   return Effect.gen(function* () {
     const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return showPageRejected(found.failure);
-    const { taskId } = found.success;
-    if (taskId === null) return showPageRejected(SHOW_PAGE_REFUSAL.TASKLESS);
+    const { id: agentId, taskId } = found.success;
     const binding = {
       userId: admitted.target.userId,
-      taskId,
+      owner:
+        taskId === null
+          ? ({ kind: PAGE_OWNER.AGENT, agentId } as const)
+          : ({ kind: PAGE_OWNER.TASK, taskId } as const),
       sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
     };
     return yield* runShowPage(binding, input, {
       kind: PAGE_SHOWER.AGENT,
-      agentId: found.success.id,
+      agentId,
     });
   }).pipe(
     Effect.tapError(logStoreFailure),

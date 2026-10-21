@@ -42,7 +42,9 @@ test("a version written while the card stands is hidden until it loads, never th
   roots.push(root);
   const render = (page: PageLine) =>
     act(() =>
-      root.render(onRegistry(AtomRegistry.make(), createElement(PageCard, { taskId: TASK, page }))),
+      root.render(
+        onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
+      ),
     );
   const preview = () => container.querySelector<HTMLElement>(".page-card-preview");
   const load = () =>
@@ -72,7 +74,9 @@ test("the head says who showed the version beside it, wherever the card hangs: L
   roots.push(root);
   const subOf = (page: PageLine) => {
     act(() =>
-      root.render(onRegistry(AtomRegistry.make(), createElement(PageCard, { taskId: TASK, page }))),
+      root.render(
+        onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
+      ),
     );
     return container.querySelector(".luke-hover-card-sub")?.textContent;
   };

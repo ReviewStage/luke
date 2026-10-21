@@ -408,7 +408,7 @@ function withCards(
       const page = tasks.pages?.find((each) => each.id === row.id);
       const taskId = tasks.activeTaskId;
       if (page === undefined || taskId === undefined) return entry;
-      return { ...entry, card: <PageCard taskId={taskId} page={page} /> };
+      return { ...entry, card: <PageCard place={{ taskId }} page={page} /> };
     }
     // Note that a file's row is named by its place in the files listed (`panelEntries`).
     const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;

@@ -26,6 +26,7 @@ import {
   taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
+import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { issueTagOf, type TaskIssueTag } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import {
@@ -685,18 +686,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
   }
 
-  /** The pages of each task a window's Inbox follows, by the task. */
+  /** The pages of each task a window's Inbox follows, and of each agent on no task whose page a window draws, by the task's or the agent's id, which never collide. */
   const pagesFollows = yield* FiberMap.make<string>();
   const decodePages = Schema.decodeUnknownOption(taskPagesLiveRowsSchema);
 
-  /** Follows `taskId`'s pages live until let go, each change emitted as `TASKS_PAGES_CHANGED`. */
-  function followPages(taskId: string) {
+  /** Follows the pages of `place`, a task or an agent on no task, live until let go, each change emitted as `TASKS_PAGES_CHANGED`. */
+  function followPages(place: PagePlace) {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
-          ? Effect.map(served(client.pagesLive(taskId, userId, poll, after)), (sealed) =>
+          ? Effect.map(served(client.pagesLive(place, userId, poll, after)), (sealed) =>
               sealed.ok
                 ? sealed.answer
                 : {
@@ -714,7 +715,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         kernel.emit(
           GATEWAY_EVENT.TASKS_PAGES_CHANGED,
           carried({
-            taskId,
+            ...place,
             view: pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
           }),
         ),
@@ -1170,7 +1171,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         board === undefined ? was : { ...was, board },
       );
       yield* readPart(OPENED_PART.CODE, client.readCode(taskId), withCodeRead);
-      yield* readPart(OPENED_PART.PAGES, client.readPages(taskId), withPagesRead);
+      yield* readPart(OPENED_PART.PAGES, client.readPages({ taskId }), withPagesRead);
       // Note that the document is read beside the parts, a fiber of its own, so a part as quick as it lands with it.
       const opened = yield* Fiber.join(yield* Effect.forkChild(served(client.open(taskId))));
       // Another task opened while these reads were out: their answers are not the panel's any more.
@@ -1230,7 +1231,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function readPages(taskId: string) {
     return Effect.gen(function* () {
       const read = partReadStarted(OPENED_PART.PAGES);
-      const pages = yield* served(client.readPages(taskId));
+      const pages = yield* served(client.readPages({ taskId }));
       if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.PAGES, read)) return;
       view = withPagesRead(view, pages);
       publish();
@@ -1858,11 +1859,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.gen(function* () {
         const read = readEither(tasksPageParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("reading a page names a task, the page, and its version");
+          return yield* invalid(
+            "reading a page names a task or an agent, the page, and its version",
+          );
         }
         if (!gate()) return carried<TasksPageAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { taskId, pageId, version } = read.success;
-        const page = yield* served(client.readPageVersion(taskId, pageId, version));
+        const { pageId, version } = read.success;
+        const place =
+          "taskId" in read.success
+            ? { taskId: read.success.taskId }
+            : { agentId: read.success.agentId };
+        const page = yield* served(client.readPageVersion(place, pageId, version));
         return carried<TasksPageAnswer>(
           page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
         );
@@ -1916,32 +1923,35 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return {};
       }),
     // A plan's pages are followed for a window's Inbox while it draws an item
-    // of that plan, and told only as `TASKS_PAGES_CHANGED`; a follow of what
-    // is already followed does nothing.
+    // of that plan, and an agent's on no task while its page is drawn, and
+    // told only as `TASKS_PAGES_CHANGED`; a follow of what is already
+    // followed does nothing.
     [GATEWAY_METHOD.TASKS_PAGES_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = readEither(taskPagesFollowSchema)(unparsedWire(params));
         if (Result.isFailure(read))
-          return yield* invalid("following a task's pages names the task");
+          return yield* invalid("following pages names the task or the agent");
         if (!gate()) return {};
-        const { taskId } = read.success;
-        yield* FiberMap.run(pagesFollows, taskId, followPages(taskId), { onlyIfMissing: true });
+        yield* FiberMap.run(pagesFollows, pagePlaceId(read.success), followPages(read.success), {
+          onlyIfMissing: true,
+        });
         return {};
       }),
     [GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = readEither(taskPagesFollowSchema)(unparsedWire(params));
         if (Result.isFailure(read))
-          return yield* invalid("letting a task's pages go names the task");
-        yield* FiberMap.remove(pagesFollows, read.success.taskId);
+          return yield* invalid("letting pages go names the task or the agent");
+        yield* FiberMap.remove(pagesFollows, pagePlaceId(read.success));
         return {};
       }),
     [GATEWAY_METHOD.TASKS_PAGES]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("reading a task's pages names the task");
+        if (Result.isFailure(read))
+          return yield* invalid("reading pages names the task or the agent");
         if (!gate()) return carried<TasksPagesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const pages = yield* served(client.readPages(read.success.taskId));
+        const pages = yield* served(client.readPages(read.success));
         return carried<TasksPagesAnswer>(
           pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
         );

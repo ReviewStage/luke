@@ -1127,10 +1127,11 @@ function shownPage(call: TargetedCall): ToolTarget | undefined {
   return page === undefined ? undefined : { kind: TOOL_TARGET.PAGE, page };
 }
 
-/** The page a read answered, which opens its tab where it is on the call's own task; one of another task opens nothing here. */
+/** The page a read answered, which opens its tab where it is on the call's own task, or the calling agent's own on no task; one of another task or agent opens nothing here. */
 function readPage(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.page : undefined;
-  return isRecord(answer) && answer.isYourTask === true ? shownPage(call) : undefined;
+  const own = isRecord(answer) && (answer.isYourTask === true || answer.isYours === true);
+  return own ? shownPage(call) : undefined;
 }
 
 /** The lines `show_code` put on screen, as a reference a File tab lights. */

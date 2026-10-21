@@ -56,7 +56,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -2727,7 +2727,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
     await database.run(
       writePage(
         bob,
-        tasks.billing,
+        taskPageOwner(tasks.billing),
         { title: "Seats", html: "<h1>One</h1>" },
         { kind: PAGE_SHOWER.LUKE },
       ),
@@ -2736,7 +2736,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   await database.run(
     writePage(
       bob,
-      tasks.billing,
+      taskPageOwner(tasks.billing),
       { pageId: shown.id, title: "Seats by month", html: rows },
       { kind: PAGE_SHOWER.LUKE },
     ),
@@ -2745,7 +2745,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
     await database.run(
       writePage(
         agents.otherWorkspaces.userId,
-        tasks.elsewhere,
+        taskPageOwner(tasks.elsewhere),
         { title: "Theirs", html: "<p/>" },
         { kind: PAGE_SHOWER.LUKE },
       ),
@@ -2781,6 +2781,57 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: shown.id, version: 0 }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: READ_PAGE_REFUSAL.UNREADABLE,
+  });
+});
+
+test("read_page reads a page an agent on no task of the caller's workspace showed on itself, naming that agent and whether it is the caller, and nothing of such an agent of another workspace", async () => {
+  const { workspaceId, elsewhere, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const bob = agents.teammates.userId;
+  const sweeper = await tasklessAgentOn(bob, workspaceId);
+  const theirs = await tasklessAgentOn(agents.otherWorkspaces.userId, elsewhere);
+  const shown = Option.getOrThrow(
+    await database.run(
+      writePage(
+        bob,
+        { kind: PAGE_OWNER.AGENT, agentId: sweeper.id },
+        { title: "Flaky tests", html: "<h1>Flaky</h1>" },
+        { kind: PAGE_SHOWER.AGENT, agentId: sweeper.id },
+      ),
+    ),
+  );
+  const elsewhereShown = Option.getOrThrow(
+    await database.run(
+      writePage(
+        agents.otherWorkspaces.userId,
+        { kind: PAGE_OWNER.AGENT, agentId: theirs.id },
+        { title: "Theirs", html: "<p/>" },
+        { kind: PAGE_SHOWER.AGENT, agentId: theirs.id },
+      ),
+    ),
+  );
+  const page = (answer: WireRecord) => (isRecord(answer.page) ? answer.page : {});
+  const byCaller = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const bySweeper = await peerCaller(hostOf(true), sweeper, eve.services);
+
+  const read = page(await byCaller(CODER_TOOL.READ_PAGE, { pageId: shown.id }));
+  const own = page(await bySweeper(CODER_TOOL.READ_PAGE, { pageId: shown.id }));
+
+  assert.deepEqual(
+    [read.title, read.html, read.agent, read.isYours, "task" in read],
+    ["Flaky tests", "<h1>Flaky</h1>", { id: sweeper.id, name: sweeper.personaName }, false, false],
+  );
+  assert.ok(
+    isWireString(read.mention) &&
+      read.mention.endsWith(`/agent/${sweeper.id}/page/${shown.id})`) &&
+      !read.mention.includes("/plan/"),
+    String(read.mention),
+  );
+  assert.equal(own.isYours, true);
+  // The caller's starter is a member of the other workspace too, but the caller is not of it.
+  assert.deepEqual(await byCaller(CODER_TOOL.READ_PAGE, { pageId: elsewhereShown.id }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: READ_PAGE_REFUSAL.NO_PAGE,
   });
 });
 

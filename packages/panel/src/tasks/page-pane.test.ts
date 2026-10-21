@@ -59,7 +59,12 @@ function mount(page: PageLine, read: ReadPageSource = readSource, findActive = t
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
-        createElement(PagePane, { taskId: TASK, page: listed, readSource: read, findActive }),
+        createElement(PagePane, {
+          place: { taskId: TASK },
+          page: listed,
+          readSource: read,
+          findActive,
+        }),
       ),
     );
   render(page);

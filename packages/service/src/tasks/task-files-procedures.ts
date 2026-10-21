@@ -32,7 +32,7 @@
 
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
-import { pageVersionNumberSchema } from "@luke/features/page-wire";
+import { pageVersionNumberSchema, taskPageOwner } from "@luke/features/page-wire";
 import { pictureOfDataUrl } from "@luke/features/picture-wire";
 import {
   PLAN_ATTACHMENT_REFUSAL,
@@ -173,14 +173,16 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
     }),
     pages: taskFiles.pages.effect(function* ({ input, context }) {
       const taskId = yield* namedRow(input.id);
-      return { pages: yield* hostedStoreOrUnavailable(listPages(context.userId, taskId)) };
+      return {
+        pages: yield* hostedStoreOrUnavailable(listPages(context.userId, taskPageOwner(taskId))),
+      };
     }),
     page: taskFiles.page.effect(function* ({ input, context }) {
       const taskId = yield* namedRow(input.id);
       const pageId = yield* namedRow(input.page);
       const version = yield* pageVersionOf(input.version);
       const page = yield* hostedStoreOrUnavailable(
-        readPageVersion(context.userId, taskId, pageId, version),
+        readPageVersion(context.userId, taskPageOwner(taskId), pageId, version),
       );
       return { page: yield* found(page) };
     }),

@@ -88,7 +88,7 @@ import {
 import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { FAKE_ANSWER, fakeActs, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
@@ -1014,6 +1014,39 @@ test("a Luke link to an agent with no task opens its page, and one under a task 
   assert.equal(page, AGENT_ID);
   assert.equal(tab.control().agentView.agentId, undefined);
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+});
+
+test("a Luke link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages read and held for it", async () => {
+  const page = { id: "page-1", title: "Flaky funnel", version: 1, at: 1 };
+  const asked: unknown[] = [];
+  // Note that a panel's pages are read through the window's act port, as its hooks read them.
+  fakeActs({
+    act: (request) => {
+      if (request.kind !== ACT_KIND.TASKS_PAGES) {
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
+      }
+      asked.push(request.payload);
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { pages: [page] } });
+    },
+  });
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.PAGE, agentId: AGENT_ID, pageId: page.id },
+    }),
+  );
+  await settle();
+
+  assert.equal(tab.control().agentView.agentId, AGENT_ID);
+  assert.deepEqual(asked, [{ agentId: AGENT_ID }]);
+  assert.deepEqual(tab.control().agentView.pages, [page]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
 
 test("a Luke link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {

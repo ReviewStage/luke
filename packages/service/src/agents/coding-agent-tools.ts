@@ -66,6 +66,7 @@ import {
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
+import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import {
   TASK_BOUNDS,
@@ -162,7 +163,8 @@ import {
   workspaceAgentsOf,
 } from "./workspace-agents.js";
 import {
-  taskStepOf,
+  pageMention,
+  pageStepOf,
   workspaceNamingOf,
   workspaceStepOf,
   writtenMention,
@@ -918,9 +920,10 @@ const readPageAsked = Schema.decodeUnknownResult(READ_PAGE_INPUT);
 export const READ_PAGE_TOOL = {
   name: AGENT_TOOL.READ_PAGE,
   description:
-    "Read a page an agent showed on a task of your workspace, by its id: its title, the " +
-    "version read (the newest unless you name one) and the newest there is, its task and " +
-    "whether that is the task you work on, its mention ready to write, and its HTML as it " +
+    "Read a page an agent showed in your workspace, by its id: its title, the version read " +
+    "(the newest unless you name one) and the newest there is, its task and whether that is " +
+    "the task you work on, or, for a page an agent on no task showed on itself, that agent " +
+    "and whether it is you, its mention ready to write, and its HTML as it " +
     "stands, cut on a line at " +
     `${READ_PAGE_CHARS} characters with how many were left out. Read a page the developer ` +
     "pointed you at, or one another agent showed, before you build on it or revise it; to " +
@@ -2666,7 +2669,39 @@ function pageCut(html: string): PageCut {
   return { html: cut.text, leftOutChars: cut.leftOutChars };
 }
 
-/** One call of `read_page`: a version of a page of a task of the caller's workspace, its HTML cut to the bound, or why there is none. */
+/**
+ * What a page read says it stands on, where that is of the caller's
+ * workspace: its task, by name, and whether it is the caller's own, or the
+ * coding agent on no task that showed it, by name, and whether that is the
+ * caller; nothing for an owner of another workspace.
+ */
+type PageStanding =
+  | {
+      readonly task: { readonly id: string; readonly name: string | null };
+      readonly isYourTask: boolean;
+    }
+  | { readonly agent: { readonly id: string; readonly name: string }; readonly isYours: boolean };
+
+const pageStandingOf = (caller: AgentCaller, owner: PageOwner) =>
+  Effect.gen(function* () {
+    const userId = callerUserId(caller);
+    if (owner.kind === PAGE_OWNER.TASK) {
+      if (!(yield* taskOfCallerWorkspace(caller, owner.taskId))) return Option.none<PageStanding>();
+      const names = yield* taskNamesOf(userId, [owner.taskId]);
+      return Option.some<PageStanding>({
+        task: { id: owner.taskId, name: names.get(owner.taskId)?.name ?? null },
+        isYourTask: owner.taskId === callerTask(caller),
+      });
+    }
+    const found = yield* workspaceAgentOf(caller, owner.agentId);
+    if (Option.isNone(found)) return Option.none<PageStanding>();
+    return Option.some<PageStanding>({
+      agent: { id: owner.agentId, name: agentName(found.value.agent) },
+      isYours: caller.kind === AGENT_CALLER.AGENT && caller.agent.id === owner.agentId,
+    });
+  });
+
+/** One call of `read_page`: a version of a page of the caller's workspace, on a task or on an agent with no task, its HTML cut to the bound, or why there is none. */
 export function runReadPage(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -2684,13 +2719,12 @@ export function runReadPage(
       }
       const userId = callerUserId(caller);
       const found = yield* readPageById(userId, asked.success.pageId, asked.success.version);
-      // A page of a task of another workspace, even one the member is also in, is none of the caller's.
-      if (Option.isNone(found) || !(yield* taskOfCallerWorkspace(caller, found.value.taskId))) {
-        return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
-      }
-      const { taskId, page, newestVersion } = found.value;
-      const names = yield* taskNamesOf(userId, [taskId]);
-      const step = yield* taskStepOf(userId, taskId);
+      if (Option.isNone(found)) return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
+      const { owner, page, newestVersion } = found.value;
+      // A page of another workspace, even one the member is also in, is none of the caller's.
+      const standing = yield* pageStandingOf(caller, owner);
+      if (Option.isNone(standing)) return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
+      const step = yield* pageStepOf(userId, owner);
       const cut = pageCut(page.html);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -2699,18 +2733,11 @@ export function runReadPage(
           title: page.title,
           version: page.version,
           newestVersion,
-          task: { id: taskId, name: names.get(taskId)?.name ?? null },
-          isYourTask: taskId === callerTask(caller),
-          // The page's mention, ready to write, wherever its task's workspace reads for the member.
+          ...standing.value,
+          // The page's mention, ready to write, wherever its owner's workspace reads for the member.
           ...(Option.isNone(step)
             ? undefined
-            : {
-                mention: writtenMention(
-                  { kind: MENTION_KIND.PAGE, taskId, pageId: page.id },
-                  page.title,
-                  step.value,
-                ),
-              }),
+            : { mention: writtenMention(pageMention(owner, page.id), page.title, step.value) }),
           html: cut.html,
           leftOutChars: cut.leftOutChars,
         },

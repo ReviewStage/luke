@@ -7,8 +7,9 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import type { PageLine } from "@luke/features/page-wire";
+import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
@@ -271,6 +272,11 @@ export const SIDE_PANEL_HOLDER = {
 } as const;
 
 type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
+
+/** What the panel's pages stand on: the agent on no task an agent's page holds the panel under, else the task. */
+function pagePlaceOf(holder: SidePanelHolder, id: string): PagePlace {
+  return holder === SIDE_PANEL_HOLDER.AGENT ? { agentId: id } : { taskId: id };
+}
 
 /** No fixed kind, the same array every render. */
 const NO_KINDS: readonly FixedSidePanelTab[] = [];
@@ -662,8 +668,8 @@ function stripTabs(input: {
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
-  /** The open plan, whose pages a page tab's card previews. */
-  taskId: string;
+  /** The open plan, or the agent on no task, whose pages a page tab's card previews. */
+  pagePlace: PagePlace;
   /** The task the panel stands beside, whose name and status its Plan tab wears; none where it is not known. */
   plan: PlanStanding | undefined;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
@@ -672,7 +678,7 @@ function stripTabs(input: {
   inboxDrafted: boolean;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
-  const { repository, copied, onOpenAgent, shownAgent, taskId } = input;
+  const { repository, copied, onOpenAgent, shownAgent, pagePlace } = input;
   const { browsers, browserPages, cloudBrowsers } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
@@ -770,7 +776,7 @@ function stripTabs(input: {
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PAGE, title: line.title }),
-      card: <PageCard taskId={taskId} page={line} />,
+      card: <PageCard place={pagePlace} page={line} />,
     }),
     close: () => panel.onClose(tab),
   }));
@@ -959,7 +965,7 @@ function PanelTabs({
     copied,
     onOpenAgent,
     shownAgent,
-    taskId,
+    pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
     inboxWaiting,
     inboxDrafted,
@@ -982,8 +988,13 @@ function PanelTabs({
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
-    // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id.
-    const linked = holder === SIDE_PANEL_HOLDER.TASK ? panelTabPlace(taskId, entry.tab) : undefined;
+    // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id, and names only its pages by it.
+    const linked =
+      holder === SIDE_PANEL_HOLDER.TASK
+        ? panelTabPlace(taskId, entry.tab)
+        : holder === SIDE_PANEL_HOLDER.AGENT && isPageTab(entry.tab)
+          ? ({ kind: LINK_PLACE.PAGE, agentId: taskId, pageId: entry.tab.page } as const)
+          : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -1293,6 +1304,7 @@ function TabContent({
   tab,
   taskId,
   codeFilesRead,
+  pagePlace,
   repository,
   board,
   shownCode,
@@ -1326,6 +1338,8 @@ function TabContent({
 }: {
   tab: SidePanelTab;
   taskId: string;
+  /** What the panel's pages stand on: the task, or the agent on no task whose page holds the panel. */
+  pagePlace: PagePlace;
   /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
   board: Board | undefined;
@@ -1441,10 +1455,10 @@ function TabContent({
     ) : (
       <PagePane
         key={page.id}
-        taskId={taskId}
+        place={pagePlace}
         page={page}
         readSource={(version) =>
-          act(ACT_KIND.TASKS_PAGE_SOURCE, { taskId, pageId: page.id, version })
+          act(ACT_KIND.TASKS_PAGE_SOURCE, { ...pagePlace, pageId: page.id, version })
         }
         findActive={findActive}
       />
@@ -2124,6 +2138,7 @@ export function SidePanel({
               tab={tab}
               taskId={taskId}
               codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
+              pagePlace={pagePlaceOf(holder, taskId)}
               repository={repository}
               board={board}
               shownCode={shownCode}

@@ -1,11 +1,11 @@
-import type { PageLine } from "@luke/features/page-wire";
+import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TasksPagesAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
- * use-inbox-pages.ts -- the pages of the task whose item the window's Inbox shows, for the panel beside it, as they move.
+ * use-inbox-pages.ts -- the pages of the task whose item the window's Inbox shows, or of the agent on no task whose page stands, for the panel beside it, as they move.
  *
  * Main holds the active task's pages alone (`TasksView`'s `pages`), and the
  * Inbox shows items of any task, so the panel beside an item reads its
@@ -14,33 +14,38 @@ import { useAct } from "../act.js";
  * streams them each time they move over Neon Realtime, so a page an agent
  * shows lands as it is shown, and nothing is read again here. A read or a
  * change that did not answer keeps the pages last read; one of a task no
- * longer chosen is let go.
+ * longer chosen is let go. An agent on no task holds pages of its own,
+ * which its page's panel reads and follows on the same terms.
  */
 
-/** The pages of the Inbox's chosen task: none until read. */
+/** The pages of the Inbox's chosen task, or of the agent whose page stands: none until read. */
 export interface InboxPages {
   readonly pages: readonly PageLine[] | undefined;
 }
 
-/** Reads and follows the pages of the task given, none where no task is. */
-export function useInboxPages(taskId: string | undefined): InboxPages {
+/** Reads and follows the pages of the task or the agent on no task given, none where neither is. */
+export function useInboxPages(place: PagePlace | undefined): InboxPages {
   const { act } = useAct();
-  const [read, setRead] = useState<{ taskId: string; pages: readonly PageLine[] } | undefined>(
+  const [read, setRead] = useState<{ id: string; pages: readonly PageLine[] } | undefined>(
     undefined,
   );
+  // Note that the place is followed by its id and kind, so a new object naming the same one follows nothing again.
+  const id = place === undefined ? undefined : pagePlaceId(place);
+  const onAgent = place !== undefined && "agentId" in place;
   useEffect(() => {
-    if (taskId === undefined) return;
+    if (id === undefined) return;
+    const asked: PagePlace = onAgent ? { agentId: id } : { taskId: id };
     let live = true;
     let followed = false;
     let stream: AsyncIteratorObject<TasksPagesAnswer> | undefined;
-    act(ACT_KIND.TASKS_PAGES, { taskId }).then(
+    act(ACT_KIND.TASKS_PAGES, asked).then(
       (answer) => {
         // Note that a change heard first is as new, so the read stands only until one is.
-        if (live && !followed && "pages" in answer) setRead({ taskId, pages: answer.pages });
+        if (live && !followed && "pages" in answer) setRead({ id, pages: answer.pages });
       },
       () => undefined,
     );
-    act(ACT_KIND.TASKS_PAGES_FOLLOW, { taskId })
+    act(ACT_KIND.TASKS_PAGES_FOLLOW, asked)
       .then(async (opened) => {
         stream = opened;
         if (!live) {
@@ -50,7 +55,7 @@ export function useInboxPages(taskId: string | undefined): InboxPages {
         for await (const answer of opened) {
           if (!live || !("pages" in answer)) continue;
           followed = true;
-          setRead({ taskId, pages: answer.pages });
+          setRead({ id, pages: answer.pages });
         }
       })
       .catch(() => undefined);
@@ -58,6 +63,6 @@ export function useInboxPages(taskId: string | undefined): InboxPages {
       live = false;
       void stream?.return?.(undefined);
     };
-  }, [act, taskId]);
-  return { pages: read?.taskId === taskId ? read?.pages : undefined };
+  }, [act, id, onAgent]);
+  return { pages: read?.id === id ? read?.pages : undefined };
 }

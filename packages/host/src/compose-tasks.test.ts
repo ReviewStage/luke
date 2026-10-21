@@ -35,7 +35,12 @@ import {
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
 } from "@luke/features/live-wire";
-import { PAGE_SHOWER, type PageLine, type PageVersion } from "@luke/features/page-wire";
+import {
+  PAGE_SHOWER,
+  type PageLine,
+  type PageVersion,
+  pagePlaceId,
+} from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import {
   PLAN_COMMENT_ACTOR,
@@ -517,10 +522,10 @@ function fakeService(tasks: Task[]): FakeService {
     readRevision: (_taskId, seq) => Effect.sync(() => service.revisions[seq]),
     pages: [],
     pageLines: {},
-    readPages: (taskId) =>
+    readPages: (place) =>
       Effect.sync(() => {
         service.recordReads.push("pages");
-        return service.pageLines[taskId];
+        return service.pageLines[pagePlaceId(place)];
       }),
     pictures: new Map(),
     // The service keeps a picture under the next id, and refuses one more where the plan holds two, a bound small enough to reach.
@@ -1010,9 +1015,9 @@ function fakeService(tasks: Task[]): FakeService {
           ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
           : { ok: true, answer: sealed };
       }),
-    pagesLive: (taskId) =>
+    pagesLive: (place) =>
       Effect.sync(() => {
-        const sealed = service.pageSeals[taskId];
+        const sealed = service.pageSeals[pagePlaceId(place)];
         return sealed === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
           : { ok: true, answer: sealed };

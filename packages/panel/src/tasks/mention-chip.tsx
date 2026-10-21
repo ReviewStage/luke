@@ -533,7 +533,13 @@ function MentionCard({
         />
       );
     case MENTION_KIND.PAGE:
-      return <PageChipCard taskId={mention.taskId} pageId={mention.pageId} fallback={card} />;
+      return (
+        <PageChipCard
+          place={"taskId" in mention ? { taskId: mention.taskId } : { agentId: mention.agentId }}
+          pageId={mention.pageId}
+          fallback={card}
+        />
+      );
     // A person hangs their card as the members of the workspace their link names draw them.
     case MENTION_KIND.PERSON:
       return (
@@ -948,7 +954,13 @@ function PlaceCard({
         <VersionChipCard taskId={place.planId} revision={place.revision} fallback={fallback} />
       );
     case LINK_PLACE.PAGE:
-      return <PageChipCard taskId={place.planId} pageId={place.pageId} fallback={fallback} />;
+      return (
+        <PageChipCard
+          place={"planId" in place ? { taskId: place.planId } : { agentId: place.agentId }}
+          pageId={place.pageId}
+          fallback={fallback}
+        />
+      );
     case LINK_PLACE.AGENT:
       return (
         <MentionedAgentCard

@@ -5,6 +5,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { listPages } from "@luke/database/models/plan-pages";
 import type { PageLine } from "@luke/features/page-wire";
+import { taskPageOwner } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
 import { Effect, Option, Schema } from "effect";
 import { listMembers } from "../accounts/workspace-members.js";
@@ -47,7 +48,7 @@ const agentIdOf = Schema.decodeUnknownOption(wireUuidSchema);
 /** Each page named that the task holds, by id, as its newest version names it. */
 const readPages = (userId: string, taskId: string, named: readonly string[]) =>
   Effect.map(
-    listPages(userId, taskId),
+    listPages(userId, taskPageOwner(taskId)),
     (lines) =>
       new Map<string, PageLine>(
         lines.filter((line) => named.includes(line.id)).map((line) => [line.id, line]),

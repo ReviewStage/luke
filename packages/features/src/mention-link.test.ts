@@ -748,7 +748,7 @@ test("a page or an agent of a plan is its Luke link, read back by the app's sche
   }
 });
 
-test("an agent on no task is mentioned by its own Luke link under the workspace, read back by either scheme, and a page on no task names nothing", () => {
+test("an agent on no task is mentioned by its own Luke link under the workspace, read back by either scheme, and a page on neither a task nor an agent names nothing", () => {
   const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-9" };
 
   assert.equal(encodeMention(agent, PLACE), "https://tryluke.dev/acme/agent/agent-9");
@@ -765,6 +765,27 @@ test("an agent on no task is mentioned by its own Luke link under the workspace,
     "https://tryluke.dev/acme/page/page-1",
   ]) {
     assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
+test("a page an agent on no task showed is mentioned under the agent's own link, read back by either scheme, and a step past its id or one under an agent on a task names nothing", () => {
+  const page: Mention = { kind: MENTION_KIND.PAGE, agentId: "agent-9", pageId: "page-1" };
+  const target = "https://tryluke.dev/acme/agent/agent-9/page/page-1";
+
+  assert.equal(encodeMention(page, PLACE), target);
+  assert.deepEqual(decodeMention(target, null), page);
+  assert.deepEqual(
+    decodeMention("tryluke://tryluke.dev/acme/agent/agent-9/page/page-1", null),
+    page,
+  );
+  assert.deepEqual(linkMention("", target, null), { mention: page, name: "Page" });
+  for (const bent of [
+    `${target}/source`,
+    `${target}#top`,
+    "https://tryluke.dev/acme/agent/agent-9/page/",
+    `https://tryluke.dev/acme/plan/${TASK_ID}/agent/agent-9/page/page-1`,
+  ]) {
+    assert.equal(decodeMention(bent, null), undefined, bent);
   }
 });
 

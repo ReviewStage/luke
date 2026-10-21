@@ -1,4 +1,9 @@
-import { PAGE_SHOWER, type PageLine, type PageShower } from "@luke/features/page-wire";
+import {
+  PAGE_SHOWER,
+  type PageLine,
+  type PagePlace,
+  type PageShower,
+} from "@luke/features/page-wire";
 import { HoverCard, HoverCardHead } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { useState } from "react";
@@ -27,21 +32,21 @@ import { useKnownNames } from "./use-known-names.js";
  * page's shape, in a quiet ground, so the card is placed once at its size.
  */
 
-/** A page with an id and a version, on the plan it is of. */
+/** A page with an id and a version, on the plan it is of, or the agent on no task. */
 interface CardPage {
-  readonly taskId: string;
+  readonly place: PagePlace;
   readonly page: PageLine;
 }
 
 /** The page's newest version, drawn small and inert. */
-function PagePreview({ taskId, page }: CardPage): React.JSX.Element {
+function PagePreview({ place, page }: CardPage): React.JSX.Element {
   const [loaded, setLoaded] = useState(false);
   return (
     <div className="page-card-preview ph-no-capture" data-loaded={String(loaded)}>
       <iframe
         className="page-card-frame"
         title={`${page.title} preview`}
-        src={appPlatform().pageFrameUrl({ taskId, pageId: page.id, version: page.version })}
+        src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version: page.version })}
         sandbox={PAGE_SANDBOX}
         allow=""
         referrerPolicy="no-referrer"
@@ -80,7 +85,7 @@ function subWords(page: PageLine, agents: ReadonlyMap<string, string>): string |
 }
 
 /** A page's card: its glyph, title, version, who showed it, and age, over a preview of its newest version. */
-export function PageCard({ taskId, page }: CardPage): React.JSX.Element {
+export function PageCard({ place, page }: CardPage): React.JSX.Element {
   const now = useMinute();
   const sub = subWords(page, useKnownNames().agents);
   return (
@@ -93,7 +98,7 @@ export function PageCard({ taskId, page }: CardPage): React.JSX.Element {
         corner={<RelativeTime at={page.at} now={now} hint={false} />}
       />
       {/* A new version is a new preview, held hidden until it has loaded rather than over the last one's frame. */}
-      <PagePreview key={`${page.id}/${page.version}`} taskId={taskId} page={page} />
+      <PagePreview key={`${page.id}/${page.version}`} place={place} page={page} />
     </HoverCard>
   );
 }

@@ -47,7 +47,9 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   (`luke-link.ts`): ids alone, never the page's title or the agent's. A
  *   coding agent on no task, as an automation's run or a one-off starts
  *   one, is the workspace's address with `/agent/<agentId>` after it, its
- *   own link, so any agent of the workspace can be mentioned.
+ *   own link, so any agent of the workspace can be mentioned, and a page
+ *   it showed, which stands on it rather than a task, is that address with
+ *   `/page/<pageId>` after it.
  * - A person is their page in the workspace, the workspace's address with
  *   `/person/<userId>` after it, the link their page is opened and copied
  *   by (`luke-link.ts`): the account's id alone, never their name or email,
@@ -327,6 +329,12 @@ const mentionSchema = EffectSchema.Union([
     taskId: taskIdSchema,
     pageId: thingIdSchema,
   }),
+  // A page a coding agent on no task showed stands on the agent rather than a task.
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.PAGE),
+    agentId: thingIdSchema,
+    pageId: thingIdSchema,
+  }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.AGENT),
     /** The task the agent works on; absent for an agent on none. */
@@ -507,11 +515,18 @@ function taskFields(taskId: string | undefined, rest: readonly string[], hash: s
   if (step === LINK.LUKE_STEP && id === undefined && hash === "") {
     return taskId === undefined ? undefined : { kind: MENTION_KIND.LUKE, taskId };
   }
-  if (id === undefined || more.length > 0 || hash !== "") return undefined;
-  // A page always stands on a task, so one with none reads as nothing to the schema.
-  if (step === LINK.PAGE_STEP) return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
+  if (id === undefined || hash !== "") return undefined;
+  // A page always stands on a task here, so one with none reads as nothing to the schema.
+  if (step === LINK.PAGE_STEP && more.length === 0) {
+    return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
+  }
   if (step !== LINK.AGENT_STEP) return undefined;
   const agentId = decodedPart(id);
+  // An agent on no task holds its own pages: `/agent/<agentId>/page/<pageId>`.
+  if (taskId === undefined && more.length === 2 && more[0] === LINK.PAGE_STEP) {
+    return { kind: MENTION_KIND.PAGE, agentId, pageId: decodedPart(more[1] ?? "") };
+  }
+  if (more.length > 0) return undefined;
   return taskId === undefined
     ? { kind: MENTION_KIND.AGENT, agentId }
     : { kind: MENTION_KIND.AGENT, taskId, agentId };
@@ -803,8 +818,14 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}/${encodedPart(mention.tool)}`;
     case MENTION_KIND.LINK:
       return linkAddress(mention.url);
-    case MENTION_KIND.PAGE:
-      return `${taskTarget(mention.taskId, place, "")}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
+    case MENTION_KIND.PAGE: {
+      // A page of an agent on no task stands under that agent's own address.
+      const owner =
+        "agentId" in mention
+          ? `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`
+          : taskTarget(mention.taskId, place, "");
+      return `${owner}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
+    }
     case MENTION_KIND.AGENT: {
       // An agent on no task stands under its workspace, as its own Luke link does.
       const owner =

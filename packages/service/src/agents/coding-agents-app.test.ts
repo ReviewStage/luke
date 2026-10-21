@@ -172,7 +172,7 @@ import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/i
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionLinksIn, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -968,7 +968,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { owner, task, eve, ask } = yield* openTask();
         const shown = yield* writePage(
           owner,
-          task.id,
+          taskPageOwner(task.id),
           { title: "Chart", html: "<h1>Chart</h1>" },
           { kind: PAGE_SHOWER.LUKE },
         );
@@ -5709,7 +5709,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* updateCodingAgentBranch(owner, other.agent.id, "luke/store-invitations");
         const shown = yield* writePage(
           owner,
-          task.id,
+          taskPageOwner(task.id),
           {
             title: "Invites by week",
             html: "<h1>Invites by week</h1>",

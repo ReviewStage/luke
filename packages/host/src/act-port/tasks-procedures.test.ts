@@ -22,6 +22,7 @@ import {
 } from "@luke/features/admin-wire";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import { pagePlaceId } from "@luke/features/page-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import {
   PLAN_COMMENT_ACTION,
@@ -413,11 +414,11 @@ function windowPort(
         return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
       }),
     tasksPages: (params) =>
-      ask(`pages:${params.taskId}`, () => ({
+      ask(`pages:${pagePlaceId(params)}`, () => ({
         pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }],
       })),
-    tasksPagesFollow: (scope) => ask(`pages-follow:${scope.taskId}`, () => undefined),
-    tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${scope.taskId}`, () => undefined),
+    tasksPagesFollow: (scope) => ask(`pages-follow:${pagePlaceId(scope)}`, () => undefined),
+    tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${pagePlaceId(scope)}`, () => undefined),
     onTaskPagesChanged: (listener) => {
       pagesListeners.add(listener);
       return () => pagesListeners.delete(listener);

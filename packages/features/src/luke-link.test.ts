@@ -77,6 +77,10 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     { kind: LINK_PLACE.MESSAGE, agentId: AGENT, messageId: OTHER },
     `${HOME}/agent/${AGENT}/message/${OTHER}`,
   ],
+  [
+    { kind: LINK_PLACE.PAGE, agentId: AGENT, pageId: OTHER },
+    `${HOME}/agent/${AGENT}/page/${OTHER}`,
+  ],
   [{ kind: LINK_PLACE.INBOX }, `${HOME}/inbox`],
   [
     { kind: LINK_PLACE.INBOX_ITEM, planId: TASK, itemId: OTHER },
@@ -223,6 +227,8 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/inbox/${OTHER}`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/inbox/${OTHER}`,
     `${HOME}/agent/${AGENT}/inbox/${OTHER}/answer`,
+    `${HOME}/agent/${AGENT}/page/${OTHER}/source`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/page/${OTHER}`,
     `${HOME}/automations/${OTHER}`,
     `${HOME}/automation/${OTHER}/runs/${AGENT}`,
     `${HOME}/factory/today`,

@@ -1201,7 +1201,8 @@ export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
   const found: InboxMedia[] = [];
   const page = (target: string) => {
     const place = readLink(target)?.place;
-    if (place?.kind !== LINK_PLACE.PAGE) return;
+    // A page of an agent on no task draws no card here, and its link opens it on the agent's page.
+    if (place?.kind !== LINK_PLACE.PAGE || !("planId" in place)) return;
     const known = found.some(
       (each) =>
         each.kind === INBOX_MEDIA.PAGE &&
@@ -1280,7 +1281,7 @@ function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly
     }
     for (const link of linksIn(message.text)) {
       const place = readLink(link.target)?.place;
-      if (place?.kind !== LINK_PLACE.PAGE) continue;
+      if (place?.kind !== LINK_PLACE.PAGE || !("planId" in place)) continue;
       const media = { kind: INBOX_MEDIA.PAGE, taskId: place.planId, pageId: place.pageId } as const;
       named.push({ at: link.start, media });
     }

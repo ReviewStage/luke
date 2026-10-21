@@ -197,11 +197,17 @@ function PageRowCard({
   const doors = useMentionDoors();
   const openLink = useOpenLink();
   const known = useKnownNames();
-  const place = { kind: LINK_PLACE.PAGE, planId: page.taskId, pageId: page.pageId } as const;
+  const place =
+    "taskId" in page
+      ? ({ kind: LINK_PLACE.PAGE, planId: page.taskId, pageId: page.pageId } as const)
+      : ({ kind: LINK_PLACE.PAGE, agentId: page.agentId, pageId: page.pageId } as const);
   const { name } = placeChipLook(place, writtenWords(target, words), known);
   const glyph = <AppWindowIcon aria-hidden="true" />;
   // Note that the page is named from the link as the bar read it, because a page's link the window reads, one ending in a slash or a fragment, may be no mention's.
-  const mention = { kind: MENTION_KIND.PAGE, taskId: page.taskId, pageId: page.pageId } as const;
+  const mention =
+    "taskId" in page
+      ? ({ kind: MENTION_KIND.PAGE, taskId: page.taskId, pageId: page.pageId } as const)
+      : ({ kind: MENTION_KIND.PAGE, agentId: page.agentId, pageId: page.pageId } as const);
   return (
     <OneRowCard label={CARD_LABEL.PAGE} kind={LONE_LINK.PAGE}>
       <RowHintOptions

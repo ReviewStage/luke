@@ -137,6 +137,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_PAGES }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
+  agentPages: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_PAGES }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
   taskHistory: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
     .input(liveTaskSchema)
