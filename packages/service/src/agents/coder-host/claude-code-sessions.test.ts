@@ -598,6 +598,49 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "a replacement for an expired sandbox that could not launch leaves the session standing for the next message",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        sequence.next = 42;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 41,
+        }).pipe(Effect.provide(api.layer));
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+        const preparing = yield* sessionsFor(userId, sequence).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(api),
+              Layer.succeed(AgentSandboxImage, { snapshotId: Effect.fail(new ImagePreparing()) }),
+            ),
+          ),
+        );
+
+        const refused = yield* preparing.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.deepEqual(refused, {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: IMAGE_PREPARING_STATUS,
+        });
+        assert.equal(expired.deleted, false);
+        const retried = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(expired.deleted, true);
+        assert.equal(api.sandboxes.at(-1)?.status, "running");
+      }),
+  );
+
+  it.effect(
     "an END the replaced launch posts while its replacement's command is starting stops nothing",
     () =>
       Effect.gen(function* () {

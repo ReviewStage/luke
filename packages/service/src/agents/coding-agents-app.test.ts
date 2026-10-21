@@ -258,7 +258,7 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
+import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
@@ -646,6 +646,7 @@ const standing = (
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
       sessionSandboxes,
+      keepAwake: keepAwakeDetached,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
