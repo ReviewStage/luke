@@ -37,9 +37,10 @@ interface Screen {
   readonly controls: readonly string[];
 }
 
-const WINDOWS = "7d30d90d";
+const VIEW_OPTIONS = "View options";
 
-const HIDE_ADMINS = "Hide admins";
+/** The range every windowed screen here reads, said after its title. */
+const RANGE = "Last 7 days";
 
 const NO_ANSWER = "The metrics endpoint did not answer.";
 
@@ -75,46 +76,46 @@ const SCREENS: readonly Screen[] = [
         },
         onOpenDay: () => undefined,
       }),
-    heading: "Overview",
-    controls: [WINDOWS, HIDE_ADMINS],
+    heading: `Overview${RANGE}`,
+    controls: [VIEW_OPTIONS],
   },
   {
     name: "Cost",
     element: () => createElement(CostScreen, SHELL),
-    heading: "Cost",
-    controls: [WINDOWS, HIDE_ADMINS],
+    heading: `Cost${RANGE}`,
+    controls: [VIEW_OPTIONS],
   },
   {
     name: "Reliability",
     element: () => createElement(ReliabilityScreen, SHELL),
-    heading: "Reliability",
-    controls: [HIDE_ADMINS],
+    heading: `Reliability${RANGE}`,
+    controls: [VIEW_OPTIONS],
   },
   {
     name: "Users",
     element: () => createElement(UsersScreen, SHELL),
-    heading: "Users",
-    controls: [WINDOWS, HIDE_ADMINS],
+    heading: `Users${RANGE}`,
+    controls: [VIEW_OPTIONS],
   },
   {
     name: "Workspaces",
     element: () => createElement(WorkspacesScreen, SHELL),
     heading: "Workspaces",
-    controls: ["Shared only", HIDE_ADMINS],
+    controls: [VIEW_OPTIONS],
   },
   {
     name: "an account",
     element: () =>
       createElement(AccountScreen, { ...SHELL, id: "account-ada", onBack: () => undefined }),
-    heading: "UsersAccount",
-    controls: [WINDOWS],
+    heading: `UsersAccount${RANGE}`,
+    controls: [VIEW_OPTIONS],
   },
   {
     name: "a day",
     element: () =>
       createElement(DayScreen, { ...SHELL, day: "2026-10-12", onBack: () => undefined }),
     heading: "OverviewOctober 12, 2026",
-    controls: [HIDE_ADMINS],
+    controls: [VIEW_OPTIONS],
   },
 ];
 
@@ -166,9 +167,13 @@ function heading(page: HTMLElement): string {
   return toolbar(page).querySelector(".desktop-toolbar-heading")?.textContent ?? "";
 }
 
-/** The toolbar's controls at its end. */
+/** The toolbar's controls at its end: their words, and the names of those drawn as a glyph alone. */
 function controls(page: HTMLElement): string {
-  return toolbar(page).querySelector(".desktop-toolbar-actions")?.textContent ?? "";
+  const actions = toolbar(page).querySelector(".desktop-toolbar-actions");
+  const named = [...(actions?.querySelectorAll("[aria-label]") ?? [])].map(
+    (each) => each.getAttribute("aria-label") ?? "",
+  );
+  return [actions?.textContent ?? "", ...named].join(" ");
 }
 
 test.each(SCREENS)(
@@ -209,13 +214,13 @@ test("an id no account carries says it was not found under the page's toolbar, i
         id: "account-gone",
         onBack: () => backs.push(backs.length),
       }),
-    heading: "UsersAccount",
-    controls: [WINDOWS],
+    heading: `UsersAccount${RANGE}`,
+    controls: [VIEW_OPTIONS],
   };
   const page = await open(account, 404);
 
-  expect(heading(page)).toBe("UsersAccount");
-  expect(controls(page)).toContain(WINDOWS);
+  expect(heading(page)).toBe(`UsersAccount${RANGE}`);
+  expect(controls(page)).toContain(VIEW_OPTIONS);
   expect(page.querySelector("main")?.textContent).toContain(
     "Not foundThis account doesn't exist, or you don't have access to it.",
   );

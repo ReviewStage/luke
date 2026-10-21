@@ -655,6 +655,7 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_ADMIN)) return;
       // An open task steps back through the history, as the toolbar's Back
       // does, to the page it was opened from, which leaves it and ends its
       // call; a task with no step behind it is left for the page the window

@@ -298,13 +298,13 @@ export function AdminShell({
           onNavigate={navigate}
           onLogOut={onLogOut}
         />
-        {/* The content region is the app's work column, a div because the
-            `main` landmark is the page's own. The page owns its scroll under
+        {/* The content region is the app's work column and the page's `main`
+            landmark, as the app's own is. The page owns its scroll under
             its toolbar, so the region only fills; a folded sidebar's toggle
             stands over the toolbar's start, which leaves it room (`shell.css`). */}
-        <div className="desktop-main" inert={drawerOpen}>
+        <main className="desktop-main" inert={drawerOpen}>
           {children}
-        </div>
+        </main>
         <div className="title-bar-controls">
           <IconButton
             ref={toggle}

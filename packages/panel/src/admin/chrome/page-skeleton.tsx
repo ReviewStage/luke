@@ -11,17 +11,20 @@ import { AdminPage, type AdminWayBack } from "./page-header.js";
  */
 export function PageSkeleton({
   title,
+  note,
   back,
   controls,
   shapes,
 }: {
   title: string;
+  /** What the page covers, after its title, as the loaded page says it. */
+  note?: string | undefined;
   back?: AdminWayBack | undefined;
   controls: React.ReactNode;
   shapes: readonly SkeletonShape[];
 }): React.JSX.Element {
   return (
-    <AdminPage title={title} back={back} controls={controls}>
+    <AdminPage title={title} note={note} back={back} controls={controls}>
       <SkeletonRegion label="Loading…">
         <SkeletonBody shapes={shapes} />
       </SkeletonRegion>

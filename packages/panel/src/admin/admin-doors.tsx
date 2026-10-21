@@ -73,15 +73,41 @@ interface AdminGate {
   }) => React.JSX.Element;
 }
 
+/**
+ * Where a mount keeps what a screen would put in an address: the web page
+ * keeps an account's page and a typed search in its address bar, so either
+ * is shareable and survives a reload; the app keeps them in its own
+ * history, so a screen there keeps its search to itself and links nowhere.
+ */
+interface AdminAddress {
+  /** The address an account's page is shared at, or none where the mount keeps no address of its own. */
+  readonly accountHref: (id: string) => string | undefined;
+  /** The search the mount's address holds, read as a screen opens. */
+  readonly search: () => string;
+  /** Keeps a typed search where the mount keeps it, in place rather than as a step of its own. */
+  readonly keepSearch: (query: string) => void;
+  /** Tells `listener` when the mount's own back or forward moved the search; answers how to stop. */
+  readonly onSearchMoved: (listener: () => void) => () => void;
+}
+
 export interface AdminDoors {
   readonly reads: AdminReads;
   readonly gate: AdminGate;
+  readonly address: AdminAddress;
 }
 
 const AdminDoorsContext = createContext<AdminDoors | undefined>(undefined);
 
 /** Hands a mount's doors to every admin screen under it. */
 export const AdminDoorsProvider = AdminDoorsContext.Provider;
+
+/**
+ * The doors the mount above handed in, or none: what an account's cell reads
+ * its address from, which draws as a plain button where no mount keeps one.
+ */
+export function useAdminDoorsIfAny(): AdminDoors | undefined {
+  return useContext(AdminDoorsContext);
+}
 
 /** The doors the mount above handed in; a screen drawn under none is a wiring fault. */
 export function useAdminDoors(): AdminDoors {

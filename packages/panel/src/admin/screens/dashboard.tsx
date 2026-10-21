@@ -19,7 +19,7 @@ import { FunnelChart, ReachChart } from "../charts/share-bars.js";
 import { SignupsChart } from "../charts/signups-chart.js";
 import { AdminSection, StatCard, StatGroup } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls.js";
+import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { ActivityNote, RetentionNote, TopAccountsNote } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
@@ -222,15 +222,24 @@ export function DashboardScreen({
   const [basis, setBasis] = useState<RetentionBasis>(RETENTION_BASIS.MEANINGFUL);
   const controls = (
     <>
-      <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-      <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+      <AdminViewOptions
+        windowDays={windowDays}
+        onWindowDaysChange={onWindowDaysChange}
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={onHideAdminsChange}
+      />
     </>
   );
 
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton title={OVERVIEW_TITLE} controls={controls} shapes={DASHBOARD_SHAPES} />,
+        <PageSkeleton
+          title={OVERVIEW_TITLE}
+          note={windowWords(windowDays)}
+          controls={controls}
+          shapes={DASHBOARD_SHAPES}
+        />,
       );
     case "signed-out":
       return gate.signedOut();
@@ -239,7 +248,7 @@ export function DashboardScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminPage title={OVERVIEW_TITLE} controls={controls}>
+        <AdminPage title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>
           <AdminErrorState
             detail={adminReadFailure(state, METRICS_ERROR)}
             refreshing={refreshing}
@@ -252,7 +261,7 @@ export function DashboardScreen({
       const overview = metrics.overview;
 
       return frame(
-        <AdminPage title={OVERVIEW_TITLE} controls={controls}>
+        <AdminPage title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>
           {/* A refetch dims the answer already on screen rather than replacing it:
           the numbers below stay the last ones actually read, and the dimming
           says so while the next read is in flight. */}

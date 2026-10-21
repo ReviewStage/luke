@@ -39,7 +39,7 @@ import { BreakdownChart, type BreakdownSeries } from "../charts/breakdown-chart.
 import { FailureRatesChart } from "../charts/failure-rates-chart.js";
 import { AdminSection, CARD_GAP, MetricCard, StatCard, StatGroup } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls.js";
+import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
@@ -410,19 +410,25 @@ export function ReliabilityScreen({
   const signOut = () => void withdraw(onSignOut);
   const controls = (
     <>
-      <WindowSwitcher
-        value={shownWindow}
-        onChange={onWindowDaysChange}
+      <AdminViewOptions
+        windowDays={shownWindow}
+        onWindowDaysChange={onWindowDaysChange}
         windows={ADMIN_RELIABILITY_WINDOWS}
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={onHideAdminsChange}
       />
-      <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
     </>
   );
 
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton title="Reliability" controls={controls} shapes={RELIABILITY_SHAPES} />,
+        <PageSkeleton
+          title="Reliability"
+          note={windowWords(shownWindow)}
+          controls={controls}
+          shapes={RELIABILITY_SHAPES}
+        />,
       );
     case "signed-out":
       return gate.signedOut();
@@ -431,7 +437,7 @@ export function ReliabilityScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminPage title="Reliability" controls={controls}>
+        <AdminPage title="Reliability" note={windowWords(shownWindow)} controls={controls}>
           <AdminErrorState
             detail={adminReadFailure(state, RELIABILITY_ERROR)}
             refreshing={refreshing}
@@ -441,7 +447,7 @@ export function ReliabilityScreen({
       );
     case "ready":
       return frame(
-        <AdminPage title="Reliability" controls={controls}>
+        <AdminPage title="Reliability" note={windowWords(shownWindow)} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <ReliabilityBody reliability={state.value} onOpenAccount={onOpenAccount} />
           </Refreshing>

@@ -44,7 +44,7 @@ import {
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
+import { useAdminAccess, useCapability, useExperiment } from "../use-app-state.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { WindowVoiceNotice } from "../window-voice.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
@@ -57,7 +57,7 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
-import { FACTORY, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
+import { ADMIN_PLACE, FACTORY, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
@@ -131,6 +131,40 @@ function FactoryLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       state={COLLECTION_STATE.LOADING}
       loadingLabel="Reading tasks…"
     />
+  );
+}
+
+/** What stands while the Admin place's chunk loads (`pages-on-demand.ts`): its list's column and the view's frame over quiet blocks, and its own way out. */
+function AdminLoading({
+  onExit,
+  hidden,
+}: {
+  onExit: () => void;
+  hidden: HiddenColumns;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
+  return (
+    <div className="desktop-admin">
+      <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
+        <div className="desktop-drag-strip" />
+      </nav>
+      <section className="admin-page" aria-label="Admin" hidden={hidden.item}>
+        <div className="desktop-drag-strip" />
+        <CollectionPage
+          frame={PAGE_FRAME.TOOLBAR}
+          label="Admin"
+          toolbar={
+            <header className="desktop-toolbar">
+              <div className="desktop-toolbar-heading">
+                <h1 className="desktop-toolbar-title">Overview</h1>
+              </div>
+            </header>
+          }
+          state={COLLECTION_STATE.LOADING}
+          loadingLabel="Reading the dashboard…"
+        />
+      </section>
+    </div>
   );
 }
 
@@ -453,6 +487,8 @@ function titleSubject(
     return { signedIn, subject: "Profile", workspace: tasks.workspace };
   }
   if (tasks.factoryView.open) return { signedIn, subject: "Factory", workspace: tasks.workspace };
+  // The Admin place reads every workspace's accounts, so it is no one workspace's.
+  if (tasks.adminView.open) return { signedIn, subject: "Admin", workspace: undefined };
   if (tasks.automationsView.open) {
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
@@ -542,13 +578,19 @@ export function DesktopShell({
   useEffect(() => {
     if (chatShown && !chatOn) closeChat();
   }, [chatShown, chatOn, closeChat]);
+  // The Admin place is an admin's alone: an account that is no admin, or no longer one, is given the task's place back.
+  const adminAccess = useAdminAccess();
+  const { open: adminShown, onClose: closeAdmin } = tasks.adminView;
+  useEffect(() => {
+    if (adminShown && !adminAccess) closeAdmin();
+  }, [adminShown, adminAccess, closeAdmin]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
     room === SHELL_ROOM.NARROW,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${tasks.adminView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
@@ -559,7 +601,8 @@ export function DesktopShell({
     tasks.factoryView.open ||
     tasks.automationsView.open ||
     tasks.chatView.open ||
-    tasks.boardView.open;
+    tasks.boardView.open ||
+    tasks.adminView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -701,6 +744,31 @@ export function DesktopShell({
         </MentionedAgents>
         {NOTICE_STRIP}
         {newTaskDialog}
+      </div>
+    );
+  }
+  // The Admin place takes the whole window as Settings does, its sections listed where the tasks were.
+  if (tasks.adminView.open && adminAccess) {
+    const exitAdmin = history.canGoBack ? history.onBack : tasks.adminView.onClose;
+    return (
+      <div className="desktop-shell" data-room={room}>
+        <Suspense
+          fallback={
+            <AdminLoading onExit={exitAdmin} hidden={hiddenColumns(room, tasks.adminView.listed)} />
+          }
+        >
+          <ADMIN_PLACE.Route
+            sidebar={sidebar}
+            room={room}
+            history={history}
+            view={tasks.adminView.view}
+            listed={tasks.adminView.listed}
+            onOpen={tasks.adminView.onOpen}
+            onList={tasks.adminView.onList}
+            onExit={exitAdmin}
+          />
+        </Suspense>
+        {NOTICE_STRIP}
       </div>
     );
   }

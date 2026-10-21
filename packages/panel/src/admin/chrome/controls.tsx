@@ -1,14 +1,19 @@
 import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/features/admin-wire";
-import { CHOICE_BAR_LOOK, Checkbox, ChoiceBar, ErrorState, GAP, Stack } from "@luke/ui";
+import {
+  ErrorState,
+  GAP,
+  IconButton,
+  MENU_ITEM_MARK,
+  Menu,
+  type MenuEntry,
+  Stack,
+  useMenu,
+} from "@luke/ui";
+import { CalendarRangeIcon, SlidersHorizontalIcon } from "lucide-react";
+import { Tooltip } from "../../tooltip.js";
 
-/** A window by the constant's own name for it, which is how the segmented control keys its options. */
-type WindowName = keyof typeof ADMIN_METRICS_WINDOW;
-
-const WINDOW_OPTIONS = Object.entries(ADMIN_METRICS_WINDOW).map(([name, windowDays]) => ({
-  // SAFETY: `Object.entries` widens the constant's own keys to string.
-  value: name as WindowName,
-  label: `${windowDays}d`,
-}));
+/** Every range a view may read, shortest first. */
+const ALL_WINDOWS: readonly AdminMetricsWindow[] = Object.values(ADMIN_METRICS_WINDOW);
 
 /**
  * What a refresh in flight dims, said busy to a reader until the answer
@@ -54,48 +59,85 @@ export function Refreshing({
   );
 }
 
-/**
- * The window every windowed read answers to, as one control of fixed
- * lengths, three unless the screen offers fewer. The choice lives in the address bar, so the press hands it up
- * rather than keeping state of its own, and flipping it refetches the way the
- * scope toggle does.
- */
-export function WindowSwitcher({
-  value,
-  onChange,
-  windows,
-}: {
-  value: AdminMetricsWindow;
-  onChange: (windowDays: AdminMetricsWindow) => void;
-  /** The lengths a screen offers, where it answers fewer than all three. */
-  windows?: readonly AdminMetricsWindow[] | undefined;
-}): React.JSX.Element {
-  const options =
-    windows === undefined
-      ? WINDOW_OPTIONS
-      : WINDOW_OPTIONS.filter((option) => windows.includes(ADMIN_METRICS_WINDOW[option.value]));
-  const chosen = options.find((option) => ADMIN_METRICS_WINDOW[option.value] === value);
-  return (
-    <ChoiceBar
-      label="Window in days"
-      items={options}
-      value={chosen?.value}
-      look={CHOICE_BAR_LOOK.SEGMENTED}
-      onChange={(name) => onChange(ADMIN_METRICS_WINDOW[name])}
-    />
-  );
+/** What the button and its menu are called, as the Tasks page's View options are. */
+const VIEW_OPTIONS = "View options";
+
+/** A time range in words, as the menu offers it and the toolbar says it after the title. */
+export function windowWords(windowDays: AdminMetricsWindow): string {
+  return `Last ${windowDays} days`;
 }
 
-export function HideAdminsToggle({
-  checked,
-  onChange,
+/**
+ * A view's options behind one button at its toolbar's end, as the app's Tasks
+ * page and Inbox keep theirs (`desktop/tasks-page-options.tsx`): the time
+ * range a view reads, a submenu with the one standing checked, and whether
+ * admins' own accounts are counted, a switch. A view offers only what it
+ * reads: an account's page its range alone, a day's the admins switch alone,
+ * and the Workspaces list whether it keeps shared workspaces only beside it. The range standing is said after the title
+ * (`windowWords`), since the button does not show it.
+ */
+export function AdminViewOptions({
+  windowDays,
+  onWindowDaysChange,
+  windows = ALL_WINDOWS,
+  hideAdmins,
+  onHideAdminsChange,
+  sharedOnly,
+  onSharedOnlyChange,
 }: {
-  checked: boolean;
-  onChange: (hide: boolean) => void;
+  windowDays?: AdminMetricsWindow | undefined;
+  onWindowDaysChange?: ((windowDays: AdminMetricsWindow) => void) | undefined;
+  /** The lengths a view offers, where it answers fewer than all three. */
+  windows?: readonly AdminMetricsWindow[] | undefined;
+  hideAdmins?: boolean | undefined;
+  onHideAdminsChange?: ((hide: boolean) => void) | undefined;
+  /** Whether a list of workspaces keeps the shared ones alone, its personal ones left out. */
+  sharedOnly?: boolean | undefined;
+  onSharedOnlyChange?: ((sharedOnly: boolean) => void) | undefined;
 }): React.JSX.Element {
+  const menu = useMenu(true);
+  const groups: MenuEntry[][] = [];
+  if (windowDays !== undefined && onWindowDaysChange !== undefined) {
+    groups.push([
+      {
+        label: "Time range",
+        icon: <CalendarRangeIcon />,
+        items: windows.map((each) => ({
+          label: windowWords(each),
+          checked: each === windowDays,
+          onSelect: () => onWindowDaysChange(each),
+        })),
+      },
+    ]);
+  }
+  const switches: MenuEntry[] = [];
+  if (sharedOnly !== undefined && onSharedOnlyChange !== undefined) {
+    switches.push({
+      label: "Shared only",
+      checked: sharedOnly,
+      mark: MENU_ITEM_MARK.SWITCH,
+      stays: true,
+      onSelect: () => onSharedOnlyChange(!sharedOnly),
+    });
+  }
+  if (hideAdmins !== undefined && onHideAdminsChange !== undefined) {
+    switches.push({
+      label: "Include admins",
+      checked: !hideAdmins,
+      mark: MENU_ITEM_MARK.SWITCH,
+      stays: true,
+      onSelect: () => onHideAdminsChange(!hideAdmins),
+    });
+  }
+  if (switches.length > 0) groups.push(switches);
   return (
-    <Checkbox checked={checked} onChange={onChange}>
-      Hide admins
-    </Checkbox>
+    <>
+      <Tooltip label={VIEW_OPTIONS}>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <Menu label={VIEW_OPTIONS} menu={menu.drawn} groups={groups} onClose={menu.close} />
+      )}
+    </>
   );
 }

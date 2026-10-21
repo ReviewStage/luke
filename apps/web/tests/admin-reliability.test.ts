@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { underWebAdminDoors } from "./support/admin-doors";
+import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
  * admin-reliability.test.ts -- the Reliability screen states its sections
@@ -265,14 +266,12 @@ test("product analytics is a link only where the deployment names its console", 
   ).toBe(false);
 });
 
-test("the window is a week or a month, and its press hands the choice up", async () => {
+test("the time range is a week or a month, and its choice hands up", async () => {
   const { page, heard } = await openReliability(reliability());
-  const windows = page.querySelector('[role="radiogroup"][aria-label="Window in days"]');
-  const radios = Array.from(windows?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []);
 
-  expect(radios.map((radio) => radio.textContent)).toEqual(["7d", "30d"]);
-  await act(async () => {
-    radios[1]?.click();
-  });
+  openViewOptions(page);
+  choose("Time range");
+  expect(menuItems().map((item) => item.label)).toEqual(["Last 7 days", "Last 30 days"]);
+  choose("Last 30 days");
   expect(heard).toEqual(["window 30"]);
 });

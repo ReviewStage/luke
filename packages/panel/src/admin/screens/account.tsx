@@ -19,7 +19,7 @@ import { ActivityCalendar } from "../charts/activity-calendar.js";
 import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card.js";
 import { UsageChart } from "../charts/usage-chart.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { Refreshing, WindowSwitcher } from "../chrome/controls.js";
+import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { AccountActivityNote } from "../chrome/notes.js";
 import {
   AccountAvatar,
@@ -87,13 +87,17 @@ export function AccountScreen({
   );
   const signOut = () => void withdraw(onSignOut);
   const back: AdminWayBack = { tab: "users", onBack };
-  const controls = <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />;
+  const controls = (
+    <AdminViewOptions windowDays={windowDays} onWindowDaysChange={onWindowDaysChange} />
+  );
+  const note = windowWords(windowDays);
 
   switch (state.status) {
     case "loading":
       return frame(
         <PageSkeleton
           title={ACCOUNT_TITLE}
+          note={note}
           back={back}
           controls={controls}
           shapes={ACCOUNT_SHAPES}
@@ -105,13 +109,13 @@ export function AccountScreen({
       return gate.forbidden({ email: account?.email, onSignOut: signOut });
     case "missing":
       return frame(
-        <AdminPage title={ACCOUNT_TITLE} back={back} controls={controls}>
+        <AdminPage title={ACCOUNT_TITLE} back={back} note={note} controls={controls}>
           <NotFound thing={NOT_FOUND_THING.ACCOUNT} />
         </AdminPage>,
       );
     case "error":
       return frame(
-        <AdminPage title={ACCOUNT_TITLE} back={back} controls={controls}>
+        <AdminPage title={ACCOUNT_TITLE} back={back} note={note} controls={controls}>
           <AdminErrorState detail={state.detail} refreshing={refreshing} onRetry={reload} />
         </AdminPage>,
       );
@@ -127,7 +131,7 @@ export function AccountScreen({
           : formatNumber(activity.currentStreakDays);
 
       return frame(
-        <AdminPage title={accountLabel(subject)} back={back} controls={controls}>
+        <AdminPage title={accountLabel(subject)} back={back} note={note} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <Inline gap={GAP.FIELD}>
               <AccountAvatar

@@ -12,6 +12,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { underWebAdminDoors } from "./support/admin-doors";
+import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
  * admin-dashboard.test.ts -- the Overview states its sections under their
@@ -377,28 +378,30 @@ test("a first read that failed says why under the page's toolbar, its controls s
   expect(page.querySelector('[role="alert"]')?.textContent).toContain(
     "The metrics endpoint did not answer.",
   );
-  act(() => button(page, "90d").click());
+  openViewOptions(page);
+  choose("Time range", "Last 90 days");
   act(() => button(page, "Retry").click());
   expect(heard).toEqual(["window 90", "reload"]);
 });
 
-test("the window is one of three radios, and the hide-admins box hands its choice up", () => {
+test("View options offer the three time ranges, the one read checked and said after the title, and Include admins, each handing its choice up", () => {
   const heard: string[] = [];
   const page = render(ready(metrics()), heard);
-  const windows = page.querySelector('[role="radiogroup"][aria-label="Window in days"]');
-  const radios = Array.from(windows?.querySelectorAll('[role="radio"]') ?? []);
 
-  expect(radios.map((radio) => radio.textContent)).toEqual(["7d", "30d", "90d"]);
-  expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual([
-    "true",
-    "false",
-    "false",
-  ]);
-  act(() => button(page, "90d").click());
-  const hide = Array.from(page.querySelectorAll("label")).find(
-    (label) => label.textContent === "Hide admins",
+  expect(page.querySelector("header .desktop-toolbar-heading")?.textContent).toBe(
+    "OverviewLast 7 days",
   );
-  act(() => hide?.querySelector("input")?.click());
+  openViewOptions(page);
+  expect(menuItems().map((item) => item.label)).toEqual(["Time range", "Include admins"]);
+  choose("Time range");
+  expect(menuItems()).toEqual([
+    { label: "Last 7 days", checked: "true" },
+    { label: "Last 30 days", checked: "false" },
+    { label: "Last 90 days", checked: "false" },
+  ]);
+  choose("Last 90 days");
+  openViewOptions(page);
+  choose("Include admins");
   expect(heard).toEqual(["window 90", "hide true"]);
 });
 

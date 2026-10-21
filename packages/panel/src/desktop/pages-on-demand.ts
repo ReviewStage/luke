@@ -6,14 +6,20 @@ import { lazyRoute } from "../lazy-route.js";
  * Settings, the Automations pages, and the Board are split off where they
  * are drawn (`desktop-shell.tsx`); these are split here instead because a
  * hover elsewhere in the window reads them early (`lazy-route.ts`): the
- * sidebar's Factory row, a plan's Version history item, a person's card, and
- * a Pull request tab's card. Each is drawn under a `Suspense` whose fallback
+ * sidebar's Factory and Admin rows, a plan's Version history item, a
+ * person's card, and a Pull request tab's card. The Admin place's chunk
+ * carries its charts, so an account that is no admin never reads it. Each is drawn under a `Suspense` whose fallback
  * is its own frame, which offers the page's way out as the page would.
  */
 
 /** Factory, its line and its campus, in the task's place (`desktop-factory.tsx`). */
 export const FACTORY = lazyRoute(() =>
   import("./desktop-factory.js").then((loaded) => loaded.DesktopFactory),
+);
+
+/** The Admin place, an admin's alone, over the whole window as Settings is (`desktop-admin.tsx`). */
+export const ADMIN_PLACE = lazyRoute(() =>
+  import("./desktop-admin.js").then((loaded) => loaded.DesktopAdmin),
 );
 
 /** The open plan's version history, over the whole window (`desktop-version-history.tsx`). */

@@ -141,6 +141,7 @@ import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
+import type { AdminView } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -333,6 +334,9 @@ interface PersonViewControl {
   readonly onClose: () => void;
 }
 
+/** The Admin place's first view, and the one it reads as while it does not stand. */
+const ADMIN_OVERVIEW: AdminView = { kind: "dashboard" };
+
 /** What may stand in the task's place, the window's own rather than the task's. */
 const STAND_IN = {
   INBOX: "inbox",
@@ -342,6 +346,7 @@ const STAND_IN = {
   AUTOMATIONS: "automations",
   CHAT: "chat",
   BOARD: "board",
+  ADMIN: "admin",
 } as const;
 
 /** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Board. */
@@ -375,7 +380,27 @@ type StandIn =
       /** The message a toast's View asked for, whose channel is shown once the read holds it. */
       readonly seek?: string | undefined;
     }
-  | { readonly kind: typeof STAND_IN.BOARD };
+  | { readonly kind: typeof STAND_IN.BOARD }
+  | {
+      readonly kind: typeof STAND_IN.ADMIN;
+      readonly view: AdminView;
+      /** Whether the section list stands rather than the view, which only a narrow room draws apart. */
+      readonly listed: boolean;
+    };
+
+/** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
+interface AdminViewControl {
+  readonly open: boolean;
+  /** The view standing, or the Overview while the place does not stand. */
+  readonly view: AdminView;
+  /** Whether the section list stands rather than the view, which only a narrow room draws apart. */
+  readonly listed: boolean;
+  /** Opens the place on `view`; where none is named, on the Overview with its section list standing. */
+  readonly onOpen: (view?: AdminView) => void;
+  /** Stands the section list, the view kept, as a narrow room's way back from a view does. */
+  readonly onList: () => void;
+  readonly onClose: () => void;
+}
 
 /** The window's Factory: whether it stands in the task's place, and the presses that open and leave it. */
 interface FactoryViewControl {
@@ -705,6 +730,8 @@ export interface TasksControl {
   personView: PersonViewControl;
   /** The window's Factory: whether it stands in the task's place, and its presses (`desktop-factory.tsx`). */
   factoryView: FactoryViewControl;
+  /** The window's Admin place, an admin's alone: whether it takes the window, its view, and its presses (`desktop-admin.tsx`). */
+  adminView: AdminViewControl;
   /** The window's Automations page: whether it stands in the task's place, and its presses (`automations-page.tsx`). */
   automationsView: AutomationsViewControl;
   /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
@@ -3585,6 +3612,23 @@ export function useTasksTab(input: {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.FACTORY });
       }),
+      onClose: guard(() => setStandIn(undefined)),
+    },
+    // The Admin place stands over the task's place as Factory does, each giving way to the others.
+    adminView: {
+      open: standIn?.kind === STAND_IN.ADMIN,
+      view: standIn?.kind === STAND_IN.ADMIN ? standIn.view : ADMIN_OVERVIEW,
+      listed: standIn?.kind === STAND_IN.ADMIN && standIn.listed,
+      onOpen: guard((view?: AdminView) => {
+        setHistoryFor(undefined);
+        setStandIn({
+          kind: STAND_IN.ADMIN,
+          view: view ?? ADMIN_OVERVIEW,
+          listed: view === undefined,
+        });
+      }),
+      onList: () =>
+        setStandIn((held) => (held?.kind === STAND_IN.ADMIN ? { ...held, listed: true } : held)),
       onClose: guard(() => setStandIn(undefined)),
     },
     // The Automations page stands over the task's place as Factory does, each giving way to the others.

@@ -174,19 +174,21 @@ body,
   grid-template-columns: minmax(0, 1fr);
 }
 
-.desktop-shell[data-room="narrow"] :is(.desktop-settings, .desktop-version-history) > [hidden],
+.desktop-shell[data-room="narrow"]
+  :is(.desktop-settings, .desktop-version-history, .desktop-admin)
+  > [hidden],
 .chat-view[data-single="true"] > [hidden] {
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log),
+.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log, .admin-sections),
 .chat-view[data-single="true"] > .chat-rail {
   border-right: 0;
 }
 
 /* Settings' list standing alone leads with its one way back, Back to the
    tasks; the history's Back and Forward beside it would be a second. */
-.desktop-shell[data-room="narrow"] .settings-pages > .title-bar-controls {
+.desktop-shell[data-room="narrow"] :is(.settings-pages, .admin-sections) > .title-bar-controls {
   display: none;
 }
 
@@ -5674,14 +5676,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* Settings ------------------------------------------------------------------- */
 
 .desktop-settings,
-.desktop-version-history {
+.desktop-version-history,
+.desktop-admin {
   display: contents;
 }
 
-/* Settings' page list and a plan's version history alike: the column where
-   the plans' sidebar stands, the way back at its head. */
+/* Settings' page list, a plan's version history, and the Admin place's
+   sections alike: the column where the plans' sidebar stands, the way back
+   at its head. */
 .settings-pages,
-.version-log {
+.version-log,
+.admin-sections {
   position: relative;
   display: flex;
   min-height: 0;
@@ -5693,7 +5698,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* The title stands a step under the way back above it. */
 .settings-pages-title,
-.version-log-title {
+.version-log-title,
+.admin-sections-title {
   margin: var(--luke-space-12) var(--row-inset);
   font-size: var(--luke-type-title-size);
   font-weight: var(--luke-weight-bold);
@@ -5814,7 +5820,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-section-gap);
 }
 
-.settings-pages ul {
+.settings-pages ul,
+.admin-sections ul {
   display: flex;
   flex-direction: column;
   gap: var(--luke-list-gap);
@@ -5840,7 +5847,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .settings-page,
-.version-page {
+.version-page,
+.admin-page {
   display: flex;
   min-width: 0;
   min-height: 0;

@@ -26,7 +26,6 @@ import {
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
-  NavItemLink,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -92,7 +91,6 @@ import {
 import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
-import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
@@ -121,7 +119,7 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
-import { FACTORY } from "./pages-on-demand.js";
+import { ADMIN_PLACE, FACTORY } from "./pages-on-demand.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
@@ -1283,34 +1281,23 @@ function SidebarAutomationsRow({
 }
 
 /**
- * The admin dashboard's row, after Automations' and drawn as it is, for an
- * admin alone: a non-admin is drawn nothing, not a row held back. It is no
- * place of the window's, so it is never the place shown. A browser tab links
- * to the dashboard on its own origin, in a tab of its own; the Mac app's
- * press opens it in the default browser, where the developer's session is,
- * rather than a Browser tab, whose cookies are its own. Note that the row is
- * a convenience: the service's own gate decides every read the dashboard
- * makes.
+ * The Admin row, after Automations' and drawn as it is, for an admin alone:
+ * a non-admin is drawn nothing, not a row held back. A press opens the
+ * window's Admin place (`desktop-admin.tsx`), which takes the whole window
+ * as Settings does, its sections listed where this sidebar stood. Note that
+ * the row is a convenience: the service's own gate decides every read the
+ * place makes.
  */
-function SidebarAdminRow({
-  onChosen,
-}: {
-  onChosen: (go: () => void) => () => void;
-}): React.JSX.Element | null {
+function SidebarAdminRow({ onOpen }: { onOpen: () => void }): React.JSX.Element | null {
   const admin = useAdminAccess();
   if (!admin) return null;
-  const way = appPlatform().adminDashboard();
-  return "href" in way ? (
-    <NavItemLink
-      href={way.href}
+  return (
+    <NavItem
       icon={<ShieldUserIcon />}
-      newTab
-      onClick={onChosen(() => undefined)}
+      // The pointer on the row is the way to the place, so its chunk, charts and all, is read now rather than at the press.
+      onPointerEnter={ADMIN_PLACE.prefetch}
+      onClick={onOpen}
     >
-      Admin
-    </NavItemLink>
-  ) : (
-    <NavItem icon={<ShieldUserIcon />} onClick={onChosen(way.open)}>
       Admin
     </NavItem>
   );
@@ -1576,6 +1563,10 @@ function SidebarColumn({
   const openChat = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.chatView.onOpen();
+  };
+  const openAdmin = () => {
+    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    tasks.adminView.onOpen();
   };
   // A new account's welcome stands while no task is open, nothing stands in
   // its place, and no launch is still reopening a task: New task's composer is
@@ -1877,7 +1868,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
-        <SidebarAdminRow onChosen={chosen} />
+        <SidebarAdminRow onOpen={chosen(openAdmin)} />
       </div>
       <hr className="sidebar-rule" />
     </>

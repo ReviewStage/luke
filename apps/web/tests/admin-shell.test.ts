@@ -7,6 +7,7 @@ import type { WireValue } from "@luke/wire";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
+import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
  * admin-shell.test.ts -- the admin's shell says where a maintainer is and
@@ -313,7 +314,11 @@ async function accountButton(page: HTMLElement): Promise<HTMLButtonElement> {
 test("the account stands at the sidebar's foot, not in the page's header, and its menu closes on Escape or a press outside", async () => {
   const page = await openAdmin();
   const trigger = await accountButton(page);
-  expect(view(page).querySelector('button[aria-haspopup="menu"]')).toBeNull();
+  expect(
+    Array.from(view(page).querySelectorAll("button")).some((button) =>
+      button.textContent?.includes("Ada Lovelace"),
+    ),
+  ).toBe(false);
 
   await act(async () => {
     trigger.click();
@@ -396,10 +401,12 @@ test("a quarter's address opens Reliability on the month, the longest window it 
     )
     .filter((url) => url.pathname === "/api/admin/reliability");
   expect(asked.map((url) => url.search)).toContain("");
-  const windows = page.querySelector('[role="radiogroup"][aria-label="Window in days"]');
-  const radios = Array.from(windows?.querySelectorAll('[role="radio"]') ?? []);
-  expect(radios.map((radio) => radio.textContent)).toEqual(["7d", "30d"]);
-  expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+  openViewOptions(page);
+  choose("Time range");
+  expect(menuItems()).toEqual([
+    { label: "Last 7 days", checked: "false" },
+    { label: "Last 30 days", checked: "true" },
+  ]);
 });
 
 /** A press as a pointer makes it: its pointerdown, which a dismissal listens for, then its click. */

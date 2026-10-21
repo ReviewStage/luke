@@ -21,7 +21,7 @@ import { useAdminDoors } from "../admin-doors.js";
 import { CostChart } from "../charts/cost-chart.js";
 import { AdminSection, StatCard, StatGroup } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls.js";
+import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { PageNote } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
@@ -227,14 +227,25 @@ export function CostScreen({
   const signOut = () => void withdraw(onSignOut);
   const controls = (
     <>
-      <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-      <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+      <AdminViewOptions
+        windowDays={windowDays}
+        onWindowDaysChange={onWindowDaysChange}
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={onHideAdminsChange}
+      />
     </>
   );
 
   switch (state.status) {
     case "loading":
-      return frame(<PageSkeleton title="Cost" controls={controls} shapes={COST_SHAPES} />);
+      return frame(
+        <PageSkeleton
+          title="Cost"
+          note={windowWords(windowDays)}
+          controls={controls}
+          shapes={COST_SHAPES}
+        />,
+      );
     case "signed-out":
       return gate.signedOut();
     case "forbidden":
@@ -242,7 +253,7 @@ export function CostScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminPage title="Cost" controls={controls}>
+        <AdminPage title="Cost" note={windowWords(windowDays)} controls={controls}>
           <AdminErrorState
             detail={adminReadFailure(state, COST_ERROR)}
             refreshing={refreshing}
@@ -253,7 +264,7 @@ export function CostScreen({
     case "ready": {
       const cost = state.value;
       return frame(
-        <AdminPage title="Cost" controls={controls}>
+        <AdminPage title="Cost" note={windowWords(windowDays)} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <AdminSection>
               <PageNote>{COST_DESCRIPTION}</PageNote>

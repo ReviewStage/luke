@@ -88,6 +88,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
+import type { AdminView } from "./admin/routing.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
@@ -102,7 +103,7 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
-import { useExperiment } from "./use-app-state.js";
+import { useAdminAccess, useExperiment } from "./use-app-state.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {
@@ -123,6 +124,7 @@ const PLACE_KIND = {
   CHAT: "chat",
   BOARD: "board",
   SETTINGS: "settings",
+  ADMIN: "admin",
 } as const;
 
 /** The side panel as a narrow room holds it: open over the plan, the whole pane, on the tab shown, or shut. */
@@ -196,6 +198,12 @@ type Place =
   | {
       readonly kind: typeof PLACE_KIND.SETTINGS;
       readonly view: SettingsView;
+      readonly listed?: boolean | undefined;
+    }
+  | {
+      readonly kind: typeof PLACE_KIND.ADMIN;
+      readonly view: AdminView;
+      /** Whether the section list stood rather than the view, in a narrow room alone. */
       readonly listed?: boolean | undefined;
     };
 
@@ -272,6 +280,7 @@ function subStepOf(place: Place): boolean | undefined {
     case PLACE_KIND.INBOX:
     case PLACE_KIND.CHAT:
     case PLACE_KIND.SETTINGS:
+    case PLACE_KIND.ADMIN:
       return place.listed;
     default:
       return undefined;
@@ -309,6 +318,9 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
 /** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Board, or Settings on any page. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
+  if (one.kind === PLACE_KIND.ADMIN && other.kind === PLACE_KIND.ADMIN) {
+    return samePageAdminView(one.view, other.view);
+  }
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
     return sameAutomationsPage(one.page, other.page);
   }
@@ -322,6 +334,28 @@ function samePage(one: Place, other: Place): boolean {
   }
   if ("workspaceId" in one && "workspaceId" in other) return one.workspaceId === other.workspaceId;
   return true;
+}
+
+/** Whether an Admin view is one of the place's sections, rather than an account's or a day's page under one. */
+function adminSection(view: AdminView): boolean {
+  return view.kind !== "account" && view.kind !== "day";
+}
+
+/**
+ * Whether two Admin views are one page: any two of its sections, which
+ * replace each other in place as Settings' pages do, so Back leaves the
+ * place; or the same account's or day's page, each a step of its own.
+ */
+function samePageAdminView(one: AdminView, other: AdminView): boolean {
+  if (adminSection(one) && adminSection(other)) return true;
+  return sameAdminView(one, other);
+}
+
+/** Whether two Admin views are the same view. */
+function sameAdminView(one: AdminView, other: AdminView): boolean {
+  if (one.kind === "account" && other.kind === "account") return one.id === other.id;
+  if (one.kind === "day" && other.kind === "day") return one.day === other.day;
+  return one.kind === other.kind;
 }
 
 /** The tab a narrow room's side panel shows over the plan, while it is open. */
@@ -412,6 +446,9 @@ function samePlace(one: Place, other: Place): boolean {
   }
   if (one.kind === PLACE_KIND.SETTINGS && other.kind === PLACE_KIND.SETTINGS) {
     return one.view === other.view;
+  }
+  if (one.kind === PLACE_KIND.ADMIN && other.kind === PLACE_KIND.ADMIN) {
+    return sameAdminView(one.view, other.view);
   }
   if (one.kind === PLACE_KIND.VERSION_HISTORY && other.kind === PLACE_KIND.VERSION_HISTORY) {
     return sameSpot(one.spot, other.spot);
@@ -599,6 +636,8 @@ function listedSteps(
 export interface ListBacks {
   readonly settings: () => void;
   readonly versions: () => void;
+  /** Stands the Admin place's section list from a view standing alone. */
+  readonly admin: () => void;
   readonly chat: () => void;
   /** Stands an automation's setup again from its runs. */
   readonly runs: () => void;
@@ -655,6 +694,7 @@ export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksCont
     },
     history: { ...tasks.history, onList: lists.versions },
     chatView: { ...tasks.chatView, onList: lists.chat },
+    adminView: { ...tasks.adminView, onList: lists.admin },
     inboxView: { ...tasks.inboxView, onListed: lists.inbox },
     automationsView: {
       ...tasks.automationsView,
@@ -942,6 +982,7 @@ export function useWindowHistory(input: {
     | "automationsView"
     | "chatView"
     | "boardView"
+    | "adminView"
     | "restoring"
     | "resting"
     | "leaveGuard"
@@ -1003,6 +1044,10 @@ export function useWindowHistory(input: {
   const chatOpen = tasks.chatView.open;
   const chatOn = useChatOn();
   const boardOpen = tasks.boardView.open;
+  const adminOpen = tasks.adminView.open;
+  const adminView = tasks.adminView.view;
+  const adminListed = narrow ? tasks.adminView.listed : undefined;
+  const adminAccess = useAdminAccess();
   // A launch reopening the task last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !tasks.restoring;
@@ -1055,6 +1100,7 @@ export function useWindowHistory(input: {
       };
     }
     if (boardOpen) return { kind: PLACE_KIND.BOARD, workspaceId: listedWorkspace };
+    if (adminOpen) return { kind: PLACE_KIND.ADMIN, view: adminView, listed: adminListed };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot, listed: historyListed }
@@ -1095,6 +1141,9 @@ export function useWindowHistory(input: {
     chatListed,
     chatShownPlace,
     boardOpen,
+    adminOpen,
+    adminView,
+    adminListed,
   ]);
   const place = useMemo((): Titled | undefined => {
     if (untitled === undefined || titleLabel === undefined) return untitled;
@@ -1111,6 +1160,8 @@ export function useWindowHistory(input: {
   const reachable = (to: Place) => {
     // Factory is an experiment, so back and forward pass over it while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
+    // The Admin place is an admin's alone, so back and forward pass over it for an account that is no admin.
+    if (to.kind === PLACE_KIND.ADMIN) return adminAccess;
     // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed, and once it is deleted.
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
       if (to.page.kind !== AUTOMATIONS_PAGE.EDIT) return true;
@@ -1195,6 +1246,11 @@ export function useWindowHistory(input: {
       tasks.boardView.onOpen();
       return;
     }
+    if (to.kind === PLACE_KIND.ADMIN) {
+      tasks.adminView.onOpen(to.view);
+      if (to.listed === true) tasks.adminView.onList();
+      return;
+    }
     // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, Chat, and the Board stand over.
     if (inboxOpen) tasks.inboxView.onClose();
     if (pageAgent !== undefined) tasks.agentView.onClose();
@@ -1203,6 +1259,7 @@ export function useWindowHistory(input: {
     if (automationsOpen) tasks.automationsView.onClose();
     if (chatOpen) tasks.chatView.onClose();
     if (boardOpen) tasks.boardView.onClose();
+    if (adminOpen) tasks.adminView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.
@@ -1262,6 +1319,11 @@ export function useWindowHistory(input: {
       up(
         { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace, listed: true },
         tasks.chatView.onList,
+      ),
+    admin: () =>
+      up(
+        { kind: PLACE_KIND.ADMIN, view: tasks.adminView.view, listed: true },
+        tasks.adminView.onList,
       ),
     runs: () =>
       up(

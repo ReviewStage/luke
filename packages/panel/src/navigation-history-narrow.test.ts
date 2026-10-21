@@ -14,6 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import type { AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
@@ -104,6 +105,8 @@ interface Standing {
     | undefined;
   /** Whether a page holds unsaved work whose ask refuses every way out, as Cancel would. */
   readonly unsaved?: boolean | undefined;
+  /** Whether the Admin place stands, the view standing, and its section list standing alone. */
+  readonly admin?: { readonly view: AdminView; readonly listed: boolean } | undefined;
 }
 
 /** The window on the task, every pane over it shut. */
@@ -236,6 +239,23 @@ function tasksTab(
       onChoose: (place) => chat({ place, listed: false }),
       onShow: (place) => chat({ open: true, place, listed: false }),
     },
+    adminView: {
+      ...base.adminView,
+      open: at.admin !== undefined,
+      view: at.admin?.view ?? { kind: "dashboard" },
+      listed: at.admin?.listed ?? false,
+      // As the real one does, a view named opens alone, and none named opens on the list.
+      onOpen: (view) =>
+        patch((held) => ({
+          ...held,
+          admin: { view: view ?? { kind: "dashboard" }, listed: view === undefined },
+        })),
+      onList: () =>
+        patch((held) =>
+          held.admin === undefined ? held : { ...held, admin: { ...held.admin, listed: true } },
+        ),
+      onClose: () => patch((held) => ({ ...held, admin: undefined })),
+    },
     history: {
       ...base.history,
       open: at.versions.open,
@@ -259,7 +279,7 @@ function tasksTab(
 const roots: Root[] = [];
 
 beforeEach(() => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
+  handState(experimentsOn(EXPERIMENT.CHAT), { access: { admin: true } });
 });
 
 /** Takes down every window mounted so far, since a window's history is the one its root installed last. */
@@ -607,6 +627,26 @@ test("on a narrow stage a Chat place chosen from the rail is a step, and Chat's 
   window.press(() => window.shown().chatView.onList());
   assert.equal(shownPlace(window.at()), undefined);
   assert.equal(window.history().canGoForward, true, "the way back was a step back");
+});
+
+test("on a narrow stage an Admin section chosen from its list is a step, and the section's way back steps back to the list rather than recording a new one", async () => {
+  const window = mount(SHELL_ROOM.NARROW, {
+    ...ON_TASK,
+    admin: { view: { kind: "dashboard" }, listed: true },
+  });
+  // Admin is an admin's alone, whose word arrives with the window's state.
+  await settle();
+  window.press(() => window.shown().adminView.onOpen({ kind: "users" }));
+
+  assert.equal(window.addresses().length, 2);
+  const shownView = (at: Standing) => (at.admin?.listed === false ? at.admin.view.kind : undefined);
+  backAndForth(window, shownView, undefined, "users");
+
+  window.press(() => window.shown().adminView.onList());
+  assert.equal(shownView(window.at()), undefined);
+  assert.equal(window.history().canGoForward, true, "the way back was a step back");
+  window.press(() => window.history().onForward());
+  assert.equal(shownView(window.at()), "users");
 });
 
 test("on a narrow stage a Settings page a link opened has no list behind it, so the way back stands the list in the page's step and Back leaves Settings", () => {

@@ -12,7 +12,7 @@ import { AccountCell } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { AdminSection, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { HideAdminsToggle, Refreshing } from "../chrome/controls.js";
+import { AdminViewOptions, Refreshing } from "../chrome/controls.js";
 import { DayNote } from "../chrome/notes.js";
 import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
@@ -105,7 +105,9 @@ export function DayScreen({
   );
   const signOut = () => void withdraw(onSignOut);
   const back: AdminWayBack = { tab: "dashboard", onBack };
-  const controls = <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />;
+  const controls = (
+    <AdminViewOptions hideAdmins={hideAdmins} onHideAdminsChange={onHideAdminsChange} />
+  );
 
   switch (state.status) {
     case "loading":

@@ -71,6 +71,11 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId();
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
+  // A series with one color rides the container's own style, which the DOM
+  // sets property by property, so it draws under a content security policy
+  // that refuses inline stylesheets (the app's `style-src 'self'`); only a
+  // series with a color per theme needs `ChartStyle`'s rules.
+  const { style, ...rest } = props;
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -78,7 +83,8 @@ function ChartContainer({
         data-slot="chart"
         data-chart={chartId}
         className={cn("luke-chart", className)}
-        {...props}
+        style={{ ...singleColorVariables(config), ...style }}
+        {...rest}
       >
         <ChartStyle id={chartId} config={config} />
         <RechartsPrimitive.ResponsiveContainer initialDimension={initialDimension}>
@@ -89,6 +95,22 @@ function ChartContainer({
   );
 }
 
+/**
+ * Each single-color series' variable, as the container's own style holds it.
+ * The same boundary as `ChartStyle`'s: a key or color that fails validation
+ * is skipped, so it costs its series the variable, not the chart its render.
+ */
+function singleColorVariables(config: ChartConfig): React.CSSProperties {
+  const variables: Record<string, string> = {};
+  for (const [key, itemConfig] of Object.entries(config)) {
+    if (itemConfig.theme || !itemConfig.color) continue;
+    if (!isSafeChartCssKey(key) || !isSafeChartCssColor(itemConfig.color)) continue;
+    variables[`--color-${key}`] = itemConfig.color;
+  }
+  return variables;
+}
+
+/** The rules for each series with a color per theme, which no one style attribute can hold. */
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   // SAFETY: the interpolation below is raw CSS, so the boundary must sit here
   // in the primitive rather than at call sites: every config funnels through
@@ -97,11 +119,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   // that fails validation is skipped, not thrown on, because one bad series
   // color should cost that series its variable, not the chart its render.
   const colorConfig = Object.entries(config).filter(([key, itemConfig]) => {
-    const colors = itemConfig.theme
-      ? Object.values(itemConfig.theme)
-      : itemConfig.color
-        ? [itemConfig.color]
-        : [];
+    const colors = itemConfig.theme ? Object.values(itemConfig.theme) : [];
     return colors.length > 0 && isSafeChartCssKey(key) && colors.every(isSafeChartCssColor);
   });
 
@@ -119,7 +137,7 @@ ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
     // SAFETY: theme iterates Object.entries(THEMES), so it is a THEMES key.
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ?? itemConfig.color;
+    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme];
     return color ? `  --color-${key}: ${color};` : null;
   })
   .join("\n")}

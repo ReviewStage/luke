@@ -366,6 +366,14 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     inboxTaskless: [],
     failedRuns: [],
     factoryView: { open: false, onOpen: ignore, onClose: ignore },
+    adminView: {
+      open: false,
+      view: { kind: "dashboard" },
+      listed: false,
+      onOpen: ignore,
+      onList: ignore,
+      onClose: ignore,
+    },
     boardView: { open: false, onOpen: ignore, onClose: ignore },
     automationsView: {
       open: false,
