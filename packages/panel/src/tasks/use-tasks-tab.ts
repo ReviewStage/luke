@@ -2177,10 +2177,25 @@ export function useTasksTab(input: {
     }
   };
 
+  // Each task's status choices made here so far, counted as each is sent,
+  // so an Undo can tell a choice made after its press, answered or not.
+  const statusChoices = useRef(new Map<string, number>());
+  const chooseStatus = (taskId: string) =>
+    statusChoices.current.set(taskId, (statusChoices.current.get(taskId) ?? 0) + 1);
+  // The tasks as the list holds them, or the open document where the list does not hold one yet.
+  const standingTasksOf = (taskIds: readonly string[]) => {
+    const held = tasks.document.task;
+    return taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
+      const task = tasks.tasks.find((each) => each.id === taskId);
+      if (task !== undefined) return [task];
+      return held?.id === taskId ? [held] : [];
+    });
+  };
   // Each status change is drawn at once and sent, and a refused one goes
   // back where it was only while no later press replaced it. Answers which
   // tasks the service kept and how many it refused.
   const sendStatuses = (changes: readonly StatusChange[]) => {
+    for (const { taskId } of changes) chooseStatus(taskId);
     const asked = changes.map(({ taskId, status }) => ({ taskId, next: { status } }));
     setStatuses(
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
@@ -2209,15 +2224,12 @@ export function useTasksTab(input: {
   // open, since a task done or canceled is still read and worked on.
   const settleTasks = (taskIds: readonly string[], status: SettledStatus) => {
     if (fixture !== undefined) return;
-    const held = tasks.document.task;
-    const listed = taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
-      const task = tasks.tasks.find((each) => each.id === taskId);
-      if (task !== undefined) return [task];
-      return held?.id === taskId ? [held] : [];
-    });
-    const { asked, undo } = settleChanges(listed, status);
+    const { asked, undo } = settleChanges(standingTasksOf(taskIds), status);
     if (asked.length === 0) return;
-    sendStatuses(asked).then(({ landed, refused }) => {
+    const sent = sendStatuses(asked);
+    // The status choice each task stood at once this press was sent, which a later choice moves on.
+    const choices = new Map(asked.map(({ taskId }) => [taskId, statusChoices.current.get(taskId)]));
+    sent.then(({ landed, refused }) => {
       if (landed.length === 0) {
         toast({
           words: settleFailedNote(status, refused),
@@ -2233,18 +2245,27 @@ export function useTasksTab(input: {
           label: UNDO_LABEL,
           onPress: () =>
             restoreNow.current(
-              undo.filter(({ taskId }) => landed.includes(taskId)),
+              undo.filter(
+                ({ taskId }) =>
+                  landed.includes(taskId) &&
+                  statusChoices.current.get(taskId) === choices.get(taskId),
+              ),
               status,
             ),
         },
       });
     });
   };
-  // Note that an Undo puts back only the tasks still at the status it
-  // undoes, so a status chosen since, on the Board or the task's chip,
+  // Note that an Undo puts back only the tasks given no status since its
+  // press, here or still in flight, and still at the status it undoes, so a
+  // status chosen since, on the Board, the task's chip, or another Mac,
   // stands.
   const restoreStatuses = (changes: readonly StatusChange[], settled: SettledStatus) => {
-    const due = undoStillDue(changes, settled, tasks.tasks);
+    const due = undoStillDue(
+      changes,
+      settled,
+      standingTasksOf(changes.map(({ taskId }) => taskId)),
+    );
     if (due.length === 0) return;
     sendStatuses(due).then(({ refused }) => {
       if (refused === 0) return;
@@ -2460,6 +2481,7 @@ export function useTasksTab(input: {
   const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     if (standing.status !== undefined) {
+      chooseStatus(taskId);
       setStatuses((held) =>
         held.has(taskId) ? new Map([...held].filter(([pending]) => pending !== taskId)) : held,
       );
