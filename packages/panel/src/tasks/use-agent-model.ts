@@ -2,7 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { CodingAgentRuntime, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { useRef, useState } from "react";
 import { chooseFailureNote } from "./coding-agent-model.js";
@@ -13,7 +13,8 @@ import { chooseFailureNote } from "./coding-agent-model.js";
  * A choice is drawn on the chip the moment it is made and sent to the
  * service, which writes it on the agent's row for its next step; the
  * agent the service answers is the one the list then holds, so the chip
- * reads the choice back off the agent. A change the service refused is
+ * reads the choice back off the agent, and the runtime it runs on, which
+ * narrows what the chip offers (`agent-runtime-models.ts`). A change the service refused is
  * taken off the chip again, which falls back to what the agent runs on,
  * and why is said under the box until the next change. An answer a later
  * change overtook is let go. Another agent's tab starts from nothing of
@@ -34,6 +35,8 @@ export interface AgentModelControl {
   note: string | undefined;
   /** Changes the agent's model, effort, and context window for its next step. */
   choose: (next: ModelChoice) => void;
+  /** The provider's own harness the agent runs on, which narrows what the chip offers; none on eve. */
+  runtime?: CodingAgentRuntime | undefined;
 }
 
 interface Held {
@@ -47,7 +50,7 @@ function fresh(agentId: string): Held {
 }
 
 export function useAgentModel(input: {
-  agent: Pick<CodingAgentSummary, "id" | "model" | "effort" | "contextWindow">;
+  agent: Pick<CodingAgentSummary, "id" | "model" | "effort" | "contextWindow" | "runtime">;
   choose: ChoiceWriter;
 }): AgentModelControl {
   const { agent } = input;
@@ -85,5 +88,6 @@ export function useAgentModel(input: {
     },
     note: held.note,
     choose,
+    runtime: agent.runtime,
   };
 }

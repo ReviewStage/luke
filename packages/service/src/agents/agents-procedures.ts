@@ -39,6 +39,7 @@ import {
   hasRepository,
   listCodingAgentLines,
   listWorkspaceCodingAgentLines,
+  nativeRuntimesOfReached,
   pinCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
@@ -49,6 +50,7 @@ import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { readAgentTranscript } from "@luke/database/models/transcript-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { runtimeChoiceRefusal } from "@luke/features/agent-runtime-models";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_LIST_ARCHIVED,
@@ -83,6 +85,7 @@ import {
   type PublishedReach,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
+import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
 import {
   acceptedAgentChoice,
   placeOfAgent,
@@ -382,7 +385,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * standard context window where it is chosen, change what its next step
      * runs on, checked against the catalog as a Start checks its own; a body
      * naming no window puts it back on the model's whole one, and the
-     * account's default is untouched.
+     * account's default is untouched. An agent on a provider's own harness
+     * takes only what its runtime runs (`agent-runtime-models.ts`), refused
+     * as invalid otherwise, and a runner of it that runs is handed the change
+     * as a `model` line at once (`runnerChoiceApplied`).
      */
     change: signedIn.change.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.params.id);
@@ -422,11 +428,18 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           ),
         );
       }
-      const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
-      return yield* changedAgent(
-        userId,
-        yield* hostedStoreOrUnavailable(updateCodingAgentChoice(userId, agent.id, choice)),
+      const runtimes = yield* hostedStoreOrUnavailable(
+        nativeRuntimesOfReached([agent.conversationId]),
       );
+      if (runtimeChoiceRefusal(runtimes.get(agent.conversationId), body) !== undefined) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
+      const changed = yield* hostedStoreOrUnavailable(
+        updateCodingAgentChoice(userId, agent.id, choice),
+      );
+      if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value);
+      return yield* changedAgent(userId, changed);
     }),
     /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {
