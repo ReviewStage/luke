@@ -1658,7 +1658,7 @@ interface InboxSearchHead {
 }
 
 /** Mark all as read as the view's menu offers it: whether any item is unread, filtered out or not, and the mark. */
-export interface InboxReadAll {
+interface InboxReadAll {
   readonly unread: boolean;
   readonly onMarkAll: () => void;
 }
