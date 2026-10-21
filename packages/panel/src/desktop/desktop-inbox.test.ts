@@ -3927,7 +3927,7 @@ async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
 /** Where the release skill's file stands on GitHub. */
 const RELEASE_ON_GITHUB = "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md";
 
-test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md in the panel beside it, as a file the item names does", async () => {
+test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md in the panel beside it as its preview, as a file the item names does", async () => {
   const answered: InboxItem = {
     ...RETRY,
     answer: {
@@ -3944,7 +3944,7 @@ test("in the window's Inbox a skill an answered note names is the chip a sent me
   const files: string[] = [];
   const panel: SidePanelControl = {
     ...tasksControl().sidePanel,
-    onOpenFile: (ref) => files.push(ref.path),
+    onPreviewFile: (ref) => files.push(ref.path),
   };
   const { page } = mount([], { panel });
   await settle();

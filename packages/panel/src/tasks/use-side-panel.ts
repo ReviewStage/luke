@@ -34,6 +34,7 @@ import { Option, Schema } from "effect";
 import { InboxIcon, MessagesSquareIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   type ByPullRequestTab,
@@ -491,6 +492,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly pullRequestViews: ByPullRequestTab<PullRequestView>;
   /** The open tabs of this Mac's terminals, by agent, in the order opened. */
   readonly macTerminals: readonly MacTerminalStripTab[];
+  /** Each task's preview tab, by task: the one tab a link opened that the next link opened replaces, until it is kept (`withPreview`). */
+  readonly previews: Readonly<Record<string, SidePanelTab>>;
   readonly tasks: Readonly<Record<string, TaskTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -557,6 +560,8 @@ export interface SidePanelControl {
   newTabAsked: boolean;
   /** The open task's fixed tabs, in the strip's order. */
   tabs: readonly FixedSidePanelTab[];
+  /** The open task's preview tab, while it has one (`onPreview`). */
+  preview: SidePanelTab | undefined;
   /**
    * The open task's tabs of any kind in the order they were opened and
    * moved into, none until one first is; the strip draws them first, as
@@ -607,6 +612,18 @@ export interface SidePanelControl {
   onInboxRead: (taskId: string, waiting: readonly string[]) => void;
   /** Shows the panel on the tab, opening it at the strip's end where the strip does not draw it, and choosing it where it does; a fixed tab stays open on that task. */
   onChoose: (tab: SidePanelTab) => void;
+  /**
+   * Shows the panel on the tab as a link pressed opens it: as the task's
+   * one preview, drawn in italics, which the next tab a link opens takes
+   * the place of until it is kept (`onKeep`). A tab the strip draws as one
+   * of its own is chosen, a fixed kind opens as `onChoose` opens it, and a
+   * link pressed with ⌘ opens a tab of its own.
+   */
+  onPreview: (tab: SidePanelTab) => void;
+  /** Opens a file as `onOpenFile` does, as the task's preview, as `onPreview` opens a tab. */
+  onPreviewFile: (ref: CodeRef, commit?: string) => void;
+  /** Keeps the tab, where it is the task's preview, as a tab of its own: what a double-click on it or typing into it asks. */
+  onKeep: (tab: SidePanelTab) => void;
   /** Shows the panel on the tab of the task given, as `onChoose` does on the open task: what a pin or a notification asks, the task opened beside it. */
   onShow: (taskId: string, tab: SidePanelTab) => void;
   /** Closes the tab, and only the view: a subagent goes on as it was, and a pin of the tab stands. Closing the one shown chooses the tab viewed before it on the task that still stands, else its neighbour, the one after it where there is one; closing the last the strip draws shuts the panel. */
@@ -1303,6 +1320,89 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
 }
 
 /**
+ * Whether a tab may stand as a preview: one a link opens, as against the
+ * fixed kinds, which stand as the task's own and are only ever chosen.
+ */
+function previewable(tab: SidePanelTab): boolean {
+  return !isFixedTab(tab);
+}
+
+/** The task's preview tab, while its strip still draws it. */
+function previewOf(held: HeldState, drawn: DrawnTabs): SidePanelTab | undefined {
+  const taskId = drawn.task.id;
+  const preview = taskId === undefined ? undefined : held.previews[taskId];
+  if (preview === undefined) return undefined;
+  return stripOf(held, drawn).some((each) => sameTab(each, preview)) ? preview : undefined;
+}
+
+/** The state with the task's preview, if it is `tab`, kept: a tab of its own from now on. */
+function withPreviewKept(held: HeldState, taskId: string, tab?: SidePanelTab): HeldState {
+  const preview = held.previews[taskId];
+  if (preview === undefined || (tab !== undefined && !sameTab(preview, tab))) return held;
+  const { [taskId]: _kept, ...others } = held.previews;
+  return { ...held, previews: others };
+}
+
+/** The state with the task's preview, where it is the file `from`'s tab, following that tab to `to`, which the tab now shows in its place. */
+function withPreviewMoved(
+  held: HeldState,
+  taskId: string | undefined,
+  from: string,
+  to: string,
+): HeldState {
+  const preview = taskId === undefined ? undefined : held.previews[taskId];
+  if (taskId === undefined || preview === undefined || !sameTab(preview, { file: from }))
+    return held;
+  return { ...held, previews: { ...held.previews, [taskId]: { file: to } } };
+}
+
+/**
+ * The state with `tab` opened by `open` as the task's preview, as VS Code
+ * opens a file a single click names: the preview standing before it, if
+ * another tab, closes first, so a run of links read one after another
+ * leaves one tab rather than one each. A tab the strip already draws as
+ * a tab of its own is only chosen, and a fixed kind is never a preview.
+ */
+function withPreview(
+  held: HeldState,
+  tab: SidePanelTab,
+  drawn: DrawnTabs,
+  open: (held: HeldState) => HeldState,
+): HeldState {
+  const taskId = drawn.task.id;
+  const preview = previewOf(held, drawn);
+  const standing = stripOf(held, drawn).some((each) => sameTab(each, tab));
+  const isPreview = preview !== undefined && sameTab(preview, tab);
+  if (taskId === undefined || !previewable(tab) || (standing && !isPreview)) return open(held);
+  const cleared = preview === undefined || isPreview ? held : withoutTab(held, preview, drawn);
+  const opened = open(cleared);
+  return { ...opened, previews: { ...opened.previews, [taskId]: tab } };
+}
+
+/**
+ * The state with the file a reference names opened, as the panel's own
+ * file door opens it: a reference naming the file alone shows it in the
+ * tab it has, or a new one; naming lines or a commit, it lights them.
+ */
+function withFileAsked(
+  held: HeldState,
+  ref: CodeRef,
+  commit: string | undefined,
+  drawn: DrawnTabs,
+  taskId: string | undefined,
+): HeldState {
+  if (ref.startLine === undefined && commit === undefined) {
+    return withFileShown(held, ref.path, drawn, taskId);
+  }
+  const tab: SidePanelTab = { file: ref.path };
+  return withFileOpened(
+    withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
+    ref,
+    commit === undefined ? undefined : { commit, taskId },
+  );
+}
+
+/**
  * The state with the tab moved to `to` in the task's strip, among tabs of
  * every kind, kept as the task's order (`movedOrder`).
  */
@@ -1479,6 +1579,7 @@ function settled(state: SidePanelState): HeldState {
     lastTerminals: {},
     pullRequestViews: new Map(),
     macTerminals: [],
+    previews: {},
     tasks: currentTasks(state.tasks),
     pins:
       pins === undefined
@@ -1861,23 +1962,55 @@ export function useSidePanel(
     [update, drawn, taskId],
   );
   const onClose = useCallback(
-    (tab: SidePanelTab) => update((held) => withoutTab(held, tab, drawn)),
+    (tab: SidePanelTab) =>
+      update((held) => {
+        const closed = withoutTab(held, tab, drawn);
+        return drawn.task.id === undefined ? closed : withPreviewKept(closed, drawn.task.id, tab);
+      }),
     [update, drawn],
   );
   const onOpenFile = useCallback(
     (ref: CodeRef, commit?: string) =>
-      update((held) => {
-        if (ref.startLine === undefined && commit === undefined) {
-          return withFileShown(held, ref.path, drawn, taskId);
-        }
-        const tab: SidePanelTab = { file: ref.path };
-        return withFileOpened(
-          withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
-          ref,
-          commit === undefined ? undefined : { commit, taskId },
-        );
-      }),
+      update((held) => withFileAsked(held, ref, commit, drawn, taskId)),
     [update, drawn, taskId],
+  );
+  // Note that a link pressed with ⌘ asks for a tab of its own, as a double-click on a preview keeps it.
+  const onPreview = useCallback(
+    (tab: SidePanelTab) => {
+      if (pressedWithCommand()) {
+        onChoose(tab);
+        return;
+      }
+      setAsked(undefined);
+      update((held) => ({
+        ...withPreview(held, tab, drawn, (from) =>
+          withTab(withTabLast(withChosenViewed(from, tab, drawn), tab, drawn), tab, taskId),
+        ),
+        open: true,
+      }));
+    },
+    [update, drawn, taskId, onChoose],
+  );
+  const onPreviewFile = useCallback(
+    (ref: CodeRef, commit?: string) => {
+      if (pressedWithCommand()) {
+        onOpenFile(ref, commit);
+        return;
+      }
+      update((held) => ({
+        ...withPreview(held, { file: ref.path }, drawn, (from) =>
+          withFileAsked(from, ref, commit, drawn, taskId),
+        ),
+        open: true,
+      }));
+    },
+    [update, drawn, taskId, onOpenFile],
+  );
+  const onKeep = useCallback(
+    (tab: SidePanelTab) => {
+      if (taskId !== undefined) update((held) => withPreviewKept(held, taskId, tab));
+    },
+    [update, taskId],
   );
   // Note that a file with a tab of its own is chosen there, because a file
   // stands in one tab at most (`withFileShown`).
@@ -1889,7 +2022,12 @@ export function useSidePanel(
           return withFileShown(held, path, drawn, taskId);
         }
         const viewed = withChosenViewed(held, { file: path }, drawn);
-        return withFileBrowsed(viewed, taskId, standing, path);
+        return withPreviewMoved(
+          withFileBrowsed(viewed, taskId, standing, path),
+          taskId,
+          from,
+          path,
+        );
       }),
     [update, drawn, taskId],
   );
@@ -1906,7 +2044,13 @@ export function useSidePanel(
         if (to === undefined) return held;
         const open = held.files.find((each) => each.path === to);
         if (open !== undefined) return withOpenFileChosen(held, open, drawn, taskId);
-        return withFileStepped(withChosenViewed(held, { file: to }, drawn), taskId, standing, step);
+        const stepped = withFileStepped(
+          withChosenViewed(held, { file: to }, drawn),
+          taskId,
+          standing,
+          step,
+        );
+        return withPreviewMoved(stepped, taskId, from, to);
       }),
     [update, drawn, taskId],
   );
@@ -2035,6 +2179,7 @@ export function useSidePanel(
     browsers,
     files: state.files,
     tab: shownIn(state, drawn),
+    preview: previewOf(state, drawn),
     width: state.width,
     fullScreen: shown && (fullScreen || narrow),
     fullScreenOnly: shown && narrow,
@@ -2055,6 +2200,9 @@ export function useSidePanel(
     onRenamePins,
     onPlacePins,
     onOpenFile,
+    onPreview,
+    onPreviewFile,
+    onKeep,
     onBrowseFile,
     onFileHistory,
     onFoldNote,

@@ -56,6 +56,7 @@ import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { installPressIntent } from "./press-intent.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
@@ -647,6 +648,8 @@ function AppWindow(): React.JSX.Element {
   useAppKeymap(true);
   useMenuCommands(true);
   useHistoryMouseButtons(history, true);
+  // A link pressed with ⌘ goes where it leads, rather than opening as a preview beside the reader.
+  useEffect(() => installPressIntent(window), []);
 
   // The doors the window hands every page are held across draws, each part that reads one holding while it does.
   const requestMicrophone = useCallback(

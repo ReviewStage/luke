@@ -87,6 +87,8 @@ function mount(
       tab: SIDE_PANEL_TAB.CODE,
       files: [commit === undefined ? tab : { ...tab, commit }],
       onOpenFile: (...asked) => opened.push(asked),
+      // A code card's head is a link, which opens its file as the panel's preview.
+      onPreviewFile: (...asked) => opened.push(asked),
     },
   });
   act(() =>

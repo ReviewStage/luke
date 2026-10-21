@@ -962,6 +962,17 @@ ul.actor-stack {
   font-weight: var(--luke-weight-bold);
 }
 
+/* The wrapper that hears typing in a preview's content lays nothing out. */
+.side-panel-keeps {
+  display: contents;
+}
+
+/* A preview tab, which the next link opened takes the place of, wears its
+   name in italics until it is kept, as VS Code draws one. */
+.tab[data-preview="true"] .tab-label {
+  font-style: italic;
+}
+
 .desktop-sidebar .sidebar-task[data-unread="true"] .sidebar-task-name {
   font-weight: var(--luke-weight-semibold);
 }
