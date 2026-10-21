@@ -191,7 +191,6 @@ import {
   type TasksIssueUnlinkParams,
   type TasksLinearIssuesAnswer,
   type TasksLinearIssuesParams,
-  type TasksMessagesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -425,12 +424,6 @@ export interface HostOperator {
   tasksRefresh(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
-  /** The Work tab scrolled back: the host reads the open task's page of work before the oldest turn it holds, and the view takes it. */
-  tasksWorkEarlier(): Effect.Effect<void>;
-  /** The Call tab scrolled back: the host reads the open task's page of conversation before the oldest turn it holds, and the view takes it. */
-  tasksConversationEarlier(): Effect.Effect<void>;
-  /** One page of a task's conversation, or the brain's worker's, held by the service while it runs; or why there is none. */
-  tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
   /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
   /** One task made the active one, replacing whichever was; answers whether the host took it. */
   tasksOpen(taskId: string): Effect.Effect<boolean>;
@@ -885,9 +878,6 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 /** What a coding-agent call the host could not answer is drawn as. */
 /** A followed transcript as the gateway's params carry it. */
 function transcriptParams(transcript: CodingAgentTranscriptKey): WireRecord {
-  if (transcript.kind === TRANSCRIPT_KIND.TASK_WORKER) {
-    return { kind: transcript.kind, taskId: transcript.taskId, callId: transcript.callId };
-  }
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
 }
@@ -1142,18 +1132,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
-    tasksWorkEarlier: () => fire(client.call(GATEWAY_METHOD.TASKS_WORK_EARLIER)),
-    tasksConversationEarlier: () => fire(client.call(GATEWAY_METHOD.TASKS_CONVERSATION_EARLIER)),
-    tasksMessages: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_MESSAGES, {
-          taskId: params.taskId,
-          ...("after" in params ? { after: params.after } : undefined),
-          ...("before" in params ? { before: params.before } : undefined),
-          ...("callId" in params ? { callId: params.callId } : undefined),
-        }),
-        codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
-      ),
     tasksOpen: (taskId) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_OPEN, { taskId }),
@@ -2079,21 +2057,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     transcriptFollow: (transcript) =>
       fire(
-        client.call(
-          transcript.kind === TRANSCRIPT_KIND.AGENT
-            ? GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW
-            : GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW,
-          transcriptParams(transcript),
-        ),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript)),
       ),
     transcriptUnfollow: (transcript) =>
       fire(
-        client.call(
-          transcript.kind === TRANSCRIPT_KIND.AGENT
-            ? GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW
-            : GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_UNFOLLOW,
-          transcriptParams(transcript),
-        ),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript)),
       ),
     onTranscriptChanged: (listener) =>
       on(

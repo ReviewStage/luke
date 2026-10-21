@@ -153,14 +153,13 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
 
 /**
  * The document as the hidden voice window and the call window are sent it: the
- * whole of it but the task turns' work, as the task's work page projects
- * it and as its task conversation reads it. Note that both are kept from
- * those windows because they draw neither, and both carry the output of
- * commands run in the developer's repository and on the developer's Mac,
- * which nothing there needs.
+ * whole of it but the task turns' work, as a call tells it. Note that it is
+ * kept from those windows because they draw none of it, and it carries the
+ * output of commands run in the developer's repository and on the
+ * developer's Mac, which nothing there needs.
  */
 export function voiceWindowState<State extends Pick<AppState, "tasks">>(held: State): State {
-  const { work: _work, conversation: _conversation, ...tasks } = held.tasks;
+  const { work: _work, ...tasks } = held.tasks;
   return { ...held, tasks };
 }
 

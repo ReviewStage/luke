@@ -546,11 +546,6 @@ function InboxSidePanel({
     }
     if (target.kind !== TOOL_TARGET.INBOX && taskId !== undefined) tasks.onShowTask(taskId);
   };
-  // The task's agents' workers are their delegations, read through their own transcripts, so the panel's work is none.
-  const work = {
-    conversation: undefined,
-    readWorker: agents.readTranscript,
-  };
   return (
     <SidePanel
       {...drawing}
@@ -562,7 +557,6 @@ function InboxSidePanel({
       shownCode={undefined}
       codeFailed={undefined}
       pages={pages}
-      work={work}
       agents={agents}
       openAgents={NO_OPEN_AGENTS}
       shownAgent={undefined}

@@ -7,21 +7,22 @@ import { Effect, Option, Schema, Stream } from "effect";
 import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /**
- * task-record-follow.ts -- where an open task's pages, calls, and agents' code stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
+ * task-record-follow.ts -- where an open task's pages and agents' code stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
  *
  * The service seals one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
  * subscribes to them (`live-follow.ts`) for as long as the task stands open,
  * as it does the board (`board-follow.ts`), and answers each delivery with
  * the parts it moved, which the caller reads again from the service. The
- * sealed statements stay here, beside the account's own bearer; only which
+ * calls part the service still seals is read by no one: every call speaks
+ * into an agent, whose own transcript says what was said. The sealed
+ * statements stay here, beside the account's own bearer; only which
  * parts moved leaves.
  */
 
 /** A part of the record the panel reads again once its mark moves. */
 export const TASK_RECORD_PART = {
   PAGES: "pages",
-  CALLS: "calls",
   CODE: "code",
 } as const;
 
@@ -48,20 +49,10 @@ function markOf<Row>(rows: readonly Row[], key: (row: Row) => string): string {
   return JSON.stringify(rows.toSorted((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0)));
 }
 
-/** The calls whose words the record now holds whole: each that ended, since a call that stands tells its own as it goes. */
-function endedCalls(rows: TaskRecordLiveRows): string {
-  return markOf(
-    rows.calls.filter((call) => call.closedAt !== null),
-    (call) => call.id,
-  );
-}
-
 /**
  * The parts a delivery moved from the one before: the pages where their
- * rows differ, the calls where an ended call's do, so a call's words
- * landing as it stands read nothing and its end, its last words, and its
- * metering each read the calls again, and the code where the `show_code`
- * calls the agents' journals answered do. The first delivery moves every part.
+ * rows differ, and the code where the `show_code` calls the agents'
+ * journals answered do. The first delivery moves every part.
  */
 function movedParts(
   before: TaskRecordLiveRows | undefined,
@@ -72,7 +63,6 @@ function movedParts(
   const codeOf = (read: TaskRecordLiveRows) => markOf(read.code, (journal) => journal.id);
   return [
     ...(pagesOf(before) === pagesOf(rows) ? [] : [TASK_RECORD_PART.PAGES]),
-    ...(endedCalls(before) === endedCalls(rows) ? [] : [TASK_RECORD_PART.CALLS]),
     ...(codeOf(before) === codeOf(rows) ? [] : [TASK_RECORD_PART.CODE]),
   ];
 }

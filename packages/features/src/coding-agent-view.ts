@@ -297,29 +297,17 @@ export const codingAgentMessagesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentMessagesAnswerView = typeof codingAgentMessagesAnswerViewSchema.Type;
 
-/** Whose transcript a window follows: a coding agent's, or a worker's of it, or a task's planning worker's. */
+/** Whose transcript a window follows: a coding agent's, or a worker's of it. */
 export const TRANSCRIPT_KIND = {
   AGENT: "agent",
-  TASK_WORKER: "taskWorker",
 } as const;
 
-/**
- * One transcript as a window follows it: an agent's own, or one of its
- * workers' by the delegation call that started it; or a task's planning
- * worker's by the call that started it.
- */
-export const codingAgentTranscriptKeySchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(TRANSCRIPT_KIND.AGENT),
-    agentId: EffectSchema.NonEmptyString,
-    callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
-  }),
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(TRANSCRIPT_KIND.TASK_WORKER),
-    taskId: EffectSchema.NonEmptyString,
-    callId: codingAgentCallIdSchema,
-  }),
-]);
+/** One transcript as a window follows it: an agent's own, or one of its workers' by the delegation call that started it. */
+export const codingAgentTranscriptKeySchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(TRANSCRIPT_KIND.AGENT),
+  agentId: EffectSchema.NonEmptyString,
+  callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
+});
 
 export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Type;
 

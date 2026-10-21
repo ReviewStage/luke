@@ -13,7 +13,6 @@ import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
 import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
-import { planDocumentSchema, planSectionEditSchema } from "./task-wire.js";
 import { taskActivitySchema, taskShownCodeSchema, taskWorkTurnSchema } from "./tasks-view.js";
 import { VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
 
@@ -154,14 +153,7 @@ export const VOICE_SERVICE_FRAME = {
    */
   SESSION_TYPED: "session.typed",
   /**
-   * The service's frame to the desktop after the handshake: the task's
-   * document as its notetaker is writing it,
-   * sent again as the draft grows and once more as saved, so the Tasks tab
-   * types the plan in while the call goes on rather than waiting for a read.
-   */
-  PLAN_DRAFT: "plan.draft",
-  /**
-   * The service's other frame to the desktop: what each part of Luke is
+   * The service's frame to the desktop after the handshake: what each part of Luke is
    * doing now, the voice, the brain, and the
    * notetaker, sent whole each time any of them changes, so the Tasks tab
    * says each part's own state rather than one word for all of them.
@@ -429,28 +421,6 @@ export const sessionReportFrameSchema = Schema.Union([
 
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
 
-/**
- * The task's document as the notetaker has it now: a draft while its model is
- * still writing, and the saved document with the instant it was saved once
- * the save lands, or the document as it stood where the run saved nothing.
- * Each names the save it was drawn over, so a window that saved an edit of
- * its own since can drop a draft that does not hold it; the saved one
- * carries who last changed each section, which each section's line reads.
- */
-const planDraftFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
-  planId: wireUuidSchema,
-  document: planDocumentSchema,
-  /** Epoch milliseconds of the save the document is; absent while it is a draft. */
-  savedAt: Schema.optionalKey(Schema.Number),
-  /** Epoch milliseconds of the save the notetaker read before it wrote; absent from a service before editing. */
-  readAt: Schema.optionalKey(Schema.Number),
-  /** For a plan that is one document, the save that last changed each section after the save; absent while it is a draft, and for any other plan. */
-  sectionEdits: Schema.optionalKey(Schema.Array(planSectionEditSchema)),
-});
-
-export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
-
 /** The activity on the call about the task named, as the service sends it to the desktop. */
 const taskActivityFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_ACTIVITY),
@@ -694,14 +664,9 @@ export function sessionReportFrameFromWire(
 }
 
 /**
- * The service's draft of the open plan, read the answering way: a key a
- * newer service added is dropped rather than refusing the whole frame.
+ * What each part of Luke is doing on a task call, read the answering way: a
+ * key a newer service added is dropped rather than refusing the whole frame.
  */
-export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame | undefined {
-  return admittedAnswer(planDraftFrameSchema, value);
-}
-
-/** What each part of Luke is doing on a task call, read the same answering way. */
 export function taskActivityFrameFromWire(value: UnparsedWireValue): TaskActivityFrame | undefined {
   return admittedAnswer(taskActivityFrameSchema, value);
 }

@@ -1102,10 +1102,10 @@ function withFileBrowsed(
 }
 
 /**
- * Whether the task draws the subagent's tab: the brain's worker's while
- * the task's work holds its call, and a delegated worker's while the
+ * Whether the task draws the subagent's tab: a delegated worker's while the
  * agent that delegated has its tab open, or until the agents are read, as
- * an agent's own tab stands. `agents` are the open agent tabs.
+ * an agent's own tab stands, and one no delegation started while
+ * `subagents` names it. `agents` are the open agent tabs.
  */
 export function drawsSubagent(
   tab: SubagentStripTab,
@@ -1591,9 +1591,9 @@ function firstHeld(was: TaskHolds, now: TaskHolds): readonly FixedSidePanelTab[]
  * it, which are kept nowhere. `task` is the open task and what it holds of
  * each fixed kind, `agents` its agents whose tabs stand open in the task's
  * column, by agent id, or nothing while they have not been read,
- * `subagents` the brain's workers its work holds, by the call that started
- * each, none where the work has none or is unread, and `files` the files
- * Luke showed on it, by path, and `pages` the pages agents wrote for it, by
+ * `subagents` the workers no delegation started that it draws, by the call
+ * that started each, which is none now that a task has no Luke of its own,
+ * and `files` the files its agents showed on it, by path, and `pages` the pages agents wrote for it, by
  * id; the tabs drawn and the tab shown are held to them, a delegated
  * worker's to the open agent tabs. In a narrow `room` the panel stands only
  * full screen, so leaving full screen there shuts it, and a room widened

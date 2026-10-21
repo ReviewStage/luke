@@ -124,6 +124,3 @@ export type TaskTranscript = typeof taskTranscriptSchema.Type;
 
 /** A transcript read (GET). */
 export const taskTranscriptAnswerSchema = EffectSchema.Struct({ transcript: taskTranscriptSchema });
-
-/** The transcript of a task no call has been made about. */
-export const EMPTY_TRANSCRIPT: TaskTranscript = { calls: [], earlierOmitted: false };

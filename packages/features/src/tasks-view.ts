@@ -4,8 +4,6 @@ import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
-  codingAgentCallIdSchema,
-  codingAgentMessagesAnswerSchema,
   storedObjectSchema,
   tasklessAgentSchema,
   turnRecordFields,
@@ -70,7 +68,6 @@ import {
   taskTreeRequestSchema,
   workspaceIdSchema,
 } from "./task-wire.js";
-import { taskTranscriptSchema } from "./transcript-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import {
   workspaceInvitationCancelSchema,
@@ -136,17 +133,6 @@ const tasksDocumentSchema = EffectSchema.Struct({
 });
 
 export type TasksDocument = typeof tasksDocumentSchema.Type;
-
-/**
- * What was said on the active task's calls as last read, kept through a
- * later read that failed, as the document is. The call standing now is not
- * in it until the call ends and the transcript is read again: its words so
- * far are the voice window's to report.
- */
-const tasksTranscriptSchema = EffectSchema.Struct({
-  status: tasksReadSchema,
-  transcript: EffectSchema.optionalKey(taskTranscriptSchema),
-});
 
 /**
  * The two waits on the voice side that no live status names: the voice model
@@ -357,27 +343,6 @@ export type TaskCodeShowing = TaskShownCode;
 /** The code of one showing as the Code tab draws it: what Luke named, where it was read, its lines, and his note on them. */
 export type TaskCode = TaskCodeShowing["code"];
 
-/**
- * A task's work as the service keeps it (GET `/api/plans/{id}/work`, with
- * `before` naming a turn for an older page): a page of the brain turns of
- * its calls, the newest before where the read began, oldest first, each as
- * a `task.work` frame would tell it, and the turn to read before for the
- * page older than this one. The newest page also carries every code Luke
- * showed on the task, oldest first, with the lines each `show_code` call
- * answered, several of one file included. It is what the Work and Code tabs
- * draw when a task opens, after a restart or a switch from another task,
- * before any call about it tells more.
- */
-export const taskWorkAnswerSchema = EffectSchema.Struct({
-  turns: EffectSchema.Array(taskWorkTurnSchema),
-  /** The turn the next older page is read before; absent where no older turn stands. */
-  earlier: EffectSchema.optionalKey(EffectSchema.String),
-  /** Every code shown on the task, oldest first; carried on the newest page alone. */
-  code: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
-});
-
-export type TaskWorkAnswer = typeof taskWorkAnswerSchema.Type;
-
 /** Every code Luke showed on one task, oldest first, as the Code tab draws it: the plan-work page's `code`, read on its own. */
 export const taskCodeAnswerSchema = EffectSchema.Struct({
   code: EffectSchema.Array(taskShownCodeSchema),
@@ -427,39 +392,18 @@ export const tasksViewSchema = EffectSchema.Struct({
   callActivity: EffectSchema.optionalKey(taskActivitySchema),
   /** The active task's whiteboard as last read or saved; absent with no task open or before its first read lands. */
   board: EffectSchema.optionalKey(boardSchema),
-  /** What was said on the active task's calls as last read; absent with no task open. */
-  transcript: EffectSchema.optionalKey(tasksTranscriptSchema),
   /**
-   * Every code Luke showed on the active task, oldest first, several of one
-   * file included: what the task's work holds, read with the newest page,
-   * and each code a call shows since, by its call, so a call's code and
-   * the record's copy of it stand once; absent with none, and cleared with
-   * the activity. A call's end keeps them.
+   * Every code the active task's agents showed, oldest first, several of one
+   * file included: what the record holds, read with the task, and each code
+   * a call shows since, by its call, so a call's code and the record's copy
+   * of it stand once; absent with none, and cleared with the activity. A
+   * call's end keeps them.
    */
   shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
-  /**
-   * The brain turns of the active task's calls, oldest first: the newest
-   * page read from the service when the task opens, each older page read as
-   * the Work tab scrolls back, and each turn a call tells since as last
-   * told; absent before the first, and cleared with the activity. A call's
-   * end keeps them.
-   */
+  /** Each turn the active task's call tells as last told, oldest first; absent before the first, and cleared with the activity. A call's end keeps them. */
   work: EffectSchema.optionalKey(EffectSchema.Array(taskWorkTurnSchema)),
-  /** The turn the active task's next older page of work is read before; absent where none stands or before the first read. */
-  workEarlier: EffectSchema.optionalKey(EffectSchema.String),
-  /** Where the read of the active task's newest work and code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
-  workStatus: EffectSchema.optionalKey(tasksReadSchema),
-  /**
-   * The active task's conversation as an agent's transcript is
-   * read: the newest page read when the task opens, each page the held read
-   * hears since joined by message id, and each older page read as the Call
-   * tab scrolls back, before the rest. Its cursor is where the held read goes
-   * on from, its `earlier` the turn the next older page is read before, and
-   * its status and workers are the newest held page's. Absent before the
-   * first read lands, and cleared with the activity; a reader that does not
-   * know it draws `work` as before.
-   */
-  conversation: EffectSchema.optionalKey(codingAgentMessagesAnswerSchema),
+  /** Where the read of the active task's code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
+  codeStatus: EffectSchema.optionalKey(tasksReadSchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with
@@ -470,21 +414,6 @@ export const tasksViewSchema = EffectSchema.Struct({
 });
 
 export type TasksView = typeof tasksViewSchema.Type;
-
-/**
- * One page of a task's conversation, as a window asks it: past a
- * cursor, before a turn, or the newest where it names neither; or, naming
- * the call that started one, a brain worker's transcript under the task,
- * past a cursor, as an agent's worker tab reads it.
- */
-export const tasksMessagesParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  after: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  before: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
-});
-
-export type TasksMessagesParams = typeof tasksMessagesParamsSchema.Type;
 
 /** The view before anything is asked: no tasks read, none active. */
 export const IDLE_TASKS_VIEW: TasksView = {

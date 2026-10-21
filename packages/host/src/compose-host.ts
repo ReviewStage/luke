@@ -9,7 +9,6 @@ import {
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
-  type PlanDraftFrame,
   type TaskActivityFrame,
   type TaskCodeFrame,
   type TaskWorkFrame,
@@ -135,12 +134,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // No brain runs on this Mac: the exchange is the service's, and Luke
     // speaks only on a task's call the developer opened.
     // The tasks composer is built after the live one and ends its calls, so
-    // the live composer reads the open task, and hands it the task's drafts
-    // and their activity, through these late bindings.
+    // the live composer reads the open task, and hands it the call's
+    // activity, code, and work, through these late bindings.
     let activeTaskId: () => string | undefined = () => undefined;
     let agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
       Effect.succeed(undefined);
-    let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
     let taskCallEnded: (taskId: string) => void = () => undefined;
     let showTaskCode: (code: TaskCodeFrame) => void = () => undefined;
@@ -150,7 +148,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       activeTaskId: () => activeTaskId(),
       agentTaskOf: (agentId) => agentTaskOf(agentId),
-      showPlanDraft: (draft) => showPlanDraft(draft),
       showTaskActivity: (activity) => showTaskActivity(activity),
       taskCallEnded: (taskId) => taskCallEnded(taskId),
       showTaskCode: (code) => showTaskCode(code),
@@ -189,7 +186,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           }),
         },
       ),
-      conversations: codingAgentClient,
     });
     const codingAgents = yield* composeCodingAgents({
       kernel,
@@ -279,7 +275,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
     activeTaskId = tasks.activeTaskId;
     agentTaskOf = codingAgents.agentTaskOf;
-    showPlanDraft = tasks.showDraft;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
     showTaskCode = ({ type: _type, planId: taskId, ...shown }) => tasks.showCode(taskId, shown);
