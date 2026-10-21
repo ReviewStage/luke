@@ -351,7 +351,7 @@ export interface AgentNotices {
   observeModels(models: readonly CatalogModel[]): void;
   /** A task the host no longer holds: its agents are forgotten. */
   observeTaskGone(taskId: string): void;
-  /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan is forgotten. */
+  /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan, or one of a held plan the list no longer names, as one archived, is forgotten. */
   observeFollowed(agents: readonly CodingAgentSummary[], taskIds: readonly string[]): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
@@ -1088,7 +1088,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeTaskGone: (taskId) => forget((agent) => agent.taskId !== taskId),
       observeFollowed: (agents, taskIds) => {
         const held = new Set(taskIds);
-        forget((agent) => agent.taskId === null || held.has(agent.taskId));
+        // The list names every agent on its plans but the archived, so one it no longer names takes its dot with it.
+        const named = new Set(agents.map((agent) => agent.id));
+        forget(
+          (agent, agentId) =>
+            agent.taskId === null || (held.has(agent.taskId) && named.has(agentId)),
+        );
         notices.observeAgents(agents);
       },
       shown: (agentId) => {
