@@ -758,7 +758,18 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 
 /** A started, stopped, or changed agent (POST, PATCH). */
-export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
+/**
+ * The id of the transaction a write on the agent committed in, as Postgres
+ * counts it, in decimal: present where a Start, a rename, an archive, or a
+ * pin changed a row, so the desktop following the task list waits for it to
+ * arrive before it confirms the write, as Neon's mutations guide says.
+ */
+const codingAgentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+export const codingAgentAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
 
 /**
  * A message handed to an agent, as the service answers it: the agent as it
