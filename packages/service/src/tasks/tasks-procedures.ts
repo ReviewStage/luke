@@ -661,7 +661,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       return { board: board.value };
     }),
 
-    /** The Mac's scene written whole, the last write winning. */
+    /** The Mac's scene written whole, the last write winning; with the id of its transaction where the board's live row shows it. */
     saveBoard: plans.saveBoard.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const save = input.body;
@@ -669,7 +669,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         writeScene(context.userId, taskId, save.elements, save.appliedDrawing, save.image),
       );
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { board: written.value };
+      return written.value;
     }),
 
     /**

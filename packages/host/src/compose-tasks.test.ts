@@ -985,7 +985,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.images[taskId] = image;
         const board = { ...service.boards[taskId], elements, appliedDrawing };
         service.boards[taskId] = board;
-        return board;
+        return { board };
       }),
     listLive: () =>
       Effect.sync(() => {

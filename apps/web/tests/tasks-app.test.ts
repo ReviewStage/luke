@@ -17,7 +17,7 @@ import {
   openWorkspace,
 } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
-import { boardAnswerSchema } from "@luke/features/board-wire";
+import { boardAnswerSchema, boardSaveAnswerSchema } from "@luke/features/board-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -1566,34 +1566,41 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
-  it.effect("the board one member saves is read by the rest of the workspace", () =>
-    Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts();
-      const started = readAnswer(
-        taskAnswerSchema,
-        HOSTED_HTTP_STATUS.CREATED,
-        yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-      ).plan;
-      yield* joinWorkspace(started.workspaceId, other);
+  it.effect(
+    "the board one member saves is read by the rest of the workspace, the save answering its transaction where the board's live row moved and none where it did not",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const started = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        ).plan;
+        yield* joinWorkspace(started.workspaceId, other);
+        const save = () =>
+          Effect.map(
+            ask(
+              request(BOARD(started.id), other, {
+                method: "PUT",
+                body: { elements: [NOTE], appliedDrawing: 0 },
+              }),
+            ),
+            (answer) => readAnswer(boardSaveAnswerSchema, HOSTED_HTTP_STATUS.OK, answer),
+          );
 
-      const saved = yield* ask(
-        request(BOARD(started.id), other, {
-          method: "PUT",
-
-          body: { elements: [NOTE], appliedDrawing: 0 },
-        }),
-      );
-
-      assert.equal(saved.status, HOSTED_HTTP_STATUS.OK);
-      assert.deepEqual(
-        readAnswer(
-          boardAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(BOARD(started.id), owner)),
-        ).board.elements,
-        [NOTE],
-      );
-    }),
+        const saved = yield* save();
+        assert.deepEqual(saved.board.elements, [NOTE]);
+        assert.match(saved.txid ?? "", /^\d+$/, "the board's first save adds its live row");
+        assert.equal((yield* save()).txid, undefined, "the same scene again moves nothing");
+        assert.deepEqual(
+          readAnswer(
+            boardAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(BOARD(started.id), owner)),
+          ).board.elements,
+          [NOTE],
+        );
+      }),
   );
 
   it.effect(

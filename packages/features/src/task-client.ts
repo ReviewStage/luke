@@ -13,7 +13,7 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { Board, BoardElement } from "./board-wire.js";
+import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
 import { CODING_AGENT_ATTACHMENT_TYPE } from "./coding-agent-wire.js";
@@ -833,21 +833,18 @@ export class HostedTaskClient {
     );
   }
 
-  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written, or nothing where the service did not answer. */
+  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written and, where the write moved the board's live row, the id of its transaction, or nothing where the service did not answer. */
   saveBoard(
     taskId: string,
     elements: readonly BoardElement[],
     appliedDrawing: number,
     image?: string,
-  ): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<BoardSaveAnswer | undefined, never, HttpClient.HttpClient> {
     return orNothing(
-      Effect.map(
-        askHosted(this.#hosted.plans.saveBoard, {
-          params: { id: taskId },
-          body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
-        }),
-        (answer) => answer.board,
-      ),
+      askHosted(this.#hosted.plans.saveBoard, {
+        params: { id: taskId },
+        body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
+      }),
     );
   }
 
