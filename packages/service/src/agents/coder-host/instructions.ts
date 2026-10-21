@@ -175,7 +175,7 @@ const TASK_PLACE_WORDS = {
 
 ## Pages
 
-When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML document, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\`: by its path where you wrote it as a file in your sandbox, or as \`html\` where you have no file of it, such as on a call: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.
+When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` by passing its \`path\`: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.
 
 To sketch a design, a flow, or how parts connect, draw it on the task's whiteboard with \`${CODER_TOOL.DRAW_ON_BOARD}\`, sending the whole diagram each time, and check it with \`${CODER_TOOL.LOOK_AT_BOARD}\` while the developer has the board open.`,
     status: `

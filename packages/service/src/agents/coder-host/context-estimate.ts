@@ -12,7 +12,7 @@ import {
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
 import { END_CALL_TOOL } from "../../tasks/end-call.js";
-import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
@@ -197,8 +197,8 @@ const AUTHORED_TOOLS = {
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
-    description: SHOW_PAGE_TOOL.description,
-    inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+    description: CODER_SHOW_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(CODER_SHOW_PAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.READ_COMMENTS]: {
     description: READ_COMMENTS_TOOL.description,

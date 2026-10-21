@@ -65,7 +65,7 @@ import {
   REPLY_TO_COMMENT_TOOL,
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
-import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
@@ -308,7 +308,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   entry(SHOW_IMAGE_TOOL, (admitted, input, { sandbox }) =>
     runAgentShowImage(admitted, input, sandbox),
   ),
-  entry(SHOW_PAGE_TOOL, (admitted, input, { sandbox }) =>
+  entry(CODER_SHOW_PAGE_TOOL, (admitted, input, { sandbox }) =>
     runAgentShowPage(admitted, input, sandbox),
   ),
   agentTool(READ_PAGE_TOOL),
