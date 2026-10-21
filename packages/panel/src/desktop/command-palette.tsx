@@ -333,20 +333,6 @@ interface PaletteSection {
 const KEYWORD_SCORE = Number.MIN_VALUE;
 
 /**
- * The least of cmdk's scores the palette counts as a match. An abbreviation
- * of a row's words ("tgsb" for Toggle sidebar) scores above it, and letters
- * scattered through unrelated words ("palette" in Permanently delete task)
- * a tenth of it.
- */
-const LEAST_SCORE = 0.01;
-
-/** cmdk's own score of the words for the query, nothing under the least the palette counts. */
-function fuzzyScore(words: string, query: string): number {
-  const score = defaultFilter(words, query);
-  return score < LEAST_SCORE ? 0 : score;
-}
-
-/**
  * How well a row answers the query: cmdk's own score over its short words,
  * else the least score where every word of the query is in its keywords.
  * Note that the keywords are not scored by cmdk, because its scoring is
@@ -354,7 +340,7 @@ function fuzzyScore(words: string, query: string): number {
  * letters in order.
  */
 function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
-  const score = fuzzyScore(row.terms.join(" "), query);
+  const score = defaultFilter(row.terms.join(" "), query);
   if (score > 0 || row.keywords === undefined) return score;
   return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
 }
@@ -369,7 +355,7 @@ function pathScore(path: string, query: string): number {
   for (const letter of query.toLowerCase()) {
     if (letter.trim() !== "" && !lowered.includes(letter)) return 0;
   }
-  return fuzzyScore(path, query);
+  return defaultFilter(path, query);
 }
 
 /**
@@ -946,7 +932,7 @@ function creatorExplains(row: PaletteRow, query: string, tokens: readonly string
   if (creator === undefined || tokens.length === 0) return false;
   if (matchRanges(creator, tokens).length > 0) return true;
   const others = row.terms.filter((term) => term !== creator).join(" ");
-  return fuzzyScore(others, query) === 0;
+  return defaultFilter(others, query) === 0;
 }
 
 function PaletteItem({

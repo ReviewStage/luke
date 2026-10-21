@@ -254,9 +254,6 @@ const PER_GROUP = 4;
 /** The most rows a list narrowed to one kind lists. */
 const PER_KIND = 50;
 
-/** The least of cmdk's scores the list counts as a match, as ⌘K counts one. */
-const LEAST_SCORE = 0.01;
-
 /** The list's own name, which its listbox is read by. */
 const MENU_LABEL = "Mention";
 
@@ -651,7 +648,7 @@ function best(rows: readonly MentionRow[], query: string, most: number): readonl
   if (query.trim() === "") return rows.slice(0, most);
   return rows
     .map((row) => ({ row, score: defaultFilter(row.terms, query) }))
-    .filter((each) => each.score >= LEAST_SCORE)
+    .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, most)
     .map((each) => each.row);
