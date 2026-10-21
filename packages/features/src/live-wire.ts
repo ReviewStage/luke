@@ -14,6 +14,7 @@ import {
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
 import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
+import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -411,3 +412,86 @@ export const transcriptNowAnswerSchema = EffectSchema.Struct({
 });
 
 export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;
+
+/**
+ * The commands the account's agents queued for its Mac, of the kinds it
+ * runs, sealed for following: the address, and the commands no Mac has
+ * claimed yet as one statement. The Mac claims each it hears of
+ * (`mac-command-wire.ts`), on the service's clock, so a command left waiting
+ * too long is refused there.
+ */
+export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ commands: sealedLiveQuerySchema }),
+});
+
+export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
+
+const [macShellCommandSchema, macBrowserCommandSchema] = macCommandSchema.members;
+
+/**
+ * One unclaimed command as its row delivers it: the command of its kind, and
+ * when it was queued in epoch milliseconds. Note that the column the other
+ * kind leaves null is read past, as every key a struct does not name is.
+ */
+const macCommandLiveRowSchema = EffectSchema.Union([
+  EffectSchema.Struct({ ...macShellCommandSchema.fields, queuedAt: countedNumber }),
+  EffectSchema.Struct({ ...macBrowserCommandSchema.fields, queuedAt: countedNumber }),
+]);
+
+/** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
+export const macCommandsLiveRowsSchema = EffectSchema.Struct({
+  commands: EffectSchema.Array(macCommandLiveRowSchema),
+});
+
+/** The unclaimed commands, the earliest queued first, so the Mac claims them in the order they were asked for. */
+export function macCommandsOfLiveRows(
+  rows: typeof macCommandsLiveRowsSchema.Type,
+): readonly MacCommand[] {
+  return rows.commands
+    .toSorted((a, b) =>
+      a.queuedAt !== b.queuedAt ? a.queuedAt - b.queuedAt : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )
+    .map(
+      (row): MacCommand =>
+        row.kind === MAC_COMMAND_KIND.SHELL
+          ? { id: row.id, kind: row.kind, command: row.command, timeoutSeconds: row.timeoutSeconds }
+          : { id: row.id, kind: row.kind, params: row.params, timeoutSeconds: row.timeoutSeconds },
+    );
+}
+
+/**
+ * A plan's planning conversation sealed for following: the address, and
+ * its mark as one statement, one row that moves whenever a read past the
+ * cursor would answer something new. The desktop holds its read of the
+ * conversation and asks it once, unheld, each time the mark moves, rather
+ * than holding a read the service looks again for on a clock. The service
+ * answers `not-found` for a plan the account does not reach, and
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
+ */
+export const taskConversationLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema, workers: sealedLiveQuerySchema }),
+});
+
+export type TaskConversationLiveAnswer = typeof taskConversationLiveAnswerSchema.Type;
+
+/**
+ * Where the conversation stands as its row delivers it, keyed by the plan:
+ * the highest message sequence and the journal revision, and the newest
+ * turn and its status (null before the first).
+ */
+const taskConversationMarkSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  seq: EffectSchema.Finite,
+  revision: EffectSchema.Finite,
+  turnId: EffectSchema.NullOr(EffectSchema.String),
+  turnStatus: EffectSchema.NullOr(EffectSchema.String),
+});
+
+/** The conversation's mark as Realtime delivers it, one row or none for a plan the account no longer reaches, and its running workers' turns, a row each by id, in no order. */
+export const taskConversationLiveRowsSchema = EffectSchema.Struct({
+  mark: EffectSchema.Array(taskConversationMarkSchema),
+  workers: EffectSchema.Array(EffectSchema.Struct({ id: EffectSchema.String })),
+});

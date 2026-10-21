@@ -1212,34 +1212,6 @@
   background: var(--code-ground);
 }
 
-/* How a run of lines filling its place is drawn (code-lines.tsx), as
-   the File tabs' settings say (file-view-settings.ts): lines unwrapped,
-   which scroll on both axes together, stand as wide as the longest or the
-   place, so the lit lines' ground runs under the whole of every one; and
-   the numbers' gutter may be gone. The frame around them is as wide as
-   the place, which a note between them measures itself by. */
-.code-lines-frame {
-  container: code-lines / inline-size;
-}
-
-.code-lines[data-wrap="false"] {
-  width: max-content;
-  min-width: 100%;
-}
-
-.code-lines[data-wrap="false"] .code-line-text {
-  overflow-wrap: normal;
-  white-space: pre;
-}
-
-.code-lines[data-line-numbers="false"] .code-line-number {
-  display: none;
-}
-
-.code-lines[data-line-numbers="false"] .code-line-text {
-  padding-left: var(--luke-space-12);
-}
-
 /* A File tab beside its repository's tree, under one bar across both: the
    file takes the room the tree leaves, and the tree keeps to the right, as
    an editor's explorer docked there does. */
@@ -4301,36 +4273,12 @@
   margin: 0;
 }
 
-/* Luke's note under the lines it is on, in a File tab (file-note.tsx): the
-   annotation card (`.annotation-card`), standing from the code's column past
-   the numbers, or at the pane's inset where the place is narrow. Lines
-   unwrapped scroll sideways under it while it keeps to the place's width in
-   view. */
+/* Luke's note under the lines it is on (file-note.tsx): the annotation card
+   (`.annotation-card`), measured as one so a narrow place steps its parts
+   back, in the element Pierre keeps for it under a File tab's line or a
+   Code card's (\`.whole-file-note\`, \`.diff-note\`), which insets it. */
 .file-note {
-  --file-note-start: 48px; /* off-scale: the numbers' gutter, `.code-line-number` */
-  --file-note-end: var(--luke-space-12);
-  margin: var(--luke-space-6) var(--file-note-end) var(--luke-space-6) var(--file-note-start);
   container: annotation / inline-size;
-}
-
-.code-lines[data-line-numbers="false"] > .file-note {
-  --file-note-start: var(--luke-space-12);
-}
-
-@container code-lines (max-width: 439px) {
-  .code-lines[data-line-numbers] > .file-note {
-    --file-note-start: var(--luke-space-8);
-    --file-note-end: var(--luke-space-8);
-  }
-}
-
-/* Note that the note is stuck within the lines, which are as wide as the
-   longest, so it stays in view across the whole of them, and is as wide
-   as the place they scroll in, less its margins. */
-.code-lines[data-wrap="false"] > .file-note {
-  position: sticky;
-  left: var(--file-note-start);
-  width: calc(100cqi - var(--file-note-start) - var(--file-note-end));
 }
 
 /* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
@@ -4352,83 +4300,15 @@
   overflow-wrap: anywhere;
 }
 
-/* Luke's note reads as the step's words, so the path above it steps back. */
-.code-card:has(> .code-card-note) [data-file-ref] {
-  color: var(--luke-color-text-muted);
+/* A snippet not yet near the view stands at about the height its lines
+   will take (code-snippet.tsx), so the feed does not jump as cards mount. */
+.code-snippet-pending {
+  height: calc(var(--snippet-rows) * var(--snippet-row));
 }
 
-.code-card-note {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  overflow-wrap: anywhere;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.code-card-header:has(+ .code-card-note) {
-  border-bottom: 0;
-}
-
-/* Lines wrap rather than scroll sideways, so no card takes a swipe from the
-   feed. Note that they opt back into selection, because the window selects
-   nothing by default (`base.css`): a File tab's, a card's, and an inbox
-   item's code is read to be copied, the gutter's numbers left out of it. */
-/* A run of lines in the type View settings sets, a File tab's and a page
-   source's alike (`code-lines.tsx`), or the window's code type where its
-   box names none. */
-.code-lines {
-  padding: var(--luke-space-6) 0;
-  color: var(--code-text);
-  font-family: var(--code-font, var(--luke-font-mono));
-  font-size: var(--code-font-size, var(--luke-type-caption-size));
-  line-height: var(--code-line-height, var(--luke-type-reading-leading));
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.code-line {
-  display: flex;
-}
-
-/* The lines pointed at, lit across the whole width with a bar in the gutter. */
-.code-line[data-pointed="true"] {
-  background: var(--code-pointed);
-  box-shadow: inset 2px 0 0 var(--code-pointed-edge);
-}
-
-.code-line-number {
-  flex: 0 0 auto;
-  width: 48px; /* off-scale: a gutter for four digits */
-  padding: 0 var(--luke-space-12) 0 0;
-  color: var(--code-line-number);
-  text-align: right;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.code-line[data-pointed="true"] .code-line-number {
-  color: var(--code-line-number-pointed);
-}
-
-.code-line-text {
-  padding-right: var(--content-inset);
-  font: inherit;
-  /* Ligatures are the code's alone, so a note between its lines keeps its
-     prose's own (file-note.tsx). */
-  font-feature-settings: var(--code-font-features, normal);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-/* Each run carries its colour in both appearances (`code-lines.tsx`); a run
-   in the theme's own foreground carries neither and takes the pane's. A
-   transcript's fenced block is coloured the same way. */
-.code-line-text > span,
+/* A transcript's fenced block: each run carries its colour in both
+   appearances (`transcript-markdown.tsx`); a run in the theme's own
+   foreground carries neither and takes the pane's. */
 .transcript-code-body span {
   color: light-dark(var(--run-light, var(--code-text)), var(--run-dark, var(--code-text)));
 }
@@ -6193,8 +6073,8 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   transition: transform var(--duration-quick) var(--motion-pane);
 }
 
-/* A text file's lines fill the card under its header and scroll there
-   (code-lines.tsx), on the code's ground. */
+/* A text file fills the card under its header and scrolls there, drawn
+   as every code is (whole-file.tsx), on the code's ground. */
 .attachment-viewer-lines {
   display: flex;
   flex-direction: column;
@@ -7098,7 +6978,7 @@ button.subagent-line:hover {
   margin: 0;
 }
 
-/* The pictures a comment on an Inbox thread carried, after its words
+/* The pictures a comment on an Inbox thread carried, over its words
    (`inbox-pane.tsx`'s CommentFiles): the row a picture in its words stands
    in, its room around it the comment's own gap between what it holds. */
 .inbox-comment-body > .transcript-pictures {
@@ -7924,9 +7804,9 @@ button.picture-frame {
   padding: var(--luke-space-8) var(--comment-field-inline) 0;
 }
 
-/* The files a sent comment carries, under its words, level with them. */
+/* The files a sent comment carries, over its words, level with them. */
 .comment-files {
-  margin: var(--luke-space-6) 0 0 var(--comment-indent);
+  margin: var(--luke-space-4) 0 var(--luke-space-6) var(--comment-indent);
 }
 
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */

@@ -110,6 +110,7 @@ import {
   type AgentTranscriptLiveAnswer,
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
+  type TaskConversationLiveAnswer,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
@@ -678,6 +679,36 @@ export class HostedCodingAgentClient {
    * the account `userId` names, and signed out where the session is no
    * longer that account's.
    */
+  /**
+   * One task's planning conversation, its mark and running workers sealed
+   * for following over Neon Realtime, or with `poll` their rows inline:
+   * not found where the account reaches no such task, signed out where
+   * `userId` is not the bearer's own, and unanswered for anything else,
+   * which the caller answers by sealing it again.
+   */
+  taskConversationLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskConversationLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.catchIf(
+      askLive(
+        this.#hosted.live.taskConversation,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
   agentTranscriptLive(
     agentId: string,
     userId: string,
@@ -707,7 +738,7 @@ export class HostedCodingAgentClient {
    */
   taskMessages(
     taskId: string,
-    page: { after?: string; before?: string },
+    page: { after?: string; before?: string; unheld?: boolean },
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
     const asked =
@@ -718,6 +749,7 @@ export class HostedCodingAgentClient {
               id: taskId,
               ...(page.after === undefined ? undefined : { after: page.after }),
               ...(page.before === undefined ? undefined : { before: page.before }),
+              ...(page.unheld === true ? { hold: "none" } : undefined),
             },
             HOSTED_DEADLINE.HELD,
           )
@@ -1087,12 +1119,16 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(this.#hosted.messages.chatWrite, {
-        query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
-        body: admitted,
-      }),
-      MESSAGE_REFUSALS,
+    return Effect.map(
+      hostedAnswer(
+        askHosted(this.#hosted.messages.chatWrite, {
+          query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
+          body: admitted,
+        }),
+        MESSAGE_REFUSALS,
+      ),
+      // A join answers the joiner's member, which no write is answered with.
+      (answer) => ("self" in answer ? UNANSWERED : answer),
     );
   }
   /**

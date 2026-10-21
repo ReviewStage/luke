@@ -1,4 +1,5 @@
 import { VOICE_SERVICE_PATH } from "@luke/features";
+import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import { LUKE_MCP_FUNCTION, LUKE_MCP_PATH } from "@luke/service/agents/luke-mcp/app";
 import {
@@ -13,8 +14,8 @@ import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the WebSocket functions, the voice sessions and the terminal
- * relay, carry the platform's longest generally available duration.
+ * may run, so the WebSocket functions, the voice sessions, the terminal
+ * relay, and the Browser tab's live view, carry the platform's longest generally available duration.
  */
 const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
 
@@ -84,10 +85,11 @@ const GROUPS: readonly GroupDefinition[] = [
   },
 ];
 
-/** The WebSocket services, each a function of its own: the voice sessions and the terminal relay. */
+/** The WebSocket services, each a function of its own: the voice sessions, the terminal relay, and the Browser tab's live view. */
 const STANDALONE_ROUTES: readonly string[] = [
   ...Object.values(VOICE_SERVICE_PATH),
   TERMINAL_RELAY.PATH,
+  BROWSER_LIVE.PATH,
 ].map(routeKeyOf);
 
 /**

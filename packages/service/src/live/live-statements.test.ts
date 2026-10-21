@@ -3,10 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
+import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
+import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
+import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
@@ -37,12 +40,16 @@ function liveStatements() {
     ),
   );
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
+  const conversation = Option.getOrThrow(taskConversationLiveStatements(USER_ID, randomUUID()));
   return {
     ...Object.fromEntries(
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
+    "mac.commands": Option.getOrThrow(
+      macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
+    ),
     ...Object.fromEntries(
       Object.entries(Option.getOrThrow(taskRecordLiveStatements(USER_ID, randomUUID()))).map(
         ([part, query]) => [`task.${part}`, query],
@@ -50,6 +57,9 @@ function liveStatements() {
     ),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(conversation).map(([part, query]) => [`conversation.${part}`, query]),
     ),
   };
 }

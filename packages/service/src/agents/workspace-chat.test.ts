@@ -21,6 +21,7 @@ import {
   CHAT_BLOCK,
   CHAT_CURSOR_START,
   chatAnswerSchema,
+  chatJoinAnswerSchema,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -62,7 +63,8 @@ import { writeWorkspaceChat } from "./workspace-chat.js";
  * The window's read of a workspace's chat, answered by the hosted oRPC
  * router the way the web route answers it, over a real dialect: held while nothing moved past
  * the reader's cursor and answered once a post lands, answered at once
- * where something already has, a changed ask read again, and a workspace
+ * where something already has, a changed ask read again, a read past the
+ * start writing nothing until the person joins, and a workspace
  * the account is not in answered as nothing. The clock is the test's, each
  * wait the route makes announced so the test moves it one step at a time.
  * And a teammate's post to an agent, with no eve handed in, tells the agent
@@ -148,15 +150,24 @@ const openRoom = Effect.gen(function* () {
         ),
     }),
   });
-  const ask = (bearer: string | undefined, query: Record<string, string>, method = "GET") =>
+  const ask = (
+    bearer: string | undefined,
+    query: Record<string, string>,
+    method = "GET",
+    sent?: string,
+  ) =>
     Effect.gen(function* () {
       const url = new URL(CHAT, ORIGIN);
       for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
+      const headers = new Headers();
+      if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
+      if (sent !== undefined) headers.set("content-type", "application/json");
       const response = yield* Effect.promise(() =>
         handle(
           new Request(url, {
             method,
-            headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+            headers,
+            ...(sent === undefined ? undefined : { body: sent }),
           }),
           webServices,
         ),
@@ -183,7 +194,10 @@ const openRoom = Effect.gen(function* () {
       });
       return { grace, general, message: Result.getOrThrow(posted).message };
     });
-  return { owner, teammate, stranger, quiet, workspace, asleep, ask, read, post };
+  /** The account joining the workspace's chat. */
+  const join = (bearer: string) =>
+    ask(bearer, { workspaceId: workspace }, "POST", JSON.stringify({ join: true }));
+  return { owner, teammate, stranger, quiet, workspace, asleep, ask, read, post, join };
 });
 
 /** An answer read as the chat's, failing the test where it is not one. */
@@ -232,6 +246,32 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
           [grace.id, String(message.seq + 1)],
         );
         assert.ok(answered.members.some((member) => member.handle === "grace-hopper"));
+      }),
+  );
+
+  it.effect(
+    "a read past the start writes nothing: it is not found until the person joins, which makes their member once",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        yield* room.post("Inside.");
+        assert.deepEqual(yield* room.ask(room.owner, { workspaceId: room.workspace, after: "1" }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        const roster = (yield* room.read(CHAT_CURSOR_START, room.teammate)).members;
+        assert.ok(roster.every((member) => member.userId !== room.owner));
+
+        const joined = yield* room.join(room.owner);
+        assert.equal(joined.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(yield* room.join(room.owner), joined);
+        const self = Result.getOrThrow(readEither(chatJoinAnswerSchema)(unparsedWire(joined.body)));
+        const read = yield* room.read("1");
+        assert.deepEqual([read.self, wordsOf(read.messages)], [self.self, [markdown("Inside.")]]);
+        assert.deepEqual(yield* room.join(room.stranger), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
       }),
   );
 

@@ -299,6 +299,7 @@ class Fold {
         callId: moment.callId,
         name,
         settlement: moment.settlement,
+        ...(moment.input !== undefined ? { input: moment.input } : undefined),
       }),
     );
   }

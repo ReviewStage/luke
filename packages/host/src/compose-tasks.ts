@@ -25,7 +25,7 @@ import {
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
-import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+import { LIVE_SIGNED_OUT, type TaskConversationLiveAnswer } from "@luke/features/live-wire";
 import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
@@ -150,15 +150,17 @@ import {
   type Scope,
   Semaphore,
   Stream,
+  type SubscriptionRef,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { boardMoves } from "./board-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { type ConversationMark, conversationMark, markMoved } from "./conversation-follow.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
-import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
+import { codeExcerpt, highlightFile } from "./task-code.js";
 import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
 
 /**
@@ -197,9 +199,8 @@ import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-r
  * title and newest version alone, and again whenever the call's activity
  * says a page the brain showed just settled or it stopped working;
  * a page's HTML is answered to the frame that draws it and held nowhere
- * here. Beside the work, the open task's conversation is read as
- * an agent's transcript is, on the service's held read, and held on the
- * view for the Call tab to switch to; the brain's worker's transcript is
+ * here. Beside the work, the open task's conversation is followed over
+ * Neon Realtime, and held on the view for the Call tab to switch to; the brain's worker's transcript is
  * answered to the tab that asks for it and held nowhere here.
  *
  * The workspaces the account is a member of are carried on the view beside
@@ -253,6 +254,9 @@ const CONVERSATION_BACKOFF = Schedule.exponential(CONVERSATION_RETRY.FIRST).pipe
     Effect.succeed(Duration.min(duration, CONVERSATION_RETRY.LONGEST)),
   ),
 );
+
+/** How long after a seal the service did not answer, or a mark that stopped, the conversation is sealed again. */
+const CONVERSATION_RESEAL = Duration.seconds(2);
 
 /** The statuses a conversation page reads as still writing: a brain's turn, or a worker of one, that may add to it. */
 const CONVERSATION_WRITING: ReadonlySet<CodingAgentStatus> = new Set([
@@ -463,8 +467,11 @@ export type TasksClient = Pick<
   github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
 };
 
-/** The service's side of a task's conversation, read as an agent's transcript is. */
-export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
+/** The service's side of a task's planning conversation, read as an agent's transcript is, and its mark sealed for following over Neon Realtime. */
+export type TasksConversationClient = Pick<
+  HostedCodingAgentClient,
+  "taskMessages" | "taskConversationLive"
+>;
 
 /** Which planning worker's transcript: the task's, by the call that started the worker. */
 class TaskWorkerKey extends Data.Class<{ readonly taskId: string; readonly callId: string }> {}
@@ -485,7 +492,7 @@ export interface TasksDependencies {
   conversations: TasksConversationClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
-  /** Realtime's client at an address, which the open task's board is followed over; Realtime's own outside a test. */
+  /** Realtime's client at an address, which the open task's board and its conversation are followed over; Realtime's own outside a test. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /**
    * Ends the call standing about `taskId`, or whatever it is about
@@ -568,21 +575,17 @@ function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is
  * while the open task and its call stand through the tab hiding. Behind a
  * closed account gate, or on a run that sends nothing, nothing is read.
  *
- * The open task's conversation is read the way an agent's tab reads its
- * transcript: its newest page when the task opens, starts, or is refreshed,
- * then one held read past the cursor after another, which the service holds
- * open while a brain turn or one of its workers runs and nothing new
- * stands. The read follows while the last page says the brain or a worker
- * still writes, and parks once a page says neither, because the service
- * answers an idle conversation at once and asking again would be a loop on
- * no clock at all. Note that it reads the workers the page names rather
- * than the list held, because a worker no page names any more reads as it
- * last did and would keep the read asking. Any word of the open task's call (its activity, or its
- * end) wakes a parked read, from the cursor held, since a turn begins only
- * on a call and its activity says so. One read stands at a time: opening
+ * The open task's conversation is followed over Neon Realtime
+ * (`conversation-follow.ts`): its newest page is read when the task opens,
+ * starts, or is refreshed, the host subscribes to the conversation's mark
+ * while the plan is open, and asks the conversation past its cursor in one
+ * look, unheld, each time the mark moves, so the service never looks again
+ * on a clock and nothing parks or needs waking. A seal the service did not
+ * answer, or a mark that stops, is sealed again after
+ * `CONVERSATION_RESEAL`, and the read goes on from the cursor held; a task
+ * the service no longer holds ends it. One read stands at a time: opening
  * another task replaces it, and leaving the task or a sign-out stops it. A
- * read the service did not answer is asked again after a backoff; a task the
- * service no longer holds parks it.
+ * read the service did not answer is asked again after a backoff.
  *
  * The open task's board is followed the same way, over Neon Realtime
  * (`board-follow.ts`): the host subscribes while the task stands open and
@@ -700,17 +703,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The planning workers' transcripts main follows for its windows, one fiber each. */
   const followedWorkers = yield* FiberMap.make<TaskWorkerKey>();
-
-  /** The tasks whose call just said something, whose parked conversation read the loop below wakes. */
-  const conversationWakes = yield* Queue.sliding<string>(1);
-
-  /**
-   * Whether the open task's call said something since the conversation read
-   * last asked. Note that a read already out when a turn began can answer
-   * the conversation idle, so the read checks this before it parks rather
-   * than miss the turn until the call's next word.
-   */
-  let conversationWoken = false;
 
   /**
    * The task whose call is telling its turns' work as they run, and the
@@ -977,33 +969,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return [...recorded, ...unread].sort((a, b) => a.startedAt - b.startedAt);
   }
 
-  /** A code shown as the Code tab's card draws it: the lines around those pointed at, coloured. */
-  function showingOf({ code, ...shown }: TaskShownCode): Effect.Effect<TaskCodeShowing> {
-    return Effect.map(highlightCode(codeExcerpt(code)), (coloured) => ({
-      ...shown,
-      code: coloured,
-    }));
+  /** A code shown as the Code tab's card draws it: the lines around those pointed at, which the window colours. */
+  function showingOf({ code, ...shown }: TaskShownCode): TaskCodeShowing {
+    return { ...shown, code: codeExcerpt(code) };
   }
 
   /**
    * The code the record holds, oldest first, then each a call showed that
    * the record does not hold yet. Note that a showing already held is kept
-   * rather than coloured again, because the task's work is read again on
-   * every refresh and colouring the windows is what costs.
+   * as it is, so a refresh hands the Code tab the same showings and it
+   * draws none of them again.
    */
-  function withShownCode(recorded: readonly TaskShownCode[]): Effect.Effect<TaskCodeShowing[]> {
+  function withShownCode(recorded: readonly TaskShownCode[]): TaskCodeShowing[] {
     const byCall = new Map((view.shownCode ?? []).map((showing) => [showing.callId, showing]));
-    return Effect.map(
-      Effect.forEach(recorded, (shown) => {
-        const held = byCall.get(shown.callId);
-        return held === undefined ? showingOf(shown) : Effect.succeed(held);
-      }),
-      (read) => {
-        const recordedCalls = new Set(recorded.map((shown) => shown.callId));
-        const held = view.shownCode ?? [];
-        return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
-      },
-    );
+    const read = recorded.map((shown) => byCall.get(shown.callId) ?? showingOf(shown));
+    const recordedCalls = new Set(recorded.map((shown) => shown.callId));
+    const held = view.shownCode ?? [];
+    return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
   }
 
   /**
@@ -1040,8 +1022,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         write({ workStatus: TASKS_READ.FAILED });
         return;
       }
-      const shownCode = yield* withShownCode(stored.code ?? []);
-      if (view.activeTaskId !== taskId) return;
+      const shownCode = withShownCode(stored.code ?? []);
       const work = withPage(stored.turns);
       const oldest = work[0]?.turnId;
       const olderHeld =
@@ -1072,7 +1053,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** One page of a task's conversation, or why the service did not answer it. */
-  function askConversation(taskId: string, page: { after?: string; before?: string }) {
+  function askConversation(
+    taskId: string,
+    page: { after?: string; before?: string; unheld?: boolean },
+  ) {
     return Effect.flatMap(served(conversations.taskMessages(taskId, page)), (answer) =>
       "failure" in answer
         ? Effect.fail(new ConversationUnanswered({ failure: answer.failure }))
@@ -1103,57 +1087,144 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     };
   }
 
+  /** One page of `taskId`'s conversation, asked again after the backoff while the service does not answer; none where the plan is gone or the gate closed. */
+  function readConversation(
+    taskId: string,
+    page: { after?: string; before?: string; unheld?: boolean },
+  ) {
+    return askConversation(taskId, page).pipe(
+      Effect.retry({
+        schedule: CONVERSATION_BACKOFF,
+        while: (unanswered) => unanswered.failure !== CODING_AGENT_CALL_FAILURE.NOT_FOUND && gate(),
+      }),
+      Effect.option,
+    );
+  }
+
   /**
-   * Follows `taskId`'s conversation while it is the open task: from its
-   * newest page, or past the cursor held, then past each page's cursor while
-   * the page says it is still written or the call woke it meanwhile. A read
-   * the service did not answer is asked again after the backoff; a task it
-   * no longer holds, or a gate that closed, ends the follow. A follow of an
-   * Untitled task that finds a turn settled, one it saw the brain writing or
-   * one a settled page carries words of, asks for the list again, for the
-   * name the turn may have given the task, and draws it on the open document.
+   * What a follow of `taskId` does with each page it reads, held or on the
+   * live mark alike: the page drawn, and, once a turn settles on an Untitled
+   * task, one the follow saw the brain writing or one a settled page carries
+   * words of, the list asked for again, for the name the turn may have given
+   * the task; and the document read again as Luke's plan edits land. It
+   * answers whether the brain is still writing.
    */
-  function followConversation(taskId: string, newest: boolean) {
-    return Effect.gen(function* () {
-      let after = newest ? undefined : view.conversation?.cursor;
-      let wasWriting = view.conversation !== undefined && conversationWriting(view.conversation);
-      let edited = false;
-      while (gate() && view.activeTaskId === taskId) {
-        conversationWoken = false;
-        const page = yield* askConversation(taskId, after === undefined ? {} : { after }).pipe(
-          Effect.retry({
-            schedule: CONVERSATION_BACKOFF,
-            while: (unanswered) =>
-              unanswered.failure !== CODING_AGENT_CALL_FAILURE.NOT_FOUND && gate(),
-          }),
-          Effect.option,
-        );
-        if (Option.isNone(page) || view.activeTaskId !== taskId) return;
-        write({ conversation: withForwardPage(page.value) });
-        const writing = conversationWriting(page.value);
-        const untitled = view.tasks.some(
-          (row) => row.id === taskId && row.name === UNTITLED_TASK_NAME,
-        );
-        // A turn that settled before this follow's first page is caught by the page's words.
-        const settledTurn = wasWriting || page.value.messages.length > 0;
-        if (!writing && settledTurn && untitled) Queue.offerUnsafe(nameReads, taskId);
-        wasWriting = writing;
-        // Luke's plan edits land with no call standing as well as with one, so the document is
-        // read again off the conversation's own follow rather than off the call's frames.
-        edited ||= pageWritesDocument(page.value);
-        if (pageWritesDocument(page.value) || (edited && !writing)) {
-          Queue.offerUnsafe(documentReads, taskId);
-        }
-        if (edited && !writing) Queue.offerUnsafe(editUnwindReads, taskId);
-        if (!writing && !conversationWoken) return;
-        after = page.value.cursor;
+  function pageLanding(taskId: string) {
+    let wasWriting = view.conversation !== undefined && conversationWriting(view.conversation);
+    let edited = false;
+    return (page: Parameters<typeof withForwardPage>[0]): boolean => {
+      write({ conversation: withForwardPage(page) });
+      const writing = conversationWriting(page);
+      const untitled = view.tasks.some(
+        (row) => row.id === taskId && row.name === UNTITLED_TASK_NAME,
+      );
+      // A turn that settled before this follow's first page is caught by the page's words.
+      const settledTurn = wasWriting || page.messages.length > 0;
+      if (!writing && settledTurn && untitled) Queue.offerUnsafe(nameReads, taskId);
+      wasWriting = writing;
+      // Luke's plan edits land with no call standing as well as with one, so the document is
+      // read again off the conversation's own follow rather than off the call's frames.
+      edited ||= pageWritesDocument(page);
+      if (pageWritesDocument(page) || (edited && !writing)) {
+        Queue.offerUnsafe(documentReads, taskId);
       }
+      if (edited && !writing) Queue.offerUnsafe(editUnwindReads, taskId);
+      return writing;
+    };
+  }
+
+  /**
+   * Follows `taskId`'s conversation on its live mark, while it is the open
+   * plan: from its newest page, or past `from`, then past each page's cursor
+   * in one look each time the mark moves from where it stood as the read
+   * before left. Answers where the read stands once the mark stops, or
+   * nothing once the follow ends.
+   */
+  function followConversationLive(
+    taskId: string,
+    from: string | undefined,
+    mark: SubscriptionRef.SubscriptionRef<ConversationMark>,
+    landed: ReturnType<typeof pageLanding>,
+  ) {
+    return Effect.gen(function* () {
+      let after = from;
+      let seen: ConversationMark = { kind: "waiting" };
+      while (gate() && view.activeTaskId === taskId) {
+        if (seen.kind === "broken") return Option.some(after);
+        const page = yield* readConversation(
+          taskId,
+          after === undefined ? {} : { after, unheld: true },
+        );
+        if (Option.isNone(page) || view.activeTaskId !== taskId) return Option.none();
+        landed(page.value);
+        after = page.value.cursor;
+        seen = yield* markMoved(mark, seen);
+      }
+      return Option.none();
     });
   }
 
-  /** Reads `taskId`'s conversation from its newest turns and follows it, in place of any read standing. */
-  function openConversation(taskId: string) {
-    return Effect.asVoid(FiberHandle.run(conversationRead, followConversation(taskId, true)));
+  /**
+   * Follows `taskId`'s conversation over its live mark while it is the open
+   * task, from its newest page. A seal the service did not answer, or a mark
+   * that stops, is sealed again after `CONVERSATION_RESEAL` and followed on
+   * from the cursor held; a task the service no longer holds, or a gate
+   * that closed, ends the follow. Each page lands as `pageLanding` says.
+   */
+  function followConversation(taskId: string) {
+    return Effect.gen(function* () {
+      let after: string | undefined;
+      const landed = pageLanding(taskId);
+      // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+      const userId = dependencies.accountId();
+      const seal = (
+        poll = false,
+        after?: string,
+      ): Effect.Effect<TaskConversationLiveAnswer | { readonly failure: string }> =>
+        userId === undefined || !gate()
+          ? Effect.succeed(
+              userId === undefined
+                ? LIVE_SIGNED_OUT
+                : { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+            )
+          : served(conversations.taskConversationLive(taskId, userId, poll, after));
+      // A task the account no longer reaches, or one no longer open, ends the follow rather than renewing or polling it.
+      const sealedFor = (poll: boolean, after?: string) =>
+        gate() && view.activeTaskId === taskId
+          ? Effect.map(seal(poll, after), (renewed) =>
+              "failure" in renewed &&
+              (renewed.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND ||
+                renewed.failure === LIVE_SIGNED_OUT.failure)
+                ? { ...renewed, gone: true }
+                : renewed,
+            )
+          : Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED, gone: true });
+      while (gate() && view.activeTaskId === taskId) {
+        const sealed = yield* seal();
+        if ("failure" in sealed) {
+          if (sealed.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+          if (sealed.failure === LIVE_SIGNED_OUT.failure) return;
+        } else {
+          const stopped = yield* Effect.scoped(
+            Effect.flatMap(
+              conversationMark(
+                {
+                  seal: () => sealedFor(false),
+                  poll: (after) => sealedFor(true, after),
+                  openLive: dependencies.openLive ?? openRealtimeClient,
+                  now: kernel.now,
+                },
+                sealed,
+              ),
+              (mark) => followConversationLive(taskId, after, mark, landed),
+            ),
+          );
+          if (Option.isNone(stopped)) return;
+          after = stopped.value;
+        }
+        yield* Effect.sleep(CONVERSATION_RESEAL);
+      }
+    });
   }
 
   /**
@@ -1284,11 +1355,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.asVoid(FiberHandle.run(boardFollow, followBoard(taskId), standing));
   }
 
-  /** Wakes the open task's parked conversation read, where `taskId` is the open task. */
-  function wakeConversation(taskId: string): void {
-    if (view.activeTaskId !== taskId) return;
-    conversationWoken = true;
-    Queue.offerUnsafe(conversationWakes, taskId);
+  /** Reads `taskId`'s conversation from its newest turns and follows it, in place of any read standing. */
+  function openConversation(taskId: string) {
+    return Effect.asVoid(FiberHandle.run(conversationRead, followConversation(taskId)));
   }
 
   /**
@@ -1330,7 +1399,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       write({ callActivity: activity });
       return;
     }
-    wakeConversation(taskId);
     write({ activity, callActivity: activity });
   }
 
@@ -1344,17 +1412,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (showsCode(taskId, shown)) Queue.offerUnsafe(codeShows, { taskId, shown });
   }
 
-  /**
-   * Colours a code shown and draws it after the rest, where it is still for
-   * the screen both as the loop takes it and once coloured.
-   */
+  /** Draws a code shown after the rest, where it is still for the screen as the loop takes it. */
   function drawShownCode({ taskId, shown }: { taskId: string; shown: TaskShownCode }) {
-    if (!showsCode(taskId, shown)) return Effect.void;
-    return Effect.flatMap(showingOf(shown), (showing) =>
-      Effect.sync(() => {
-        if (showsCode(taskId, shown)) write({ shownCode: [...(view.shownCode ?? []), showing] });
-      }),
-    );
+    return Effect.sync(() => {
+      if (showsCode(taskId, shown)) {
+        write({ shownCode: [...(view.shownCode ?? []), showingOf(shown)] });
+      }
+    });
   }
 
   function showWork(taskId: string, turn: TaskWorkTurn): void {
@@ -2670,13 +2734,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(callEndWakes), (taskId) => {
-            // Note that the turn's last work and journal may land after the call's end, so both are read again after a wait.
+            // Note that the turn's last work may land after the call's end, so it is read again after a wait.
             const read = Effect.suspend(() =>
-              gate() && view.activeTaskId === taskId
-                ? serial(readWork(taskId)).pipe(
-                    Effect.andThen(Effect.sync(() => wakeConversation(taskId))),
-                  )
-                : Effect.void,
+              gate() && view.activeTaskId === taskId ? serial(readWork(taskId)) : Effect.void,
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
@@ -2706,23 +2766,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                     )
                   : Effect.void,
               ),
-            ),
-          ),
-        ),
-      );
-      // Note that a read still following is left alone, because it already
-      // reads past what the call just said.
-      yield* Effect.forkScoped(
-        Effect.forever(
-          Effect.flatMap(Queue.take(conversationWakes), (taskId) =>
-            Effect.suspend(() =>
-              gate() && view.activeTaskId === taskId
-                ? Effect.asVoid(
-                    FiberHandle.run(conversationRead, followConversation(taskId, false), {
-                      onlyIfMissing: true,
-                    }),
-                  )
-                : Effect.void,
             ),
           ),
         ),

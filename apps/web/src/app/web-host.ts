@@ -44,6 +44,7 @@ import {
   initialAppState,
   linkClientNotices,
   linkNetworkWatch,
+  linkSessionReload,
   type OperatorClient,
 } from "@luke/host/client";
 import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
@@ -87,7 +88,7 @@ import {
   type WebNoticeDoors,
   webNoticeDoors,
 } from "./web-notices";
-import { downloadText, openTab, webPlatform } from "./web-platform";
+import { copyPng, downloadText, openTab, webPlatform } from "./web-platform";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
 const STATE_ROOT = "/luke";
@@ -236,8 +237,9 @@ const noticeDoors = (
   );
 
 /**
- * The platform procedures the tab answers itself: a copy, a download, focus,
- * the contact mail, Settings' test notification, and feedback. Every other
+ * The platform procedures the tab answers itself: a copy of words or a
+ * picture, a download, focus, the contact mail, Settings' test notification,
+ * and feedback. Every other
  * platform kind is refused in its own words, since a page cannot carry it
  * yet: the updater, Browser tabs, the microphone, the system's notification
  * settings, the terminals and the Mac's own, the voice, the call window, and
@@ -254,6 +256,9 @@ function platformProcedures(
     ...refusedPlatformProcedures<WebSender>(),
     [KIND.WINDOW_COPY_TEXT]: port[KIND.WINDOW_COPY_TEXT].handler(({ input }) =>
       navigator.clipboard.writeText(input.words),
+    ),
+    [KIND.WINDOW_COPY_IMAGE]: port[KIND.WINDOW_COPY_IMAGE].handler(({ input }) =>
+      copyPng(Promise.resolve(input.png)),
     ),
     [KIND.WINDOW_SAVE_FILE]: port[KIND.WINDOW_SAVE_FILE].handler(({ input }) =>
       downloadText({ name: input.name, text: input.text }),
@@ -415,6 +420,8 @@ const composedWeb = (
       // No voice window and no talk key stand beside the panel.
       operator.link({ sendToVoice: () => undefined, reapplyTalkHotkey: () => undefined });
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
+      // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
+      yield* linkSessionReload({ state, reload: () => location.reload() });
 
       // The notices' toasts reach the panel through the bridge, which is built
       // after the notices, so they find it late.

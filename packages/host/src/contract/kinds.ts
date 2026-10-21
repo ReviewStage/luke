@@ -476,6 +476,8 @@ export const WINDOW_SURFACE_ACT_KIND = {
   CONTACT_EMAIL: "contact.email",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
+  /** A picture put on the clipboard as a PNG, as a copy from Preview puts one. */
+  WINDOW_COPY_IMAGE: "window.copyImage",
   WINDOW_SAVE_FILE: "window.saveFile",
   FEEDBACK_SEND: "feedback.send",
 } as const;

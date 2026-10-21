@@ -20,6 +20,7 @@ import {
   dialog,
   ipcMain,
   MessageChannelMain,
+  nativeImage,
   type WebContents,
   webContents,
 } from "electron";
@@ -167,6 +168,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
       openExternal: config.openExternal,
       testNotification,
       copyText: (words) => clipboard.writeText(words),
+      copyImage: (png) => {
+        const image = nativeImage.createFromBuffer(Buffer.from(png, "base64"));
+        if (image.isEmpty()) return false;
+        clipboard.writeImage(image);
+        return true;
+      },
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };

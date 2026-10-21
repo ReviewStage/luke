@@ -1,22 +1,27 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@luke/features/live-wire";
 import {
   MAC_COMMAND_IMAGE_TYPE,
   MAC_COMMAND_KIND,
   type MacBrowserResult,
   type MacCommand,
+  type MacCommandKind,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
 import { eq, sql } from "drizzle-orm";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { macCommand } from "../../schemas/mac-command.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  claimMacCommand,
   claimMacCommands,
   macCommandResult,
+  macCommandsLiveStatement,
   macCommandsWaiting,
   macListeningSince,
   markMacListening,
@@ -33,7 +38,9 @@ import {
  * waits on only the kinds it names, a row queued before kinds were reads
  * as a shell command, a Mac counts as listening for a kind only from
  * its last read naming it on, and a browser command's image is read back
- * with its result and leaves with the row.
+ * with its result and leaves with the row. The live statement delivers what
+ * a Mac following live would claim: the account's unclaimed commands of its
+ * kinds and no one else's.
  *
  * Synthetic accounts and commands throughout.
  */
@@ -48,6 +55,17 @@ const RESULT: MacCommandResult = {
   truncated: false,
   timedOut: false,
 };
+
+/** The account's unclaimed commands of the kinds given as a Mac following them live decodes them, the statement run as Realtime runs it. */
+const liveCommandsOf = (userId: string, kinds: readonly MacCommandKind[]) =>
+  Effect.gen(function* () {
+    const statement = Option.getOrThrow(macCommandsLiveStatement(userId, kinds));
+    const sql = yield* SqlClient.SqlClient;
+    const commands = yield* sql.unsafe(statement.sql, [...statement.params]);
+    return macCommandsOfLiveRows(
+      yield* Schema.decodeUnknownEffect(macCommandsLiveRowsSchema)({ commands }),
+    );
+  });
 
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
@@ -219,6 +237,50 @@ it.layer(getTestDB())("the Mac command store", (it) => {
       assert.equal(browserAfterNewer, true);
       assert.equal(browserAfterBoth, true, "an older Mac's read leaves a newer one counted");
       assert.equal(browserForOther, false);
+    }),
+  );
+
+  it.effect(
+    "the live statement delivers the account's unclaimed commands of the kinds named, the earliest first, and one claimed by its id leaves it, claimed once and by its own account alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const since = yield* now;
+        const [shell, browser] = [command(), browserCommand()];
+        yield* queueMacCommand(owner, shell);
+        yield* queueMacCommand(owner, browser);
+        yield* queueMacCommand(other, command());
+        const both = [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER];
+
+        assert.deepEqual(yield* liveCommandsOf(owner, [MAC_COMMAND_KIND.SHELL]), [shell]);
+        assert.deepEqual(
+          (yield* liveCommandsOf(owner, both)).map(({ id }) => id).toSorted(),
+          [shell.id, browser.id].toSorted(),
+        );
+        assert.equal((yield* liveCommandsOf(other, both)).length, 1, "another's are their own");
+
+        assert.deepEqual(yield* claimMacCommand(other, browser.id, since, both), Option.none());
+        assert.deepEqual(
+          yield* claimMacCommand(owner, browser.id, since, both),
+          Option.some(browser),
+        );
+        assert.deepEqual(yield* claimMacCommand(owner, browser.id, since, both), Option.none());
+        assert.deepEqual(yield* liveCommandsOf(owner, both), [shell]);
+      }),
+  );
+
+  it.effect("a command queued before the claim window began is never claimed by its id", () =>
+    Effect.gen(function* () {
+      const { owner } = yield* openAccounts;
+      const queued = command();
+      yield* queueMacCommand(owner, queued);
+      const later = new Date((yield* Clock.currentTimeMillis) + 1);
+
+      assert.deepEqual(
+        yield* claimMacCommand(owner, queued.id, later, [MAC_COMMAND_KIND.SHELL]),
+        Option.none(),
+      );
+      assert.deepEqual(yield* liveCommandsOf(owner, [MAC_COMMAND_KIND.SHELL]), [queued]);
     }),
   );
 });
