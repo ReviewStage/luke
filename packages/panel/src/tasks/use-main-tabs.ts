@@ -43,7 +43,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * its task. An agent's tab stands only once the task's agents are read and
  * hold it, so the column never shows an agent its strip draws no tab for: a
  * task opened on an agent shows its plan while the list is on its way, and
- * stays on it where the read fails.
+ * stays on it where the read fails. Before the list answers, the task's row
+ * in the sidebar may already settle which tab it will be (`NamedAgents`):
+ * the agent last viewed, where the row names it, or the strip's last, where
+ * the row names every agent in the order started. The column then shows it
+ * at once, its transcript read beside the list, and only where the row
+ * cannot settle it does the column wait.
  *
  * The tabs are dragged or moved from the keyboard among themselves, and the
  * task keeps the order from then on: an agent's tab closed and opened again
@@ -222,10 +227,25 @@ export interface MainTabsControl {
   onNewTabAnswered: () => void;
 }
 
-/** What the open task holds for the tabs: its id, its agents, or nothing while unread, and its draft's key. */
+/**
+ * The agents the open task's row in the sidebar names before its list is
+ * read: at most a few (`TASK_AGENTS_BOUNDS`), those at work first and then
+ * the rest, newest started first within each, and none archived.
+ */
+export interface NamedAgents {
+  /** The agents named, by id, in the row's order. */
+  ids: readonly string[];
+  /** How many agents the task has in all. */
+  total: number;
+  /** How many of them are at work. */
+  working: number;
+}
+
+/** What the open task holds for the tabs: its id, its agents, or nothing while unread, what its row names of them meanwhile, and its draft's key. */
 interface DrawnTabs {
   taskId: string | undefined;
   agents: readonly string[] | undefined;
+  named: NamedAgents | undefined;
   draft: string | undefined;
 }
 
@@ -283,10 +303,48 @@ function stands(held: HeldState, drawn: DrawnTabs, tab: MainTab): boolean {
  * never shows another first.
  */
 function shownIn(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
+  if (drawn.agents === undefined) return shownBeforeList(held, drawn);
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
   const viewed = recent.findLast((tab) => stands(held, drawn, tab));
-  if (viewed !== undefined || drawn.agents === undefined) return viewed;
+  if (viewed !== undefined) return viewed;
   return stripOf(held, drawn).at(-1);
+}
+
+/**
+ * The task's agents in the order started, where its row names every one of
+ * them in an order that says it: all at work, or none, so the row's newest
+ * first is the whole order. Else nothing, as a row naming some, or a mix
+ * whose order among the two it cannot tell.
+ */
+function wholeOrderOf(named: NamedAgents): readonly string[] | undefined {
+  const whole = named.ids.length === named.total;
+  const oneKind = named.working === 0 || named.working === named.total;
+  return whole && oneKind ? [...named.ids].reverse() : undefined;
+}
+
+/**
+ * The tab the task will show once its agents are read, where its row
+ * already settles it, else none, which waits on the read. The latest tab
+ * viewed that the row shows standing is it; one the row cannot place, an
+ * agent it does not name among more than it names, leaves the choice to the
+ * read, as does a task none of whose tabs viewed stands but whose order the
+ * row cannot tell (`wholeOrderOf`).
+ */
+function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
+  const { named } = drawn;
+  const whole = named === undefined ? undefined : wholeOrderOf(named);
+  const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
+  for (const tab of [...recent].reverse()) {
+    if (isDraftTab(tab)) {
+      if (tab.draft === drawn.draft) return tab;
+      continue;
+    }
+    if (held.closedAgents.includes(tab.agent)) continue;
+    if (named?.ids.includes(tab.agent) === true) return tab;
+    // An agent the row does not name stands where the row names only some of the agents.
+    if (whole === undefined) return undefined;
+  }
+  return whole === undefined ? undefined : stripOf(held, { ...drawn, agents: whole }).at(-1);
 }
 
 /** The state with the tabs viewed on the task, in the order given, as its latest. */
@@ -460,13 +518,15 @@ function readStored(): HeldState {
 /**
  * The column's tabs over the open task: `taskId`, none while no task is
  * open, `agents` its agents by id in the order started, or nothing while
- * unread, and `draft` its draft agent's key, if it holds one. A fixture
- * run's column keeps nothing, and starts from nothing.
+ * unread, `named` what its row names of them meanwhile, and `draft` its
+ * draft agent's key, if it holds one. A fixture run's column keeps nothing,
+ * and starts from nothing.
  */
 export function useMainTabs(
   fixture: boolean,
   taskId: string | undefined,
   agents: readonly string[] | undefined,
+  named: NamedAgents | undefined,
   draft: string | undefined,
 ): MainTabsControl {
   // Note that a fixture run's column is a state of its own rather than the
@@ -480,7 +540,7 @@ export function useMainTabs(
     (change: (held: HeldState) => HeldState) => (fixture ? setStaged : setKept)(change),
     [fixture],
   );
-  const drawn = useMemo(() => ({ taskId, agents, draft }), [taskId, agents, draft]);
+  const drawn = useMemo(() => ({ taskId, agents, named, draft }), [taskId, agents, named, draft]);
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {

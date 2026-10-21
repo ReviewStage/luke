@@ -1529,6 +1529,45 @@ it.effect(
 );
 
 it.effect(
+  "opening a task tells the window it is reading, then its document, board, code, and pages in one view",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const funnel = {
+        id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        title: "Invite funnel",
+        version: 2,
+        at: 1_500,
+      };
+      const board = { elements: [], appliedDrawing: 0 };
+      service.boards[BILLING] = board;
+      service.codes[BILLING] = [];
+      service.pageLines[BILLING] = [funnel];
+      const { call, told } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+
+      const before = told.length;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+      const opened = told.slice(before);
+
+      assert.deepEqual(
+        opened.map((view) => [view.activeTaskId, view.document.status, view.codeStatus]),
+        [
+          [BILLING, TASKS_READ.READING, TASKS_READ.READING],
+          [BILLING, TASKS_READ.READY, TASKS_READ.READY],
+        ],
+      );
+      const landed = opened.at(-1);
+      assert.deepEqual(landed?.document, { status: TASKS_READ.READY, task: billing });
+      assert.deepEqual(landed?.board, board);
+      assert.deepEqual(landed?.shownCode, []);
+      assert.deepEqual(landed?.pages, [funnel]);
+    }),
+);
+
+it.effect(
   "a task's code read as none is held as none, and a task whose code read did not answer holds its code unread",
   () =>
     Effect.gen(function* () {

@@ -5076,6 +5076,24 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   flex-direction: column;
 }
 
+/* An agent's tab while its transcript or the agent is read
+   (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
+   the newest lines draw, on the log's own inset, over the composer's card. */
+.agent-tab > .luke-skeleton-region {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.agent-log-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
+}
+
 .transcript-luke-mark {
   display: flex;
   width: 16px;
