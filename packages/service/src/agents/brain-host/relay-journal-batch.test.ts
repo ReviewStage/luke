@@ -12,9 +12,7 @@ import { Clock, Effect, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import { TOOL_PART_STATE, UNKNOWN_ACTION_STATUS } from "../../core.js";
-import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../repository-shell.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import {
   foldedQuietly,
@@ -23,6 +21,8 @@ import {
   type RelayStanding,
   StreamRelay,
 } from "./relay.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { AGENT_TOOL } from "../agent-runtime/tools.js";
 
 /**
  * A running turn's journal written in batches: what only grows it, told
@@ -45,7 +45,7 @@ const setUp = Effect.gen(function* () {
   yield* db
     .insert(conversations)
     .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-  const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
+  const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
   let at = yield* Clock.currentTimeMillis;
   const refusals: string[] = [];
   const relay = new StreamRelay({
@@ -74,7 +74,7 @@ const setUp = Effect.gen(function* () {
       at = yield* Clock.currentTimeMillis;
     });
   const past = (cursor: MessageCursor) =>
-    listMessagesPast(userId, conversationId, HOSTED_TOOL_SET, cursor);
+    listMessagesPast(userId, conversationId, CODER_TOOL_SET, cursor);
   return { relayed, tick, past, refusals };
 });
 
@@ -93,7 +93,7 @@ const tenCallsAsked = (relayed: Relayed) =>
         actions: CALLS.map((callId) => ({
           kind: "tool-call",
           callId,
-          toolName: RUN_IN_REPOSITORY_TOOL.name,
+          toolName: AGENT_TOOL.BASH,
           input: { command: `check ${callId}` },
         })),
       },
@@ -109,8 +109,8 @@ const answered = (callId: string): Omit<MessageStreamEvent, "meta"> => ({
     result: {
       kind: "tool-result",
       callId,
-      toolName: RUN_IN_REPOSITORY_TOOL.name,
-      output: { status: REPOSITORY_SHELL_STATUS.RAN, exitCode: 0, stdout: callId, stderr: "" },
+      toolName: AGENT_TOOL.BASH,
+      output: { exitCode: 0, stdout: callId, stderr: "" },
     },
   },
 });

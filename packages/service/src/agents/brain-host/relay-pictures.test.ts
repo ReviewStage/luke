@@ -20,10 +20,10 @@ import { isToolUIPart } from "ai";
 import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 
 /**
  * The pictures an integration's tool answers, relayed into the record over
@@ -46,7 +46,7 @@ const PNG_37_BY_23 = [
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
+const writer = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,

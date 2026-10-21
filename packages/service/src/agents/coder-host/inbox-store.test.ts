@@ -23,7 +23,13 @@ import { automation as automationTable } from "@luke/database/schemas/automation
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
+import {
+  getTestDB,
+  insertFormerLuke,
+  joinWorkspace,
+  openWorkspace,
+  startTask,
+} from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
@@ -220,7 +226,7 @@ const liveAnswerOf = (userId: string, readAt: number) =>
 
 it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
-    "a message that waits names its author by what they are called, a person by their account's name and a task's Luke as Luke, alike in the live read and the held read",
+    "a message that waits names its author by what they are called, a person by their account's name and an old task's Luke as Luke, alike in the live read and the held read",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -237,9 +243,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const grace = Option.getOrThrow(
           yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
         );
-        const luke = Option.getOrThrow(
-          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.LUKE, taskId: agent.taskId }),
-        );
+        // A task's Luke minted before no task had one, whose asks still stand.
+        const luke = { id: yield* insertFormerLuke(workspaceId, agent.taskId) };
         const ask = (authorMemberId: string, key: string) =>
           Effect.map(
             postAsk(owner, workspaceId, {

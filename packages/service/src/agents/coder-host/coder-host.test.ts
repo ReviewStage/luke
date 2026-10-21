@@ -29,7 +29,7 @@ import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listJournalsCalling } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { openTaskConversation, readTask, updateTask } from "@luke/database/models/task-store";
+import { readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
@@ -804,12 +804,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
-        // The same account's other conversation: a task's, which no agent row names.
+        // The same account's other conversation, which no agent row names.
         const userId = admitted.target.userId;
-        const task = yield* startTask(userId, { name: "Billing export" });
-        const conversationId = Option.getOrThrow(
-          yield* openTaskConversation(userId, task.id),
-        ).conversationId;
+        const [opened] = yield* Database.use((db) =>
+          db
+            .insert(conversations)
+            .values({ userId, kind: CONVERSATION_KIND.MAIN })
+            .returning({ id: conversations.id }),
+        );
+        assert.ok(opened);
+        const conversationId = opened.id;
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);
         const starting = yield* host.admitStarting(auth, sessionId);

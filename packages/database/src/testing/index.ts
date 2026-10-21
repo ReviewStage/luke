@@ -1,3 +1,4 @@
+export * from "./chat-members.js";
 export * from "./hosted-store-database.js";
 export * from "./live-immutability.js";
 export * from "./migrations.js";

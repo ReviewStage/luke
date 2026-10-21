@@ -80,7 +80,7 @@ function answeringEach(
     eveSessions({
       origin: ORIGIN,
       caller: options.caller ?? CALLER,
-      mount: options.mount ?? EVE_MOUNT.TASKS,
+      mount: options.mount ?? EVE_MOUNT.CODER,
     }),
     client,
   );
@@ -109,7 +109,7 @@ it.effect(
       assert.equal(seen.length, 1);
       const [request] = seen;
       assert.ok(request);
-      assert.equal(request.url, `${ORIGIN}/eve/v1/session`);
+      assert.equal(request.url, `${ORIGIN}/eve/coder/v1/session`);
       assert.equal(request.method, "POST");
       assert.equal(request.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
       assert.equal(request.headers.get("content-type"), "application/json");
@@ -181,7 +181,7 @@ function streaming(status: number, lines: readonly string[]) {
     return new Response(lines.join("\n"), { status });
   });
   const sessions: Effect.Effect<AgentSessions> = Effect.provide(
-    eveSessions({ origin: ORIGIN, caller: CALLER, mount: EVE_MOUNT.TASKS }),
+    eveSessions({ origin: ORIGIN, caller: CALLER, mount: EVE_MOUNT.CODER }),
     client,
   );
   return { seen, sessions };
@@ -212,7 +212,7 @@ it.effect(
       ]);
       assert.deepEqual(seen, [
         {
-          url: `${ORIGIN}/eve/v1/session/${SESSION}/stream?startIndex=-1`,
+          url: `${ORIGIN}/eve/coder/v1/session/${SESSION}/stream?startIndex=-1`,
           method: "GET",
           authorization: `Bearer ${DEPLOYMENT_SECRET}`,
         },

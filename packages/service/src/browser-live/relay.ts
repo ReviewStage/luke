@@ -38,8 +38,7 @@
  * connection holds it, and each message the panel sends moves it on,
  * written at most once a minute. The socket closes as idle once the panel
  * has sent nothing for the idle bound, and the sweep stops the sandbox
- * once the lease lapses. Luke's own sandbox is kept on its own rule and
- * takes no lease.
+ * once the lease lapses.
  */
 
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
@@ -324,7 +323,7 @@ interface LiveView {
   readonly ask: BrowserLiveAsk;
   readonly reached: ReachedBrowserTab;
   readonly deps: BrowserLiveDependencies;
-  /** Whether the member may drive the tab: anyone who reaches Luke's, and one who controls a coding agent. */
+  /** Whether the member may drive the tab: one who controls the coding agent whose browser holds it. */
   readonly drivable: boolean;
   /** The instant this socket last took or moved on its takeover; none while it holds none. */
   readonly driving: Ref.Ref<number | undefined>;
@@ -372,7 +371,7 @@ function openView(
       ask,
       reached,
       deps,
-      drivable: agent === null || controlsAgent(ask.userId, agent),
+      drivable: controlsAgent(ask.userId, agent),
       driving: yield* Ref.make<number | undefined>(undefined),
       releasePending: yield* Ref.make(false),
       lastDriver: yield* Ref.make<
@@ -447,7 +446,6 @@ function watchTab(view: LiveView): Effect.Effect<LiveEnd> {
 function noteActive(view: LiveView, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
     yield* Ref.set(view.lastActive, at.getTime());
-    if (view.reached.agent === null) return;
     const since = at.getTime() - (yield* Ref.get(view.lastHeld));
     if (since < Duration.toMillis(BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY)) return;
     yield* Ref.set(view.lastHeld, at.getTime());
@@ -792,7 +790,7 @@ export function relayBrowserTab(
     // A takeover this socket took is handed back as it closes, however it closes.
     yield* Effect.addFinalizer(() => releaseOnClose(view));
     // A watched coding agent's sandbox is held from the start, so the resume a connection makes is held too.
-    if (reached.agent !== null) yield* deps.hold(reached.tab.conversationId, heldFrom(startedAt));
+    yield* deps.hold(reached.tab.conversationId, heldFrom(startedAt));
     const end = yield* Effect.raceAll([
       readViewer(view),
       watchBrowser(view),

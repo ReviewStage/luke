@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { openAvatarSession } from "@luke/database/models/voice-avatar-sessions";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { voiceAvatarSessions } from "@luke/database/schemas/voice";
@@ -113,12 +115,26 @@ interface Stand {
   stop(): Promise<void>;
   readonly openAi: Awaited<ReturnType<typeof startFakeOpenAi>>;
   readonly taskId: string;
+  readonly agentId: string;
 }
 
 /** The service for one account holding one plan, with the avatar on the Keyframe given, or none. */
 async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand> {
   const userId = await database.createUser();
   const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
+  const { agent } = Option.getOrThrow(
+    await database.run(
+      createCodingAgent(userId, {
+        taskId: task.id,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: null,
+        planSnapshot: null,
+        prompt: null,
+      }),
+    ),
+  );
   const openAi = await startFakeOpenAi();
   const log: LogEntry[] = [];
   const voice = voiceServer();
@@ -150,6 +166,7 @@ async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand
     log,
     openAi,
     taskId: task.id,
+    agentId: agent.id,
     url: (path) => `ws://127.0.0.1:${port}${path}`,
     stop: async () => {
       await database.run(Scope.close(scope, Exit.void));
@@ -169,6 +186,7 @@ async function openSession(context: Stand) {
     voice: LIVE_VOICE.MARIN,
     input: [],
     planId: context.taskId,
+    agentId: context.agentId,
   });
   const attach = await context.openAi.nextAttach();
   const upstream = readSocket(attach.socket);

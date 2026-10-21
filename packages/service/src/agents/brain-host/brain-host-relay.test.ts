@@ -25,12 +25,12 @@ import {
   TURN_STATUS,
   UNKNOWN_ACTION_STATUS,
 } from "../../core.js";
-import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { spokenTurn } from "../../testing/eve-turns.js";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../repository-shell.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 import { foldedQuietly, memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { AGENT_TOOL } from "../agent-runtime/tools.js";
 
 /**
  * The relay from eve's stream into the store writer, over the real
@@ -46,7 +46,7 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
+const writer = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 
 /**
  * The developer's spoken line as the voice writer leaves it since the ledger
@@ -120,7 +120,7 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: RUN_IN_REPOSITORY_TOOL.name,
+            toolName: AGENT_TOOL.BASH,
             input: { command: "ls" },
           },
         ],
@@ -136,9 +136,8 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: RUN_IN_REPOSITORY_TOOL.name,
+          toolName: AGENT_TOOL.BASH,
           output: {
-            status: REPOSITORY_SHELL_STATUS.RAN,
             exitCode: 0,
             stdout: "README.md\n",
             stderr: "",
@@ -263,7 +262,7 @@ it.effect(
       // reasoning, then the call — although eve told the reasoning last.
       assert.deepEqual(
         answer.parts.map((part) => part.type),
-        [STEP_START, "reasoning", `tool-${RUN_IN_REPOSITORY_TOOL.name}`, STEP_START, "text"],
+        [STEP_START, "reasoning", `tool-${AGENT_TOOL.BASH}`, STEP_START, "text"],
       );
       const toolPart = answer.parts.find((part) => isToolUIPart(part));
       assert.ok(toolPart);
@@ -427,7 +426,7 @@ it.effect(
       assert.ok(answer);
       assert.deepEqual(
         answer.parts.map((part) => part.type),
-        [STEP_START, "reasoning", `tool-${RUN_IN_REPOSITORY_TOOL.name}`, STEP_START, "text"],
+        [STEP_START, "reasoning", `tool-${AGENT_TOOL.BASH}`, STEP_START, "text"],
       );
     }),
 );
@@ -460,7 +459,7 @@ it.effect(
                 {
                   kind: "tool-call",
                   callId: "call-abandoned",
-                  toolName: RUN_IN_REPOSITORY_TOOL.name,
+                  toolName: AGENT_TOOL.BASH,
                   input: { command: "pwd" },
                 },
               ],
@@ -509,7 +508,7 @@ function streamedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
       data: {
         ...step,
         callId: "call-1",
-        toolName: RUN_IN_REPOSITORY_TOOL.name,
+        toolName: AGENT_TOOL.BASH,
         inputTextDelta: '{"command":',
         inputTextOffset: 0,
       },
