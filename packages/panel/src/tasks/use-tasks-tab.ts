@@ -696,8 +696,8 @@ export interface TasksControl {
   talkingTaskId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
   chatView: ChatViewControl;
-  /** Opens a task's file in its side panel at the commit named, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
-  onShowFile: (taskId: string, ref: CodeRef, commit: string) => void;
+  /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code, and a chat message's, opens. */
+  onShowFile: (taskId: string, ref: CodeRef, commit: string | undefined) => void;
   /** Opens a tab pinned to the sidebar: its task, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
   /** Opens the tab closed latest again as it stood, on its task, opening the task first where it is not the open one; none while no closed tab is kept. */
@@ -1217,7 +1217,8 @@ export function useTasksTab(input: {
   };
   /** A file an inbox item opens on a task not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
-    { readonly taskId: string; readonly ref: CodeRef; readonly commit: string } | undefined
+    | { readonly taskId: string; readonly ref: CodeRef; readonly commit: string | undefined }
+    | undefined
   >(undefined);
   const [sectionReveal, setSectionReveal] = useState<TasksControl["sectionReveal"]>(undefined);
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
@@ -2969,7 +2970,7 @@ export function useTasksTab(input: {
 
   // An inbox item's code opens in its task's File tab; on a task not yet
   // open, once the host has it open, since the panel draws the open task's.
-  const showFile = (taskId: string, ref: CodeRef, commit: string) => {
+  const showFile = (taskId: string, ref: CodeRef, commit: string | undefined) => {
     setStandIn(undefined);
     setHistoryFor(undefined);
     if (taskId === tasks.activeTaskId) {

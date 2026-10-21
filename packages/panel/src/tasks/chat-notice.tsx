@@ -13,12 +13,13 @@ import {
   channelLabel,
   chatWho,
 } from "@luke/ui/chat-model";
-import type { ChatNoticeMetadata } from "@luke/wire";
+import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { FadingWords } from "../fading-words.js";
 import { useChatActor } from "./chat-actors.js";
 import { RelativeTime } from "./relative-time.js";
+import { SentWords } from "./skill-chip.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -31,7 +32,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * workspace's chat as `m 41`, and how long ago it was posted, with Open in
  * Chat at the head's end, which opens the window's Chat on that channel.
  * Its body is the message as the chat holds it, Markdown as the transcript
- * draws it; where the window has read no chat holding it, the head says
+ * draws it, and a person's as they typed it, its line breaks and skills
+ * kept, as Chat draws it (`skill-chip.tsx`'s `SentWords`); where the window has read no chat holding it, the head says
  * what the notice's own metadata says, the sender and the place, and the
  * body is the notice's words, with nothing to open.
  */
@@ -136,7 +138,11 @@ export function ChatNoticeCard({
       </header>
       {shownWords === "" ? null : (
         <div className="chat-notice-words">
-          <TranscriptWords text={shownWords} />
+          {notice.author === MESSAGE_AUTHOR.HUMAN ? (
+            <SentWords text={shownWords} />
+          ) : (
+            <TranscriptWords text={shownWords} />
+          )}
         </div>
       )}
     </section>
