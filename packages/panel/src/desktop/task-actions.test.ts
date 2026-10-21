@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
+import {
+  DOCUMENT_REGION,
+  type SettledStatus,
+  TASKS_PAGE,
+  type TaskMark,
+} from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -244,7 +249,7 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
   assert.equal(title?.textContent, "Permanently delete task?");
   assert.equal(
     body?.textContent,
-    "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
+    "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, mark it done.",
   );
   // A key already pressed lands on the answer that changes nothing.
   assert.equal(document.activeElement, answer("Cancel"));
@@ -596,20 +601,17 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
           ),
   });
 }
-test("Archive asks first of a plan with agents, from its menu and its row's own button alike, and archives on its answer, while a plan with none archives at once", async () => {
+test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task cancels it, and a task already done offers neither Mark done nor its check", async () => {
   const working: TaskSummary = {
     ...OTHER,
+    status: TASK_STATUS.IN_PROGRESS,
     agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
-  const idle: TaskSummary = {
-    ...OTHER,
-    id: "5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
-    name: "Rate limits",
-  };
-  const marked: [string, TaskMark][] = [];
+  const done: TaskSummary = { ...working, status: TASK_STATUS.DONE };
+  const settled: [string[], SettledStatus][] = [];
   const tasks = tasksControl({
-    tasks: [working, idle],
-    onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
+    tasks: [working],
+    onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
   });
   const asked: Asked = {
     opened: [],
@@ -619,37 +621,33 @@ test("Archive asks first of a plan with agents, from its menu and its row's own 
     renamed: [],
     marked: [],
   };
-  const archiveButton = (container: HTMLElement) => {
-    const button = container.querySelector('button[aria-label="Archive"]');
-    assert.ok(button instanceof HTMLButtonElement);
-    return button;
-  };
+  const doneButton = (container: HTMLElement) =>
+    container.querySelector('button[aria-label="Mark done"]');
 
   const row = mount(sidebarTask(tasks, working, asked));
-  act(() => archiveButton(row).click());
-  assert.equal(asking(), true, "Archive asks first of a plan with agents");
-  assert.equal(
-    dialog()?.textContent?.includes(
-      "Archiving “Billing export” will stop and archive all its agents. Unarchiving it brings them back.",
-    ),
-    true,
-  );
-  act(() => answer("Cancel").click());
-  assert.deepEqual(marked, []);
+  const check = doneButton(row);
+  assert.ok(check instanceof HTMLButtonElement, "the row offers Mark done as its button");
+  act(() => check.click());
+  assert.equal(asking(), false, "Mark done asks nothing, since it stops no agent");
   const rowButton = row.querySelector("ul > li > button");
   assert.ok(rowButton instanceof HTMLButtonElement);
   rightClick(rowButton, 40, 60);
-  choose("Archive");
-  await act(async () => answer("Archive").click());
-  assert.deepEqual(marked, [[working.id, "archive"]]);
-  assert.equal(asking(), false);
+  choose("Mark done");
+  rightClick(rowButton, 40, 60);
+  choose("Cancel task");
+  assert.deepEqual(settled, [
+    [[working.id], TASK_STATUS.DONE],
+    [[working.id], TASK_STATUS.DONE],
+    [[working.id], TASK_STATUS.CANCELED],
+  ]);
 
   unmountAll();
-  const idleArchive = archiveButton(mount(sidebarTask(tasks, idle, asked)));
-  act(() => idleArchive.click());
-  assert.equal(asking(), false, "a plan with no agents archives at once");
-  assert.deepEqual(marked, [
-    [working.id, "archive"],
-    [idle.id, "archive"],
-  ]);
+  const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
+  assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
+  const doneRowButton = doneRow.querySelector("ul > li > button");
+  assert.ok(doneRowButton instanceof HTMLButtonElement);
+  rightClick(doneRowButton, 40, 60);
+  const labels = menuItems().map((item) => item.textContent);
+  assert.equal(labels.includes("Mark done"), false);
+  assert.equal(labels.includes("Cancel task"), true);
 });

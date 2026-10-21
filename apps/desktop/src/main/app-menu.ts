@@ -398,7 +398,7 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.COPY_PLAN),
         commandItem(APP_COMMAND.COPY_LINK),
         SEPARATOR,
-        commandItem(APP_COMMAND.ARCHIVE_TASK),
+        commandItem(APP_COMMAND.MARK_TASK_DONE),
         commandItem(APP_COMMAND.DELETE_TASK),
       ],
     },

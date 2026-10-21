@@ -8,13 +8,13 @@ import {
 } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
-  ArchiveIcon,
   BUTTON_SIZE,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogConfirm,
   EllipsisIcon,
   IconButton,
+  MarkDoneIcon,
   PencilIcon,
   TextField,
   TrashIcon,
@@ -30,7 +30,7 @@ import {
   unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { archiveAsks } from "@luke/ui/tasks-model";
+import { SETTLED_STATUS, settleOffered } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
@@ -40,7 +40,7 @@ import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
-import { archiveTasksQuestion, SidebarGroupHeader } from "./sidebar-group-header.js";
+import { SidebarGroupHeader } from "./sidebar-group-header.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -53,8 +53,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * fold is, with Edit section and Delete section on its ⋯ and a right-click,
  * and between them, while it holds tasks, what acts on all of them at once:
  * Mark all as read while any is unread, Move tasks to another section or a
- * new one, Remove tasks from section, and Archive tasks, which asks first
- * where any has coding agents, as a repository's does.
+ * new one, Remove tasks from section, and Mark tasks done, which sets them
+ * all Done and asks nothing, as a repository's does.
  * Its tasks stand in the order dragged, and a row is dragged within its
  * section, into another, onto Tasks, which takes it out of every section,
  * or onto Pinned, which pins it there and takes it out of every section too
@@ -290,8 +290,8 @@ interface SectionContext {
 /** What a section's actions on all its tasks run through beyond the section's writes: each asks or reaches past the sections. */
 interface SectionDoors {
   readonly onMarkRead: () => void;
-  /** Archives every task, asking first where any has coding agents. */
-  readonly onArchive: () => void;
+  /** Sets every task Done. */
+  readonly onMarkDone: () => void;
 }
 
 /**
@@ -361,7 +361,9 @@ function sectionActionGroups(
       icon: <FolderOutputIcon />,
       onSelect: () => tasks.onWriteSections(unplaceAllWrites(drawn.tasks.map(({ id }) => id))),
     },
-    { label: "Archive tasks", icon: <ArchiveIcon />, onSelect: doors.onArchive },
+    ...(drawn.tasks.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
+      ? [{ label: "Mark tasks done", icon: <MarkDoneIcon />, onSelect: doors.onMarkDone }]
+      : []),
   ];
   return [edit, bulk, remove];
 }
@@ -393,32 +395,15 @@ function SidebarSection({
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const reads = useReadMarks();
-  // Note that the question is about the tasks drawn when it was asked, so it goes once any of them leaves the section, moved by another window, rather than archiving whatever stands there now.
-  const [doomed, setDoomed] = useState<readonly string[]>([]);
-  const archiving = useConfirmDialog(
-    {
-      subject:
-        doomed.length > 0 && doomed.every((id) => drawn.tasks.some((task) => task.id === id)),
-      surfaceOpen: tasks.shown,
-    },
-    () => {
-      tasks.onArchiveTasks(doomed);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
-  );
   const groups = sectionActionGroups(drawn, context, {
     onMarkRead: () => {
       for (const task of drawn.tasks.filter(context.unread)) reads.mark(task, false);
     },
-    onArchive: () => {
-      const taskIds = drawn.tasks.map(({ id }) => id);
-      if (!archiveAsks(drawn.tasks)) {
-        tasks.onArchiveTasks(taskIds);
-        return;
-      }
-      setDoomed(taskIds);
-      archiving.ask();
-    },
+    onMarkDone: () =>
+      tasks.onSettleTasks(
+        drawn.tasks.map(({ id }) => id),
+        SETTLED_STATUS.DONE,
+      ),
   });
   const glyph = sectionGlyph(section.icon);
   return (
@@ -455,10 +440,6 @@ function SidebarSection({
           onClose={menu.close}
         />
       )}
-      <ConfirmDialog
-        confirm={archiving}
-        question={archiveTasksQuestion(section.title, doomed.length)}
-      />
       {rows.length === 0 ? (
         folded ? null : (
           <p className="sidebar-section-empty">Drag tasks here</p>

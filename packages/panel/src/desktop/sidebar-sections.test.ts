@@ -390,7 +390,7 @@ test("a section holding tasks offers what acts on all of them between Edit and D
     "Edit section",
     "Move tasks to",
     "Remove tasks from section",
-    "Archive tasks",
+    "Mark tasks done",
     "Delete section",
   ]);
 });
@@ -437,65 +437,22 @@ test("a section's Remove tasks from section takes every task in it out of every 
   ]);
 });
 
-test("a section's Archive tasks archives every task in it at once where none has agents", async () => {
-  const archived: string[][] = [];
-  const sidebar = await mountSidebar([], BOTH_IN_LAUNCH, {
-    onArchiveTasks: (taskIds) => archived.push([...taskIds]),
-  });
-
-  openSectionMenu(sidebar, "Launch");
-  act(() => item("Archive tasks").click());
-
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
-  assert.deepEqual(archived, [[INVITES.id, RETRIES.id]]);
-});
-
-test("a section's Archive tasks asks first where a task in it has agents, then archives them all", async () => {
-  const archived: string[][] = [];
+test("a section's Mark tasks done marks every task in it done at once, asking nothing even where a task has agents", async () => {
+  const settled: [string[], string][] = [];
   const working: TaskSummary = {
     ...RETRIES,
     agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
   const sidebar = await mountSidebar([], BOTH_IN_LAUNCH, {
     tasks: [INVITES, working],
-    onArchiveTasks: (taskIds) => archived.push([...taskIds]),
+    onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
   });
 
   openSectionMenu(sidebar, "Launch");
-  act(() => item("Archive tasks").click());
-  const asked = archived.length;
-  const question = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
-  await act(async () => dialogButton("Archive").click());
-
-  assert.equal(asked, 0);
-  assert.match(question, /Archive 2 tasks\?/);
-  assert.deepEqual(archived, [[INVITES.id, RETRIES.id]]);
-});
-
-test("a section's Archive question goes when a task it asked about leaves the section, and archives nothing", async () => {
-  const archived: string[][] = [];
-  const working: TaskSummary = {
-    ...RETRIES,
-    agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
-  };
-  const { container, draw } = await mountSidebarRedrawn([], BOTH_IN_LAUNCH, {
-    tasks: [INVITES, working],
-    onArchiveTasks: (taskIds) => archived.push([...taskIds]),
-  });
-  openSectionMenu(container, "Launch");
-  act(() => item("Archive tasks").click());
-  assert.ok(document.querySelector('[role="alertdialog"]'), "the question is asked");
-
-  await draw({
-    sections: BOTH_IN_LAUNCH.sections,
-    entries: [
-      { taskId: INVITES.id, sectionId: LAUNCH, addedAt: 3 },
-      { taskId: RETRIES.id, sectionId: SOMEDAY, addedAt: 4 },
-    ],
-  });
+  act(() => item("Mark tasks done").click());
 
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
-  assert.deepEqual(archived, []);
+  assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
 test("a section's Mark all as read stands while a task in it is unread, and marks every one read", async () => {

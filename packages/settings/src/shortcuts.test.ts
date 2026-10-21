@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  APP_COMMAND,
   APP_SHORTCUT_GROUPS,
+  appCommandLabel,
   CHAPTERS_KEYS,
   CHAPTERS_SHORTCUTS,
   chaptersKeyFor,
+  commandForKey,
   FILES_CHANGED_KEYS,
   FILES_CHANGED_SHORTCUT_GROUPS,
   filesChangedKeyFor,
+  isAppCommand,
   KEYED_COMMANDS,
   type ShortcutChord,
 } from "./shortcuts.js";
@@ -45,4 +49,22 @@ test("no Chapters key is a Files changed key, whose list hears a press first and
     assert.equal(chaptersKeyFor(press), key, `${key} answers its own chord`);
     assert.equal(filesChangedKeyFor(press), undefined, `${key} is left to Chapters`);
   }
+});
+
+test("⇧⌘A, Archive's chord, runs Mark done, which still answers to the id the menu bar sent for Archive", () => {
+  const press = {
+    key: "a",
+    code: "KeyA",
+    metaKey: true,
+    shiftKey: true,
+    ctrlKey: false,
+    altKey: false,
+  };
+
+  const command = commandForKey(KEYED_COMMANDS, press);
+
+  assert.equal(command, APP_COMMAND.MARK_TASK_DONE);
+  assert.equal(command === undefined ? undefined : appCommandLabel(command), "Mark done");
+  assert.ok(isAppCommand("archive-plan"));
+  assert.equal(APP_COMMAND.MARK_TASK_DONE, "archive-plan");
 });
