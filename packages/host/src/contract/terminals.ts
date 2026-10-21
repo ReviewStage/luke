@@ -15,9 +15,10 @@ import { TERMINAL_ACT_KIND } from "./kinds.js";
 /**
  * terminals.ts -- a coding agent's Terminal tab: its shells listed, started, named, ended, attached, and detached, and its sandbox resumed, as procedures.
  *
- * Main answers them itself (`apps/desktop/src/main/ipc/terminal-acts.ts`).
- * They carry ids, sizes, and names alone: what a shell prints travels on the
- * port an attach posts to the asking panel, never on these.
+ * The platform answers them itself, the desktop's main and a browser tab's
+ * host alike, through `act-port/terminal-procedures.ts`. They carry ids,
+ * sizes, and names alone: what a shell prints travels on the port an attach
+ * posts to the asking panel, never on these.
  */
 export const terminalActsContract = {
   [TERMINAL_ACT_KIND.TERMINAL_LIST]: actProcedure("Could not reach this agent's sandbox.")

@@ -1,13 +1,14 @@
 /**
- * compose-browser-live.ts -- a cloud Browser tab's live view, on the window's behalf: each view a panel attached held open on the service's live relay under the account's bearer, its text frames carried each way.
+ * compose-browser-live.ts -- a cloud Browser tab's live view, on the window's behalf: each view a panel attached held open on the service's live relay under the account's credential, its text frames carried each way.
  *
  * The desktop's panel draws the view and decides when to open it again
  * (`@luke/panel`'s `cloud-browser-live.ts`); this only carries the socket,
  * because the bearer is the host's and never the page's. An attached view
  * is a connection main named, held here on one fiber until the panel lets
  * it go or the socket closes: the fiber opens the relay socket
- * (`browser-live-wire.ts`) under the account's bearer, renewed once on a
- * refusal, hands up each text frame the service sent as a
+ * (`browser-live-wire.ts`) under the account's credential
+ * (`relay-credential.ts`), a bearer renewed once on a refusal, hands up
+ * each text frame the service sent as a
  * `BROWSER_LIVE_MESSAGE` event named by that connection, and its close, last,
  * as `BROWSER_LIVE_CLOSED`, with its code; a socket that never opened closes
  * as a browser's would, abnormally. What the panel sends before the socket
@@ -39,7 +40,7 @@ import { Effect, FiberMap, Result, Stream } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { OpenTerminalSocket, TerminalSocket } from "./compose-terminals.js";
 import type { HostKernel } from "./host-kernel.js";
-import { openedUnderBearer } from "./relay-bearer.js";
+import { openedUnderCredential } from "./relay-credential.js";
 import type { RunMode } from "./run-mode.js";
 
 /** The most text frames a view holds for a socket still opening; past it the panel's newest are let go. */
@@ -49,7 +50,7 @@ export interface BrowserLiveDependencies {
   kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "emit"> & {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
-  account: Pick<AccountComposer, "capabilitiesActive" | "token">;
+  account: Pick<AccountComposer, "capabilitiesActive" | "credential">;
   openSocket: OpenTerminalSocket;
 }
 
@@ -92,7 +93,7 @@ export function browserLiveConcern(
   const session = (connectionId: string, connection: Connection, address: string) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const opening = yield* openedUnderBearer(account.token, openSocket, address);
+        const opening = yield* openedUnderCredential(account.credential, openSocket, address);
         if (!("socket" in opening)) return yield* closed(connectionId, BROWSER_LIVE_ABNORMAL_CLOSE);
         const { socket } = opening;
         connection.socket = socket;

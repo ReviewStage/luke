@@ -1,18 +1,20 @@
 /**
- * terminal-acts.ts -- the Terminal tab's acts, answered on the act port: a coding agent's shells listed, started, named, ended, attached, and detached, and its sandbox resumed.
+ * terminal-procedures.ts -- the Terminal tab's acts, answered on the act port by whichever shell runs the host: a coding agent's shells listed, started, named, ended, attached, and detached, and its sandbox resumed.
  *
  * The acts carry ids, sizes, and names alone. An attach mints a connection
  * for the asking panel and that one shell, opens a channel, and posts the
  * channel's other end to that panel alone; what the shell prints arrives as
- * the host's events for that connection and is posted on main's end, and
- * what the panel types, resizes, and acks arrives on it and goes to the host
- * named by the same connection. Nothing a shell prints is read here beyond
- * its connection's id, kept, logged, or written to app state: it passes from
- * the host's event to the one port and is let go. A panel that attaches a
- * shell it already holds has the older port closed first, and a panel whose
- * page is gone has every port it held closed and every connection let go.
- * Only a panel draws a Terminal tab, so every procedure refuses the voice and
- * call windows.
+ * the host's events for that connection and is posted on the host's end,
+ * and what the panel types, resizes, and acks arrives on it and goes to the
+ * host named by the same connection. Nothing a shell prints is read here
+ * beyond its connection's id, kept, logged, or written to app state: it
+ * passes from the host's event to the one port and is let go. A panel that
+ * attaches a shell it already holds has the older port closed first, and a
+ * panel whose page is gone has every port it held closed and every
+ * connection let go. Only a panel draws a Terminal tab, so every procedure
+ * refuses the voice and call windows. How a channel reaches a page is the
+ * platform's (`TerminalPortSeam`): the desktop posts it from main through the
+ * preload, and a browser tab, whose host runs in the page, posts it to itself.
  */
 
 import {
@@ -21,63 +23,33 @@ import {
   type TerminalPortTicket,
   terminalPortInboundSchema,
 } from "@luke/features/terminal-acts";
-import type { ActSender } from "@luke/host/act-port";
-import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import { TERMINAL_ACT_KIND } from "@luke/host/contract";
-import type { HostOperator } from "@luke/host/host-operator";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
-import type { WebContents } from "electron";
+import { TERMINAL_ACT_KIND } from "../contract/index.js";
+import type { HostOperator } from "../host-operator.js";
+import { type ActSender, actPortFor } from "./base.js";
+import type { PlatformActProcedures } from "./index.js";
 
 type TerminalActKind = (typeof TERMINAL_ACT_KIND)[keyof typeof TERMINAL_ACT_KIND];
 
-/** Main's end of one attached shell's channel. */
-export interface MainTerminalPort {
+/** The host's end of one attached shell's channel. */
+export interface HostTerminalPort {
   post(message: TerminalPortOutbound): void;
   /** Hears each message the panel sends, unread. */
   onMessage(listener: (message: WireBoundaryInput) => void): void;
   close(): void;
 }
 
-/** How main reaches a panel's page for its ports. */
-interface TerminalPortSeam {
-  /** A fresh channel: main's end, with the other end already posted to the panel under the ticket. */
-  open(sender: WebContents, ticket: TerminalPortTicket): MainTerminalPort;
+/** How the host reaches a panel's page for its ports, `Sender` being the platform's own handle on the window. */
+export interface TerminalPortSeam<Sender> {
+  /** A fresh channel: the host's end, with the other end already posted to the panel under the ticket. */
+  open(sender: Sender, ticket: TerminalPortTicket): HostTerminalPort;
   /** Calls `then` once, when the panel's page is gone. */
-  whenGone(sender: WebContents, then: () => void): void;
+  whenGone(sender: Sender, then: () => void): void;
 }
 
-/** The events of a window's contents that end the page a port was posted to. */
-type PageEvents = Pick<NodeJS.EventEmitter, "on" | "off">;
-
-/**
- * Calls `then` once the page behind a window's contents is gone: the
- * contents destroyed, its renderer gone, or the window navigated to a new
- * document, which a reload is. The contents outlive a reload, and the ports
- * posted to the page before it do not, so a reload is as much an end as a
- * close. A navigation within the same document, or of a frame inside it,
- * keeps the page.
- */
-export function whenPageGone(contents: PageEvents, then: () => void): void {
-  const navigated = (details: {
-    readonly isMainFrame: boolean;
-    readonly isSameDocument: boolean;
-  }) => {
-    if (details.isMainFrame && !details.isSameDocument) gone();
-  };
-  const gone = () => {
-    contents.off("did-start-navigation", navigated);
-    contents.off("render-process-gone", gone);
-    contents.off("destroyed", gone);
-    then();
-  };
-  contents.on("did-start-navigation", navigated);
-  contents.on("render-process-gone", gone);
-  contents.on("destroyed", gone);
-}
-
-export interface TerminalActsDependencies {
+export interface TerminalActsDependencies<Sender> {
   host: Pick<
     HostOperator,
     | "terminalList"
@@ -93,22 +65,20 @@ export interface TerminalActsDependencies {
     | "onTerminalOutput"
     | "onTerminalState"
   >;
-  ports: TerminalPortSeam;
+  ports: TerminalPortSeam<Sender>;
   /** A fresh connection id. */
   createId: () => string;
-  /** Runs what a port's message asks of the host, from the port's own callback. */
-  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  /** Forks what a port's message asks of the host, from the port's own callback, on the platform's runtime. */
+  fork: (effect: Effect.Effect<void>) => void;
 }
 
-/** One shell a panel attached: the connection the host knows it by, and main's end of its channel. */
+/** One shell a panel attached: the connection the host knows it by, and the host's end of its channel. */
 interface Attached {
   readonly connectionId: string;
-  readonly port: MainTerminalPort;
+  readonly port: HostTerminalPort;
 }
 
 const readInbound = readEither(terminalPortInboundSchema);
-
-const terminalPort = actPortFor<WebContents>();
 
 /** The refusal a window that draws no Terminal tab hears, in its kind's own words, or nothing for a panel. */
 function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect<void, E> {
@@ -125,14 +95,15 @@ function answeredOr<Answer, E>(
   );
 }
 
-export function terminalProcedures(
-  dependencies: TerminalActsDependencies,
-): Pick<PlatformActProcedures<WebContents>, TerminalActKind> {
-  const { host, ports, createId, run } = dependencies;
+export function terminalProcedures<Sender>(
+  dependencies: TerminalActsDependencies<Sender>,
+): Pick<PlatformActProcedures<Sender>, TerminalActKind> {
+  const { host, ports, createId, fork } = dependencies;
+  const terminalPort = actPortFor<Sender>();
   /** Each panel's attached shells, by agent and then by shell, since a shell's id is its agent's to mint. */
-  const panels = new Map<WebContents, Map<string, Map<string, Attached>>>();
+  const panels = new Map<Sender, Map<string, Map<string, Attached>>>();
   /** Every attached shell, by connection, which is how the host names its events. */
-  const byConnection = new Map<string, MainTerminalPort>();
+  const byConnection = new Map<string, HostTerminalPort>();
 
   host.onTerminalOutput(({ connectionId, data }) => {
     byConnection.get(connectionId)?.post({ type: TERMINAL_PORT_MESSAGE.OUTPUT, data });
@@ -168,7 +139,7 @@ export function terminalProcedures(
   };
 
   /** The panel's attached shells of one agent, its page's end watched for the first time it attaches any. */
-  const attachedOf = (sender: WebContents, agentId: string) => {
+  const attachedOf = (sender: Sender, agentId: string) => {
     let agents = panels.get(sender);
     if (agents === undefined) {
       const fresh = new Map<string, Map<string, Attached>>();
@@ -177,7 +148,7 @@ export function terminalProcedures(
       ports.whenGone(sender, () => {
         panels.delete(sender);
         const all = [...fresh.values()].flatMap((shells) => [...shells.values()]);
-        void run(Effect.forEach(all, release, { discard: true }));
+        fork(Effect.forEach(all, release, { discard: true }));
       });
     }
     const held = agents.get(agentId);
@@ -233,7 +204,7 @@ export function terminalProcedures(
         const attached = { connectionId, port };
         held.set(input.terminalId, attached);
         byConnection.set(connectionId, port);
-        port.onMessage((message) => void run(heard(connectionId, message)));
+        port.onMessage((message) => fork(heard(connectionId, message)));
         const taken = yield* host.terminalConnect({ connectionId, ...input });
         if (taken) return;
         // Note that only this attach's own entry goes, because a newer attach of the shell may have taken its place.
