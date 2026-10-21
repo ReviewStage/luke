@@ -182,8 +182,8 @@ const INBOX_NOT_TAKEN_NOTE = {
   ANSWERED: "This item was already answered.",
   /** The agent took the item back first. */
   CLOSED: "The agent took this item back.",
-  /** A member closed the item first, from another window or Mac. */
-  CLOSED_BY_MEMBER: "This item was already closed.",
+  /** A member resolved the item first, from another window or Mac. */
+  CLOSED_BY_MEMBER: "This item was already resolved.",
 } as const;
 
 /** Why an answer was not taken, from the item as the service answered it. */

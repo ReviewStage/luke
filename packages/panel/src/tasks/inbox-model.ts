@@ -1408,6 +1408,31 @@ export function inboxSettledWords(
   return undefined;
 }
 
+/** A settled item's standing in one word: answered, resolved by a member without an answer, or withdrawn by its agent. */
+export const INBOX_SETTLED_STANDING = {
+  ANSWERED: "Answered",
+  RESOLVED: "Resolved",
+  WITHDRAWN: "Withdrawn",
+} as const;
+
+/**
+ * Where a settled item stands, as its row's card says it over how it ended
+ * (`inboxSettledWords`), in that line's own word: an ask the agent took
+ * back is read before a close, as that line reads it, so the card never
+ * calls one ending two names.
+ */
+export function inboxSettledStanding(
+  item: InboxItem,
+): (typeof INBOX_SETTLED_STANDING)[keyof typeof INBOX_SETTLED_STANDING] {
+  if (item.status === INBOX_STATUS.ANSWERED) return INBOX_SETTLED_STANDING.ANSWERED;
+  const withdrawn = (inboxThreadOf(item) ?? []).some(
+    (each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN,
+  );
+  return !withdrawn && closedByMember(item)
+    ? INBOX_SETTLED_STANDING.RESOLVED
+    : INBOX_SETTLED_STANDING.WITHDRAWN;
+}
+
 /** What an open ask asks, as its row's second line says it (`inboxPreview`). */
 function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
   switch (ask.type) {
