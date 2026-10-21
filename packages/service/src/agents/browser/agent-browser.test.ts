@@ -27,8 +27,9 @@ import { BROWSER_START_EXIT } from "./sandbox-browser.js";
  * An agent's browser over a fake sandbox and a fake Chromium behind a fake
  * bridge: the browser is started once and attached to after, a stopped
  * sandbox is resumed and waited for, a worker reaches its parent's sandbox,
- * and a CDP session answers commands, carries events, and lists, opens, and
- * closes pages. Every way the browser cannot be reached says why, and a
+ * a bridge that does not come up at first is tried again, and a CDP session
+ * answers commands, carries events, and lists, opens, and closes pages.
+ * Every way the browser cannot be reached says why, and a
  * command fails as refused, timed out, or closed.
  */
 
@@ -240,7 +241,6 @@ it.effect("a browser that cannot be reached says why", () =>
         browserOver(peer, { unavailable: 503 }),
         browserOver(peer, { startExit: BROWSER_START_EXIT.NO_CHROMIUM }),
         browserOver(peer, { startExit: BROWSER_START_EXIT.NOT_STARTED }),
-        browserOver(peer, {}, FAKE_BRIDGE.ERROR),
       ],
       ({ service }) =>
         Effect.map(Effect.exit(Effect.scoped(service.connect(SESSION))), (exit) => {
@@ -256,7 +256,6 @@ it.effect("a browser that cannot be reached says why", () =>
       { reason: BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE, status: 503 },
       { reason: BROWSER_UNREACHABLE.NO_CHROMIUM, status: undefined },
       { reason: BROWSER_UNREACHABLE.NOT_STARTED, status: undefined },
-      { reason: BROWSER_UNREACHABLE.BRIDGE_FAILED, status: undefined },
     ]);
   }),
 );
@@ -271,6 +270,7 @@ it.effect(
         pendingResumes: Number.POSITIVE_INFINITY,
       });
       const silent = browserOver(peer, {}, FAKE_BRIDGE.SILENT);
+      const refusing = browserOver(peer, {}, FAKE_BRIDGE.ERROR);
 
       const refused = browserOver(peer, { status: "stopped", resumeUnavailable: 503 });
 
@@ -279,6 +279,9 @@ it.effect(
       const bridging = yield* Effect.forkChild(
         Effect.flip(Effect.scoped(silent.service.connect(SESSION))),
       );
+      const unbridged = yield* Effect.forkChild(
+        Effect.flip(Effect.scoped(refusing.service.connect(SESSION))),
+      );
       yield* TestClock.adjust(Duration.minutes(2));
 
       assert.equal((yield* Fiber.join(resuming)).reason, BROWSER_UNREACHABLE.NOT_RESUMED);
@@ -286,5 +289,26 @@ it.effect(
       assert.equal(unavailable.reason, BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE);
       assert.equal(unavailable.status, 503);
       assert.equal((yield* Fiber.join(bridging)).reason, BROWSER_UNREACHABLE.BRIDGE_FAILED);
+      assert.equal((yield* Fiber.join(unbridged)).reason, BROWSER_UNREACHABLE.BRIDGE_FAILED);
+    }),
+);
+
+it.effect(
+  "a bridge that does not come up on its first PTY, as just after a fresh start, is tried again and the first connect succeeds",
+  () =>
+    Effect.gen(function* () {
+      const peer = yield* fakeCdpPeer();
+      const { service } = browserOver(peer, {}, FAKE_BRIDGE.ERROR_FIRST);
+
+      const connecting = yield* Effect.forkChild(
+        Effect.scoped(Effect.flatMap(service.connect(SESSION), (cdp) => cdp.pages)),
+      );
+      yield* TestClock.adjust(Duration.seconds(1));
+      const pages = yield* Fiber.join(connecting);
+
+      assert.deepEqual(
+        pages.map((page) => page.url),
+        ["about:blank"],
+      );
     }),
 );

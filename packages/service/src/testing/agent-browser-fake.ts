@@ -54,8 +54,13 @@ export interface FakeCdpCommand {
   readonly sessionId?: string | undefined;
 }
 
-/** How the bridge comes up: ready, unable to reach the browser, or never saying anything. */
-export const FAKE_BRIDGE = { READY: "ready", ERROR: "error", SILENT: "silent" } as const;
+/** How the bridge comes up: ready, unable to reach the browser, never saying anything, or unable only on its first PTY, as just after a fresh start. */
+export const FAKE_BRIDGE = {
+  READY: "ready",
+  ERROR: "error",
+  SILENT: "silent",
+  ERROR_FIRST: "error-first",
+} as const;
 
 export type FakeBridge = (typeof FAKE_BRIDGE)[keyof typeof FAKE_BRIDGE];
 
@@ -184,9 +189,17 @@ export function fakeBridgePty(
   peer: FakeCdpPeer,
   bridge: FakeBridge = FAKE_BRIDGE.READY,
 ): SandboxPtyService {
+  let connections = 0;
   return {
     connect: () =>
       Effect.gen(function* () {
+        connections += 1;
+        const word =
+          bridge === FAKE_BRIDGE.ERROR_FIRST
+            ? connections === 1
+              ? FAKE_BRIDGE.ERROR
+              : FAKE_BRIDGE.READY
+            : bridge;
         const output = yield* Queue.make<RelayFrame, Cause.Done>();
         yield* Effect.addFinalizer(() => Queue.end(output));
         let held = "";
@@ -197,10 +210,14 @@ export function fakeBridgePty(
           send: (frame) =>
             Effect.gen(function* () {
               if ("text" in frame) {
-                if (!startsBridge(frame.text) || bridge === FAKE_BRIDGE.SILENT) return;
+                if (!startsBridge(frame.text) || word === FAKE_BRIDGE.SILENT) return;
                 yield* peer.attach(output);
                 yield* say("a line the PTY printed before the bridge\r\n");
-                yield* say(`${JSON.stringify({ bridge: bridge })}\r\n`);
+                const said =
+                  word === FAKE_BRIDGE.ERROR
+                    ? { bridge: word, reason: "socket" }
+                    : { bridge: word };
+                yield* say(`${JSON.stringify(said)}\r\n`);
                 return;
               }
               held += new TextDecoder().decode(frame.bytes);
