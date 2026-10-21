@@ -1768,6 +1768,20 @@ export interface CodingAgentDeleteGuard<R> {
   readonly beforeDelete: TaskDeleteGuard<R>["beforeDelete"];
 }
 
+/** Every call into the agent, open or ended, locked against a segment its voice writes meanwhile, which waits and then finds the conversation stamped (`voice-writer.ts`). */
+const lockAgentCalls = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: IdRowSchema,
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ id: voiceSessions.id })
+        .from(voiceSessions)
+        .where(eq(voiceSessions.agentId, agentId))
+        .for("update"),
+    ),
+});
+
 /**
  * The words said on every call into the agent, open or ended; the calls
  * themselves stay, their agent set null by the delete, since the admin's
@@ -1827,6 +1841,8 @@ export function deleteCodingAgent<R = never>(
         if (Option.isNone(agent)) return Option.none();
         if (!(yield* guard.standsStopped(agent.value))) return yield* new TaskAgentUnstopped();
         yield* guard.beforeDelete([agent.value.conversationId]);
+        // Note that the calls are locked before their words go, so a call still open writes no word between.
+        yield* lockAgentCalls(agentId);
         yield* deleteAgentCallWords(agentId);
         const [deleted] = yield* deleteAgentRow({ userId, agentId });
         if (deleted === undefined) return Option.none();

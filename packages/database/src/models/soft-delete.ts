@@ -86,19 +86,43 @@ const stampRows = SqlSchema.findAll({
     ),
 });
 
+const findChildren = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: IdRowSchema,
+  execute: (parentIds) =>
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(inArray(conversations.parentConversationId, parentIds)),
+    ),
+});
+
 /**
- * Stamps the conversations deleted now, so the reads skip them from the
+ * Stamps the conversations deleted now, and every conversation delegated
+ * from them, a worker's under its agent's, so the reads skip them from the
  * call after and the purge takes them thirty days on; one already stamped
- * keeps its stamp. By id alone, so the caller has gated the rows that named
- * them: a task's delete its agents', an agent's delete its own.
+ * keeps its stamp. Note that each child is stamped itself rather than left
+ * to its parent's cascade, because the purge queues the sandbox of each row
+ * it deletes by name (`purgeClearedConversations`) and a row the cascade
+ * takes names none. By id alone, so the caller has gated the rows that
+ * named them: a task's delete its agents', an agent's delete its own.
  */
 export function stampConversationsDeleted(
   conversationIds: readonly string[],
 ): Effect.Effect<void, ClearFailure, DatabaseServices> {
   if (conversationIds.length === 0) return Effect.void;
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.asVoid(stampRows({ conversationIds, now })),
-  );
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const seen = new Set(conversationIds);
+    let level: readonly string[] = conversationIds;
+    while (level.length > 0) {
+      yield* stampRows({ conversationIds: level, now });
+      const children = yield* findChildren(level);
+      level = children.map(({ id }) => id).filter((id) => !seen.has(id));
+      for (const id of level) seen.add(id);
+    }
+  });
 }
 
 /**

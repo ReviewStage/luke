@@ -11,7 +11,7 @@ import {
   MESSAGE_ROLE,
   type SpokenAskMetadata,
 } from "@luke/wire";
-import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import {
@@ -20,6 +20,7 @@ import {
   type DatabaseShape,
   type QueryError,
 } from "../core/query.js";
+import { conversations } from "../schemas/storage.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../voice-vocabulary.js";
@@ -227,6 +228,19 @@ const lockVoiceSession = SqlSchema.findOneOption({
   execute: (key) => Database.use((db) => voiceSessionOf(db, key).for("update")),
 });
 
+/** The call's conversation where it still stands, unstamped by a delete. */
+const findStandingConversation = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: VoiceSessionRowSchema,
+  execute: (conversationId) =>
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
+    ),
+});
+
 /** The session's last position, zero where it holds no segment yet; the builder has no spelling for that fallback, so it is a fragment. */
 const LAST_SEGMENT_SEQ = sql<number>`coalesce(max(${voiceTranscriptSegments.seq}), 0)::int`;
 
@@ -307,6 +321,11 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
             liveSessionId: target.liveSessionId,
           });
           if (Option.isNone(voiceSession)) return voiceSession;
+          // Note that a call into an agent deleted since takes no more words: the delete took the
+          // ones it had, under this same row's lock (`deleteCodingAgent`), so a word racing it
+          // either landed first and went with them, or waited and finds the conversation stamped.
+          const standing = yield* findStandingConversation(target.conversation.conversationId);
+          if (Option.isNone(standing)) return Option.none();
           const last = yield* findLastSegmentSeq(voiceSession.value.id);
           yield* insertSegment({
             voiceSessionId: voiceSession.value.id,

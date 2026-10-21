@@ -1269,6 +1269,8 @@ export function useCodingAgents(input: {
         : { ...was, agents: was.agents.filter((agent) => agent.id !== agentId) },
     );
     toast({ words: DELETE_WORDS.done, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    // Note that the list is read again, which drops a read already out that still holds the agent.
+    readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const sayRefusal = (result: ActionResult) => {

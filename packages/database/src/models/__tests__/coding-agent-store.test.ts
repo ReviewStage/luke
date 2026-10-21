@@ -12,6 +12,7 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+import { LIVE_SERVER_EVENT } from "@luke/live";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
   MESSAGE_AUTHOR,
@@ -87,6 +88,7 @@ import { sentLineId } from "../ids.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";
+import { VOICE_WRITE_REFUSAL, voiceWriter } from "../voice-writer.js";
 import { type LineSender, storeWriter } from "../writer.js";
 
 /**
@@ -2212,6 +2214,28 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
           [[], [], [{ agentId: null }], true],
         );
         assert.ok(Option.isNone(yield* deleteCodingAgent(starter, agentId, guard(true))));
+        // The call is still open, and a word its voice writes after the delete is taken by nothing.
+        const voice = voiceWriter({ store: yield* storeWriter({ tools: {} }) });
+        const late = yield* voice.consume(
+          {
+            userId: starter,
+            liveSessionId: `live-${call}`,
+            conversation: { userId: starter, conversationId },
+          },
+          {
+            type: LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA,
+            event_id: "event_late",
+            delta: " and the release notes",
+            start_ms: 1_000,
+            end_ms: 1_400,
+          },
+        );
+        assert.ok(Result.isFailure(late) && late.failure === VOICE_WRITE_REFUSAL.NO_SESSION);
+        const after = yield* db
+          .select({ seq: voiceTranscriptSegments.seq })
+          .from(voiceTranscriptSegments)
+          .where(eq(voiceTranscriptSegments.voiceSessionId, call));
+        assert.deepEqual(after, []);
       }),
   );
 });

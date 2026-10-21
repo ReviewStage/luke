@@ -14,7 +14,7 @@ import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
-import type { WireBoundaryInput } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -1070,4 +1070,35 @@ test("a draft's Call starts an empty draft's agent blank under a key of its own,
   assert.equal(first?.prompt, undefined);
   assert.notEqual(first?.idempotencyKey, empty, "under a key of the press's own");
   assert.deepEqual(second, { taskId: TASK, idempotencyKey: worded, prompt, call: true, ...choice });
+});
+
+test("a delete that landed takes the agent out of the list, and a read already out that still holds it does not bring it back", async () => {
+  const OTHER = { ...STARTED, id: "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f" };
+  const tab = mount({ taskId: TASK, repository: null });
+  let answerStale: (answer: WireBoundaryInput) => void = () => undefined;
+  const stale = new Promise<WireBoundaryInput>((resolve) => {
+    answerStale = resolve;
+  });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, stale, { agents: [OTHER] });
+  tab.answer(ACT_KIND.CODING_AGENTS_DELETE, { deleted: true });
+  await tab.mount();
+
+  let result: Awaited<ReturnType<CodingAgentsControl["onDelete"]>> | undefined;
+  await act(async () => {
+    result = await tab.control().onDelete(AGENT);
+  });
+  await settle();
+  // The read that went out before the delete lands last, still holding the agent.
+  await act(async () => answerStale({ agents: [STARTED, OTHER] }));
+  await settle();
+
+  assert.deepEqual(result, { status: ACTION_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.id),
+    [OTHER.id],
+  );
+  assert.deepEqual(
+    tab.asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_DELETE),
+    [{ kind: ACT_KIND.CODING_AGENTS_DELETE, payload: { agentId: AGENT } }],
+  );
 });
