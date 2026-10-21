@@ -7,8 +7,14 @@
  * Chromium in the agent's own sandbox (`agent-browser.ts`,
  * `browser-actions.ts`); a worker drives its parent's, since it works in its
  * parent's sandbox. Every call is routed to its browser here alone
- * (`browserFor`), so a later kind of tab, a Mac's, is one more route in this
- * module and nothing in the roots that offer the tool.
+ * (`browserFor`): the sandbox's, or, where the call says `on: "mac"`, the
+ * developer's own Mac, whose desktop runs the same actions on the Browser
+ * tabs of the agent's task (`@luke/host`'s `mac-browser-tabs.ts`) as a Mac
+ * command of the browser kind (`../mac-command.ts`'s `askMac`), for the
+ * agent's starter, whose Mac it is, as `run_on_mac` asks. A Mac's tabs are
+ * the desktop's own, so the tab store below never holds them and no
+ * takeover is read for them; its answer is mapped into the result a sandbox
+ * run answers, its last screenshot put back where the run took it.
  *
  * The agent's tabs are kept in the service under the conversation whose
  * agent's browser holds them (`@luke/database/models/agent-browser-tabs`):
@@ -40,32 +46,56 @@ import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire"
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
+  BROWSER_SCREENSHOT,
   BROWSER_STEP_STATUS,
   type BrowserAgentAction,
   type BrowserAgentRun,
   type BrowserAgentStep,
   browserAgentActionsSchema,
+  browserAgentRunSchema,
   cutBrowserText,
 } from "@luke/features/browser-agent-actions";
 import { runBrowserActions } from "@luke/features/browser-agent-cdp";
 import type { CdpSession, PageTarget } from "@luke/features/browser-cdp";
-import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
+import {
+  MAC_COMMAND_KIND,
+  type MacBrowserParams,
+  type MacCommandImage,
+} from "@luke/features/mac-command-wire";
+import { EXCESS_KEYS, isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Clock, Effect, Result, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
+import { askMac, MAC_COMMAND_STATUS } from "../mac-command.js";
 import type { AgentBrowser } from "./agent-browser.js";
 import { connectRestoring } from "./restore-tabs.js";
+
+/** Where a call acts: the Chromium in the agent's own sandbox, or the Browser tabs on the developer's own Mac. */
+export const BROWSER_PLACE = {
+  SANDBOX: "sandbox",
+  MAC: "mac",
+} as const;
 
 const BROWSER_INPUT = Schema.Struct({
   actions: describeWire(
     browserAgentActionsSchema,
     `The actions to take, in order, 1 to ${BROWSER_AGENT_LIMITS.MAX_ACTIONS}; the call stops at the first that fails.`,
   ),
+  on: Schema.optionalKey(
+    describeWire(
+      Schema.Literals(Object.values(BROWSER_PLACE)),
+      `Where to act: "${BROWSER_PLACE.SANDBOX}", your own browser, where left out; or ` +
+        `"${BROWSER_PLACE.MAC}", the Browser tabs of your task on the developer's own Mac, as the developer.`,
+    ),
+  ),
 });
 
 const readInput = readEither(BROWSER_INPUT);
+
+/** A Mac's run as its answer carries it, read as an answer is: a key a newer desktop added is let go. */
+const readMacRun = readEither(browserAgentRunSchema, { excess: EXCESS_KEYS.DROP });
 
 /** The tool as every agent is offered it, Luke, a coding agent, and either's workers alike: its name, its words, and its input schema. */
 export const BROWSER_TOOL = {
@@ -73,7 +103,11 @@ export const BROWSER_TOOL = {
   description:
     "Drive a real browser, a Chromium in your own sandbox, whose tabs the developer can watch " +
     "and take over in the Browser tab beside the plan. Your own dev server is at localhost " +
-    "there, such as http://localhost:3000/. Each call takes up to " +
+    "there, such as http://localhost:3000/. Use it for your own dev server and for anything the " +
+    'developer should watch or take over. With `on: "mac"` the same actions run instead on the ' +
+    "Browser tabs of your task in Luke on the developer's own Mac, signed in as the developer: " +
+    "use that only for the developer's own localhost or a site they are signed in to there, " +
+    "since on the Mac you act as the developer on every site they are signed in to. Each call takes up to " +
     `${BROWSER_AGENT_LIMITS.MAX_ACTIONS} actions, run in order: list the tabs, open one at an ` +
     "address, navigate, go back or forward, click, type, press a key, scroll, wait, take a " +
     "screenshot to see the page, take a snapshot to read it as text with a ref beside each " +
@@ -82,7 +116,7 @@ export const BROWSER_TOOL = {
     "it acted on, so open and go on in one call. While the developer drives a tab, actions on " +
     "it are refused until they hand it back: wait, or ask them. Answers each step that ran and " +
     "the tabs it acted on as they now stand, or `not-run` and why, such as the browser not " +
-    "being reachable.",
+    "being reachable or the Mac not listening.",
   inputSchema: BROWSER_INPUT,
 } as const;
 
@@ -107,6 +141,18 @@ export const BROWSER_TOOL_REFUSAL = {
   UNREACHABLE: "Not run: your browser could not be reached:",
   UNAVAILABLE: "Not run: the browser could not be reached just now. The call may be made again.",
   NO_SANDBOX: "Not run: your sandbox could not be opened. The call may be made again.",
+  NO_MAC:
+    "Not run: you cannot reach the developer's Mac's Browser tabs. Use your own browser, " +
+    "with `on` left out.",
+  TASKLESS:
+    "Not run: you work on no task, and the developer's Mac drives only the Browser tabs of a " +
+    "task. Use your own browser, with `on` left out.",
+  MAC_UNREADABLE:
+    "No answer it could read: the developer's Mac answered in a shape this service does not " +
+    "read, so the actions may or may not have run. Luke on the Mac may need updating.",
+  MAC_UNAVAILABLE:
+    "Not run: your task could not be read just now, so nothing was sent to the developer's " +
+    "Mac. The call may be made again.",
 } as const;
 
 /** What a call runs under: the session whose sandbox its browser is in, and the conversation its tabs belong to. */
@@ -117,6 +163,16 @@ export interface BrowserCall {
   readonly conversationId: string;
   /** Opens the sandbox the browser runs in, as eve opens it for any tool that needs it, a worker's its parent's; one already open is answered as it stands. */
   readonly openSandbox: () => PromiseLike<unknown>;
+  /** The developer's Mac, which a call that says `on: "mac"` reaches; none where this agent reaches no Mac's Browser tabs. */
+  readonly mac?: MacBrowserCall;
+}
+
+/** What a call on the developer's Mac is sent under: whose Mac, and the task whose Browser tabs it drives. */
+export interface MacBrowserCall {
+  /** The account whose Mac runs the actions: the agent's starter's, as `run_on_mac` asks. */
+  readonly userId: string;
+  /** The agent's task, read only for a call that asks for the Mac; null for an agent on no task. */
+  readonly taskId: Effect.Effect<string | null, unknown, DatabaseServices>;
 }
 
 /** A call that ran nothing, and why. */
@@ -228,13 +284,8 @@ function keepTabs(
   });
 }
 
-/**
- * The browser a call is routed to: the Chromium in the agent's own sandbox,
- * connected for the caller's scope, its kept tabs reopened where it started
- * afresh (`restore-tabs.ts`). The one route, so a tab of another kind
- * is routed here and nowhere else.
- */
-function browserFor(call: BrowserCall) {
+/** The Chromium in the agent's own sandbox, connected for the caller's scope, its kept tabs reopened where it started afresh (`restore-tabs.ts`). */
+function sandboxBrowser(call: BrowserCall) {
   return connectRestoring(call.browserSession, call.conversationId);
 }
 
@@ -260,27 +311,11 @@ function runOn(cdp: CdpSession, call: BrowserCall, actions: readonly BrowserAgen
 }
 
 /**
- * One `browser` call made for an agent, whichever agent made it: its input
- * read against the tool's schema, the action on a tab a member drives
- * refused with nothing after it run, the rest run on the agent's browser,
- * and the store kept in step. It never fails: a browser that cannot be
- * reached, or a store that cannot be read, answers `not-run` and why.
+ * A call on the agent's own sandbox browser: the action on a tab a member
+ * drives refused with nothing after it run, the rest run, and the store
+ * kept in step.
  */
-export function runBrowserTool(
-  call: BrowserCall,
-  input: UnparsedWireValue,
-): Effect.Effect<BrowserToolResult, never, AgentBrowser | DatabaseServices> {
-  const read = readInput(input);
-  if (Result.isFailure(read)) {
-    const at = read.failure.path.join(".");
-    return Effect.succeed(
-      browserNotRun(
-        `Not run: the input did not read${at === "" ? "" : ` at ${at}`}. Name 1 to ` +
-          `${BROWSER_AGENT_LIMITS.MAX_ACTIONS} actions, each as the tool's input says.`,
-      ),
-    );
-  }
-  const { actions } = read.success;
+function onSandbox(call: BrowserCall, actions: readonly BrowserAgentAction[]) {
   return Effect.gen(function* () {
     // Note that the sandbox is opened first, as eve opens it for a shell call, because the browser
     // is found by the sandbox its session is tagged with, and an agent's first call may be this one.
@@ -293,7 +328,7 @@ export function runBrowserTool(
     const ran = yield* Effect.result(
       Effect.scoped(
         Effect.gen(function* () {
-          const cdp = yield* browserFor(call);
+          const cdp = yield* sandboxBrowser(call);
           const rows = yield* listAgentBrowserTabs(call.conversationId);
           const now = new Date(yield* Clock.currentTimeMillis);
           const refused = firstDriven(actions, drivenTabs(rows, now));
@@ -339,6 +374,114 @@ export function runBrowserTool(
   );
 }
 
+/**
+ * A Mac's run with its one image put back where it was taken: the last
+ * screenshot that was done, whose picture the Mac sent as the result's
+ * image and left empty in the run (`mac-browser-tabs.ts`). Every earlier
+ * screenshot stays without its picture, and an image of a type a
+ * screenshot is not is left out.
+ */
+function withMacImage(run: BrowserAgentRun, image: MacCommandImage | undefined): BrowserAgentRun {
+  if (image === undefined || image.mediaType !== BROWSER_SCREENSHOT.MIME) return run;
+  const at = run.steps.findLastIndex(
+    (step) =>
+      step.action === BROWSER_AGENT_ACTION.SCREENSHOT && step.status === BROWSER_STEP_STATUS.DONE,
+  );
+  const steps = run.steps.map((step, index) =>
+    index === at && step.action === BROWSER_AGENT_ACTION.SCREENSHOT && "image" in step
+      ? { ...step, image: { ...step.image, data: image.data } }
+      : step,
+  );
+  return { ...run, steps };
+}
+
+/**
+ * The tabs a Mac's run acted on, each with the address and title it last
+ * showed in the run, a list's or a snapshot's; a tab the run never showed
+ * a page of is left out, since the Mac answers no page beside its steps.
+ */
+function macTabs(steps: readonly BrowserAgentStep[]): readonly ShownTab[] {
+  const seen = new Map<string, PageTarget>();
+  for (const step of steps) {
+    if (step.status !== BROWSER_STEP_STATUS.DONE) continue;
+    if (step.action === BROWSER_AGENT_ACTION.LIST) {
+      for (const tab of step.tabs) seen.set(tab.tab, { targetId: tab.tab, ...tab });
+    }
+    if (step.action === BROWSER_AGENT_ACTION.SNAPSHOT) {
+      seen.set(step.tab, { targetId: step.tab, url: step.url, title: step.title });
+    }
+  }
+  return tabsActedOn(steps).flatMap((tab) => {
+    const page = seen.get(tab);
+    return page === undefined ? [] : [shownTab(page)];
+  });
+}
+
+/**
+ * A call on the Browser tabs of the agent's task on the developer's own
+ * Mac, sent to the starter's Mac as a browser command: refused in words
+ * where the agent reaches no Mac or works on no task, the Mac's `not-run`
+ * told in its own words, and its run answered as a sandbox run is.
+ */
+function onMac(mac: MacBrowserCall | undefined, actions: readonly BrowserAgentAction[]) {
+  return Effect.gen(function* () {
+    if (mac === undefined) return browserNotRun(BROWSER_TOOL_REFUSAL.NO_MAC);
+    const taskId = yield* Effect.result(mac.taskId);
+    if (Result.isFailure(taskId)) return browserNotRun(BROWSER_TOOL_REFUSAL.MAC_UNAVAILABLE);
+    if (taskId.success === null) return browserNotRun(BROWSER_TOOL_REFUSAL.TASKLESS);
+    const params: MacBrowserParams = { taskId: taskId.success, actions };
+    const answer = yield* askMac(mac.userId, {
+      kind: MAC_COMMAND_KIND.BROWSER,
+      params,
+    });
+    if (answer.status === MAC_COMMAND_STATUS.NOT_RUN) return browserNotRun(answer.reason);
+    if (!("output" in answer)) return browserNotRun(BROWSER_TOOL_REFUSAL.MAC_UNREADABLE);
+    const read = readMacRun(unparsedWire(answer.output));
+    if (Result.isFailure(read)) return browserNotRun(BROWSER_TOOL_REFUSAL.MAC_UNREADABLE);
+    const run = withMacImage(read.success, answer.image);
+    return {
+      status: BROWSER_TOOL_STATUS.RAN,
+      ...run,
+      tabs: macTabs(run.steps),
+    } satisfies BrowserToolResult;
+  });
+}
+
+/**
+ * The browser a call is routed to, the one place every call is: the
+ * developer's Mac where it says `on: "mac"`, the agent's own sandbox
+ * otherwise.
+ */
+function browserFor(call: BrowserCall, input: typeof BROWSER_INPUT.Type) {
+  return input.on === BROWSER_PLACE.MAC
+    ? onMac(call.mac, input.actions)
+    : onSandbox(call, input.actions);
+}
+
+/**
+ * One `browser` call made for an agent, whichever agent made it: its input
+ * read against the tool's schema and the call routed to its browser
+ * (`browserFor`). It never fails: a browser that cannot be reached, a Mac
+ * that ran nothing, or a store that cannot be read, answers `not-run` and
+ * why.
+ */
+export function runBrowserTool(
+  call: BrowserCall,
+  input: UnparsedWireValue,
+): Effect.Effect<BrowserToolResult, never, AgentBrowser | DatabaseServices> {
+  const read = readInput(input);
+  if (Result.isFailure(read)) {
+    const at = read.failure.path.join(".");
+    return Effect.succeed(
+      browserNotRun(
+        `Not run: the input did not read${at === "" ? "" : ` at ${at}`}. Name 1 to ` +
+          `${BROWSER_AGENT_LIMITS.MAX_ACTIONS} actions, each as the tool's input says.`,
+      ),
+    );
+  }
+  return browserFor(call, read.success);
+}
+
 /** A screenshot as a stored or shown result carries it, read leniently: only its picture is wanted. */
 const isScreenshotted = Schema.is(
   Schema.Struct({
@@ -382,8 +525,11 @@ export function browserModelOutput(output: UnparsedWireValue): ToolModelOutput {
     return { type: "json", value: output };
   }
   const steps: readonly UnparsedWireValue[] = output.steps;
+  // Note that a picture left empty is none: a Mac sends only its run's last.
   const pictures = steps.flatMap((step) =>
-    isScreenshotted(step) ? [{ tab: step.tab, mime: step.image.mime, data: step.image.data }] : [],
+    isScreenshotted(step) && step.image.data !== ""
+      ? [{ tab: step.tab, mime: step.image.mime, data: step.image.data }]
+      : [],
   );
   if (pictures.length === 0) return { type: "json", value: output };
   return {
