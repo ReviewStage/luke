@@ -6,8 +6,9 @@
  * tab again from what it would have to read itself: each strip hands over
  * how it drew its tabs as it draws them, and a card wears that, as the tab
  * stood when it was last seen. The strip's whole set replaces the one it
- * handed last, so a tab closed is no longer held. It is the window's memory
- * alone, kept for as long as the window stands.
+ * handed last, so a tab closed is no longer held. It says only how a tab
+ * looks: whether a tab still stands is its strip's own state's to say. It is
+ * the window's memory alone, kept for as long as the window stands.
  */
 
 import { type StripTab, tabKey } from "@luke/ui/tab-strip-model";
@@ -31,11 +32,6 @@ const held = new Map<string, Map<LookStrip, ReadonlyMap<string, HeldLook>>>();
 /** How a strip drew its tab, the last time it drew it for `taskId`; none where it never did or the tab is closed. */
 export function heldLook(strip: LookStrip, taskId: string, tab: StripTab): HeldLook | undefined {
   return held.get(taskId)?.get(strip)?.get(tabKey(tab));
-}
-
-/** Whether the strip drew its tabs for `taskId` at all, so a tab it holds no look of is one it no longer draws. */
-export function stripHeld(strip: LookStrip, taskId: string): boolean {
-  return held.get(taskId)?.has(strip) === true;
 }
 
 /** Hands over how a strip draws its tabs for `taskId`, each time it draws them. */

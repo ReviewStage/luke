@@ -18,7 +18,8 @@
  * cards show. Escape lets go of nothing.
  */
 
-import { type AgentStripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { sameTab } from "@luke/ui/tab-strip-model";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 
 /** How many stops the window keeps, most recent first: far more than the cards, so a closed tab's place is filled from further back. */
@@ -41,7 +42,7 @@ export type SwitcherPlace = (typeof SWITCHER_PLACE)[keyof typeof SWITCHER_PLACE]
 
 /** The kinds of stop. */
 export const STOP_KIND = {
-  /** One agent's tab in a task's column. */
+  /** One tab of a task's column: an agent's, or the draft agent's. */
   COLUMN: "column",
   /** One tab of a task's side panel. */
   PANEL: "panel",
@@ -58,7 +59,7 @@ export type Stop =
   | {
       readonly kind: typeof STOP_KIND.COLUMN;
       readonly taskId: string;
-      readonly tab: AgentStripTab;
+      readonly tab: MainTab;
     }
   | { readonly kind: typeof STOP_KIND.PANEL; readonly taskId: string; readonly tab: SidePanelTab }
   | { readonly kind: typeof STOP_KIND.TASK; readonly taskId: string }
@@ -208,7 +209,7 @@ export interface WindowStanding {
   /** The task the host has open, which the tabs below are of. */
   readonly openTaskId: string | undefined;
   /** The column's tab, none where it shows none or the panel fills the window over it. */
-  readonly column: AgentStripTab | undefined;
+  readonly column: MainTab | undefined;
   /** The side panel's tab, none while it is shut. */
   readonly panel: SidePanelTab | undefined;
 }

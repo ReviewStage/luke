@@ -11,6 +11,7 @@ import {
   SWITCHER_LET_GO,
   SWITCHER_PLACE,
   type SwitcherState,
+  sameStop,
   shownStops,
   switcherChose,
   switcherPressed,
@@ -71,10 +72,7 @@ describe("the stops", () => {
 
   test("let a closed tab go and keep the rest in order", () => {
     const stops = walked(agentTab("a", "x"), agentTab("a", "y"), inbox);
-    const kept = forgotten(
-      stops,
-      (stop) => stop.kind === STOP_KIND.COLUMN && stop.tab.agent === "y",
-    );
+    const kept = forgotten(stops, (stop) => sameStop(stop, agentTab("a", "y")));
     assert.deepEqual(kept, [inbox, agentTab("a", "x")]);
   });
 });
@@ -180,6 +178,12 @@ describe("what is on screen", () => {
     assert.deepEqual(shownStops({ ...standing, boundFor: undefined }), [home]);
     assert.deepEqual(shownStops({ ...standing, agentId: "z" }), [
       { kind: STOP_KIND.AGENT, agentId: "z" },
+    ]);
+  });
+
+  test("counts the draft agent's tab in the column as a tab of its own", () => {
+    assert.deepEqual(shownStops({ ...standing, column: { draft: "d" }, panel: undefined }), [
+      { kind: STOP_KIND.COLUMN, taskId: "a", tab: { draft: "d" } },
     ]);
   });
 

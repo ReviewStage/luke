@@ -45,7 +45,7 @@ const HELD_UNDER_OVERLAY: ReadonlySet<AppCommand> = new Set([
 let overlaysStanding = 0;
 
 /** Whether an overlay holds the keyboard now: a dialog's card, which every dialog marks modal, or an overlay held by {@link useOverlayHold}. */
-function overlayStands(): boolean {
+export function overlayHoldsKeyboard(): boolean {
   return overlaysStanding > 0 || document.querySelector('[aria-modal="true"]') !== null;
 }
 
@@ -143,7 +143,7 @@ export function useMenuCommands(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     return appPlatform().onMenuCommand((command) => {
-      if (HELD_UNDER_OVERLAY.has(command) && overlayStands()) return;
+      if (HELD_UNDER_OVERLAY.has(command) && overlayHoldsKeyboard()) return;
       runAppCommand(command);
     });
   }, [enabled]);

@@ -195,13 +195,16 @@ test("a card pressed while the cards show is gone to, a place through its own do
   assert.equal(document.querySelector(".tab-switcher"), null);
 });
 
-test("the stop left is taken as a still for its card, which the session recording leaves out", async () => {
+test("the stop left is taken as a still for its card, drawn as it lands while the cards show, and the session recording leaves it out", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const taken: unknown[] = [];
+  let answer: (still: string) => void = () => undefined;
   fakeActPort({
     [ACT_KIND.WINDOW_CAPTURE]: (part) => {
       taken.push(part);
-      return Promise.resolve(STILL);
+      return new Promise<string>((resolve) => {
+        answer = resolve;
+      });
     },
   });
   const panel = document.createElement("div");
@@ -214,11 +217,12 @@ test("the stop left is taken as a still for its card, which the session recordin
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
 
   tab();
+  tab();
+  assert.equal(cards()[0]?.querySelector("img"), null, "no still yet, so the glyph stands");
   await act(async () => {
+    answer(STILL);
     for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   });
-  tab();
-  tab();
 
   assert.deepEqual(taken, [{ x: 880, y: 0, width: 400, height: 800 }]);
   const preview = cards()[0]?.querySelector(".tab-switcher-preview");
@@ -251,4 +255,62 @@ test("the menu bar's Next recent tab goes at once, as a tap does", async () => {
     assert.ok(runAppCommand(APP_COMMAND.NEXT_RECENT_TAB));
   });
   assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.PLAN]]);
+});
+
+test("a dialog over the window keeps ⌃Tab, so nothing moves behind it", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  const dialog = document.createElement("div");
+  dialog.setAttribute("aria-modal", "true");
+  document.body.append(dialog);
+
+  assert.equal(tab().defaultPrevented, false);
+  letGo();
+  assert.equal(runAppCommand(APP_COMMAND.NEXT_RECENT_TAB), true);
+  assert.deepEqual(told, asked());
+});
+
+test("a tab closed since it was left is no stop, whether or not its strip drew the close", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  const strip = (tabs: readonly SidePanelTab[]) => ({
+    ...tasksControl().sidePanel,
+    open: true,
+    strip: tabs,
+  });
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: { ...tasksControl().inboxView, open: true } }),
+  );
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.CODE, told, {
+      sidePanel: { ...strip([SIDE_PANEL_TAB.CODE]), tab: SIDE_PANEL_TAB.CODE },
+    }),
+  );
+
+  tab();
+  letGo();
+  assert.deepEqual(told, { panelTabs: [], places: ["inbox"] });
+});
+
+test("the task's own tab is named for the task once, its card saying only the strip under it", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+
+  tab();
+  tab();
+  const plan = cards()[1];
+  assert.equal(plan?.querySelector(".tab-switcher-name")?.textContent, DOCUMENT_TASK.name);
+  assert.equal(plan?.querySelector(".tab-switcher-detail")?.textContent, "Panel");
+  assert.equal(
+    cards()[0]?.querySelector(".tab-switcher-detail")?.textContent,
+    `${DOCUMENT_TASK.name} · Panel`,
+  );
 });

@@ -35,6 +35,7 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import {
@@ -56,6 +57,7 @@ import {
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  sameTab,
   TAB_WORDS,
 } from "@luke/ui/tab-strip-model";
 import { Effect } from "effect";
@@ -72,16 +74,17 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
-import { useAppCommand, useOverlayHold } from "../app-commands.js";
+import { overlayHoldsKeyboard, useAppCommand, useOverlayHold } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Shortcut } from "../shortcut.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCapability } from "../use-app-state.js";
-import { type HeldLook, heldLook, LOOK_STRIP, stripHeld } from "./switcher-looks.js";
+import { type HeldLook, heldLook, LOOK_STRIP } from "./switcher-looks.js";
 import {
   arrived,
   forgotten,
@@ -180,9 +183,12 @@ interface CardLook extends KindLook {
   readonly detail: string | undefined;
 }
 
-/** A tab's look where its strip never drew it in this window: its kind's glyph and word. */
-function tabWordLook(tab: SidePanelTab | { readonly agent: string }): KindLook {
-  if (typeof tab === "string") return tabLook({ kind: TAB_KIND.PANEL, tab });
+/** A tab's look where its strip never drew it in this window: its kind's glyph and word, the Plan's named for its task where the window lists it. */
+function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined): KindLook {
+  if (typeof tab === "string") {
+    const plan = task === undefined ? undefined : { name: task.name, status: task.status };
+    return tabLook({ kind: TAB_KIND.PANEL, tab, plan });
+  }
   if (isAgentTab(tab)) return tabLook({ kind: TAB_KIND.AGENT, name: undefined, agent: undefined });
   if (isFileTab(tab)) return tabLook({ kind: TAB_KIND.FILE, path: tab.file });
   if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
@@ -209,15 +215,18 @@ function cardLook(stop: Stop, tasks: TasksControl): CardLook {
     case STOP_KIND.COLUMN:
     case STOP_KIND.PANEL: {
       const strip = stop.kind === STOP_KIND.COLUMN ? LOOK_STRIP.COLUMN : LOOK_STRIP.PANEL;
+      const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === stop.taskId);
       const held: HeldLook | KindLook =
-        heldLook(strip, stop.taskId, stop.tab) ?? tabWordLook(stop.tab);
-      const name = taskName(tasks, stop.taskId);
+        heldLook(strip, stop.taskId, stop.tab) ?? tabWordLook(stop.tab, task);
+      const name = task?.name;
       const words = STRIP_WORDS[stop.kind];
+      // The task's own tab is already named for the task, so its card says only the strip.
+      const named = name === undefined || name === held.label;
       return {
         icon: held.icon,
         label: held.label,
         endMark: "endMark" in held ? held.endMark : undefined,
-        detail: name === undefined ? words : `${name} · ${words}`,
+        detail: named ? words : `${name} · ${words}`,
       };
     }
     case STOP_KIND.TASK: {
@@ -269,8 +278,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl) {
     automations: tasks.automationsView.open,
     boundFor: tasks.boundFor,
     openTaskId: tasks.activeTaskId,
-    column:
-      column !== undefined && isAgentTab(column) && !sidePanel.fullScreen ? column : undefined,
+    column: sidePanel.fullScreen ? undefined : column,
     panel: sidePanel.open ? sidePanel.tab : undefined,
   });
 }
@@ -388,6 +396,8 @@ export function TabSwitcher({
   const answers = available && desktop;
   const { act } = useAct();
   const [state, setState] = useState<SwitcherState>(SWITCHER_LET_GO);
+  // Counts the stills kept, so one landing while the cards show is drawn at once.
+  const [, setStillsKept] = useState(0);
   // Note that these are refs, because the keys and the stills read them as they land, which no render stands between.
   const latest = useRef<SwitcherState>(SWITCHER_LET_GO);
   const stops = useRef<readonly Stop[]>([]);
@@ -420,6 +430,7 @@ export function TabSwitcher({
       { stop, src },
       ...stills.current.filter((held) => !sameStop(held.stop, stop)),
     ].slice(0, STILLS_KEPT);
+    if (latest.current.held) setStillsKept((count) => count + 1);
   };
 
   // A still of the stop as it is drawn now, kept once main answers; a stop no longer on screen by then keeps what it had.
@@ -513,7 +524,7 @@ export function TabSwitcher({
     stops.current = [stop, ...stops.current.filter((each) => !sameStop(each, stop))];
   };
 
-  // The stops that still stand: no tab the open task's strips no longer draw, and no task the window no longer lists.
+  // The stops that still stand: no tab the open task no longer holds, as its strips' own state says, and no task the window no longer lists.
   const standing = (): readonly Stop[] => {
     const control = doors.current.tasks;
     const open = control.activeTaskId;
@@ -522,9 +533,15 @@ export function TabSwitcher({
       if (taskId === undefined) return false;
       if (control.listRead && taskName(control, taskId) === undefined) return true;
       if (taskId !== open) return false;
-      if (stop.kind !== STOP_KIND.COLUMN && stop.kind !== STOP_KIND.PANEL) return false;
-      const strip = stop.kind === STOP_KIND.COLUMN ? LOOK_STRIP.COLUMN : LOOK_STRIP.PANEL;
-      return stripHeld(strip, taskId) && heldLook(strip, taskId, stop.tab) === undefined;
+      if (stop.kind === STOP_KIND.PANEL) {
+        return !control.sidePanel.strip.some((each) => sameTab(each, stop.tab));
+      }
+      if (stop.kind !== STOP_KIND.COLUMN) return false;
+      // Note that an agent's tab is judged only once the task's agents are read, since none stands open before.
+      const { openAgents, tabs } = control.mainTabs;
+      if (isAgentTab(stop.tab))
+        return openAgents !== undefined && !openAgents.includes(stop.tab.agent);
+      return !tabs.some((each) => sameTab(each, stop.tab));
     });
     return stops.current;
   };
@@ -551,7 +568,7 @@ export function TabSwitcher({
 
   // The menu bar's items, and ⌘K's rows, go at once, as a tap would: no ⌃ is held to let go of.
   const tap = (step: SwitchStep) => () => {
-    if (latest.current.held) return;
+    if (latest.current.held || overlayHoldsKeyboard()) return;
     const target = switcherTarget(
       switcherPressed(SWITCHER_LET_GO, { stops: standing(), here: here(), step }),
     );
@@ -568,6 +585,8 @@ export function TabSwitcher({
     const down = (event: KeyboardEvent) => {
       const command = commandForKey(SWITCH_COMMANDS as readonly KeyedCommand[], event);
       if (command === APP_COMMAND.NEXT_RECENT_TAB || command === APP_COMMAND.PREVIOUS_RECENT_TAB) {
+        // A dialog or ⌘K's palette over the window keeps its keys, so nothing moves behind it.
+        if (!latest.current.held && overlayHoldsKeyboard()) return;
         claim(event);
         keys.current.press(STEP_OF[command]);
         return;
