@@ -41,6 +41,7 @@
     "./agents/agent-runtime/meter": "./src/agents/agent-runtime/meter.js",
     "./agents/agent-runtime/role": "./src/agents/agent-runtime/role.js",
     "./agents/agent-runtime/sandbox": "./src/agents/agent-runtime/sandbox.js",
+    "./agents/agent-runtime/sandbox-idle": "./src/agents/agent-runtime/sandbox-idle.js",
     "./agents/agent-runtime/sandbox-image": "./src/agents/agent-runtime/sandbox-image.js",
     "./agents/agent-runtime/servers": "./src/agents/agent-runtime/servers.js",
     "./agents/agent-runtime/skills": "./src/agents/agent-runtime/skills.js",
