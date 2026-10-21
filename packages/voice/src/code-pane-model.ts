@@ -61,7 +61,7 @@ export function fileRefText(ref: NamedLines): string {
 }
 
 /** Whether `line` of the file is one the reference points at. */
-export function isPointed(ref: CodeRef, line: number): boolean {
+function isPointed(ref: CodeRef, line: number): boolean {
   if (ref.startLine === undefined || ref.endLine === undefined) return false;
   return line >= ref.startLine && line <= ref.endLine;
 }

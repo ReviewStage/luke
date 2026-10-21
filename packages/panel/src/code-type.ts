@@ -1,9 +1,9 @@
 /**
- * code-type.ts -- the type code is set in, as View settings sets it: each font's stack, each line height's ratio, and the font features ligatures turn, one table for a diff and a File tab's lines alike.
+ * code-type.ts -- the type code is set in, as View settings sets it: each font's stack, each line height's ratio, and the font features ligatures turn, one table for every place code is drawn.
  *
- * A diff sets these on its host for its shadow root (`diff-view/index.ts`),
- * and a run of lines on its own box (`tasks/code-lines.tsx`), so a setting
- * reads the same in every place code is drawn.
+ * The diff bundle sets these on its host for its shadow root
+ * (`diff-view/index.ts`), a diff's, a whole file's, and a Code card's
+ * snippet alike, so a setting reads the same in every place code is drawn.
  */
 
 import { DIFF_FONT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
@@ -27,6 +27,3 @@ export const LINE_HEIGHT_RATIO = {
 
 /** The font features ligatures turn on or off. */
 export const LIGATURES = { ON: "'liga' 1, 'calt' 1", OFF: "'liga' 0, 'calt' 0" } as const;
-
-/** The type a run of code is set in: its font, its size in pixels, its line height, and whether its ligatures join. */
-export type CodeType = Pick<DiffLook, "font" | "fontSize" | "lineHeight" | "ligatures">;

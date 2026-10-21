@@ -121,6 +121,7 @@ function useWholeFileFind(
   read: RefObject<{ text: string; notes: readonly WholeFileNote[]; from: number }>,
   noteElement: (key: string) => HTMLElement,
   handle: RefObject<FileViewHandle | undefined>,
+  findable: boolean,
 ): () => void {
   const [find] = useState(() => {
     const state = {
@@ -248,7 +249,7 @@ function useWholeFileFind(
     };
     return { source, paint, refresh, clear: source.clear };
   });
-  useFindSource(find.source);
+  useFindSource(findable ? find.source : undefined);
   // Note that the tints are taken away with the file, since they name ranges of its rows.
   useEffect(() => find.clear, [find]);
   useEffect(() => find.refresh());
@@ -270,6 +271,7 @@ export function WholeFile({
   findFrom,
   reveal: revealed,
   handleRef,
+  findable = true,
 }: {
   name: string;
   text: string;
@@ -281,6 +283,12 @@ export function WholeFile({
   /** A run of lines to centre, again each time `at` changes; none leaves the file at its top. */
   reveal?: { readonly range: FileLineRange; readonly at: number } | undefined;
   handleRef?: RefObject<WholeFileHandle | null> | undefined;
+  /**
+   * Whether ⌘F over the tab finds in the file: false where the file is
+   * drawn over the window rather than in the tab, as a text file opened from
+   * a message is, so the tab's find stays the tab's own.
+   */
+  findable?: boolean | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -298,7 +306,7 @@ export function WholeFile({
   }, []);
   const read = useRef({ text: "", notes: [] as readonly WholeFileNote[], from: 1 });
   read.current = { text, notes, from: findFrom };
-  const paint = useWholeFileFind(host, read, elementFor, handle);
+  const paint = useWholeFileFind(host, read, elementFor, handle, findable);
   const props: FileViewProps = {
     name,
     text,

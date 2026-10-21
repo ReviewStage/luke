@@ -1118,7 +1118,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
 /** The id a whole file's one item stands under in its view. */
 const WHOLE_FILE_ITEM = "file";
 
-/** How much room stands above a whole file's first line and below its last, in pixels: the File tab's rows' own (`styles/tasks.css`'s `.code-lines`). */
+/** How much room stands above a whole file's first line and below its last, in pixels: what the File tab's rows of lines stood in before Pierre drew them. */
 const WHOLE_FILE_EDGE = 6;
 
 /**

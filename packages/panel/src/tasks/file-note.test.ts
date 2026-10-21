@@ -10,7 +10,6 @@ import { afterEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { CodeLineRows } from "./code-lines.js";
 import { FileNoteAnnotation, type FileNotes, type NoteLines } from "./file-note.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -164,20 +163,4 @@ test("the pointer, or the keyboard, on a note lights its lines, and leaving lets
     { startLine: 3, endLine: 5 },
     undefined,
   ]);
-});
-
-test("lines a note lights are drawn lit beside those pointed at", () => {
-  const lines = Array.from({ length: 8 }, (_, at) => [{ text: `line ${at + 1}` }]);
-  const container = draw(
-    createElement(CodeLineRows, {
-      firstLine: 1,
-      lines,
-      pointed: { path: "src/invite.ts", startLine: 7, endLine: 7 },
-      lit: { startLine: 3, endLine: 5 },
-    }),
-  );
-  const pointed = [...container.querySelectorAll(".code-line")].map(
-    (row) => row.getAttribute("data-pointed") === "true",
-  );
-  assert.deepEqual(pointed, [false, false, true, true, true, false, true, false]);
 });
