@@ -12,7 +12,12 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { BOARD_BOUNDS, boardAnswerSchema, boardSaveRequestSchema } from "../board-wire.js";
+import {
+  BOARD_BOUNDS,
+  boardAnswerSchema,
+  boardSaveAnswerSchema,
+  boardSaveRequestSchema,
+} from "../board-wire.js";
 import { MAXIMUM_START_BODY_BYTES } from "../coding-agent-wire.js";
 import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -133,7 +138,7 @@ export const tasksContract = {
     .meta(bodyCap(BOARD_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: `${PLAN}/board`, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), boardSaveRequestSchema))
-    .output(EffectSchema.flip(boardAnswerSchema)),
+    .output(EffectSchema.flip(boardSaveAnswerSchema)),
   /** The developer's edit of the document. */
   edit: hostedProcedure
     .meta(bodyCap(EDIT_BODY_BYTES))

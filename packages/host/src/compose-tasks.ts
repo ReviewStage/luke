@@ -2356,9 +2356,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate() || view.activeTaskId !== taskId) return { saved: false };
         return yield* serial(
           Effect.gen(function* () {
-            const board = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
-            if (board === undefined) return { saved: false };
-            if (view.activeTaskId === taskId) write({ board });
+            const saved = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
+            if (saved === undefined) return { saved: false };
+            if (view.activeTaskId === taskId) write({ board: saved.board });
             return { saved: true };
           }),
         );
