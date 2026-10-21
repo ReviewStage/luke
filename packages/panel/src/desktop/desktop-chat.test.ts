@@ -918,10 +918,9 @@ test("until the chat is read, the window's Chat keeps its titled bar with New ch
   const chat = mount(() => undefined);
   const bar = chat.querySelector(".chat-rail .desktop-toolbar");
   assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
-  assert.ok(
-    bar?.querySelector('button[aria-label="New channel"]'),
-    "New channel stands while it is read",
-  );
+  const create = bar?.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
+  assert.ok(create, "New channel stands while it is read");
+  assert.equal(create.disabled, true, "but opens no channel against no chat");
   const windowWait = chat.querySelector('.chat-rail [role="status"]');
   assert.ok(windowWait, "the window's Chat says it is waiting");
   assert.equal(windowWait.querySelector(".luke-visually-hidden")?.textContent, "Reading chat…");

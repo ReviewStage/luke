@@ -952,7 +952,8 @@ function ChatView({
     return (
       <div className="chat-view">
         <nav className="chat-rail" aria-label={CHAT_LIST} style={{ width: railWidth }}>
-          <RailBar onNew={dialogs.askNew} viewOptions={undefined} />
+          {/* Note that New channel stands but takes no press until the chat is read, since a channel opened against no chat would go nowhere. */}
+          <RailBar onNew={undefined} viewOptions={undefined} />
           {standIn}
         </nav>
         {dialogs.dialog}
@@ -1095,7 +1096,8 @@ function RailBar({
   onNew,
   viewOptions,
 }: {
-  onNew: () => void;
+  /** Opens New channel's question; none while no chat is read, which leaves the press disabled. */
+  onNew: (() => void) | undefined;
   viewOptions: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -1107,7 +1109,12 @@ function RailBar({
       <div className="desktop-toolbar-actions">
         {viewOptions}
         <Tooltip label={NEW_CHANNEL}>
-          <IconButton icon={<PlusIcon />} label={NEW_CHANNEL} onClick={onNew} />
+          <IconButton
+            icon={<PlusIcon />}
+            label={NEW_CHANNEL}
+            disabled={onNew === undefined}
+            onClick={onNew}
+          />
         </Tooltip>
         <SendFeedbackButton experiment={EXPERIMENT.CHAT} />
       </div>

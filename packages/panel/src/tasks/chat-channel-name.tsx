@@ -11,12 +11,18 @@ import { useTaskStatus } from "./use-known-names.js";
  * #general's. A direct message is named by who it is with.
  */
 
-/** A channel's name in words: a topic's or #general's `#name`, a task's name, or a DM by who it is with, both of its two's names where the reader is neither (`channelLabel`). */
+/**
+ * A channel's name in words: a topic's or #general's `#name`, a task's by
+ * its task's name as the window holds it, so a rename reaches it, and its
+ * channel's own name until the task is read, or a DM by who it is with,
+ * both of its two's names where the reader is neither (`channelLabel`).
+ */
 export function channelTitle(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
   const label = channelLabel(chat, names, channel);
-  return channel.kind === CHANNEL_KIND.DM || channel.kind === CHANNEL_KIND.TASK
-    ? label
-    : `#${label}`;
+  if (channel.kind === CHANNEL_KIND.TASK) {
+    return (channel.planId === undefined ? undefined : names.tasks.get(channel.planId)) ?? label;
+  }
+  return channel.kind === CHANNEL_KIND.DM ? label : `#${label}`;
 }
 
 /** A channel by name as drawn: a task's glyph before its name, else its name in words (`channelTitle`). */
