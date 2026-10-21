@@ -835,6 +835,19 @@
     margin-block-end: var(--luke-space-12);
   }
 
+  /* A line off screen is neither styled, laid out, nor painted until it
+     nears the view, so a long transcript costs what stands on screen rather
+     than every line it holds. It keeps the height it was last drawn at
+     (`auto`), and its clip leaves room for a focus ring and a revealed
+     message's mark, which the containment would otherwise cut. The Inbox's
+     board is left out: a thread there is one line, whose `/` and `@` lists
+     open inside it, and nothing there would be skipped. */
+  .conversation-log:not(.inbox-board) > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 160px; /* off-scale: a line's height before it is first drawn */
+    overflow-clip-margin: var(--luke-space-8);
+  }
+
   .conversation-empty {
     display: flex;
     max-width: 280px; /* off-scale: a short line's measure */

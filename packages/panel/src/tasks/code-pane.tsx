@@ -58,16 +58,29 @@ const OPEN_FILE_LABEL = "Open file";
 /** No agent named, where the pane is drawn with no agents to name. */
 const noAgentLabel = (): undefined => undefined;
 
+/** Scrolls `lines` alone until `target` stands in its middle as it is laid out now. */
+function centreNow(lines: HTMLElement, target: HTMLElement): void {
+  const box = lines.getBoundingClientRect();
+  const line = target.getBoundingClientRect();
+  lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
+}
+
 /**
  * Scrolls `lines` alone until `target` stands in its middle. Note that this
  * is not `scrollIntoView`, because that scrolls every box around the line as
  * well, and the panel often arrives sliding in from past the window's edge,
- * so the window's own layout would be scrolled sideways after it.
+ * so the window's own layout would be scrolled sideways after it. Note too
+ * that a transcript's line off screen stands at a placeholder height until
+ * it is drawn (`content-visibility: auto`, tasks.css), so the line is centred
+ * once more two frames on, once scrolling it into view has drawn it.
  */
 export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
-  const box = lines.getBoundingClientRect();
-  const line = target.getBoundingClientRect();
-  lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
+  centreNow(lines, target);
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (lines.isConnected && target.isConnected) centreNow(lines, target);
+    }),
+  );
 }
 
 /** The nearest box around an element that scrolls, which a reveal scrolls rather than every box around it; none where nothing around it scrolls. */
