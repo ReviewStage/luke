@@ -782,9 +782,10 @@ function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope
     const current = yield* Effect.result(
       deps.readTab(view.ask.userId, view.ask.taskId, view.ask.tabId),
     );
-    if (Result.isSuccess(current) && Option.isSome(current.success)) {
-      yield* Ref.set(view.targetId, current.success.value.tab.targetId);
-    }
+    // A store that could not say is unavailable, and a tab the member no longer reaches, or that closed, is gone.
+    if (Result.isFailure(current)) return BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
+    if (Option.isNone(current.success)) return BROWSER_LIVE_CLOSE_REASON.GONE;
+    yield* Ref.set(view.targetId, current.success.value.tab.targetId);
     // Note that the events are read from before the first command, so the screencast's first frame, after
     // which Chromium sends none until it is acknowledged, is never missed.
     yield* Effect.forkScoped(

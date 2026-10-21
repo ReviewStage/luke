@@ -624,6 +624,57 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a tab the member stopped reaching while its browser was reached is never cast, and a store that could not say closes as unavailable",
+  () =>
+    Effect.gen(function* () {
+      const revoked = yield* liveBrowser();
+      const revokedPanel = yield* scriptedViewer;
+      const revokedStore = world(revoked.browser);
+      yield* Effect.scoped(
+        relayBrowserTab(revokedPanel.viewer, ASK, reachedTab(undefined), {
+          ...revokedStore.deps,
+          browser: {
+            connect: (sessionId) =>
+              Effect.andThen(
+                Effect.sync(() => revokedStore.close()),
+                revoked.browser.connect(sessionId),
+              ),
+          },
+        }),
+      );
+      assert.deepEqual(revokedPanel.closed, [
+        BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.GONE],
+      ]);
+      assert.ok(!revoked.commands.some((command) => command.method === "Page.startScreencast"));
+
+      const failing = yield* liveBrowser();
+      const failingPanel = yield* scriptedViewer;
+      const failingStore = world(failing.browser);
+      let connected = false;
+      yield* Effect.scoped(
+        relayBrowserTab(failingPanel.viewer, ASK, reachedTab(undefined), {
+          ...failingStore.deps,
+          readTab: (...args) =>
+            connected ? Effect.fail("store unavailable") : failingStore.deps.readTab(...args),
+          browser: {
+            connect: (sessionId) =>
+              Effect.andThen(
+                Effect.sync(() => {
+                  connected = true;
+                }),
+                failing.browser.connect(sessionId),
+              ),
+          },
+        }),
+      );
+      assert.deepEqual(failingPanel.closed, [
+        BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE],
+      ]);
+      assert.ok(!failing.commands.some((command) => command.method === "Page.startScreencast"));
+    }),
+);
+
 it.effect("a tab its agent closed, or its browser destroyed, closes the socket as gone", () =>
   Effect.gen(function* () {
     const listed = yield* liveBrowser();
