@@ -7098,7 +7098,7 @@ button.subagent-line:hover {
   margin: 0;
 }
 
-/* The pictures a comment on an Inbox thread carried, after its words
+/* The pictures a comment on an Inbox thread carried, over its words
    (`inbox-pane.tsx`'s CommentFiles): the row a picture in its words stands
    in, its room around it the comment's own gap between what it holds. */
 .inbox-comment-body > .transcript-pictures {
@@ -7924,9 +7924,9 @@ button.picture-frame {
   padding: var(--luke-space-8) var(--comment-field-inline) 0;
 }
 
-/* The files a sent comment carries, under its words, level with them. */
+/* The files a sent comment carries, over its words, level with them. */
 .comment-files {
-  margin: var(--luke-space-6) 0 0 var(--comment-indent);
+  margin: var(--luke-space-4) 0 var(--luke-space-6) var(--comment-indent);
 }
 
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */

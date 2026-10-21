@@ -469,12 +469,13 @@ function CommentEntry({
       {lead}
       {editing === undefined ? (
         <>
-          <WordsDatesContext.Provider value={dates}>
-            <CommentWords words={entry.words ?? ""} />
-          </WordsDatesContext.Provider>
+          {/* Note that a comment's files stand over its words, as the field held them and as every message's do. */}
           {entry.files === undefined ? null : (
             <CommentFiles planId={doors.control.planId} files={entry.files} />
           )}
+          <WordsDatesContext.Provider value={dates}>
+            <CommentWords words={entry.words ?? ""} />
+          </WordsDatesContext.Provider>
         </>
       ) : (
         <div className="comment-field comment-editing">

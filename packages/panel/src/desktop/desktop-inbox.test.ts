@@ -2115,7 +2115,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
 });
 
-test("a thread draws no strip of files over a comment's words: an agent's pictures stand once, where its words draw them, one they do not draw after them, and a member's picture and file after their words, the viewer walking each picture once", async () => {
+test("a thread draws a comment's files over its words: an agent's pictures stand once, where its words draw them, one they do not draw over them, and a member's picture and file over their words, the viewer walking each picture once", async () => {
   const [before, after, unnamed, mine, spec] = [
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c80",
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c81",
@@ -2169,11 +2169,11 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   );
   const alts = (within: Element) =>
     [...within.querySelectorAll<HTMLImageElement>(".picture-block img")].map((image) => image.alt);
-  assert.deepEqual(alts(agent), ["Before", "After", "older.png"], "each picture stands once");
+  assert.deepEqual(alts(agent), ["older.png", "Before", "After"], "each picture stands once");
   assert.deepEqual(alts(member), ["mine.png"]);
   assert.deepEqual(attachedNames(agent), []);
   assert.deepEqual(attachedNames(member), ["spec.pdf"]);
-  // What the message carried stands after its words, never over them.
+  // What the message carried stands over its words, as every message's files do.
   for (const [comment, carried] of [
     [agent, agent.querySelector("[data-inbox-file-pictures]")],
     [member, member.querySelector("[data-inbox-file-pictures]")],
@@ -2181,7 +2181,7 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   ] as const) {
     const words = comment.querySelector("[data-inbox-message-text]");
     assert.ok(words && carried, "the words and the files are drawn");
-    assert.ok(words.compareDocumentPosition(carried) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(words.compareDocumentPosition(carried) & Node.DOCUMENT_POSITION_PRECEDING);
   }
 
   const press = pane.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
@@ -2203,13 +2203,13 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
           new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
         ),
     );
-  assert.deepEqual(viewer(), ["After.png", "2 of 4"]);
-  key("ArrowRight");
-  assert.deepEqual(viewer(), ["older.png", "3 of 4"]);
+  assert.deepEqual(viewer(), ["After.png", "3 of 4"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["mine.png", "4 of 4"]);
   key("ArrowRight");
-  assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
+  assert.deepEqual(viewer(), ["older.png", "1 of 4"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Before.png", "2 of 4"]);
 });
 
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */

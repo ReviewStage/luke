@@ -948,7 +948,7 @@ function chipNames(box: HTMLElement): (string | null)[] {
   );
 }
 
-test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them under words or alone, each drawn in the channel and opened larger on a press", async () => {
+test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them with words or alone, each drawn in the channel over the words and opened larger on a press", async () => {
   const asked: string[] = [];
   const page = mount(
     (chat) => chat,
@@ -980,6 +980,12 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
   const drawn = under?.querySelector<HTMLImageElement>(".picture-block img");
   assert.equal(drawn?.getAttribute("src"), `data:${CHAT_IMAGE_TYPE.PNG};base64,${PNG_BASE64}`);
   assert.equal(drawn?.getAttribute("alt"), "invite-email.png");
+  const words = under?.querySelector(".chat-words");
+  assert.ok(drawn && words);
+  assert.ok(
+    drawn.compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "a person's pictures stand over their words",
+  );
 
   await handFiles(
     box,
