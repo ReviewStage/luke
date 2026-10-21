@@ -235,10 +235,7 @@ async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClien
 }
 
 /** The service's own word about the task, sent beside the relayed frames as the call goes. */
-const TASK_FRAMES: readonly unknown[] = [
-  VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-  VOICE_SERVICE_FRAME.TASK_WORK,
-];
+const TASK_FRAMES: readonly unknown[] = [VOICE_SERVICE_FRAME.TASK_ACTIVITY];
 
 /** The next frame relayed to the desktop, past the service's own word about the task. */
 async function relayedFrame(reader: SocketReader, timeoutMs?: number): Promise<WireRecord> {

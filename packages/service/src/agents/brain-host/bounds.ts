@@ -165,12 +165,12 @@ export const BRAIN_HOST_TURN_KIND = {
 
 /** The environment the host reads beside the names every hosted route already honours. */
 export const BRAIN_HOST_ENVIRONMENT = {
-  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/v1/*` rewrite. */
+  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/coder/v1/*` rewrite. */
   EVE_ORIGIN: "LUKE_EVE_ORIGIN",
   /**
    * The secret the deployment acts for an account under at eve's door, read on
-   * both sides of it: the web functions and each eve service send it, and both
-   * eve services admit it. It is never the cron's `CRON_SECRET`, so the bearer
+   * both sides of it: the web functions and the eve service send it, and the
+   * eve service admits it. It is never the cron's `CRON_SECRET`, so the bearer
    * Vercel's scheduler holds opens no eve session.
    */
   DEPLOYMENT_SECRET: "EVE_DEPLOYMENT_SECRET",

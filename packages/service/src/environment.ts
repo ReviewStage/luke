@@ -35,7 +35,7 @@ export interface HostedEnvironmentValues {
   readonly posthogIngestHost: string | undefined;
   /** Vercel's own bearer on every scheduled call, which the maintenance routes asked by hand take too and eve's door never does; absent refuses every sweep. */
   readonly cronSecret: Redacted.Redacted | undefined;
-  /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by both eve services; absent, blank, or the cron's own value refuses every delegation. */
+  /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by the eve service; absent, blank, or the cron's own value refuses every delegation. */
   readonly eveDeploymentSecret: Redacted.Redacted | undefined;
   /** The secret GitHub signs the Luke GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;

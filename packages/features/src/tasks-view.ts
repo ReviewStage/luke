@@ -2,13 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { agentBrowserTabsAnswerSchema } from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  storedObjectSchema,
-  tasklessAgentSchema,
-  turnRecordFields,
-} from "./coding-agent-wire.js";
+import { CODING_AGENT_ATTACHMENT_TYPE, tasklessAgentSchema } from "./coding-agent-wire.js";
 import {
   GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
@@ -172,130 +166,6 @@ export const taskActivitySchema = EffectSchema.Struct({
 
 export type TaskActivity = typeof taskActivitySchema.Type;
 
-/** How far a brain turn, or one call inside it, has got. */
-export const TASK_WORK_STATE = {
-  RUNNING: "running",
-  DONE: "done",
-  FAILED: "failed",
-} as const;
-
-export type TaskWorkState = (typeof TASK_WORK_STATE)[keyof typeof TASK_WORK_STATE];
-
-/**
- * How much of a turn one `task.work` frame carries. The newest parts are
- * kept, and every string in them is cut to its bound, so a turn that read
- * a large file still travels in a frame of tens of kilobytes.
- */
-export const TASK_WORK_BOUNDS = {
-  /** The most turns one read of a task's work carries, the newest before where it began; older ones are read a page at a time. */
-  TURNS: 20,
-  PARTS: 60,
-  TEXT_CHARS: 4_000,
-  NAME_CHARS: 64,
-  /** The most spoken lines one turn names as its ask. */
-  ASKED_LINES: 20,
-  /** The most characters of a spoken line's id, which the voice's ledger mints. */
-  LINE_ID_CHARS: 128,
-} as const;
-
-const workText = EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.TEXT_CHARS));
-
-/**
- * A journal as the agent tab reads one: its parts as the AI SDK stored them
- * (the model's words, its reasoning, and each tool call with its input and
- * answer, under the tool's own name), the newest kept and every string in
- * them cut to the text bound, so a turn that read a large file still travels
- * small. The desktop reads each call by its tool's name
- * (`@luke/features/agent-tools`), as it reads a coding agent's.
- */
-const taskWorkJournalSchema = EffectSchema.Array(storedObjectSchema).check(
-  EffectSchema.isMaxLength(TASK_WORK_BOUNDS.PARTS),
-);
-
-/**
- * One worker a turn handed work to, by the call that started it: the job it
- * was handed, the task eve runs it as, where it stands as its own session
- * reads (running while it works, though its call answered the moment it
- * started), and its session as a journal, with when its newest task began
- * and ended, its title, and what that task ran on and spent.
- */
-const taskWorkWorkerSchema = EffectSchema.Struct({
-  callId: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.LINE_ID_CHARS)),
-  taskId: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.NAME_CHARS)),
-  ),
-  task: workText,
-  state: EffectSchema.Literals(Object.values(TASK_WORK_STATE)),
-  earlierOmitted: EffectSchema.Boolean,
-  journal: taskWorkJournalSchema,
-  startedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  title: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
-  ),
-  ...turnRecordFields,
-});
-
-export type TaskWorkWorker = typeof taskWorkWorkerSchema.Type;
-
-/**
- * One brain turn as the Work tab draws it: the turn, when it started and
- * ended, how far it has got, its journal and the workers it handed work to,
- * and what it ran on and spent. Unlike `task.activity`, this carries each
- * call's output: the text a command answered in the task's repository
- * sandbox, and pages read from the public web, shown back to the developer
- * on their own Mac.
- */
-export const taskWorkTurnSchema = EffectSchema.Struct({
-  turnId: EffectSchema.String,
-  /** Epoch milliseconds the turn started. */
-  startedAt: EffectSchema.Finite,
-  /** Epoch milliseconds the turn ended; absent while it runs, and from a service older than it. */
-  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  state: EffectSchema.Literals(Object.values(TASK_WORK_STATE)),
-  /** Whether older parts than the journal's were left out. */
-  earlierOmitted: EffectSchema.Boolean,
-  /** The turn's own journal, as the agent tab reads one. */
-  journal: taskWorkJournalSchema,
-  /** The workers the turn handed work to, in the order it started them. */
-  workers: EffectSchema.Array(taskWorkWorkerSchema).check(
-    EffectSchema.isMaxLength(TASK_WORK_BOUNDS.PARTS),
-  ),
-  /**
-   * The developer's spoken lines the turn took as its ask, by the ids the
-   * Transcript names them by, in the order they were said: those of the asks
-   * that opened it, never a follow-up the running turn was steered with;
-   * absent for a turn no spoken line opened, before its lines are taken into
-   * it, and from a service older than it.
-   */
-  asked: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.String.check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.LINE_ID_CHARS)),
-    ).check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.ASKED_LINES)),
-  ),
-  /**
-   * Where each of those lines began: the store's id for the call it was said
-   * on, and the milliseconds into that call, as the Live API's transcript
-   * deltas count them. A line heard on the call standing now carries the
-   * voice window's own row id, which no turn names, and is matched by where
-   * it began instead. Absent where `asked` is, for a line written before it
-   * was recorded, and from a service older than it.
-   */
-  askedAt: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.Struct({
-        voiceSessionId: EffectSchema.String.check(
-          EffectSchema.isMaxLength(TASK_WORK_BOUNDS.LINE_ID_CHARS),
-        ),
-        fromMs: EffectSchema.Finite,
-      }),
-    ).check(EffectSchema.isMaxLength(TASK_WORK_BOUNDS.ASKED_LINES)),
-  ),
-  ...turnRecordFields,
-});
-
-export type TaskWorkTurn = typeof taskWorkTurnSchema.Type;
-
 /** One run of a line in one colour per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
   text: EffectSchema.String,
@@ -401,8 +271,6 @@ export const tasksViewSchema = EffectSchema.Struct({
    * call's end keeps them.
    */
   shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
-  /** Each turn the active task's call tells as last told, oldest first; absent before the first, and cleared with the activity. A call's end keeps them. */
-  work: EffectSchema.optionalKey(EffectSchema.Array(taskWorkTurnSchema)),
   /** Where the read of the active task's code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
   codeStatus: EffectSchema.optionalKey(tasksReadSchema),
   /**

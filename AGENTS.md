@@ -26,7 +26,7 @@ Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
 `apps/web/server/routes/`, the deployment shell beside them, the agents' eve
-app, `apps/dev`, and build and release scripts. A React component, hook, or
+apps, `apps/dev`, and build and release scripts. A React component, hook, or
 DOM-free view model lives in `packages/ui` when more than one app can
 mount it, the panel every client mounts, the desktop's panel window and the
 web's tab alike, in `packages/panel`, the hosted service's logic in
@@ -130,7 +130,7 @@ token and wakes the agent with them, as the webhook does for the App.
 pnpm check:affected                      # optional: the checks for what changed
 ./scripts/check.sh                       # CI's checks, bar the Postgres job
 pnpm exec vitest run <path>              # one file
-pnpm --filter @luke/web test:agent       # offline coding-agent eval, scripted model, by hand
+pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
 Push and let CI, which runs every check, gate the PR. Running the tests you
@@ -235,10 +235,10 @@ request, so there is no request fiber to compose it into),
 `apps/web/server/terminal/function.ts` (the terminal relay, stood for a
 function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
-its own process), the eve root's own module-scope memoized runtime,
+its own process), each eve root's own module-scope memoized runtime,
 `apps/dev/runtime.ts`, built over the
 same layer (`@luke/service/runtime`'s `webServices`) and holding its
-`runAgent`, and the coding-agent eve project's authored files —
+`runAgent`, the eve project's authored files —
 `apps/dev/agent.ts`, `apps/dev/channels/eve.ts`,
 `apps/dev/hooks/store.ts`, `apps/dev/instructions/prompt.ts`, and
 `apps/dev/sandbox.ts` (the sandbox selector, which eve calls as a
@@ -247,9 +247,10 @@ there), each an edge because eve drives them through promise-shaped hooks of
 its own, and `apps/dev/host.ts`, the one module those files share their
 host through, composed with `Effect.runSync` as it loads. Not
 every seam in `packages/service/src/` is an effect down to its floor:
-`packages/service/src/agents/brain-host/door.ts`'s
-`SessionOwnership` speaks eve's own `AuthFn<Request>` — a promise-shaped
-foreign boundary the effects around it compose over rather than
+`packages/service/src/agents/coder-host/production.ts`'s `spend` is
+the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
+`SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
+foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
 probe, same terms), `tools/claude-code-probe/src/cli.ts` (the Claude Code

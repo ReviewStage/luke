@@ -1065,10 +1065,9 @@ changes when a check is run, not when one is planned.
   on the Tasks tab over a synthetic task
   (`app-smoke-tasks.png`, from `--profile tasks`), on the
   task's whiteboard (`app-smoke-tasks-board.png`, from
-  `--profile tasks-board`), on its transcript mid-call
-  (`app-smoke-tasks-transcript.png`, from
-  `--profile tasks-transcript`), on its Work tab mid-call
-  (`app-smoke-tasks-work.png`, from `--profile tasks-work`),
+  `--profile tasks-board`), on its plan beside a call in the task's column
+  (`app-smoke-tasks-transcript.png` and `app-smoke-tasks-work.png`, from
+  `--profile tasks-transcript` and `--profile tasks-work`),
   and over
   the synthetic task list with none open (`app-smoke-expanded.png`, the
   window opening on Tasks), but neither

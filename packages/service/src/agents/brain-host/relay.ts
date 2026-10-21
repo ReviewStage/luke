@@ -54,11 +54,11 @@ import {
 import { keptPictures } from "./relay-pictures.js";
 
 /**
- * The relay from eve's stream into the brain's own, which both eve services
- * share: every event eve records for a session is read here, after eve has
- * written it, and told again as the `BrainRunEvent` the store writer
- * consumes, so the writer stays the sole consumer and the only thing that
- * writes a message row. Both hosts compose it with the ask record, whose
+ * The relay from eve's stream into the brain's own: every event eve records
+ * for a session is read here, after eve has written it, and told again as
+ * the `BrainRunEvent` the store writer consumes, so the writer stays the sole
+ * consumer and the only thing that writes a message row. The coder host
+ * composes it with the ask record, whose
  * deliveries a turn's start binds and whose Stop it carries, on every turn,
  * since a line of either kind may join a turn of the other under way: a
  * call's spoken ask joins a coding agent's typed turn, and a line typed to

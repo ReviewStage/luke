@@ -10,6 +10,7 @@ import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
+  type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
@@ -59,11 +60,7 @@ import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { type RecordingSentry, recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { CALL_BACKEND } from "./call-backend.js";
-import {
-  type HostedLiveBrain,
-  type HostedLiveBrainOptions,
-  hostedLiveBrain,
-} from "./live-brain.js";
+import { type HostedLiveBrainOptions, hostedLiveBrain } from "./live-brain.js";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -205,7 +202,7 @@ interface Listening {
 
 interface Stand extends Listening {
   readonly eve: FakeEve;
-  readonly brain: HostedLiveBrain;
+  readonly brain: LiveBrain;
   readonly reports: string[];
   /** Sentry's reporter where the stand records Sentry, for a submission's own fiber, as the voice service's runtime provides it; empty otherwise. */
   readonly reporting: Context.Context<never>;
@@ -214,7 +211,7 @@ interface Stand extends Listening {
 }
 
 /** The brain's listener as the service stands one: the seams, the activity, and the settled steps kept apart, each with a wait on its count. */
-function listening(brain: HostedLiveBrain): Listening {
+function listening(brain: LiveBrain): Listening {
   const events: LiveBrainRunEvent[] = [];
   const activities: LiveBrainRunEvent[] = [];
   const steps: LiveBrainRunEvent[] = [];

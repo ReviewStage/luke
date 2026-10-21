@@ -74,7 +74,7 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
       anthropic: environment.anthropicKey,
       openAi: environment.openAiKey,
     };
-    // Every inference on Luke's key is counted on the account's meter, a coding agent's as the brain's is.
+    // Every inference on Luke's key is counted on the account's meter.
     const spend = (userId: string) =>
       run(Effect.asVoid(spendHostedMeter({ userId, now: Date.now() })));
     const meter = (userId: string) => accountMeter(spend, userId);

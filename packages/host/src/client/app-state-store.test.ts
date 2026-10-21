@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
@@ -17,9 +16,7 @@ import {
   initialAppState,
   publishAppStateChanges,
   voiceWindowGone,
-  voiceWindowState,
   WindowAppStates,
-  windowAppState,
 } from "./app-state-store.js";
 
 /**
@@ -122,29 +119,33 @@ it("two slices in one patch are one version", () => {
 
 it("a slice that moved keeps every part of it that did not, so what a reader held of it is the object it still holds", () => {
   const app = store();
-  const turn = (turnId: string, said: readonly string[]) => ({
-    turnId,
-    startedAt: 0,
-    state: TASK_WORK_STATE.RUNNING,
-    earlierOmitted: false,
-    journal: said.map((text) => ({ type: "text" as const, text })),
-    workers: [],
+  const shown = (callId: string, lines: readonly string[]) => ({
+    callId,
+    turnId: "turn-1",
+    shownAt: 0,
+    code: {
+      ref: { path: "src/invites.ts", startLine: 1, endLine: 1 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: lines.length,
+      lines: [...lines],
+    },
   });
   app.update({
     tasks: {
       ...app.snapshot().tasks,
       activeTaskId: "plan-1",
-      work: [turn("turn-1", ["Invites live in one file."]), turn("turn-2", ["Reading it."])],
+      shownCode: [shown("call-1", ["const a = 1;"]), shown("call-2", ["const b = 2;"])],
     },
   });
   const held = app.snapshot().tasks;
 
-  // The host's next view: the same data, every object of it new, and the second turn gone on.
+  // The host's next view: the same data, every object of it new, and the second code grown.
   const next = {
     ...structuredClone(held),
-    work: [
-      turn("turn-1", ["Invites live in one file."]),
-      turn("turn-2", ["Reading it.", "It expires them."]),
+    shownCode: [
+      shown("call-1", ["const a = 1;"]),
+      shown("call-2", ["const b = 2;", "const c = 3;"]),
     ],
   };
   app.update({ tasks: next });
@@ -153,9 +154,9 @@ it("a slice that moved keeps every part of it that did not, so what a reader hel
   assert.equal(app.snapshot().version, 2);
   assert.deepEqual(now, next);
   assert.equal(now.document, held.document);
-  assert.equal(now.work?.[0], held.work?.[0]);
-  assert.notEqual(now.work?.[1], held.work?.[1]);
-  assert.equal(now.work?.[1]?.journal[0], held.work?.[1]?.journal[0]);
+  assert.equal(now.shownCode?.[0], held.shownCode?.[0]);
+  assert.notEqual(now.shownCode?.[1], held.shownCode?.[1]);
+  assert.equal(now.shownCode?.[1]?.code.ref, held.shownCode?.[1]?.code.ref);
 });
 
 it.effect("a touch re-announces the document without numbering it again", () =>
@@ -233,41 +234,6 @@ it("an unpackaged run never records, whatever the host permitted", () => {
   );
   app.update({ sessionReplay: { permitted: true, accountId: "person", halted: false } });
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
-});
-
-it("the voice and call windows are sent the document, and answered their first read of it, without the call's turns' work, and the rest of the plan as held", () => {
-  const held = initialAppState(RUN, true, []);
-  const tasks = {
-    ...held.tasks,
-    activeTaskId: "plan-1",
-    work: [
-      {
-        turnId: "turn-1",
-        startedAt: 0,
-        state: TASK_WORK_STATE.DONE,
-        earlierOmitted: false,
-        journal: [{ type: "text", text: "On branch invite-expiry." }],
-        workers: [],
-      },
-    ],
-  } as const;
-  const sent = voiceWindowState({ ...held, tasks: tasks });
-  assert.equal(sent.tasks.activeTaskId, "plan-1");
-  assert.equal("work" in sent.tasks, false);
-  assert.doesNotMatch(JSON.stringify(sent), /invite-expiry/u);
-  // A window's first read of the document answers the same: the voice and call windows' without it, a panel's whole.
-  for (const window of [
-    { voice: true, call: false },
-    { voice: false, call: true },
-  ]) {
-    assert.doesNotMatch(
-      JSON.stringify(windowAppState({ ...held, tasks: tasks }, window)),
-      /invite-expiry/u,
-    );
-  }
-  const panel = windowAppState({ ...held, tasks: tasks }, { voice: false, call: false });
-  assert.equal(panel.tasks.work?.length, 1);
-  assert.deepEqual(sent.run, held.run);
 });
 
 it.effect(

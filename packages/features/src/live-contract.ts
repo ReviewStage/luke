@@ -13,7 +13,7 @@ import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
 import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
-import { taskActivitySchema, taskShownCodeSchema, taskWorkTurnSchema } from "./tasks-view.js";
+import { taskActivitySchema, taskShownCodeSchema } from "./tasks-view.js";
 import { VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
 
 /**
@@ -154,28 +154,21 @@ export const VOICE_SERVICE_FRAME = {
   SESSION_TYPED: "session.typed",
   /**
    * The service's frame to the desktop after the handshake: what each part of Luke is
-   * doing now, the voice, the brain, and the
-   * notetaker, sent whole each time any of them changes, so the Tasks tab
-   * says each part's own state rather than one word for all of them.
+   * doing now, the voice and the agent the call speaks into, sent whole each
+   * time either changes, so the Tasks tab says each part's own state rather
+   * than one word for all of them.
    */
   TASK_ACTIVITY: "plan.activity",
   /**
    * The service's fourth frame to the desktop, on a task call alone:
    * code of the task's repository Luke is about to talk about, with its
-   * lines as the service read them from the brain session's checkout,
+   * lines as the service read them from the agent's checkout,
    * sent as he starts to speak, so the Tasks tab's code pane draws it as he
    * says it.
    */
   TASK_CODE: "plan.code",
   /**
-   * The service's fifth frame to the desktop, on a task call alone: one
-   * brain turn's work as it stands, what the model wrote and each call
-   * it made with its output, sent whole each time it changes, so the Tasks
-   * tab's Work tab reads like an agent's own transcript.
-   */
-  TASK_WORK: "plan.work",
-  /**
-   * The service's sixth frame to the desktop, on a task call alone: the
+   * The service's fifth frame to the desktop, on a task call alone: the
    * developer said they are done and Luke is saying goodbye, so the desktop
    * hangs up through its own hang-up once that goodbye has played, and keeps
    * the call up if the developer speaks first. It carries no words.
@@ -444,15 +437,6 @@ const taskCodeFrameSchema = Schema.Struct({
 
 export type TaskCodeFrame = typeof taskCodeFrameSchema.Type;
 
-/** One brain turn's work on the call about the task named, as the service sends it to the desktop. */
-const taskWorkFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_WORK),
-  planId: wireUuidSchema,
-  turn: taskWorkTurnSchema,
-});
-
-export type TaskWorkFrame = typeof taskWorkFrameSchema.Type;
-
 /** Luke is ending the call about the task named, once his goodbye has played. */
 const taskCallEndingFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CALL_ENDING),
@@ -674,11 +658,6 @@ export function taskActivityFrameFromWire(value: UnparsedWireValue): TaskActivit
 /** The code Luke put on screen on a task call, read the same answering way. */
 export function taskCodeFrameFromWire(value: UnparsedWireValue): TaskCodeFrame | undefined {
   return admittedAnswer(taskCodeFrameSchema, value);
-}
-
-/** One brain turn's work on a task call, read the same answering way. */
-export function taskWorkFrameFromWire(value: UnparsedWireValue): TaskWorkFrame | undefined {
-  return admittedAnswer(taskWorkFrameSchema, value);
 }
 
 /** Luke ending a task call, read the same answering way. */

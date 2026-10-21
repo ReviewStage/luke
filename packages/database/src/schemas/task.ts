@@ -113,9 +113,10 @@ export const task = pgTable(
     archivedAt: timestamptz("archived_at"),
     /**
      * @deprecated The conversation of the task's own Luke, who is gone:
-     * every call and every turn is an agent's now, and nothing writes or
-     * reads this. It stands, with the conversations it names, until a later
-     * migration drops it.
+     * every call and every turn is an agent's now. Nothing writes this, and
+     * only a task's delete reads it, to stamp that conversation with its
+     * agents' (`deleteTask`). It stands, with the conversations it names,
+     * until a later migration drops it.
      */
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",

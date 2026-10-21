@@ -7,11 +7,12 @@ import {
   voiceWriter,
 } from "@luke/database/models/voice-writer";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import type { TaskActivity, TaskShownCode, TaskWorkTurn } from "@luke/features/tasks-view";
+import type { TaskActivity, TaskShownCode } from "@luke/features/tasks-view";
 import { serialQueue } from "@luke/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   type AdoptableSession,
+  type LiveBrain,
   LiveSessionService,
   type LiveSessionStatus,
   type LiveSessionTrace,
@@ -21,7 +22,7 @@ import type { WebSocket } from "ws";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import type { AgentSessions } from "../agents/brain-host/eve-sessions.js";
 import type { CallBackend } from "./call-backend.js";
-import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
+import { hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
 
@@ -74,8 +75,6 @@ export interface HostedLiveExchangeOptions {
   readonly onActivity?: (activity: TaskActivity) => void;
   /** Code Luke is about to talk about, with its lines, told as he starts to speak; a task call's device is shown it. */
   readonly onCode?: (shown: TaskShownCode) => void;
-  /** Each brain turn's work, told whole on each change; a task call's device is shown it. */
-  readonly onWork?: (work: TaskWorkTurn) => void;
   /** The developer said they are done and Luke is saying goodbye; a task call's device hangs up once it has played. */
   readonly onCallEnding?: () => void;
   /** Each hand-off the session traces, ids and words left out; the service writes it to its log. */
@@ -100,8 +99,6 @@ export interface AttachedSession {
   readonly onActivity?: ((activity: TaskActivity) => void) | undefined;
   /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
   readonly onCode?: ((shown: TaskShownCode) => void) | undefined;
-  /** The device's door for each brain turn's work on the call; absent where the route sends it nothing of its own. */
-  readonly onWork?: ((work: TaskWorkTurn) => void) | undefined;
   /** The device's door for Luke ending the call; absent where the route sends it nothing of its own. */
   readonly onCallEnding?: (() => void) | undefined;
   /** The service's door for each hand-off the session traces; absent where the route logs none. */
@@ -141,7 +138,7 @@ export interface HostedLiveExchange {
    * close; an exchange never told closes it.
    */
   endAs(ending: ExchangeEnding): void;
-  readonly brain: HostedLiveBrain;
+  readonly brain: LiveBrain;
   readonly store: HostedStore;
   /**
    * Runs a session the service created for the device: the record observes
@@ -228,11 +225,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       notes: false,
     });
   };
-
-  if (options.onWork !== undefined) {
-    const unshown = brain.onWork(options.onWork);
-    yield* Effect.addFinalizer(() => Effect.sync(unshown));
-  }
 
   /** The sideband with the record listening ahead of the service, on every session adopted. */
   const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {

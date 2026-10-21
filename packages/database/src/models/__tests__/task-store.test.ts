@@ -18,6 +18,7 @@ import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
 import { VOICE_CLOSE_REASON } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
+import { conversationReachableBy, runtimeSessionReachableBy } from "../recorded-session.js";
 import {
   assignUnassignedTask,
   beginTaskWork,
@@ -418,6 +419,112 @@ const openTaskAgent = (userId: string, organizationId: string, taskId: string) =
     });
     return id;
   });
+
+/** When the conversation was stamped deleted, or none while it stands. */
+const conversationDeletedAt = (conversationId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const [row] = yield* db
+      .select({ deletedAt: conversations.deletedAt })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    return row?.deletedAt ?? undefined;
+  });
+
+it.layer(getTestDB())("a plan's delete and the conversations it leaves", (it) => {
+  it.effect(
+    "a plan's delete stamps its agents' conversations and the one its own Luke kept before plans lost him, while only the agents' are handed to the guard, whose service still stands",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const { dean, charles, taskId, workspace } = yield* openSharedTask;
+        const agentId = yield* openTaskAgent(dean, workspace, taskId);
+        const [agent] = yield* db
+          .select({ conversationId: codingAgent.conversationId })
+          .from(codingAgent)
+          .where(eq(codingAgent.id, agentId));
+        assert.ok(agent);
+        // The conversation the plan's own Luke kept, opened by a teammate, as a row from before stands.
+        const former = randomUUID();
+        yield* db
+          .insert(conversations)
+          .values({ id: former, userId: charles, kind: CONVERSATION_KIND.TASK });
+        yield* db.update(task).set({ conversationId: former }).where(eq(task.id, taskId));
+        // A plan started after plans lost him names none, and its delete stamps its agents' alone.
+        const { id: later } = yield* createTask(dean, {
+          ...SHARED_TASK,
+          organizationId: workspace,
+        });
+        const laterAgent = yield* openTaskAgent(dean, workspace, later);
+
+        const handed: (readonly string[])[] = [];
+        const deleted = yield* deleteTask(dean, taskId, {
+          stoppedAgentIds: new Set([agentId]),
+          beforeDelete: (conversationIds) => Effect.sync(() => void handed.push(conversationIds)),
+        });
+
+        assert.equal(deleted, true);
+        assert.deepEqual(handed, [[agent.conversationId]]);
+        assert.ok((yield* conversationDeletedAt(former)) !== undefined);
+        assert.ok((yield* conversationDeletedAt(agent.conversationId)) !== undefined);
+
+        const [laterRow] = yield* db
+          .select({ conversationId: codingAgent.conversationId })
+          .from(codingAgent)
+          .where(eq(codingAgent.id, laterAgent));
+        assert.ok(laterRow);
+        assert.equal(yield* deleteTask(dean, later), true);
+        assert.ok((yield* conversationDeletedAt(laterRow.conversationId)) !== undefined);
+      }),
+  );
+});
+
+it.layer(getTestDB())("a plan's own Luke's conversation, after plans lost him", (it) => {
+  it.effect(
+    "the conversation a plan's own Luke kept, and a worker's delegated from it, are reached by no one, its opener included, while an opener's own conversation and its worker's stay theirs",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const former = randomUUID();
+        const formerWorker = randomUUID();
+        const own = randomUUID();
+        const ownWorker = randomUUID();
+        yield* db.insert(conversations).values([
+          {
+            id: former,
+            userId: charles,
+            kind: CONVERSATION_KIND.TASK,
+            runtimeSessionId: "s-former",
+          },
+          { id: own, userId: charles, kind: CONVERSATION_KIND.MAIN },
+        ]);
+        yield* db.insert(conversations).values([
+          {
+            id: formerWorker,
+            userId: charles,
+            kind: CONVERSATION_KIND.CHILD,
+            parentConversationId: former,
+          },
+          {
+            id: ownWorker,
+            userId: charles,
+            kind: CONVERSATION_KIND.CHILD,
+            parentConversationId: own,
+          },
+        ]);
+        yield* db.update(task).set({ conversationId: former }).where(eq(task.id, taskId));
+
+        const reached = (userId: string) =>
+          Effect.forEach([former, formerWorker, own, ownWorker], (id) =>
+            conversationReachableBy(userId, id),
+          );
+        assert.deepEqual(yield* reached(charles), [false, false, true, true]);
+        assert.deepEqual(yield* reached(dean), [false, false, false, false]);
+        assert.equal(yield* runtimeSessionReachableBy(charles, "s-former"), false);
+      }),
+  );
+});
 
 /** The agent's archive as the store reads it: when, and who it was by. */
 const archiveOf = (userId: string, agentId: string) =>

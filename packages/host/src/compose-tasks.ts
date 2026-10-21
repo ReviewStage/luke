@@ -54,7 +54,6 @@ import {
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
-  type TaskWorkTurn,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksBrowserTabsParamsSchema,
@@ -362,12 +361,6 @@ export interface TasksComposer extends Composer {
    * end. Code about any other task, or of a call already held, is dropped.
    */
   showCode: (taskId: string, shown: TaskShownCode) => void;
-  /**
-   * Shows a turn's work on the call about the open task, in place of the
-   * same turn as last told; work about any other task is dropped. Leaving
-   * or switching tasks clears it, and the call's end keeps it.
-   */
-  showWork: (taskId: string, turn: TaskWorkTurn) => void;
   /** The call about `taskId` ended: what it was doing is no longer drawn. */
   callEnded: (taskId: string) => void;
 }
@@ -472,13 +465,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The view with no activity, no board, no code, no work, and no pages read or told, as a task left behind leaves it. */
+  /** The view with no activity, no board, no code, and no pages read or told, as a task left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
     shownCode: _shownCode,
     codeStatus: _codeStatus,
-    work: _work,
     pages: _pages,
     ...rest
   }: TasksView): TasksView {
@@ -875,16 +867,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         write({ shownCode: [...(view.shownCode ?? []), showingOf(shown)] });
       }
     });
-  }
-
-  function showWork(taskId: string, turn: TaskWorkTurn): void {
-    if (view.activeTaskId !== taskId) return;
-    const held = view.work ?? [];
-    // A turn told again stays where it first stood, so the tab never reorders what it drew.
-    const turns = held.some((standing) => standing.turnId === turn.turnId)
-      ? held.map((standing) => (standing.turnId === turn.turnId ? turn : standing))
-      : [...held, turn];
-    write({ work: turns });
   }
 
   function callEnded(_taskId: string): void {
@@ -1991,7 +1973,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     activeTaskId: () => view.activeTaskId,
     showActivity,
     showCode,
-    showWork,
     callEnded,
     reset: Effect.gen(function* () {
       yield* endTaskCall(undefined);

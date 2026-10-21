@@ -9,7 +9,6 @@ import {
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
@@ -160,8 +159,6 @@ export interface LiveSessionHolderOptions {
   onTaskActivity?: (activity: TaskActivityFrame) => void;
   /** Luke put code on screen on the standing task call, on the same terms as `onTaskActivity`. */
   onTaskCode?: (code: TaskCodeFrame) => void;
-  /** A brain turn's work on the standing task call changed, on the same terms as `onTaskActivity`. */
-  onTaskWork?: (work: TaskWorkFrame) => void;
   /** The task call about the task named ended, so what it put on screen goes with it. */
   onTaskCallEnded?: (taskId: string) => void;
 }
@@ -463,7 +460,6 @@ export class LiveSessionHolder {
       yield* Scope.addFinalizer(scope, sideband.close);
       opened.onTaskActivity?.((activity) => this.#activity(session, activity));
       opened.onTaskCode?.((code) => this.#code(session, code));
-      opened.onTaskWork?.((work) => this.#work(session, work));
       opened.onTaskCallEnding?.((ending) => this.#ending(session, ending));
       opened.onAvatarStarted?.((started) => this.#avatarStarted(session, started));
       opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
@@ -808,12 +804,6 @@ export class LiveSessionHolder {
   #code(session: HeldSession, code: TaskCodeFrame): void {
     if (session.ended || code.planId !== session.taskId) return;
     this.#options.onTaskCode?.(code);
-  }
-
-  /** A brain turn's work on the call about the task the session is bound to, passed on while the session stands. */
-  #work(session: HeldSession, work: TaskWorkFrame): void {
-    if (session.ended || work.planId !== session.taskId) return;
-    this.#options.onTaskWork?.(work);
   }
 
   /**

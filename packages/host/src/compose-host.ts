@@ -11,7 +11,6 @@ import {
   HostedWorkspaceClient,
   type TaskActivityFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
 } from "@luke/features";
 import {
   carried,
@@ -142,7 +141,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
     let taskCallEnded: (taskId: string) => void = () => undefined;
     let showTaskCode: (code: TaskCodeFrame) => void = () => undefined;
-    let showTaskWork: (work: TaskWorkFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
@@ -151,7 +149,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       showTaskActivity: (activity) => showTaskActivity(activity),
       taskCallEnded: (taskId) => taskCallEnded(taskId),
       showTaskCode: (code) => showTaskCode(code),
-      showTaskWork: (work) => showTaskWork(work),
     });
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -278,7 +275,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
     showTaskCode = ({ type: _type, planId: taskId, ...shown }) => tasks.showCode(taskId, shown);
-    showTaskWork = (work) => tasks.showWork(work.planId, work.turn);
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch

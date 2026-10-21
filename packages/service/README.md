@@ -1195,7 +1195,8 @@ the agent at once without stopping the worker. Several calls in one step run
 at once, and a call with the subagent task's id sends the worker more, into the same
 session. A call into the agent follows its delegations under either name,
 `delegate` or eve's `worker` in earlier transcripts (`DELEGATION_TOOLS` in
-`src/tasks/task-work.ts`). A worker's row in an agent's tab
+`src/voice/live-brain.ts`), to follow it under the bound a parked turn
+takes. A worker's row in an agent's tab
 says where the worker's own session stands (the page's `subagents`), since
 the call settles at the receipt.
 Its step fills the pair in from the agent's own row, holds it to the same
@@ -1762,7 +1763,8 @@ teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its coding agents go with it, and
 `DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
-and their conversations stamped deleted (`deleteTask`),
+and their conversations stamped deleted, with the one the task's own Luke
+kept where the row still names it (`deleteTask`),
 the id read from the path by the hosted oRPC router.
 Each row of the list carries `agents` where the task has a coding agent
 (`src/agents/task-agents.ts`): how many it has and how many are starting

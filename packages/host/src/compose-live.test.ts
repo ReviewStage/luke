@@ -161,7 +161,6 @@ function subject(options: { videoOnCall?: boolean; avatar?: VideoAvatar } = {}) 
           ),
         showTaskActivity: () => undefined,
         showTaskCode: () => undefined,
-        showTaskWork: () => undefined,
         taskCallEnded: () => undefined,
       }),
       HostKernelTag,

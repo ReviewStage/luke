@@ -1597,7 +1597,7 @@ export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary
  * and not this wire's to spell. The node shown for it says only that much.
  */
-export const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
+const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
 });
@@ -1641,7 +1641,7 @@ const recordedChoice = EffectSchema.String.check(
  * absent where the row recorded none and from a service older than it; the
  * tokens and the ending, too, until the turn has ended.
  */
-export const turnRecordFields = {
+const turnRecordFields = {
   /** The catalog id of the model the turn ran on, such as `openai/gpt-6.1-sol`. */
   model: EffectSchema.optionalKey(recordedChoice),
   effort: EffectSchema.optionalKey(recordedChoice),

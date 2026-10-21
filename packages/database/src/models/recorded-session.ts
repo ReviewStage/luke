@@ -25,6 +25,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  ne,
   not,
   or,
   type SQL,
@@ -108,6 +109,21 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
   );
 }
 
+/** The condition that the conversation the row was delegated from was a task's own Luke's. */
+function parentWasLukes(): SQL {
+  return exists(
+    queryBuilder
+      .select({ one: parentConversation.id })
+      .from(parentConversation)
+      .where(
+        and(
+          eq(parentConversation.id, conversations.parentConversationId),
+          eq(parentConversation.kind, CONVERSATION_KIND.TASK),
+        ),
+      ),
+  );
+}
+
 /**
  * The condition that the account reaches the standing conversation row a
  * statement reads: the conversation, or the standing one it was delegated
@@ -115,7 +131,11 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
  * it is the account's own and no agent names it or its parent. Note that a
  * conversation an agent names is reached through the workspace alone, even
  * by the member who opened it, because a member who leaves the workspace
- * leaves its agents' conversations with it.
+ * leaves its agents' conversations with it. A task's own Luke's
+ * conversation, and a worker's delegated from one, is reached by no one:
+ * it was its workspace's while the task named it, and with the task's
+ * reach gone the opener's own would outlast their leaving the workspace
+ * while every other member lost it.
  */
 function reachableConversation(userId: string): SQL | undefined {
   return and(
@@ -123,10 +143,11 @@ function reachableConversation(userId: string): SQL | undefined {
     or(
       and(
         eq(conversations.userId, userId),
+        ne(conversations.kind, CONVERSATION_KIND.TASK),
         not(namedByWork(conversations.id)),
         or(
           isNull(conversations.parentConversationId),
-          not(namedByWork(conversations.parentConversationId)),
+          and(not(namedByWork(conversations.parentConversationId)), not(parentWasLukes())),
         ),
       ),
       namedByReachableWork(userId, conversations.id),
