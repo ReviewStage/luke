@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { type ChildProcess, fork } from "node:child_process";
+import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -27,8 +28,10 @@ const BLOCKS = [
 function forkChild(
   listeners: TaskCodeProcessListeners,
   afterSend: (child: ChildProcess) => void = () => undefined,
+  forked: (child: ChildProcess) => void = () => undefined,
 ): TaskCodeProcess {
   const child = fork(CHILD, { execArgv: ["--import", "tsx"], stdio: "inherit" });
+  forked(child);
   child.on("message", (message) => listeners.onMessage(message));
   child.on("exit", () => listeners.onExit());
   return {
@@ -88,6 +91,35 @@ it.effect(
         assert.ok(
           coloured.some((line) => line.some((run) => run.color !== undefined)),
           "the new process colours the block",
+        );
+      }),
+    ),
+  CHILD_TIMEOUT_MS,
+);
+
+it.effect(
+  "a process that dies while idle is replaced before the next block, which is coloured rather than drawn plain",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const children: ChildProcess[] = [];
+        const colour = yield* taskCodeProcessColouring((listeners) =>
+          forkChild(listeners, undefined, (child) => children.push(child)),
+        );
+        const [block] = BLOCKS;
+        yield* colour(block.language, block.code);
+
+        // The first process crashes after answering, with no block in its hands.
+        const [first] = children;
+        assert.ok(first !== undefined);
+        const exited = once(first, "exit");
+        first.kill("SIGKILL");
+        yield* Effect.promise(() => exited);
+        const coloured = yield* colour(block.language, block.code);
+
+        assert.ok(
+          coloured.some((line) => line.some((run) => run.color !== undefined)),
+          "the block after an idle crash is coloured",
         );
       }),
     ),

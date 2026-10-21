@@ -72,6 +72,8 @@ interface Spawned {
   readonly child: TaskCodeProcess;
   readonly answers: Queue.Queue<unknown, Cause.Done>;
   readonly scope: Scope.Closeable;
+  /** Whether the process has exited, so no further block is sent to it. */
+  readonly exited: () => boolean;
 }
 
 /** A block asked for and the answer its caller waits on, interrupted where the caller went away. */
@@ -107,6 +109,7 @@ function spawnInto(parent: Scope.Scope, spawn: SpawnTaskCodeProcess): Effect.Eff
   return Effect.gen(function* () {
     const scope = yield* Scope.fork(parent);
     const answers = yield* Queue.unbounded<unknown, Cause.Done>();
+    let exited = false;
     const child = yield* Effect.acquireRelease(
       Effect.sync(() =>
         spawn({
@@ -114,13 +117,14 @@ function spawnInto(parent: Scope.Scope, spawn: SpawnTaskCodeProcess): Effect.Eff
             Queue.offerUnsafe(answers, message);
           },
           onExit: () => {
+            exited = true;
             Queue.endUnsafe(answers);
           },
         }),
       ),
       (spawned) => Effect.sync(() => spawned.kill()),
     ).pipe(Scope.provide(scope));
-    return { child, answers, scope };
+    return { child, answers, scope, exited: () => exited };
   });
 }
 
@@ -150,6 +154,8 @@ export function taskCodeProcessColouring(
 
     const colourInProcess = ({ language, code }: Asked) =>
       Effect.gen(function* () {
+        // Note that a process that exited while idle is retired before the block, so the block is coloured by its replacement rather than drawn plain.
+        if (standing?.exited() === true) yield* retire(standing);
         const spawned = standing ?? (yield* spawnInto(scope, spawn));
         standing = spawned;
         lastId += 1;
