@@ -1777,6 +1777,15 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         ).messages;
         assert.deepEqual(wholeJournal?.parts, [text("Building."), command, thinking, read]);
         assert.equal(wholeJournal?.cutParts, undefined);
+        // The read back from the end cuts the same parts where it is asked to.
+        const [newestJournal] = readAnswer(
+          codingAgentNewestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT_NEWEST, owner, { id: agent.id, parts: TRANSCRIPT_PARTS_QUERY.CUT }),
+          ),
+        ).messages;
+        assert.deepEqual(newestJournal?.cutParts, cutJournal?.cutParts);
 
         const part = (bearer: string, index: number) =>
           ask(request(`/api/agents/${agent.id}/messages/${journal}/parts/${index}`, bearer));
