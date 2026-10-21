@@ -1714,7 +1714,11 @@ export function spokenMessages(placed: readonly PlacedMessage[]): readonly Spoke
     if (moved.has(row.message.id)) return [];
     const lines = said.get(row.message.id);
     const answers = joined.get(row.message.id) ?? NOTHING_SAID;
-    const arrived = [...row.arrived, ...answers];
+    // Note that the answers are merged among the lines by when each began, because two asks may join at one step, each answered before the next was asked.
+    const arrived =
+      answers.length === 0
+        ? row.arrived
+        : [...row.arrived, ...answers].toSorted((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0));
     if (lines === undefined) {
       return [
         {

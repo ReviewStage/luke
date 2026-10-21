@@ -2448,7 +2448,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "a line the voice says on a call names on the agent's page the turn its ask ran in, with the steps begun before the ask where it joined a typed turn under way, said while that turn ran or three minutes after it settled alike, and the turn's journal names the same turn; a line whose ask learned no turn names none",
+    "a line the voice says on a call names on the agent's page the turn its ask ran in, with the steps begun before the ask where it joined a typed turn under way, said before the ask bound (read again once it does), while that turn ran, or three minutes after it settled alike, and the turn's journal names the same turn; a line whose ask learned no turn names none",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
@@ -2482,12 +2482,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           text: "Where are you with the invites?",
           metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
         });
-        session.auth = { current: spokenSeat(target).current, initiator: auth.initiator };
-        const tail = steeredTail("turn_0", "The developer asked where the invites are.", [
-          "delivery-call",
-        ]);
-        yield* relayed(tail.slice(0, 2));
-        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
         const said = (clientId: string, text: string, delegation: string) =>
           writer.upsertSpokenRow(target, {
             role: MESSAGE_ROLE.ASSISTANT,
@@ -2499,6 +2493,25 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
               delegation_id: delegation,
             },
           });
+        const pageAfter = (cursor: typeof CURSOR_START) =>
+          transcriptPast(target, CODER_TOOL_SET, cursor, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+        // The voice says it is checking before eve has steered the ask in, so before it binds, and a
+        // tab following the transcript reads that line then.
+        yield* said("said-early", "Checking now.", delegationId);
+        const early = yield* pageAfter(CURSOR_START);
+        assert.deepEqual(
+          early.messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).at(-1)
+            ?.readFrom,
+          undefined,
+        );
+        session.auth = { current: spokenSeat(target).current, initiator: auth.initiator };
+        const tail = steeredTail("turn_0", "The developer asked where the invites are.", [
+          "delivery-call",
+        ]);
+        yield* relayed(tail.slice(0, 2));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
 
         // The voice answers the ask while the turn it joined still runs, as on a call into a busy agent.
         yield* said("said-mid-turn", "The table is built; the tests run now.", delegationId);
@@ -2519,9 +2532,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         });
         yield* said("said-unbound", "I couldn't reach it.", unbound);
 
-        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
-          Effect.provide(modelCatalogOf(CATALOG)),
+        // The tab reads the early line again past its cursor, now naming the turn its ask joined.
+        const reread = (yield* pageAfter(early.cursor)).messages.find((message) =>
+          message.parts.some((part) => isTextUIPart(part) && part.text === "Checking now."),
         );
+        assert.deepEqual(reread?.readFrom, { turnId, afterStep: 1 });
+        const page = yield* pageAfter(CURSOR_START);
         const spoken = page.messages.filter(
           (message) =>
             message.role === MESSAGE_ROLE.ASSISTANT &&
@@ -2531,6 +2547,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.deepEqual(
           spoken.map((message) => [message.parts, message.readFrom]),
           [
+            [[{ type: "text", text: "Checking now.", state: "done" }], { turnId, afterStep: 1 }],
             [
               [{ type: "text", text: "The table is built; the tests run now.", state: "done" }],
               { turnId, afterStep: 1 },

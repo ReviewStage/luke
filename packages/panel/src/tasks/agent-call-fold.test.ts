@@ -446,6 +446,33 @@ test("on a call into a busy agent, the answer to an ask that joined its turn und
   assert.match(container.textContent ?? "", /Worked for 1m 10s/u, "and how long it worked");
 });
 
+test("two asks that joined a busy turn at the same step each stand ahead of their own answer", async () => {
+  const second: CodingAgentMessage = {
+    ...JOINED,
+    id: "joined-again",
+    parts: [{ type: "text", text: "And the resend path?" }],
+    sentAt: CALL_START + 20_000,
+  };
+  const secondReply: CodingAgentMessage = {
+    ...voiceLine("joined-again-reply", "Same expiry there.", 25_000),
+    readFrom: { turnId: "turn-busy", afterStep: 1 },
+  };
+  const container = await drawnTab([TASK, JOINED, JOINED_REPLY, second, secondReply, BUSY_TURN]);
+
+  assert.deepEqual(drawnOrder(container), [
+    "message: task",
+    "call begins",
+    "message: busy-turn",
+    "fold: 1 tool call (closed)",
+    "message: joined",
+    "message: joined-reply",
+    "message: joined-again",
+    "message: joined-again-reply",
+    "fold: 1 tool call, 1 message (closed)",
+    "call ended",
+  ]);
+});
+
 test("a reply the service names its turn for by readFrom alone, as one said minutes after the turn settled, folds that turn under it as one said at once does", async () => {
   const late = {
     ...voiceLine("late", "Seven days.", 50_000),
