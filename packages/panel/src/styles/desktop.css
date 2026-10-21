@@ -5463,9 +5463,31 @@ polygon.factory-campus-edge[data-edge="selected"] {
   content: "";
 }
 
-/* An ask draws as a card in its row (`Card`), a step under the byline. */
+/* An ask draws as the Inbox's ask in its row (`chat-ask.tsx`), a step
+   under the byline: the Inbox's bordered card and head, and under the head
+   its title, the poster's words, and its answer box or its answer. The box
+   is the Inbox's answer card with the note under it, as the agent
+   composer's stands, though it is no `.agent-composer`, which docks at a
+   column's foot (`column-dock.ts`) where this box scrolls with the
+   messages. */
 .chat-ask {
   margin-top: var(--luke-space-4);
+}
+
+.chat-ask-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-12);
+}
+
+.chat-ask-box {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-8);
 }
 
 .chat-thread {
@@ -5595,19 +5617,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .desktop-shell[data-room="narrow"] .chat-mention-menu {
   max-width: 100%;
-}
-
-/* The note's field and, where the answer is sent by one, its send beside it. */
-.chat-ask-note {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-  margin: 0;
-}
-
-.chat-ask-note-field {
-  flex: 1;
-  min-width: 0;
 }
 
 /* A chat notice in an agent's transcript: a card across the column washed

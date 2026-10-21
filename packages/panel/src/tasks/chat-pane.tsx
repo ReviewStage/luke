@@ -275,10 +275,12 @@ function Body({
     <AskCard
       message={message}
       ask={ask}
-      mine={message.authorId === context.chat.self}
+      chat={context.chat}
       answers={home === undefined || postsIn(context.chat, home)}
       blocks={blocks}
-      nameOf={(memberId) => chatWho(context.chat, context.names, memberId).name}
+      actorOf={context.actorOf}
+      keywords={context.keywords}
+      now={context.now}
       onAnswer={context.onAnswer}
     />
   );
