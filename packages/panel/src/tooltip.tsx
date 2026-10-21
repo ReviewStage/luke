@@ -175,8 +175,39 @@ const hintRestAtom = rendererRuntime.fn(({ show }: { readonly show: () => void }
   Effect.andThen(Effect.sleep(HINT_REST), Effect.sync(show)),
 );
 
-/** Who the window's one wait is for, by an id of theirs, so only they call the wait off. */
-let resting: string | undefined;
+/**
+ * Who the window's one wait is for, by an id of theirs, so only they call
+ * the wait off, and the way to let go of the window's movements it hears
+ * while it runs.
+ */
+let resting: { readonly id: string; readonly unhear: () => void } | undefined;
+
+/** The window's one wait let go of: its movements no longer heard, and no one's. */
+function letGoRest(): void {
+  resting?.unhear();
+  resting = undefined;
+}
+
+/**
+ * Hears, while a wait runs, the window's movements that take a hint down
+ * once it stands, so they call off a hint still waiting the same way: a key,
+ * a scroll anywhere but on a standing card, which is a card being read, and
+ * the window losing the keyboard. Answers the way to stop hearing them.
+ */
+function hearRestEnders(stop: () => void): () => void {
+  const scrolled = (event: Event) => {
+    const { target } = event;
+    if (!(target instanceof Node && standing.some((each) => each.holds(target)))) stop();
+  };
+  window.addEventListener("keydown", stop, true);
+  window.addEventListener("scroll", scrolled, true);
+  window.addEventListener("blur", stop);
+  return () => {
+    window.removeEventListener("keydown", stop, true);
+    window.removeEventListener("scroll", scrolled, true);
+    window.removeEventListener("blur", stop);
+  };
+}
 
 /**
  * A card's linger, as an atom whose work is the wait: it takes the card down
@@ -241,28 +272,30 @@ interface HintRest {
 /**
  * The window's one wait, for a hint of the caller's: `rest` shows it once
  * the pointer has rested `--hint-delay`, and `stop` calls the wait off,
- * as the caller unmounting does. `Tooltip` waits through it, and so does a
+ * as the caller unmounting does, and as a key, a scroll, or the window
+ * losing the keyboard do while it runs, as they take a standing hint down. `Tooltip` waits through it, and so does a
  * hint drawn by hand, as the diff's gap controls draw theirs.
  */
 export function useHintRest(): HintRest {
   const id = useId();
   const wait = useAtomSet(hintRestAtom);
   const stop = useCallback(() => {
-    if (resting !== id) return;
-    resting = undefined;
+    if (resting?.id !== id) return;
+    letGoRest();
     wait(Atom.Interrupt);
   }, [id, wait]);
   const rest = useCallback(
     (show: () => void) => {
-      resting = id;
+      letGoRest();
+      resting = { id, unhear: hearRestEnders(stop) };
       wait({
         show: () => {
-          resting = undefined;
+          letGoRest();
           show();
         },
       });
     },
-    [id, wait],
+    [id, wait, stop],
   );
   useEffect(() => stop, [stop]);
   return useMemo(() => ({ rest, stop }), [rest, stop]);

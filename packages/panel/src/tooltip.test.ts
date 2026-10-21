@@ -480,6 +480,26 @@ test("a pointer sweeping on from a row whose card stands lets each next row wait
   );
 });
 
+test("a key, a scroll, or the window losing the keyboard while the pointer rests calls the waiting hint off", () => {
+  const leaves: readonly (() => void)[] = [
+    () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    () => document.body.dispatchEvent(new Event("scroll")),
+    () => window.dispatchEvent(new Event("blur")),
+  ];
+  for (const leave of leaves) {
+    waiting();
+    const press = drawRows(["Alpha"]);
+    move(undefined, press("Alpha"));
+    pass(MOTION_DELAY_MS.HINT / 2);
+    act(leave);
+    pass(2 * MOTION_DELAY_MS.HINT);
+    assert.deepEqual(mounted, [], "the hint waiting is called off");
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    vi.useRealTimers();
+  }
+});
+
+// Note that this stands last, because the warm spell it leaves is the window's own.
 test("a pill seen warms the window, so the next control's shows at once", () => {
   waiting();
   const container = document.body.appendChild(document.createElement("div"));
