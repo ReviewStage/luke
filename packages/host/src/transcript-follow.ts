@@ -165,6 +165,21 @@ function cursorParts(cursor: string): { readonly seq: number; readonly revision:
   return { seq: Number(seq), revision };
 }
 
+/**
+ * The read as the host follows it: every statement the service sealed but
+ * the count of its messages, which released desktops wake on and this host
+ * needs no longer, since the window's own rows carry the messages.
+ */
+function followedRead(sealed: AgentTranscriptLiveAnswer) {
+  const { messages: _messages, ...queries } = sealed.queries;
+  return { url: sealed.url, queries };
+}
+
+/** A seal's answer as the host follows it: the read without the count of its messages, or the failure as answered. */
+function followedAnswer<Failure extends Failed>(answer: AgentTranscriptLiveAnswer | Failure) {
+  return "failure" in answer ? answer : followedRead(answer);
+}
+
 /** The transcript sealed, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
 function sealedOf(
   seal: (poll: boolean, after?: string) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
@@ -208,11 +223,11 @@ export function transcriptFollows<Key = TranscriptKey>(
             liveRows(
               {
                 openLive: dependencies.openLive,
-                reseal: () => seal(false),
-                poll: (after) => seal(true, after),
+                reseal: () => Effect.map(seal(false), followedAnswer),
+                poll: (after) => Effect.map(seal(true, after), followedAnswer),
                 now: dependencies.now,
               },
-              sealed,
+              followedRead(sealed),
             ),
             (read) =>
               Option.match(decode(read), {

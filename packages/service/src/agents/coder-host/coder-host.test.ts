@@ -626,7 +626,6 @@ const liveRowsOf = (
       ),
     );
     const rows = yield* Effect.all({
-      messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
       turns: sql.unsafe(statements.turns.sql, [...statements.turns.params]),
       conversation: sql.unsafe(statements.conversation.sql, [...statements.conversation.params]),
       agent: sql.unsafe(statements.agent.sql, [...statements.agent.params]),
@@ -894,7 +893,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         // Another account's statements over the same conversations read nothing of them.
         const stranger = yield* openGithubUser();
         const nothing = JSON.stringify([
-          ["messages", [JSON.stringify({ rows: 0, seq: 0 })]],
           ["turns", []],
           ["conversation", []],
           ["agent", []],
