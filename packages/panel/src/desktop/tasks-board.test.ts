@@ -216,7 +216,7 @@ async function mountBoard(
 function columns(board: HTMLElement): [string, string[]][] {
   return [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map((column) => [
     column.getAttribute("aria-label") ?? "",
-    [...column.querySelectorAll(".tasks-board-key")].map((key) => key.textContent ?? ""),
+    [...column.querySelectorAll("[data-task-key]")].map((key) => key.textContent ?? ""),
   ]);
 }
 

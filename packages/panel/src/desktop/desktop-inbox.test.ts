@@ -2419,7 +2419,7 @@ test("an item's card says whom an open item waits on, the reader as Needs you an
   );
 });
 
-test("an item's card names its task as the window names a task everywhere: the key in the task card's own key chip, then the task's mention pill wearing its status's mark, its whole name in the task's card it hangs", async () => {
+test("an item's card names its task as the window names a task everywhere: the key as plain words, as every place draws a key, then the task's mention pill wearing its status's mark, its whole name in the task's card it hangs", async () => {
   const LONG = "Billing usage alerts, with a name long enough to be cut short in the card";
   handState(
     {},
@@ -2444,11 +2444,13 @@ test("an item's card names its task as the window names a task everywhere: the k
   assert.deepEqual(
     [...(head?.children ?? [])].map((each) => [each.className, each.textContent]),
     [
-      ["task-card-chip task-card-key", "STAG-182"],
+      ["task-key", "STAG-182"],
       ["luke-inline-ref", LONG],
     ],
-    "the key chip, then the task's chip, on one line",
+    "the key, then the task's chip, on one line",
   );
+  assert.ok(head?.querySelector("[data-task-key] .luke-text"), "the key is the shared key's words");
+  assert.equal(head?.querySelector(".task-card-chip"), null, "the key is no chip");
   const chip =
     head?.querySelector<HTMLElement>('.luke-inline-ref[data-look="pill"][data-holder-ref]') ??
     assert.fail("the task is named by the mention pill");

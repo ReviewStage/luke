@@ -3290,6 +3290,7 @@ ul.actor-stack {
 .task-card-standing {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--luke-space-4);
 }
 
@@ -3325,12 +3326,16 @@ ul.actor-stack {
   height: var(--luke-type-caption-size);
 }
 
-/* A key is short and read whole; the chip beside it gives way instead. */
-.task-card-key {
+/* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
+   stands: its words are `Text`'s caption, subtle and monospace, with even
+   figures. It is short and read whole, so it never shrinks, and what stands
+   beside it gives way instead; it sits centred on the row it leads. */
+.task-key {
+  display: inline-flex;
   flex-shrink: 0;
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
+  align-items: center;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's
@@ -8761,14 +8766,6 @@ button.tasks-board-card-press:focus-visible::after {
   font-variant-numeric: tabular-nums;
 }
 
-.tasks-board-key {
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-variant-numeric: tabular-nums;
-}
-
 .tasks-board-face {
   display: inline-flex;
   min-width: 0;
@@ -9226,13 +9223,6 @@ button.tasks-list-press:focus-visible::after {
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-.tasks-list-key {
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
 }
 
 /* A row's repository is led by its owner's picture, or a folder's glyph

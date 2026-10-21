@@ -90,7 +90,6 @@ import {
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
-import { TaskKeyChip } from "../desktop/task-card.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
@@ -160,6 +159,7 @@ import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
+import { TaskKey } from "./task-standing.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
@@ -542,7 +542,7 @@ const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
 
 /**
  * What holds an item, as its card leads with it, on one line: a task by its
- * key, as the task's own card leads with it (`TaskKeyChip`), and by its chip
+ * key, as the task's own card leads with it (`TaskKey`), and by its chip
  * as a mention of it is drawn (`HolderRef`); an automation, or the agents no
  * automation names, by their chip alone.
  */
@@ -555,7 +555,7 @@ function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
   return (
     <div className="task-card-standing" data-line="one">
       {holder.kind === INBOX_HOLDER.TASK ? (
-        <TaskKeyChip task={holder.task} workspaceName={workspaceName} />
+        <TaskKey workspaceName={workspaceName} number={holder.task.number} />
       ) : null}
       <HolderRef holder={holder} />
     </div>
