@@ -12,6 +12,14 @@
  * console is what the browser replays as its console and log are enabled.
  * Nothing a page holds is kept or logged here; it reaches only the caller.
  *
+ * Each session asks the page to behave as focused (focus emulation), as
+ * Playwright does for every page it drives, so a tab whose window does not
+ * hold the system's focus, or that sits behind another, still takes focus,
+ * typing, and its focus events. Input that would land nowhere fails rather
+ * than answering done: typing where nothing that takes text has the focus,
+ * and a ref's click whose point another element covers. A refusal about a
+ * ref carries the browser's own words beside ours.
+ *
  * Every action is bounded: `wait` by its own timeout, every other by the
  * action timeout. A sequence stops at its first failure, whose reason is in
  * words a model can act on, and answers every step that ran.
@@ -192,6 +200,7 @@ const EvaluatedSchema = Schema.Struct({
   result: Schema.Struct({ value: Schema.optional(WireValueSchema) }),
 });
 const CapturedSchema = Schema.Struct({ data: Schema.String });
+const ResolvedSchema = Schema.Struct({ object: Schema.Struct({ objectId: Schema.String }) });
 const PointSchema = Schema.Struct({ x: Schema.Number, y: Schema.Number });
 const ClosedSchema = Schema.Struct({ success: Schema.optional(Schema.Boolean) });
 const ConsoleCallSchema = Schema.Struct({
@@ -228,6 +237,48 @@ const FOCUSED_POINT = `(() => {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 })()`;
 
+/**
+ * Whether what has the focus takes text: an input that types, a text area,
+ * or an editable element, each neither read-only nor disabled, found
+ * through open shadow roots. Note that a focused frame counts, since a page
+ * cannot see into another origin's frame, and the frame may hold the field.
+ */
+const TAKES_TEXT = `(() => {
+  let focused = document.activeElement;
+  while (focused !== null && focused.shadowRoot && focused.shadowRoot.activeElement) {
+    focused = focused.shadowRoot.activeElement;
+  }
+  if (focused === null || focused === document.body) return false;
+  if (focused.tagName === "IFRAME" || focused.tagName === "FRAME") return true;
+  if (focused.isContentEditable) return true;
+  const textless = ["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"];
+  if (focused.tagName === "INPUT" && textless.includes(focused.type)) return false;
+  if (focused.tagName !== "INPUT" && focused.tagName !== "TEXTAREA") return false;
+  return !focused.readOnly && !focused.disabled;
+})()`;
+
+/**
+ * Called on a ref's element with a point: the tag of the element that would
+ * take a click there instead, or "" where the element itself, something in
+ * it, or a label for it would. Note that an element in a frame is not
+ * checked, since the point is the top page's and the frame's own document
+ * cannot place it.
+ */
+const COVERED_BY = `function (x, y) {
+  if (window !== window.top) return "";
+  let hit = document.elementFromPoint(x, y);
+  while (hit !== null && hit.shadowRoot) {
+    const inner = hit.shadowRoot.elementFromPoint(x, y);
+    if (inner === null || inner === hit) break;
+    hit = inner;
+  }
+  if (hit === null) return "";
+  for (let node = hit; node; node = node.parentNode || node.host) if (node === this) return "";
+  const label = hit.closest("label");
+  if (label !== null && label.control === this) return "";
+  return hit.tagName.toLowerCase();
+}`;
+
 /** A reader of a command's answer, which fails as malformed where the answer is not what the method answers. */
 function answerOf<S extends Schema.ConstraintDecoder<unknown>>(schema: S) {
   const read = readEither(schema, { excess: EXCESS_KEYS.DROP });
@@ -258,6 +309,15 @@ function wordsOfCdp(failure: CdpFailure): string {
 /** A refusal read as the failure given, any other failure left as it is. */
 const refusedAs = (reason: string) => (failure: CdpFailure) =>
   failure.kind === CDP_FAILURE.REFUSED ? new ActionFailed({ reason }) : failure;
+
+/** A refusal read as the failure given with the browser's own words beside it, any other failure left as it is. */
+const refusedSaying = (reason: string) => (failure: CdpFailure) =>
+  failure.kind === CDP_FAILURE.REFUSED
+    ? new ActionFailed({
+        reason:
+          failure.detail === undefined ? reason : `${reason} (the browser said: ${failure.detail})`,
+      })
+    : failure;
 
 const goneRef = (ref: string) =>
   `${ref} is not on the page any more; take a new snapshot for the refs that are`;
@@ -363,6 +423,14 @@ function pagesOver(cdp: CdpSession): Effect.Effect<Pages, never, Scope.Scope> {
             ),
           );
         const { sessionId } = yield* readAttached(method, answer);
+        // Note that a browser that will not emulate the focus still takes input where its window has it.
+        yield* Effect.ignore(
+          cdp.send({
+            method: "Emulation.setFocusEmulationEnabled",
+            params: { enabled: true },
+            sessionId,
+          }),
+        );
         const page: Page = {
           targetId,
           sessionId,
@@ -461,9 +529,9 @@ function pointOfRef(page: Page, ref: string) {
   return Effect.gen(function* () {
     yield* page
       .send("DOM.scrollIntoViewIfNeeded", { backendNodeId: backendNodeIdOf(ref) })
-      .pipe(Effect.mapError(refusedAs(goneRef(ref))));
+      .pipe(Effect.mapError(refusedSaying(goneRef(ref))));
     const [quad] = yield* quadsOf(page, ref).pipe(
-      Effect.mapError(refusedAs(`${ref} is not drawn on the page; it may be hidden`)),
+      Effect.mapError(refusedSaying(`${ref} is not drawn on the page; it may be hidden`)),
     );
     if (quad === undefined) {
       return yield* failed(`${ref} is not drawn on the page; it may be hidden`);
@@ -491,14 +559,80 @@ function clickAt(page: Page, point: { readonly x: number; readonly y: number }) 
   );
 }
 
+const readResolved = answerOf(ResolvedSchema);
+
+/**
+ * Fails where another element covers a ref's point and would take its
+ * click, as Playwright's own check does. Note that a page that cannot say
+ * lets the click go on, since the check only keeps a click from landing
+ * somewhere it was not meant to.
+ */
+function assertUncovered(
+  page: Page,
+  ref: string,
+  point: { readonly x: number; readonly y: number },
+) {
+  return Effect.gen(function* () {
+    const covered = yield* Effect.option(
+      Effect.gen(function* () {
+        const resolve = "DOM.resolveNode";
+        const resolved = yield* readResolved(
+          resolve,
+          yield* page.send(resolve, { backendNodeId: backendNodeIdOf(ref) }),
+        );
+        const call = "Runtime.callFunctionOn";
+        const { result } = yield* readEvaluated(
+          call,
+          yield* page.send(call, {
+            objectId: resolved.object.objectId,
+            functionDeclaration: COVERED_BY,
+            arguments: [{ value: point.x }, { value: point.y }],
+            returnByValue: true,
+          }),
+        );
+        return result.value;
+      }),
+    );
+    const by = Option.getOrUndefined(covered);
+    if (typeof by === "string" && by !== "") {
+      return yield* failed(
+        `${ref} is covered at its middle by a ${by}, which would take the click; close or scroll past what covers it, then take a new snapshot`,
+      );
+    }
+  });
+}
+
+/** Whether what has the focus takes text; a page that cannot say counts as yes, leaving the typing to land where it may. */
+function takesText(page: Page) {
+  const method = "Runtime.evaluate";
+  return page.send(method, { expression: TAKES_TEXT, returnByValue: true }).pipe(
+    Effect.flatMap((answer) => readEvaluated(method, answer)),
+    Effect.map(({ result }) => result.value !== false),
+    Effect.orElseSucceed(() => true),
+  );
+}
+
+/**
+ * Types the text where the focus is, the ref's element focused first. Note
+ * that inserted text lands only in something that takes text, and lands
+ * nowhere otherwise without the browser saying so, so where nothing such
+ * has the focus the typing fails in words the model can act on.
+ */
 function typeText(page: Page, text: string, ref: string | undefined) {
   return Effect.gen(function* () {
     if (ref !== undefined) {
       yield* page
         .send("DOM.focus", { backendNodeId: backendNodeIdOf(ref) })
         .pipe(
-          Effect.mapError(refusedAs(`${ref} cannot take the focus; click it, or name a field`)),
+          Effect.mapError(refusedSaying(`${ref} cannot take the focus; click it, or name a field`)),
         );
+    }
+    if (!(yield* takesText(page))) {
+      return yield* failed(
+        ref === undefined
+          ? "nothing that takes text has the focus, so the text would go nowhere; name the field's ref, or click the field first"
+          : `${ref} does not take text; name a text field's ref`,
+      );
     }
     yield* page.send("Input.insertText", { text });
   });
@@ -626,7 +760,7 @@ function scroll<R>(
     if (by.ref !== undefined) {
       yield* page
         .send("DOM.scrollIntoViewIfNeeded", { backendNodeId: backendNodeIdOf(by.ref) })
-        .pipe(Effect.mapError(refusedAs(goneRef(by.ref))));
+        .pipe(Effect.mapError(refusedSaying(goneRef(by.ref))));
       return;
     }
     const method = "Page.getLayoutMetrics";
@@ -846,10 +980,11 @@ function onPage<R>(
         actedOn(action.action, tab),
       );
     case BROWSER_AGENT_ACTION.CLICK: {
+      const ref = action.ref;
       const at =
-        action.ref === undefined
+        ref === undefined
           ? Effect.succeed({ x: action.x ?? 0, y: action.y ?? 0 })
-          : pointOfRef(page, action.ref);
+          : Effect.tap(pointOfRef(page, ref), (point) => assertUncovered(page, ref, point));
       return Effect.as(
         Effect.flatMap(at, (point) =>
           Effect.andThen(
