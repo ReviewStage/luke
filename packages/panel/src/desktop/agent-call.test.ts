@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  NATIVE_CODING_AGENT_RUNTIMES,
+} from "@luke/features/coding-agent-wire";
 import { LIVE_STATUS } from "@luke/live";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -23,7 +27,9 @@ import { DesktopTasks } from "./desktop-tasks.js";
  * An agent's tab takes calls where the platform has a voice: a Call button
  * beside Dictate, which calls the agent, and while a call into it stands, the
  * call bar at its foot in the button's place, its glyph wearing the live
- * mark. A platform with no voice hands the tab no doors, and it draws none.
+ * mark. A platform with no voice hands the tab no doors, and it draws none,
+ * and nor does the tab of an agent on Claude Code or Codex, since calls run
+ * on eve alone.
  * Synthetic task and agent.
  */
 
@@ -51,6 +57,7 @@ afterEach(() => {
 async function mountOn(
   calls: AgentCallDoors | undefined,
   voice: VoiceView = IDLE_VOICE_VIEW,
+  agent: CodingAgentSummary = AGENT,
 ): Promise<HTMLElement> {
   handState(
     {},
@@ -66,11 +73,11 @@ async function mountOn(
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [{ agent: AGENT.id }],
-      tab: { agent: AGENT.id },
-      openAgents: [AGENT.id],
+      tabs: [{ agent: agent.id }],
+      tab: { agent: agent.id },
+      openAgents: [agent.id],
     },
-    agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id] }),
     calls,
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -131,4 +138,20 @@ test("while a call into the agent stands, its tab's foot draws the call bar in t
     page.querySelector('.main-tabs [role="tab"] .agent-calling-glyph'),
     "the agent's tab wears the live mark",
   );
+});
+
+test("an agent on Claude Code or Codex draws no Call button and no call foot, even where the platform has a voice", async () => {
+  for (const runtime of NATIVE_CODING_AGENT_RUNTIMES) {
+    const pressed: string[] = [];
+    const page = await mountOn({ onPress: (agentId) => pressed.push(agentId) }, IDLE_VOICE_VIEW, {
+      ...AGENT,
+      runtime,
+    });
+    assert.ok(page.querySelector(".dictate-button"), `${runtime}: the composer stands`);
+    assert.equal(callButton(page), null, `${runtime}: no Call button`);
+    assert.equal(page.querySelector(".agent-call-foot"), null, `${runtime}: no call foot`);
+    assert.deepEqual(pressed, []);
+    act(() => roots.pop()?.unmount());
+    document.body.innerHTML = "";
+  }
 });
