@@ -246,6 +246,8 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
     messages: replaces ? page.messages : applyMessagesPage(was.messages, page.messages),
     before: replaces ? page.before : was.before,
     olderOut: replaces ? undefined : was.olderOut,
+    // Note that a failure is the failed cursor's, so a page that replaces the cursor lets it go.
+    olderFailed: replaces ? false : was.olderFailed,
     failure: page.failureReason,
     usage: page.usage,
     context: page.context,
