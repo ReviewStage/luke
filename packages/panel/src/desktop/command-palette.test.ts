@@ -1287,6 +1287,36 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   ]);
 });
 
+test("on an agent's page with a page it showed open in the panel, ⌥⌘C copies the page's link under the agent's while the panel fills the window, and the agent's own otherwise", async () => {
+  const copied = installClipboard();
+  const pageId = "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f";
+  const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
+  const onPage = (fullScreen: boolean) => {
+    const base = tasksControl(listed);
+    return tasksControl({
+      ...listed,
+      agentView: { ...base.agentView, agentId: LINKED_AGENT },
+      sidePanel: { ...base.sidePanel, open: true, fullScreen, tab: { page: pageId } },
+    });
+  };
+  for (const tasks of [onPage(true), onPage(false)]) {
+    openPalette(tasks);
+    act(() => {
+      runAppCommand(APP_COMMAND.COMMAND_PALETTE);
+      runAppCommand(APP_COMMAND.COPY_LINK);
+    });
+    await act(async () => undefined);
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+  }
+
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/page/${pageId}`,
+    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
+  ]);
+});
+
 test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⌥⌘C copies their page's link in the workspace it opened in", async () => {
   const copied = installClipboard();
   const [acme] = ON_AGENT_TAB.workspaces;
