@@ -329,7 +329,6 @@ function platformProcedures(
  */
 function portDependencies(
   operator: OperatorClient,
-  state: AppStateStore,
   notices: AgentProceduresDependencies["notices"],
   reporter: string,
   tabs: ConnectTabs,
@@ -371,7 +370,6 @@ function portDependencies(
       colourCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
-      activeTaskId: () => state.snapshot().tasks.activeTaskId,
       talkTo: nothing,
     },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
@@ -495,7 +493,7 @@ const composedWeb = (
       });
       events = made.events;
       const actPort = yield* servedActPort(
-        portDependencies(operator, state, notices, crypto.randomUUID(), tabs),
+        portDependencies(operator, notices, crypto.randomUUID(), tabs),
         platformProcedures(http, doors, { operator, fork }),
         services,
       );

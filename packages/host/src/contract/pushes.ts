@@ -89,11 +89,14 @@ export const PUSH_GUARD = {
   ),
   /**
    * An agent's Call press, forwarded by the main process to the voice window
-   * alone, carrying the agent pressed for and the task the panel had open
-   * when it was pressed, and nothing else.
+   * alone, carrying the agent pressed for and the task it is on where it is
+   * on one, and nothing else.
    */
-  [PUSH.TASKS_TALK]: result<{ taskId: string; agentId: string }>(
-    (value) => isRecord(value) && isWireString(value.taskId) && isWireString(value.agentId),
+  [PUSH.TASKS_TALK]: result<{ agentId: string; taskId?: string | undefined }>(
+    (value) =>
+      isRecord(value) &&
+      (value.taskId === undefined || isWireString(value.taskId)) &&
+      isWireString(value.agentId),
   ),
   /**
    * A coding agent's notification clicked: the panel is to open the task on

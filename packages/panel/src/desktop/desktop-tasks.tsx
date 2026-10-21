@@ -81,7 +81,7 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js"
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
+import { useAgentCallDoors, useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
@@ -591,6 +591,8 @@ function PlanDocument({
   const { mainTabs, sidePanel, agents } = tasks;
   const { tab } = mainTabs;
   const archived = opened?.archivedAt !== undefined;
+  // The column's agents take calls on the open task, none while it is archived.
+  const calls = useAgentCallDoors(tasks.calls, { taskId, archived });
   const home =
     opened === undefined
       ? undefined
@@ -1065,7 +1067,7 @@ function PlanDocument({
                           ) : (
                             <CallNotice.Provider value={notice}>
                               <AgentPane
-                                call={tasks.calls}
+                                call={calls}
                                 label={mainTabLabel(tab, agents)}
                                 tabbed
                                 tab={tab}

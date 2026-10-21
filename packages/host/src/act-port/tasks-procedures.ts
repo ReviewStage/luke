@@ -138,8 +138,6 @@ export interface TasksProceduresDependencies {
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
   serviceBaseUrl: string;
-  /** The task the panel has open, as the bridge's side holds the host's view of it. */
-  activeTaskId: () => string | undefined;
   /** Tells the voice window, which owns the call, that an agent's Call button was pressed. */
   talkTo: (about: VoiceCallAbout) => void;
 }
@@ -374,9 +372,9 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         );
       },
     ),
-    // The press names its agent and no task: the task is the one the host
-    // has open, read here, so the panel cannot open a call into an agent of
-    // a task it is not showing. That the agent is on it is checked as the
+    // The press names its agent, and the task it is on where it is on one,
+    // whatever task the panel has open: a call is keyed by its agent. That
+    // the agent takes calls and is on the task named is checked as the
     // call's session is created (`compose-live.ts`).
     [TASKS_ACT_KIND.TASKS_TALK]: actPort[TASKS_ACT_KIND.TASKS_TALK].effect(function* ({
       input,
@@ -384,9 +382,10 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       errors,
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const taskId = dependencies.activeTaskId();
-      if (taskId === undefined) return yield* Effect.fail(errors.REFUSED());
-      dependencies.talkTo({ taskId, agentId: input.agentId });
+      dependencies.talkTo({
+        agentId: input.agentId,
+        ...(input.taskId === undefined ? undefined : { taskId: input.taskId }),
+      });
     }),
     [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: actPort[TASKS_ACT_KIND.TASKS_BOARD_SAVE].effect(function* ({
       input,

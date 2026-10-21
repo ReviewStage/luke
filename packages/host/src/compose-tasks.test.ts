@@ -2015,6 +2015,59 @@ it.effect(
     }),
 );
 
+it.effect(
+  "code shown on a call into an agent with no task is held for that agent, once each, whatever task is open, and a call into another such agent replaces it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.codes[INVITES] = [];
+      const { call, tasks, viewLands } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      const shown = {
+        callId: "call-1",
+        turnId: "turn-1",
+        shownAt: 10,
+        agentId: "taskless-agent",
+        code: {
+          ref: { path: "src/invite.ts" },
+          repository: "acme/api",
+          firstLine: 1,
+          lineCount: 1,
+          lines: ["const answer = 42;"],
+        },
+      };
+
+      const held = yield* viewLands((view) => (view.agentCallCode?.shownCode.length ?? 0) === 2);
+      tasks.showAgentCode("taskless-agent", shown);
+      tasks.showAgentCode("taskless-agent", shown);
+      tasks.showAgentCode("taskless-agent", { ...shown, callId: "call-2" });
+      const view = yield* held;
+      assert.equal(view.agentCallCode?.agentId, "taskless-agent");
+      assert.deepEqual(view.agentCallCode?.shownCode[0]?.code.lines, ["const answer = 42;"]);
+      // The open task's Code tab takes none of it.
+      assert.deepEqual(view.shownCode ?? [], []);
+
+      // Its activity is the floating call's alone, never the open task's.
+      const told = yield* viewLands((next) => next.callActivity?.notes === true);
+      tasks.showActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        agentId: "taskless-agent",
+        notes: true,
+      });
+      const toldView = yield* told;
+      assert.equal(toldView.activity, undefined);
+      assert.deepEqual(toldView.callActivity, { notes: true });
+
+      const replaced = yield* viewLands((next) => next.agentCallCode?.agentId === "another-agent");
+      tasks.showAgentCode("another-agent", { ...shown, callId: "call-3" });
+      assert.deepEqual(
+        (yield* replaced).agentCallCode?.shownCode.map((code) => code.callId),
+        ["call-3"],
+      );
+    }),
+);
+
 it.effect("code whose drawing dies is reported, and code shown after it is still drawn", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -3709,7 +3762,7 @@ it.effect(
         planId: INVITES,
         notes: false,
       });
-      tasks.callEnded(INVITES);
+      tasks.callEnded({ agentId: "agent-1", taskId: INVITES });
       yield* deliver([page(2)], [callRow(3, 5_000)]);
       yield* TestClock.adjust(Duration.seconds(5));
       yield* boardSettled;

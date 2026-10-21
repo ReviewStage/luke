@@ -65,6 +65,26 @@ export interface AgentCallDoors {
   readonly onPress: (agentId: string) => void;
 }
 
+/**
+ * Where an agent pressed for stands, which its call names: the task it is
+ * on, none for an agent with no task, and whether it or its task is
+ * archived, which takes no call.
+ */
+export interface AgentCallPlace {
+  readonly taskId: string | undefined;
+  readonly archived: boolean;
+}
+
+/**
+ * What a window takes calls through, for an agent wherever it is drawn: its
+ * tab in a task's column or its own page, each naming where the agent
+ * stands (`agent-actions.tsx`'s `useAgentCallDoors`); none where the
+ * platform has no voice.
+ */
+export interface AgentCallPress {
+  readonly onPress: (agentId: string, place: AgentCallPlace) => void;
+}
+
 /** Whether a call may go into the agent: one on eve, whose summary names no native runtime, and never one on Claude Code or Codex. */
 export function takesCalls(agent: Pick<CodingAgentSummary, "runtime">): boolean {
   return agent.runtime === undefined;

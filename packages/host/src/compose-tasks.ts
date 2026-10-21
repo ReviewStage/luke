@@ -133,6 +133,7 @@ import {
   invalid,
 } from "@luke/gateway";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { keepIdentity, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
@@ -413,8 +414,14 @@ export interface TasksComposer extends Composer {
    * end. Code about any other task, or of a call already held, is dropped.
    */
   showCode: (taskId: string, shown: TaskShownCode) => void;
-  /** The call about `taskId` ended: what it was doing is no longer drawn. */
-  callEnded: (taskId: string) => void;
+  /**
+   * Puts code on screen as Luke named it on a call into an agent with no
+   * task, which no task's Code tab takes: held for that agent's page,
+   * coloured here, each call's code once.
+   */
+  showAgentCode: (agentId: string, shown: TaskShownCode) => void;
+  /** The call ended: what it was doing is no longer drawn. */
+  callEnded: (about: VoiceCallAbout) => void;
   /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every task and agent row, so a write is confirmed once
@@ -1392,10 +1399,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** Shows the call's activity; the board and the pages are read as their marks move (`followBoard`, `followRecord`). */
-  function showActivity({ type: _type, planId: taskId, ...activity }: TaskActivityFrame): void {
+  function showActivity({
+    type: _type,
+    planId: taskId,
+    agentId: _agentId,
+    ...activity
+  }: TaskActivityFrame): void {
     // The call's own copy is kept whatever task is open, for the floating
-    // call window; the panel's is the active task's alone.
-    if (view.activeTaskId !== taskId) {
+    // call window; the panel's is the active task's alone, and a call into
+    // an agent with no task is no task's.
+    if (taskId === undefined || view.activeTaskId !== taskId) {
       write({ callActivity: activity });
       return;
     }
@@ -1421,7 +1434,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  function callEnded(_taskId: string): void {
+  /** Holds a code shown on a call into an agent with no task, in place of another agent's, each call's code once. */
+  function showAgentCode(agentId: string, shown: TaskShownCode): void {
+    const held = view.agentCallCode?.agentId === agentId ? view.agentCallCode.shownCode : [];
+    if (held.some((showing) => showing.callId === shown.callId)) return;
+    write({ agentCallCode: { agentId, shownCode: [...held, showingOf(shown)] } });
+  }
+
+  function callEnded(_about: VoiceCallAbout): void {
     const { callActivity: _ended, ...rest } = view;
     view = rest;
     publish();
@@ -2708,6 +2728,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     activeTaskId: () => view.activeTaskId,
     showActivity,
     showCode,
+    showAgentCode,
     callEnded,
     listed,
     reset: Effect.gen(function* () {

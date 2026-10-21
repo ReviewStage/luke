@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { TaskActivityFrame, TaskCallEndingFrame, TaskCodeFrame } from "@luke/features";
+import {
+  type TaskActivityFrame,
+  type TaskCallEndingFrame,
+  type TaskCodeFrame,
+  VOICE_SERVICE_FRAME,
+} from "@luke/features";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
 import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@luke/live";
 import type { WireRecord } from "@luke/wire";
@@ -8,6 +13,7 @@ import { Effect, type Scope, type Stream } from "effect";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
+import type { VoiceCallAbout } from "../voice-view.js";
 import { LiveSessionHolder } from "./live-session-holder.js";
 
 /**
@@ -88,8 +94,8 @@ function settle() {
 interface Fixture {
   holder: LiveSessionHolder;
   sidebands: FakeSideband[];
-  /** The task each session was created about, in order. */
-  tasks: string[];
+  /** The task each session was created about, in order; none for a call into an agent with no task. */
+  tasks: (string | undefined)[];
   changes: VoiceLiveSessionChanged[];
   /** Every idle report the source's door was handed, in order. */
   reports: boolean[];
@@ -107,8 +113,8 @@ interface Fixture {
   tellCode(code: TaskCodeFrame): void;
   /** The service's word that Luke is ending the call, as the source's door would deliver it. */
   tellEnding(ending: TaskCallEndingFrame): void;
-  /** Every task whose call the holder told its caller ended, in order. */
-  callsEnded: string[];
+  /** Every call the holder told its caller ended, in order. */
+  callsEnded: VoiceCallAbout[];
   created: number;
   sourceAvailable: boolean;
   /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
@@ -121,7 +127,7 @@ interface Fixture {
 function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const sidebands: FakeSideband[] = [];
-    const tasks: string[] = [];
+    const tasks: (string | undefined)[] = [];
     const changes: VoiceLiveSessionChanged[] = [];
     const reports: boolean[] = [];
     const activity: TaskActivityFrame[] = [];
@@ -129,7 +135,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const code: TaskCodeFrame[] = [];
     let codeListener: ((code: TaskCodeFrame) => void) | undefined;
     let endingListener: ((ending: TaskCallEndingFrame) => void) | undefined;
-    const callsEnded: string[] = [];
+    const callsEnded: VoiceCallAbout[] = [];
     const typed: string[] = [];
     const state = {
       sourceAvailable: true,
@@ -191,8 +197,8 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       onTaskCode: (frame) => {
         code.push(frame);
       },
-      onTaskCallEnded: (taskId) => {
-        callsEnded.push(taskId);
+      onTaskCallEnded: (about) => {
+        callsEnded.push(about);
       },
       onSessionCreated: () => {
         state.created += 1;
@@ -305,5 +311,89 @@ it.effect(
       yield* settle();
       assert.equal(f.holder.typeLine(INVITES_AGENT, "After the call.", "send-3"), false);
       assert.deepEqual(f.typed, ["send-2:Use the fixture branch."]);
+    }),
+);
+
+/** An agent an automation started with no task, whose call is keyed by the agent alone. */
+const TASKLESS_AGENT = "5e2c9a7d-1b3f-4c8e-a6d0-3f7b2e9c1a58";
+
+it.effect(
+  "a call into an agent with no task names none, hears the service's frames about that agent and no other, and its end names the agent",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", { agentId: TASKLESS_AGENT });
+      assert.ok(created);
+      assert.deepEqual(f.tasks, [undefined]);
+      f.sidebands[0]?.started(created.sessionId);
+      yield* settle();
+      const shown = { callId: "call-1", turnId: "turn-1", shownAt: 1, agentId: TASKLESS_AGENT };
+      const code = {
+        ref: { path: "src/app.ts", startLine: 1, endLine: 2 },
+        repository: "acme/app",
+        firstLine: 1,
+        lineCount: 2,
+        lines: ["one", "two"],
+      };
+      f.tellActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        agentId: TASKLESS_AGENT,
+        notes: true,
+      });
+      f.tellActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        agentId: INVITES_AGENT,
+        notes: true,
+      });
+      f.tellActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        planId: INVITES_TASK,
+        notes: true,
+      });
+      f.tellCode({ type: VOICE_SERVICE_FRAME.TASK_CODE, ...shown, code });
+      f.tellCode({
+        type: VOICE_SERVICE_FRAME.TASK_CODE,
+        ...shown,
+        agentId: INVITES_AGENT,
+        callId: "call-2",
+        code,
+      });
+      assert.deepEqual(
+        f.activity.map((word) => word.agentId),
+        [TASKLESS_AGENT],
+      );
+      assert.deepEqual(
+        f.code.map((frame) => frame.callId),
+        ["call-1"],
+      );
+      f.sidebands[0]?.closedBy("close_requested", 3);
+      yield* settle();
+      assert.deepEqual(f.callsEnded, [{ agentId: TASKLESS_AGENT }]);
+      // The end says nothing doing about the agent, which names no task.
+      assert.deepEqual(f.activity.at(-1), {
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        agentId: TASKLESS_AGENT,
+        notes: false,
+      });
+    }),
+);
+
+it.effect(
+  "a task's call still hears a service that names its task alone, and a delete of another task ends nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* f.open();
+      f.tellActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        planId: INVITES_TASK,
+        notes: true,
+      });
+      assert.equal(f.activity.length, 1);
+      yield* f.holder.endTaskCall("another-task");
+      assert.equal(f.holder.sessionStands(), true);
+      f.sidebands[0]?.closedBy("close_requested", 3);
+      yield* settle();
+      assert.deepEqual(f.callsEnded, [{ agentId: INVITES_AGENT, taskId: INVITES_TASK }]);
     }),
 );

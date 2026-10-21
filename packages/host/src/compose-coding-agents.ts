@@ -248,11 +248,13 @@ export interface CodingAgentsComposer extends Composer {
   /** Every transcript's, every plan's and agent's inbox's, and the account inbox's subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
   /**
-   * The task an agent is on, as the service reads it now, which a call into
-   * the agent is checked against: null for an agent on no task, and none
-   * for one archived, or that the account does not reach or could not read.
+   * The task an agent a call may go into is on, as the service reads it now,
+   * which a call into the agent is checked against: null for an agent on no
+   * task, and none for one no call goes into: archived, on a provider's own
+   * harness rather than eve, or that the account does not reach or could
+   * not read.
    */
-  readonly agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
+  readonly callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -1090,9 +1092,14 @@ function composed(
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
   });
 
-  const agentTaskOf = (agentId: string) =>
+  // Note that an agent naming a runtime runs on Claude Code or Codex, which takes no call: calls run on eve alone.
+  const callTaskOf = (agentId: string) =>
     Effect.map(asked(client.agent(agentId)), (answer) =>
-      "agent" in answer && answer.agent.archivedAt === undefined ? answer.agent.planId : undefined,
+      "agent" in answer &&
+      answer.agent.archivedAt === undefined &&
+      answer.agent.runtime === undefined
+        ? answer.agent.planId
+        : undefined,
     );
-  return { methods, lifetime: Effect.void, reset, agentTaskOf };
+  return { methods, lifetime: Effect.void, reset, callTaskOf };
 }

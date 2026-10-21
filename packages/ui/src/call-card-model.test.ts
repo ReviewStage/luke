@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
 import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
@@ -106,6 +107,31 @@ test("a call's plan the list does not hold is named from the open document, or p
   assert.equal(callCard({ view: LISTENING, tasks: IDLE_TASKS_VIEW }).taskName, "Call");
 });
 
+test("a call into an agent with no task is named as its row names the agent, or plainly as a call", () => {
+  const taskless: TasksView = {
+    ...TASKS,
+    tasklessAgents: [
+      {
+        id: OTHER_AGENT,
+        planId: null,
+        turnId: null,
+        title: "Retry audit",
+        model: "openai/gpt-6.1-sol",
+        effort: "high",
+        status: CODING_AGENT_STATUS.COMPLETED,
+        createdAt: 1_000,
+        automationId: null,
+        workspaceId: WORKSPACE,
+        repository: "acme/relay",
+        activityAt: 1_000,
+      },
+    ],
+  };
+  const call = (agentId: string) => ({ ...LISTENING, call: { agentId } });
+  assert.equal(callCard({ view: call(OTHER_AGENT), tasks: taskless }).taskName, "Retry audit");
+  assert.equal(callCard({ view: call(CALLED), tasks: taskless }).taskName, "Call");
+});
+
 test("a Luke window draws the card only with the keyboard, a call in progress, and anything but the call's agent's tab on screen", () => {
   const shown = (view: VoiceView, focused: boolean, agentShown: string | undefined) =>
     callCardShown({ view, focused, agentShown });
@@ -118,13 +144,13 @@ test("a Luke window draws the card only with the keyboard, a call in progress, a
   assert.equal(shown(IDLE_VOICE_VIEW, true, OTHER_AGENT), false);
 });
 
-test("an agent's call bar is on screen only on its tab of a task's document, and not under its version history, the window's Inbox, an agent's page, or a side panel filling the window", () => {
+test("an agent's call bar is on screen on its tab of a task's document, or on its own page, and not under its version history, the window's Inbox, another agent's page, or a side panel filling the window", () => {
   const onTab = {
     tasksTab: true,
     documentPage: true,
     historyOpen: false,
     inboxOpen: false,
-    agentPageOpen: false,
+    pageAgentId: undefined,
     sidePanelFullScreen: false,
     columnAgentId: CALLED,
   };
@@ -132,7 +158,12 @@ test("an agent's call bar is on screen only on its tab of a task's document, and
   assert.equal(callBarAgentId({ ...onTab, columnAgentId: undefined }), undefined);
   assert.equal(callBarAgentId({ ...onTab, historyOpen: true }), undefined);
   assert.equal(callBarAgentId({ ...onTab, inboxOpen: true }), undefined);
-  assert.equal(callBarAgentId({ ...onTab, agentPageOpen: true }), undefined);
+  assert.equal(callBarAgentId({ ...onTab, pageAgentId: OTHER_AGENT }), OTHER_AGENT);
+  // An agent's own page draws its call bar whatever task is open, or none.
+  const onPage = { ...onTab, documentPage: false, columnAgentId: undefined, pageAgentId: CALLED };
+  assert.equal(callBarAgentId(onPage), CALLED);
+  assert.equal(callBarAgentId({ ...onPage, inboxOpen: true }), undefined);
+  assert.equal(callBarAgentId({ ...onPage, sidePanelFullScreen: true }), undefined);
   assert.equal(callBarAgentId({ ...onTab, sidePanelFullScreen: true }), undefined);
   assert.equal(callBarAgentId({ ...onTab, documentPage: false }), undefined);
   assert.equal(callBarAgentId({ ...onTab, tasksTab: false }), undefined);

@@ -22,6 +22,7 @@ import {
 } from "@luke/gateway";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -131,23 +132,21 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings, openSocket: openVoiceSocket });
     // No brain runs on this Mac: the exchange is the service's, and Luke
-    // speaks only on a task's call the developer opened.
+    // speaks only on a call the developer opened into an agent.
     // The tasks composer is built after the live one and ends its calls, so
-    // the live composer reads the open task, and hands it the call's
-    // activity, code, and work, through these late bindings.
-    let activeTaskId: () => string | undefined = () => undefined;
-    let agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
+    // the live composer reads the agent a call goes into, and hands the
+    // call's activity, code, and work on, through these late bindings.
+    let callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
       Effect.succeed(undefined);
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
-    let taskCallEnded: (taskId: string) => void = () => undefined;
+    let taskCallEnded: (about: VoiceCallAbout) => void = () => undefined;
     let showTaskCode: (code: TaskCodeFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
-      activeTaskId: () => activeTaskId(),
-      agentTaskOf: (agentId) => agentTaskOf(agentId),
+      callTaskOf: (agentId) => callTaskOf(agentId),
       showTaskActivity: (activity) => showTaskActivity(activity),
-      taskCallEnded: (taskId) => taskCallEnded(taskId),
+      taskCallEnded: (about) => taskCallEnded(about),
       showTaskCode: (code) => showTaskCode(code),
     });
     const workspaceClient = new HostedWorkspaceClient({
@@ -264,13 +263,13 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           openConsent: (yield* SignInConsent).open,
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
-    activeTaskId = tasks.activeTaskId;
-    agentTaskOf = codingAgents.agentTaskOf;
+    callTaskOf = codingAgents.callTaskOf;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
-    // Note that code a call into an agent with no task shows names no task, so no task's Code tab takes it.
+    // Note that code a call into an agent with no task shows names no task, so it is held for that agent's page by its agent.
     showTaskCode = ({ type: _type, planId: taskId, ...shown }) => {
       if (taskId !== undefined) tasks.showCode(taskId, shown);
+      else if (shown.agentId !== undefined) tasks.showAgentCode(shown.agentId, shown);
     };
 
     /**

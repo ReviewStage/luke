@@ -26,10 +26,11 @@ import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { RelativeTime } from "../tasks/relative-time.js";
-import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
+import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { RowHint, RowHintOptions } from "../tooltip.js";
+import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { useAgentDelete } from "./agent-delete.js";
@@ -149,6 +150,7 @@ export function SidebarAgent({
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
+  const calling = useCallingAgent();
   const starter = starterOf(agent, face, reader);
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
@@ -219,7 +221,8 @@ export function SidebarAgent({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <span className="sidebar-agent-glyph">
-              <AgentGlyph agent={agent} />
+              {/* The live mark while a call into the agent stands, as its tab's glyph wears it on a task. */}
+              {tabLook({ kind: TAB_KIND.AGENT, name, agent, calling: calling === agent.id }).icon}
             </span>
           }
           title={

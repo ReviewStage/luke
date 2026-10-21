@@ -76,13 +76,14 @@ export function isVoiceCallTranscriptChange(value: UnparsedWireValue): boolean {
 
 /**
  * What a call is about: the agent it speaks into, and the task that agent is
- * on, which the host creates the call only for while the panel has it open.
- * One call stands on a Mac at a time, about one agent; calling another hangs
- * it up first.
+ * on where it is on one, none for an agent with no task. The call is keyed
+ * by its agent, and the host creates it only into an agent the account
+ * reaches on eve, whose own task is the one named. One call stands on a Mac
+ * at a time, about one agent; calling another hangs it up first.
  */
 export interface VoiceCallAbout {
-  readonly taskId: string;
   readonly agentId: string;
+  readonly taskId?: string | undefined;
 }
 
 /** Whether two calls are about the same agent, and so are the same call to press for. */
@@ -104,7 +105,7 @@ export interface VoiceView extends VoiceSpeakers {
   voiceError: string | undefined;
   voiceNotice: string | undefined;
   talkOpening: boolean;
-  /** The agent the standing call speaks into, and its task; none for no call. */
+  /** The agent the standing call speaks into, and its task where it has one; none for no call. */
   call: VoiceCallAbout | undefined;
   /** The store's id for the session of the last call Luke ended himself; none before he has. */
   lukeEndedCall: string | undefined;
@@ -180,7 +181,9 @@ export function isVoiceCommand(value: UnparsedWireValue): value is VoiceCommand 
 function isOptionalCallAbout(value: UnparsedWireValue): boolean {
   return (
     value === undefined ||
-    (isRecord(value) && isWireString(value.taskId) && isWireString(value.agentId))
+    (isRecord(value) &&
+      (value.taskId === undefined || isWireString(value.taskId)) &&
+      isWireString(value.agentId))
   );
 }
 

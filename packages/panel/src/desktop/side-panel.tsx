@@ -255,8 +255,9 @@ const NO_PAGES: readonly PageLine[] = [];
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
  * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Pull request, and its Terminal, and no plan's Board,
- * Code, Call, files, or pages. A tab of an agent's page is no plan's to
+ * agent's workers, its Pull request, and its Terminal, the Code a call
+ * into it showed where it has no task to hold it, and no plan's Board,
+ * Call, files, or pages. A tab of an agent's page is no plan's to
  * pin, so none is offered. Beside the window's Inbox it stands for the
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
@@ -277,10 +278,13 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 /** No Terminal tab, as the Inbox's panel draws. */
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
+/** The Code tab alone, which an agent's page offers while a call into it showed code. */
+const CODE_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.CODE];
+
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: SIDE_PANEL_TABS,
-  [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
+  [SIDE_PANEL_HOLDER.AGENT]: CODE_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
 
@@ -1997,10 +2001,14 @@ export function SidePanel({
   const offers = panelEntries({
     panel,
     // The Chat is offered only where the task's page draws one, which it does while Chat is on.
+    // An agent's page offers Code only while a call into its agent showed some.
     kinds: HOLDER_KINDS[holder].filter(
       (kind) =>
         (kind !== SIDE_PANEL_TAB.INBOX || inboxOffered) &&
-        (kind !== SIDE_PANEL_TAB.CHAT || chat !== undefined),
+        (kind !== SIDE_PANEL_TAB.CHAT || chat !== undefined) &&
+        (kind !== SIDE_PANEL_TAB.CODE ||
+          holder === SIDE_PANEL_HOLDER.TASK ||
+          (shownCode?.length ?? 0) > 0),
     ),
     files: offered,
     changes: changesOffers(agents, changes),

@@ -173,7 +173,14 @@ export const tasksActsContract = {
     .input(takesNothing)
     .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_TALK]: actProcedure("Could not call that agent on this system.")
-    .input(exactInput(EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString })))
+    .input(
+      exactInput(
+        EffectSchema.Struct({
+          agentId: EffectSchema.NonEmptyString,
+          taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+        }),
+      ),
+    )
     .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: actProcedure("Could not save the board on this system.")
     .input(exactInput(tasksBoardSaveParamsSchema))

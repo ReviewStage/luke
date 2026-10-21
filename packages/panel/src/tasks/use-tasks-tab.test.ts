@@ -3295,8 +3295,8 @@ test("a platform with no voice takes no calls", async () => {
   assert.equal(web.control().calls, undefined);
 });
 
-test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
-  // The voice arrives as main delivers it, a call into another agent landing after the first press.
+/** The voice as main delivers it, whose call a test stands by hand: a call into another agent landing after a first press. */
+function voiceDelivered(): { stand: (view: VoiceView) => Promise<void> } {
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -3306,11 +3306,27 @@ test("an agent's Call press opens a call into it at once, and over another agent
       return () => listeners.delete(listener);
     },
   });
-  const otherCall: VoiceView = {
-    ...IDLE_VOICE_VIEW,
-    voiceStatus: LIVE_STATUS.LISTENING,
-    call: { taskId: TASK.id, agentId: VOICE_CHAT_AGENT.id },
+  return {
+    stand: async (view) => {
+      act(() => {
+        for (const listener of listeners) {
+          listener(stateWith({}, { version: 2, voice: { avatar: AVATAR_OFF, view } }));
+        }
+      });
+      await settle();
+    },
   };
+}
+
+/** A call standing into another agent, of the open task. */
+const OTHER_CALL: VoiceView = {
+  ...IDLE_VOICE_VIEW,
+  voiceStatus: LIVE_STATUS.LISTENING,
+  call: { taskId: TASK.id, agentId: VOICE_CHAT_AGENT.id },
+};
+
+test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
+  const voice = voiceDelivered();
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
@@ -3323,24 +3339,57 @@ test("an agent's Call press opens a call into it at once, and over another agent
     await settle();
     assert.ok(tab.control().calls, "a desktop's agents take calls");
   });
-  act(() => tab.control().calls?.onPress(AGENT_ID));
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
+  const onTask = { taskId: TASK.id, archived: false };
+  act(() => tab.control().calls?.onPress(AGENT_ID, onTask));
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID, taskId: TASK.id }]);
 
-  act(() => {
-    for (const listener of listeners) {
-      listener(stateWith({}, { version: 2, voice: { avatar: AVATAR_OFF, view: otherCall } }));
-    }
-  });
-  await settle();
-  act(() => tab.control().calls?.onPress(AGENT_ID));
+  await voice.stand(OTHER_CALL);
+  act(() => tab.control().calls?.onPress(AGENT_ID, onTask));
   assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
   assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
   await act(async () => tab.control().secondCall.confirm.run());
   await settle();
   assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
-    { agentId: AGENT_ID },
-    { agentId: AGENT_ID },
+    { agentId: AGENT_ID, taskId: TASK.id },
+    { agentId: AGENT_ID, taskId: TASK.id },
   ]);
+});
+
+/** The list as OPEN holds it, with no task open. */
+const { activeTaskId: _open, ...NO_TASK_OPEN } = OPEN;
+
+test("an agent's page takes a call into its agent with no task open, naming no task, asks first over another call, and an archived agent takes none", async () => {
+  const voice = voiceDelivered();
+  const tab = mount(
+    { shown: true, tasks: NO_TASK_OPEN },
+    { [ACT_KIND.TASKS_TALK]: () => Promise.resolve(undefined) },
+    AtomRegistryModule.make(),
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().calls, "a desktop's agents take calls");
+  });
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, agentId: AGENT_ID },
+    }),
+  );
+  assert.equal(tab.control().agentView.agentId, AGENT_ID);
+  const tasklessPlace = { taskId: undefined, archived: false };
+
+  act(() => tab.control().calls?.onPress(AGENT_ID, { ...tasklessPlace, archived: true }));
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [], "an archived agent takes no call");
+  act(() => tab.control().calls?.onPress(AGENT_ID, tasklessPlace));
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
+
+  await voice.stand(OTHER_CALL);
+  act(() => tab.control().calls?.onPress(AGENT_ID, tasklessPlace));
+  assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
+  assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
+  await act(async () => tab.control().secondCall.confirm.run());
+  await settle();
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }, { agentId: AGENT_ID }]);
 });
 
 test("a task opened is timed from the press to its document drawn ready, and one refused is timed by no span", async () => {
