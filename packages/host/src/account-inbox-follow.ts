@@ -17,6 +17,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
+import type { InboxTxWaits } from "./inbox-tx-waits.js";
 import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /**
@@ -63,6 +64,8 @@ export interface AccountInboxDependencies {
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /** Where the account inbox's wait for a write's transaction stands while it is subscribed, which the inbox's writes wait on. */
+  readonly txWaits: InboxTxWaits;
 }
 
 /** Each account's subscription, by its id, held while main reads it and a while after. */
@@ -102,6 +105,7 @@ export function accountInboxes(
             reseal: () => dependencies.seal(userId, false),
             poll: (after) => dependencies.seal(userId, true, after),
             now: dependencies.now,
+            onTxWait: dependencies.txWaits.hook(),
           },
           first,
         ).pipe(

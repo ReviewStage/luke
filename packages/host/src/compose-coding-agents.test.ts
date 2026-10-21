@@ -267,6 +267,8 @@ function fakeService() {
   let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
   let pinTxid: string | undefined;
+  // The transaction the service says each inbox write committed in; none says it changed nothing.
+  let committedIn: { readonly txid?: string } = {};
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -556,17 +558,17 @@ function fakeService() {
     markInboxItemRead: (itemId) =>
       Effect.sync(() => {
         asked.push(`inbox-read:${itemId}`);
-        return { id: itemId, unread: false };
+        return { id: itemId, unread: false, ...committedIn };
       }),
     markInboxItemUnread: (itemId) =>
       Effect.sync(() => {
         asked.push(`inbox-unread:${itemId}`);
-        return { id: itemId, unread: true };
+        return { id: itemId, unread: true, ...committedIn };
       }),
     markInboxRead: (request) =>
       Effect.sync(() => {
         asked.push(`inbox-read-all:${request?.workspaceId ?? ""}`);
-        return { marked: 2 };
+        return { marked: 2, ...committedIn };
       }),
     messageInbox: (itemId, request) =>
       Effect.sync(() => {
@@ -598,6 +600,7 @@ function fakeService() {
         return {
           item: { ...ITEM, status: INBOX_STATUS.CLOSED, closedBy: { userId: "u1", name: "Dana" } },
           taken: true,
+          ...committedIn,
         };
       }),
     answerInbox: (itemId, request) =>
@@ -669,6 +672,10 @@ function fakeService() {
     /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
     sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       scope = next;
+    },
+    /** The transaction the service says each inbox write committed in from now on; none says it changed nothing. */
+    commitIn: (txid: string | undefined) => {
+      committedIn = txid === undefined ? {} : { txid };
     },
     /** What the service seals for following the account inbox, or that the session signed out; none answers unanswered. */
     sealAccount: (next: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined) => {
@@ -745,6 +752,7 @@ function subject(
       pageNewest: service.pageNewest,
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
+      commitIn: service.commitIn,
       realtime,
       /** Every answer of the followed account inbox the host told, in order. */
       accountInboxes: () =>
@@ -2148,5 +2156,46 @@ it.effect(
       assert.deepEqual(accountInboxes(), []);
       assert.deepEqual(realtime.opened, []);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
+    }),
+);
+
+it.effect(
+  "a mark is answered once a followed inbox has its transaction, and at once where no inbox is followed over Realtime or the write changed nothing",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealScope, realtime, told, commitIn } = yield* subject();
+      const markRead = { itemId: ITEM.id, unread: false };
+      commitIn("41");
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, markRead),
+        { id: ITEM.id, unread: false, txid: "41" },
+        "with no inbox followed, nothing is waited on",
+      );
+
+      sealScope(SEALED_SCOPE);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* toldTimes(told, 1);
+
+      commitIn("42");
+      const marking = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, markRead),
+      );
+      yield* settled;
+      assert.deepEqual(realtime.awaitingTxids(), ["42"]);
+      assert.equal(marking.pollUnsafe(), undefined, "not answered before the inbox has it");
+      realtime.arrive("42");
+      assert.deepEqual(yield* Fiber.join(marking), { id: ITEM.id, unread: false, txid: "42" });
+
+      commitIn(undefined);
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
+        { marked: 2 },
+        "a write that changed nothing answers at once",
+      );
+      assert.deepEqual(realtime.awaitingTxids(), []);
     }),
 );
