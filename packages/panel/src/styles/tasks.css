@@ -430,6 +430,17 @@
   pointer-events: none;
 }
 
+/* The room a date picker opened from words at rest hangs in
+   (`words-dates.tsx`): laid over the words whole, so the picker is placed
+   from the room's own box wherever it stands, and only the picker takes
+   the pointer. */
+.words-date-room {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
 .date-picker-anchor > * {
   pointer-events: auto;
 }
@@ -7934,6 +7945,7 @@ button.picture-frame {
    its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,
    which holds the list's own padded element). */
 .comments-tab {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;

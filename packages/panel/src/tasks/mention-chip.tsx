@@ -54,7 +54,7 @@ import {
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { InlineRef } from "../inline-ref.js";
-import type { LinkDrawer } from "../markdown-message.js";
+import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
 import { APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
@@ -92,6 +92,7 @@ import {
   useWordsWorkspaceId,
 } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
+import { useWordsDates } from "./words-dates.js";
 
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.
@@ -153,7 +154,10 @@ import { useOpenLink } from "./use-open-link.js";
  * (`useMinute`), and its card says it in full and how far off it is. A day
  * has no page, so in words that take no change it opens nothing; in an
  * editor's words a press opens the date's picker, which names the chip
- * anew in place or takes it out (`date-picker.tsx`).
+ * anew in place or takes it out (`date-picker.tsx`), and so it does in
+ * words drawn at rest that take a change, the plan's or the reader's own
+ * comment's, which are then saved with the date written anew
+ * (`words-dates.tsx`).
  *
  * A section is known by its heading's anchor, so a section of the plan
  * drawn here whose anchor no heading of the plan spells any longer is gone:
@@ -766,6 +770,34 @@ function DateChip({
   );
 }
 
+/**
+ * A date's link drawn in words as its chip, opening its picker where the
+ * words take a change and say where the link is written in them
+ * (`words-dates.tsx`), and nothing elsewhere.
+ */
+function WrittenDateChip({
+  date,
+  at,
+  place,
+}: {
+  date: DateMention;
+  /** Where its link is written in the words drawn; none where the place drawing them says not. */
+  at: MarkdownSpan | undefined;
+  place: MentionPlace;
+}): React.JSX.Element {
+  const dates = useWordsDates();
+  return (
+    <DateChip
+      date={date}
+      onPick={
+        dates === undefined || at === undefined
+          ? undefined
+          : (chip) => dates.pick({ at, date, place }, chip)
+      }
+    />
+  );
+}
+
 /** The glyph a place in Luke wears, the one its tab or its row in the window wears: an agent's its harness's mark, where the window holds the agent. */
 function PlaceGlyph({
   place,
@@ -955,16 +987,20 @@ const MENTION_KIND_PLACE = "place";
  * A link in words as its chip, through the doors given: a mention's where
  * its target names one (`linkMention`), a place's in Luke where it is a
  * Luke link no mention names (`readLink`); nothing where it is neither, and
- * it stays a link.
+ * it stays a link. `at` is where the link is written in the words drawn,
+ * which a date's chip names to its picker in words that take a change.
  */
 export function linkChip(
   href: string,
   label: string,
   doors: MentionDoors,
+  at?: MarkdownSpan | undefined,
 ): React.JSX.Element | undefined {
   const bare = isBareLink(label, href);
   const found = linkMention(label, href, doors.place.repository);
-  if (found?.mention.kind === MENTION_KIND.DATE) return <DateChip date={found.mention} />;
+  if (found?.mention.kind === MENTION_KIND.DATE) {
+    return <WrittenDateChip date={found.mention} at={at} place={doors.place} />;
+  }
   if (found !== undefined) {
     return (
       <MentionChip
@@ -990,7 +1026,7 @@ export function linkChip(
 
 /** What draws a link in Markdown as its chip through the doors given (`linkChip`); a link where it names nothing. */
 export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
-  return (href, label) => linkChip(href, label, doors);
+  return (href, label, at) => linkChip(href, label, doors, at);
 }
 
 /** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */

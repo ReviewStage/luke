@@ -103,6 +103,13 @@ import { useMinute } from "./task-time.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useOpenLink } from "./use-open-link.js";
+import {
+  useWordsDatePicker,
+  WordsDatePickerRoom,
+  type WordsDates,
+  WordsDatesContext,
+  wordsDatesDoor,
+} from "./words-dates.js";
 
 /**
  * plan-comments.tsx -- comments on the open plan, beside its words: each open thread in the margin level with the words it is on, or behind a count at the line's end where the column has no room for a margin, a thread started from words selected or from a block's own button, and each thread answered, resolved, reopened, edited, and deleted where it stands.
@@ -378,6 +385,30 @@ function CommentEntry({
       : []),
   ];
   const settle = first && openThread(thread);
+  // The reader's own words take a date changed from its chip, as their editor would, saved as an edit of the comment.
+  const openDate = useWordsDatePicker();
+  const latestWords = useRef(entry.words);
+  latestWords.current = entry.words;
+  const { control } = doors;
+  const dates = useMemo<WordsDates | undefined>(
+    () =>
+      !mine || openDate === undefined
+        ? undefined
+        : wordsDatesDoor(
+            openDate,
+            () => latestWords.current,
+            (words) => {
+              // Note that a comment is never saved empty, so Clear on a comment of a date alone leaves it.
+              if (words.trim() === "") return;
+              void control.act(thread.id, {
+                action: PLAN_COMMENT_ACTION.EDIT,
+                entry: entry.id,
+                words: words.trim(),
+              });
+            },
+          ),
+    [mine, openDate, control, thread.id, entry.id],
+  );
   const save = () => {
     const words = editing?.trim() ?? "";
     if (words === "") return;
@@ -438,7 +469,9 @@ function CommentEntry({
       {lead}
       {editing === undefined ? (
         <>
-          <CommentWords words={entry.words ?? ""} />
+          <WordsDatesContext.Provider value={dates}>
+            <CommentWords words={entry.words ?? ""} />
+          </WordsDatesContext.Provider>
           {entry.files === undefined ? null : (
             <CommentFiles planId={doors.control.planId} files={entry.files} />
           )}
@@ -1871,59 +1904,61 @@ export function PlanCommentsTab({
   const full = { ...doors, control };
   return (
     <div className="comments-tab">
-      <div className="comments-head">
-        <span className="comments-head-title">
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {COMMENTS_FILTER_WORDS[filter]}
-          </Text>
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-            {listed.length}
-          </Text>
-        </span>
-        <ResolvedOnly
-          shown={filter === COMMENTS_FILTER.RESOLVED}
-          onShown={(shown) => {
-            setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
-            // Note that the other list starts at its top, not where the one it replaces was scrolled to.
-            if (list.current !== null) list.current.scrollTop = 0;
-          }}
-        />
-      </div>
-      <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-        <div className="comments-list">
-          {control.failed ? (
-            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
-              The comments could not be read.
-            </ErrorState>
-          ) : listed.length === 0 ? (
-            control.read ? (
-              <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
-                {NO_COMMENTS[filter].line}
-              </EmptyState>
-            ) : null
-          ) : (
-            listed.map((thread) => (
-              <div key={thread.id} className="comments-row">
-                {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
-                <ThreadCard
-                  thread={thread}
-                  open
-                  quote
-                  doors={full}
-                  onShowWords={
-                    openThread(thread)
-                      ? () => {
-                          onShowDocument();
-                          reveal(thread.id);
-                        }
-                      : undefined
-                  }
-                />
-              </div>
-            ))
-          )}
+      <WordsDatePickerRoom>
+        <div className="comments-head">
+          <span className="comments-head-title">
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {COMMENTS_FILTER_WORDS[filter]}
+            </Text>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {listed.length}
+            </Text>
+          </span>
+          <ResolvedOnly
+            shown={filter === COMMENTS_FILTER.RESOLVED}
+            onShown={(shown) => {
+              setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
+              // Note that the other list starts at its top, not where the one it replaces was scrolled to.
+              if (list.current !== null) list.current.scrollTop = 0;
+            }}
+          />
         </div>
-      </ScrollArea>
+        <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+          <div className="comments-list">
+            {control.failed ? (
+              <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
+                The comments could not be read.
+              </ErrorState>
+            ) : listed.length === 0 ? (
+              control.read ? (
+                <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
+                  {NO_COMMENTS[filter].line}
+                </EmptyState>
+              ) : null
+            ) : (
+              listed.map((thread) => (
+                <div key={thread.id} className="comments-row">
+                  {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
+                  <ThreadCard
+                    thread={thread}
+                    open
+                    quote
+                    doors={full}
+                    onShowWords={
+                      openThread(thread)
+                        ? () => {
+                            onShowDocument();
+                            reveal(thread.id);
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </WordsDatePickerRoom>
     </div>
   );
 }
