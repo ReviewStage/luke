@@ -72,6 +72,7 @@ import {
   readCodingAgentRouting,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
+import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { UserContent } from "ai";
@@ -575,6 +576,16 @@ export const runnerSessions = <
                 api.updateTags(sandbox.name, launching),
               ),
             ),
+          ),
+        );
+        // A released wait's wakeups go once the CLI has started again and taken its first
+        // message: it restores on resume what it can (`coding-agent-wakeups.ts`), so a copy Luke
+        // still held would fire twice, or after the agent cancelled it. A launch that failed
+        // before this leaves them for the sweep to deliver, and a delete that failed is logged,
+        // never failing the launch that already runs.
+        yield* replaceCodingAgentWakeups(agent.id, []).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning(`a relaunched agent's wakeups were not handed back: ${failure._tag}`),
           ),
         );
       });

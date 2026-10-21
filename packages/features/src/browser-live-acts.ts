@@ -41,7 +41,7 @@ export const BROWSER_LIVE_ABNORMAL_CLOSE = 1006;
 const BROWSER_LIVE_SEND_MAX_CHARS = 16_384;
 
 /** One cloud Browser tab of one task, as its live view names it. */
-export const browserLiveTargetSchema = EffectSchema.Struct({
+const browserLiveTargetSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   tabId: EffectSchema.NonEmptyString,
 });
@@ -69,8 +69,6 @@ export const browserLivePortInboundSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(BROWSER_LIVE_PORT_MESSAGE.SEND),
   text: EffectSchema.String.check(EffectSchema.isMaxLength(BROWSER_LIVE_SEND_MAX_CHARS)),
 });
-
-export type BrowserLivePortInbound = typeof browserLivePortInboundSchema.Type;
 
 /** What main sends on a view's port: a text frame the service sent, or the socket's close. */
 export const browserLivePortOutboundSchema = EffectSchema.Union([

@@ -16,7 +16,7 @@ import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
  */
 
 /** What the log's placeholder says to a reader. */
-export const TRANSCRIPT_LOADING_LABEL = "Loading transcript";
+const TRANSCRIPT_LOADING_LABEL = "Loading transcript";
 
 /** How wide each of the log's placeholder lines stands, the newest last: one message's lines. */
 const LOG_LINE_WIDTHS = ["72%", "88%", "64%", "40%"] as const;
@@ -42,7 +42,7 @@ export function TranscriptSkeleton({
 }
 
 /** The composer's card in its own frame and size, its field and its row of controls. */
-export function ComposerSkeleton(): React.JSX.Element {
+function ComposerSkeleton(): React.JSX.Element {
   return (
     <div className="agent-composer" aria-hidden="true">
       <div className="prompt-input">

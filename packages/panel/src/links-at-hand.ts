@@ -277,8 +277,10 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     const root = { kind: LINK_PLACE.CHAT } as const;
     const { place } = tasks.chatView;
     if (place.kind !== CHAT_PLACE.CHANNEL) return [at_(root, LINK_THING.CHAT)];
-    // A narrow room's rail stands alone over the channel it hides, so the rail is the step, at Chat's own link.
-    if (at.narrow === true && tasks.chatView.listed) return [at_(root, LINK_THING.CHAT)];
+    // A rail standing alone, in a narrow room or a Chat showing one column by its own width, hides the channel, so the rail is the step, at Chat's own link.
+    if ((at.narrow === true || tasks.chatView.single === true) && tasks.chatView.listed) {
+      return [at_(root, LINK_THING.CHAT)];
+    }
     const channel: LinkPlace = { kind: LINK_PLACE.CHAT, channelId: place.channelId };
     return [at_(channel, LINK_THING.CHANNEL), within(root, LINK_THING.CHAT)];
   }

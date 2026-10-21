@@ -57,7 +57,7 @@ test("a task on its way, its strips still another's, is named by the task alone"
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, opening), { label: "Auth refactor" });
 });
 
-test("the Inbox's step names the task its item is of, and Settings and the home page are named alone", () => {
+test("the Inbox's step names the task its item is of, and Settings and a new account's welcome are named alone", () => {
   const chosen: InboxChoice = { itemId: "item-1", taskId: TASK.id };
   const base = tasksControl({ tasks: [TASK] });
   const inbox = tasksControl({
@@ -66,7 +66,7 @@ test("the Inbox's step names the task its item is of, and Settings and the home 
   });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, inbox), { label: "Inbox", detail: "Auth refactor" });
   assert.deepEqual(stepTitle(PANEL_TAB.SETTINGS, base), { label: "Settings" });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Home" });
+  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Welcome" });
 });
 
 test("an Inbox showing one column names no item while its list stands, as its step holds none", () => {

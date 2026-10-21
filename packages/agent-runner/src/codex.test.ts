@@ -9,6 +9,7 @@ import { type Cause, Deferred, Effect, Fiber, Layer, Logger, Queue, Stream } fro
 import type * as HttpClient from "effect/http/HttpClient";
 import { askCodexToken } from "./codex-token.js";
 import type { RunnerSelf } from "./launch.js";
+import { processTable } from "./processes.js";
 import {
   CODEX_EFFORT,
   CODEX_TOKEN_COMMAND,
@@ -34,6 +35,7 @@ import {
 } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
 import { makeFakeLuke } from "./testing/fake-luke.js";
+import { UNREAD_PROC } from "./testing/fake-proc.js";
 
 const BEARER = "runner-bearer-for-tests";
 const ACCESS_TOKEN = "chatgpt-access-token-for-tests";
@@ -137,6 +139,8 @@ function launch(
           server.layer,
           extra.http ?? luke.layer,
           claude.layer,
+          // Codex never waits on a wakeup, so no wait of its is released whatever runs.
+          processTable(UNREAD_PROC, 1),
           Logger.layer([recorder]),
         ),
       ),

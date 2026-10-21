@@ -207,8 +207,6 @@ export const providerKeyForAgentsRequestSchema = EffectSchema.Struct({
   forAgents: EffectSchema.Boolean,
 });
 
-export type ProviderKeyForAgentsRequest = typeof providerKeyForAgentsRequestSchema.Type;
-
 /** No OAuth token, client id, or subject Luke is handed is longer; a field past it is no credential. */
 const CHATGPT_CREDENTIAL_BOUNDS = {
   MAX_TOKEN_CHARS: 16_384,

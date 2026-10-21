@@ -1,10 +1,6 @@
 import type { AdminMetricsWindow } from "@luke/features/admin-wire";
-import { useCallback, useEffect, useState } from "react";
-import { authClient } from "./admin/auth-client";
-import { ForbiddenCard, SignInCard } from "./admin/chrome/cards";
-import type { ViewerAccount } from "./admin/chrome/page-header";
-import { AdminShell } from "./admin/chrome/sidebar";
-import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "./admin/prefs";
+import type { ViewerAccount } from "@luke/panel/admin/chrome/page-header";
+import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
 import {
   type AdminTab,
   type AdminView,
@@ -14,17 +10,31 @@ import {
   viewFromLocation,
   windowFromLocation,
   windowHref,
-} from "./admin/routing";
-import { AccountScreen } from "./admin/screens/account";
+} from "@luke/panel/admin/routing";
+import { AccountScreen } from "@luke/panel/admin/screens/account";
+import { CostScreen } from "@luke/panel/admin/screens/cost";
+import { DashboardScreen, useMetricsRead } from "@luke/panel/admin/screens/dashboard";
+import { DayScreen } from "@luke/panel/admin/screens/day";
+import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
+import { UsersScreen } from "@luke/panel/admin/screens/users";
+import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
+import { useCallback, useEffect, useState } from "react";
+import { authClient } from "./admin/auth-client";
+import { ForbiddenCard, SignInCard } from "./admin/chrome/gate-cards";
+import { AdminShell } from "./admin/chrome/sidebar";
 import { AnimationsScreen } from "./admin/screens/animations";
-import { CostScreen } from "./admin/screens/cost";
-import { DashboardScreen, useMetricsRead } from "./admin/screens/dashboard";
-import { DayScreen } from "./admin/screens/day";
-import { ReliabilityScreen } from "./admin/screens/reliability";
-import { UsersScreen } from "./admin/screens/users";
-import { WorkspacesScreen } from "./admin/screens/workspaces";
+import { WebAdminDoors } from "./admin/web-admin-doors";
 
+/** The standalone page: the dashboard under this page's own doors (`web-admin-doors.tsx`). */
 export function AdminDashboard(): React.JSX.Element {
+  return (
+    <WebAdminDoors>
+      <AdminDashboardPage />
+    </WebAdminDoors>
+  );
+}
+
+function AdminDashboardPage(): React.JSX.Element {
   // Admin accounts are the maintainers' own; their traffic reads as noise in
   // every count, so admins start hidden and the toggle is the explicit ask to
   // include them, remembered across visits. The scope is the server's filter —

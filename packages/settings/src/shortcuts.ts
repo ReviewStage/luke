@@ -1,7 +1,7 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape, the Inbox's J and K, and the tab switcher's
+ * Every shortcut but Escape, the Inbox's and Chat's J and K, and the tab switcher's
  * ⌃Tab holds Command, the way a
  * Mac app's own chords do, since Command chords belong to whichever app is
  * frontmost. J
@@ -63,11 +63,15 @@ export const APP_COMMAND = {
   FIND_PREVIOUS: "find-previous",
   EXIT_SETTINGS: "exit-settings",
   EXIT_VERSION_HISTORY: "exit-version-history",
-  HOME: "home",
   INBOX: "inbox",
   INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
+  CHAT: "chat",
+  CHAT_LIST: "chat-list",
+  PREVIOUS_CHAT_CHANNEL: "previous-chat-channel",
+  NEXT_CHAT_CHANNEL: "next-chat-channel",
+  NEXT_UNREAD_CHAT_CHANNEL: "next-unread-chat-channel",
   TOGGLE_INBOX_ITEM_READ: "toggle-inbox-item-read",
   REPLY_TO_SELECTION: "reply-to-selection",
   EXIT_AGENT_PAGE: "exit-agent-page",
@@ -117,14 +121,15 @@ export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
 
 /**
  * The commands ⌘K alone offers, by the name it gives them: the sidebar's
- * view of its tasks, which its View options menu sets too, and Factory,
- * which the sidebar's row opens, so no chord or menu bar item spends a key
- * on them. Factory keeps no chord while it is an experiment, so ⇧⌘F stays
- * free for a find across everything; ⌘K offers it only while the account
- * has it on, since its command is offered nothing otherwise.
+ * view of its tasks, which its View options menu sets too, and Factory and
+ * Chat, which the sidebar's rows open, so no chord or menu bar item spends a
+ * key on them. Factory and Chat keep no chord while they are experiments, so
+ * ⇧⌘F stays free for a find across everything; ⌘K offers each only while
+ * the account has it on, since its command is offered nothing otherwise.
  */
 const PALETTE_COMMAND_LABELS = {
   [APP_COMMAND.FACTORY]: "Factory",
+  [APP_COMMAND.CHAT]: "Chat",
   [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
   [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
   [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",
@@ -315,7 +320,7 @@ export interface AppShortcut {
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
  * Safari have them, ⌃Tab and ⌃⇧Tab through the tabs used last as VS Code
- * and Chrome have them, ⇧⌘H for home as Finder has it, ⇧⌘⏎ to fill the window
+ * and Chrome have them, ⇧⌘⏎ to fill the window
  * with a pane as iTerm and Warp have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
@@ -431,7 +436,6 @@ export const APP_SHORTCUTS = {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.HOME]: { label: "Home", chord: { key: SHORTCUT_KEY.H, shift: true } },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
   [APP_COMMAND.INBOX_LIST]: {
     label: "Back to inbox list",
@@ -448,6 +452,27 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.TOGGLE_INBOX_ITEM_READ]: {
     label: "Mark inbox item as read or unread",
     chord: { key: SHORTCUT_KEY.U, plain: true },
+  },
+  [APP_COMMAND.CHAT_LIST]: {
+    label: "Back to chat list",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.CHAT,
+  },
+  // Note that Chat's K and J are the Inbox's own keys, because the two never stand at once and the keymap runs whichever is offered.
+  [APP_COMMAND.PREVIOUS_CHAT_CHANNEL]: {
+    label: "Previous chat channel",
+    chord: { key: SHORTCUT_KEY.K, plain: true },
+    experiment: EXPERIMENT.CHAT,
+  },
+  [APP_COMMAND.NEXT_CHAT_CHANNEL]: {
+    label: "Next chat channel",
+    chord: { key: SHORTCUT_KEY.J, plain: true },
+    experiment: EXPERIMENT.CHAT,
+  },
+  [APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL]: {
+    label: "Next unread chat channel",
+    chord: { key: SHORTCUT_KEY.J, plain: true, shift: true },
+    experiment: EXPERIMENT.CHAT,
   },
   [APP_COMMAND.REPLY_TO_SELECTION]: {
     label: "Reply to selection",
@@ -538,12 +563,15 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.MARK_TASK_DONE,
       APP_COMMAND.DELETE_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
-      APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
       APP_COMMAND.INBOX_LIST,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+      APP_COMMAND.CHAT_LIST,
+      APP_COMMAND.PREVIOUS_CHAT_CHANNEL,
+      APP_COMMAND.NEXT_CHAT_CHANNEL,
+      APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL,
       APP_COMMAND.REPLY_TO_SELECTION,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,

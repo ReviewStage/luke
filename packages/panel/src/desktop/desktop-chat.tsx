@@ -4,6 +4,7 @@ import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { CodeRef } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   BackIcon,
@@ -12,6 +13,8 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FoldingButton,
+  type FoldingButtonHint,
   IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -37,11 +40,13 @@ import {
 } from "@luke/ui/chat-model";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MailOpenIcon, MessagesSquareIcon } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
+import { AttentionMark } from "../attention-mark.js";
+import { useColumnSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { FoldingButton } from "../folding-button.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
@@ -49,6 +54,7 @@ import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor } from "../tasks/chat-actors.js";
 import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
@@ -91,10 +97,17 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * the chat read carries where those name more. With nothing read, it says
  * so under Chat's glyph. Any row of the sidebar leaves it for the plan it
  * stood over; Escape does not, as it does not leave the Inbox, so a stray
- * press never loses the place being read. A narrow room shows the rail or
- * the place, one at a time (`hiddenColumns`): Chat opens on its rail, and a
- * place chosen there, or shown from elsewhere, stands alone the whole width,
- * under a way back to the rail.
+ * press never loses the place being read. Chat narrower than the Inbox's
+ * line, by its own width (`column-split.ts`) or a narrow room's, shows the
+ * rail or the place, one at a time (`hiddenColumns`): Chat opens on its
+ * rail, and a place chosen there, or shown from elsewhere, stands alone the
+ * whole width, under a way back to the rail, which Back's chord and Escape
+ * take as well, as the Inbox's item's does. K and J step to the place above
+ * and below in the rail as drawn, stopping at its ends, and ⇧J to the next
+ * channel holding anything unread, wrapping round, as the Inbox's keys step
+ * through its items, the row they land on taking the keyboard where the
+ * rail stands. For you, and any channel with an ask waiting on the reader,
+ * wears the Inbox's attention mark; the blue dot is for the unread alone.
  */
 
 /** The workspace a chip's link is written in, the chat's own; none while no workspace is listed. */
@@ -161,6 +174,16 @@ function useTaskDoors(
 
 /** What the way back from a place to the rail says, in a narrow room. */
 const CHAT_LIST = "Chat";
+
+/**
+ * The way back's pill, which says where it goes and names Back's chord
+ * whether its word is folded away or not, as the Inbox's way back does.
+ */
+const BackHint: FoldingButtonHint = ({ children }) => (
+  <Tooltip label="Back to chat" command={APP_COMMAND.BACK}>
+    {children}
+  </Tooltip>
+);
 
 /**
  * How the rail groups the tasks' channels: as the reader's sidebar groups
@@ -433,6 +456,7 @@ function RailRow({
       at={latest?.postedAt}
       now={now}
       unread={row.unread > 0}
+      needsYou={row.asks > 0}
       current={current}
       card={placeCard(tasks, row, actorOf, now)}
       end={
@@ -451,12 +475,13 @@ function RailRow({
 /**
  * One place of the rail as a row of the Inbox's own list (`ListRow`): the
  * blue dot in a gutter where something waits unread, its mark, its name in
- * the unread weight while it does, at the line's end what its row says
- * there and when it last spoke, and under it who said what last. It hangs
- * its card, or its name alone, while the pointer rests on it, a
- * right-click opens its menu where it has one, and while something waits
- * unread in it, Mark as read stands at its end on hover and a swipe right
- * does it, as an Inbox row's do.
+ * the unread weight while it does, at the line's end the attention mark
+ * where something in it needs the reader, as an Inbox item's needing them
+ * wears it, what its row says there and when it last spoke, and under it
+ * who said what last. It hangs its card, or its name alone, while the
+ * pointer rests on it, a right-click opens its menu where it has one, and
+ * while something waits unread in it, Mark as read stands at its end on
+ * hover and a swipe right does it, as an Inbox row's do.
  */
 function PlaceRow({
   mark,
@@ -465,6 +490,7 @@ function PlaceRow({
   at,
   now,
   unread,
+  needsYou,
   current,
   card,
   end,
@@ -479,6 +505,7 @@ function PlaceRow({
   at: number | undefined;
   now: number;
   unread: boolean;
+  needsYou: boolean;
   current: boolean;
   /** The card it hangs while the pointer rests on it; none hangs its name alone. */
   card: React.ReactNode;
@@ -519,6 +546,12 @@ function PlaceRow({
           meta={
             <span className="home-row-meta">
               {unread ? <span className="visually-hidden">{UNREAD_WORDS}</span> : null}
+              {needsYou ? (
+                <span className="inbox-row-attention">
+                  <AttentionMark />
+                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                </span>
+              ) : null}
               {end}
               {at === undefined ? null : <RelativeTime at={at} now={now} hint={false} />}
             </span>
@@ -642,6 +675,96 @@ function RailGroup({
   );
 }
 
+/** Every place of the rail in its order, For you first, whether drawn or folded away. */
+function railPlaces(groups: RailGroupsShown): readonly ChatRailRow[] {
+  return [...groups.lead, ...groups.tasks, ...groups.trail].flatMap((group) => group.rows);
+}
+
+/** The places K and J step through: For you, then each row the rail draws, a folded group's place shown alone among its rows. */
+function drawnSteps(
+  groups: RailGroupsShown,
+  folded: (group: RailGroupShown) => boolean,
+  place: ChatPlace,
+): readonly ChatPlace[] {
+  const rows = [...groups.lead, ...groups.tasks, ...groups.trail].flatMap((group) =>
+    folded(group) ? group.rows.filter((each) => shows(place, each)) : group.rows,
+  );
+  return [FOR_YOU, ...rows.map((each) => channelPlace(each))];
+}
+
+/** A row's channel as a place. */
+function channelPlace(row: ChatRailRow): ChatPlace {
+  return { kind: CHAT_PLACE.CHANNEL, channelId: row.channel.id };
+}
+
+/** Whether two places are the same one. */
+function samePlace(one: ChatPlace, other: ChatPlace): boolean {
+  if (one.kind !== CHAT_PLACE.CHANNEL || other.kind !== CHAT_PLACE.CHANNEL) {
+    return one.kind === other.kind;
+  }
+  return one.channelId === other.channelId;
+}
+
+/** The next row after the place shown holding anything unread, wrapping round the rail, folded groups among it; none where no other does. */
+function nextUnread(groups: RailGroupsShown, place: ChatPlace): ChatPlace | undefined {
+  const rows = railPlaces(groups);
+  const at = rows.findIndex((each) => shows(place, each));
+  const after = [...rows.slice(at + 1), ...rows.slice(0, Math.max(at, 0))];
+  const found = after.find((each) => each.unread > 0 && !shows(place, each));
+  return found === undefined ? undefined : channelPlace(found);
+}
+
+/**
+ * K, J, and ⇧J while Chat is on screen: the place above or below the one
+ * shown in the rail as drawn, stopping at its ends, and the next channel
+ * holding anything unread. The row a key lands on takes the keyboard where
+ * the rail stands, as the Inbox's row does, so the keys go on from there;
+ * where the place stands alone, the narrow focus hands it on instead.
+ */
+function useChannelKeys({
+  groups,
+  folded,
+  place,
+  onChoose,
+  active,
+  railShown,
+  rail,
+}: {
+  groups: RailGroupsShown | undefined;
+  folded: (group: RailGroupShown) => boolean;
+  place: ChatPlace;
+  onChoose: (place: ChatPlace) => void;
+  active: boolean;
+  railShown: boolean;
+  rail: React.RefObject<HTMLDivElement | null>;
+}): void {
+  const stepped = useRef(false);
+  const steps = groups === undefined ? [] : drawnSteps(groups, folded, place);
+  const at = steps.findIndex((each) => samePlace(each, place));
+  const go = (to: ChatPlace | undefined) =>
+    to === undefined
+      ? undefined
+      : () => {
+          stepped.current = true;
+          onChoose(to);
+        };
+  const previous = at > 0 ? steps[at - 1] : undefined;
+  const next = at >= 0 ? steps[at + 1] : undefined;
+  const unread = groups === undefined ? undefined : nextUnread(groups, place);
+  useAppCommand(APP_COMMAND.PREVIOUS_CHAT_CHANNEL, active ? go(previous) : undefined);
+  useAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL, active ? go(next) : undefined);
+  useAppCommand(APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL, active ? go(unread) : undefined);
+  // Note that the row is focused before paint, so the keyboard is never left on a row no longer marked.
+  useLayoutEffect(() => {
+    if (!stepped.current) return;
+    stepped.current = false;
+    if (!railShown) return;
+    rail.current
+      ?.querySelector<HTMLElement>('.chat-rail [aria-current]:not([aria-current="false"])')
+      ?.focus();
+  });
+}
+
 /**
  * The window's Chat, in the plan's place: the rail, and the place chosen
  * beside it, inside the listed workspace's members read, as the Inbox
@@ -696,10 +819,44 @@ function ChatView({
     label: "Resize chat list",
     onResize,
   });
-  const screen = useNarrowFocus(room, view.listed);
+  // Note that Chat narrower than the Inbox's line by its own width stands as a narrow room's does.
+  const split = useColumnSplit();
+  const single = room === SHELL_ROOM.NARROW || split.single === true;
+  const chatRoom = single ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE;
+  const { onSingle } = view;
+  useLayoutEffect(() => {
+    onSingle?.(split.single === true);
+  }, [split.single, onSingle]);
+  const screen = useNarrowFocus(chatRoom, view.listed);
+  const measure = split.ref;
+  const rootRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      screen.current = element;
+      const unmeasure = measure(element);
+      return () => {
+        screen.current = null;
+        unmeasure?.();
+      };
+    },
+    [screen, measure],
+  );
+  const hidden = hiddenColumns(chatRoom, view.listed);
+  // A place standing alone steps back to the rail by Escape too, as the Inbox's item does.
+  useAppCommand(APP_COMMAND.CHAT_LIST, hidden.list ? view.onList : undefined);
+  const rail = read === undefined ? undefined : chatRail(read.answer, names, taskGrouping(tasks));
+  const groups = rail === undefined ? undefined : railGroups(rail);
+  useChannelKeys({
+    groups,
+    folded: folds.folded,
+    place: view.place,
+    onChoose: view.onChoose,
+    active: tasks.shown && read !== undefined && !view.failed,
+    railShown: !hidden.list,
+    rail: screen,
+  });
   // Note that the window's Chat stands on no task's page, so a task's channel is handed its task's mentions here.
   const taskDoors = useTaskDoors(tasks, true);
-  if (read === undefined || view.failed) {
+  if (read === undefined || view.failed || rail === undefined || groups === undefined) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
       <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
@@ -720,9 +877,6 @@ function ChatView({
     );
   }
   const chat = read.answer;
-  const rail = chatRail(chat, names, taskGrouping(tasks));
-  const hidden = hiddenColumns(room, view.listed);
-  const groups = railGroups(rail);
   const forYouGroups = copyChat === undefined ? [] : [[copyChat]];
   const row = (each: ChatRailRow) => (
     <RailRow
@@ -753,12 +907,12 @@ function ChatView({
     />
   );
   return (
-    <div ref={screen} className="chat-view">
+    <div ref={rootRef} className="chat-view" data-single={String(single)}>
       <nav
         className="chat-rail"
         aria-label="Chat"
         hidden={hidden.list}
-        style={{ width: room === SHELL_ROOM.NARROW ? undefined : drawnWidth(width) }}
+        style={{ width: single ? undefined : drawnWidth(width) }}
       >
         <header className="desktop-toolbar chat-rail-bar">
           <div className="desktop-toolbar-heading">
@@ -779,7 +933,8 @@ function ChatView({
                 preview={rail.forYou === 0 ? NOTHING_WAITS : waitingWords(rail.forYou)}
                 at={undefined}
                 now={now}
-                unread={rail.forYou > 0}
+                unread={false}
+                needsYou={rail.forYou > 0}
                 current={view.place.kind === CHAT_PLACE.FOR_YOU}
                 card={undefined}
                 end={undefined}
@@ -794,7 +949,7 @@ function ChatView({
             {groups.trail.map(group)}
           </div>
         </ScrollArea>
-        {room === SHELL_ROOM.NARROW ? null : <SidebarResizeEdge edge={edge} />}
+        {single ? null : <SidebarResizeEdge edge={edge} />}
       </nav>
       <ChatPane
         chat={chat}
@@ -813,8 +968,13 @@ function ChatView({
         readPicture={view.readPicture}
         taskDoors={taskDoors}
         lead={
-          room === SHELL_ROOM.NARROW ? (
-            <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={view.onList} />
+          single ? (
+            <FoldingButton
+              label={CHAT_LIST}
+              icon={<BackIcon />}
+              onClick={view.onList}
+              hint={BackHint}
+            />
           ) : undefined
         }
         hidden={hidden.item}

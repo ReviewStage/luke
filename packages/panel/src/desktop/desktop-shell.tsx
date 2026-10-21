@@ -300,7 +300,7 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * task, Settings, the home page, the Inbox, the tab closed latest, opened again on its
+ * task, Settings, the Inbox, the tab closed latest, opened again on its
  * task, the Keyboard shortcuts page that lists them all, and back and
  * forward, which answer whether or not their buttons are drawn.
  */
@@ -328,15 +328,6 @@ function usePlaceCommands(
   );
   useAppCommand(APP_COMMAND.SETTINGS, pastGate ? () => onTabChange(PANEL_TAB.SETTINGS) : undefined);
   useAppCommand(
-    APP_COMMAND.HOME,
-    pastGate && tasks.signedIn
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.onGoHome();
-        }
-      : undefined,
-  );
-  useAppCommand(
     APP_COMMAND.INBOX,
     pastGate && tasks.signedIn
       ? () => {
@@ -353,6 +344,17 @@ function usePlaceCommands(
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           tasks.factoryView.onOpen();
+        }
+      : undefined,
+  );
+  // Chat is an experiment as Factory is, so ⌘K offers it only on the terms its sidebar row stands on.
+  const chatOn = useChatOn();
+  useAppCommand(
+    APP_COMMAND.CHAT,
+    pastGate && tasks.signedIn && chatOn && tasks.chatView.available
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.chatView.onOpen();
         }
       : undefined,
   );
@@ -747,11 +749,15 @@ export function DesktopShell({
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
             {chatOpen ? (
-              <DesktopChat
-                tasks={tasks}
-                room={room}
-                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-              />
+              <PageFind page={FIND_PAGE.CHAT} active={tasks.shown}>
+                <DesktopChat
+                  tasks={tasks}
+                  room={room}
+                  accountName={
+                    account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined
+                  }
+                />
+              </PageFind>
             ) : inboxOpen ? (
               <DesktopInbox tasks={tasks} listing={sharedListing} />
             ) : pageAgent !== undefined ? (
@@ -805,8 +811,6 @@ export function DesktopShell({
                 looks={looks}
                 notice={noticeInColumn ? NOTICE_STRIP : undefined}
                 summary={summary}
-                room={room}
-                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             )}
           </ChipCards>

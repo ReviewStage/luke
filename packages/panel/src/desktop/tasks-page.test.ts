@@ -203,14 +203,14 @@ let listWorkspace: (workspace: Workspace) => void = () => undefined;
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].map((group) => [
     group.getAttribute("aria-label") ?? "",
-    [...group.querySelectorAll(".tasks-list-key")].map((key) => key.textContent ?? ""),
+    [...group.querySelectorAll("[data-task-key]")].map((key) => key.textContent ?? ""),
   ]);
 }
 
 /** The row of the task keyed `key`, its press. */
 function rowOf(page: HTMLElement, key: string): HTMLElement {
   const row = [...page.querySelectorAll<HTMLElement>(".tasks-list-group li")].find(
-    (each) => each.querySelector(".tasks-list-key")?.textContent === key,
+    (each) => each.querySelector("[data-task-key]")?.textContent === key,
   );
   assert.ok(row, `the row of ${key} stands`);
   return row;
@@ -646,7 +646,7 @@ test("a Board display kept before its cards offered Agents and Needs you draws t
   const card = page.querySelector<HTMLElement>('li[data-task-id="t-44"]');
 
   assert.match(card?.textContent ?? "", /2 need you/, "the card says what waits on the reader");
-  assert.equal(card?.querySelector(".tasks-board-key"), null, "the key stays off, as kept");
+  assert.equal(card?.querySelector("[data-task-key]"), null, "the key stays off, as kept");
 });
 
 /** The section writes sent, each as its kind, its task, and its section. */

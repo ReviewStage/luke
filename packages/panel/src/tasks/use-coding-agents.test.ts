@@ -1067,6 +1067,58 @@ test("a draft's Call starts an empty draft's agent blank under a key of its own,
   assert.deepEqual(second, { taskId: TASK, idempotencyKey: worded, prompt, call: true, ...choice });
 });
 
+test("what an agent's transcript said of it before its task's agents were read stands over the list's answer, which was read as it stood before", async () => {
+  let answer: (value: WireBoundaryInput) => void = () => undefined;
+  const tab = mount({ taskId: TASK, repository: null });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    new Promise<WireBoundaryInput>((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await tab.mount();
+  assert.equal(tab.control().agents, undefined, "the agents are still being read");
+
+  // The tab follows its agent from the id, so its page lands before the list does.
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
+  answer({ agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }] });
+  await settle();
+
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
+    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+  );
+});
+
+test("what an agent's transcript said before its task's agents were read outlasts a read of them that failed, and stands over the one that lands", async () => {
+  let fail: (value: WireBoundaryInput) => void = () => undefined;
+  const tab = mount({ taskId: TASK, repository: null });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    new Promise<WireBoundaryInput>((resolve) => {
+      fail = resolve;
+    }),
+  );
+  await tab.mount();
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
+  fail({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
+  assert.equal(tab.control().agents, undefined, "the read failed");
+
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, {
+    agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }],
+  });
+  act(() => tab.control().onRetryList());
+  await settle();
+
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
+    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+  );
+});
+
 test("a delete that landed takes the agent out of the list, and a read already out that still holds it does not bring it back", async () => {
   const OTHER = { ...STARTED, id: "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f" };
   const tab = mount({ taskId: TASK, repository: null });

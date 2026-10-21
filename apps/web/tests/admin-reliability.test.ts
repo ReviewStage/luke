@@ -7,11 +7,12 @@ import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
+import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
 import { adminIntegrations } from "@luke/service/admin/admin-health";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { ReliabilityScreen } from "../src/admin/screens/reliability";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-reliability.test.ts -- the Reliability screen states its sections
@@ -146,16 +147,18 @@ async function openReliability(body: AdminReliability | undefined): Promise<Open
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(ReliabilityScreen, {
-        hideAdmins: true,
-        onHideAdminsChange: (hide) => heard.push(`hide ${hide}`),
-        windowDays: 7,
-        onWindowDaysChange: (windowDays) => heard.push(`window ${windowDays}`),
-        account: undefined,
-        onSignOut: async () => undefined,
-        onOpenAccount: (id) => heard.push(`open ${id}`),
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(ReliabilityScreen, {
+          hideAdmins: true,
+          onHideAdminsChange: (hide) => heard.push(`hide ${hide}`),
+          windowDays: 7,
+          onWindowDaysChange: (windowDays) => heard.push(`window ${windowDays}`),
+          account: undefined,
+          onSignOut: async () => undefined,
+          onOpenAccount: (id) => heard.push(`open ${id}`),
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return { page, heard };

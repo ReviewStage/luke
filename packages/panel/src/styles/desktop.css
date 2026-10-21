@@ -165,21 +165,22 @@ body,
 
 /* A narrow room shows a screen's list or the item chosen in it, one at a
    time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
-   list or its page, a version history's versions or the version, each the
-   shell's one column, and Chat's rail or its place, the view's one column.
-   The one shown stands alone, so no edge parts it from the other. */
+   list or its page and a version history's versions or the version, each the
+   shell's one column. Chat does the same by its own width as well as a
+   narrow room's (`column-split.ts`), its rail or its place the view's one
+   column. The one shown stands alone, so no edge parts it from the other. */
 .desktop-shell[data-room="narrow"]:not([data-sidebar-collapsed]),
-.desktop-shell[data-room="narrow"] .chat-view {
+.chat-view[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.desktop-shell[data-room="narrow"]
-  :is(.desktop-settings, .desktop-version-history, .chat-view)
-  > [hidden] {
+.desktop-shell[data-room="narrow"] :is(.desktop-settings, .desktop-version-history) > [hidden],
+.chat-view[data-single="true"] > [hidden] {
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log, .chat-rail) {
+.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log),
+.chat-view[data-single="true"] > .chat-rail {
   border-right: 0;
 }
 
@@ -3162,7 +3163,11 @@ ul.actor-stack {
   > .page-find
   > .inbox-view
   .inbox-tasks-bar,
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main > .chat-view .chat-rail-bar {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .chat-view
+  .chat-rail-bar {
   display: grid;
   grid-template-columns:
     minmax(
@@ -3183,6 +3188,7 @@ ul.actor-stack {
   .desktop-toolbar-heading,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .chat-view
   .chat-rail-bar
   .desktop-toolbar-heading {
@@ -3198,6 +3204,7 @@ ul.actor-stack {
   .desktop-toolbar-actions,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .chat-view
   .chat-rail-bar
   .desktop-toolbar-actions {
@@ -3301,6 +3308,7 @@ ul.actor-stack {
 .task-card-standing {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--luke-space-4);
 }
 
@@ -3336,12 +3344,16 @@ ul.actor-stack {
   height: var(--luke-type-caption-size);
 }
 
-/* A key is short and read whole; the chip beside it gives way instead. */
-.task-card-key {
+/* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
+   stands: its words are `Text`'s caption, subtle and monospace, with even
+   figures. It is short and read whole, so it never shrinks, and what stands
+   beside it gives way instead; it sits centred on the row it leads. */
+.task-key {
+  display: inline-flex;
   flex-shrink: 0;
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
+  align-items: center;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's
@@ -5757,10 +5769,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* Home has no toolbar, so its bar stands at the page's top, clear of the
    greeting and its New task. */
-.page-find:has(> .home) > .find-bar {
-  top: var(--luke-space-8);
-}
-
 /* The bar floats as a menu does, on the menu's ground, edge, and entrance,
    and claims its presses back from any drag strip beneath it. */
 .find-bar {
@@ -7813,10 +7821,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* The home page (`desktop-home.tsx`), a `DetailPage`: its sections a
-   little apart, their rows the Inbox's and Recent's own, each with its
-   context, the plan or the repository, in the faint ink between its name
-   and its time. */
+/* The page with no task open (`desktop-tasks.tsx`), which fills the column
+   for a new account's welcome (`desktop-welcome.tsx`). */
 .home {
   display: flex;
   min-height: 0;
@@ -7824,28 +7830,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-/* The box the arrow keys find Home's rows in lays nothing out, so the page
-   fills the room as it would alone. */
-.home-rows {
-  display: contents;
-}
-
-/* New task's composer (`new-task-composer.tsx`) at the top of the page's
-   content, its head row and card as the dialog draws them, as wide as the
-   content, the sections a little under it. */
+/* New task's composer (`new-task-composer.tsx`) under the welcome's line,
+   its head row and card as the dialog draws them. */
 .home-composer {
   margin-bottom: var(--luke-space-32);
-}
-
-/* Signed out, the page draws no composer, and its box takes no room. */
-.home-composer:empty {
-  display: none;
-}
-
-/* Where the page or the welcome lays the composer's one box
-   (`desktop-home.tsx`'s `useComposerSlot`), which lays nothing out itself. */
-.home-composer-slot {
-  display: contents;
 }
 
 .home-section {
@@ -7858,27 +7846,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-top: var(--luke-space-32);
 }
 
-.home-section-title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-space-6);
-  margin: 0 0 var(--luke-space-2);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
 /* A section's note, nothing waiting or a read refused, on the title's edge. */
 .home-note {
   margin: var(--luke-space-4) 0;
-}
-
-/* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
-.home-section-count {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-medium);
 }
 
 .home-row .sidebar-task-line {
@@ -8782,14 +8752,6 @@ button.tasks-board-card-press:focus-visible::after {
   font-variant-numeric: tabular-nums;
 }
 
-.tasks-board-key {
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-variant-numeric: tabular-nums;
-}
-
 .tasks-board-face {
   display: inline-flex;
   min-width: 0;
@@ -9247,13 +9209,6 @@ button.tasks-list-press:focus-visible::after {
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-.tasks-list-key {
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
 }
 
 /* A row's repository is led by its owner's picture, or a folder's glyph

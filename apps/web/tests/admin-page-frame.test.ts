@@ -1,16 +1,17 @@
 // @vitest-environment jsdom
 import type { AdminMetrics } from "@luke/features/admin-answer-wire";
+import { AccountScreen } from "@luke/panel/admin/screens/account";
+import { CostScreen } from "@luke/panel/admin/screens/cost";
+import { DashboardScreen } from "@luke/panel/admin/screens/dashboard";
+import { DayScreen } from "@luke/panel/admin/screens/day";
+import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
+import { UsersScreen } from "@luke/panel/admin/screens/users";
+import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
+import type { AdminRead } from "@luke/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { AccountScreen } from "../src/admin/screens/account";
-import { CostScreen } from "../src/admin/screens/cost";
-import { DashboardScreen } from "../src/admin/screens/dashboard";
-import { DayScreen } from "../src/admin/screens/day";
-import { ReliabilityScreen } from "../src/admin/screens/reliability";
-import { UsersScreen } from "../src/admin/screens/users";
-import { WorkspacesScreen } from "../src/admin/screens/workspaces";
-import type { AdminRead } from "../src/admin/use-admin-read";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-page-frame.test.ts -- every admin screen stands under the app's
@@ -149,7 +150,7 @@ async function open(screen: Screen, status: number | undefined): Promise<HTMLEle
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);
-  await act(async () => root?.render(screen.element(status === undefined)));
+  await act(async () => root?.render(underWebAdminDoors(screen.element(status === undefined))));
   return page;
 }
 
