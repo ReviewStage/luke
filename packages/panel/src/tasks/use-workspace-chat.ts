@@ -45,6 +45,8 @@ import { messageFailureWords } from "./coding-agent-model.js";
  * While a channel is shown the developer has read to the newest message
  * held, which is told to the service once per place it moves to. For you
  * moves no cursor, since what waits there is what has not been read.
+ * Mark as read, from a rail row or a group's head, reads each channel it
+ * names to its newest message held, on that channel's cursor alone.
  * A picture a message carries is read on its own, by the message and the
  * attachment its block names, in the workspace read.
  */
@@ -112,6 +114,8 @@ export interface WorkspaceChatControl {
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
+  /** Marks channels read to the newest message each holds, as a row's Mark as read asks; a channel with nothing past its cursor is left alone. */
+  readonly onRead: (channelIds: readonly string[]) => void;
   /** Reads one picture a message carries, by the message and the attachment its block names. */
   readonly readPicture: (
     messageId: string,
@@ -178,8 +182,9 @@ function withChannels(
 
 /**
  * The chat held with a push taken in: the push whole, which messages it
- * holds included, each one the window holds newer kept, and what the window
- * wrote laid over it, since a push may have been read before a write landed.
+ * holds included, each one the window holds newer kept, each read cursor
+ * the window holds further kept, and what the window wrote laid over it,
+ * since a push may have been read before a write landed.
  */
 function withRead(
   chat: ChatAnswer | undefined,
@@ -191,8 +196,15 @@ function withRead(
     const standing = held.get(message.id);
     return standing !== undefined && standing.touchedSeq > message.touchedSeq ? standing : message;
   });
+  // Note that a cursor never moves back, so a push read before a read's answer sets nothing back.
+  const reads =
+    chat?.reads === undefined || answer.reads === undefined
+      ? answer.reads
+      : furthestReads(chat, answer.reads);
   return {
     ...answer,
+    readSeq: Math.max(chat?.readSeq ?? 0, answer.readSeq),
+    ...(reads === undefined ? undefined : { reads }),
     channels: withChannels(answer.channels, written.channels),
     messages: withMessages(pushed, written.messages),
   };
@@ -223,6 +235,23 @@ function holdsAsWritten(pushed: ChatAnswer, written: Written): boolean {
   );
 }
 
+/**
+ * Each channel's cursor as far as either the chat held or a read's answer
+ * or a push puts it. Note that a cursor never moves back, so of two reads
+ * answered out of order, as Mark all as read sends them, the older answer
+ * sets nothing back, nor does a push read before either landed.
+ */
+function furthestReads(
+  chat: ChatAnswer,
+  answered: NonNullable<ChatAnswer["reads"]>,
+): NonNullable<ChatAnswer["reads"]> {
+  const furthest = new Map((chat.reads ?? []).map((each) => [each.channelId, each.readSeq]));
+  for (const each of answered) {
+    furthest.set(each.channelId, Math.max(furthest.get(each.channelId) ?? 0, each.readSeq));
+  }
+  return [...furthest].map(([channelId, readSeq]) => ({ channelId, readSeq }));
+}
+
 /** The chat held with a write's answer taken in: the message it names in place, or the cursor where it moved. */
 function withWrite(chat: ChatAnswer, answer: ChatWriteAnswer): ChatAnswer {
   if ("channel" in answer) {
@@ -239,7 +268,7 @@ function withWrite(chat: ChatAnswer, answer: ChatWriteAnswer): ChatAnswer {
     return {
       ...chat,
       readSeq: Math.max(chat.readSeq, answer.readSeq),
-      ...(answer.reads === undefined ? undefined : { reads: answer.reads }),
+      ...(answer.reads === undefined ? undefined : { reads: furthestReads(chat, answer.reads) }),
     };
   }
   const message =
@@ -406,6 +435,16 @@ export function useWorkspaceChat(input: {
     [workspaceId],
   );
 
+  const onRead = useCallback(
+    (channelIds: readonly string[]) => {
+      for (const channelId of channelIds) {
+        const newest = newestSeqIn(held.chat, channelId);
+        if (newest > readSeqIn(held.chat, channelId)) void write({ readTo: newest, channelId });
+      }
+    },
+    [held.chat, write],
+  );
+
   // While a channel is shown, the developer has read it to the newest message it holds: told once per place, of that channel alone.
   const newest = reading === undefined ? 0 : newestSeqIn(held.chat, reading);
   const readSeq = reading === undefined ? 0 : readSeqIn(held.chat, reading);
@@ -439,6 +478,7 @@ export function useWorkspaceChat(input: {
     onPost,
     onAnswer,
     onChannel,
+    onRead,
     readPicture,
   };
 }

@@ -948,11 +948,6 @@ function baseIdOf(id: string): string | undefined {
   return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
 }
 
-/** Whether a catalog id names a model's fast version. */
-export function isFastModelId(id: string): boolean {
-  return baseIdOf(id) !== undefined;
-}
-
 /**
  * The catalog folded to its base models, each with its fast version, in the
  * menus' order. The signal is the id: a model whose id is another offered

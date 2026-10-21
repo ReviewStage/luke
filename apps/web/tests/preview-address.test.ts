@@ -13,6 +13,8 @@ const BRANCH = "luke/rebased";
 
 /** The script's own exit for a commit no build serves the deployed tree of. */
 const EXIT_NOT_AFFECTED = 3;
+/** The script's own exit for a read of GitHub that failed. */
+const EXIT_UNREADABLE = 7;
 
 /**
  * GitHub's answers, one file a request path, which the fake `gh` filters with
@@ -81,17 +83,34 @@ function built(
   address: string,
   state: "success" | "failure" = "success",
 ): void {
-  answer(answers, `repos/${REPOSITORY}/deployments?sha=${sha}&environment=Preview&per_page=10`, [
-    { id, created_at: "2026-10-20T10:00:00Z" },
-  ]);
-  answer(answers, `repos/${REPOSITORY}/deployments/${id}/statuses?per_page=10`, [
-    {
-      state,
-      description: state === "success" ? "Deployment has completed" : "Build failed",
-      environment_url: address,
-      created_at: "2026-10-20T10:02:00Z",
-    },
-  ]);
+  deployed(answers, sha, [{ id, address, state, at: "2026-10-20T10:00:00Z" }]);
+}
+
+interface Build {
+  readonly id: number;
+  readonly address: string;
+  readonly state: "success" | "failure";
+  /** When Vercel started it, which orders a commit's records. */
+  readonly at: string;
+}
+
+/** Records every build Vercel made of `sha`, a redeployment beside its first build among them. */
+function deployed(answers: string, sha: string, builds: readonly Build[]): void {
+  answer(
+    answers,
+    `repos/${REPOSITORY}/deployments?sha=${sha}&environment=Preview&per_page=10`,
+    builds.map((build) => ({ id: build.id, created_at: build.at })),
+  );
+  for (const build of builds) {
+    answer(answers, `repos/${REPOSITORY}/deployments/${build.id}/statuses?per_page=10`, [
+      {
+        state: build.state,
+        description: build.state === "success" ? "Deployment has completed" : "Build failed",
+        environment_url: build.address,
+        created_at: build.at,
+      },
+    ]);
+  }
 }
 
 /** Records that the project's Ignored Build Step skipped `sha`, which writes no deployment record. */
@@ -125,8 +144,6 @@ interface Fixture {
   readonly earlier: string;
   /** The head pushed after it, deploying the same tree, which the rebase also force-pushed away. */
   readonly between: string;
-  /** The commit the rebased head stands on, which deploys what the base did. */
-  readonly parent: string;
   /** The rebased head, which the checkout is at. */
   readonly head: string;
 }
@@ -151,7 +168,7 @@ async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<F
   const between = commit(origin, "docs/NOTES.md", "notes\n");
   git(origin, "update-ref", "refs/kept/between", between);
   git(origin, "checkout", "-q", "main");
-  const parent = commit(origin, "apps/desktop/src/main/main.ts", "desktop\n");
+  commit(origin, "apps/desktop/src/main/main.ts", "desktop\n");
   git(origin, "branch", "-q", "-f", BRANCH, "main");
   git(origin, "checkout", "-q", BRANCH);
   const head = commit(origin, "apps/web/src/main.tsx", "web v1\n");
@@ -165,7 +182,7 @@ async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<F
   writeFileSync(join(bin, "curl"), FAKE_CURL);
   chmodSync(join(bin, "gh"), 0o755);
   chmodSync(join(bin, "curl"), 0o755);
-  return { checkout, answers, bin, earlier, between, parent, head };
+  return { checkout, answers, bin, earlier, between, head };
 }
 
 function previewAddress(fixture: Fixture): { status: number | null; address: string } {
@@ -215,17 +232,36 @@ test("an earlier head whose own build failed is passed over for an older one tha
   });
 });
 
-test("a branch whose pushes GitHub will not list still finds the preview its ancestors serve", async (t) => {
+test("a rebased branch whose pushes GitHub will not list answers unreadable rather than another branch's preview", async (t) => {
   const fixture = await rebasedBranch(t, "web v1\n");
-  // Note that the head's own web change is undone here, so its parent deploys what it does.
-  git(fixture.checkout, "rm", "-q", "apps/web/src/main.tsx");
-  git(fixture.checkout, "commit", "-q", "-m", "drop the web change");
-  const head = git(fixture.checkout, "rev-parse", "HEAD");
-  built(fixture.answers, fixture.parent, 9, "https://luke-parent.vercel.app");
-  skipped(fixture.answers, head);
+  // Note that the rebased head here stands for the head of the branch rebased onto, built as that branch's own preview.
+  built(fixture.answers, fixture.head, 9, "https://luke-other-branch.vercel.app");
+  commit(fixture.checkout, "docs/NOTES.md", "notes\n");
+  skipped(fixture.answers, git(fixture.checkout, "rev-parse", "HEAD"));
   pushed(fixture.answers, REFUSED);
+  assert.equal(previewAddress(fixture).status, EXIT_UNREADABLE);
+});
+
+test("an earlier head redeployed and failed still resolves to its first build, which serves the tree", async (t) => {
+  const fixture = await rebasedBranch(t, "web v1\n");
+  deployed(fixture.answers, fixture.earlier, [
+    {
+      id: 7,
+      address: "https://luke-earlier.vercel.app",
+      state: "success",
+      at: "2026-10-20T10:00:00Z",
+    },
+    {
+      id: 8,
+      address: "https://luke-redeploy.vercel.app",
+      state: "failure",
+      at: "2026-10-20T11:00:00Z",
+    },
+  ]);
+  skipped(fixture.answers, fixture.head);
+  pushed(fixture.answers, [fixture.head, fixture.earlier]);
   assert.deepEqual(previewAddress(fixture), {
     status: 0,
-    address: "https://luke-parent.vercel.app",
+    address: "https://luke-earlier.vercel.app",
   });
 });

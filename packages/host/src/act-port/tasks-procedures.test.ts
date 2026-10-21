@@ -27,6 +27,7 @@ import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskBrowserTabsFollowed,
   type TaskHistoryFollowed,
   type TaskPagesFollowed,
   type TasksGitHubDisconnectAnswer,
@@ -264,6 +265,7 @@ function windowPort(
   const talked: VoiceCallAbout[] = [];
   const pagesListeners = new Set<(followed: TaskPagesFollowed) => void>();
   const historyListeners = new Set<(followed: TaskHistoryFollowed) => void>();
+  const browserTabsListeners = new Set<(followed: TaskBrowserTabsFollowed) => void>();
   const script: Script = {
     start: { failure: TASK_CALL_FAILURE.UNANSWERED },
     activeTaskId: TASK_ID,
@@ -394,6 +396,12 @@ function windowPort(
       pagesListeners.add(listener);
       return () => pagesListeners.delete(listener);
     },
+    tasksBrowserTabsFollow: (scope) => ask(`tabs-follow:${scope.taskId}`, () => undefined),
+    tasksBrowserTabsUnfollow: (scope) => ask(`tabs-unfollow:${scope.taskId}`, () => undefined),
+    onTaskBrowserTabsChanged: (listener) => {
+      browserTabsListeners.add(listener);
+      return () => browserTabsListeners.delete(listener);
+    },
     tasksHistoryFollow: (scope) => ask(`history-follow:${scope.taskId}`, () => undefined),
     tasksHistoryUnfollow: (scope) => ask(`history-unfollow:${scope.taskId}`, () => undefined),
     onTaskHistoryChanged: (listener) => {
@@ -426,7 +434,11 @@ function windowPort(
   const historyMoved = (followed: TaskHistoryFollowed) => {
     for (const listener of historyListeners) listener(followed);
   };
-  return { client, asked, browsed, talked, script, pagesMoved, historyMoved };
+  /** A task's Browser tabs as the host tells them moved. */
+  const browserTabsMoved = (followed: TaskBrowserTabsFollowed) => {
+    for (const listener of browserTabsListeners) listener(followed);
+  };
+  return { client, asked, browsed, talked, script, pagesMoved, historyMoved, browserTabsMoved };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -946,4 +958,26 @@ it("a plan's newest page of history is streamed to a panel as the host tells it,
   await vi.waitFor(() =>
     assert.deepEqual(asked, [`history-follow:${TASK_ID}`, `history-unfollow:${TASK_ID}`]),
   );
+});
+
+it("a task's Browser tabs are streamed to a panel as the host tells them, and let go as the stream closes; the voice window is refused them", async () => {
+  const { client, asked, browserTabsMoved } = windowPort(PANEL);
+  const stream = await client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK);
+  const heard = stream.next();
+  await vi.waitFor(() => assert.deepEqual(asked, [`tabs-follow:${TASK_ID}`]));
+
+  browserTabsMoved({ taskId: "another-task", view: { tabs: [] } });
+  browserTabsMoved({ taskId: TASK_ID, view: { failure: TASK_CALL_FAILURE.UNANSWERED } });
+  assert.deepEqual(await heard, {
+    done: false,
+    value: { failure: TASK_CALL_FAILURE.UNANSWERED },
+  });
+  await stream.return?.(undefined);
+  await vi.waitFor(() =>
+    assert.deepEqual(asked, [`tabs-follow:${TASK_ID}`, `tabs-unfollow:${TASK_ID}`]),
+  );
+
+  const voice = windowPort(VOICE);
+  await assert.rejects(voice.client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK));
+  assert.deepEqual(voice.asked, []);
 });

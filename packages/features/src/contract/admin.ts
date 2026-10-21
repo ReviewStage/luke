@@ -14,9 +14,8 @@
  * `detailed`, since a PUT's compact input would be its body.
  *
  * The answers declare no output schema: the dashboard's answers are typed
- * where the service builds them (`@luke/service/admin/*`), which this package
- * cannot import, and they are written as the handler returns them, the bytes
- * the old group wrote.
+ * in `admin-answer-wire.ts` as plain shapes, not schemas, and they are
+ * written as the handler returns them, the bytes the old group wrote.
  */
 
 import { HTTP_METHOD } from "@luke/wire";

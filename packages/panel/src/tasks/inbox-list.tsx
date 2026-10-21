@@ -45,6 +45,7 @@ import {
   personActor,
 } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import * as Atom from "effect/reactivity/Atom";
 import {
   ArchiveIcon,
   ArrowDownNarrowWideIcon,
@@ -97,7 +98,7 @@ import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
@@ -536,6 +537,9 @@ function InboxItemCard({
   );
 }
 
+/** The account's workspaces, which tell their readers only as the list moves, not as the tasks beside it do. */
+const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
+
 /**
  * What holds an item, as its card leads with it, on one line: a task by its
  * key, as the task's own card leads with it (`TaskKeyChip`), and by its chip
@@ -543,7 +547,7 @@ function InboxItemCard({
  * automation names, by their chip alone.
  */
 function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
-  const workspaces = useAppState()?.tasks?.workspaces;
+  const workspaces = useAppSlice(WORKSPACES);
   const workspaceName =
     holder.kind === INBOX_HOLDER.TASK
       ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name

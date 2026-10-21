@@ -1,22 +1,22 @@
-import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
-import { browserClient } from "@luke/features/contract/browser-client";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import type { AdminIntegration } from "@luke/service/admin/admin-health";
 import type {
   AdminAttentionAccount,
   AdminAttentionProblem,
+  AdminIntegration,
   AdminReliability,
-} from "@luke/service/admin/admin-reliability";
+} from "@luke/features/admin-answer-wire";
 import {
   ADMIN_ATTENTION_AGENT_DAYS,
   ADMIN_ATTENTION_KIND,
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
   type AdminWindowedQuery,
-} from "@luke/service/admin/http";
+} from "@luke/features/admin-wire";
+import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/automation-wire";
+import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
+import { browserClient } from "@luke/features/contract/browser-client";
+import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import {
   BADGE_TONE,
   Badge,
@@ -59,7 +59,7 @@ const RELIABILITY_ERROR = "The reliability endpoint did not answer.";
 const readReliability =
   (query: AdminWindowedQuery): AdminReader<AdminReliability> =>
   async (signal) =>
-    // SAFETY: the admin reliability procedure answers an AdminReliability (`@luke/service/admin/admin-reliability`), which the contract cannot name.
+    // SAFETY: the admin reliability procedure answers an AdminReliability (`@luke/features/admin-answer-wire`), for which the contract declares no output.
     (await browserClient.admin.reliability(query, { signal })) as AdminReliability;
 
 /** How many providers the health list's bones stand for, about the list a deployment draws. */

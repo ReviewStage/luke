@@ -30,7 +30,7 @@ import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { RowHint, RowHintOptions } from "../tooltip.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { useAgentDelete } from "./agent-delete.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
@@ -56,11 +56,12 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * pointer is, in a task's row's groups: Copy link and Rename, which turns
  * the row into its name's field until the edit ends, with Mark as unread
  * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
- * the reader's own, and Archive agent, asked first while the agent works
- * (`agent-archive.tsx`), or Unarchive; and last and alone, Permanently
- * delete, always asked first (`agent-delete.tsx`), which leaves the agent's
- * page where it is the one standing. An archived agent offers neither a
- * pin nor a rename, as an archived task. Note that the agent is read again
+ * the reader's own, Archive agent, asked first while the agent works
+ * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
+ * own sections, as a task's (`sidebar-sections.tsx`); and last and alone,
+ * Permanently delete, always asked first (`agent-delete.tsx`), which leaves
+ * the agent's page where it is the one standing. An archived agent
+ * offers neither a pin, a rename, nor a section, as an archived task. Note that the agent is read again
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
  */
@@ -110,6 +111,7 @@ export function SidebarAgent({
   shown,
   onOpen,
   onPin,
+  section,
   onDeleted,
 }: {
   agent: TasklessAgent;
@@ -132,6 +134,8 @@ export function SidebarAgent({
   onOpen: () => void;
   /** Pins the agent for the reader or unpins it; none for an archived agent, which offers no pin. */
   onPin?: ((pinned: boolean) => void) | undefined;
+  /** Move to section, in the menu's group with Pin and Archive as a task's; none for an archived agent. */
+  section?: MenuEntry | undefined;
   /** Leaves the agent's page where it is the one standing, once its delete landed. */
   onDeleted?: (() => void) | undefined;
 }): React.JSX.Element {
@@ -171,13 +175,13 @@ export function SidebarAgent({
   const renameItem: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: rename.begin };
   const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
   const put = archived ? unarchive : archive.action;
-  const groups = [
+  const groups: MenuEntry[][] = [
     [
       ...(copyLink === undefined ? [] : [copyLink]),
       markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) }),
       ...(archived ? [] : [renameItem]),
     ],
-    [...(pin === undefined ? [] : [pin]), put],
+    [...(pin === undefined ? [] : [pin]), put, ...(section === undefined ? [] : [section])],
     [deletion.action],
   ].filter((group) => group.length > 0);
   // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.

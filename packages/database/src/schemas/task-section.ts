@@ -2,10 +2,11 @@ import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import { index, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
+import { codingAgent } from "./coding-agent.js";
 import { task } from "./task.js";
 
 /**
- * task-section.ts -- the sections an account made in a workspace's sidebar, and which of its tasks it keeps in each.
+ * task-section.ts -- the sections an account made in a workspace's sidebar, and which of its tasks and agents it keeps in each.
  *
  * A section is its maker's own, as a pin is (`task-pin.ts`): one account's
  * in one workspace, so a section one member makes in a shared workspace
@@ -68,5 +69,38 @@ export const taskSectionEntry = pgTable(
     index("task_section_entry_task").on(table.taskId),
     // A section's delete cascades to its entries, found by the section alone.
     index("task_section_entry_section").on(table.sectionId),
+  ],
+);
+
+/**
+ * One coding agent with no task an account keeps in one of its sections,
+ * standing among the section's tasks by the same order, as an agent's pin
+ * stands among the plans' (`agent-pin.ts`). At most one section per agent
+ * for each account; it leaves with its account, its agent, or its section,
+ * so deleting a section puts its agents back under Tasks as it does its
+ * tasks.
+ */
+export const agentSectionEntry = pgTable(
+  "agent_section_entry",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    codingAgentId: uuid("coding_agent_id")
+      .notNull()
+      .references(() => codingAgent.id, { onDelete: "cascade" }),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => taskSection.id, { onDelete: "cascade" }),
+    // Where it stands among the section's rows once dragged; null stands it by `addedAt`.
+    position: text("position"),
+    addedAt: timestamptz("added_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.codingAgentId] }),
+    // An agent's delete cascades to its entries, found by the agent alone.
+    index("agent_section_entry_agent").on(table.codingAgentId),
+    // A section's delete cascades to its entries, found by the section alone.
+    index("agent_section_entry_section").on(table.sectionId),
   ],
 );

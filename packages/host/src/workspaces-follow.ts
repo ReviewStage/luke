@@ -118,10 +118,10 @@ export function invitationsMoves(
   }));
 }
 
-/** The account's sidebar sections, the tasks in them, and its pins each time their rows change, as the held reads would answer them. */
+/** The account's sidebar sections, the tasks and agents in them, and its pins each time their rows change, as the held reads would answer them. */
 export function sidebarMoves(
-  dependencies: LiveReadDependencies<SealedRead<"sections" | "entries" | "pins">>,
-  first: SealedRead<"sections" | "entries" | "pins">,
+  dependencies: LiveReadDependencies<SealedRead<"sections" | "entries" | "agentEntries" | "pins">>,
+  first: SealedRead<"sections" | "entries" | "agentEntries" | "pins">,
 ): Stream.Stream<SidebarRead, LiveBroken> {
   return liveMoves(dependencies, first, sidebarLiveRowsSchema, sidebarOfLiveRows);
 }

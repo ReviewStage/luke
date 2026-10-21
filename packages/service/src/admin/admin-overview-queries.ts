@@ -24,6 +24,15 @@ import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
 import { voiceSessions } from "@luke/database/schemas/voice";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
+import {
+  DAILY_COUNT,
+  type DailyCount,
+  FUNNEL_STEP,
+  type FunnelStep,
+  REACH_FEATURE,
+  type ReachFeature,
+} from "@luke/features/admin-overview-vocabulary";
+import type { AdminMetricsScope, AdminMetricsWindow } from "@luke/features/admin-wire";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
@@ -64,14 +73,6 @@ import {
 } from "./admin-metrics.js";
 import { ADMIN_OVERVIEW_ACCOUNTS_LIMIT, type AdminOverviewSource } from "./admin-overview.js";
 import {
-  DAILY_COUNT,
-  type DailyCount,
-  FUNNEL_STEP,
-  type FunnelStep,
-  REACH_FEATURE,
-  type ReachFeature,
-} from "./admin-overview-vocabulary.js";
-import {
   AdminMetricsScopeSchema,
   type AdminQueryFailure,
   AggregateColumnSchema,
@@ -82,7 +83,6 @@ import {
   SIGNUP_WEEK,
   UserRoleSchema,
 } from "./admin-queries.js";
-import type { AdminMetricsScope, AdminMetricsWindow } from "./http.js";
 
 const DailyCountSchema = Schema.Literals(Object.values(DAILY_COUNT));
 const ReachFeatureSchema = Schema.Literals(Object.values(REACH_FEATURE));

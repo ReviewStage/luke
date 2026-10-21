@@ -87,7 +87,7 @@ test("a Claude Code agent's label says the Claude plan pays, and its status wher
     [
       { words: "Using your Claude plan", attention: false },
       { words: "Using your Claude plan", attention: false },
-      { words: "Using your Claude plan · Not yet checked", attention: false },
+      { words: "Using your Claude plan", attention: false },
       {
         words: `Claude plan limit reached · Resets ${dayAndTimeText(resetsAt)}`,
         attention: true,

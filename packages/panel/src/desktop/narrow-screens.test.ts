@@ -186,11 +186,6 @@ function Shell({
     sidebar,
     room,
     settingsStep,
-    call: undefined,
-    notice: {
-      notice: { content: undefined, shown: false },
-      onDismissHint: ignore,
-    },
     settings,
   });
   return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);

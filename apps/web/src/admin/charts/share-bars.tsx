@@ -9,13 +9,13 @@
  * loses nothing. A share of nobody draws an empty track and a dash.
  */
 
-import type { AdminFunnelStep, AdminOverview } from "@luke/service/admin/admin-overview";
+import type { AdminFunnelStep, AdminOverview } from "@luke/features/admin-answer-wire";
 import {
   FUNNEL_STEP,
   type FunnelStep,
   REACH_FEATURE,
   type ReachFeature,
-} from "@luke/service/admin/admin-overview-vocabulary";
+} from "@luke/features/admin-overview-vocabulary";
 import { TEXT_ELEMENT, TEXT_TONE, Text } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 import { ChartEmpty, ChartFrame } from "./chart-frame";

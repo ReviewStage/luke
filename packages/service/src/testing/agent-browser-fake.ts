@@ -309,6 +309,7 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     openInteractive: () =>
       refused() ??
       Effect.succeed({ url: "wss://sbx-fixture.vercel.run/ws", token: Redacted.make("pty-token") }),
+    updateTimeout: () => Effect.die("a sandbox the scenario opened is already within the timeout"),
   };
   return { api, ran };
 }

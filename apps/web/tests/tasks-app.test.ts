@@ -89,6 +89,7 @@ import {
   makeDocumentTask,
   makeSavedDocumentTask,
 } from "@luke/service/testing/plan-documents";
+import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
 import { added } from "@luke/service/testing/task-contents";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -298,6 +299,7 @@ const answer = (
       workspaces: yield* fakeWorkspaceSeams,
       eveOrigin: () => ORIGIN,
       sessionSandboxes: sessionSandboxesLayer,
+      keepAwake: keepAwakeDetached,
       ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
     };
     const { handler, dispose } = HttpRouter.toWebHandler(

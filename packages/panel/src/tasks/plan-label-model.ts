@@ -19,9 +19,9 @@ import { dayAndTimeText } from "./task-time.js";
  * sees the plain label.
  *
  * A Claude Code agent's composer says "Using your Claude plan" the same
- * way, with the plan's status where it is not verified: not yet checked
- * until a turn ran on it, its limit reached with the reset Claude Code
- * named, or a setup-token that needs pasting again.
+ * way, or why the plan cannot serve: its limit reached with the reset
+ * Claude Code named, or a setup-token that needs pasting again. A plan no
+ * turn has run on yet reads as one that serves.
  */
 
 /** Where OpenAI's guidelines send Manage usage: ChatGPT's own usage settings. */
@@ -67,7 +67,6 @@ export function chatGptPlanLabel(keys: ProviderKeysAnswer | undefined): PlanLabe
 
 export const CLAUDE_PLAN_LABEL_WORDS = {
   USING: "Using your Claude plan",
-  UNVERIFIED: "Using your Claude plan · Not yet checked",
   LIMIT_REACHED: "Claude plan limit reached",
   RECONNECT: "Claude plan needs reconnecting in Settings",
 } as const;
@@ -90,8 +89,6 @@ export function claudePlanLabel(keys: ProviderKeysAnswer | undefined): PlanLabel
     case PROVIDER_KEY_STATUS.INVALID:
     case PROVIDER_KEY_STATUS.UNREADABLE:
       return { words: CLAUDE_PLAN_LABEL_WORDS.RECONNECT, attention: true };
-    case PROVIDER_KEY_STATUS.UNVERIFIED:
-      return { words: CLAUDE_PLAN_LABEL_WORDS.UNVERIFIED, attention: false };
     default:
       return { words: CLAUDE_PLAN_LABEL_WORDS.USING, attention: false };
   }

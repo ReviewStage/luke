@@ -5,7 +5,10 @@ import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
 import { hostedAdminSeams } from "@luke/service/admin/admin-route";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
-import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
+import {
+  type SandboxStopReach,
+  sessionSandboxesLayer,
+} from "@luke/service/agents/session-sandboxes";
 import { agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
@@ -22,7 +25,7 @@ import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router"
 import type { Route } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { waitUntil } from "@vercel/functions";
-import type { Context, Layer } from "effect";
+import { type Context, Effect, type Layer } from "effect";
 import { nativeAgents } from "./native-agents.js";
 import { webServicesWith } from "./runtime.js";
 
@@ -70,6 +73,17 @@ export function routeFromHostedFetch(
   };
 }
 
+/**
+ * An archive's stop of the sandbox, handed to Vercel's `waitUntil` once the
+ * archive has answered, so the instance is not frozen before the stop has
+ * reached Vercel (https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package#waituntil).
+ * The work runs on the services of the request it was asked in.
+ */
+const keepAwake: SandboxStopReach["keepAwake"] = <R>(work: Effect.Effect<void, never, R>) =>
+  Effect.flatMap(Effect.context<R>(), (context) =>
+    Effect.sync(() => waitUntil(Effect.runPromiseExitWith(context)(work))),
+  );
+
 /** The deployment's resolvers, and what the resources ask of the deployment beside them. */
 const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   ...accountProcedureSeams(),
@@ -83,6 +97,7 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   eveOrigin: deploymentEveOrigin,
   sandbox: agentSandboxLayer,
   sessionSandboxes: sessionSandboxesLayer,
+  keepAwake,
   members: memberSeams(auth.api),
 };
 

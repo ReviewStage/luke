@@ -178,6 +178,8 @@ import {
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskBrowserTabsFollow,
+  type TaskBrowserTabsFollowed,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -265,6 +267,7 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
   tasksBrowserTabsAnswerSchema,
@@ -518,6 +521,12 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** A followed plan's pages as they now stand, each time they move while followed. */
   onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+  /** One task's cloud Browser tabs followed from now until let go, heard through `onTaskBrowserTabsChanged`. */
+  tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
+  /** A followed task's Browser tabs let go: nothing more is heard of them until they are followed again. */
+  tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
+  /** A followed task's Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
+  onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
   /** One plan's newest page of history followed from now until let go, heard through `onTaskHistoryChanged`. */
   tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** A followed plan's history let go: nothing more is heard of it until it is followed again. */
@@ -1536,6 +1545,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
+    tasksBrowserTabsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, scope)),
+    tasksBrowserTabsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, scope)),
+    onTaskBrowserTabsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(taskBrowserTabsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
     tasksHistoryFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, scope)),
     tasksHistoryUnfollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, scope)),
@@ -1853,7 +1875,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : undefined),
           ...("from" in params ? { from: params.from } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
-          ...("payer" in params ? { payer: params.payer } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

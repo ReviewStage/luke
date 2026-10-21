@@ -1009,7 +1009,7 @@ clicked. Each recording carries Luke's version and whether it is a released
 build or a development one; only a released build records at all.
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
-small, downscaled still of a tab or page you visited, taken by the app as you
+small, downscaled still of a screen you visited, taken by the app as you
 settle on it and as ⌃Tab leaves it. Those stills stay in that window's memory
 while it is open, a few at a time: they are never written to disk and never
 reach our service, a trace, a counted event, or the voice window, and the

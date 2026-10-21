@@ -15,7 +15,6 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import {
   EmptyState,
-  ScrollArea,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -39,45 +38,69 @@ import {
   chatWho,
   continuesRun,
   type ForYouEntry,
+  firstUnreadSeq,
   forYou,
+  messageMarkdown,
   placeChannel,
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "../ai-elements/conversation.js";
+import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
 import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
-import { Tooltip } from "../tooltip.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
 import { ChatComposer } from "./chat-composer.js";
+import { CopyMessageAction } from "./copy-message.js";
 import { FileRef } from "./file-ref.js";
+import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { LinkBlock } from "./inbox-pane.js";
-import { clockText, momentText } from "./task-time.js";
+import { LoneLinkCards } from "./lone-link-card.js";
+import { RelativeTime } from "./relative-time.js";
+import { SentWords } from "./skill-chip.js";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * chat-pane.tsx -- one place of the window's Chat at reading size: For you, or a channel's messages with their threads.
  *
  * A message is a row led by its author's mark, an agent's own glyph as its
- * tab wears it, Luke's initial in his blue, a person's initial, then a line
+ * tab wears it, or a person's photo or initial, then a line
  * naming the author and when it was posted, and under it the
- * blocks it carries: Markdown as the transcript draws it, a link by its
- * label, a code block by the file and lines it points at as a transcript
- * names a file (`file-ref.tsx`), a picture drawn as a plan's picture is
+ * blocks it carries: Markdown drawn as a document, as an Inbox item's is,
+ * a link alone on its line as its card, and a person's words as they typed
+ * them, their line breaks and skills kept (`skill-chip.tsx`'s `SentWords`);
+ * a link by its label; a code block in a task's channel as the Inbox's
+ * card of its lines, read through the task and opening the file in it
+ * (`inbox-code-card.tsx`), and elsewhere by the file and lines it points
+ * at as a transcript names a file (`file-ref.tsx`); a picture drawn as a plan's picture is
  * (`../picture-block.tsx`), read once through the window's picture cache
  * under its message and pressed to open it over the window, and a line naming a
  * newer Luke for a block this build does not know. A message carrying an ask draws as a card in its row, answered in
  * place (`chat-ask.tsx`). A root with replies says how many under it, and
  * a press folds the thread open there with a box to reply in under it; a
  * root with none offers Reply at its byline's end while it is hovered,
- * which opens the box alone. A channel's
+ * which opens the box alone, beside the Copy every message offers there.
+ * A place's messages are a log, as every conversation in the window is:
+ * it opens at the newest, follows new ones while the reader is there, and
+ * a channel opened with messages unread draws a "New" line before the
+ * first of them. A channel's
  * messages close on the composer (`chat-composer.tsx`), which posts to it.
+ * A task's channel reads through that task's doors where the place drawing
+ * it hands them (`ChatTaskDoors`): its code cards, and in the window's
+ * Chat, which stands on no task's page, its mentions, so a file's chip
+ * opens the file in its task.
  * For you lists what waits on the developer (`chat-model.ts`'s `forYou`),
  * each row saying the channel it was posted in, or that it is a direct
  * message, and answered or replied to where it stands. A place with
@@ -113,8 +136,20 @@ function threadToggleWords(open: boolean, count: number): string {
   return count === 1 ? "1 reply" : `${count} replies`;
 }
 
-/** A code block by what it points at: the file and its lines, named as a transcript names them, with nothing to open them from here. */
-function CodeLine({ block }: { block: ChatCodeBlock }): React.JSX.Element {
+/**
+ * A code block: the Inbox's card of its lines in a task's channel, read
+ * through the task and opening the file in it; elsewhere, where no task's
+ * repository reads them, the file and its lines named as a transcript
+ * names them, with nothing to open them from.
+ */
+function CodeBlock({
+  block,
+  code,
+}: {
+  block: ChatCodeBlock;
+  code: InboxCodeDoors | undefined;
+}): React.JSX.Element {
+  if (code !== undefined) return <InboxCodeCard block={block} code={code} />;
   const { path, startLine, endLine } = block;
   return (
     <Text>
@@ -174,23 +209,33 @@ function ChatPicture({
   );
 }
 
-/** One block of a message, drawn as its type is. */
+/** One block of a message, drawn as its type is; `typed` where a person wrote it. */
 function Block({
   messageId,
   block,
+  typed,
+  code,
   context,
 }: {
   messageId: string;
   block: ChatReadBlock;
+  typed: boolean;
+  /** What a code block reads its lines through and opens its file with; none outside a task's channel. */
+  code: InboxCodeDoors | undefined;
   context: MessageContext;
 }): React.JSX.Element {
   const { openLink } = context;
   if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
+      // Note that every message is drawn as a document, as an Inbox item's words are, so a link alone on its line is its card.
       return (
         <div className="chat-words">
-          <TranscriptWords text={block.text} />
+          {typed ? (
+            <SentWords text={block.text} asDocument />
+          ) : (
+            <TranscriptWords text={block.text} asDocument />
+          )}
         </div>
       );
     case CHAT_BLOCK.LINK:
@@ -200,10 +245,23 @@ function Block({
         </Text>
       );
     case CHAT_BLOCK.CODE:
-      return <CodeLine block={block} />;
+      return <CodeBlock block={block} code={code} />;
     case CHAT_BLOCK.IMAGE:
       return <ChatPicture messageId={messageId} block={block} readPicture={context.readPicture} />;
   }
+}
+
+/**
+ * What a task's channel reads through where Chat draws it: what its code
+ * reads its lines through and opens its files with, and, where the place
+ * drawing it stands off the task's page, the task's mentions, so a file's
+ * chip opens the file in its task and a GitHub link is read against its
+ * repository.
+ */
+export interface ChatTaskDoors {
+  readonly code: InboxCodeDoors;
+  /** None where the page drawing the chat hands the task's mentions itself, as the plan's Chat tab stands on the task's page. */
+  readonly mentions?: TaskMentionsValue | undefined;
 }
 
 /** What the window draws a message with: the chat, the names, the moment, what the composer offers, and the doors a link, a post, and an answer go through. */
@@ -222,6 +280,14 @@ interface MessageContext {
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Reads one picture a message carries, by the message and the attachment its block names. */
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
+  /** The doors of the task whose channel the channel named is; none for any other channel, or a task not at hand. */
+  readonly doorsIn: (channelId: string) => ChatTaskDoors | undefined;
+}
+
+/** Whether a person wrote the message, whose words are drawn as typed and whose pictures lead them. */
+function byPerson(message: ChatMessage, chat: ChatAnswer): boolean {
+  const author = chat.members.find((member) => member.id === message.authorId);
+  return author?.kind === MEMBER_KIND.HUMAN;
 }
 
 /**
@@ -236,13 +302,30 @@ function drawnBlocks(
   chat: ChatAnswer,
 ): readonly { readonly block: ChatReadBlock; readonly index: number }[] {
   const placed = message.blocks.map((block, index) => ({ block, index }));
-  const author = chat.members.find((member) => member.id === message.authorId);
-  if (author?.kind !== MEMBER_KIND.HUMAN) return placed;
+  if (!byPerson(message, chat)) return placed;
   const picture = (block: ChatReadBlock) => knownBlock(block) && block.type === CHAT_BLOCK.IMAGE;
   return [
     ...placed.filter(({ block }) => picture(block)),
     ...placed.filter(({ block }) => !picture(block)),
   ];
+}
+
+/**
+ * Hands what is drawn under it the doors of the task whose channel it is:
+ * the code doors a link to lines alone on its line reads through, and the
+ * task's mentions where the page drawing them does not hand them.
+ */
+function TaskDoorsScope({
+  doors,
+  children,
+}: {
+  doors: ChatTaskDoors | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  if (doors === undefined) return <>{children}</>;
+  const cards = <LoneLinkCards doors={doors}>{children}</LoneLinkCards>;
+  if (doors.mentions === undefined) return cards;
+  return <TaskMentions value={doors.mentions}>{cards}</TaskMentions>;
 }
 
 /** A message's body: its ask's card where it carries one, its blocks inside, else its blocks in turn. */
@@ -253,9 +336,18 @@ function Body({
   message: ChatMessage;
   context: MessageContext;
 }): React.JSX.Element {
+  const typed = byPerson(message, context.chat);
+  const code = context.doorsIn(message.channelId)?.code;
   const blocks = drawnBlocks(message, context.chat).map(({ block, index }) => (
     // Blocks have no key of their own, so each keeps its place in the message as its key.
-    <Block key={index} messageId={message.id} block={block} context={context} />
+    <Block
+      key={index}
+      messageId={message.id}
+      block={block}
+      typed={typed}
+      code={code}
+      context={context}
+    />
   ));
   const { ask } = message;
   if (ask === undefined) return <>{blocks}</>;
@@ -264,27 +356,18 @@ function Body({
     <AskCard
       message={message}
       ask={ask}
-      mine={message.authorId === context.chat.self}
+      chat={context.chat}
       answers={home === undefined || postsIn(context.chat, home)}
       blocks={blocks}
-      nameOf={(memberId) => chatWho(context.chat, context.names, memberId).name}
+      actorOf={context.actorOf}
+      keywords={context.keywords}
+      now={context.now}
       onAnswer={context.onAnswer}
     />
   );
 }
 
-/** When a message was posted, on the clock as Slack says it ("10:42 AM"), the full moment on hover. */
-function ClockTime({ at, now }: { at: number; now: number }): React.JSX.Element {
-  return (
-    <Tooltip label={momentText(at)}>
-      <time className="chat-time" dateTime={new Date(at).toISOString()}>
-        {clockText(at, now)}
-      </time>
-    </Tooltip>
-  );
-}
-
-/** The line over a message's words, as Slack's is: its author by name in bold, their card on it, where it was said, and when on the clock. */
+/** The line over a message's words, as Slack's is: its author by name in bold, their card on it, where it was said, and how long ago, the full moment on hover, as every row and thread in the window says it. */
 function Byline({
   actor,
   at,
@@ -297,7 +380,7 @@ function Byline({
   at: number;
   where: string | undefined;
   now: number;
-  /** A press at the line's end, shown while the message is hovered or the press has the keyboard. */
+  /** The presses at the line's end, shown while the message is hovered or one has the keyboard. */
   action?: React.ReactNode;
   /** Whether the message continues its author's run, so the line names no one and holds its press alone. */
   continued?: boolean;
@@ -321,7 +404,7 @@ function Byline({
         )}
       </span>
       {where === undefined ? null : <FadingWords className="chat-byline-where" words={where} />}
-      <ClockTime at={at} now={now} />
+      <RelativeTime className="chat-time" at={at} now={now} />
       {action}
     </div>
   );
@@ -329,7 +412,7 @@ function Byline({
 
 /**
  * The face a message leads with, in a column of its own at a card's size: the
- * author's photo, Luke, or the agent's harness. A message continuing its
+ * person's photo or initial, as a circle, or the agent's own mark, as a rounded square. A message continuing its
  * author's run leads with its time instead, shown while it is hovered, as
  * Slack's grouped messages do.
  */
@@ -347,25 +430,56 @@ function Face({
   if (continued) {
     return (
       <span className="chat-face" data-continued="true">
-        <ClockTime at={at} now={now} />
+        <RelativeTime className="chat-time" at={at} now={now} />
       </span>
     );
   }
   return (
     <span className="chat-face">
-      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} tiled />
+      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
     </span>
   );
 }
 
-/** One message of a thread: its face, its byline, and its body. */
+/**
+ * The presses at a message's byline's end: Copy of its words as Markdown,
+ * the one every transcript's message offers (`copy-message.tsx`), where it
+ * has any, and the press the caller adds. Note that it offers no Copy
+ * link, since no Luke link names one message of the chat.
+ */
+function RowActions({
+  message,
+  extra,
+}: {
+  message: ChatMessage;
+  extra?: React.ReactNode;
+}): React.JSX.Element | undefined {
+  const words = messageMarkdown(message);
+  if (words === "" && extra === undefined) return undefined;
+  return (
+    <span className="chat-byline-action">
+      {words === "" ? null : (
+        <CopyMessageAction words={words} placement={MESSAGE_ACTIONS_PLACEMENT.INLINE} />
+      )}
+      {extra}
+    </span>
+  );
+}
+
+/** One message of a thread: its face, its byline with its Copy, and its body. */
 function Reply({ message, context }: { message: ChatMessage; context: MessageContext }) {
   const actor = context.actorOf(message.authorId);
   return (
     <li className="chat-reply" data-seq={message.seq}>
       <Face actor={actor} at={message.postedAt} now={context.now} />
       <div className="chat-message-body">
-        <Byline actor={actor} at={message.postedAt} where={undefined} now={context.now} />
+        <Byline
+          actor={actor}
+          at={message.postedAt}
+          where={undefined}
+          now={context.now}
+          action={<RowActions message={message} />}
+        />
         <Body message={message} context={context} />
       </div>
     </li>
@@ -403,25 +517,8 @@ function ThreadRow({
       {threadToggleWords(open, replies.length)}
     </TextButton>
   );
-  // A message nobody has replied to offers Reply at its byline's end, out of the way until wanted.
+  // A message nobody has replied to offers Reply at its byline's end beside its Copy, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
-  if (quiet && !canReply) {
-    return (
-      <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
-        <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
-        <div className="chat-message-body">
-          <Byline
-            actor={actor}
-            at={message.postedAt}
-            where={where}
-            now={context.now}
-            continued={continued}
-          />
-          <Body message={message} context={context} />
-        </div>
-      </li>
-    );
-  }
   return (
     <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
       <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
@@ -432,7 +529,7 @@ function ThreadRow({
           where={where}
           now={context.now}
           continued={continued}
-          action={quiet ? <span className="chat-byline-action">{toggle}</span> : undefined}
+          action={<RowActions message={message} extra={quiet && canReply ? toggle : undefined} />}
         />
         <Body message={message} context={context} />
         {quiet ? null : (
@@ -447,6 +544,8 @@ function ThreadRow({
             ) : null}
             {open && canReply ? (
               <ChatComposer
+                channelId={message.channelId}
+                replyTo={message.seq}
                 label="Reply in thread"
                 targets={context.targetsIn(message.channelId)}
                 keywords={context.keywords}
@@ -460,6 +559,82 @@ function ThreadRow({
         )}
       </div>
     </li>
+  );
+}
+
+/** What the line before a channel's first unread message says. */
+const UNREAD_LINE = "New";
+
+/**
+ * A channel's messages as a log, as every conversation in the window is
+ * (`../ai-elements/conversation.tsx`): it opens at its newest message,
+ * follows each new one while the reader is there, and floats the way back
+ * once they scroll up. A channel opened with messages someone else posted
+ * since the reader last read it draws a "New" line before the first of
+ * them, taken as it opened and held while it stays open, since the read
+ * the window then tells moves the cursor past them. Where the unread run
+ * is taller than the box, it opens with that line at its top instead,
+ * scrolled from the newest message there before the paint, and told so the
+ * log lets go of its newest line.
+ */
+function ChannelStream({
+  channelId,
+  threads,
+  context,
+}: {
+  channelId: string;
+  threads: readonly ChatThread[];
+  context: MessageContext;
+}): React.JSX.Element {
+  // The first unread message as the channel opened, taken again as another opens in its place.
+  const [opened, setOpened] = useState(() => ({
+    channelId,
+    unreadFrom: firstUnreadSeq(context.chat, channelId),
+  }));
+  if (opened.channelId !== channelId) {
+    setOpened({ channelId, unreadFrom: firstUnreadSeq(context.chat, channelId) });
+  }
+  const unreadFrom = opened.channelId === channelId ? opened.unreadFrom : undefined;
+  const list = useRef<HTMLDivElement>(null);
+  const line = useRef<HTMLLIElement>(null);
+  // Note that this runs after the log has taken itself to the channel's newest message, since a parent's layout effect follows its children's.
+  useLayoutEffect(() => {
+    if (opened.unreadFrom === undefined) return;
+    const box = list.current;
+    const at = line.current;
+    if (box === null || at === null) return;
+    const room = Number.parseFloat(window.getComputedStyle(at).scrollMarginTop) || 0;
+    const above = at.getBoundingClientRect().top - box.getBoundingClientRect().top - room;
+    if (above >= 0) return;
+    box.scrollTop += above;
+    box.dispatchEvent(new Event("scroll"));
+  }, [opened]);
+  return (
+    <Conversation subject={channelId} list={list}>
+      <ConversationContent className="chat-stream-body">
+        <ol className="chat-messages">
+          {threads.map((thread, index) => {
+            const first = thread.message.seq === unreadFrom;
+            return (
+              <Fragment key={thread.message.id}>
+                {first ? (
+                  <li ref={line} className="chat-unread-line">
+                    {UNREAD_LINE}
+                  </li>
+                ) : null}
+                <ThreadRow
+                  thread={thread}
+                  where={undefined}
+                  context={context}
+                  continued={!first && continuesRun(threads[index - 1], thread)}
+                />
+              </Fragment>
+            );
+          })}
+        </ol>
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
   );
 }
 
@@ -560,6 +735,7 @@ export function ChatPane({
   lead,
   channelActions,
   hidden,
+  taskDoors,
 }: {
   chat: ChatAnswer;
   names: ChatNames;
@@ -580,6 +756,8 @@ export function ChatPane({
   channelActions?: ((channel: ChatChannel) => React.ReactNode) | undefined;
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
+  /** The doors of a task, by its id, that its channel's messages read their code and open their files through; none where the task is not at hand. */
+  taskDoors?: ((taskId: string) => ChatTaskDoors | undefined) | undefined;
 }): React.JSX.Element {
   // A composer offers only the members a post in its own channel reaches, as the service holds the chat to its tasks.
   const targetsIn = (channelId: string) =>
@@ -591,6 +769,11 @@ export function ChatPane({
     );
   const keywords = chatKeywords(chat, names);
   const actorOf = useChatActor(chat, names);
+  const doorsIn = (channelId: string) => {
+    const home = chat.channels.find((each) => each.id === channelId);
+    if (home?.kind !== CHANNEL_KIND.TASK || home.planId === undefined) return undefined;
+    return taskDoors?.(home.planId);
+  };
   const context: MessageContext = {
     actorOf,
     chat,
@@ -602,6 +785,7 @@ export function ChatPane({
     onPost,
     onAnswer,
     readPicture,
+    doorsIn,
   };
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
@@ -612,26 +796,30 @@ export function ChatPane({
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
         ) : (
-          <ScrollArea>
-            <div className="chat-stream-body">
+          <Conversation>
+            <ConversationContent className="chat-stream-body">
               <ol className="chat-messages">
                 {entries.map((entry) => (
-                  <ThreadRow
-                    key={entry.message.id}
-                    thread={entry}
-                    where={whereWords(chat, names, entry)}
-                    context={context}
-                  />
+                  // Each row is of its own channel, so each reads through its own task.
+                  <TaskDoorsScope key={entry.message.id} doors={doorsIn(entry.channel.id)}>
+                    <ThreadRow
+                      thread={entry}
+                      where={whereWords(chat, names, entry)}
+                      context={context}
+                    />
+                  </TaskDoorsScope>
                 ))}
               </ol>
-            </div>
-          </ScrollArea>
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
         )}
       </section>
     );
   }
   const threads = channelThreads(chat, channel.id);
   const title = channelTitle(chat, names, channel);
+  const doors = doorsIn(channel.id);
   return (
     <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
       <PlaceHead
@@ -645,26 +833,15 @@ export function ChatPane({
           {NOTHING_POSTED}
         </EmptyState>
       ) : (
-        <ScrollArea>
-          <div className="chat-stream-body">
-            <ol className="chat-messages">
-              {threads.map((thread, index) => (
-                <ThreadRow
-                  key={thread.message.id}
-                  thread={thread}
-                  where={undefined}
-                  context={context}
-                  continued={continuesRun(threads[index - 1], thread)}
-                />
-              ))}
-            </ol>
-          </div>
-        </ScrollArea>
+        <TaskDoorsScope doors={doors}>
+          <ChannelStream channelId={channel.id} threads={threads} context={context} />
+        </TaskDoorsScope>
       )}
-      {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another. */}
+      {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another, and each channel's draft waits under its own. */}
       {postsIn(chat, channel) ? (
         <ChatComposer
           key={channel.id}
+          channelId={channel.id}
           label={composerLabel(chat, names, channel)}
           targets={targetsIn(channel.id)}
           keywords={keywords}

@@ -31,7 +31,7 @@ export interface CallCardModel {
 }
 
 /** The call's task by name, from the list or the task open, whichever holds it. */
-function taskNameOf(tasks: TasksView, taskId: string | undefined): string {
+export function callTaskName(tasks: TasksView, taskId: string | undefined): string {
   const open = tasks.document.task;
   const named =
     tasks.tasks.find((task) => task.id === taskId)?.name ??
@@ -45,7 +45,7 @@ export function callCard(input: {
 }): CallCardModel {
   const { view, tasks } = input;
   return {
-    taskName: taskNameOf(tasks, view.call?.taskId),
+    taskName: callTaskName(tasks, view.call?.taskId),
     status: standingCallStatus(view, tasks.callActivity),
     microphoneMuted: !view.listening && view.voiceStatus !== LIVE_STATUS.CONNECTING,
   };

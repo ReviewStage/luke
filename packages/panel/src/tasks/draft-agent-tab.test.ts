@@ -2,12 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_PAYER,
-  CODING_AGENT_STATUS,
-  type CodingAgentPayer,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import type { IntegrationProviderParams } from "@luke/features/integration-view";
 import {
@@ -635,124 +630,39 @@ function plannedKeys(forAgents: boolean): ProviderKeysAnswer {
   };
 }
 
-/** A draft on a Claude model, the account's keys read as given; each Start's payer written down. */
-async function payerTab(options: {
-  keys: ProviderKeysAnswer;
-  payer?: CodingAgentPayer;
-  model?: string;
-  onDraftChange?: CodingAgentsControl["onDraftChange"];
-}) {
+/** A draft on the model given, the account's keys read as given; each Start's arguments written down. */
+async function plannedTab(options: { keys: ProviderKeysAnswer; model: string }) {
   fakeActPort({
     ...fakeActPortCalls(),
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(options.keys),
   });
   handState({}, { access: { admin: false } });
-  const payers: (CodingAgentPayer | undefined)[] = [];
+  const starts: unknown[][] = [];
   const tab = mount(
     [],
-    {
-      ...DRAFT,
-      choice: { model: options.model ?? "anthropic/claude-opus-5.5", effort: "high" },
-      ...(options.payer === undefined ? undefined : { payer: options.payer }),
-    },
+    { ...DRAFT, choice: { model: options.model, effort: "high" } },
     {
       startPrompt: (...args) => {
-        payers.push(args[5]);
+        starts.push(args);
         return Promise.resolve(undefined);
       },
-      ...(options.onDraftChange === undefined
-        ? undefined
-        : { onDraftChange: options.onDraftChange }),
     },
   );
   await settle();
-  const field = () =>
-    [...document.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label")?.startsWith("Who pays: ") === true,
-    );
-  return { ...tab, payers, field };
+  return { ...tab, starts };
 }
 
-test("an account with a Claude plan sees who pays beside the chip, standing on its default, and a Start names the payer it shows", async () => {
-  const tab = await payerTab({ keys: plannedKeys(true) });
-  assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: Claude plan");
-  await tab.send();
-  assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]);
-});
-
-test("picking another payer in the field hands it to the draft as its own", async () => {
-  const picks: unknown[] = [];
-  const tab = await payerTab({
-    keys: plannedKeys(true),
-    onDraftChange: (change) => picks.push(change),
-  });
-  const field = tab.field() ?? assert.fail("no payer field");
-  act(() => field.click());
-  await settle();
-  const item =
-    [
-      ...document.querySelectorAll<HTMLElement>(
-        '[role="menuitemradio"], [role="menuitemcheckbox"], [role="menuitem"]',
-      ),
-    ].find((each) => each.textContent?.includes("API key")) ?? assert.fail("no API key item");
-  act(() => item.click());
-  await settle();
-  assert.deepEqual(picks, [{ payer: CODING_AGENT_PAYER.API_KEY }]);
-});
-
-test("a payer picked for the one agent is the one its Start names, and with the default off the field stands on the API key", async () => {
-  const picked = await payerTab({
-    keys: plannedKeys(true),
-    payer: CODING_AGENT_PAYER.API_KEY,
-  });
-  assert.equal(picked.field()?.getAttribute("aria-label"), "Who pays: API key");
-  await picked.send();
-  assert.deepEqual(picked.payers, [CODING_AGENT_PAYER.API_KEY]);
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-
-  const off = await payerTab({ keys: plannedKeys(false) });
-  assert.equal(off.field()?.getAttribute("aria-label"), "Who pays: API key");
-});
-
-test("with no plan connected, or on a GPT model with a Claude plan alone, the draft is as it was: no payer drawn or sent", async () => {
-  const none = await payerTab({
-    keys: { ...plannedKeys(true), subscriptions: [] },
-    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-  });
-  assert.equal(none.field(), undefined);
-  await none.send();
-  assert.deepEqual(none.payers, [undefined]);
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-
-  const gpt = await payerTab({ keys: plannedKeys(true), model: "openai/gpt-5.5" });
-  assert.equal(gpt.field(), undefined);
-});
-
-test("an account with ChatGPT connected sees ChatGPT plan beside a GPT model's chip, and a Start names it", async () => {
-  const tab = await payerTab({
-    model: "openai/gpt-5.5",
-    keys: {
-      keys: [],
-      subscriptions: [
-        {
-          provider: PROVIDER_KEY_PROVIDER.OPENAI,
-          kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-          hint: "ChatGPT",
-          addedAt: 0,
-          status: PROVIDER_KEY_STATUS.UNVERIFIED,
-          statusAt: 0,
-          forAgents: true,
-        },
-      ],
-    },
-  });
-  assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: ChatGPT plan");
-  await tab.send();
-  assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]);
+test("an account with a plan connected starts on Settings' choice alone: no payer drawn beside the chip or sent", async () => {
+  for (const model of ["anthropic/claude-opus-5.5", "openai/gpt-5.5"]) {
+    const tab = await plannedTab({ keys: plannedKeys(true), model });
+    assert.doesNotMatch(document.body.textContent ?? "", /Who pays/u);
+    assert.equal(document.querySelector('[aria-label^="Who pays"]'), null);
+    await tab.send();
+    assert.equal(tab.starts.length, 1);
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+  }
 });
 
 /** A desktop whose voice can take a call, the microphone granted. */

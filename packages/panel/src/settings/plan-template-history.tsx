@@ -6,7 +6,6 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
-import type { CallCardInput } from "../call/call-card.js";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history.js";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse.js";
 import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history.js";
@@ -92,7 +91,6 @@ export function TemplateVersionHistory({
   room,
   history,
   account,
-  call,
   onExit,
 }: {
   sidebar: SidebarCollapse;
@@ -100,8 +98,6 @@ export function TemplateVersionHistory({
   history: NavigationHistory;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
-  /** The call card, at the foot of the versions. */
-  call: CallCardInput | undefined;
   onExit: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -152,7 +148,6 @@ export function TemplateVersionHistory({
       history={steps}
       subject={subject}
       account={account}
-      call={call}
       onExit={onExit}
       onRestored={onExit}
     />

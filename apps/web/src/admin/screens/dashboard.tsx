@@ -1,11 +1,12 @@
+import type {
+  AdminMetrics,
+  AdminOverview,
+  AdminOverviewAccount,
+  AdminTrend,
+} from "@luke/features/admin-answer-wire";
+import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
+import type { AdminMetricsWindow, AdminWindowedQuery } from "@luke/features/admin-wire";
 import { browserClient } from "@luke/features/contract/browser-client";
-import type { AdminMetrics, AdminTrend } from "@luke/service/admin/admin-metrics";
-import type { AdminOverview, AdminOverviewAccount } from "@luke/service/admin/admin-overview";
-import {
-  RETENTION_BASIS,
-  type RetentionBasis,
-} from "@luke/service/admin/admin-overview-vocabulary";
-import type { AdminMetricsWindow, AdminWindowedQuery } from "@luke/service/admin/http";
 import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
@@ -38,7 +39,7 @@ const METRICS_ERROR = "The metrics endpoint did not answer.";
 const readMetrics =
   (query: AdminWindowedQuery): AdminReader<AdminMetrics> =>
   async (signal) =>
-    // SAFETY: the admin metrics procedure answers an AdminMetrics (`@luke/service/admin/admin-metrics`), which the contract cannot name.
+    // SAFETY: the admin metrics procedure answers an AdminMetrics (`@luke/features/admin-answer-wire`), for which the contract declares no output.
     (await browserClient.admin.metrics(query, { signal })) as AdminMetrics;
 
 /** What the page is called, in the sidebar and over the page alike. */
