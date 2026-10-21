@@ -1462,7 +1462,13 @@ const findAgentsOfTasks = SqlSchema.findAll({
     ),
 });
 
-/** One agent of the task, archived or not, whose pull request GitHub reported merged, where the account reaches the task. */
+/**
+ * One agent of the task, archived or not, whose pull request GitHub reported
+ * merged, where the account reaches the task. Note that every agent of the
+ * task counts, one on a teammate's token the account does not see among
+ * them, because the answer is one bit about the task and names no agent,
+ * and the migration that settled the archived tasks counted them all.
+ */
 const findMergedAgentOfTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -1476,7 +1482,6 @@ const findMergedAgentOfTask = SqlSchema.findOneOption({
           and(
             eq(task.id, taskId),
             taskReachableBy(userId),
-            agentSeenBy(userId),
             isNotNull(sql`${codingAgent.published} ->> 'mergedAt'`),
           ),
         )
@@ -2102,7 +2107,7 @@ export function recordCodingAgentPublished(
   return updateAgentPublished({ userId, agentId, published });
 }
 
-/** Whether any coding agent on the task, archived ones among them, has a pull request GitHub reported merged; false for a task the account does not reach. */
+/** Whether any coding agent on the task, archived ones and a teammate's on their own token among them, has a pull request GitHub reported merged; false for a task the account does not reach. */
 export function taskHasMergedPullRequest(
   userId: string,
   taskId: string,
