@@ -213,11 +213,11 @@
     opacity: 0;
   }
 
-  /* Note that the accent count takes the button's blue rather than the
-     links' ink, because it should read as the same blue as the app's other
-     accents. */
+  /* Note that the accent count takes the accent's ink rather than its fill,
+     because a count is words, and the fill reads at 1.5:1 on the web's
+     light sidebar. */
   .luke-nav-item-count[data-tone="accent"] {
-    color: var(--luke-color-accent);
+    color: var(--luke-color-accent-text);
   }
 
   .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {
