@@ -24,7 +24,8 @@
  * browser, a browser that would not start, or a bridge that never came up.
  * A bridge that did not come up, as one may not on a browser just started,
  * is tried again on a fresh PTY a couple of times within a short window,
- * and how each attempt failed is logged by its kind alone.
+ * every attempt together held to a bound once the browser runs, and how
+ * each attempt failed is logged by its kind alone.
  */
 
 import {
@@ -85,6 +86,8 @@ const AGENT_BROWSER = {
   BRIDGE_RETRIES: 2,
   BRIDGE_RETRY_SPACING: Duration.seconds(1),
   BRIDGE_RETRY_WINDOW: Duration.seconds(10),
+  /** The most the bridge's attempts take in all once the browser runs, so a hung one never stacks its timeouts. */
+  BRIDGE_BOUND: Duration.seconds(20),
   /** How long a command waits on its answer. */
   COMMAND_TIMEOUT: Duration.seconds(30),
   /** The most events a subscriber that falls behind is owed; past it the oldest give way. */
@@ -191,6 +194,7 @@ const BRIDGE_FAILURE = {
   REFUSED: "the bridge could not reach the browser",
   NOT_READY: "the bridge did not say it was ready in time",
   CLOSED: "the bridge ended before it was ready",
+  OUT_OF_TIME: "no attempt came up within the bound",
 } as const;
 
 /** The PTY server's exit frame: the bridge ended. */
@@ -473,42 +477,51 @@ export function agentBrowserOver(
   return {
     ensure,
     connect: (sessionId) =>
-      ownScope(
-        Effect.gen(function* () {
-          const { sandboxSessionId } = yield* ensure(sessionId);
-          // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
-          const shell = yield* api
-            .openInteractive(sandboxSessionId)
-            .pipe(Effect.mapError(sandboxUnavailable));
-          const socket = yield* pty
-            .connect(shell)
-            .pipe(Effect.catch(() => bridgeFailed(BRIDGE_FAILURE.NO_PTY)));
-          const bridge = browserBridge();
-          yield* socket.send({
-            text: JSON.stringify({
-              type: "start",
-              command: bridge.command,
-              args: bridge.args,
-              env: AGENT_BROWSER.PTY.ENV,
-              cwd: AGENT_BROWSER.PTY.CWD,
-              cols: AGENT_BROWSER.PTY.COLS,
-              rows: AGENT_BROWSER.PTY.ROWS,
-            }),
-          });
-          return yield* cdpSessionOver(socket);
-        }),
-      ).pipe(
-        // Note that a bridge that did not come up is tried again from the start, the browser made sure
-        // of again too, since a browser just started may not take its first connection, and one that
-        // went is started anew; any other failure, the sandbox's own, answers at once.
-        Effect.retry({
-          schedule: Schedule.max([
-            Schedule.spaced(AGENT_BROWSER.BRIDGE_RETRY_SPACING),
-            Schedule.recurs(AGENT_BROWSER.BRIDGE_RETRIES),
-            Schedule.during(AGENT_BROWSER.BRIDGE_RETRY_WINDOW),
-          ]),
-          while: (failure) => failure.reason === BROWSER_UNREACHABLE.BRIDGE_FAILED,
-        }),
+      // Note that the browser is made sure of once ahead of the bound, since a resume may take a minute,
+      // so the bound holds the bridge's attempts alone, each of which makes sure of it again quickly.
+      Effect.andThen(
+        ensure(sessionId),
+        ownScope(
+          Effect.gen(function* () {
+            const { sandboxSessionId } = yield* ensure(sessionId);
+            // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
+            const shell = yield* api
+              .openInteractive(sandboxSessionId)
+              .pipe(Effect.mapError(sandboxUnavailable));
+            const socket = yield* pty
+              .connect(shell)
+              .pipe(Effect.catch(() => bridgeFailed(BRIDGE_FAILURE.NO_PTY)));
+            const bridge = browserBridge();
+            yield* socket.send({
+              text: JSON.stringify({
+                type: "start",
+                command: bridge.command,
+                args: bridge.args,
+                env: AGENT_BROWSER.PTY.ENV,
+                cwd: AGENT_BROWSER.PTY.CWD,
+                cols: AGENT_BROWSER.PTY.COLS,
+                rows: AGENT_BROWSER.PTY.ROWS,
+              }),
+            });
+            return yield* cdpSessionOver(socket);
+          }),
+        ).pipe(
+          // Note that a bridge that did not come up is tried again from the start, the browser made sure
+          // of again too, since a browser just started may not take its first connection, and one that
+          // went is started anew; any other failure, the sandbox's own, answers at once.
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.spaced(AGENT_BROWSER.BRIDGE_RETRY_SPACING),
+              Schedule.recurs(AGENT_BROWSER.BRIDGE_RETRIES),
+              Schedule.during(AGENT_BROWSER.BRIDGE_RETRY_WINDOW),
+            ]),
+            while: (failure) => failure.reason === BROWSER_UNREACHABLE.BRIDGE_FAILED,
+          }),
+          Effect.timeoutOrElse({
+            duration: AGENT_BROWSER.BRIDGE_BOUND,
+            orElse: () => bridgeFailed(BRIDGE_FAILURE.OUT_OF_TIME),
+          }),
+        ),
       ),
   };
 }
