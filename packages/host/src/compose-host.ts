@@ -230,6 +230,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       ? yield* composeMacCommands({
           kernel,
           account,
+          accountId,
           enabled: Effect.map(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
