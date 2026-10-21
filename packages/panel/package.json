@@ -15,6 +15,7 @@
     "./admin/chrome/places": "./src/admin/chrome/places.js",
     "./admin/prefs": "./src/admin/prefs.js",
     "./admin/routing": "./src/admin/routing.js",
+    "./admin/sources.css": "./src/admin/sources.css",
     "./admin/screens/account": "./src/admin/screens/account.js",
     "./admin/screens/cost": "./src/admin/screens/cost.js",
     "./admin/screens/dashboard": "./src/admin/screens/dashboard.js",
