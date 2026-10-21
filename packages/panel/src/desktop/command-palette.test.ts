@@ -18,6 +18,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
+  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
@@ -1857,8 +1858,8 @@ const PREVIEWS: InboxItem = {
   settledAt: 9_000,
 };
 
-/** The palette over a window whose listed workspace's task holds the items main pushes as `inbox` says, every Inbox item it opens recorded. */
-function paletteOverInbox(inbox: () => CodingAgentInboxChanged["inbox"]) {
+/** The palette over a window whose listed workspace's task holds the items main pushes as `inbox` says, main's word of it last changed at `changed`, every Inbox item it opens recorded. */
+function paletteOverInbox(inbox: () => CodingAgentInboxChanged["inbox"], changed = 9_000) {
   const main = followedInboxes((scope) =>
     scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === ROTATION.id ? inbox() : undefined,
   );
@@ -1866,7 +1867,7 @@ function paletteOverInbox(inbox: () => CodingAgentInboxChanged["inbox"]) {
   const opened: InboxChoice[] = [];
   const tasks = tasksControl({
     tasks: [ROTATION],
-    inboxTasks: [{ taskId: ROTATION.id, items: 2, updatedAt: 9_000 }],
+    inboxTasks: [{ taskId: ROTATION.id, items: 2, updatedAt: changed }],
   });
   openPalette({
     ...tasks,
@@ -1918,4 +1919,54 @@ test("an Inbox that could not be read says so, rather than that nothing matches"
   await settle();
 
   assert.equal(emptyLine()?.startsWith("Your inbox could not be read."), true);
+});
+
+test("a query its title half answers says the thread's words that answer the rest, never the title again", async () => {
+  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  chooseFilter("Inbox");
+
+  type("rotate stripe");
+  await settle();
+
+  assert.deepEqual(rows(), [
+    "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
+  ]);
+});
+
+test("an Inbox item is found by a form's field and the value it was answered with", async () => {
+  const PORT: InboxItem = {
+    ...askedItem(
+      "a1b2c3d4-0000-4000-8000-000000000013",
+      "Which mail server?",
+      "Fill in the relay.",
+      4_000,
+    ),
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.ANSWERED, values: [{ label: "SMTP port", value: 587 }] },
+    settledAt: 4_000,
+  };
+  paletteOverInbox(() => ({ items: [PORT] }));
+  chooseFilter("Inbox");
+
+  type("587");
+  await settle();
+  assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · 587"]);
+  type("smtp");
+  assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · SMTP port"]);
+});
+
+test("while main says a task's inbox changed later than its push, a query it does not answer says the inbox is still being read", async () => {
+  const { main } = paletteOverInbox(() => ({ items: [PREVIEWS] }), 12_000);
+  chooseFilter("Inbox");
+
+  type("webhook");
+  await settle();
+  assert.equal(emptyLine(), "Reading your inbox…");
+
+  const fresh = { ...ROTATE, updatedAt: 12_000 };
+  act(() =>
+    main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: ROTATION.id }, { items: [PREVIEWS, fresh] }),
+  );
+  await settle();
+  assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]);
 });

@@ -1582,31 +1582,57 @@ function blockWords(block: InboxItem["blocks"][number]): string | undefined {
   }
 }
 
-/** The words an ask offers: a decision's options and a to-do's steps; none of an answer's fields, nor of an ask this build does not know. */
+/** The words options say: each one's label and the trade-off written under it. */
+function optionWords(options: readonly { label: string; detail?: string }[]): readonly string[] {
+  return options.flatMap((option) => [option.label, option.detail ?? ""]);
+}
+
+/** The words a form's fields say: each one's label and a select's options. */
+function fieldWords(fields: readonly InboxForm["fields"][number][]): readonly string[] {
+  return fields.flatMap((field) => [field.label, ...(field.options ?? [])]);
+}
+
+/** The words a filled form says: each field's label and its value as words. */
+function valueWords(values: readonly InboxFormValue[] | undefined): readonly string[] {
+  return (values ?? []).flatMap((each) => [each.label, fieldValueWords(each.value)]);
+}
+
+/** The words an ask offers: a decision's options, a to-do's steps, and an answer's fields; none of an ask this build does not know. */
 function askWords(ask: InboxReadAsk | undefined): readonly string[] {
   if (ask === undefined || !knownAsk(ask)) return [];
-  if (ask.type === INBOX_ASK.DECIDE) return ask.options.map((option) => option.label);
+  if (ask.type === INBOX_ASK.DECIDE) return optionWords(ask.options);
   if (ask.type === INBOX_ASK.DO) return ask.steps.map(plainWords);
+  return fieldWords(ask.fields ?? []);
+}
+
+/** The words a response offers: a choice's options and a form's fields. */
+function responseWords(response: InboxItem["response"]): readonly string[] {
+  if (!knownResponse(response)) return [];
+  if (response.type === INBOX_RESPONSE.CHOICE) return optionWords(response.options);
+  if (response.type === INBOX_RESPONSE.FORM) return fieldWords(response.fields);
   return [];
 }
 
 /**
  * Every line of words an item says, as a search reads it: its title, its
- * blocks, what it offers to choose, each message of its thread and what
- * that asks or picks, and the answer it was given. Note that it names no
+ * blocks, what it offers to choose or fill in, each message of its thread
+ * and what that asks, picks, or fills in, and the answer it was given. Note that it names no
  * address, id, or member, because a query typed is about what was said, and
  * an address holds letters enough to match almost anything.
  */
 export function inboxItemWords(item: InboxItem): readonly string[] {
-  const response = knownResponse(item.response) ? item.response : undefined;
-  const offered =
-    response?.type === INBOX_RESPONSE.CHOICE ? response.options.map((option) => option.label) : [];
+  const offered = responseWords(item.response);
   const said = (item.thread ?? item.messages ?? []).flatMap((message) => [
     plainWords(message.text),
     ...askWords(message.ask),
     ...(message.answers?.choices ?? []),
+    ...valueWords(message.answers?.values),
   ]);
-  const answered = [...(item.answer?.choices ?? []), item.answer?.note ?? ""];
+  const answered = [
+    ...(item.answer?.choices ?? []),
+    ...valueWords(item.answer?.values),
+    item.answer?.note ?? "",
+  ];
   return [item.title, ...item.blocks.map(blockWords), ...offered, ...said, ...answered].filter(
     (words): words is string => words !== undefined && words.length > 0,
   );

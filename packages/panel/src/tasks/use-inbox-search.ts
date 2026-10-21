@@ -77,9 +77,10 @@ export function useInboxSearch(tasks: TasksControl, asked: boolean): InboxSearch
     const groups = [...taskGroups, ...tasklessGroups(waiting, tasklessItems, workspaceId)];
     return searchOrder(groups, tasks.me);
   }, [holdings, standing, read.items, waiting, tasklessItems, workspaceId, tasks.me]);
+  // Note that an inbox counts as read only once its push holds what main says it now holds, since an older push kept from the last search may lack the item sought.
   const reading =
-    holdings.some((holding) => !read.items.has(holding.taskId) && !read.failed) ||
-    waiting.some((each) => !taskless.items.has(each.agentId) && !taskless.failed);
+    read.pending ||
+    (!taskless.failed && waiting.some((each) => !taskless.current.has(each.agentId)));
   const { onRetry: retryTasks } = read;
   const { onRetry: retryTaskless } = taskless;
   return {

@@ -776,23 +776,29 @@ function peopleRows(
 }
 
 /**
- * The words around where the query's first word landed in an item's words,
- * cut on either side, for a row its title and holder did not find; none
- * where they did, or where no line holds it.
+ * The words around where a query's word that the row's title and holder do
+ * not hold landed in what the item says, cut on either side, for a row
+ * those did not find whole; none where they did, or where nothing else it
+ * says holds such a word. Note that the title is never the snippet, since
+ * the row already says it.
  */
 function snippetOf(
   words: readonly string[],
   seen: readonly string[],
   tokens: readonly string[],
 ): string | undefined {
-  const first = tokens[0];
-  if (first === undefined || matchesTokens(seen, tokens)) return undefined;
-  const line = words.find((each) => each.toLowerCase().includes(first));
-  if (line === undefined) return undefined;
-  const at = line.toLowerCase().indexOf(first);
-  const from = Math.max(0, at - SNIPPET_REACH);
-  const to = Math.min(line.length, at + first.length + SNIPPET_REACH);
-  return `${from > 0 ? "…" : ""}${line.slice(from, to).trim()}${to < line.length ? "…" : ""}`;
+  const missing = tokens.filter((token) => !matchesTokens(seen, [token]));
+  for (const line of words) {
+    if (seen.includes(line)) continue;
+    const lowered = line.toLowerCase();
+    const token = missing.find((each) => lowered.includes(each));
+    if (token === undefined) continue;
+    const at = lowered.indexOf(token);
+    const from = Math.max(0, at - SNIPPET_REACH);
+    const to = Math.min(line.length, at + token.length + SNIPPET_REACH);
+    return `${from > 0 ? "…" : ""}${line.slice(from, to).trim()}${to < line.length ? "…" : ""}`;
+  }
+  return undefined;
 }
 
 /**
@@ -816,7 +822,7 @@ function inboxRows(
     const title = cardTitle(item.title);
     const name = holderName(holder);
     const words = inboxItemWords(item);
-    const snippet = snippetOf(words, [title, name], seams.tokens);
+    const snippet = snippetOf(words, [item.title, title, name], seams.tokens);
     return {
       icon: (
         <ItemMark
