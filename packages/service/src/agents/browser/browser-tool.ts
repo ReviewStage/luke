@@ -370,23 +370,38 @@ function settleTitles(cdp: CdpSession, steps: readonly BrowserAgentStep[]) {
 }
 
 /**
- * The steps with each tab a `list` named that the call moved, and that still
- * stands at the address listed, titled as its page settled
- * (`settleTitles`), so a step never names a tab by the title it showed while
- * loading where the result's `tabs` names it by its own.
+ * The steps with each tab a `list` named titled as its page settled
+ * (`settleTitles`), where the call moved it before that list and never
+ * after, and it still stands at the address listed: so a step never names a
+ * tab by the title it showed while loading where the result's `tabs` names
+ * it by its own, and a list before a later move keeps what it saw.
  */
 function withSettledTitles(
   steps: readonly BrowserAgentStep[],
   byId: ReadonlyMap<string, PageTarget>,
 ): readonly BrowserAgentStep[] {
-  const moved = new Set(tabsMoved(steps));
-  return steps.map((step) => {
+  // Each tab still standing that the call moved, by the step that last moved it.
+  const lastMoved = new Map<string, number>();
+  for (const tab of tabsMoved(steps)) {
+    lastMoved.set(
+      tab,
+      steps.findLastIndex(
+        (step) =>
+          step.status === BROWSER_STEP_STATUS.DONE &&
+          "tab" in step &&
+          step.tab === tab &&
+          MOVING_ACTIONS.has(step.action),
+      ),
+    );
+  }
+  return steps.map((step, at) => {
     if (step.action !== BROWSER_AGENT_ACTION.LIST || step.status !== BROWSER_STEP_STATUS.DONE) {
       return step;
     }
     const tabs = step.tabs.map((listed) => {
       const page = byId.get(listed.tab);
-      if (!moved.has(listed.tab) || page === undefined) return listed;
+      const moved = lastMoved.get(listed.tab);
+      if (moved === undefined || moved > at || page === undefined) return listed;
       const settled = shownTab(page);
       return settled.url === listed.url ? { ...listed, title: settled.title } : listed;
     });
