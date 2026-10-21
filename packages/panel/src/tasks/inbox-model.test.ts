@@ -1986,6 +1986,19 @@ test("a settled item's card names its ending in the word its line says it in: an
   assert.equal(inboxSettledWords(resolved, previewName), "Charles Pan: Resolved without an answer");
   assert.equal(inboxSettledStanding(resolved), "Resolved");
 
+  // Note that the service's member close withdraws the ask it left open, saying no why.
+  const resolvedAsked = item({
+    id: "w5",
+    status: INBOX_STATUS.CLOSED,
+    closedBy: CHARLES,
+    thread: [standing(asked, INBOX_ASK_STATUS.WITHDRAWN)],
+  });
+  assert.equal(
+    inboxSettledWords(resolvedAsked, previewName),
+    "Charles Pan: Resolved without an answer",
+  );
+  assert.equal(inboxSettledStanding(resolvedAsked), "Resolved");
+
   const takenBack = item({
     id: "w3",
     status: INBOX_STATUS.CLOSED,

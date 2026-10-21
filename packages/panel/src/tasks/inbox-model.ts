@@ -1398,7 +1398,8 @@ export function inboxSettledWords(
     const words = plainWords(answering.text);
     return `${nameOf(answering.member)}: ${words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`}`;
   }
-  // Note that an ask the agent took back says so before a close is read as a member's, since a close naming no closer reads as one.
+  // Note that a close naming its closer is a member's, though it withdrew the ask it left open; otherwise an ask the agent took back says so before a close is read as a member's, since a close naming no closer reads as one.
+  if (item.closedBy !== undefined) return `${nameOf(item.closedBy)}: ${CLOSED_WORDS}`;
   const withdrawn = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN);
   if (withdrawn?.ask !== undefined) {
     const why = plainWords(withdrawn.ask.withdrawnReason ?? "");
@@ -1417,14 +1418,16 @@ export const INBOX_SETTLED_STANDING = {
 
 /**
  * Where a settled item stands, as its row's card says it over how it ended
- * (`inboxSettledWords`), in that line's own word: an ask the agent took
- * back is read before a close, as that line reads it, so the card never
+ * (`inboxSettledWords`), in that line's own word, read in that line's
+ * order: a close naming its closer is a member's, though it withdrew the
+ * ask it left open, then an ask the agent took back, so the card never
  * calls one ending two names.
  */
 export function inboxSettledStanding(
   item: InboxItem,
 ): (typeof INBOX_SETTLED_STANDING)[keyof typeof INBOX_SETTLED_STANDING] {
   if (item.status === INBOX_STATUS.ANSWERED) return INBOX_SETTLED_STANDING.ANSWERED;
+  if (item.closedBy !== undefined) return INBOX_SETTLED_STANDING.RESOLVED;
   const withdrawn = (inboxThreadOf(item) ?? []).some(
     (each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN,
   );
