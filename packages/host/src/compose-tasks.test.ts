@@ -236,6 +236,8 @@ interface FakeService extends TasksClient {
   renameAnswered: Effect.Effect<void>;
   /** Whether Realtime misses the store's changes, telling none of them. */
   realtimeMisses: boolean;
+  /** The transaction a task's rename answers it committed in, where it answers one. */
+  renameTxid: string | undefined;
   /** Realtime as the service's deployment holds it: each subscription to the workspaces is told the table as it stands, and again on every change. */
   realtime: ReturnType<typeof fakeServiceRealtime>;
   /** Realtime's client as the host opens it at the workspaces' address, each subscription told the workspaces at once, as Realtime's first result. */
@@ -586,6 +588,7 @@ function fakeService(tasks: Task[]): FakeService {
     workspacesSignedOut: false,
     renamedAgain: undefined,
     renameAnswered: Effect.void,
+    renameTxid: undefined,
     members: {},
     former: {},
     linearIssues: {},
@@ -1054,7 +1057,9 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? renamed : candidate,
         );
-        return { task: renamed };
+        return service.renameTxid === undefined
+          ? { task: renamed }
+          : { task: renamed, txid: service.renameTxid };
       }),
     // The service sets the status, the priority, and the assignee named, naming the assignee by
     // their account, and leaves the rest standing; null assigns the task to no one.
@@ -1111,6 +1116,15 @@ function fakeRealtime() {
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
   >();
   const closed: string[] = [];
+  const arrived = new Set<string>();
+  const waiting = new Map<string, Array<() => void>>();
+  /** A write's transaction waited on until `arrive` names it, as Realtime's `awaitTxId` settles. */
+  const awaitTxId = (txid: string): Promise<void> => {
+    if (arrived.has(txid)) return Promise.resolve();
+    const { promise, resolve } = Promise.withResolvers<void>();
+    waiting.set(txid, [...(waiting.get(txid) ?? []), resolve]);
+    return promise;
+  };
   const open = (url: string): LiveClient => ({
     subscribe: (query) => ({
       onChange: (listener) => {
@@ -1118,7 +1132,7 @@ function fakeRealtime() {
         return () => listeners.delete(query.capability);
       },
       renew: () => Promise.resolve(),
-      awaitTxId: () => Promise.resolve(),
+      awaitTxId,
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => void closed.push(url),
@@ -1160,6 +1174,14 @@ function fakeRealtime() {
       assert.ok(listener, `no subscription to ${part}`);
       listener({ status: "live", data });
     },
+    /** A write's transaction reaching the subscriptions, settling every wait on it. */
+    arrive: (txid: string) => {
+      arrived.add(txid);
+      for (const resolve of waiting.get(txid) ?? []) resolve();
+      waiting.delete(txid);
+    },
+    /** The transactions a wait still stands on. */
+    awaitingTxids: () => [...waiting.keys()].toSorted(),
     /** One part of the task list's subscription stopped for good. */
     failPart: (part: string) => listeners.get(part)?.({ status: "error", data: [] }),
     /** Lets what was delivered reach the view, through the fibers that carry it. */
@@ -1444,6 +1466,45 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     assert.equal(last()?.activeTaskId, BILLING);
     assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: billing });
   }),
+);
+
+it.effect(
+  "a rename that answers its transaction is answered once the followed list carries it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.renameTxid = "7301";
+      const { call, listed, realtime, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+
+      const renaming = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
+      );
+      yield* settled;
+      assert.deepEqual(realtime.awaitingTxids(), ["7301"]);
+      assert.equal(renaming.pollUnsafe(), undefined, "the rename waits for its transaction");
+
+      realtime.arrive("7301");
+      assert.deepEqual(yield* Fiber.join(renaming), { renamed: true });
+      assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
+);
+
+it.effect(
+  "a rename's transaction is waited for by nothing while the list is not followed over Realtime",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.renameTxid = "7302";
+      const { call, realtime } = yield* subject(service);
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
+        { renamed: true },
+      );
+      assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
 );
 
 it.effect(
