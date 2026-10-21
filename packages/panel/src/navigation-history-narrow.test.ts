@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { AUTOMATION_PRESET } from "@luke/features/automation-code-review";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -32,8 +33,9 @@ import {
   type InboxChoice,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
+import { fakeAppBridge, fakeAppBridgeCalls } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { handState } from "./testing/app-state.js";
+import { handState, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
@@ -753,6 +755,47 @@ test("a window whose history already stands on a step when it opens, as a reload
   );
   assert.deepEqual(reloaded.addresses(), [TASK_PATH, `${TASK_PATH}/page/page-1`]);
   assert.equal(reloaded.history().canGoBack, true);
+});
+
+test("a reloaded window whose saved step is the Admin place opens it once the account is known for an admin, its access read a moment after it signs in", async () => {
+  const before = mount(SHELL_ROOM.NARROW, {
+    ...ON_TASK,
+    admin: { view: { kind: "cost" }, listed: false },
+  });
+  await settle();
+  const { held } = before;
+  unmountAll();
+
+  // The reloaded window's first document holds no access yet, as main's does until the read answers.
+  let deliver: ((snapshot: AppStateSnapshot) => void) | undefined;
+  const unread = stateWith(experimentsOn(EXPERIMENT.CHAT), {
+    access: { admin: false, pending: true },
+  });
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(unread),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      deliver = listener;
+      return () => undefined;
+    },
+  });
+  const reloaded = mount(SHELL_ROOM.NARROW, ON_TASK, held);
+  await settle();
+  assert.deepEqual(
+    reloaded.at().admin,
+    { view: { kind: "cost" }, listed: false },
+    "the place stands, waiting on the read, rather than being passed over",
+  );
+
+  act(() =>
+    deliver?.({
+      ...unread,
+      version: unread.version + 1,
+      access: { ...unread.access, admin: true },
+    }),
+  );
+  await settle();
+  assert.deepEqual(reloaded.at().admin, { view: { kind: "cost" }, listed: false });
 });
 
 /** The automation's page, as a link to it or a press opens it, and as a link to one of its runs opens it. */

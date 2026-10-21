@@ -48,6 +48,7 @@ import {
   InboxIcon,
   MessageSquareIcon,
   MessagesSquareIcon,
+  ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -858,6 +859,8 @@ function PlaceGlyph({
       return <UserIcon />;
     case LINK_PLACE.CHAT:
       return <MessagesSquareIcon aria-hidden="true" />;
+    case LINK_PLACE.ADMIN:
+      return <ShieldUserIcon aria-hidden="true" />;
   }
 }
 

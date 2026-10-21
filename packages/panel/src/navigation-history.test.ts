@@ -771,6 +771,29 @@ test("Chat stands at its workspace's /chat though a task stands under it, and a 
   ]);
 });
 
+test("the Admin place stands at its workspace's /admin though a task stands under it, a section at /admin/<section> in place, and an account's page at /admin/user/<id> as a step, as Copy link copies each", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const task = onTask([ACME]);
+  const admin = (view: TasksControl["adminView"]["view"]): TasksControl => ({
+    ...task,
+    adminView: { ...task.adminView, open: true, view },
+  });
+  const window = mount(task);
+  window.stand(admin({ kind: "dashboard" }));
+  window.stand(admin({ kind: "cost" }));
+  window.stand(admin({ kind: "account", id: "user-ada" }));
+  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+  await settle();
+
+  assert.deepEqual(window.addresses(), [
+    `/acme/plan/${DOCUMENT_TASK.id}`,
+    "/acme/admin/cost",
+    "/acme/admin/user/user-ada",
+  ]);
+  assert.deepEqual(copied, ["https://tryluke.dev/acme/admin/user/user-ada"]);
+});
+
 test("with no workspace listed, a place in a workspace has no link, so it stands at /app as Copy link offers nothing", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });

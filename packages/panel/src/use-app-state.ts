@@ -276,6 +276,12 @@ const ADMIN_ACCESS: Atom.Atom<boolean> = Atom.map(
   (access) => access?.admin === true,
 );
 
+/** Whether the account's access is not read yet, before the first read of the document among it. */
+const ADMIN_ACCESS_PENDING: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.ACCESS,
+  (access) => access === undefined || access.pending === true,
+);
+
 /**
  * Whether the signed-in account is an admin, redrawn as it moves: what the
  * sidebar offers the Admin place by, and what the window's history and shell
@@ -285,6 +291,15 @@ const ADMIN_ACCESS: Atom.Atom<boolean> = Atom.map(
  */
 export function useAdminAccess(): boolean {
   return useAtomValue(ADMIN_ACCESS);
+}
+
+/**
+ * Whether the signed-in account's access is still being read, as it is for
+ * a moment after a sign-in or a launch: what an admin alone may reach waits
+ * on it rather than being refused, a reloaded Admin address among it.
+ */
+export function useAdminAccessPending(): boolean {
+  return useAtomValue(ADMIN_ACCESS_PENDING);
 }
 
 /**

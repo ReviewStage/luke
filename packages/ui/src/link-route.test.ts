@@ -20,7 +20,7 @@ const ACME = {
   github: null,
 };
 
-const WINDOW = { workspaces: [ACME], factoryOn: false, chatOn: false };
+const WINDOW = { workspaces: [ACME], factoryOn: false, chatOn: false, adminOn: false };
 
 test("a link to a page of Settings opens it on the workspace its slug names, where the account is in it", () => {
   assert.deepEqual(
@@ -74,6 +74,21 @@ test("a link to Chat or one of its channels opens nowhere while the account has 
       kind: LINK_ROUTE.EXPERIMENT_OFF,
     });
     assert.deepEqual(linkRoute({ workspace: "acme", place }, { ...WINDOW, chatOn: true }), {
+      kind: LINK_ROUTE.TASKS,
+    });
+  }
+});
+
+test("a link to the Admin place or one of its views opens nowhere for a reader who is no admin, and on the Plans tab for an admin", () => {
+  for (const place of [
+    { kind: LINK_PLACE.ADMIN },
+    { kind: LINK_PLACE.ADMIN, section: "cost" },
+    { kind: LINK_PLACE.ADMIN, userId: "u1" },
+  ] as const) {
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, WINDOW), {
+      kind: LINK_ROUTE.NOT_PERMITTED,
+    });
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, { ...WINDOW, adminOn: true }), {
       kind: LINK_ROUTE.TASKS,
     });
   }

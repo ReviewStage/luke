@@ -16,7 +16,11 @@ import {
  * window does not know opens Settings on its first. Factory's place, and
  * Chat's, stand nowhere while their experiment is off, as every other door
  * to them does (`renderer/CLAUDE.md`'s "Experiments"), so a link to either
- * says how to turn it on instead. Every other place opens on
+ * says how to turn it on instead. The Admin place is an admin's alone, so
+ * its link opens nowhere, and says nothing, for a reader who is no admin;
+ * the window counts a reader whose access it is still reading as one, the
+ * place waiting on that read, since a reload on an Admin address would
+ * otherwise be refused for a reader who is an admin. Every other place opens on
  * the Plans tab, whose own door checks nothing: a place the reader may not
  * read is read all the same, and its read says it is not there.
  */
@@ -25,13 +29,16 @@ export const LINK_ROUTE = {
   SETTINGS: "settings",
   TASKS: "plans",
   EXPERIMENT_OFF: "experiment-off",
+  /** An Admin link opened by a reader who is no admin, which opens nowhere. */
+  NOT_PERMITTED: "not-permitted",
 } as const;
 
 /** Where a link opens, with the Settings place where it opens there. */
 export type LinkRoute =
   | { readonly kind: typeof LINK_ROUTE.SETTINGS; readonly settings: SettingsLink }
   | { readonly kind: typeof LINK_ROUTE.TASKS }
-  | { readonly kind: typeof LINK_ROUTE.EXPERIMENT_OFF };
+  | { readonly kind: typeof LINK_ROUTE.EXPERIMENT_OFF }
+  | { readonly kind: typeof LINK_ROUTE.NOT_PERMITTED };
 
 /** What a link to a place of an experiment that is off says, since the place stands nowhere until it is on. */
 export const EXPERIMENT_OFF_LINK =
@@ -44,6 +51,8 @@ export function linkRoute(
     readonly workspaces: readonly Workspace[];
     readonly factoryOn: boolean;
     readonly chatOn: boolean;
+    /** Whether the reader is an admin, or may be one while their access is read. */
+    readonly adminOn: boolean;
   },
 ): LinkRoute {
   switch (place.kind) {
@@ -66,6 +75,8 @@ export function linkRoute(
       return window.factoryOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     case LINK_PLACE.CHAT:
       return window.chatOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
+    case LINK_PLACE.ADMIN:
+      return window.adminOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.NOT_PERMITTED };
     default:
       return { kind: LINK_ROUTE.TASKS };
   }

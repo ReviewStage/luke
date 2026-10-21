@@ -211,8 +211,8 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
       machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
       openSocket: scriptedOpenSocket([]).openSocket,
     });
-    // Nothing is read until the gate opening asks, so nothing is an admin before it.
-    assert.deepEqual(yield* account.accessState, { admin: false });
+    // Nothing is read until the gate opening asks, so nothing is an admin before it, and the read is owed.
+    assert.deepEqual(yield* account.accessState, { admin: false, pending: true });
 
     yield* account.refreshAccess;
     yield* until(() => lastAdmin() === true);
@@ -223,8 +223,8 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
     assert.ok(handler);
     yield* Effect.orDie(handler({}, CONTEXT));
     yield* until(() => lastAdmin() === false);
-    assert.deepEqual(lastAccess(), { admin: false });
-    assert.deepEqual(yield* account.accessState, { admin: false });
+    assert.deepEqual(lastAccess(), { admin: false, pending: true });
+    assert.deepEqual(yield* account.accessState, { admin: false, pending: true });
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, async (input, init) => {
       const request = new Request(input, init);

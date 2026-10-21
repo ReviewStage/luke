@@ -103,7 +103,7 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
-import { useAdminAccess, useExperiment } from "./use-app-state.js";
+import { useAdminAccess, useAdminAccessPending, useExperiment } from "./use-app-state.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {
@@ -1047,7 +1047,10 @@ export function useWindowHistory(input: {
   const adminOpen = tasks.adminView.open;
   const adminView = tasks.adminView.view;
   const adminListed = narrow ? tasks.adminView.listed : undefined;
-  const adminAccess = useAdminAccess();
+  // A reloaded tab's Admin step is reachable while the account's access is still being read, as the place waits on it.
+  const adminOn = useAdminAccess();
+  const adminPending = useAdminAccessPending();
+  const adminAccess = adminOn || adminPending;
   // A launch reopening the task last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !tasks.restoring;

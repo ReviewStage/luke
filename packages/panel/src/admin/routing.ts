@@ -19,6 +19,7 @@ import {
   type AdminWorkspacesQuery,
   isUtcDayKey,
 } from "@luke/features/admin-wire";
+import { ADMIN_LINK_SECTION, type AdminLinkSection } from "@luke/features/luke-link";
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted
@@ -248,4 +249,39 @@ export function workspacesReadQuery(
     ...(sharedOnly ? undefined : { [ADMIN_WORKSPACES_KIND_PARAM]: ADMIN_WORKSPACES_KIND.ALL }),
     ...(search === undefined ? undefined : { [ADMIN_USERS_SEARCH_PARAM]: search }),
   };
+}
+
+/** The Admin place's link fields for a view: the Overview none, a section its name, an account's or a day's page its own. */
+export function adminLinkFields(view: AdminView): {
+  readonly section?: AdminLinkSection;
+  readonly userId?: string;
+  readonly day?: string;
+} {
+  switch (view.kind) {
+    case "account":
+      return { userId: view.id };
+    case "day":
+      return { day: view.day };
+    case "cost":
+      return { section: ADMIN_LINK_SECTION.COST };
+    case "reliability":
+      return { section: ADMIN_LINK_SECTION.RELIABILITY };
+    case "workspaces":
+      return { section: ADMIN_LINK_SECTION.WORKSPACES };
+    case "users":
+      return { section: ADMIN_LINK_SECTION.USERS };
+    default:
+      return {};
+  }
+}
+
+/** The view an Admin link names, or none where it names only the place, which opens on its Overview with its list standing. */
+export function adminViewOfLink(fields: {
+  readonly section?: AdminLinkSection | undefined;
+  readonly userId?: string | undefined;
+  readonly day?: string | undefined;
+}): AdminView | undefined {
+  if (fields.userId !== undefined) return { kind: "account", id: fields.userId };
+  if (fields.day !== undefined) return { kind: "day", day: fields.day };
+  return fields.section === undefined ? undefined : { kind: fields.section };
 }
