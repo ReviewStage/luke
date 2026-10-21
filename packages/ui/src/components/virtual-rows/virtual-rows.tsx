@@ -190,8 +190,12 @@ export function VirtualRows({
       bringIn: (key, then) => {
         const index = latestKeys.current.indexOf(key);
         if (index === -1) return false;
+        const box = scroller.current;
+        const item = virtualizer.measurementsCache[index];
+        if (box === null || item === undefined) return false;
         bringing.current = { key, drawn: then };
-        virtualizer.scrollToIndex(index, { align: "center" });
+        // Note that the scroller is moved itself, as a reader would move it, and the run draws the row as it hears the scroll.
+        box.scrollTop = Math.max(0, item.start - (box.clientHeight - item.size) / 2);
         return true;
       },
       rowElement,
@@ -201,7 +205,7 @@ export function VirtualRows({
           return key === null ? [] : [key];
         }),
     }),
-    [virtualizer, rowElement],
+    [virtualizer, rowElement, scroller],
   );
   // A row brought in is handed on once it is drawn.
   useLayoutEffect(() => {

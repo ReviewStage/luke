@@ -75,7 +75,12 @@ import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { SpinnerRegion } from "../spinner.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
-import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
+import {
+  AgentSubagentTab,
+  type BriefTask,
+  bringCallIntoView,
+  type TranscriptCards,
+} from "../tasks/agent-tab.js";
 import {
   AgentTabCard,
   type CardReading,
@@ -1179,14 +1184,20 @@ function subagentCardReading(
 /**
  * Brings a call's row to the middle of the plan column's transcript once the
  * column draws it, as a worker's sender line opens its agent at the call
- * that started the worker; a row folded away, or never drawn, is left be.
+ * that started the worker, a row a long log has not drawn brought into
+ * view first; a row folded away, or never drawn, is left be.
  */
 function seekCall(callId: string): void {
+  // Note that a long log draws only the rows near its view, so the call's row is brought in once, the first frame it is not drawn.
+  let brought = false;
   focusSeek({
-    find: () =>
-      document.querySelector<HTMLElement>(
+    find: () => {
+      const row = document.querySelector<HTMLElement>(
         `.desktop-task-column [role="log"] [data-call-id="${CSS.escape(callId)}"]`,
-      ),
+      );
+      if (row === null && !brought) brought = bringCallIntoView(callId);
+      return row;
+    },
     ready: drawnVisibly,
     act: (row) => {
       const log = row.closest<HTMLElement>('[role="log"]');

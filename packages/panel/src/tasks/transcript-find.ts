@@ -101,8 +101,8 @@ export function useTranscriptFind(input: {
       painting: NO_PAINTING as FindPainting,
       // Whether the match the find is at still waits to be brought into view, once drawn.
       pending: false,
-      // Each row's count as it was last drawn under the query.
-      drawn: new Map<string, number>(),
+      // Each row's count as it was last drawn under the query, with the words it held then, so a row a page rewrote off screen is counted from its words again.
+      drawn: new Map<string, { readonly words: string; readonly count: number }>(),
       listeners: new Set<(tally: FindTally) => void>(),
       unwatch: undefined as (() => void) | undefined,
     };
@@ -112,11 +112,19 @@ export function useTranscriptFind(input: {
     };
     /** Every match, each row's from what it last drew where it was drawn under the query, else from its words, then what stands after the rows. */
     const readMatches = (grouped: Map<string | undefined, Range[]>): RowMatch[] => {
-      for (const [row, ranges] of grouped)
-        if (row !== undefined) state.drawn.set(row, ranges.length);
+      // Note that every row drawn now is counted as drawn, one with no match left among them.
+      const shown = new Set(handle.current?.drawnKeys() ?? []);
+      for (const [row] of grouped) if (row !== undefined) shown.add(row);
       const matches: RowMatch[] = [];
       for (const row of latestRows.current) {
-        const count = state.drawn.get(row.key) ?? countIn(row.words, state.query);
+        if (shown.has(row.key)) {
+          state.drawn.set(row.key, { words: row.words, count: grouped.get(row.key)?.length ?? 0 });
+        }
+        const kept = state.drawn.get(row.key);
+        const count =
+          kept !== undefined && kept.words === row.words
+            ? kept.count
+            : countIn(row.words, state.query);
         for (let nth = 0; nth < count; nth += 1) matches.push({ row: row.key, nth });
       }
       const after = grouped.get(undefined)?.length ?? 0;
@@ -178,14 +186,16 @@ export function useTranscriptFind(input: {
       const kept = state.matches.findIndex(
         (match) => match.row === was?.row && match.nth === was?.nth,
       );
-      // Note that a row counted from its words and found to draw fewer keeps the find on its last.
+      // Note that a row counted from its words and found to draw fewer keeps the find on its last, and a find at no match yet starts where the reader is once one lands.
       const fallback = state.matches.findLastIndex((match) => match.row === was?.row);
       state.at =
-        kept !== -1
-          ? kept
-          : fallback !== -1
-            ? fallback
-            : Math.min(state.at, state.matches.length - 1);
+        was === undefined
+          ? startAt(grouped)
+          : kept !== -1
+            ? kept
+            : fallback !== -1
+              ? fallback
+              : Math.min(state.at, state.matches.length - 1);
       tell();
       paint(grouped);
     };

@@ -24,7 +24,7 @@ import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
-import { AgentTab, type TranscriptCards } from "./agent-tab.js";
+import { AgentTab, bringCallIntoView, type TranscriptCards } from "./agent-tab.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 
@@ -55,6 +55,11 @@ beforeEach(() => {
   vi.stubGlobal("CSS", { highlights: new Map(), escape: (words: string) => words });
   vi.stubGlobal("Highlight", Set);
   Range.prototype.getBoundingClientRect = () => new DOMRect();
+  // The browser answers a scroll written to an element with its scroll event, after the write.
+  Element.prototype.scrollTo = function (this: Element, options?: ScrollToOptions | number) {
+    if (typeof options === "object" && options.top !== undefined) this.scrollTop = options.top;
+    queueMicrotask(() => this.dispatchEvent(new Event("scroll")));
+  } as typeof Element.prototype.scrollTo;
 });
 
 afterEach(() => {
@@ -136,17 +141,19 @@ async function settled(): Promise<void> {
 }
 
 /** The log's box as the window would lay it out: the room it shows, and every scroll written to it heard as the browser hears one. */
-function layOut(box: HTMLElement): { readonly writes: number[] } {
+function layOut(box: HTMLElement, height = 1_000_000): { readonly writes: number[] } {
   let top = 0;
   const writes: number[] = [];
   Object.defineProperty(box, "clientHeight", { configurable: true, get: () => 600 });
-  Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 1_000_000 });
+  Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => height });
   Object.defineProperty(box, "scrollTop", {
     configurable: true,
     get: () => top,
     set: (to: number) => {
       writes.push(to);
       top = to;
+      // The browser answers a scroll written to the box with its scroll event.
+      box.dispatchEvent(new Event("scroll"));
     },
   });
   box.scrollTo = ((options: ScrollToOptions) => {
@@ -466,4 +473,95 @@ test("the log first draws once the calls its lines were said on are read, so no 
     ReturnType<CodingAgentsControl["readCalls"]>
   >);
   assert.ok(drawnRows(container).length > 0, "a read that did not answer lets the lines draw");
+});
+
+test("the log draws without its pull request once the read has stood a moment, so a slow read never holds it back", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { follower } = following(page(messages(0, 6)));
+    const never = handed<{ repository: null; branch: null; pullRequest: null }>();
+    const { container } = await drawTab(
+      codingAgentsControl({ agents: [AGENT], transcripts: follower, readPullRequest: never.read }),
+    );
+    assert.equal(drawnRows(container).length, 0, "the log waits a moment for the read");
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await settled();
+    });
+    assert.ok(drawnRows(container).length > 0, "then draws without it");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/** The find bar opened over a tab holding `held`, its query typed, and a way to push the next page. */
+async function findOver(held: readonly CodingAgentMessage[], query: string) {
+  const follow = following(page(held));
+  const { container, box } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follow.follower }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  layOut(box);
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind(query);
+  await act(settled);
+  return { container, push: follow.push };
+}
+
+test("⌘F counts a call's line in a row the log has not drawn, as its row says it", async () => {
+  const held = messages(0, 400);
+  held[7] = {
+    id: "m-7",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "step-start" }, tool("frobnicate_widget", "call-frob", {}, {})],
+    startedAt: 7_000,
+    finishedAt: 7_500,
+  };
+  const { container } = await findOver(held, "frobnicate_widget");
+  assert.equal(findTally(), "1 of 1");
+  assert.ok(drawnRows(container).includes("m-7"), "the call's row is drawn");
+});
+
+test("⌘F lets go of a match a page took out of a drawn row, and is at one that lands where there was none", async () => {
+  const { push } = await findOver([message(0), message(1, "Ship the lantern.")], "lantern");
+  assert.equal(findTally(), "1 of 1");
+
+  await push(page([message(1, "Ship the lamp.")]));
+  assert.notEqual(findTally(), "1 of 1", "the match that went is not counted");
+
+  await push(page([message(1, "Ship the lantern after all.")]));
+  assert.equal(findTally(), "1 of 1", "the match that landed is the one the find is at");
+  assert.equal([...(CSS.highlights.get("find-current") ?? [])].length, 1, "and it is lit");
+});
+
+test("a worker's sender line brings the call that started it into view in a long transcript", async () => {
+  const held = messages(0, 400);
+  held[7] = {
+    id: "m-7",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      { type: "step-start" },
+      tool("delegate", "call-worker", { task: "Audit the retry paths" }, { status: "accepted" }),
+    ],
+    startedAt: 7_000,
+    finishedAt: 7_500,
+  };
+  const follow = following(page(held));
+  const { container, box } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follow.follower }),
+  );
+  // The log is as tall as its rows, each a row and the step between two, and a later page draws it again over that layout.
+  layOut(box, 400 * (160 + 12));
+  await follow.push(page([message(399)]));
+  assert.ok(!drawnRows(container).includes("m-7"), "the call's row is not drawn");
+  let brought = false;
+  await act(async () => {
+    brought = bringCallIntoView("call-worker");
+    await settled();
+  });
+  assert.equal(brought, true);
+  // The finished turn folds its calls, so its row is what comes into view, as a folded call's always was.
+  assert.ok(drawnRows(container).includes("m-7"), "the call's row is drawn");
 });

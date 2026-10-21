@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
@@ -18,7 +19,7 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
+import { CALL_KIND, CALL_WORDS, callLine } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_VARIANT,
@@ -44,6 +45,8 @@ import {
 } from "@luke/voice/transcript-model";
 import { MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import type { UIMessage } from "ai";
+import { Duration, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
   createContext,
@@ -57,6 +60,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { useAct } from "../act.js";
 import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref.js";
@@ -78,6 +82,7 @@ import { FadingWords } from "../fading-words.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
@@ -303,6 +308,9 @@ export const AGENT_LEAD: TranscriptLead = {
 
 /** The plan's own tab, which a task's name over its plan's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+
+/** How long a tab's log waits at most for the reads that draw around it (its pull request, its calls) before it draws without them. */
+const SURROUNDS_BOUND = Duration.millis(400);
 
 /** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's. */
 const ROW_ESTIMATE_PX = 160;
@@ -1606,17 +1614,44 @@ function drawsMessage(row: PlacedRow, messageId: string): boolean {
   );
 }
 
+/** The transcripts drawn now, each able to bring the row of one of its calls into view; see `bringCallIntoView`. */
+const callBringers = new Set<(callId: string) => boolean>();
+
+/**
+ * Brings the row holding the call `callId` into view in whichever drawn
+ * transcript holds it, as a worker's sender line opens its agent at the call
+ * that started it; false where no drawn transcript holds the call. Note that
+ * a long log draws only the rows near its view, so the call's row may stand
+ * in no DOM until this scrolls to it.
+ */
+export function bringCallIntoView(callId: string): boolean {
+  for (const bring of callBringers) if (bring(callId)) return true;
+  return false;
+}
+
+/** Whether a row draws the call `callId`. */
+function drawsCall(row: PlacedRow, callId: string): boolean {
+  return agentParts(row.message).some(
+    (part) => part.kind === AGENT_PART.TOOL && part.callId === callId,
+  );
+}
+
 /** Each message's words as a find counts them, kept by the message, so a page that leaves it reads them once. */
 const wordsFound = new WeakMap<CodingAgentMessage, string>();
 
-/** The words a message draws that a find counts before its row is drawn: its text and its reasoning. */
+/** The words a message draws that a find counts before its row is drawn: its text, its reasoning, and each call's line. */
 function findWordsOf(message: CodingAgentMessage): string {
   const kept = wordsFound.get(message);
   if (kept !== undefined) return kept;
   const words = agentParts(message)
-    .flatMap((part) =>
-      part.kind === AGENT_PART.TEXT || part.kind === AGENT_PART.REASONING ? [part.text] : [],
-    )
+    .flatMap((part) => {
+      if (part.kind === AGENT_PART.TEXT || part.kind === AGENT_PART.REASONING) return [part.text];
+      if (part.kind !== AGENT_PART.TOOL) return [];
+      // A call's row says its verb and its subject, as `TranscriptTool` draws them.
+      const view = toolCallView(part);
+      const line = callLine(view.kind, view.subject, view.description);
+      return [line.subject === undefined ? line.verb : `${line.verb} ${line.subject}`];
+    })
     .join("\n");
   wordsFound.set(message, words);
   return words;
@@ -1844,6 +1879,18 @@ function AgentTranscriptView({
     handle: rowsHandle,
     findable: rowKeys.length > 0,
   });
+  const latestPlaced = useRef(placing.placed);
+  latestPlaced.current = placing.placed;
+  useEffect(() => {
+    const bring = (callId: string) => {
+      const row = latestPlaced.current.find((placed) => drawsCall(placed, callId));
+      return row !== undefined && rowsHandle.current?.bringIn(row.message.id) === true;
+    };
+    callBringers.add(bring);
+    return () => {
+      callBringers.delete(bring);
+    };
+  }, []);
   useLayoutEffect(() => {
     if (bringIn === undefined) return;
     bringIn.current = (messageId, then) => {
@@ -2417,12 +2464,14 @@ export function AgentTab({
     read: control.readPullRequest,
     known: control.pullRequests.get(agent.id),
   });
-  // Note that the log first draws once what stands around it has landed too: the pull request's dock over the box, and the dividers of calls its lines were said on, so neither moves a line the reader sees.
+  // Note that the log first draws once what stands around it has landed too, or once the tab has stood `SURROUNDS_BOUND`, so a slow read never holds the transcript back: the pull request's dock over the box, and the dividers of calls its lines were said on, so neither moves a line the reader sees.
   const surroundsLanded =
     publishedSettled &&
     (callsSettled || !messages.some((message) => callOfLine(message) !== undefined));
+  const [bound] = useState(() => rendererRuntime.atom(Effect.sleep(SURROUNDS_BOUND)));
+  const boundPassed = AsyncResult.isSuccess(useAtomValue(bound));
   const opened = useRef(false);
-  if (surroundsLanded) opened.current = true;
+  if (surroundsLanded || boundPassed) opened.current = true;
   const holding = messages.length > 0 && !opened.current;
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => appPlatform().openGitHub(url);
