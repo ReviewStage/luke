@@ -927,7 +927,7 @@ test("an @ or a # word that names nothing says so, and Enter there still posts t
   assert.equal(boxWords(box), "");
 });
 
-test("words naming more members than a post tells say under the box that only the first few are told", () => {
+test("a post addressing more members than it tells says under its box that only the first few are told, a reply's thread counted after its mentions", () => {
   const page = mount(
     (chat) => ({
       ...chat,
@@ -958,9 +958,27 @@ test("words naming more members than a post tells say under the box that only th
   typeInComposer(box, "@zoe");
   pressInComposer(box, "Enter");
 
+  const four = crowded();
+
+  // A reply tells its thread's author and repliers after those it mentions.
+  act(() =>
+    page
+      .querySelector<HTMLButtonElement>('.chat-message[data-seq="48"] button[aria-expanded]')
+      ?.click(),
+  );
+  const reply = boxNamed(page, "Reply in thread");
+  const replyCrowded = () => reply.querySelector(".chat-composer-crowded")?.textContent ?? "";
+  typeInComposer(reply, "@maria");
+  pressInComposer(reply, "Enter");
+  const withThread = replyCrowded();
+  typeInComposer(reply, "@zoe");
+  pressInComposer(reply, "Enter");
+
   assert.equal(three, "", "three members are each told");
-  assert.equal(crowded(), "Only the first 3 members mentioned are notified.");
+  assert.equal(four, "Only 3 members are notified of a post.");
   assert.equal(box.querySelectorAll("[data-mention-ref]").length, 4);
+  assert.equal(withThread, "", "one mention and the thread's two agents are each told");
+  assert.equal(replyCrowded(), "Only 3 members are notified of a post.");
 });
 
 /** Chat's box where the editor's bundle could not be loaded, every post it makes written down. */

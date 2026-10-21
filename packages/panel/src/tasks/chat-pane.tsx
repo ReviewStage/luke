@@ -273,7 +273,8 @@ interface MessageContext {
   readonly names: ChatNames;
   readonly now: number;
   /** What a composer posting in the channel offers to name: the members a post there reaches, its task, and the channels. */
-  readonly mentionsIn: (channelId: string) => ChatComposerMentions;
+  /** What a composer posting in the channel offers, a reply's by the members of its thread, its root's author and repliers. */
+  readonly mentionsIn: (channelId: string, thread?: readonly string[]) => ChatComposerMentions;
   /** The words a dictation in the chat is likely to say. */
   readonly keywords: readonly string[];
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
@@ -548,7 +549,10 @@ function ThreadRow({
                 channelId={message.channelId}
                 replyTo={message.seq}
                 label="Reply in thread"
-                mentions={context.mentionsIn(message.channelId)}
+                mentions={context.mentionsIn(message.channelId, [
+                  message.authorId,
+                  ...replies.map((reply) => reply.authorId),
+                ])}
                 keywords={context.keywords}
                 compact
                 onSend={(text, attachments) =>

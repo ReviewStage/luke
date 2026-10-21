@@ -73,7 +73,7 @@ import { useKnownNames } from "./use-known-names.js";
  * requests where it has a task, and dates. A member chosen is written as
  * their chip, the same mention link the other boxes write
  * (`[@Ada Lovelace](…/person/<id>)`), which the service reads to tell them;
- * the box says so where the words name more members than a post tells. A
+ * the box says so where a post would address more members than it tells. A
  * `#` opens the same list on the channels, one chosen written as its word
  * (`#general`). A Luke address pasted whole is written as its chip, as it is in the
  * agent box, the Inbox, and a plan comment (`pastedMentionNode`).
@@ -110,8 +110,8 @@ function carriesFiles(event: React.DragEvent): boolean {
   return event.dataTransfer.types.includes("Files");
 }
 
-/** What the box says where the words name more members than a post tells. */
-const CROWDED = `Only the first ${CHAT_BOUNDS.MAX_STEERS_PER_POST} members mentioned are notified.`;
+/** What the box says where a post of its words would address more members than a post tells. */
+const CROWDED = `Only ${CHAT_BOUNDS.MAX_STEERS_PER_POST} members are notified of a post.`;
 
 /** What an `@` or a `#` in a chat box offers, as the place it stands in hands it (`chat-mention-source.ts`). */
 export interface ChatComposerMentions {
@@ -121,7 +121,7 @@ export interface ChatComposerMentions {
   readonly members: MentionMembers;
   /** The channels a `#` names. */
   readonly channels: readonly MentionableChannel[];
-  /** Whether the words name more members than a post here tells. */
+  /** Whether a post of the words here would address more members than a post tells: those it mentions, then a reply's thread. */
   readonly crowded: (text: string) => boolean;
 }
 
@@ -301,7 +301,7 @@ function NoteLine({
   );
 }
 
-/** A line under the box where the words name more members than a post tells, since those past the first few hear nothing of it. */
+/** A line under the box where a post would address more members than a post tells, since those past the first few hear nothing of it. */
 function CrowdedNote({ shown }: { shown: boolean }): React.JSX.Element {
   return (
     <div className="chat-composer-crowded" role="status">

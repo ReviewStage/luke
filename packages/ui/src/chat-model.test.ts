@@ -26,10 +26,10 @@ import {
   FOR_YOU_REASON,
   firstUnreadSeq,
   forYou,
-  mentionsPastTold,
   messageMarkdown,
   postsIn,
   reachedIn,
+  toldPastBound,
   topicName,
   topicNameProblem,
 } from "./chat-model.js";
@@ -484,7 +484,7 @@ test("a composer offers only the members a post in its channel reaches: its task
   assert.equal(reachedIn(noTask, TASK_CHANNEL), false);
 });
 
-test("words name more members than a post tells only past the bound, each member the post reaches counted once and the reader not at all, and never in a direct message", () => {
+test("a post addresses more members than it tells only past the bound, each member it reaches counted once and the reader not at all, a reply's thread counted after its mentions, and never in a direct message", () => {
   const more = ["Ada", "Bo", "Cy"].map((name) => ({
     id: `member-${name}`,
     kind: MEMBER_KIND.HUMAN,
@@ -507,20 +507,30 @@ test("words name more members than a post tells only past the bound, each member
     place,
   );
   assert.equal(
-    mentionsPastTold(chat, GENERAL, `${three} ${person("user-dean", "Dean")} ${three}`),
+    toldPastBound(chat, GENERAL, `${three} ${person("user-dean", "Dean")} ${three}`),
     false,
     "the reader, and a member named again, add no one",
   );
-  assert.equal(mentionsPastTold(chat, GENERAL, `${three} ${person("user-Cy", "Cy")}`), true);
+  assert.equal(toldPastBound(chat, GENERAL, `${three} ${person("user-Cy", "Cy")}`), true);
   assert.equal(
-    mentionsPastTold(chat, TOPIC, `${three} ${agent}`),
+    toldPastBound(chat, TOPIC, `${three} ${agent}`),
     false,
     "an agent a topic does not reach is told nothing there",
   );
   assert.equal(
-    mentionsPastTold(chat, WITH_MARIA, `${three} ${person("user-Cy", "Cy")}`),
+    toldPastBound(chat, WITH_MARIA, `${three} ${person("user-Cy", "Cy")}`),
     false,
     "a direct message tells its other member alone",
+  );
+  assert.equal(
+    toldPastBound(chat, GENERAL, three, [MARIA, ME]),
+    false,
+    "a thread's author already mentioned, and the reader, add no one",
+  );
+  assert.equal(
+    toldPastBound(chat, GENERAL, three, ["member-Cy"]),
+    true,
+    "a thread's replier past three mentions is not told",
   );
 });
 

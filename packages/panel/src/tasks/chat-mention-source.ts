@@ -2,7 +2,7 @@ import type { ChatAnswer, ChatChannel } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Actor } from "@luke/ui/actor-model";
-import { type ChatNames, chatMentionables, mentionsPastTold } from "@luke/ui/chat-model";
+import { type ChatNames, chatMentionables, toldPastBound } from "@luke/ui/chat-model";
 import { useMemberDirectory } from "../member-directory.js";
 import type { ChatComposerMentions } from "./chat-composer.js";
 import type { MentionablePullRequest, MentionMembers, MentionSource } from "./mention-picker.js";
@@ -90,9 +90,10 @@ function sourceIn(
 }
 
 /**
- * What a chat box posting in a channel offers, by the channel's id: the
- * members a mention there tells, the channel's task, the channels, and
- * whether words name more members than a post there tells.
+ * What a chat box posting in a channel offers, by the channel's id and, for
+ * a reply, the members of its thread: the members a mention there tells,
+ * the channel's task, the channels, and whether a post of the words would
+ * address more members than a post tells.
  */
 export function useChatMentions({
   chat,
@@ -109,10 +110,10 @@ export function useChatMentions({
   tasks: readonly TaskSummary[];
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
   actorOf: (memberId: string) => Actor;
-}): (channelId: string) => ChatComposerMentions {
+}): (channelId: string, thread?: readonly string[]) => ChatComposerMentions {
   const page = useTaskMentions();
   const { members: read } = useMemberDirectory();
-  return (channelId) => {
+  return (channelId, thread) => {
     const channel = chat.channels.find((each) => each.id === channelId);
     const offered = chatMentionables(chat, names, channel);
     const members: MentionMembers =
@@ -139,7 +140,7 @@ export function useChatMentions({
       source: sourceIn(channel, place, page, tasks, names),
       members,
       channels: offered.channels,
-      crowded: (text) => channel !== undefined && mentionsPastTold(chat, channel, text),
+      crowded: (text) => channel !== undefined && toldPastBound(chat, channel, text, thread),
     };
   };
 }

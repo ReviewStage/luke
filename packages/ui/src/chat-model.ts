@@ -581,21 +581,26 @@ export function chatMentionables(
 }
 
 /**
- * Whether the words name more members than a post in the channel tells:
- * each member a post there reaches counted once, the reader not at all. A
- * post tells the first `MAX_STEERS_PER_POST` it mentions and no more
- * (`chat-notify.ts`); a direct message tells its other member alone,
- * whatever it mentions.
+ * Whether a post of the words in the channel would address more members
+ * than a post tells: each member a post there reaches that the words
+ * mention, then, for a reply, the thread's root author and its repliers,
+ * each counted once and the reader not at all. A post tells the first
+ * `MAX_STEERS_PER_POST` of them and no more (`chat-notify.ts`); a direct
+ * message tells its other member alone, whatever it mentions.
  */
-export function mentionsPastTold(chat: ChatAnswer, channel: ChatChannel, text: string): boolean {
+export function toldPastBound(
+  chat: ChatAnswer,
+  channel: ChatChannel,
+  text: string,
+  thread: readonly string[] = [],
+): boolean {
   if (channel.kind === CHANNEL_KIND.DM) return false;
   const reached = toldIn(chat, channel);
-  const named = new Set(
-    chatMentionsIn(text).members.flatMap(({ mention }) =>
-      reached.filter((member) => namesMember(mention, member)).map((member) => member.id),
-    ),
+  const named = chatMentionsIn(text).members.flatMap(({ mention }) =>
+    reached.filter((member) => namesMember(mention, member)).map((member) => member.id),
   );
-  return named.size > CHAT_BOUNDS.MAX_STEERS_PER_POST;
+  const addressed = new Set([...named, ...thread].filter((id) => id !== chat.self));
+  return addressed.size > CHAT_BOUNDS.MAX_STEERS_PER_POST;
 }
 
 /** What the wire refuses in a dictation's word: a line break, or an angle bracket. */
