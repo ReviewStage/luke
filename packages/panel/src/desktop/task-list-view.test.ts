@@ -421,7 +421,7 @@ test("a filter that leaves nothing says so, and Show all lists everyone's again"
   choose(sidebar, "Created by", "Me");
   assert.equal(taskRows(sidebar).length, 0);
   const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
-    each.textContent?.startsWith("None of your tasks here."),
+    each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
   assert.ok(showAll, "the note offers Show all");
@@ -444,7 +444,7 @@ test("with every task pinned, a filter still says it leaves nothing under Tasks,
   choose(sidebar, "Created by", "Charles Pan");
   const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
   assert.ok(
-    notes.some((note) => note?.startsWith("None of their tasks here.")),
+    notes.some((note) => note?.startsWith("No tasks match this view.")),
     "the empty filter says so",
   );
 });
@@ -1051,7 +1051,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
   assert.equal(chipWords(sidebar), "Assigned to Charles Pan");
   assert.equal(taskRows(sidebar).length, 0);
   const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
-    each.textContent?.startsWith("Nothing assigned to them here."),
+    each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
   assert.ok(showAll, "the note offers Show all");

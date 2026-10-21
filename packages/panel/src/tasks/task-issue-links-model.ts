@@ -11,7 +11,9 @@ import { ISSUE_STATE, type IssueState } from "@luke/features/github-repositories
 import {
   TASK_ISSUE_LINK_REFUSAL,
   TASK_ISSUE_PROVIDER,
+  TASK_ISSUE_RELATION,
   type TaskIssueLinkRefusal,
+  type TaskIssueRelation,
   type TaskIssueStanding,
 } from "@luke/features/task-issue-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
@@ -57,3 +59,9 @@ export function linkNoteOf(
 export function linksFull(count: number): boolean {
   return count >= TASK_BOUNDS.MAX_ISSUES;
 }
+
+/** What each keyword does: under its name in a chip's menu, and as a new task's chip's tooltip. */
+export const RELATION_DETAIL = {
+  [TASK_ISSUE_RELATION.CLOSES]: "Merging closes the issue",
+  [TASK_ISSUE_RELATION.PART_OF]: "Names the issue, leaves it open",
+} as const satisfies Record<TaskIssueRelation, string>;

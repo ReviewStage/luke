@@ -141,7 +141,7 @@ const CHAPTERS_WORDS = {
   READING: "Reading chapters",
   FAILED: "The chapters could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
-  NONE: "Split this pull request into chapters to review in order, each with what to look at.",
+  NONE: "No chapters yet.",
   GENERATE: "Generate chapters",
   UNAVAILABLE: "Chapters aren't available on this deployment.",
   GENERATING: "Generating chapters",
@@ -152,8 +152,7 @@ const CHAPTERS_WORDS = {
   REGENERATE_CHAPTERS: "Regenerate chapters",
   NOTHING: "This pull request has nothing to chapter.",
   NO_FILES: "None of this chapter's changes are in the pull request now.",
-  STALE_DIFF:
-    "These chapters were made before the newest commits. Regenerate to see their changes.",
+  STALE_DIFF: "Regenerate the chapters to see this chapter's changes.",
   /** Which model told the chapters, as quiet meta text above them. */
   madeBy: (model: string) => `Made by ${model}`,
   STALE: "New commits since these chapters",

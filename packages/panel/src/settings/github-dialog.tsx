@@ -45,8 +45,8 @@ import { useOpenLink } from "../tasks/use-open-link.js";
 const NO_CAPTURE = "ph-no-capture";
 
 const LINE = {
-  SAVE_FAILED: "Couldn't save the token",
-  REMOVE_FAILED: "Couldn't remove the token.",
+  SAVE_FAILED: "The token could not be saved. Try again.",
+  REMOVE_FAILED: "The token could not be removed. Try again.",
 } as const;
 
 /** Why a save kept nothing, as a short label. */
@@ -65,7 +65,7 @@ function rejectionLabel(rejection: GitHubTokenRejection): string {
     case GITHUB_TOKEN_REJECTION.UNREACHABLE:
       return "Couldn't reach GitHub";
     case GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES:
-      return "Too many tries";
+      return "Too many tokens tried in the last hour";
   }
 }
 
