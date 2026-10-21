@@ -300,10 +300,12 @@ function HistoryButton({
       }}
       onTouchEnd={hold.touchEnd}
       onClickCapture={(event) => {
-        // Note that the release of a press that opened the list is no step as well.
         if (!hold.held.current) return;
         hold.held.current = false;
-        event.stopPropagation();
+        // Note that the release of a press that opened the list is no step as well, while a
+        // click in the list, drawn in a portal whose clicks still pass through here, is its own.
+        const target = event.target;
+        if (target instanceof Node && button.current?.contains(target)) event.stopPropagation();
       }}
     >
       <Tooltip label={label} command={command}>

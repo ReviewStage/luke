@@ -66,6 +66,7 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
+import { SHELL_ROOM } from "./shell-room.js";
 import { useStageRoom } from "./stage-room.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatOn } from "./tasks/chat-gate.js";
@@ -588,7 +589,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
-    title: stepTitle(tab, tasks),
+    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,

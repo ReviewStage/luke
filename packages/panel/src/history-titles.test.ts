@@ -68,3 +68,21 @@ test("the Inbox's step names the task its item is of, and Settings and the home 
   assert.deepEqual(stepTitle(PANEL_TAB.SETTINGS, base), { label: "Settings" });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Home" });
 });
+
+test("an Inbox showing one column names no item while its list stands, as its step holds none", () => {
+  const chosen: InboxChoice = { itemId: "item-1", taskId: TASK.id };
+  const base = tasksControl({ tasks: [TASK] });
+  const listed = tasksControl({
+    tasks: [TASK],
+    inboxView: { ...base.inboxView, open: true, chosen, single: true, listed: true },
+  });
+  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, listed), { label: "Inbox", detail: undefined });
+  const narrowListed = tasksControl({
+    tasks: [TASK],
+    inboxView: { ...base.inboxView, open: true, chosen, listed: true },
+  });
+  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, narrowListed, true), {
+    label: "Inbox",
+    detail: undefined,
+  });
+});

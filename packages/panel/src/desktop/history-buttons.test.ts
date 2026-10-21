@@ -148,3 +148,27 @@ test("a step named nothing as the window stood on it is listed all the same", ()
   });
   assert.deepEqual(menuWords(), ["Earlier page"]);
 });
+
+test("a press held into the list and let go there leaves the list's first click its own", () => {
+  vi.useFakeTimers();
+  const window = mount(BACK);
+  act(() => {
+    window.back.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        pointerType: "mouse",
+        isPrimary: true,
+      }),
+    );
+  });
+  act(() => vi.advanceTimersByTime(1000));
+  // Let go over the list rather than over Back, which clicks nothing.
+  act(() => {
+    document.body.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  });
+  const inbox = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].at(-1);
+  assert.ok(inbox);
+  act(() => inbox.click());
+  assert.deepEqual(window.went, [0], "the first click in the list goes to its step");
+});
