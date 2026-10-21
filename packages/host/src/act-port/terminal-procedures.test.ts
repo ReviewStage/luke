@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
 import { afterEach, it } from "@effect/vitest";
 import {
   TERMINAL_CONNECTION,
@@ -10,35 +9,36 @@ import {
   type TerminalPortTicket,
 } from "@luke/features/terminal-acts";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import type { ActSender } from "@luke/host/act-port";
-import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import { ACT_KIND } from "@luke/host/acts";
-import type { HostOperator } from "@luke/host/host-operator";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Deferred, Effect, Fiber } from "effect";
-import type { WebContents } from "electron";
+import { ACT_KIND } from "../acts.js";
+import type { HostOperator } from "../host-operator.js";
+import type { ActSender } from "./base.js";
 import {
-  type MainTerminalPort,
+  type HostTerminalPort,
   type TerminalActsDependencies,
   terminalProcedures,
-  whenPageGone,
-} from "./terminal-acts";
+} from "./terminal-procedures.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 /**
- * The Terminal tab's acts as main carries them, over a host and ports that
- * answer from a script: each call answers what the host said, or the kind's
- * own refusal where it had nothing; an attach posts a port to the asking
- * panel alone, and what the host hears of that connection reaches that port
- * and no other; what the panel sends on it reaches the host by connection;
- * a second attach of the same shell, a detach, and the page's end each
- * close the port and let the connection go, a reload being the page's end;
- * an attach the host refused after a newer one leaves the newer standing;
- * and only a panel is answered.
- * Synthetic ids and bytes throughout.
+ * The Terminal tab's acts as a platform carries them, over a host and ports
+ * that answer from a script: each call answers what the host said, or the
+ * kind's own refusal where it had nothing; an attach posts a port to the
+ * asking panel alone, and what the host hears of that connection reaches
+ * that port and no other; what the panel sends on it reaches the host by
+ * connection; a second attach of the same shell, a detach, and the page's
+ * end each close the port and let the connection go; an attach the host
+ * refused after a newer one leaves the newer standing; and only a panel is
+ * answered. A window is an inert object of its own, as the platform's handle
+ * on one is to these procedures. Synthetic ids and bytes throughout.
  */
 
+/** A platform's handle on a window, which the procedures read by identity alone. */
+type Window = { readonly window: number };
+
 /** Every act port a fixture opened, closed once its test is done. */
-const ports: TestActPort<WebContents>[] = [];
+const ports: TestActPort<Window>[] = [];
 
 afterEach(() => {
   for (const port of ports.splice(0)) port.close();
@@ -49,9 +49,11 @@ const SHELL_ID = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const SHELL = { id: SHELL_ID, title: "zsh", command: "zsh", cwd: "/workspace", running: false };
 const ATTACH = { agentId: AGENT_ID, terminalId: SHELL_ID, cols: 120, rows: 32 };
 
-// SAFETY: the rows read a sender by identity alone; one inert object is one window.
-const panelOf = (): ActSender<WebContents> => ({
-  sender: {} as WebContents,
+let windows = 0;
+
+/** A panel of a window of its own. */
+const panelOf = (): ActSender<Window> => ({
+  sender: { window: ++windows },
   panel: true,
   voice: false,
   call: false,
@@ -59,9 +61,9 @@ const panelOf = (): ActSender<WebContents> => ({
 
 type Listener<Event> = (event: Event) => void;
 
-/** One port main opened, as the test watches it: where it went, what main posted on it, and whether it closed. */
+/** One port the host opened, as the test watches it: where it went, what the host posted on it, and whether it closed. */
 interface ScriptedPort {
-  readonly sender: WebContents;
+  readonly sender: Window;
   readonly ticket: TerminalPortTicket;
   readonly posted: TerminalPortOutbound[];
   closed: boolean;
@@ -76,12 +78,12 @@ function fixture(
 ) {
   const asked: string[] = [];
   const opened: ScriptedPort[] = [];
-  const gone = new Map<WebContents, () => void>();
-  const pending: Effect.Effect<unknown>[] = [];
+  const gone = new Map<Window, () => void>();
+  const pending: Effect.Effect<void>[] = [];
   let outputListener: Listener<{ connectionId: string; data: Uint8Array }> | undefined;
   let stateListener: Parameters<HostOperator["onTerminalState"]>[0] | undefined;
   let ids = 0;
-  const host: TerminalActsDependencies["host"] = {
+  const host: TerminalActsDependencies<Window>["host"] = {
     terminalList: ({ agentId }) =>
       Effect.sync(() => {
         asked.push(`list:${agentId}`);
@@ -119,10 +121,10 @@ function fixture(
     },
   };
   const actPort = testActPort(
-    terminalProcedures({
+    terminalProcedures<Window>({
       host,
       ports: {
-        open: (sender, ticket): MainTerminalPort => {
+        open: (sender, ticket): HostTerminalPort => {
           let heard: ((message: WireBoundaryInput) => void) | undefined;
           const port: ScriptedPort = {
             sender,
@@ -145,10 +147,7 @@ function fixture(
         whenGone: (sender, then) => void gone.set(sender, then),
       },
       createId: () => `connection-${++ids}`,
-      run: <A>(effect: Effect.Effect<A>) => {
-        pending.push(effect);
-        return new Promise<A>(() => undefined);
-      },
+      fork: (effect) => void pending.push(effect),
     }),
   );
   ports.push(actPort);
@@ -164,7 +163,7 @@ function fixture(
         stateListener?.({ connectionId, state, ...(code === undefined ? undefined : { code }) }),
     },
     /** The page behind a panel going away. */
-    pageGone: (sender: WebContents) => gone.get(sender)?.(),
+    pageGone: (sender: Window) => gone.get(sender)?.(),
     /** What the ports' callbacks handed to the runtime, run now. */
     drain: Effect.suspend(() => Effect.all(pending.splice(0), { discard: true })),
   };
@@ -219,7 +218,7 @@ it.effect(
 it.effect("only a panel is answered", () =>
   Effect.gen(function* () {
     const { actPort, asked, opened } = fixture();
-    const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
+    const voice: ActSender<Window> = { ...panelOf(), panel: false, voice: true };
 
     const listed = yield* actPort.perform(
       { kind: ACT_KIND.TERMINAL_LIST, payload: { agentId: AGENT_ID } },
@@ -361,25 +360,6 @@ it.effect(
       assert.ok(asked.includes("disconnect:connection-2"));
     }),
 );
-
-it("a page is gone when its contents are destroyed, its renderer dies, or it navigates to a new document", () => {
-  const ends: string[] = [];
-  const watched = (name: string) => {
-    const contents = new EventEmitter();
-    whenPageGone(contents, () => ends.push(name));
-    return contents;
-  };
-
-  const reloaded = watched("reloaded");
-  reloaded.emit("did-start-navigation", { isMainFrame: false, isSameDocument: false });
-  reloaded.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
-  reloaded.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
-  reloaded.emit("destroyed");
-  watched("crashed").emit("render-process-gone", {}, { reason: "crashed" });
-  watched("closed").emit("destroyed");
-
-  assert.deepEqual(ends, ["reloaded", "crashed", "closed"], "each page ends once");
-});
 
 it.effect(
   "one shell id under two agents is two shells: a detach of one leaves the other's port",
