@@ -1514,9 +1514,9 @@ export function useTasksTab(input: {
   const named = useMemo<NamedAgents | undefined>(() => {
     if (!rowListed) return undefined;
     // Note that a row names agents only for a task with one, so a row with none names a task with none.
-    if (rowAgents === undefined) return { ids: [], total: 0, working: 0 };
-    const { agents: lines, total, working } = rowAgents;
-    return { ids: lines.map((line) => line.id), total, working };
+    if (rowAgents === undefined) return { ids: [], total: 0 };
+    const { agents: lines, total } = rowAgents;
+    return { ids: lines.map((line) => line.id), total };
   }, [rowListed, rowAgents]);
   const mainTabs = useMainTabs(
     fixture !== undefined,

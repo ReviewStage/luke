@@ -1066,3 +1066,27 @@ test("a draft's Call starts an empty draft's agent blank under a key of its own,
   assert.notEqual(first?.idempotencyKey, empty, "under a key of the press's own");
   assert.deepEqual(second, { taskId: TASK, idempotencyKey: worded, prompt, call: true, ...choice });
 });
+
+test("what an agent's transcript said of it before its task's agents were read stands over the list's answer, which was read as it stood before", async () => {
+  let answer: (value: WireBoundaryInput) => void = () => undefined;
+  const tab = mount({ taskId: TASK, repository: null });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    new Promise<WireBoundaryInput>((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await tab.mount();
+  assert.equal(tab.control().agents, undefined, "the agents are still being read");
+
+  // The tab follows its agent from the id, so its page lands before the list does.
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
+  answer({ agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }] });
+  await settle();
+
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
+    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+  );
+});

@@ -132,6 +132,7 @@ import {
   Duration,
   Effect,
   Exit,
+  Fiber,
   FiberHandle,
   FiberMap,
   Option,
@@ -981,13 +982,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Reads what the active task's page draws, its document, board, code, and
-   * pages, all at once, and tells the window them in one view, so the page
-   * lands whole rather than a part at a time, each part reflowing what the
-   * one before laid out. A copy of the same task already held stays drawn
-   * while the reads are out and through a document read that failed, so a
-   * save redraws in place; a failed board, code, or pages read keeps what is
-   * held of it, as their own reads do. The document and the code say they
-   * are reading only where nothing of them is held, which a switch has
+   * pages, all at once, and tells the window the document with every other
+   * part already answered in one view, so the page lands whole rather than a
+   * part at a time, each reflowing what the one before laid out. A part that
+   * answers after the document never holds it back: those still out land
+   * together, in one view more. A copy of the same task already held stays
+   * drawn while the reads are out and through a document read that failed,
+   * so a save redraws in place; a failed board, code, or pages read keeps
+   * what is held of it, as their own reads do. The document and the code say
+   * they are reading only where nothing of them is held, which a switch has
    * already told (`TASKS_OPEN`).
    */
   function readOpened(taskId: string) {
@@ -997,25 +1000,50 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         ...(held === undefined ? { document: { status: TASKS_READ.READING } } : undefined),
         ...(view.codeStatus === TASKS_READ.READY ? undefined : { codeStatus: TASKS_READ.READING }),
       });
-      const [opened, board, stored, pages] = yield* Effect.all(
-        [
-          served(client.open(taskId)),
-          served(client.readBoard(taskId)),
-          served(client.readCode(taskId)),
-          served(client.readPages(taskId)),
-        ],
-        { concurrency: "unbounded" },
-      );
+      const parts = [
+        yield* openedPart(served(client.readBoard(taskId)), (was, board) =>
+          board === undefined ? was : { ...was, board },
+        ),
+        yield* openedPart(served(client.readCode(taskId)), withCodeRead),
+        yield* openedPart(served(client.readPages(taskId)), withPagesRead),
+      ];
+      // Note that the document is read beside the parts rather than ahead of them, so a part as quick as it rides along.
+      const opened = yield* Fiber.join(yield* Effect.forkChild(served(client.open(taskId))));
       // Another task opened while these reads were out: their answers are not the panel's any more.
       if (view.activeTaskId !== taskId) return;
-      const read: TasksView = {
-        ...view,
-        document: documentAfter(opened, held),
-        ...(board === undefined ? undefined : { board }),
-      };
-      view = withPagesRead(withCodeRead(read, stored), pages);
+      let read: TasksView = { ...view, document: documentAfter(opened, held) };
+      const late: (typeof parts)[number]["late"][] = [];
+      for (const part of parts) {
+        const laid = part.early(read);
+        if (laid === undefined) late.push(part.late);
+        else read = laid;
+      }
+      view = read;
+      publish();
+      if (late.length === 0) return;
+      const lays = yield* Effect.all(late, { concurrency: "unbounded" });
+      if (view.activeTaskId !== taskId) return;
+      view = lays.reduce((was, lay) => lay(was), view);
       publish();
     });
+  }
+
+  /**
+   * One part of an open's reads, started at once beside the document's: laid
+   * over the view `early` where it has already answered, as the document
+   * lands, else answered `late`, as what lays it over the view then.
+   */
+  function openedPart<A, E, R>(
+    read: Effect.Effect<A, E, R>,
+    lay: (was: TasksView, answer: A) => TasksView,
+  ) {
+    return Effect.map(Effect.forkChild(read), (fiber) => ({
+      early: (was: TasksView): TasksView | undefined => {
+        const exit = fiber.pollUnsafe();
+        return exit !== undefined && Exit.isSuccess(exit) ? lay(was, exit.value) : undefined;
+      },
+      late: Effect.map(Fiber.join(fiber), (answer) => (was: TasksView) => lay(was, answer)),
+    }));
   }
 
   /** Reads the active task's board; a failed read keeps the board drawn. */
