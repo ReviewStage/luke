@@ -1,7 +1,7 @@
 import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
-import { AgentPlaceholderIcon, CallIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
+import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import {
@@ -43,8 +43,6 @@ export const TAB_KIND = {
   PANEL: "panel",
   /** A task, as a row naming it does. */
   PLAN: "plan",
-  /** The "+" row that starts a blank agent with a call into it. */
-  VOICE_CHAT: "voice-chat",
   INBOX: "inbox",
   /** The plan's own channel of the workspace's chat. */
   CHAT: "chat",
@@ -84,7 +82,6 @@ export type TabSubject =
       readonly plan?: PlanStanding | undefined;
     }
   | ({ readonly kind: typeof TAB_KIND.PLAN } & PlanStanding)
-  | { readonly kind: typeof TAB_KIND.VOICE_CHAT }
   | { readonly kind: typeof TAB_KIND.INBOX }
   | { readonly kind: typeof TAB_KIND.CHAT }
   | { readonly kind: typeof TAB_KIND.DRAFT }
@@ -232,8 +229,6 @@ export function tabLook(subject: TabSubject): KindLook {
     }
     case TAB_KIND.PLAN:
       return { icon: <PlanGlyph status={subject.status} />, label: subject.name };
-    case TAB_KIND.VOICE_CHAT:
-      return { icon: <CallIcon />, label: TAB_WORDS.NEW_VOICE_CHAT };
     case TAB_KIND.INBOX:
       return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
     case TAB_KIND.CHAT:

@@ -133,7 +133,7 @@ export function codingAgentsControl(
     onUnarchive: undefined,
     continueAgent: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
-    startVoiceChat: undefined,
+    startCall: undefined,
     onStop: () => Promise.resolve(),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -218,7 +218,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
     calls: undefined,
-    onNewVoiceChat: undefined,
     live: false,
     mainTabs: {
       tabs: [],

@@ -582,8 +582,6 @@ export interface TasksControl {
   edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
   /** What the open task's agents' tabs take calls through; none where the window has no voice, as the web's has none. */
   calls: AgentCallDoors | undefined;
-  /** Starts a new voice chat on the open task: an agent started blank, its tab opened, and a call into it opened; none where the window has no voice, or the task is archived. */
-  onNewVoiceChat: (() => void) | undefined;
   /** Whether a call into one of the open task's agents is in progress, so the plan may still be written. */
   live: boolean;
   /** The task's column's tabs: its agents' and its draft's, and its Chat, and which is shown. */
@@ -1499,6 +1497,18 @@ export function useTasksTab(input: {
     (agents.heldIds?.length ?? 0) > 0 ||
     input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId);
   mainRef.current = mainTabs;
+  // A task whose column shows no tab once its agents are read opens a new
+  // agent's draft, which the column then shows (`use-main-tabs.ts`), so a
+  // task with no agent, or whose last tab closed, lands in a composer. Note
+  // that nothing reaches the service until the draft is sent or called.
+  const openDraftNow = useRef(agents.onNewDraft);
+  openDraftNow.current = agents.onNewDraft;
+  const draftWanted =
+    mainTabs.tab === undefined && agents.agentIds !== undefined && agents.onUnarchive === undefined;
+  const draftTask = viewed.activeTaskId;
+  useEffect(() => {
+    if (draftWanted && draftTask !== undefined) openDraftNow.current();
+  }, [draftWanted, draftTask]);
   // A page's tab is held to the pages agents wrote for the task.
   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
@@ -2271,16 +2281,6 @@ export function useTasksTab(input: {
     () => ({ onPress: (agentId) => pressCallNow.current(agentId) }),
     [],
   );
-  // A new voice chat: an agent started blank, its tab opened as a Start's is, and a call into it opened.
-  const startVoiceChatNow = useRef(agents.startVoiceChat);
-  startVoiceChatNow.current = agents.startVoiceChat;
-  const newVoiceChat = useCallback(() => {
-    const start = startVoiceChatNow.current;
-    if (start === undefined) return;
-    void start().then((agentId) => {
-      if (agentId !== undefined) pressCallNow.current(agentId);
-    });
-  }, []);
 
   // Code shown on a call lands as a card the diff bundle draws, so the bundle loads as the call stands.
   usePrefetchDiffBundle(live);
@@ -3057,7 +3057,6 @@ export function useTasksTab(input: {
     edit,
     // An agent's tab takes calls where the window has a voice to call with; the web's has none.
     calls: voiceOffered ? callDoors : undefined,
-    onNewVoiceChat: voiceOffered && agents.startVoiceChat !== undefined ? newVoiceChat : undefined,
     live,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },

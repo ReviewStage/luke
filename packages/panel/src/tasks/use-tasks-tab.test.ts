@@ -654,7 +654,9 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
   ]);
-  assert.deepEqual(column().tabs, []);
+  // The column with no tab left opens a new agent's draft in their place.
+  const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
+  assert.deepEqual(column().tabs, [draft]);
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panel().strip, [
@@ -671,7 +673,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   );
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, draft]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -680,7 +682,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("a task opens on its plan until an agent's tab is chosen, keeps that tab across a launch, and is back on its plan once its last tab closes", async () => {
+test("a task none of whose tabs was viewed shows its strip's last, keeps the tab chosen across a launch, and opens a new agent's draft once its last tab closes", async () => {
   const listed = {
     [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
   };
@@ -689,7 +691,8 @@ test("a task opens on its plan until an agent's tab is chosen, keeps that tab ac
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
   assert.deepEqual(column().tabs, [agent]);
-  assert.equal(column().tab, undefined, "a task never shown on an agent shows its plan");
+  assert.deepEqual(column().tab, agent, "a task never shown on an agent shows its last tab");
+  assert.equal(tab.control().agents.draft, undefined, "and opens no draft beside it");
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
 
   act(() => column().onChoose(agent));
@@ -701,8 +704,10 @@ test("a task opens on its plan until an agent's tab is chosen, keeps that tab ac
   assert.deepEqual(again().tab, agent, "a launch opens the task on the agent it last showed");
 
   act(() => again().onClose(agent));
-  assert.deepEqual(again().tabs, []);
-  assert.equal(again().tab, undefined, "a column with no tab left is back on the plan");
+  await settle();
+  const draft = { draft: launched.control().agents.draft?.id ?? assert.fail("no draft opened") };
+  assert.deepEqual(again().tabs, [draft]);
+  assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
 });
 
 test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
@@ -732,7 +737,7 @@ test("a column kept while the plan, the Inbox, and the Call stood in it reads wi
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 });
 
-test("a column whose last agent is archived is back on the plan, and a draft opened since stands alone", async () => {
+test("a column whose last agent is archived shows a new agent's draft standing alone", async () => {
   let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
@@ -752,11 +757,9 @@ test("a column whose last agent is archived is back on the plan, and a draft ope
 
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
-  assert.deepEqual(column().tabs, []);
-  assert.equal(column().tab, undefined);
-  const draft = { draft: tab.control().agents.onNewDraft() };
-  act(() => column().onChoose(draft));
+  const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
   assert.deepEqual(column().tabs, [draft]);
+  assert.deepEqual(column().tab, draft);
 });
 
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
@@ -3037,7 +3040,7 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   assert.equal(refreshes(named) - namedBefore, 0);
 });
 
-/** An agent New voice chat started blank on the open task. */
+/** An agent of the open task's another's call speaks into. */
 const VOICE_CHAT_AGENT: CodingAgentSummary = {
   ...RUNNING_AGENT,
   id: "2f4a6c8e-0b1d-4e3f-a5c7-9e1b3d5f7a90",
@@ -3049,41 +3052,37 @@ function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[]
   return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);
 }
 
-test("New voice chat starts an agent blank on the open task, opens its tab, and calls it; a platform with no voice offers none", async () => {
-  handCapabilities(DESKTOP_CAPABILITIES);
-  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
+test("a task with no agent opens on a new agent's draft once its agents are read, asking the service nothing, and closing it opens a fresh one", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
-      [ACT_KIND.CODING_AGENTS_START]: () => {
-        listed = [RUNNING_AGENT, VOICE_CHAT_AGENT];
-        return Promise.resolve({ agent: VOICE_CHAT_AGENT });
-      },
-      [ACT_KIND.TASKS_TALK]: () => Promise.resolve(undefined),
-    },
-    AtomRegistryModule.make(),
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
   );
   await vi.waitFor(async () => {
     await settle();
-    assert.ok(tab.control().onNewVoiceChat, "a desktop offers New voice chat");
+    assert.ok(tab.control().agents.draft, "the task holds a draft");
   });
-  await act(async () => tab.control().onNewVoiceChat?.());
+  const draft = tab.control().agents.draft;
+  assert.ok(draft);
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "and its column shows it");
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), [], "nothing is started");
+
+  act(() => {
+    tab.control().mainTabs.onClose({ draft: draft.id });
+    tab.control().agents.onDiscardDraft(draft.id);
+  });
   await settle();
+  const fresh = tab.control().agents.draft;
+  assert.ok(fresh);
+  assert.notEqual(fresh.id, draft.id, "the draft closed is let go");
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: fresh.id });
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), []);
+});
 
-  const [start] = payloadsOf(tab, ACT_KIND.CODING_AGENTS_START);
-  assert.ok(start !== null && typeof start === "object");
-  assert.equal(Reflect.get(start, "blank"), true, "the agent starts blank");
-  assert.equal(Reflect.get(start, "taskId"), TASK.id);
-  assert.equal(Reflect.get(start, "prompt"), undefined, "and is handed no words");
-  assert.deepEqual(tab.control().mainTabs.tab, { agent: VOICE_CHAT_AGENT.id });
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: VOICE_CHAT_AGENT.id }]);
-
+test("a platform with no voice takes no calls", async () => {
   handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.VOICE));
   const web = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
   await settle();
-  assert.equal(web.control().onNewVoiceChat, undefined);
-  assert.equal(web.control().calls, undefined, "and its agents' tabs take no calls");
+  assert.equal(web.control().calls, undefined);
 });
 
 test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {

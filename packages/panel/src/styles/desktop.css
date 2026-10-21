@@ -2371,18 +2371,6 @@ ul.actor-stack {
   }
 }
 
-/* A task's column with no agent tab to show: the two ways to start one,
-   side by side in the middle of the room the plan's side panel leaves. */
-.desktop-no-agent {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-page-inset);
-}
-
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
    filling the window) they float at the window's foot over the work column. */
 .desktop-shell > .voice-caption {

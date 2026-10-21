@@ -920,6 +920,33 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
+      "a Start a Call opens a call into runs on eve with its words as the prompt, for an account the routing would otherwise send to Claude Code",
+      () =>
+        Effect.gen(function* () {
+          const { owner, workspaceId } = yield* openStarter(true);
+          const { eve, claudeCode, native } = runtimes();
+          const started = yield* startCodingAgent(routedSessions(eve.sessions, owner), owner, {
+            ...startIn(workspaceId, "anthropic/claude-opus-5.5"),
+            call: true,
+          }).pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                githubReaching(INSTALLATIONS).layer,
+                CATALOG,
+                environment([owner]),
+                native,
+              ),
+            ),
+          );
+
+          const routing = Option.getOrThrow(yield* readCodingAgentRouting(owner, started.agent.id));
+          assert.deepEqual([routing.runtime, routing.payer], ["eve", null]);
+          assert.deepEqual([heard(eve), heard(claudeCode)], [["open"], []]);
+          assert.equal(started.agent.prompt, "Fix the flaky test.");
+        }),
+    );
+
+    it.effect(
       "a cohort account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a fast GPT model, a sign-in OpenAI signed out, none, an account outside the cohort, or a function with no harness starts on eve as today, and a Claude agent is untouched",
       () =>
         Effect.gen(function* () {

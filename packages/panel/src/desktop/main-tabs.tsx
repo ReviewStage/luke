@@ -68,14 +68,15 @@ import { TabStrip } from "./tab-strip.js";
  * the agent goes on as it was, and the "+" opens it again. A tab an agent
  * ended on while no one was looking at it reads in semibold until shown. The
  * draft's tab, named New agent as the "+" row that opens it is, stands after
- * the agents until its first message starts the agent, and closing it lets
- * the draft go. Every tab wears its kind's look (`tab-look.tsx`), and an
+ * the agents until its first message, or its Call, starts the agent, and
+ * closing it lets the draft go. A task with no other tab standing shows a
+ * draft's (`use-main-tabs.ts`), so a voice chat or a typed one is the
+ * developer's to start from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
  * agent's or the draft's, while its box holds words and another tab is
  * chosen, the Draft pencil at its end (`draft-mark.tsx`).
  *
- * The "+" after the last tab drops the shared searchable menu: New voice
- * chat, where the window has a voice, which starts an agent blank with a
- * call into it; New agent, which opens a draft agent's tab, or chooses the
+ * The "+" after the last tab drops the shared searchable menu: New agent,
+ * which opens a draft agent's tab, or chooses the
  * task's draft where it has one, unavailable with Start's own reason while
  * Start could not run; the task's Chat while there is one; and each of the
  * task's agents in the order started, picking one choosing its tab or
@@ -88,9 +89,6 @@ export const AGENTS_SECTION = "Agents";
 
 /** The "+" menu's row that opens a draft agent, which no agent's id spells. */
 const NEW_AGENT_ROW = "new-coding-agent";
-
-/** The "+" menu's row that starts a new voice chat, which no agent's id spells. */
-const NEW_VOICE_CHAT_ROW = "new-voice-chat";
 
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
@@ -329,31 +327,14 @@ export function chatEntries(available: boolean, onPick: () => void): AddEntry[] 
 }
 
 /**
- * The "+" menu's rows: New voice chat, where the window has a voice, New
- * agent, unavailable with Start's own reason while Start could not run, both
- * left out on an archived task, each by itself under no heading; then each
- * of its agents under Agents (`agentEntries`). The task's Chat stands in the
- * side panel, whose own "+" offers it.
+ * The "+" menu's rows: New agent, unavailable with Start's own reason while
+ * Start could not run, left out on an archived task, by itself under no
+ * heading; then each of its agents under Agents (`agentEntries`). A voice
+ * chat is started from a draft's composer, its Call. The task's Chat
+ * stands in the side panel, whose own "+" offers it.
  */
-function addEntries(
-  main: MainTabsControl,
-  agents: CodingAgentsControl,
-  onNewVoiceChat: (() => void) | undefined,
-): AddEntry[] {
+function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
   const { start } = agents;
-  const voiceChat: AddEntry[] =
-    onNewVoiceChat === undefined
-      ? []
-      : [
-          {
-            row: {
-              id: NEW_VOICE_CHAT_ROW,
-              ...tabLook({ kind: TAB_KIND.VOICE_CHAT }),
-              disabled: start.busy ? NEW_AGENT_STARTING : undefined,
-            },
-            onPick: onNewVoiceChat,
-          },
-        ];
   const newAgent: AddEntry = {
     row: {
       id: NEW_AGENT_ROW,
@@ -364,7 +345,7 @@ function addEntries(
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
   const agentRows = agentEntries(main, agents);
-  const starts = agents.onUnarchive === undefined ? [...voiceChat, newAgent] : [];
+  const starts = agents.onUnarchive === undefined ? [newAgent] : [];
   return [...starts, ...agentRows];
 }
 
@@ -383,7 +364,6 @@ export function MainTabStrip({
   keys,
   shown,
   onOpenTerminal,
-  onNewVoiceChat,
   calling,
 }: {
   task: TaskSummary;
@@ -404,8 +384,6 @@ export function MainTabStrip({
   shown: boolean;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
-  /** Starts a new voice chat on the task, which the "+" menu offers first; none where the window has no voice. */
-  onNewVoiceChat: (() => void) | undefined;
   /** The agent a call is in progress into, whose tab's glyph wears the live mark; none while no call stands. */
   calling: string | undefined;
 }): React.JSX.Element {
@@ -491,7 +469,7 @@ export function MainTabStrip({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(main, agents, onNewVoiceChat)}
+        entries={addEntries(main, agents)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}
@@ -533,7 +511,7 @@ export function MainTabContent({
 }: {
   tab: MainTab;
   agents: CodingAgentsControl;
-  /** What an agent's tab takes calls through; none where the platform has no voice. */
+  /** What an agent's tab, and a draft's Call, take calls through; none where the platform has no voice. */
   call?: AgentCallDoors | undefined;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
@@ -563,7 +541,13 @@ export function MainTabContent({
     // The tab stands for a draft the task no longer holds only until the
     // column moves back to the task, a render away.
     return agents.draft?.id === tab.draft ? (
-      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} cards={cards.call} />
+      <DraftAgentTab
+        key={tab.draft}
+        draft={agents.draft}
+        control={agents}
+        cards={cards.call}
+        call={call}
+      />
     ) : (
       <SpinnerRegion label="Loading agent" />
     );
