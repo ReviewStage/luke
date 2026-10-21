@@ -10,7 +10,9 @@
  * bounded batch at a time: every sandbox carrying the session's tag is
  * deleted with the snapshots only it kept, and the session leaves the queue.
  * A delete Vercel did not confirm leaves the session queued, stamped, behind
- * the rest. Nothing here reads a sandbox's files or a word of any account:
+ * the rest. An agent's archive stops its sandbox rather than deleting it, in
+ * the background (`stoppedInBackground`), so an unarchive still resumes from
+ * the snapshot. Nothing here reads a sandbox's files or a word of any account:
  * what is asked of Vercel is a tag and a name, and what is logged of a
  * failure is its status.
  *
@@ -21,12 +23,14 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import {
   nextSessionSandboxes,
   sessionSandboxDeferred,
   sessionSandboxDeleted,
 } from "@luke/database/models/session-sandbox-cleanup";
-import { Context, Effect, Layer, Result, type Schema } from "effect";
+import { Context, Duration, Effect, Layer, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import {
   deploymentOidcToken,
@@ -38,6 +42,17 @@ import {
 const SESSION_SANDBOX_SWEEP = {
   /** The most sessions one sweep takes, so a backlog is worked through a sweep at a time. */
   MAX_SESSIONS: 20,
+  CONCURRENCY: 5,
+} as const;
+
+const ARCHIVE_STOP = {
+  /**
+   * The most one agent's stop runs, its list and its stop at Vercel: long
+   * enough for both calls on a slow answer, short enough that a hung one
+   * does not hold the function's instance for the rest of its life.
+   */
+  TIMEOUT: Duration.seconds(15),
+  /** How many agents of an archived task are stopped at once. */
   CONCURRENCY: 5,
 } as const;
 
@@ -88,6 +103,61 @@ export const sessionSandboxesLayer: Layer.Layer<SessionSandboxes, never, HttpCli
     SessionSandboxes,
     Effect.map(vercelSandboxApi(deploymentOidcToken), sessionSandboxesOver),
   );
+
+/** What an archive of an agent asks of the deployment beside it: the service that stops its sandbox, Vercel's in production and a script's in a test. */
+export interface SandboxStopReach {
+  readonly sessionSandboxes: Layer.Layer<SessionSandboxes, never, HttpClient.HttpClient>;
+}
+
+/** A failure as the log says it: a sandbox's own words, and the kind alone for any other, since a store failure's message may name a statement. */
+function describeStopFailure(failure: {
+  readonly _tag: string;
+  readonly message?: string;
+}): string {
+  return failure._tag === "SandboxUnavailable" ? (failure.message ?? failure._tag) : failure._tag;
+}
+
+/**
+ * The sandboxes of the agents just archived stopped, never deleted, so an
+ * unarchive resumes from the snapshot as a stopped sandbox does. Each
+ * agent's session is read here, one keyed read that fails to nothing worse
+ * than a log line, and the stops at Vercel are forked detached, so this
+ * returns without waiting on Vercel and the archive never fails on it. A
+ * stop that fails or runs past its bound is logged and left: the turn's own
+ * end stops a sandbox a turn ran (`agent-runtime/sandbox.ts`), so what is
+ * left running here is one a terminal held.
+ */
+export const stoppedInBackground = /* @__PURE__ */ Effect.fnUntraced(function* (
+  agents: ReadonlyArray<Pick<CodingAgent, "userId" | "conversationId">>,
+) {
+  const sandboxes = yield* SessionSandboxes;
+  const read = yield* Effect.forEach(agents, (agent) =>
+    recordedRuntimeSession(agent).pipe(
+      Effect.catch((failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `an archived agent's sandbox was not found to stop: ${describeStopFailure(failure)}`,
+          ),
+          undefined,
+        ),
+      ),
+    ),
+  );
+  // An agent that never opened a sandbox has no session, and none to stop.
+  const sessions = read.filter((sessionId) => sessionId !== undefined);
+  const stopOne = (sessionId: string) =>
+    sandboxes.stopFor(sessionId).pipe(
+      Effect.timeout(ARCHIVE_STOP.TIMEOUT),
+      Effect.catch((failure) =>
+        Effect.logWarning(
+          `an archived agent's sandbox was not stopped: ${describeStopFailure(failure)}`,
+        ),
+      ),
+    );
+  yield* Effect.forkDetach(
+    Effect.forEach(sessions, stopOne, { concurrency: ARCHIVE_STOP.CONCURRENCY, discard: true }),
+  );
+});
 
 /** What one sweep of the queue came to: sessions whose sandboxes went, and sessions left for a later sweep. */
 export interface SessionSandboxSweepOutcome {

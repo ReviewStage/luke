@@ -51,6 +51,7 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
+import { SESSION_TAG } from "../vercel-sandbox-api.js";
 import {
   type ClaudeCodeSessionsOptions,
   claudeCodeSessions,
@@ -550,6 +551,49 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox, a new checkout with no CLI session to resume",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        sequence.next = 42;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 41,
+        }).pipe(Effect.provide(api.layer));
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(expired.deleted, true);
+        const fresh = api.sandboxes[1];
+        assert.ok(fresh !== undefined);
+        assert.equal(fresh.status, "running");
+        assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
+        const relaunch = api.commands[1];
+        assert.equal(relaunch?.sandboxSessionId, fresh.currentSessionId);
+        const [config, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, undefined);
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(line.content, [{ type: "text", text: "Now the emails." }]);
+        // The session is found again by its tag, in the new sandbox alone.
+        const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+        assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 2);
       }),
   );
 
