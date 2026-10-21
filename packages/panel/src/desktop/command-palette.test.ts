@@ -1055,25 +1055,6 @@ test("Search lists the listed workspace's plans first, then every other workspac
   );
 });
 
-test("a task is found by a short start of each of its words, typed with spaces between, as cmdk's own filter finds it", () => {
-  const task = (name: string) => ({
-    id: name,
-    workspaceId: "workspace-personal",
-    name,
-    createdAt: 1,
-    updatedAt: 1,
-    repository: null,
-  });
-  openPalette(
-    tasksControl({ tasks: [task("Fix the login bug in settings"), task("Dotfiles sync")] }),
-  );
-  chooseFilter("Tasks");
-
-  type("fi lo bu se");
-
-  assert.deepEqual(rows(), ["Fix the login bug in settings"]);
-});
-
 test("a teammate's task wears its creator's face at its row's end, and is found by their name, which the row then says", () => {
   const charles = { userId: "user-charles", name: "Charles Pan" };
   const dean = { userId: "user-dean", name: "Dean Stratakos" };

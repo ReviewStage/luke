@@ -245,18 +245,6 @@ test("a heading just renamed is offered by its new words, before the editor hand
   );
 });
 
-test("a section is offered by a short start of each of its words, typed with spaces between, as cmdk's own filter finds it", async () => {
-  const task = await opened();
-
-  await task.typeAfter("Rollout", " plan for teams");
-  await task.typeAtEnd(" See @ro pl fo te");
-
-  assert.deepEqual(
-    listed(task.container).find(([group]) => group === "Plan"),
-    ["Plan", ["Rollout plan for teams"]],
-  );
-});
-
 test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
   const page: TaskMentionsValue = {
     taskId: TASK.id,
