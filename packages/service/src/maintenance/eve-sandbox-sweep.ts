@@ -134,13 +134,26 @@ function eveSandboxOf(sandbox: ListedSandbox): EveSandbox | undefined {
   return { sessionId, running: sandbox.currentSessionId };
 }
 
-/** The running eve sandboxes on at most `MAX_PAGES` pages, in the order listed. */
+/**
+ * The running eve sandboxes on at most `MAX_PAGES` pages, in the order
+ * listed. A first page Vercel did not answer fails the list; a later one
+ * ends it at the pages already read, whose sandboxes are no less the
+ * sweep's to read.
+ */
 const runningEveSandboxes = (api: VercelSandboxApi, order: ListOrder) =>
   Effect.gen(function* () {
     const found: EveSandbox[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < EVE_SANDBOX_SWEEP.MAX_PAGES; page += 1) {
-      const listed = yield* api.listRunning(cursor, order);
+      const asked = yield* Effect.result(api.listRunning(cursor, order));
+      if (Result.isFailure(asked)) {
+        if (page === 0) return yield* asked.failure;
+        yield* Effect.logWarning(
+          `a later page of the running sandboxes was not listed: ${asked.failure.message}`,
+        );
+        break;
+      }
+      const listed = asked.success;
       for (const sandbox of listed.sandboxes) {
         const eve = eveSandboxOf(sandbox);
         if (eve !== undefined) found.push(eve);

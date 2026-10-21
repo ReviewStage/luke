@@ -58,7 +58,13 @@ interface FakeSandbox {
 }
 
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
-function vercel(options: { readonly refuseList?: boolean; readonly refusePolicy?: boolean } = {}) {
+function vercel(
+  options: {
+    readonly refuseList?: boolean;
+    readonly refuseLaterPages?: boolean;
+    readonly refusePolicy?: boolean;
+  } = {},
+) {
   const sandboxes: FakeSandbox[] = [];
   const stopped: string[] = [];
   const policies: string[] = [];
@@ -80,6 +86,9 @@ function vercel(options: { readonly refuseList?: boolean; readonly refusePolicy?
       const status = parsed.searchParams.get("status");
       const order = parsed.searchParams.get("sortOrder");
       pagesListed.push({ order });
+      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) {
+        return new Response(null, { status: 503 });
+      }
       const from = Number(parsed.searchParams.get("cursor") ?? "0");
       const matching = sandboxes.filter((each) => status === null || each.status === status);
       if (order === "desc") matching.reverse();
@@ -321,6 +330,23 @@ it.layer(getTestDB())("the eve sandbox sweep", (it) => {
 
       assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0, unmapped: 0 });
       assert.deepEqual(api.stopped, []);
+    }),
+  );
+
+  it.effect("a later page Vercel refused leaves the pages before it to be swept", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel({ refuseLaterPages: true });
+      const agent = yield* openAgent({ status: TURN_STATUS.SETTLED, at: LONG_AGO });
+      const orphan = eveSandbox(agent.sessionId);
+      api.sandboxes.push(orphan);
+      for (let each = 0; each < PAGE; each += 1) api.sandboxes.push(eveSandbox());
+
+      const outcome = yield* sweepEveSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+      assert.equal(api.pagesListed.length, 2, "the second page was asked and refused");
+      assert.equal(outcome.stopped, 1);
+      assert.equal(orphan.status, "stopped");
     }),
   );
 
