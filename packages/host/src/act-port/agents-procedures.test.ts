@@ -15,9 +15,9 @@ import { afterEach, it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentMessagesAnswerView,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptPage,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
@@ -71,6 +71,8 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_START]: "Could not start an agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGES]: "Could not read the agent's transcript on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PART]: "Could not read the agent's output on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]:
+    "Could not read the agent's earlier messages on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: "Could not message the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_CHOOSE]: "Could not change the agent's model on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_RENAME]: "Could not rename the agent on this system.",
@@ -139,6 +141,11 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.CODING_AGENTS_PART,
     payload: { agentId: AGENT_ID, messageId: "message-1", index: 1 },
     ask: "codingAgentPart",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER,
+    payload: { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID, before: "40" },
+    ask: "transcriptOlder",
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_MESSAGE,
@@ -611,11 +618,12 @@ it("a panel's transcript stream follows the transcript at the host, hears each p
   ports.push(port);
   const client = port.as(PANEL);
   const transcript: CodingAgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
-  const page: CodingAgentMessagesAnswerView = {
+  const page: CodingAgentTranscriptPage = {
     messages: [],
     cursor: "1:0",
     status: CODING_AGENT_STATUS.RUNNING,
     title: "Invites",
+    caughtUp: false,
   };
 
   const one = await client[AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript);

@@ -84,6 +84,8 @@ import {
   type CodingAgentStopParams,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptOlderAnswer,
+  type CodingAgentTranscriptOlderParams,
   type CodingAgentWorkspaceListParams,
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
@@ -113,6 +115,7 @@ import {
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentReviewOptionsAnswerViewSchema,
   codingAgentTranscriptChangedSchema,
+  codingAgentTranscriptOlderAnswerSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -792,6 +795,10 @@ export interface HostOperator {
   transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
   /** One followed transcript let go: nothing more is heard of it until it is followed again. */
   transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+  /** The page of a transcript below the oldest message the window holds, read at once; or why there is none. */
+  transcriptOlder(
+    params: CodingAgentTranscriptOlderParams,
+  ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
   /** A followed transcript's next page, or why there is none, each time it moves. */
   onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
   codingAgentInboxAttachment(
@@ -2228,6 +2235,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     transcriptFollow: (transcript) =>
       fire(
         client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript)),
+      ),
+    transcriptOlder: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, {
+          ...transcriptParams(params),
+          before: params.before,
+        }),
+        codingAgentAnswer(codingAgentTranscriptOlderAnswerSchema),
       ),
     transcriptUnfollow: (transcript) =>
       fire(
