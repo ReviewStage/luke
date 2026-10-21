@@ -9,8 +9,10 @@ import { Cause, Data, Duration, Effect, Fiber, Queue, Schedule, Stream } from "e
 /**
  * live-follow.ts -- a read the host follows over Neon Realtime, as Neon's guide says to: sealed statements subscribed to at the address the service names, and renewed before they expire.
  *
- * Each read is one or more parts, one sealed statement each, all on one
- * socket ("Subscribe to the sealed query"). Once every part has its first
+ * Each read is one or more parts, one sealed statement each, and every read
+ * at one address shares one client and its one socket ("Create one client
+ * for the whole app, because every subscription shares its connection").
+ * Once every part has its first
  * result, every change of any part is the parts' rows whole, undecoded, for
  * the caller to decode at this boundary. Every seal is renewed ten seconds
  * before the earliest expires, a fetch that failed asked again a second
@@ -82,12 +84,82 @@ export interface LiveClient {
 }
 
 /**
- * Realtime's own client, at the address the service named, loaded only when
- * a read is first followed, so its protocol's validators stay out of the
- * web app's first load.
+ * One client per address, shared by every read following there: each open
+ * takes a handle, and the client closes once the last handle is let go. The
+ * client is opened once however many reads wait on it while it loads; one
+ * that failed to load is forgotten, so the next read loads it afresh. So is
+ * one any of whose subscriptions moved to `error`: where its connection
+ * failed, every subscription on it is in `error` and Neon's guide says to
+ * create a new client before subscribing again, so the next read opens a
+ * new one and the old one closes once its last holder lets go. `drop`
+ * forgets every client the same way, for a sign-out or an account switch.
  */
-export const openRealtimeClient = (url: string): Promise<LiveClient> =>
-  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url }));
+export function shareLiveClients(open: (url: string) => LiveClient | PromiseLike<LiveClient>): {
+  readonly open: (url: string) => Promise<LiveClient>;
+  readonly drop: () => void;
+} {
+  interface Shared {
+    readonly client: Promise<LiveClient>;
+    holders: number;
+  }
+  const standing = new Map<string, Shared>();
+  const forget = (url: string, shared: Shared) => {
+    if (standing.get(url) === shared) standing.delete(url);
+  };
+  return {
+    open: async (url) => {
+      let shared = standing.get(url);
+      if (shared === undefined) {
+        const opening: Shared = { client: Promise.resolve(url).then(open), holders: 0 };
+        opening.client.catch(() => forget(url, opening));
+        standing.set(url, opening);
+        shared = opening;
+      }
+      const held = shared;
+      held.holders += 1;
+      let client: LiveClient;
+      try {
+        client = await held.client;
+      } catch (error) {
+        held.holders -= 1;
+        throw error;
+      }
+      let holding = true;
+      return {
+        subscribe: (query) => {
+          const subscription = client.subscribe(query);
+          subscription.onChange((snapshot) => {
+            if (snapshot.status === "error") forget(url, held);
+          });
+          return subscription;
+        },
+        close: () => {
+          if (!holding) return;
+          holding = false;
+          held.holders -= 1;
+          if (held.holders > 0) return;
+          forget(url, held);
+          client.close();
+        },
+      };
+    },
+    drop: () => standing.clear(),
+  };
+}
+
+const realtimeClients = shareLiveClients((url) =>
+  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url })),
+);
+
+/**
+ * Realtime's own client at the address the service named, shared by every
+ * read following there, and loaded only when a read is first followed, so
+ * its protocol's validators stay out of the web app's first load.
+ */
+export const openRealtimeClient = realtimeClients.open;
+
+/** Forgets the shared Realtime clients, on a sign-out or an account switch: the next read opens a new one, and each old one closes once its reads let go. */
+export const dropRealtimeClients = realtimeClients.drop;
 
 /** A read sealed for following: where to subscribe, and each part's sealed statement. */
 export interface SealedRead<Part extends string> {

@@ -33,6 +33,7 @@ import { agentTraceDirectory } from "./devtrace/trace-directory.js";
 import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AccountSource, AppIdentity, Environment, ServiceOrigin } from "./effect/seams.js";
+import { dropRealtimeClients } from "./live-follow.js";
 
 /** What a refused account step says, worded by the step alone. */
 const SIGN_IN_REFUSED = "the sign-in did not finish";
@@ -180,7 +181,10 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       previousAccount.status === ACCOUNT_STATUS.SIGNED_IN ? previousAccount.email : undefined;
     const nextAccountKey = signedIn ? next.email : undefined;
     previousAccount = next;
-    if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
+    if (previousAccountKey !== nextAccountKey) {
+      settings.forgetAccountPreferenceHydration();
+      dropRealtimeClients();
+    }
     // A deletion stands recording down until the next sign-in, which starts it again.
     if (signedIn && !wasSignedIn) sessionReplayEndedByDeletion = false;
     kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));

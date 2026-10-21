@@ -3,12 +3,14 @@ import { it } from "@effect/vitest";
 import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { test } from "vitest";
 import {
   LiveBroken,
   type LiveClient,
   liveRows,
   openRealtimeClient,
   type SealedRead,
+  shareLiveClients,
 } from "./live-follow.js";
 
 /**
@@ -341,3 +343,98 @@ it.effect("a read whose session the service refuses as signed out ends, and is a
     assert.ok(Exit.isFailure(exit));
   }),
 );
+
+/**
+ * Every read at one address shares one Realtime client: a second read opens
+ * nothing new, the client closes once the last read lets go, a connection
+ * error makes the next read open a new client, and a sign-out drops it.
+ * Realtime's client is a script that counts what it opened and closed.
+ */
+
+function scriptedClients() {
+  const opened: string[] = [];
+  const closed: string[] = [];
+  const listeners: ((snapshot: { readonly status: string; readonly data: undefined }) => void)[] =
+    [];
+  const open = (url: string): LiveClient => {
+    opened.push(url);
+    return {
+      subscribe: () => ({
+        onChange: (listener) => {
+          listeners.push(listener);
+          return () => undefined;
+        },
+        renew: () => Promise.resolve(),
+        unsubscribe: () => undefined,
+      }),
+      close: () => void closed.push(url),
+    };
+  };
+  /** Every subscription so far moves to `error`, as a failed connection moves them. */
+  const fail = () => {
+    for (const listener of listeners) listener({ status: "error", data: undefined });
+  };
+  return { open, opened, closed, fail };
+}
+
+const ADDRESS = "wss://realtime.example/v1";
+const sealedAs = (capability: string) => ({
+  capability,
+  queryFingerprint: capability,
+  expiresAt: 0,
+});
+
+test("two reads at one address share one client, closed once the last lets go", async () => {
+  const clients = scriptedClients();
+  const shared = shareLiveClients(clients.open);
+  const [inbox, plan] = await Promise.all([shared.open(ADDRESS), shared.open(ADDRESS)]);
+  inbox.subscribe(sealedAs("inbox"));
+  plan.subscribe(sealedAs("plan"));
+  assert.deepEqual(clients.opened, [ADDRESS]);
+
+  inbox.close();
+  inbox.close();
+  assert.deepEqual(clients.closed, [], "a handle let go twice counts once");
+  plan.close();
+  assert.deepEqual(clients.closed, [ADDRESS]);
+});
+
+test("a connection error makes the next read open a new client; the old closes once let go", async () => {
+  const clients = scriptedClients();
+  const shared = shareLiveClients(clients.open);
+  const inbox = await shared.open(ADDRESS);
+  inbox.subscribe(sealedAs("inbox"));
+  clients.fail();
+
+  const plan = await shared.open(ADDRESS);
+  assert.equal(clients.opened.length, 2, "the next read opens a new client");
+  inbox.close();
+  assert.equal(clients.closed.length, 1, "the failed one closes");
+  plan.close();
+  assert.equal(clients.closed.length, 2);
+});
+
+test("a sign-out drops the shared client", async () => {
+  const clients = scriptedClients();
+  const shared = shareLiveClients(clients.open);
+  const before = await shared.open(ADDRESS);
+  shared.drop();
+  const after = await shared.open(ADDRESS);
+  assert.equal(clients.opened.length, 2, "the next read opens a new client");
+  before.close();
+  assert.equal(clients.closed.length, 1, "the dropped one closes once its read lets go");
+  after.close();
+  assert.equal(clients.closed.length, 2);
+});
+
+test("a client that failed to load is loaded afresh by the next read", async () => {
+  const clients = scriptedClients();
+  let loads = 0;
+  const shared = shareLiveClients((url) => {
+    loads += 1;
+    return loads === 1 ? Promise.reject(new Error("offline")) : clients.open(url);
+  });
+  await assert.rejects(shared.open(ADDRESS));
+  await shared.open(ADDRESS);
+  assert.deepEqual(clients.opened, [ADDRESS]);
+});
