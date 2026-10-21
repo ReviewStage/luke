@@ -149,6 +149,7 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "./closed-tabs.js";
+import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentTabLabel,
@@ -1574,6 +1575,15 @@ export function useTasksTab(input: {
     [inboxAgent],
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
+  // The task's agents' cloud Browser tabs, while the Browser tab experiment is on, which the panel draws on its own task alone.
+  const cloudTaskId =
+    inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
+  const cloudListed = useCloudBrowserTabs(cloudTaskId, useExperiment(EXPERIMENT.BROWSER));
+  // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
+  const cloudBrowsers = useMemo(
+    () => (cloudTaskId === undefined ? NO_IDS : cloudListed?.map((each) => each.id)),
+    [cloudTaskId, cloudListed],
+  );
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
@@ -1592,6 +1602,7 @@ export function useTasksTab(input: {
         : inboxAgents
       : (pageAgents ?? agents.agentIds),
     input.room,
+    cloudBrowsers,
   );
   // A Browser tab an agent opens or closes in main is held here, whether or not the side panel is drawn now.
   const browserOn = useExperiment(EXPERIMENT.BROWSER);

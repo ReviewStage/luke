@@ -1,5 +1,5 @@
 /**
- * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab for a web address, the host's event count, the masked session recording, the Mac app on a Mac, and nothing for the Mac's menus or bundles.
+ * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab for a web address, the host's event count, the masked session recording, a cloud Browser tab's socket from the page, the Mac app on a Mac, and nothing for the Mac's menus or bundles.
  *
  * The web client's shell beside the host in the tab (`web-host.ts`), which
  * hands it where a surface event is counted. An agent's page has no
@@ -17,6 +17,7 @@ import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
 import { browserLinkPlatform } from "./mac-app-handoff";
 import { PANEL_ASSET_BASE } from "./web-address";
+import { openBrowserLiveOverWebSocket } from "./web-browser-live";
 import { askNotificationsPermission } from "./web-notices";
 
 /** What every agent's page frame shows until pages have a sandboxed origin of their own (`public/page-in-mac-app.html`). */
@@ -122,7 +123,8 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
  * tab, as every other event is; notifications are the browser's to grant,
  * for the site, asked for on Settings' press itself; unsaved work is held
  * by the tab's ways out (`page-leave.ts`); session replay is the desktop's
- * own masked recording (`web-session-replay.ts`); and the way to the Mac
+ * own masked recording (`web-session-replay.ts`); a cloud Browser tab's
+ * live view is a socket the page opens itself (`web-browser-live.ts`); and the way to the Mac
  * app is offered only on the `linkPlatform` that can open it, a Mac.
  */
 export function webPlatform(
@@ -143,6 +145,7 @@ export function webPlatform(
     // The dashboard is served on the tab's own origin, so the Admin row links to it there.
     adminDashboard: () => ({ href: new URL(ADMIN_PAGE_PATH, location.origin).href }),
     applySessionReplay: lazySessionReplay(),
+    openBrowserLive: openBrowserLiveOverWebSocket,
     ...(linkPlatform === LINK_PLATFORM.MAC ? { macAppLink } : undefined),
     notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,
     askNotificationsPermission: () => {

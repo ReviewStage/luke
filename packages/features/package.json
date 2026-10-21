@@ -120,6 +120,7 @@
     "./page-frame": "./src/page-frame.js",
     "./browser-acts": "./src/browser-acts.js",
     "./browser-live-wire": "./src/browser-live-wire.js",
+    "./browser-live-acts": "./src/browser-live-acts.js",
     "./agent-browser-tab-wire": "./src/agent-browser-tab-wire.js",
     "./browser-agent-actions": "./src/browser-agent-actions.js",
     "./browser-agent-cdp": "./src/browser-agent-cdp.js",

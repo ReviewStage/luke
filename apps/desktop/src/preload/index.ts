@@ -1,3 +1,4 @@
+import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { eventWithoutAccessTokens, withoutAccessTokens } from "@luke/features/sentry-breadcrumbs";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
@@ -57,3 +58,8 @@ window.addEventListener(
     ipcRenderer.postMessage(ACT_PORT.CHANNEL, null, [port]);
   }),
 );
+
+// A cloud Browser tab's live view's port is handed in the same way (`@luke/panel`'s `tasks/browser-live-port.ts`).
+ipcRenderer.on(BROWSER_LIVE_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
+  window.postMessage({ channel: BROWSER_LIVE_PORT_CHANNEL, ticket }, "*", [...event.ports]);
+});

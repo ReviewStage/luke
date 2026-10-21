@@ -15,6 +15,8 @@ import {
   GITHUB_DISCONNECT_FAILURE,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksBrowserTabsAnswer,
+  type TasksBrowserTabsParams,
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
@@ -97,6 +99,7 @@ export interface TasksProceduresDependencies {
     tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
     tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
     tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+    tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
     tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
@@ -418,6 +421,15 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       if ("issue" in answer) return answer.issue;
       return yield* Effect.fail(errors.REFUSED());
     }),
+    // Likewise a task's Browser tabs: a service that did not answer is refused, never read as no tab.
+    [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TABS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const answer = yield* host.tasksBrowserTabs(input);
+        if ("tabs" in answer) return answer;
+        return yield* Effect.fail(errors.REFUSED());
+      },
+    ),
     [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOUR_CODE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

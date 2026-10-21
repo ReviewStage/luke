@@ -1730,6 +1730,57 @@
   opacity: 1;
 }
 
+/* A cloud Browser tab (cloud-browser-pane.tsx): whose browser it is and
+   the page's address beside who drives it, then the page drawn on a canvas
+   of the page's own shape, centred in the body, with a quiet line over it
+   while no page stands to drive. */
+.cloud-browser-bar {
+  gap: var(--luke-space-8);
+}
+
+.cloud-browser-where {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+}
+
+/* Whose browser it is stays whole; the address gives way first. */
+.cloud-browser-where > :first-child {
+  flex: none;
+}
+
+.cloud-browser-body {
+  align-items: center;
+  justify-content: center;
+  background: var(--luke-color-well);
+}
+
+.cloud-browser-canvas {
+  display: block;
+  outline: none;
+}
+
+.cloud-browser-canvas[data-driving] {
+  box-shadow: 0 0 0 1px var(--luke-color-border);
+}
+
+.cloud-browser-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--luke-space-8);
+  pointer-events: none;
+}
+
+.cloud-browser-notice > * {
+  pointer-events: auto;
+}
+
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
 /* A Browser tab (browser-pane.tsx): the page's bar, its address field
