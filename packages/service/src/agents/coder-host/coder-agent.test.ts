@@ -753,6 +753,10 @@ test("with Chat on the session keeps the developer's inbox for what it needs of 
     assert.ok(instructions.includes("Never put one question in both places."), brief);
     // The voice: posts read as a person typing in Slack, not as an AI writing a report.
     assert.ok(instructions.includes("No AI tells:"), brief);
+    assert.ok(
+      instructions.includes("- In bursts. A person fires off two or three quick posts"),
+      brief,
+    );
     assert.ok(instructions.includes("Most posts are under fifteen words"), brief);
   }
 });
