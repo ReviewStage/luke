@@ -173,6 +173,7 @@ import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_LIST_ARCHIVED,
   TASK_STATUS,
+  taskDeleteAnswerSchema,
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
@@ -4378,7 +4379,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
 
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
         assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
         assert.deepEqual(eve.reset, [sessionId]);
@@ -4424,7 +4428,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [[deploymentFor(messaged.other), messaged.sessionId]],
         );
         assert.equal(agentStop.status, HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
         assert.deepEqual(stopped.eve.cancelled, [[stopped.sessionId, "turn_0"]]);
         assert.deepEqual(stopped.eve.cancelledAs, [deploymentFor(stopped.other)]);
         assert.deepEqual(stopped.eve.reset, [stopped.sessionId]);

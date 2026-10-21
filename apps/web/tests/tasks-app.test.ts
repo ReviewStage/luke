@@ -46,6 +46,7 @@ import {
   TASK_PRIORITY,
   TASK_STATUS,
   taskAnswerSchema,
+  taskDeleteAnswerSchema,
   taskFileAnswerSchema,
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
@@ -873,10 +874,14 @@ it.layer(getTestDB())("the plan routes", (it) => {
           HOSTED_HTTP_STATUS.OK,
           "the task stands",
         );
-        assert.deepEqual(yield* ask(request(ONE_TASK(taskId), owner, { method: "DELETE" })), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { deleted: true },
-        });
+        assert.equal(
+          readAnswer(
+            taskDeleteAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(ONE_TASK(taskId), owner, { method: "DELETE" })),
+          ).deleted,
+          true,
+        );
       }),
   );
 
@@ -893,7 +898,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const deletedBy = (taskId: string, by: string) =>
           ask(request(ONE_TASK(taskId), undefined, { method: "DELETE", cookie: by }));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-        const deleted = { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } };
+        // A delete is answered with the transaction it committed in, whichever that is.
+        const deletedAs = (taskId: string, by: string) =>
+          Effect.map(
+            deletedBy(taskId, by),
+            (answer) => readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).deleted,
+          );
 
         assert.equal(
           (yield* ask(request(ONE_TASK(relay), undefined, { cookie }))).status,
@@ -904,8 +914,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(yield* deletedBy(ledger, sessionCookieOf(other)), notFound);
         assert.deepEqual(retired, [], "another account's cookie retires nothing");
 
-        assert.deepEqual(yield* deletedBy(relay, cookie), deleted);
-        assert.deepEqual(yield* deletedBy(ledger, cookie), deleted);
+        assert.equal(yield* deletedAs(relay, cookie), true);
+        assert.equal(yield* deletedAs(ledger, cookie), true);
         assert.deepEqual(
           readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
             .plans,

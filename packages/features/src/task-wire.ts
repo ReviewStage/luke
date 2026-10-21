@@ -642,8 +642,19 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
-/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved. */
-export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
+/**
+ * The id of the transaction a write committed in, as Postgres counts it, in
+ * decimal: present where the write changed a row, so the desktop following
+ * the task list waits for it to arrive before it confirms the write, and
+ * absent where nothing changed, as Neon's mutations guide says.
+ */
+const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved, and the transaction a write committed in. */
+export const taskAnswerSchema = EffectSchema.Struct({
+  plan: taskSchema,
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
 
 /**
  * Why the agent a start asked for was not started beside the task it made,
@@ -669,12 +680,16 @@ export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   agent: EffectSchema.optionalKey(codingAgentSummarySchema),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
 });
 
 export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
-export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
+export const taskDeleteAnswerSchema = EffectSchema.Struct({
+  deleted: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
 
 /** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
 export const UNKNOWN_AGENT_LABEL = "a coding agent";
