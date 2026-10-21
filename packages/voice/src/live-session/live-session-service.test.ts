@@ -1188,7 +1188,7 @@ it.effect(
 );
 
 it.effect(
-  "a typed line sent again under its send's id, as a Retry after a lost answer sends it, is written and asked once",
+  "a typed line sent again under its send's id, as a Retry after a lost answer sends it, is written and asked once, unless the brain refused it",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1202,6 +1202,17 @@ it.effect(
       assert.ok(f.service.typeLine("Use the fixture branch.", "line-2"));
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
+      // A line the brain refused was never asked, so its Retry asks it again.
+      f.brain.refuse = "Luke can't take that right now.";
+      assert.ok(f.service.typeLine("Try again.", "line-3"));
+      yield* settle();
+      f.brain.refuse = undefined;
+      assert.ok(f.service.typeLine("Try again.", "line-3"));
+      yield* settle();
+      assert.deepEqual(
+        f.brain.asks.map((ask) => ask.submissionId),
+        ["line-1", "line-2", "line-3", "line-3"],
+      );
     }),
 );
 

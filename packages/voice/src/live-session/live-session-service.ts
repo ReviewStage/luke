@@ -1044,6 +1044,8 @@ export class LiveSessionService {
         const rowIds = rows.map((row) => row.rowId);
         this.#markAsked(session, rowIds);
         if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+          // A refused line was never asked, so a Retry of it asks it again.
+          session.typedLines.delete(lineId);
           this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_REFUSED, revision: asked.revision });
           if (rowIds.length > 0) yield* this.#attachAsk(session, lineId, rowIds);
           this.#speakInto(session, null, submission.refusal);
