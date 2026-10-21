@@ -433,6 +433,11 @@ function fakeService() {
         asked.push(`remove:${removal.provider}`);
         return { keys: [] };
       }),
+    setProviderKeyForAgents: (change) =>
+      Effect.sync(() => {
+        asked.push(`forAgents:${change.kind}:${String(change.forAgents)}`);
+        return { keys: [] };
+      }),
     readGitHubToken: () =>
       Effect.sync(() => {
         asked.push("token");

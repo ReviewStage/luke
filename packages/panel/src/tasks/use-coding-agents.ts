@@ -17,6 +17,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentChangesPeople,
   type CodingAgentOrigin,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -220,7 +221,9 @@ export interface CodingAgentsControl {
   onDropFork: () => void;
   /** Writes the open task's draft: the words in its box, the choice on its chip, the MCP servers it switched off, or that the refusal it was handed was let go. */
   onDraftChange: (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
+    change: Partial<
+      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "payer" | "refused">
+    >,
   ) => void;
   /**
    * Hands a task New task just started, whose agent the service refused, a
@@ -250,6 +253,7 @@ export interface CodingAgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
+    payer?: CodingAgentPayer,
   ) => Promise<Failure | undefined>;
   /**
    * Starts the draft's fork: from its source at its message, under the
@@ -265,6 +269,7 @@ export interface CodingAgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
+    payer?: CodingAgentPayer,
   ) => Promise<Failure | undefined>;
   /** Brings the open task back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
@@ -398,12 +403,17 @@ export interface AgentDraft {
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
   readonly fork?: AgentFork | undefined;
+  /** Who the developer picked to pay for this one agent where Start offered it (`payer-model.ts`); none for the account's default. */
+  readonly payer?: CodingAgentPayer | undefined;
   /** Why the service refused the agent of a draft New task handed over (`onHandDraft`), which its tab shows under the box until the next send. */
   readonly refused?: Failure | undefined;
 }
 
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
-type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork" | "refused">;
+type DraftChoices = Pick<
+  AgentDraft,
+  "id" | "choice" | "disabledServers" | "fork" | "payer" | "refused"
+>;
 
 /** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
 function taskDraft(
@@ -944,7 +954,9 @@ export function useCodingAgents(input: {
   };
 
   const onDraftChange = (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
+    change: Partial<
+      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "payer" | "refused">
+    >,
   ) => {
     if (startsOn === undefined || draft === undefined) return;
     const { prompt, ...choices } = change;
@@ -955,6 +967,7 @@ export function useCodingAgents(input: {
       choice: draft.choice,
       disabledServers: draft.disabledServers,
       ...(draft.fork === undefined ? undefined : { fork: draft.fork }),
+      ...(draft.payer === undefined ? undefined : { payer: draft.payer }),
       ...(draft.refused === undefined ? undefined : { refused: draft.refused }),
       ...choices,
     });
@@ -1004,6 +1017,7 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly string[] = [],
+    payer?: CodingAgentPayer,
   ): Promise<Failure | undefined> => {
     if (taskId === undefined || repository === null)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
@@ -1014,6 +1028,7 @@ export function useCodingAgents(input: {
       ...(attachments.length === 0 ? undefined : { attachments }),
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
+      ...(payer === undefined ? undefined : { payer }),
     });
     if ("failure" in answer) return startFailureNote(answer, taskId);
     withDraft(taskId, undefined);
@@ -1030,11 +1045,20 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly string[] = [],
+    payer?: CodingAgentPayer,
   ): Promise<Failure | undefined> => {
     if (archived) return { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED };
     if (startsOn === undefined || !startsFrom)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
-    const asked = forkStart({ draftId, fork, words, attachments, choice, disabledServers });
+    const asked = forkStart({
+      draftId,
+      fork,
+      words,
+      attachments,
+      choice,
+      disabledServers,
+      payer,
+    });
     const answer = await askStart(startsOn, asked);
     if ("failure" in answer) return startFailureNote(answer, taskId ?? null);
     withDraft(startsOn, undefined);

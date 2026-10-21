@@ -409,7 +409,11 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * agent nothing at all, neither the plan nor a prompt, so it names no
  * prompt, files, source, or note; its first words come later, typed or
  * spoken, and it may start on a task with no repository, where it works in
- * none.
+ * none. A `payer` is who the developer picked to pay for this one agent,
+ * where Start offered the choice: its plan, which runs the provider's own
+ * harness, or the API key or Luke's key, which run on eve; with none the
+ * account's default decides, and the service honours a pick only where
+ * the account could have been offered it.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -422,6 +426,7 @@ export const codingAgentStartRequestFields = {
   from: EffectSchema.optionalKey(codingAgentStartFromSchema),
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */

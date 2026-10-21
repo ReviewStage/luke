@@ -36,6 +36,7 @@ import {
   chatGptHostAnswerSchema,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
+  providerKeyForAgentsRequestSchema,
   providerKeyKindSchema,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
@@ -113,6 +114,10 @@ export const accountContract = {
     .meta(bodyCap(PROVIDER_KEY_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }))
     .input(exactInput(providerKeySaveRequestSchema))
+    .output(EffectSchema.flip(providerKeysAnswerSchema)),
+  setProviderKeyForAgents: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.PATCH, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }))
+    .input(exactInput(providerKeyForAgentsRequestSchema))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
   removeProviderKey: hostedProcedure
     .meta(

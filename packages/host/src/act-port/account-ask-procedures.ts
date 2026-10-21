@@ -10,6 +10,7 @@ import type {
   PlanTemplateRevisionsAnswerView,
   PlanTemplateRevisionsParams,
   PlanTemplateWriteParams,
+  ProviderKeyForAgentsParams,
   ProviderKeyRemoveParams,
   ProviderKeySaveParams,
   ProviderKeysAnswerView,
@@ -33,6 +34,7 @@ export interface AccountAskProceduresDependencies {
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+    providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
     chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
     chatGptSignInCancel(): Effect.Effect<void>;
     githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
@@ -78,6 +80,12 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.providerKeyRemove(input);
+    }),
+    [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]: actPort[
+      ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.providerKeyForAgents(input);
     }),
     [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actPort[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN].effect(
       function* ({ context, errors }) {

@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_PAYER,
+  CODING_AGENT_STATUS,
+  type CodingAgentPayer,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import type { IntegrationProviderParams } from "@luke/features/integration-view";
 import {
@@ -13,25 +18,34 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeysAnswer,
+} from "@luke/features/provider-key-wire";
+import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
   pressInComposer,
 } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { startFailureNote } from "./coding-agent-model.js";
@@ -165,27 +179,31 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  // Each tab reads the window's document from a registry of its own, so one test's account never answers another's.
   act(() =>
     root.render(
-      createElement(
-        OpenSettingsProvider,
-        { value: (link: SettingsLink) => links.push(link) },
+      onRegistry(
+        AtomRegistry.make(),
         createElement(
-          GitHubConnectProvider,
-          {
-            value: {
-              connection: { connected: false, login: null },
-              connect: () => {
-                github.connects += 1;
-                return Promise.resolve(true);
-              },
-              disconnect: () => Promise.resolve(false),
-            },
-          },
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => links.push(link) },
           createElement(
-            RepositoryRemedyProvider,
-            { value: doors },
-            createElement(DraftAgentTab, { draft, control }),
+            GitHubConnectProvider,
+            {
+              value: {
+                connection: { connected: false, login: null },
+                connect: () => {
+                  github.connects += 1;
+                  return Promise.resolve(true);
+                },
+                disconnect: () => Promise.resolve(false),
+              },
+            },
+            createElement(
+              RepositoryRemedyProvider,
+              { value: doors },
+              createElement(DraftAgentTab, { draft, control }),
+            ),
           ),
         ),
       ),
@@ -589,4 +607,107 @@ test("a draft New task handed over after its agent was refused sends nothing by 
     [{ refused: undefined }],
     "the refusal handed over is let go as it sends",
   );
+});
+
+/** The account's keys as the service holds them: a Claude plan, its default as given, and an Anthropic API key. */
+function plannedKeys(forAgents: boolean): ProviderKeysAnswer {
+  const kept = {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    hint: "sk-ant-…fake",
+    addedAt: 0,
+    status: PROVIDER_KEY_STATUS.VERIFIED,
+    statusAt: 0,
+  };
+  return {
+    keys: [kept],
+    subscriptions: [
+      {
+        ...kept,
+        kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        status: PROVIDER_KEY_STATUS.UNVERIFIED,
+        forAgents,
+      },
+    ],
+  };
+}
+
+/** A draft on a Claude model for an account in the cohort or not, the keys read as given; each Start's payer written down. */
+async function payerTab(options: {
+  cohort: boolean;
+  keys: ProviderKeysAnswer;
+  payer?: CodingAgentPayer;
+  model?: string;
+}) {
+  let keysRead = 0;
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.PROVIDER_KEYS_READ]: () => {
+      keysRead += 1;
+      return Promise.resolve(options.keys);
+    },
+  });
+  handState({}, { access: { admin: false, nativeAgents: options.cohort } });
+  const payers: (CodingAgentPayer | undefined)[] = [];
+  const tab = mount(
+    [],
+    {
+      ...DRAFT,
+      choice: { model: options.model ?? "anthropic/claude-opus-5.5", effort: "high" },
+      ...(options.payer === undefined ? undefined : { payer: options.payer }),
+    },
+    {
+      startPrompt: (...args) => {
+        payers.push(args[5]);
+        return Promise.resolve(undefined);
+      },
+    },
+  );
+  await settle();
+  const field = () =>
+    [...document.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label")?.startsWith("Who pays: ") === true,
+    );
+  return { ...tab, payers, field, keysRead: () => keysRead };
+}
+
+test("a cohort account with a Claude plan sees who pays beside the chip, standing on its default, and a Start on the default names no payer, so the service's default decides", async () => {
+  const tab = await payerTab({ cohort: true, keys: plannedKeys(true) });
+  assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: Claude plan");
+  await tab.send();
+  assert.deepEqual(tab.payers, [undefined]);
+});
+
+test("a payer picked for the one agent is the one its Start names, and with the default off the field stands on the API key", async () => {
+  const picked = await payerTab({
+    cohort: true,
+    keys: plannedKeys(true),
+    payer: CODING_AGENT_PAYER.API_KEY,
+  });
+  assert.equal(picked.field()?.getAttribute("aria-label"), "Who pays: API key");
+  await picked.send();
+  assert.deepEqual(picked.payers, [CODING_AGENT_PAYER.API_KEY]);
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  const off = await payerTab({ cohort: true, keys: plannedKeys(false) });
+  assert.equal(off.field()?.getAttribute("aria-label"), "Who pays: API key");
+});
+
+test("outside the cohort, or on a GPT model, the draft is as it was: no payer drawn or sent, and outside the cohort no key is read", async () => {
+  const outside = await payerTab({
+    cohort: false,
+    keys: plannedKeys(true),
+    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  });
+  assert.equal(outside.field(), undefined);
+  assert.equal(outside.keysRead(), 0);
+  await outside.send();
+  assert.deepEqual(outside.payers, [undefined]);
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  const gpt = await payerTab({ cohort: true, keys: plannedKeys(true), model: "openai/gpt-5.5" });
+  assert.equal(gpt.field(), undefined);
 });

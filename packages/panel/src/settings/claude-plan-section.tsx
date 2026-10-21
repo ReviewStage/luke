@@ -29,6 +29,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { HarnessMark } from "../harness-marks.js";
 import { dayText } from "../tasks/task-time.js";
+import { SwitchRow } from "./switch-row.js";
 
 /**
  * claude-plan-section.tsx -- Settings › Coding agents › Claude Code: the account's Claude plan, connected by pasting a `claude setup-token` and disconnected.
@@ -41,7 +42,10 @@ import { dayText } from "../tasks/task-time.js";
  * refusal says why under the field and leaves it as pasted. Connected, the
  * row draws the service's status and hint of the token and offers
  * Disconnect, asked first. The service never answers a token, so nothing
- * here holds one but the one being pasted. The whole group is kept out of
+ * here holds one but the one being pasted. Connected, a switch beneath the
+ * row says whether the plan pays for the account's coding agents by
+ * default, on as the plan is connected; Start may pick another payer for
+ * one agent whatever it says. The whole group is kept out of
  * the screen recording, which masks a field's characters but not their
  * count.
  */
@@ -65,6 +69,10 @@ const WORDS = {
   READ_FAILED: "Your Claude plan could not be read.",
   SAVE_FAILED: "The token could not be saved. Try again.",
   DISCONNECT_FAILED: "Your Claude plan could not be disconnected. Try again.",
+  FOR_AGENTS: "Use my Claude plan for coding agents",
+  FOR_AGENTS_DETAIL:
+    "New agents on a Claude model run on Claude Code with your plan. You can pick another payer when you start one.",
+  FOR_AGENTS_FAILED: "The default could not be changed. Try again.",
 } as const;
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
@@ -219,6 +227,23 @@ export function ClaudePlanSection({ signedIn }: { signedIn: boolean }): React.JS
         }),
     [act],
   );
+  const turnForAgents = useCallback(
+    (forAgents: boolean): Promise<ActionResult> =>
+      act(ACT_KIND.PROVIDER_KEYS_FOR_AGENTS, {
+        provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+        kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        forAgents,
+      })
+        .catch(() => undefined)
+        .then((turned): ActionResult => {
+          if (turned === undefined || "failure" in turned) {
+            return { status: ACTION_RESULT_STATUS.REJECTED, reason: WORDS.FOR_AGENTS_FAILED };
+          }
+          setAnswer(turned);
+          return { status: ACTION_RESULT_STATUS.ACCEPTED };
+        }),
+    [act],
+  );
   const removal = useConfirmDialog(
     { subject: stored !== undefined, surfaceOpen: true },
     disconnect,
@@ -311,6 +336,14 @@ export function ClaudePlanSection({ signedIn }: { signedIn: boolean }): React.JS
                 </>
               )}
             </SettingsRow>
+            {stored !== undefined ? (
+              <SwitchRow
+                label={WORDS.FOR_AGENTS}
+                detail={WORDS.FOR_AGENTS_DETAIL}
+                checked={stored.forAgents !== false}
+                onChange={turnForAgents}
+              />
+            ) : null}
           </div>
         ) : readFailed ? (
           <SettingsLine>

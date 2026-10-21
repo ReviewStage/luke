@@ -122,6 +122,7 @@ import {
   type PlanTemplateRevisionsAnswerView,
   type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
+  type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -688,6 +689,8 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
+  providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
   /** A ChatGPT sign-in run through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
   chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
@@ -1759,6 +1762,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : undefined),
           ...("from" in params ? { from: params.from } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
+          ...("payer" in params ? { payer: params.payer } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -1974,6 +1978,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
           provider: params.provider,
           ...(params.kind === undefined ? undefined : { kind: params.kind }),
+        }),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    providerKeyForAgents: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS, {
+          provider: params.provider,
+          kind: params.kind,
+          forAgents: params.forAgents,
         }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
       ),

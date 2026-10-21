@@ -29,6 +29,8 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /**
    * Settings › Coding agents › Codex: Sign in with ChatGPT for Luke's hosted
    * runtime, run by the host through the developer's browser, and the one

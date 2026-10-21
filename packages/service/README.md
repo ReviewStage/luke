@@ -451,8 +451,9 @@ answers the route over a fixed catalog, byte for byte as the old group did.
 `src/accounts/provider-keys-procedures.ts` answers `/api/account/provider-keys` on the
 hosted oRPC router (`src/orpc/`), the
 account's own Anthropic and OpenAI API keys, at most one per provider:
-`GET` answers what each is, `PUT` saves one, and `DELETE
-?provider=<provider>` removes one, each answered with the keys as they then
+`GET` answers what each is, `PUT` saves one, `DELETE
+?provider=<provider>` removes one, and `PATCH` turns a connected plan's
+default for the account's coding agents on or off, each answered with the keys as they then
 stand (`@luke/features/provider-key-wire`). No answer carries a key: what
 the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —

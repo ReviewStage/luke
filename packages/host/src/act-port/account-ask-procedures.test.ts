@@ -44,6 +44,8 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: "Could not read your API keys on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: "Could not save your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Could not remove your API key on this system.",
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]:
+    "Could not change your plan's default on this system.",
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Could not sign in with ChatGPT on this system.",
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
     "Could not cancel the ChatGPT sign-in on this system.",
@@ -73,6 +75,15 @@ const ACTS = [
     kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE,
     payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH },
     ask: "providerKeyRemove",
+  },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS,
+    payload: {
+      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+      forAgents: false,
+    },
+    ask: "providerKeyForAgents",
   },
   { kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN, payload: undefined, ask: "chatGptSignIn" },
   { kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ, payload: undefined, ask: "planTemplateRead" },

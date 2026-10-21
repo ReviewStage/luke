@@ -23,6 +23,7 @@
 import type {
   CodingAgentAttachment,
   CodingAgentMessage,
+  CodingAgentPayer,
   CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -141,7 +142,8 @@ function forkFrom(fork: AgentFork): NonNullable<ForkStart["from"]> {
  * message, a note where the box holds anything, its words and the files
  * with them, the servers the draft switched off, none among them as well,
  * and the choice only where one was made, since a fork otherwise runs on
- * the source's.
+ * the source's; the payer only where the developer picked one, since a fork
+ * otherwise follows the account's default.
  */
 export function forkStart(input: {
   readonly draftId: string;
@@ -150,9 +152,10 @@ export function forkStart(input: {
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
+  readonly payer?: CodingAgentPayer | undefined;
 }): ForkStart {
   const note = input.words.trim();
-  const { attachments, choice, disabledServers } = input;
+  const { attachments, choice, disabledServers, payer } = input;
   return {
     idempotencyKey: input.draftId,
     from: forkFrom(input.fork),
@@ -161,6 +164,7 @@ export function forkStart(input: {
     // Note that the servers go even when none is off, because a Start naming none runs on the source's.
     disabledServers,
     ...(choice === undefined ? undefined : choiceRequest(choice)),
+    ...(payer === undefined ? undefined : { payer }),
   };
 }
 
