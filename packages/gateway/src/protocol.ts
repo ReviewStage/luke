@@ -204,6 +204,15 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /**
+   * A workspace's automations, or an automation's runs, followed from now
+   * until let go or signed out, on the service's live read. What it holds
+   * is heard as `AUTOMATIONS_CHANGED` events, never answered; following
+   * again starts over, from the list or history as it stands.
+   */
+  AUTOMATIONS_FOLLOW: "automations.follow",
+  /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
+  AUTOMATIONS_UNFOLLOW: "automations.unfollow",
   /** A workspace's Factory world, read whole as it stands now. */
   FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
@@ -656,6 +665,8 @@ export const GATEWAY_EVENT = {
   TASKS_PAGES_CHANGED: "tasks.pagesChanged",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
+  /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
+  AUTOMATIONS_CHANGED: "automations.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

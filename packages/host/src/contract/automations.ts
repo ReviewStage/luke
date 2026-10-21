@@ -1,7 +1,10 @@
 import {
+  type AutomationListView,
+  type AutomationRunsView,
   automationChangeParamsSchema,
   automationCreateParamsSchema,
   automationDeletedViewSchema,
+  automationFollowSchema,
   automationIdParamsSchema,
   automationListParamsSchema,
   automationListViewSchema,
@@ -10,6 +13,7 @@ import {
   automationRunViewSchema,
   automationViewSchema,
 } from "@luke/features/automation-view";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AUTOMATION_ACT_KIND } from "./kinds.js";
@@ -18,7 +22,8 @@ import { AUTOMATION_ACT_KIND } from "./kinds.js";
  * automations.ts -- the Automations pages' asks of the host about the account's automations, as procedures.
  *
  * Each output is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port.
+ * row's value into what crosses the port. A follow's output is the stream
+ * of what it follows, each as it now stands, for as long as it is held open.
  */
 export const automationActsContract = {
   [AUTOMATION_ACT_KIND.AUTOMATIONS_LIST]: actProcedure(
@@ -56,4 +61,9 @@ export const automationActsContract = {
   )
     .input(exactInput(automationIdParamsSchema))
     .output(EffectSchema.flip(automationViewSchema)),
+  [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: actProcedure(
+    "Could not follow the automations on this system.",
+  )
+    .input(exactInput(automationFollowSchema))
+    .output(eventIterator(type<AutomationListView | AutomationRunsView>())),
 };
