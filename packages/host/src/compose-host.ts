@@ -262,7 +262,10 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     agentTaskOf = codingAgents.agentTaskOf;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
-    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => tasks.showCode(taskId, shown);
+    // Note that code a call into an agent with no task shows names no task, so no task's Code tab takes it.
+    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => {
+      if (taskId !== undefined) tasks.showCode(taskId, shown);
+    };
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
