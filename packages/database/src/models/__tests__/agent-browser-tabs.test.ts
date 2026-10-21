@@ -23,6 +23,7 @@ import {
   listTaskBrowserTabs,
   readTaskBrowserTab,
   renewBrowserTabTakeover,
+  retargetBrowserTab,
   takeOverBrowserTab,
   upsertBrowserTab,
 } from "../agent-browser-tabs.js";
@@ -307,6 +308,34 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
       assert.deepEqual(yield* listAgentBrowserTabs(agent.conversationId), []);
       assert.deepEqual(Option.getOrThrow(yield* listTaskBrowserTabs(starter, taskId)), []);
     }),
+  );
+
+  it.effect(
+    "a reopened tab keeps its id, page, and takeover on its new target, in its own agent's browser alone",
+    () =>
+      Effect.gen(function* () {
+        const { teammate, agent, lukeConversation } = yield* openTask;
+        const tab = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-1", "https://shop.test/"),
+        );
+        const now = yield* DateTime.nowAsDate;
+        yield* takeOverBrowserTab(tab.id, teammate, new Date(now.getTime() + MINUTE_MS), now);
+
+        assert.equal(yield* retargetBrowserTab(lukeConversation, tab.id, "target-9"), false);
+        assert.equal(yield* retargetBrowserTab(agent.conversationId, tab.id, "target-2"), true);
+        const [moved] = yield* listAgentBrowserTabs(agent.conversationId);
+
+        assert.ok(moved);
+        assert.equal(moved.id, tab.id);
+        assert.equal(moved.targetId, "target-2");
+        assert.equal(moved.address, "https://shop.test/");
+        assert.equal(moved.driverUserId, teammate);
+        // A later report from the browser names the new target and finds the same tab.
+        const again = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-2", "https://shop.test/cart"),
+        );
+        assert.equal(again.id, tab.id);
+      }),
   );
 
   it.effect(

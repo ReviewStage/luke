@@ -611,7 +611,28 @@ const BEFORE_CHAT = Schema.decodeUnknownSync(
   Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
 )(JSON.parse(readFileSync(BEFORE_CHAT_PATH, "utf8")));
 
-test("with Chat off the instructions are main's own, byte for byte, and with it on they add the chat section alone", () => {
+/** What the instructions' opening adds with Chat on: that the agent is one of a team talking in its task's chat. */
+const TEAM_WORDS = / You are not working alone: [^\n]*?as its section below says\./u;
+
+/** How the instructions say an agent the agent starts reports back, with Chat on and with it off. */
+/** How an agent another started is told to send its starter what it would have posted in the inbox, with Chat on and with it off. */
+const STARTER_REACH_WORDS = {
+  on: "in your task's chat with that agent's mention link where you share a task, or with `message_agent` where you do not",
+  off: "with `message_agent`",
+} as const;
+
+const STARTED_REPORT_WORDS = {
+  on: "reports back in your task's chat, mentioning you, where it is on your task, and with a message where it is not",
+  off: "reports back with a message",
+} as const;
+
+/** What the instructions say of messaging another agent with Chat on, and with it off. */
+const MESSAGE_AGENT_WORDS = {
+  on: / Talk to the agents on your task in your task's chat, never with `message_agent`[^\n]*?keep each message short and complete\./u,
+  off: " Message another agent when its work meets yours, such as a change of yours it depends on or something only it knows, and keep each message short and complete.",
+} as const;
+
+test("with Chat off the instructions are main's own, byte for byte, and with it on they open on the team, add the chat section, and send the task's agents to it rather than message_agent", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const before = BEFORE_CHAT[brief];
     assert.ok(before, brief);
@@ -622,12 +643,23 @@ test("with Chat off the instructions are main's own, byte for byte, and with it 
     assert.equal(off.onTask, before.onTask, brief);
     assert.equal(off.taskless, before.taskless, brief);
     const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
-    assert.ok(on.includes("## Chat with other agents"), brief);
+    assert.ok(on.includes("## Your team's chat"), brief);
     // Chat's word on the inbox keeps the exception for an agent another coding agent started.
     assert.ok(on.includes("or, where another coding agent started you, to that agent"), brief);
-    const section = on.slice(on.indexOf("\n\n## Chat with other agents"));
+    const section = on.slice(on.indexOf("\n\n## Your team's chat"));
     const end = section.indexOf("\n\n## ", 2);
-    assert.equal(on.replace(section.slice(0, end), ""), before.onTask, brief);
+    assert.match(on, MESSAGE_AGENT_WORDS.on, brief);
+    assert.match(on.split("\n")[0] ?? "", TEAM_WORDS, brief);
+    assert.equal(
+      on
+        .replace(section.slice(0, end), "")
+        .replace(MESSAGE_AGENT_WORDS.on, MESSAGE_AGENT_WORDS.off)
+        .replace(TEAM_WORDS, "")
+        .replace(STARTED_REPORT_WORDS.on, STARTED_REPORT_WORDS.off)
+        .replace(STARTER_REACH_WORDS.on, STARTER_REACH_WORDS.off),
+      before.onTask,
+      brief,
+    );
     for (const tool of Object.values(CHAT_TOOLS)) {
       assert.ok(!off.onTask.includes(tool.name), `${brief} with Chat off names ${tool.name}`);
     }
@@ -638,7 +670,7 @@ test("with Chat on the session keeps the developer's inbox for what it needs of 
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const instructions = coderInstructions("Acme/Relay", brief, false, null, undefined, true);
     assert.ok(instructions.includes("## The developer's inbox"), brief);
-    assert.ok(instructions.includes("## Chat with other agents"), brief);
+    assert.ok(instructions.includes("## Your team's chat"), brief);
     for (const tool of [...Object.values(CHAT_TOOLS), ...Object.values(INBOX_TOOLS)]) {
       assert.ok(instructions.includes(tool.name), `${brief} names ${tool.name}`);
     }

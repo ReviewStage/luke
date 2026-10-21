@@ -22,6 +22,7 @@ import {
   ensureTaskChannel,
   findOrMakeDm,
   history,
+  openTopicChannel,
   postAsk,
   postMessage,
   readAttachment,
@@ -66,7 +67,6 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
-import { task } from "@luke/database/schemas/task";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -7547,12 +7547,10 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
             channelId: dm.id,
           },
         );
-        assert.deepEqual(sent.receipt, {
-          told: [],
-          held: [chat.links.person],
-          left: [],
-          unresolved: [],
-        });
+        // The other agent cannot read the DM, so naming it there names no one.
+        assert.deepEqual(sent.receipt.told, []);
+        assert.deepEqual(sent.receipt.held, [chat.links.person]);
+        assert.equal(sent.receipt.unresolved.length, 1);
         assert.equal(eve.sent.length, 0);
       }),
   );
@@ -8010,32 +8008,23 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post to a member's mention link is a DM the other agent reads by the poster's link, a reply lands in the thread it answers and tells its poster, and every message names its thread's root",
+    "a post to a member's mention link is refused, since a task's agents talk in its channel; a reply lands in the thread it answers and tells its poster, and every message names its thread's root",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const chat = yield* openAgents(eve);
         const { first: one, second: two } = chat.links;
-        const dm = yield* chat.post(chat.first, { text: "Is the invite table yours?", to: two });
-        assert.ok("told" in dm);
-        assert.deepEqual([dm.in, dm.told], [two, [two]]);
-        const direct = yield* chat.read(chat.second, { channel: one });
-        assert.ok("messages" in direct);
         assert.deepEqual(
-          direct.messages.map((message) => [message.in, message.text]),
-          [[one, "Is the invite table yours?"]],
+          yield* chat.post(chat.first, { text: "Is the invite table yours?", to: two }),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.ELSEWHERE },
         );
-        // The read of one channel marks nothing read.
-        const unread = yield* chat.read(chat.second);
-        assert.ok("messages" in unread);
-        assert.deepEqual(
-          unread.channels.map((channel) => [channel.name, channel.unread]),
-          [
-            ["#teammate-invitations", 0],
-            [one, 0],
-          ],
-        );
-        assert.equal(unread.messages.length, 1);
+        assert.equal(eve.sent.length, 0);
+        const named = yield* chat.post(chat.first, {
+          text: "Is the invite table yours?",
+          to: "#teammate-invitations",
+        });
+        assert.ok("in" in named);
+        assert.equal(named.in, "#teammate-invitations", "a to naming its own channel posts there");
 
         const root = yield* chat.post(chat.first, { text: "Who owns the emails?" });
         assert.ok("seq" in root);
@@ -8059,7 +8048,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "an agent started on another plan of the workspace answers to its link, written bare, before it ever posts or reads, and is told a DM to it",
+    "an agent on another plan of the workspace is out of reach: a post to its link is refused, naming it tells it nothing, and neither reads the other's chat",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -8083,29 +8072,46 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           ),
         );
         const address = link.slice(link.indexOf("](") + 2, -1);
-        const dm = yield* chat.post(chat.first, { text: "Take the emails?", to: address });
-        assert.ok("told" in dm);
-        assert.deepEqual([dm.in, dm.told], [link, [link]], "the DM is named by its link whole");
+        assert.deepEqual(yield* chat.post(chat.first, { text: "Take the emails?", to: address }), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: CHAT_TOOL_REFUSAL.ELSEWHERE,
+        });
+        const across = yield* chat.post(chat.first, { text: `${link} take the emails?` });
+        assert.ok("told" in across);
+        assert.deepEqual([across.told, across.unresolved.length], [[], 1]);
+        assert.equal(eve.sent.length, 0);
+        const outsider: ChatAgent = {
+          ...chat.first,
+          taskId: other.id,
+          self: { kind: MEMBER_KIND.AGENT, agentId: third.agent.id },
+        };
+        const theirs = yield* chat.read(outsider);
+        assert.ok("messages" in theirs);
         assert.deepEqual(
-          eve.sent.map((each) => each.sessionId),
-          [sessionId],
+          [theirs.messages, theirs.channels.map((channel) => channel.name)],
+          [[], ["#billing-export"]],
         );
+        const ours = yield* chat.read(chat.second);
+        assert.ok("members" in ours);
+        assert.ok(!ours.members.some((member) => member.mention === link));
+        assert.deepEqual(yield* chat.read(chat.second, { channel: "#billing-export" }), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: CHAT_TOOL_REFUSAL.NO_CHANNEL,
+        });
       }),
   );
 
   it.effect(
-    "a #name no channel holds opens a topic channel, and the read lists the roster and every channel the agent sees",
+    "a post to any other channel is refused and opens none, and the read lists the task's members and its own channel alone",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
-        const topic = yield* chat.post(chat.first, {
-          text: "Release notes go here.",
-          to: "#releases",
-          purpose: "What ships, and when",
-        });
-        assert.ok("in" in topic);
-        assert.equal(topic.in, "#releases");
-        yield* chat.post(chat.first, { text: "Hello all.", to: "#general" });
+        for (const to of ["#releases", "#general"]) {
+          assert.deepEqual(yield* chat.post(chat.first, { text: "Hello all.", to }), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: CHAT_TOOL_REFUSAL.ELSEWHERE,
+          });
+        }
         const read = yield* chat.read(chat.second);
         assert.ok("members" in read);
         assert.equal(read.you, chat.links.second);
@@ -8116,15 +8122,9 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
             { mention: chat.links.second, kind: MEMBER_KIND.AGENT },
           ].toSorted((a, b) => a.mention.localeCompare(b.mention)),
         );
-        assert.deepEqual(read.channels.map((channel) => [channel.name, channel.kind]).toSorted(), [
-          ["#general", CHANNEL_KIND.GENERAL],
-          ["#releases", CHANNEL_KIND.TOPIC],
-          ["#teammate-invitations", CHANNEL_KIND.TASK],
-        ]);
-        // The topic says what it is for, as its opener wrote it, to every agent that reads.
-        assert.equal(
-          read.channels.find((channel) => channel.name === "#releases")?.purpose,
-          "What ships, and when",
+        assert.deepEqual(
+          read.channels.map((channel) => [channel.name, channel.kind]),
+          [["#teammate-invitations", CHANNEL_KIND.TASK]],
         );
       }),
   );
@@ -8134,8 +8134,16 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
-        yield* chat.post(chat.first, { text: "Notes.", to: "#releases", purpose: "What ships" });
-        yield* chat.post(chat.first, { text: "Hi.", to: "#design" });
+        // The topics are a person's, opened from the window, since an agent posts in its task's channel alone.
+        const workspace = chat.task.workspaceId;
+        const person = Option.getOrThrow(
+          yield* ensureMember(chat.owner, workspace, {
+            kind: MEMBER_KIND.HUMAN,
+            userId: chat.owner,
+          }),
+        );
+        yield* openTopicChannel(chat.owner, workspace, "releases", person.id, "What ships");
+        yield* openTopicChannel(chat.owner, workspace, "design", person.id);
         const renamed = yield* chat.editChannel(chat.second, {
           channel: "#releases",
           name: "release-train",
@@ -8194,7 +8202,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post refused names why: both a reply and a target, a link naming no member or the agent itself, a handle, a message that is not there, words that do not read, and a turn past its bound; a read of a channel or a DM the agent does not see",
+    "a post refused names why: both a reply and a target, any place but its own channel, a handle, a message that is not there, words that do not read, and a turn past its bound; a read of a channel or a DM the agent does not see",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -8209,14 +8217,14 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
             text: "Hi.",
             to: `[@Ghost](https://tryluke.dev/acme/agent/${randomUUID()})`,
           }),
-          refused(CHAT_TOOL_REFUSAL.NO_MEMBER),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
         );
         assert.deepEqual(
           yield* chat.post(chat.first, {
             text: "Hi.",
             to: "https://tryluke.dev/acme/plan/pl_1",
           }),
-          refused(CHAT_TOOL_REFUSAL.NO_MEMBER),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
           "a task's link names no member",
         );
         assert.deepEqual(
@@ -8225,7 +8233,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.deepEqual(
           yield* chat.post(chat.first, { text: "Hi.", to: chat.links.first }),
-          refused(CHAT_TOOL_REFUSAL.TO_SELF),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
         );
         assert.deepEqual(
           yield* chat.post(chat.first, { text: "Hi.", replyTo: 9_999 }),
@@ -8284,7 +8292,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post to a person's link is a DM with that person, and one to the task's Luke's link mints the Luke and DMs him, each named back by its link",
+    "a post to a person's or the task's Luke's link is refused, while their links in a post's words tell them, the Luke minted as he is named, each named back by its link",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
@@ -8297,70 +8305,54 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
             }),
           ),
         );
+        const personLink = `[@Someone](https://tryluke.dev/acme/person/${chat.owner})`;
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Can I take the invite file?", to: personLink }),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.ELSEWHERE },
+        );
         const toPerson = yield* chat.post(chat.first, {
-          text: "Can I take the invite file?",
-          to: `[@Someone](https://tryluke.dev/acme/person/${chat.owner})`,
+          text: `${personLink} can I take the invite file?`,
         });
         assert.ok("held" in toPerson);
-        assert.deepEqual([toPerson.in, toPerson.held], [person.link, [person.link]]);
+        assert.deepEqual(toPerson.held, [person.link]);
 
         const lukes = Effect.map(roster(chat.owner, workspace), (rows) =>
           rows.filter((row) => row.kind === MEMBER_KIND.LUKE),
         );
         assert.deepEqual(yield* lukes, [], "no Luke is a member before he is named");
         const toLuke = yield* chat.post(chat.first, {
-          text: "Is the plan settled?",
-          to: `https://tryluke.dev/acme/plan/${chat.task.id}/luke`,
+          text: `[@Luke](https://tryluke.dev/acme/plan/${chat.task.id}/luke) is the plan settled?`,
         });
         const [luke] = yield* lukes;
         assert.ok(luke !== undefined && "held" in toLuke);
         assert.equal(luke.taskId, chat.task.id);
         const lukeLink = (yield* memberNaming(luke)).link;
-        assert.deepEqual([toLuke.in, toLuke.held], [lukeLink, [lukeLink]]);
-        const read = yield* chat.read(chat.first, { channel: lukeLink });
-        assert.ok("messages" in read);
-        assert.deepEqual(
-          read.messages.map((message) => message.text),
-          ["Is the plan settled?"],
-        );
+        assert.deepEqual(toLuke.held, [lukeLink]);
       }),
   );
 
   it.effect(
-    "an agent whose coding agent is gone, and a Luke whose task is gone, are named by a plain label that names no one",
+    "an agent whose coding agent is gone is named by a plain label that names no one, and the task's chat lists it no more",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
         const said = yield* chat.post(chat.second, { text: "Handing the table over." });
         assert.ok("seq" in said);
-        const other = yield* startTask(chat.owner, { name: "Billing export" });
-        yield* chat.post(chat.first, {
-          text: "Is billing yours?",
-          to: `https://tryluke.dev/acme/plan/${other.id}/luke`,
-        });
         const db = yield* Database;
         const secondId = "agentId" in chat.second.self ? chat.second.self.agentId : "";
         yield* db.delete(codingAgent).where(eq(codingAgent.id, secondId));
-        yield* db.delete(task).where(eq(task.id, other.id));
 
         const read = yield* chat.read(chat.first, { channel: "#teammate-invitations" });
         assert.ok("members" in read);
         assert.deepEqual(
-          read.members.filter((member) => !member.mention.startsWith("[")),
-          [
-            { mention: CHAT_MEMBER_LABEL.FORMER_AGENT, kind: MEMBER_KIND.AGENT },
-            { mention: CHAT_MEMBER_LABEL.LUKE, kind: MEMBER_KIND.LUKE },
-          ],
+          read.members.map((member) => member.mention),
+          [chat.links.first],
         );
         assert.deepEqual(
           read.messages
             .filter((message) => message.seq === said.seq)
             .map((message) => message.from),
           [CHAT_MEMBER_LABEL.FORMER_AGENT],
-        );
-        assert.ok(
-          read.channels.some((channel) => channel.name === CHAT_MEMBER_LABEL.LUKE),
-          "the DM with the gone Luke is named by his label",
         );
       }),
   );
@@ -8493,7 +8485,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "an ask stays where it was first posted, and one whose shape asks what it cannot is refused before anything is posted",
+    "an ask goes nowhere but the task's channel, and one whose shape asks what it cannot is refused before anything is posted",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
@@ -8501,7 +8493,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         yield* chat.post(chat.first, QUEUE_ASK);
         assert.deepEqual(
           yield* chat.post(chat.first, { ...QUEUE_ASK, to: "#general" }),
-          refused(ASK_REFUSAL.ELSEWHERE),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
         );
         assert.deepEqual(
           yield* chat.post(chat.first, {
@@ -8673,9 +8665,9 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
 
         const plain = yield* chat.post(chat.first, { text: "Starting on the emails." });
         const root = yield* chat.post(chat.first, QUEUE_ASK);
-        const dm = yield* chat.post(chat.first, { text: "Is the table yours?", to: two });
+        const dm = yield* chat.post(chat.first, { text: `${two} is the table yours?` });
         assert.ok("seq" in plain && "seq" in root && "told" in dm);
-        assert.deepEqual(dm.told, [two], "the DM is told as a notice");
+        assert.deepEqual(dm.told, [two], "the mention is told as a notice");
         assert.equal(
           yield* chatDigest(chat.second),
           [
@@ -10634,6 +10626,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         );
         const sent = yield* chat.wrote({
           text: `${named} take the table, please.`,
+          to: `#${chat.channel.name ?? ""}`,
           clientKey: randomUUID(),
         });
         assert.ok("posted" in sent);
@@ -10680,6 +10673,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         );
         yield* chat.wrote({
           text: `${named} see ${plan}, and ask https://tryluke.dev/acme/person/${chat.owner}.`,
+          to: `#${chat.channel.name ?? ""}`,
           clientKey: randomUUID(),
         });
         assert.equal(eve.sent.length, 2);

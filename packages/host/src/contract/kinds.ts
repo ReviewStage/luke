@@ -321,6 +321,8 @@ export const TASKS_ACT_KIND = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_ISSUE: "tasks.issue",
+  /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
+  TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   TASKS_COLOUR_CODE: "tasks.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -345,6 +347,17 @@ export const TASKS_ACT_KIND = {
   TASKS_COMMENTS: "tasks.comments",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
+} as const;
+
+/**
+ * A cloud Browser tab's live view (`@luke/features/browser-live-acts`): one
+ * view attached for the asking panel, its socket opened by the host under
+ * the account's bearer, and detached. What the page shows travels on the
+ * port an attach posts to that panel, never on an act.
+ */
+export const BROWSER_LIVE_ACT_KIND = {
+  BROWSER_LIVE_ATTACH: "browserLive.attach",
+  BROWSER_LIVE_DETACH: "browserLive.detach",
 } as const;
 
 /**
@@ -504,6 +517,7 @@ export const PORT_ACT_KIND = {
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
   ...BROWSER_ACT_KIND,
+  ...BROWSER_LIVE_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
@@ -528,6 +542,7 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
 export const PLATFORM_PORT_ACT_KIND = {
   ...AVATAR_ACT_KIND,
   ...BROWSER_ACT_KIND,
+  ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,

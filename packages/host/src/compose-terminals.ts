@@ -48,9 +48,11 @@ import {
 import { Base64 } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
+import { type BrowserLiveConcern, browserLiveConcern } from "./compose-browser-live.js";
 import type { Composer } from "./composer.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
+import { openedUnderBearer } from "./relay-bearer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -134,6 +136,12 @@ export interface TerminalsComposer extends Composer {
   readonly reset: Effect.Effect<void>;
 }
 
+/** The shells' own methods: the concern's, but the live view's beside them (`compose-browser-live.ts`). */
+type ShellMethods = Omit<
+  PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.TERMINALS>,
+  keyof BrowserLiveConcern["methods"]
+>;
+
 /** The status of an upgrade a server refused for want of itself rather than the ask: it may answer the next one. */
 const SERVER_ERROR_STATUS = 500;
 
@@ -215,7 +223,13 @@ export function composeTerminals(
 ): Effect.Effect<TerminalsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const fibers = yield* FiberMap.make<string>();
-    return composed(dependencies, fibers, yield* HttpClient.HttpClient);
+    const views = browserLiveConcern(dependencies, yield* FiberMap.make<string>());
+    const terminals = composed(dependencies, fibers, yield* HttpClient.HttpClient);
+    return {
+      methods: { ...terminals.methods, ...views.methods },
+      lifetime: terminals.lifetime,
+      reset: Effect.andThen(terminals.reset, views.reset),
+    };
   });
 }
 
@@ -224,7 +238,7 @@ function composed(
   dependencies: TerminalsDependencies,
   fibers: FiberMap.FiberMap<string>,
   http: HttpClient.HttpClient,
-): TerminalsComposer {
+): Omit<TerminalsComposer, "methods"> & { readonly methods: ShellMethods } {
   const { kernel, account, client, openSocket } = dependencies;
   const connections = new Map<string, Connection>();
   const socketOrigin = webSocketOrigin(kernel.hostedServiceBaseUrl);
@@ -255,18 +269,7 @@ function composed(
       yield* socket.pause;
     });
 
-  /** The relay socket opened under the account's bearer; a refusal of it is renewed once, on a bearer that changed. */
-  const opened = (address: string) =>
-    Effect.gen(function* () {
-      const bearer = yield* account.token.readAccessToken();
-      if (bearer === undefined) return { refused: 401 } satisfies TerminalSocketOpening;
-      const opening = yield* openSocket(address, { authorization: `Bearer ${bearer}` });
-      if (!("refused" in opening) || opening.refused !== 401) return opening;
-      yield* Effect.ignore(account.token.refreshAccount());
-      const renewed = yield* account.token.readAccessToken();
-      if (renewed === undefined || renewed === bearer) return opening;
-      return yield* openSocket(address, { authorization: `Bearer ${renewed}` });
-    });
+  const opened = (address: string) => openedUnderBearer(account.token, openSocket, address);
 
   /**
    * One socket's life: opened, read until it closes, and its close read as
@@ -403,7 +406,7 @@ function composed(
 
   const encoder = new TextEncoder();
 
-  const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.TERMINALS> = {
+  const methods: ShellMethods = {
     [GATEWAY_METHOD.TERMINALS_LIST]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(

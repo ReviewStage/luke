@@ -18,6 +18,9 @@ import type { FramedPage } from "@luke/features/page-frame";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import type { AppCommand } from "@luke/settings/shortcuts";
 import type { NotificationsGrantor } from "@luke/voice/settings-controls";
+import type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
+
+export type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
 
 /**
  * The way the sidebar's Admin row takes an admin to the dashboard: a link
@@ -62,6 +65,12 @@ export interface AppPlatform {
   openGitHub(url: string): void;
   /** Opens a web page outside the window. */
   openWeb(url: string): void;
+  /**
+   * Opens a cloud Browser tab's live view socket: the desktop from its host
+   * under the account's bearer, reached over a port main posts this window,
+   * and a browser tab from its own page under the session cookie.
+   */
+  openBrowserLive: OpenBrowserLive;
   /** How the admin dashboard is reached from this window: a link to it, or a press the shell answers. */
   adminDashboard(): AdminDashboardWay;
   /**

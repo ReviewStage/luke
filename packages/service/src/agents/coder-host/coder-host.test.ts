@@ -9,6 +9,7 @@ import {
   agentWorkspace,
   ensureGeneral,
   ensureMember,
+  ensureTaskChannel,
   postMessage,
   roster,
 } from "@luke/database/models/chat-store";
@@ -97,6 +98,7 @@ import {
   type BrainHostTurn,
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
+import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
@@ -1274,6 +1276,76 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "an agent's browser call keeps its steps and the tabs it acted on in the transcript, and never a screenshot's picture",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
+        const picture = "/9j/4AAQSkZJRgABAQAAAQABAAD";
+        const input = { actions: [{ action: "screenshot", tab: "tab-1" }] };
+        const answer = {
+          status: BROWSER_TOOL_STATUS.RAN,
+          steps: [
+            {
+              action: "screenshot",
+              status: "done",
+              tab: "tab-1",
+              image: { mime: "image/jpeg", data: picture, width: 1280, height: 800 },
+            },
+          ],
+          skipped: 0,
+          tabs: [{ tab: "tab-1", url: "http://localhost:3000/", title: "Shop" }],
+        };
+
+        const call = { callId: "call-browser", toolName: CODER_TOOL.BROWSER };
+        const at = { turnId: "turn_0", sequence: 0, stepIndex: 0 };
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+          stamped({ type: "step.started", data: { ...at, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: { ...at, actions: [{ kind: "tool-call", ...call, input }] },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              ...at,
+              status: "completed",
+              result: { kind: "tool-result", ...call, output: answer },
+            },
+          }),
+          stamped({ type: "step.completed", data: { ...at, finishReason: "tool-calls" } }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+        ];
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const browsed = page.messages.flatMap((message) => message.parts).find(isToolUIPart);
+        assert.ok(browsed);
+        assert.equal(browsed.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+        assert.deepEqual(browsed.output, {
+          ...answer,
+          steps: [
+            {
+              action: "screenshot",
+              status: "done",
+              tab: "tab-1",
+              image: { mime: "image/jpeg", width: 1280, height: 800 },
+            },
+          ],
+        });
+        assert.equal(JSON.stringify(page).includes(picture), false);
+      }),
+  );
+
+  it.effect(
     "an agent's inbox calls run under its session: a post opens a thread, withdraw_ask settles its ask, and read_inbox reads it back",
     () =>
       Effect.gen(function* () {
@@ -1899,12 +1971,17 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const person = Option.getOrThrow(
           yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
         );
-        const general = Option.getOrThrow(yield* ensureGeneral(userId, workspace));
+        // The agent's own channel, the one its chat is scoped to.
+        const home = Option.getOrThrow(
+          agent.taskId === null
+            ? yield* ensureGeneral(userId, workspace)
+            : yield* ensureTaskChannel(userId, agent.taskId),
+        );
         // The agent joins before the post, as a member joins the chat at its head.
         yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id });
         yield* postMessage(userId, workspace, {
           authorMemberId: person.id,
-          to: { channelId: general.id },
+          to: { channelId: home.id },
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
           clientKey: "post-1",
         });

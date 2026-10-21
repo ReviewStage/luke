@@ -4,6 +4,14 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { browserSessionOf } from "@luke/service/agents/browser/agent-browser";
+import {
+  BROWSER_TOOL,
+  type BrowserToolResult,
+  browserModelOutput,
+  browserNotRun,
+  runBrowserTool,
+} from "@luke/service/agents/browser/browser-tool";
 import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
 import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
@@ -567,6 +575,40 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
           const call = unparsedWire(input as WireBoundaryInput);
           return yield* runOnMacTool(admitted.success.target.userId, call);
+        }),
+      ),
+  });
+}
+
+/**
+ * `browser` as the agent and its worker are offered it, each admitted on
+ * its own terms (the worker's on ownership, as its resolvers are), and run
+ * through the one door every agent's call goes through
+ * (`packages/service/src/agents/browser/browser-tool.ts`): the Chromium in
+ * the root's sandbox, which a worker shares, with its tabs kept under the
+ * agent's own conversation, which a worker's admission names too. A session
+ * the host does not admit runs nothing. Its screenshots reach the model as
+ * images and the transcript keeps the rest.
+ */
+export function browserFor(admit: CoderHost["admit"]) {
+  return defineTool({
+    description: BROWSER_TOOL.description,
+    inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
+    // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
+    toModelOutput: (output) => browserModelOutput(unparsedWire(output as WireBoundaryInput)),
+    execute: (input, ctx): Promise<BrowserToolResult> =>
+      runAgent(
+        Effect.gen(function* () {
+          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+          if (Result.isFailure(admitted)) return browserNotRun(admitted.failure);
+          const call = {
+            browserSession: browserSessionOf(ctx.session),
+            conversationId: admitted.success.target.conversationId,
+            // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
+            openSandbox: () => ctx.getSandbox(),
+          };
+          // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
+          return yield* runBrowserTool(call, unparsedWire(input as WireBoundaryInput));
         }),
       ),
   });

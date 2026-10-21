@@ -209,7 +209,8 @@ interface MessageContext {
   readonly chat: ChatAnswer;
   readonly names: ChatNames;
   readonly now: number;
-  readonly targets: readonly ChatTarget[];
+  /** What a composer posting in the channel offers to name: the members a post there reaches, and the channels. */
+  readonly targetsIn: (channelId: string) => readonly ChatTarget[];
   /** The words a dictation in the chat is likely to say. */
   readonly keywords: readonly string[];
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
@@ -390,7 +391,7 @@ function ThreadRow({
             {open && canReply ? (
               <ChatComposer
                 label="Reply in thread"
-                targets={context.targets}
+                targets={context.targetsIn(message.channelId)}
                 keywords={context.keywords}
                 compact
                 onSend={(text, attachments) =>
@@ -523,7 +524,14 @@ export function ChatPane({
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
 }): React.JSX.Element {
-  const targets = chatTargets(chat, names, mentionPlace);
+  // A composer offers only the members a post in its own channel reaches, as the service holds the chat to its tasks.
+  const targetsIn = (channelId: string) =>
+    chatTargets(
+      chat,
+      names,
+      mentionPlace,
+      chat.channels.find((each) => each.id === channelId),
+    );
   const keywords = chatKeywords(chat, names);
   const actorOf = useChatActor(chat, names);
   const context: MessageContext = {
@@ -531,7 +539,7 @@ export function ChatPane({
     chat,
     names,
     now,
-    targets,
+    targetsIn,
     keywords,
     openLink,
     onPost,
@@ -600,7 +608,7 @@ export function ChatPane({
         <ChatComposer
           key={channel.id}
           label={composerLabel(chat, names, channel)}
-          targets={targets}
+          targets={targetsIn(channel.id)}
           keywords={keywords}
           onSend={(text, attachments) =>
             onPost({ ...postOf(text, attachments), channelId: channel.id })

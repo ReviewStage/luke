@@ -156,8 +156,8 @@ export const CHAT_BOUNDS = {
   MAX_STEERS_PER_POST: 3,
   /** The most topic channels a workspace keeps open beside its general and plan channels. */
   MAX_TOPIC_CHANNELS: 12,
-  /** The most posts one agent's turn may make. */
-  MAX_POSTS_PER_TURN: 20,
+  /** The most posts one agent's turn may make: a coding agent's whole run is one turn, and it is told to keep its team posted throughout. */
+  MAX_POSTS_PER_TURN: 50,
   /** The most characters a handle may spell. */
   MAX_HANDLE_CHARS: 40,
   /** The most characters a `to` may spell: a channel's `#name`, or a member's mention link, whose label is a name and whose address an agent's task and id make long. */
@@ -550,7 +550,7 @@ export const editChannelInputSchema = EffectSchema.Struct({
  * whether it has left, an archived agent or plan, which is still named in
  * the messages it wrote.
  */
-const chatMemberSchema = EffectSchema.Struct({
+export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
   /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
@@ -568,7 +568,7 @@ const chatMemberSchema = EffectSchema.Struct({
 export type ChatMember = typeof chatMemberSchema.Type;
 
 /** A channel as a reader sees one: its kind, its name, the plan it is of, the two members of a DM, and whether it is archived. */
-const chatChannelSchema = EffectSchema.Struct({
+export const chatChannelSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(CHANNEL_KIND)),
   name: EffectSchema.optionalKey(EffectSchema.String),
@@ -588,7 +588,7 @@ const chatChannelSchema = EffectSchema.Struct({
 export type ChatChannel = typeof chatChannelSchema.Type;
 
 /** An ask as a message carries it: its key and revision, where it stands, what it asks, the answer and its answerer, and why its poster resolved it. */
-const chatMessageAskSchema = EffectSchema.Struct({
+export const chatMessageAskSchema = EffectSchema.Struct({
   key: EffectSchema.String,
   revision: countedNumber,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
@@ -606,7 +606,7 @@ const chatMessageAskSchema = EffectSchema.Struct({
  * thread root it replies to, its author, its body, the members it mentions,
  * when it was posted, and the ask it carries.
  */
-const chatMessageSchema = EffectSchema.Struct({
+export const chatMessageSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   seq: countedNumber,
   touchedSeq: countedNumber,

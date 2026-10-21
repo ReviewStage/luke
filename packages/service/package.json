@@ -65,6 +65,7 @@
     "./agents/brain-host/seed": "./src/agents/brain-host/seed.js",
     "./agents/brain-host/stop-carrier": "./src/agents/brain-host/stop-carrier.js",
     "./agents/browser/agent-browser": "./src/agents/browser/agent-browser.js",
+    "./agents/browser/browser-tool": "./src/agents/browser/browser-tool.js",
     "./agents/browser/sandbox-browser": "./src/agents/browser/sandbox-browser.js",
     "./agents/coder-host/chat": "./src/agents/coder-host/chat.js",
     "./agents/coder-host/account-keys": "./src/agents/coder-host/account-keys.js",

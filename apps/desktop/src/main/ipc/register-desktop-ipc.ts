@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
@@ -28,6 +29,7 @@ import { createBrowserViews } from "../window/browser-views";
 import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserProcedures } from "./browser-acts";
+import { browserLiveProcedures } from "./browser-live-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { clientSettingSideEffects } from "./settings-side-effects";
 import { terminalProcedures, whenPageGone } from "./terminal-acts";
@@ -113,6 +115,25 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const platformProcedures: PlatformActProcedures<WebContents> = {
     ...avatarProcedures({ avatar }),
     ...browserProcedures({ views: browserViews, experimentOn: browserExperimentOn }),
+    ...browserLiveProcedures({
+      host: operator.host,
+      ports: {
+        open: (sender, ticket) => {
+          const { port1, port2 } = new MessageChannelMain();
+          sender.postMessage(BROWSER_LIVE_PORT_CHANNEL, ticket, [port2]);
+          port1.start();
+          return {
+            post: (message) => port1.postMessage(message),
+            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
+            close: () => port1.close(),
+          };
+        },
+        whenGone: whenPageGone,
+      },
+      experimentOn: browserExperimentOn,
+      createId: randomUUID,
+      run,
+    }),
     ...macTerminalProcedures({
       host: operator.host,
       worktreesRoot: worktreesRoot(os.homedir()),

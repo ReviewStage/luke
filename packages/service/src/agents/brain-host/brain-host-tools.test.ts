@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { listTaskBrowserTabs } from "@luke/database/models/agent-browser-tabs";
 import {
   ensureMember,
   ensureTaskChannel,
@@ -72,12 +73,20 @@ import {
   pictureNotLooked,
 } from "../../tasks/picture-look.js";
 import {
+  fakeBridgePty,
+  fakeCdpPeer,
+  fakeSandboxApi,
+  noSandboxBrowserLayer,
+} from "../../testing/agent-browser-fake.js";
+import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
 import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
+import { AgentBrowser, agentBrowserOver } from "../browser/agent-browser.js";
+import { BROWSER_TOOL, BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
 import { CHAT_TOOL_REFUSAL } from "../coder-host/chat.js";
 import { ASK_REFUSAL } from "../coder-host/chat-ask.js";
 import { HELD_DOORS } from "../coder-host/chat-notify.js";
@@ -197,6 +206,7 @@ function toolContext(
   auth: SessionAuth,
   name: string,
   callId = "call-1",
+  getSandbox: EveToolContext["getSandbox"] = unreached("getSandbox"),
 ): EveToolContext {
   return {
     session: { id, auth, turn: { id: "turn_0", sequence: 0 } },
@@ -206,7 +216,7 @@ function toolContext(
     messages: [],
     getToken: unreached("getToken"),
     requireAuth: unreached("requireAuth"),
-    getSandbox: unreached("getSandbox"),
+    getSandbox,
   };
 }
 
@@ -217,7 +227,10 @@ async function callerOn(
   services: Layer.Layer<GitHubApp | HttpClient.HttpClient> = NO_GITHUB,
   catalog: readonly OfferedModel[] = [],
   speaker?: string,
+  browser?: Layer.Layer<AgentBrowser>,
 ): Promise<(name: string, input: WireRecord, callId?: string) => Promise<WireRecord>> {
+  // SAFETY: the browser's double stands for the sandbox, so the session's sandbox is opened and never read.
+  const sandboxOpened = (async () => ({})) as unknown as EveToolContext["getSandbox"];
   const id = sessionId();
   const opened = seat(target);
   // A teammate speaks into the session the conversation's opener started, under its own principal.
@@ -239,9 +252,21 @@ async function callerOn(
   return (name, input, callId) =>
     database.run(
       host
-        .runTool(name, binding, input, toolContext(id, auth, name, callId))
+        .runTool(
+          name,
+          binding,
+          input,
+          toolContext(id, auth, name, callId, browser === undefined ? undefined : sandboxOpened),
+        )
         .pipe(
-          Effect.provide(Layer.mergeAll(services, modelCatalogOf(catalog), NO_WORKSPACE_LINEAR)),
+          Effect.provide(
+            Layer.mergeAll(
+              services,
+              modelCatalogOf(catalog),
+              NO_WORKSPACE_LINEAR,
+              browser ?? noSandboxBrowserLayer,
+            ),
+          ),
         ),
     );
 }
@@ -749,6 +774,36 @@ test("Luke looks at a picture of the call's plan as a member speaking in it: the
   assert.deepEqual(refused, pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
 });
 
+test("Luke opens a page in the browser in its own sandbox, whose tab is kept as the task's, and the model is shown the result", async () => {
+  const task = await taskConversation();
+  const peer = await database.run(fakeCdpPeer({ pages: [] }));
+  // The sandbox stands under whatever session the caller runs, as eve tags the root's.
+  const { api } = fakeSandboxApi({ status: "running", sessionId: "any" });
+  const browser = Layer.succeed(
+    AgentBrowser,
+    agentBrowserOver({ ...api, listTagged: () => api.listTagged("any") }, fakeBridgePty(peer)),
+  );
+  const call = await callerOn(brainHost(seams), task, NO_GITHUB, [], undefined, browser);
+
+  const opened = await call(BROWSER_TOOL.name, {
+    actions: [{ action: "open", url: "http://localhost:3000/" }],
+  });
+
+  assert.equal(opened.status, BROWSER_TOOL_STATUS.RAN);
+  assert.deepEqual(opened.tabs, [{ tab: "page-1", url: "http://localhost:3000/", title: "" }]);
+  const listed = Option.getOrThrow(
+    await database.run(listTaskBrowserTabs(task.userId, task.taskId)),
+  );
+  assert.deepEqual(
+    listed.map(({ tab, agent }) => ({ targetId: tab.targetId, address: tab.address, agent })),
+    [{ targetId: "page-1", address: "http://localhost:3000/", agent: null }],
+  );
+  assert.deepEqual(tasksModelOutput(BROWSER_TOOL.name, unparsedWire(opened)), {
+    type: "json",
+    value: opened,
+  });
+});
+
 test("end_call is the one planning tool eve is told ends its turn, so the model is asked for no step after the goodbye it was told to add nothing to", () => {
   const endings = brainToolDeclarations()
     .filter((tool) => tool.endsTurn === true)
@@ -886,7 +941,7 @@ test("Luke reads a page of the call's task by its id, as the member on the call,
   );
 });
 
-test("Luke's direct message to the plan's agent is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
+test("Luke's mention of the plan's agent in its channel is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
   const userId = await database.createUser();
   await chatOn(userId);
   const task = await taskConversation(userId, RELAY_FULL_NAME);
@@ -899,10 +954,12 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   });
   const call = await callerOn(acting, task, eve.services);
 
-  // The agent is addressed by its mention link, and named back by its link under the workspace as Luke's account reads it.
+  // The agent is addressed by its mention link in the task's channel, and named back by its link under the workspace as Luke's account reads it.
   const agentLink = (step: string) =>
     `[@anthropic/claude-opus-5.5](https://tryluke.dev/${step}/plan/${task.taskId}/agent/${agent.id})`;
-  const told = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: agentLink("acme") });
+  const refused = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: agentLink("acme") });
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, "Luke sends no direct message");
+  const told = await call(CHAT_TOOL.POST, { text: `${agentLink("acme")} ${INSTRUCTION}` });
   assert.equal(told.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(told));
   assert.ok(Array.isArray(told.told));
   const named = String(told.told[0]);
@@ -913,16 +970,16 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
       "u",
     ),
   );
-  assert.deepEqual([told.in, told.told, told.held], [named, [named], []]);
+  assert.deepEqual([told.told, told.held], [[named], []]);
   assert.deepEqual(
     eve.sent.map((request) => request.path),
     [`/eve/coder/v1/session/${agent.sessionId}`],
   );
   assert.equal(eve.sent[0]?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
-  // The notice names Luke by his task's link.
+  // The notice names Luke by his task's link, and the task's channel it was said in.
   assert.match(
     JSON.parse(eve.sent[0]?.body ?? "").message,
-    new RegExp(`\\[@Luke\\]\\(https://tryluke\\.dev/[^/]+/plan/${task.taskId}/luke\\) to you`, "u"),
+    new RegExp(`\\[@Luke\\]\\(https://tryluke\\.dev/[^/]+/plan/${task.taskId}/luke\\) in #`, "u"),
   );
 
   // Another account's plan, on a deployment that reaches no eve: its agent reads Luke's word when it next reads.
@@ -931,8 +988,7 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   const otherAgent = await agentOn(other.userId, other.taskId);
   const unsecured = await callerOn(brainHost(seams), other, eve.services);
   const held = await unsecured(CHAT_TOOL.POST, {
-    text: INSTRUCTION,
-    to: `https://tryluke.dev/acme/plan/${other.taskId}/agent/${otherAgent.id}`,
+    text: `[@Agent](https://tryluke.dev/acme/plan/${other.taskId}/agent/${otherAgent.id}) ${INSTRUCTION}`,
   });
   assert.equal(held.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(held));
   assert.equal(Array.isArray(held.told) && held.told.length, 0);

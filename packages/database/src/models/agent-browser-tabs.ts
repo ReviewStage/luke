@@ -231,6 +231,25 @@ const deleteTab = SqlSchema.findAll({
     ),
 });
 
+const retargetTab = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    tabId: Schema.String,
+    targetId: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ conversationId, tabId, targetId }) =>
+    Database.use((db) =>
+      db
+        .update(agentBrowserTab)
+        .set({ targetId })
+        .where(
+          and(eq(agentBrowserTab.id, tabId), eq(agentBrowserTab.conversationId, conversationId)),
+        )
+        .returning({ id: agentBrowserTab.id }),
+    ),
+});
+
 const takeTab = SqlSchema.findAll({
   Request: Schema.Struct({
     tabId: Schema.String,
@@ -380,6 +399,20 @@ export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<Age
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
   });
+}
+
+/**
+ * Moves a tab of the agent's onto the target its browser reopened it as,
+ * once a resumed sandbox's browser started without its pages: the same tab,
+ * by its id, with its page, opener, takeover, and instants as they stood.
+ * Answers whether the agent's browser held it.
+ */
+export function retargetBrowserTab(
+  conversationId: string,
+  tabId: string,
+  targetId: string,
+): BrowserTabEffect<boolean> {
+  return Effect.map(retargetTab({ conversationId, tabId, targetId }), (rows) => rows.length > 0);
 }
 
 /** Deletes a tab its agent closed, answering whether the agent's browser held it. */

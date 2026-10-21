@@ -20,6 +20,12 @@ import {
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
+  type BrowserLiveClosedEvent,
+  type BrowserLiveMessageEvent,
+  browserLiveClosedEventSchema,
+  browserLiveMessageEventSchema,
+} from "@luke/features/browser-live-acts";
+import {
   type ChatGptSignInAnswerView,
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -166,6 +172,8 @@ import {
   TASK_CALL_FAILURE,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksBrowserTabsAnswer,
+  type TasksBrowserTabsParams,
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
@@ -246,6 +254,7 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
@@ -473,6 +482,8 @@ export interface HostOperator {
   tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
   /** The issues a task links, each with where it stands now; or why there are none. */
   tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
+  /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
+  tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
   /** One more issue linked to a task, read from its provider by the service; or why none was. */
   tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
   /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
@@ -799,6 +810,20 @@ export interface HostOperator {
   ): () => void;
   /** How an attached shell's connection stands, by its connection. */
   onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
+  /** One cloud Browser tab's live view opened under the connection id given; whether the host took it. */
+  browserLiveConnect(params: {
+    connectionId: string;
+    taskId: string;
+    tabId: string;
+  }): Effect.Effect<boolean>;
+  /** One text frame for the service on a live view's connection. */
+  browserLiveSend(params: { connectionId: string; text: string }): Effect.Effect<void>;
+  /** A live view's connection let go, its socket closed. */
+  browserLiveDisconnect(params: { connectionId: string }): Effect.Effect<void>;
+  /** One text frame the service sent on a live view, by its connection. */
+  onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
+  /** A live view's socket closed, with its code, by its connection. */
+  onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
 }
 
 /** The host's answer to a terminal call, read by its schema; none where the host refused it or the shape is not read. */
@@ -1319,6 +1344,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId: params.taskId }),
         taskIssueAnswer(tasksIssueLinksAnswerSchema),
+      ),
+    tasksBrowserTabs: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
+        taskIssueAnswer(tasksBrowserTabsAnswerSchema),
       ),
     tasksIssueLink: (params) =>
       Effect.map(
@@ -2277,6 +2307,38 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.TERMINAL_STATE,
         (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
+        listener,
+      ),
+    browserLiveConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, {
+          connectionId: params.connectionId,
+          taskId: params.taskId,
+          tabId: params.tabId,
+        }),
+        (answer) => answer.ok,
+      ),
+    browserLiveSend: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.BROWSER_LIVE_SEND, {
+          connectionId: params.connectionId,
+          text: params.text,
+        }),
+      ),
+    browserLiveDisconnect: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT, { connectionId: params.connectionId }),
+      ),
+    onBrowserLiveMessage: (listener) =>
+      on(
+        GATEWAY_EVENT.BROWSER_LIVE_MESSAGE,
+        (payload) => Result.getOrUndefined(readEither(browserLiveMessageEventSchema)(payload)),
+        listener,
+      ),
+    onBrowserLiveClosed: (listener) =>
+      on(
+        GATEWAY_EVENT.BROWSER_LIVE_CLOSED,
+        (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
       ),
     onSessionReplayChanged: (listener) =>
