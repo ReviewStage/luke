@@ -3,6 +3,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
@@ -70,6 +71,7 @@ import {
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
   type ChaptersModelAnswerView,
@@ -135,6 +137,7 @@ export type CodingAgentClient = Pick<
   | "list"
   | "listWorkspace"
   | "start"
+  | "startFrom"
   | "messagesNow"
   | "agentTranscriptLive"
   | "message"
@@ -145,6 +148,7 @@ export type CodingAgentClient = Pick<
   | "pin"
   | "stop"
   | "agent"
+  | "calls"
   | "agentInbox"
   | "pullRequest"
   | "changes"
@@ -190,11 +194,23 @@ export interface CodingAgentsDependencies {
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
+  /**
+   * Hands a line typed to an agent to the call standing on that agent, where
+   * one does (`LiveSessionHolder.typeLine`); answers whether the call took
+   * it. None where this Mac holds no calls, and every line steers.
+   */
+  typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
 }
 
 export interface CodingAgentsComposer extends Composer {
   /** Every transcript's subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
+  /**
+   * The task an agent is on, as the service reads it now, which a call into
+   * the agent is checked against: null for an agent on no task, and none
+   * for one archived, or that the account does not reach or could not read.
+   */
+  readonly agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -239,6 +255,26 @@ function composed(
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
   const asked = askedOf(dependencies, http);
+
+  /**
+   * The agent as a line handed to its call leaves it, as a message's answer
+   * carries it: read whole and answered as its summary, running, as a steer's
+   * answer is read after the message was taken. The call writes and asks the
+   * line a moment after the frame leaves, so a read now could still say the
+   * agent is idle; the transcript's follow settles the status from there.
+   */
+  const agentAsItStands = (agentId: string): Effect.Effect<CodingAgentAgentAnswer> =>
+    Effect.map(asked(client.agent(agentId)), (answer) => {
+      if ("failure" in answer) return answer;
+      const {
+        automationId: _automation,
+        origin: _origin,
+        workspaceId: _workspace,
+        repository: _repository,
+        ...agent
+      } = answer.agent;
+      return { agent: { ...agent, status: CODING_AGENT_STATUS.RUNNING } };
+    });
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -400,9 +436,12 @@ function composed(
         const { taskId, ...request } = yield* read(
           codingAgentStartParamsSchema,
           params,
-          "starting an agent names a task and the press's own key",
+          "starting an agent names a task or an agent to start from, and the press's own key",
         );
-        const answer = yield* asked(client.start(taskId, request));
+        // A Start from another agent that names no task goes where that agent is, its task or its workspace.
+        const answer = yield* asked(
+          taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
+        );
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
@@ -447,6 +486,15 @@ function composed(
           params,
           "messaging an agent names the agent, its words, and the send's key",
         );
+        // A line with words, typed while this Mac's call is up on the agent, is the call's: the
+        // service answers it aloud and writes it down as typed. Its files ride nowhere, since the
+        // call hands on words alone; a line of files alone steers as it would with no call up.
+        if (
+          request.text !== "" &&
+          dependencies.typeIntoCall?.(agentId, request.text, request.clientKey) === true
+        ) {
+          return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));
+        }
         const answer = yield* asked(client.message(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
@@ -519,6 +567,16 @@ function composed(
         );
         const answer = yield* asked(client.agent(agentId));
         return carried<CodingAgentPageAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CALLS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPageParamsSchema,
+          params,
+          "reading an agent's calls names one agent",
+        );
+        const answer = yield* asked(client.calls(agentId));
+        return carried<CodingAgentCallsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
@@ -783,5 +841,9 @@ function composed(
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
   });
 
-  return { methods, lifetime: Effect.void, reset };
+  const agentTaskOf = (agentId: string) =>
+    Effect.map(asked(client.agent(agentId)), (answer) =>
+      "agent" in answer && answer.agent.archivedAt === undefined ? answer.agent.planId : undefined,
+    );
+  return { methods, lifetime: Effect.void, reset, agentTaskOf };
 }

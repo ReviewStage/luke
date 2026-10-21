@@ -5,7 +5,6 @@ import { EmptyState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import type { StripTab } from "@luke/ui/tab-strip-model";
 import { TASK_MARK } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
@@ -114,16 +113,10 @@ const BACK_TO_INBOX = "Back to Inbox";
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
   Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
-const nothing = (): void => undefined;
+const _nothing = (): void => undefined;
 
 /** No tab of the Inbox's panel is drawn in semibold: what arrives on a task arrives on its page. */
 const NO_UNREAD: readonly StripTab[] = [];
-
-/** What the Inbox's panel says of calls: none, its task's calls being its page's. */
-const NO_CALLS = {
-  region: { kind: TRANSCRIPT_REGION.EMPTY },
-  onRetry: nothing,
-} as const;
 
 /** No agent's tab stands open beside the Inbox, so no worker's tab stands in its panel. */
 const NO_OPEN_AGENTS: readonly string[] = [];
@@ -556,7 +549,6 @@ function InboxSidePanel({
   // The task's agents' workers are their delegations, read through their own transcripts, so the panel's work is none.
   const work = {
     conversation: undefined,
-    onLoadEarlier: () => Promise.resolve(),
     readWorker: agents.readTranscript,
   };
   return (
@@ -570,7 +562,6 @@ function InboxSidePanel({
       shownCode={undefined}
       codeFailed={undefined}
       pages={pages}
-      transcript={NO_CALLS}
       work={work}
       agents={agents}
       openAgents={NO_OPEN_AGENTS}

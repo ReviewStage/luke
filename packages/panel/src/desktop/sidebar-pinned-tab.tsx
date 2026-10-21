@@ -26,7 +26,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { PullRequestReader } from "../tasks/use-agent-pull-request.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
@@ -102,7 +101,6 @@ function pinSubject(
     const pinned = pin.model === undefined ? undefined : { model: pin.model };
     return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? pinned };
   }
-  if (tab === MAIN_TAB.CALL) return { kind: TAB_KIND.CALL };
   if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES };
   if (isFileTab(tab)) return { kind: TAB_KIND.FILE, path: tab.file };
   return { kind: TAB_KIND.PANEL, tab, plan: { name: task.name, status: task.status } };

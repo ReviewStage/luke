@@ -154,8 +154,8 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: actProcedure("Could not disconnect GitHub on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_TALK]: actProcedure("Could not talk about that task on this system.")
-    .input(takesNothing)
+  [TASKS_ACT_KIND.TASKS_TALK]: actProcedure("Could not call that agent on this system.")
+    .input(exactInput(EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString })))
     .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: actProcedure("Could not save the board on this system.")
     .input(exactInput(tasksBoardSaveParamsSchema))

@@ -277,6 +277,11 @@ function fakeService() {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
       }),
+    startFrom: (request) =>
+      Effect.sync(() => {
+        asked.push(`start-from:${request.from?.agentId}:${request.idempotencyKey}`);
+        return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
+      }),
     messagesNow: (agentId, after, callId) =>
       Effect.sync(() => {
         asked.push(
@@ -335,6 +340,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`page:${agentId}`);
         return { agent: PAGE };
+      }),
+    calls: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`calls:${agentId}`);
+        return { transcript: { calls: [], earlierOmitted: false } };
       }),
     agentInbox: (agentId, after) =>
       Effect.sync(() => {
@@ -645,7 +655,13 @@ function fakeRealtime() {
   };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
+function subject(
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
+  } = {},
+) {
   return Effect.gen(function* () {
     const service = fakeService();
     const realtime = fakeRealtime();
@@ -660,6 +676,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       accountId: () => "user-dana",
       client: service.client,
       openLive: realtime.open,
+      ...(options.typeIntoCall === undefined ? undefined : { typeIntoCall: options.typeIntoCall }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -1053,6 +1070,37 @@ it.effect(
 );
 
 it.effect(
+  "a Start from an agent that names no task asks the service to start where that agent is, one on a task still starts on it, and one naming neither a task nor an agent is refused, asking nothing",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+
+      const fromTaskless = yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+        idempotencyKey: "press-continue",
+        from: { agentId: AGENT_ID },
+      });
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+        taskId: TASK_ID,
+        idempotencyKey: "press-fork",
+        from: { agentId: AGENT_ID },
+      });
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.CODING_AGENTS_START, {
+          idempotencyKey: "press-nowhere",
+          prompt: "Go.",
+        }),
+      );
+
+      assert.deepEqual(fromTaskless, { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.deepEqual(asked, [
+        `start-from:${AGENT_ID}:press-continue`,
+        `start:${TASK_ID}:press-fork:default`,
+      ]);
+    }),
+);
+
+it.effect(
   "a provider key passes through to the service once and is answered back as its hint alone, and a save the schema refuses is refused in words that hold no key",
   () =>
     Effect.gen(function* () {
@@ -1236,5 +1284,82 @@ it.effect(
       yield* settled;
       assert.deepEqual(followed.realtime.closed, [SEALED_TRANSCRIPT.url]);
       assert.equal(followed.pages().length, 1);
+    }),
+);
+
+it.effect(
+  "a line typed while this Mac's call is up on the agent goes to the call and is not steered, and the tab hears the agent as it stands",
+  () =>
+    Effect.gen(function* () {
+      const typed: [string, string, string][] = [];
+      const { call, asked } = yield* subject({
+        typeIntoCall: (agentId, text, clientKey) => {
+          typed.push([agentId, text, clientKey]);
+          return agentId === AGENT_ID;
+        },
+      });
+      const {
+        automationId: _automation,
+        workspaceId: _workspace,
+        repository: _repository,
+        ...page
+      } = PAGE;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: AGENT_ID,
+          text: "Use the fixture branch.",
+          clientKey: "send-1",
+        }),
+        // Running, as a steer's answer is: the call asks the line a moment after the frame leaves.
+        { agent: { ...page, status: CODING_AGENT_STATUS.RUNNING } },
+      );
+      assert.deepEqual(typed, [[AGENT_ID, "Use the fixture branch.", "send-1"]]);
+      assert.deepEqual(asked, [`page:${AGENT_ID}`]);
+    }),
+);
+
+it.effect(
+  "a line typed with no call on the agent, a call on another agent, or files alone steers as before",
+  () =>
+    Effect.gen(function* () {
+      const typed: string[] = [];
+      const other = "0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f";
+      const { call, asked } = yield* subject({
+        typeIntoCall: (agentId, text) => {
+          typed.push(text);
+          return agentId === other;
+        },
+      });
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: AGENT_ID,
+          text: "Expire them after a week.",
+          clientKey: "send-1",
+        }),
+        { agent: AGENT },
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: other,
+          text: "",
+          clientKey: "send-2",
+          attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
+        }),
+        { agent: AGENT },
+      );
+      // Only the line with words was offered to the call; the files-only line never was.
+      assert.deepEqual(typed, ["Expire them after a week."]);
+      assert.deepEqual(asked, [
+        `message:${AGENT_ID}:send-1:Expire them after a week.`,
+        `message:${other}:send-2:`,
+      ]);
+
+      const { call: callWithNoCalls, asked: steered } = yield* subject();
+      yield* callWithNoCalls(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+        agentId: AGENT_ID,
+        text: "Expire them after a week.",
+        clientKey: "send-3",
+      });
+      assert.deepEqual(steered, [`message:${AGENT_ID}:send-3:Expire them after a week.`]);
     }),
 );

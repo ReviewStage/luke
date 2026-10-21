@@ -137,6 +137,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // the live composer reads the open task, and hands it the task's drafts
     // and their activity, through these late bindings.
     let activeTaskId: () => string | undefined = () => undefined;
+    let agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
+      Effect.succeed(undefined);
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
     let taskCallEnded: (taskId: string) => void = () => undefined;
@@ -146,6 +148,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       settings,
       account,
       activeTaskId: () => activeTaskId(),
+      agentTaskOf: (agentId) => agentTaskOf(agentId),
       showPlanDraft: (draft) => showPlanDraft(draft),
       showTaskActivity: (activity) => showTaskActivity(activity),
       taskCallEnded: (taskId) => taskCallEnded(taskId),
@@ -192,6 +195,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       accountId,
       client: codingAgentClient,
+      typeIntoCall: (agentId, text, clientKey) => live.service.typeLine(agentId, text, clientKey),
     });
     const automations = yield* composeAutomations({
       kernel,
@@ -227,6 +231,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       ? yield* composeMacCommands({
           kernel,
           account,
+          accountId,
           enabled: Effect.map(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
@@ -260,6 +265,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
     activeTaskId = tasks.activeTaskId;
+    agentTaskOf = codingAgents.agentTaskOf;
     showPlanDraft = tasks.showDraft;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;

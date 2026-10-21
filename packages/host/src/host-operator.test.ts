@@ -11,7 +11,7 @@ import {
   type GatewayClient,
   type GatewayMethod,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_SETTING_SCHEMA, THEME } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { AppSettings } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@luke/wire";
@@ -54,8 +54,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const operator = operatorOver(client);
 
     const result = yield* operator.updateSetting(
-      APP_SETTING_SCHEMA.voiceHotkey.field,
-      "Alt+Space",
+      APP_SETTING_SCHEMA.theme.field,
+      THEME.DARK,
       REPORTER,
     );
 
@@ -64,8 +64,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const [request] = requests;
     assert.equal(request?.method, GATEWAY_METHOD.SETTINGS_UPDATE);
     assert.deepEqual(request?.params, {
-      field: APP_SETTING_SCHEMA.voiceHotkey.field,
-      value: "Alt+Space",
+      field: APP_SETTING_SCHEMA.theme.field,
+      value: THEME.DARK,
       reporter: REPORTER,
     });
   }),
@@ -164,6 +164,30 @@ it.effect("a task filed for later carries its status and priority to the host", 
   }),
 );
 
+it.effect(
+  "a Start from an agent that names no task travels to the host with no task key, and one on a task with its task",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const from = { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
+
+      yield* operator.codingAgentStart({ idempotencyKey: "press-1", from });
+      yield* operator.codingAgentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.CODING_AGENTS_START, { idempotencyKey: "press-1", from }],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_START,
+            { taskId: "task-1", idempotencyKey: "press-2", from },
+          ],
+        ],
+      );
+    }),
+);
+
 it.effect("an inbox answer's files travel to the host with its words, under the answer's key", () =>
   Effect.gen(function* () {
     const { client, requests } = recordingClient();
@@ -249,7 +273,7 @@ it.effect(
         operatorOver({
           call: () => Effect.succeed(answer),
           on: () => () => undefined,
-        }).updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, "Alt+Space", REPORTER);
+        }).updateSetting(APP_SETTING_SCHEMA.theme.field, THEME.DARK, REPORTER);
       // The router's own boundary, which every act's call through the operator runs under.
       const asked = (answer: GatewayCallResult) =>
         Effect.exit(Effect.withErrorReporting(answering(answer), { defectsOnly: true }));

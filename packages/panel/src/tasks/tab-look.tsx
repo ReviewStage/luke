@@ -6,6 +6,7 @@ import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import {
   AppWindowIcon,
+  AudioLinesIcon,
   BotIcon,
   GitPullRequestIcon,
   GlobeIcon,
@@ -42,8 +43,8 @@ export const TAB_KIND = {
   PANEL: "panel",
   /** A task, as a row naming it does. */
   PLAN: "plan",
-  /** The task's calls with Luke, which anchor its column. */
-  CALL: "call",
+  /** The "+" row that starts a blank agent with a call into it. */
+  VOICE_CHAT: "voice-chat",
   INBOX: "inbox",
   /** The plan's own channel of the workspace's chat. */
   CHAT: "chat",
@@ -83,7 +84,7 @@ export type TabSubject =
       readonly plan?: PlanStanding | undefined;
     }
   | ({ readonly kind: typeof TAB_KIND.PLAN } & PlanStanding)
-  | { readonly kind: typeof TAB_KIND.CALL }
+  | { readonly kind: typeof TAB_KIND.VOICE_CHAT }
   | { readonly kind: typeof TAB_KIND.INBOX }
   | { readonly kind: typeof TAB_KIND.CHAT }
   | { readonly kind: typeof TAB_KIND.DRAFT }
@@ -92,6 +93,8 @@ export type TabSubject =
       /** Its tab's label (`agentTabLabel`), or what a pin last called it; the word for an agent where none is known. */
       readonly name: string | undefined;
       readonly agent: AgentStanding | undefined;
+      /** Whether a call into the agent is in progress, which its glyph wears as the live mark. */
+      readonly calling?: boolean | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.SUBAGENT;
@@ -187,6 +190,22 @@ export function AgentGlyph({ agent }: { agent: AgentStanding | undefined }) {
   return <StateGlyph glyph={<AgentMark provider={provider} />} state={state} />;
 }
 
+/** What a reader is told of an agent's glyph while a call into it is in progress. */
+const CALLING_WORDS = "On a call";
+
+/**
+ * An agent's glyph while a call into it is in progress: the voice's live
+ * mark in the live tint, in the glyph's own footprint, as a call's divider
+ * marks the call live (`call-card.tsx`), whatever the agent is doing.
+ */
+function CallingGlyph(): React.JSX.Element {
+  return (
+    <span className="state-glyph agent-calling-glyph" role="img" aria-label={CALLING_WORDS}>
+      <AudioLinesIcon aria-hidden="true" />
+    </span>
+  );
+}
+
 /** A subagent's glyph wearing where it stands, as `AgentGlyph` wears an agent's. */
 function SubagentGlyph({ model, state }: { model: string | undefined; state: GlyphState }) {
   return <StateGlyph glyph={<SubagentMark model={model} />} state={state} />;
@@ -213,8 +232,8 @@ export function tabLook(subject: TabSubject): KindLook {
     }
     case TAB_KIND.PLAN:
       return { icon: <PlanGlyph status={subject.status} />, label: subject.name };
-    case TAB_KIND.CALL:
-      return { icon: <CallIcon />, label: TAB_WORDS.CALL };
+    case TAB_KIND.VOICE_CHAT:
+      return { icon: <CallIcon />, label: TAB_WORDS.NEW_VOICE_CHAT };
     case TAB_KIND.INBOX:
       return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
     case TAB_KIND.CHAT:
@@ -223,7 +242,7 @@ export function tabLook(subject: TabSubject): KindLook {
       return { icon: <PlusIcon />, label: TAB_WORDS.NEW_AGENT };
     case TAB_KIND.AGENT:
       return {
-        icon: <AgentGlyph agent={subject.agent} />,
+        icon: subject.calling === true ? <CallingGlyph /> : <AgentGlyph agent={subject.agent} />,
         label: subject.name ?? TAB_WORDS.CODING_AGENT,
       };
     case TAB_KIND.SUBAGENT:

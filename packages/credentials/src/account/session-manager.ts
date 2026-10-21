@@ -742,8 +742,10 @@ function sameAccount(stored: StoredAccount, identity: AccountIdentity): boolean 
     : stored.email === identity.email;
 }
 
+/** Whether the stored identity already says all the service does; a stored account missing the service's id is not, so a refresh records it. */
 function sameIdentity(stored: StoredAccount, identity: AccountIdentity): boolean {
   return (
+    (identity.id === undefined || identity.id === stored.id) &&
     identity.email === stored.email &&
     identity.name === stored.name &&
     identity.pictureUrl === stored.pictureUrl &&

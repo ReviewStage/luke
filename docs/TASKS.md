@@ -47,14 +47,13 @@ A reviewer can hold the build to these as easily as to the layout:
 - An assumption is edited like any other line of the text, never confirmed or
   accepted: there is no checkbox, no Accept, and nothing that moves one
   elsewhere.
-- The document is the record. What was said on the task's calls can be read
-  back in the task's Call tab, but nothing there is a second
+- The document is the record. What was said on a call can be read back in
+  the transcript of the agent it spoke into, but nothing there is a second
   document: it is never copied, edited, or handed to an agent. The document
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
-- The work column is the agents'. The task's Call with Luke anchors it, and
-  each coding agent started on the task stands beside the Call in a tab of
-  its own; everything else, the plan's document, the task's Inbox, the
+- The work column is the agents'. Each agent started on the task stands in
+  a tab of its own, and any of them takes a call; everything else, the plan's document, the task's Inbox, the
   whiteboard ("Whiteboard" below), and the code Luke has on screen, stands
   in a side panel ("Side panel" below) that the developer opens and closes.
   A task opens with the panel shown on its plan; only a first drawing, first
@@ -102,35 +101,38 @@ Escape unwinds one page at a time, after any open microphone has been muted
 (Escape mutes first, as it does for any call): the document page back to the
 new-task page, which leaves the task, and the new-task page closes the panel. Escape on the Settings tab's front page comes back to Tasks.
 
-### Opening, leaving, and the talk key
+### Opening, leaving, and calls
 
 - Opening a task, from the list or by starting one, makes it the host's one
   **active task**, and every panel's Tasks tab shows it on its document page.
+  It opens on the agent tab it last showed, or on its plan: the side panel
+  on its Plan tab beside a column that offers **New voice chat** and **New
+  agent**.
+- A call is about an **agent**, never a task. Any agent's tab can take one,
+  from the Call button beside Dictate in its composer, and "+ → New voice
+  chat" starts an agent blank and calls it at once. One call stands on a Mac
+  at a time: calling another agent asks first, then hangs the call up and
+  opens one into that agent. The host creates a call only into an agent of
+  the task the panel has open (`compose-live.ts` reads the agent and checks
+  its task), and the service checks again.
 - A task stays open while the developer turns to Settings or closes the
-  window, so a call about it goes on. The sidebar draws a task's call
-  exactly as any call: Luke's face and the waveform beside it, with the
-  captions just above the task's call bar, or at the window's foot where no
-  call bar is drawn. They carry no task name, and hold back spoken words
-  while the side panel is showing the Transcript, which streams the same
-  ones.
+  window, so a call into one of its agents goes on. While the call's agent's
+  tab is on screen, the captions ride its call bar and hold back the spoken
+  words its transcript already streams; anywhere else they float at the
+  window's foot, and the call card stands while the window has the keyboard.
 - A task is left by Back (`‹`) or Escape on its document page, by opening
   another task, or by a sign-out. Leaving a task, or opening another, leaves
-  its call standing: the call outlives the task on screen, and Luke goes on
-  hearing, speaking, and writing the plan of the call's task. Only one task is ever the
-  spoken conversation, so another task's Talk press, or starting a task,
-  hangs the call up and opens one about that task. Deleting the call's task,
-  open or not, and signing out end it.
-- While a call stands, the talk key speaks into it, whatever task the panel
-  has open. With no call, it opens the call about the open task, and with no
-  task open it does nothing. The microphone and speaker mute chords answer
-  while a call is in progress wherever the panel stands, on another task,
-  in Settings, or on the new-task page.
-- Nothing polls. Luke's saves, on a call or after it, reach the open task
-  through the conversation's own follow, which reads the document again as
-  his turn writes the plan. The list and the open task are read when a panel shows the
-  Tasks tab; the open task again when a task opens, and the list again when
-  one starts or is deleted. Leaving the tab leaves the task and its call
-  standing, and coming back reads everything again.
+  its call standing: the call outlives the tab on screen. Deleting the
+  call's task, and signing out, end it.
+- Luke takes no keys from the machine. The microphone and speaker mute
+  chords answer while a call is in progress wherever the panel stands, and
+  Escape mutes and quiets Luke.
+- Nothing polls. Luke's saves reach the open task through the conversation's
+  own follow, which reads the document again as his turn writes the plan.
+  The list and the open task are read when a panel shows the Tasks tab; the
+  open task again when a task opens, and the list again when one starts or
+  is deleted. Leaving the tab leaves the task and its call standing, and
+  coming back reads everything again.
 
 ### Task list
 
@@ -230,40 +232,24 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
 
 ### New task
 
-A devtool's new-task page: the heading "What are we planning?" over one
-composer card, and nothing spoken. Leaving or deleting a task lands here.
+One composer card whose words start a coding agent: the repository chip in
+its head row, the Issue chip beside it, and at its foot the model chip on
+the account's default, Dictate, File for later, and Start.
 
-1. **Task name**, the card's large single-line field, focused on arrival,
-   whose placeholder, "Name the feature, e.g. Dark mode toggle", reads as an
-   example to replace rather than a filled value.
-2. **Repository**, the chip along the card's foot: the GitHub mark and the
+1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
    on the task (`plan.repository`). It starts on the repository of the newest
-   started task that has one. Its menu is the app's searchable picker
-   (`renderer/searchable-menu.tsx`, which the Start button's model menu is
-   too): a search field as the first row, focused as the menu opens and
-   filtering as it is typed in; under it every repository the Luke GitHub
-   App reaches for the account (`GET /api/github/repositories`), the recent
-   ones first and the rest as GitHub last saw them change, each under the
-   GitHub mark or a lock where it is private, with a check on the chosen
-   one, in a list that scrolls past a bounded height. The chip only chooses:
-   with no GitHub connected to the workspace, its menu says so, with one
-   `Open Settings` row for an owner or an admin to the workspace's GitHub
-   repositories in Settings, where the App is installed and its
-   repositories chosen, and for a member a line to ask one. With no repository used before it reads
-   `Choose repository`; a task can start without one and be given one later.
-   The list is read when the chip mounts and again whenever the window takes
-   focus, which is how the chip picks up an App installed in the browser
-   meanwhile; nothing polls. The arrows move the highlight while the search
-   field keeps focus, Enter picks, Escape closes the menu and hands focus
-   back to the chip, and so does focus leaving it.
-3. **Start**, the round arrow at the card's other end; Enter presses it.
-   The name is optional. Pressing it saves the task with its name, its
-   repository, and the untouched template as its plan, and opens it. A task
-   started with no name stands as "Untitled" until the developer renames it. If
-   the service cannot be reached, or it refuses the repository (the App does
-   not reach it, or the account must sign in with GitHub again), the reason
-   shows under the card and the button can be pressed again.
+   started task that has one, and its menu is the app's searchable picker,
+   listing the repositories the workspace's GitHub reaches. An agent needs a
+   repository, so Start is held without one, and the card says so.
+2. **Start**, the round button; Return presses it. It starts the task with
+   an empty plan and no call, named by its issue where one was picked and
+   Untitled until the agent names it, and the agent on the words, the files,
+   and the chosen model, in the one start, then opens the task on the
+   agent's tab. ⌘Return on an empty box starts a bare task with no agent,
+   and File for later files it in the backlog with the words as its brief;
+   neither needs a repository. There is no Plan mode: starting a task never
+   opens a call, which only an agent's own tab starts.
 
 ### Header
 
@@ -459,114 +445,88 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 
 ### Agent tabs
 
-Each coding agent started on the task has a tab of its own in the task's
-column, after the Call's tab (`desktop/main-tabs.tsx`,
-`planning/use-main-tabs.ts`, `planning/agent-tab.tsx`,
-`planning/use-coding-agents.ts`), opened and selected the moment its Start
-lands, and showing its transcript and composer where the document stands.
-The column's strip is the side panel's: tabs drag and step among
-themselves, close by ×, Delete, ⌘W, or Close and Close others, hang their
-cards, and pin to the sidebar. The Call's tab stands first: it never moves,
-closes only beside another tab, a press chooses it, and its right-click
-offers Close others and Pin tab. The tab each task last showed is kept, so a task opens
-as it was left. ⌘T and ⌘W answer the column holding the focus, the side
-panel's once the pointer goes into it. A subagent's tab stays in the side
-panel.
+Each agent started on the task has a tab of its own in the task's column
+(`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`, `tasks/agent-tab.tsx`,
+`tasks/use-coding-agents.ts`), opened and selected the moment its Start
+lands, and showing its transcript, its calls, and its composer. The column's
+strip is the side panel's: tabs drag and step among themselves, close by ×,
+Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
+sidebar. A column whose last tab closes is back on the plan. The tab each
+task last showed is kept, so a task opens as it was left; what an earlier
+version kept of the task's Call tab is let go. ⌘T and ⌘W answer the column
+holding the focus, the side panel's once the pointer goes into it. A
+subagent's tab stays in the side panel.
 
-- **A new agent from the "+".** The column's "+" offers New coding
-  agent, unavailable with Start's own reason while Start could not run, and
-  each of the task's agents, picking one opening its tab again. It
-  opens a draft tab (`planning/draft-agent-tab.tsx`): no transcript yet,
-  the composer focused, and the model chip on the account's default.
-  Nothing reaches the service until the first message, which starts the
-  agent with those words as its prompt, never the plan, in the task's
-  repository; the agent's own tab then takes the draft's place. Closing
-  the draft lets it go with nothing left behind. An agent handed a prompt
-  draws it as the developer's first message rather than as the plan's card.
+- **A new agent from the "+".** The column's "+" offers New voice chat,
+  where the window has a voice, then New agent, unavailable with Start's
+  own reason while Start could not run, then each of the task's agents,
+  picking one opening its tab again. Start's split menu offers New voice
+  chat at its foot too. New voice chat starts an agent blank, on the
+  account's one default model and needing no repository, opens its tab, and
+  calls it; a blank agent's first line, typed or spoken, is drawn as any
+  other line. New agent opens a draft tab (`tasks/draft-agent-tab.tsx`): no
+  transcript yet, the composer focused, and the model chip on the account's
+  default. Nothing reaches the service until the first message, which
+  starts the agent with those words as its prompt; the agent's own tab then
+  takes the draft's place. Closing the draft lets it go.
 
 - **The head.** The model · the effort · the status, which the tab's glyph
   wears (`state-glyph.tsx`): the mark of the harness the model runs in
-  (Claude Code or Codex), giving way in its own slot to the working mark
-  (`working-mark.tsx`) while the agent is starting or running, an alert in
-  the danger colour once it failed, and
-  the mark alone once it completed or was stopped; the tab's hint says
-  "Working", "Failed", or "Stopped" beside the model. A
-  Stop stands while the agent may still write; it asks the service to cancel
-  the turn and stop the sandbox, and anything the agent pushed stays.
+  (Claude Code or Codex), giving way to the working mark while the agent is
+  starting or running, an alert in the danger colour once it failed, and the
+  voice's live mark while a call into the agent is in progress. A Stop
+  stands while the agent may still write; it asks the service to cancel the
+  turn, and anything the agent pushed stays.
 - **What it published.** Once the agent has pushed, the head wears a pill
-  for its pull request (`planning/agent-published.tsx`): the GitHub mark
-  and `#123`, coloured by where the pull request stands (open green, draft
-  grey, merged purple, closed red) with a dot for the checks on its head
-  (pending, passing, failing, or none), which opens the pull request in the
-  browser; or, with a branch pushed and no pull request from it yet, a chip
-  naming the branch. A ⋯ beside either offers Open pull request, Copy
-  branch name, Copy checkout command (`git fetch origin <branch> && git
-  switch <branch>`), and View changes on GitHub (the pull request's Files
-  tab, or the branch compared). Once the agent has ended with a pull
-  request, the transcript ends on one row summing it up ("Opened #123 ·
-  +210 −14 in 6 files") with Open. The window reads
-  `GET /api/agents/{id}/pull-request` (`planning/use-agent-pull-request.ts`)
-  as the tab comes on screen, as pages of the transcript land no closer
-  than fifteen seconds apart, and the moment a page says the agent ended;
-  the service keeps its answer thirty seconds per agent, reading afresh
-  the first time after the agent ends, so a tab reading beside every held
-  page asks GitHub a few times a minute at most and the pull request an
-  agent opens last shows the moment it ends. The branch is the one
-  checked out in the agent's sandbox as its turn ended, written on its row
-  by the service as the sandbox stops, and the pull request is the newest
-  from that branch.
-- **The transcript.** The agent's stored `UIMessage`s, drawn with the same
-  AI Elements components as the Transcript tab, on the same spacing: the
-  plan it was handed, the first of the developer's messages, as a Plan card
-  folded under its title; any message the developer sent it since as the
-  developer's bubble; and each of its own turns with its text as Markdown,
-  its reasoning folded under one line that previews its first words, each
-  tool call one row saying what it did with the input and the output under
-  it once opened (a command's row, drawn muted as the reasoning's line is,
-  drops its command while open, since the body shows it whole), a call that
-  ended in an error said in red, and a link to the pull request it opened,
-  which opens on GitHub in the browser. A copy of a turn's words waits
-  under it. While the agent may still write, a shimmering "Working…" stands
-  at the end; it goes the moment the agent ends. The list keeps to its
-  newest line while it is scrolled there. Under the transcript is the room
-  for a composer, which the tab is handed (`AgentTab`'s `composer`) and
-  does not draw itself.
+  for its pull request (`tasks/agent-published.tsx`), coloured by where the
+  pull request stands with a dot for its checks, which opens it in the
+  browser, or a chip naming the branch pushed with no pull request yet. The
+  window reads `GET /api/agents/{id}/pull-request` as the tab comes on
+  screen, as pages of the transcript land, and the moment the agent ends.
+- **The transcript.** The agent's stored `UIMessage`s, drawn with the AI
+  Elements components: the plan or prompt it was handed, the developer's
+  messages, and each of its turns with its text as Markdown, its reasoning
+  folded, and each tool call one row. The lines said on its calls (channel
+  `voice`) stand among them in the order said, the developer's in a bubble
+  and the agent's as its messages, and each call begins at a divider saying
+  its day and time, marked `Live` while it stands, and closes, once it has
+  ended, on a line saying how long it ran that hangs the call's card
+  (`tasks/call-card.tsx`). Where each call begins and ends is read from the
+  agent's calls, `GET /api/agents/{id}/calls` (`tasks/use-agent-calls.ts`),
+  read as the tab opens, as a call into the agent ends, and for a call its
+  lines name that the read does not hold.
+- **The call standing.** Its lines are written into the transcript as they
+  are first heard, and the voice window reports them too
+  (`VoiceView.callTranscript`); those the transcript does not hold yet grow
+  at its foot under the call's divider, so a line is drawn once, from the
+  record once the record holds it (`callPlaces`). While the call stands, its
+  tab's foot draws the avatar's video, the captions, and the call bar over
+  the composer: the voice's status, the speaker, the microphone, and End
+  call.
 - **Live.** While the tab shows and the agent is starting or running, the
   window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
-  the service's held long-poll (`planning/use-agent-transcript.ts`): each
-  page joins the messages held by id, and each carries the agent's status,
-  so the loop ends on its own when the agent ends. A tab hidden, a task
-  left, or an agent that ended stops the reads; the agents list is read when
-  the task opens and after a Start or a Stop. The one other read is main's
-  watch, below.
+  the service's held long-poll (`tasks/use-agent-transcript.ts`), ending on
+  its own when the agent ends. A call writes its lines whether or not the
+  agent still works, so while a call into the agent stands the tab reads it
+  through again for each line heard, and once more as the call ends.
 - **When it ends.** Main keeps a ledger of where each agent stands
-  (`main/agent-notices.ts`), fed by every coding-agent answer that passes
-  through its acts, and lists a task's agents again every thirty seconds
-  while one of them is starting or running, so an agent on a task the
-  developer has left is still watched. An agent that moves from writing to
-  completed or failed is announced once: a macOS notification titled with
-  the task's name, saying the model's name and "finished" or "failed" and
-  nothing of the transcript, unless the window is focused on that agent's
-  tab; its click brings Luke forward on the task with that tab open. The
-  agent's tab reads in semibold until it is shown or the window comes
-  forward on it. A Stop is the developer's own and is not announced, and an
-  agent first seen already ended, as after a relaunch, is not either. The
-  "opened #N" wording waits on a read of the agent's pull request, and a
-  Settings toggle for the notifications is a follow-up. An agent an
-  automation started with no task is held from the task list, which carries
-  the account's own beside the tasks, and while it works it is read again by
-  itself on the same clock; its end is told the same way, titled with the
-  automation's name, and its click or its toast's View opens the agent's
-  own page.
-- **Privacy.** Every word is the agent's or the plan's, so the tab carries
-  `ph-no-capture`, as the Transcript tab does.
+  (`main/agent-notices.ts`) and announces an agent that moves from writing
+  to completed or failed once, with a macOS notification titled with the
+  task's name and nothing of the transcript, unless the window is focused on
+  that agent's tab. The agent's tab reads in semibold until it is shown.
+- **Privacy.** Every word is the agent's, the developer's, or the plan's, so
+  the tab carries `ph-no-capture`; the call bar and the captions draw inside
+  it.
+- **The web.** A browser has no voice, so its agent tabs draw their
+  transcripts, calls among them, and their composer, with no Call button,
+  and its "+" offers no New voice chat.
 
-### Settings › Coding agents
+### Settings › Agents
 
-The model and effort a click on Start runs an agent on are the account's
-one default, kept on the service with the account preferences
-(`/api/account/preferences`'s `codingAgent` part) and shown on the Coding
-agents page of Settings (`settings/coding-agents-page.tsx`): a model menu
+The model and effort every agent starts on, a voice chat's as a Start's, are
+the account's one default, with no voice default of its own, kept on the service with the account preferences
+(`/api/account/preferences`'s `codingAgent` part) and shown on the Agents
+page of Settings (`settings/coding-agents-page.tsx`): a model menu
 with each model under its harness's mark (Claude Code's for Anthropic's,
 Codex's for OpenAI's), the efforts the chosen model lists, and, for a
 model that offers two context windows (one whose provider prices prompts
@@ -583,49 +543,13 @@ account starts on Claude Opus 5.5 at high.
 
 ### Transcript
 
-The Transcript tab reads back what was said on the task's calls with Luke,
-as a chat does: each call from a divider saying its day and time, oldest
-first, and each run of lines from one speaker as one turn, the developer's
-in a bubble at the right and Luke's under his mark at the left, with a copy
-of the turn's words under it (`planning/plan-transcript.tsx`,
-`@luke/voice/transcript-model`).
-
-- **The record.** The service keeps each call's words as timed fragments
-  (`voice_transcript_segments`) and answers them at
-  `GET /api/plans/{id}/transcript` (`packages/database/src/models/transcript-store.ts`), grouped
-  into turns by the same ledger the captions use, so a call that ended reads
-  back in the lines its captions drew. Each turn is answered as an AI SDK
-  `UIMessage` (`packages/features/src/transcript-wire.ts`): its place on the
-  call as the id, the speaker as the role, and its words as one text part,
-  the shape Luke's `messages` table keeps every conversation in. The newest
-  4,000 fragments are read; past that, the tab says earlier lines are not
-  shown. The host reads it with the task's plan, and again when a call
-  about the task ends, once at the end and once more five seconds on, after
-  the call's last words have reached the record.
-- **The call standing now.** Its words are not on record yet, so the voice
-  window reports them as they are said (`VoiceView.callTranscript`),
-  whatever the captions preference, and the tab grows the call at the
-  bottom, marked `Live`, each heard line a message of the same shape under
-  the ledger's row id. The two are told apart by the store's id for the
-  call's session, so a call is drawn once, from the record once the
-  record's copy has as many words as were heard; hanging up, or calling again
-  at once, keeps the heard words drawn until then.
-- **The components.** The turns are drawn with AI Elements, the AI SDK's
-  chat components, copied from its registry into
-  `apps/desktop/src/renderer/ai-elements/` and restyled to the renderer's
-  tokens: `Conversation` is the log, `Message` one turn by its role, and
-  `MessageResponse` the turn's words as markdown. They are written in
-  Tailwind utilities, which `scripts/tailwind.mjs` compiles into the one
-  stylesheet the renderer ships, over tokens aliased from `base.css`
-  (`styles/tailwind.css`); the rest of the renderer stays plain CSS. A
-  coding agent's transcript is drawn with the same components over the same
-  shape ("Agent tabs" above).
-- **Following.** The list keeps to its newest line while it is scrolled
-  there; scrolling up to read leaves it in place, with a button back to the
-  newest line, until the developer scrolls back down.
-- **States.** Reading, a read that failed with `Try again`, and a task with
-  nothing said yet: "Nothing said yet — start a call and the transcript
-  appears here."
+What is said on a call is drawn in the transcript of the agent the call
+speaks into ("Agent tabs" above). The service keeps each call's words as
+timed fragments (`voice_transcript_segments`) and each line as a row of the
+agent's conversation with channel `voice`, and answers an agent's calls,
+each with its lines and its record, at `GET /api/agents/{id}/calls`. The
+lines are drawn with AI Elements, the AI SDK's chat components, copied into
+`packages/panel/src/ai-elements/` and restyled to the panel's tokens.
 
 ### Luke's notes
 
@@ -957,49 +881,26 @@ the interfaces and the cases himself for the developer to confirm, so the
 call never turns into dictating code or test cases. None of this is validated against a
 comparative evaluation.
 
-### Microphone row and the panel's voice
+### Call bar and the panel's voice
 
-- **Microphone button.** One press starts talking to Luke about the open task.
-  The call opens if none stands, and the microphone opens. A call just
-  opened is Luke's to begin: the voice service creates it with the opening
-  in its startup history (`callOpeningHistory`), asking what to build on an untouched plan
-  and the plan's next question on one under way, in its first turn and
-  without waiting on the backend, while a call re-attached after a dropped
-  socket opens nothing again. The call's seed says which the plan is: an
-  untouched plan is seeded as a new plan with nothing answered, and any
-  other as the saved plan the call continues. A second press mutes it. The
-  microphone stays open between the two presses rather than only while a
-  key is held, because a conversation with Luke runs for minutes.
-  The existing talk key keeps its hold-to-talk meaning, and speaks into the
-  open task's call.
-- **Status**, beside the button, in two lines, each part of Luke saying only
-  what it is doing. The first is the voice: the one word `LIVE_STATUS`
-  already names, `Connecting`, `Listening`, `Muted`, `Speaking` (Luke), or
-  `Closing`, while a call about this task stands, and the button's own label
-  otherwise. A listening or muted call reads `Handing off` from the voice
-  model's delegation until the backend takes the ask (or it is
-  refused), and `About to answer` from words queued for Luke until his voice
-  begins them. The second line stands only while the backend works, with the
-  thinking dots: `Planning model ·` the command of its pending
-  `run_in_repository` call (the tool's name for any other call), or
-  `Thinking` with none pending, while an exchange is open; and `Notetaker ·
-  Writing notes` while the notetaker's model call runs. No tool's output is
-  shown, and the command is cut to 120 characters. The service sends the
-  whole snapshot as a `plan.activity` frame on the call's own socket each
-  time any part changes: the live session service reports the voice's wait
-  and the exchange, the live brain reads the pending call off the turn's
-  journal on its own poll, and the notetaker reports its model call. The
-  host holds the snapshot in the planning view as it stands, clears it on
-  leaving or switching tasks, and the call's end is told as nothing doing. A
-  silent Luke whose row reads `Listening` with no second line is not working,
-  and that is a bug to chase rather than a pause to wait out.
+- **Call button.** Beside Dictate in an agent's composer, on a platform with
+  a voice. One press calls the agent: the call opens and the microphone
+  opens. A second press, or the call bar's microphone, mutes it, and the
+  microphone stays open between the two because a call runs for minutes. A
+  press while another agent's call stands asks first, then hangs that call
+  up. The press asks for the microphone first where macOS has not granted
+  it, and opens System Settings where it was denied.
+- **Status**, at the call bar's left, in two lines. The first is the voice:
+  the one word `LIVE_STATUS` names, `Connecting`, `Listening`, `Muted`,
+  `Speaking`, or `Closing`, which reads `Handing off` or `About to answer`
+  while the voice waits. The second stands only while the agent works on
+  the call's turn, with the thinking dots and its pending command. The
+  service sends the snapshot as a `plan.activity` frame on the call's own
+  socket each time it changes, and the call's end is told as nothing doing.
 - **Everything else is the panel's own.** The waveform is the wings', the
-  captions (Luke's current words, and the developer's own under the captions
-  preference) ride the caption strip just above the call bar, labelled with
-  who is speaking, and a voice error
-  or notice takes that strip exactly as it does for any call, with the button
-  left able to try again. Nothing is kept here; what matters lands in the
-  document.
+  captions ride the call bar, labelled with who is speaking, and a voice
+  error or notice takes their strip, with the button left able to try
+  again.
 
 ### How Luke reads code
 
@@ -1369,8 +1270,6 @@ changes when a check is run, not when one is planned.
     deleting the call's task or signing out ends it;
   - the final review written into the same document;
   - Copy's Markdown, at the store's largest document;
-  - the talk key, pressed while a task is open, speaking into the open
-    task's call.
 - The Tasks tab (LUKE-347) is held by renderer tests: the tab bar's four
   tabs, the list and document pages, Back leaving the task, the tasks read
   again each time the tab shows, and the host keeping the open task through

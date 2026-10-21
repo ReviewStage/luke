@@ -1116,7 +1116,7 @@ test("a code block near the file's top reads from its first line, a file that en
       branch: block.sha,
       firstLine: 1,
       lineCount: 1,
-      lines: [[{ text: "export {};" }]],
+      lines: ["export {};"],
     },
   };
   assert.deepEqual(codeReadOf(block, short), {

@@ -96,6 +96,7 @@ export {
   type SessionHangUpFrame,
   type SessionReportFrame,
   type SessionStopFrame,
+  type SessionTypedFrame,
   sessionActivityFrameFromWire,
   sessionActivityFrameSchema,
   sessionAttachedFrameFromWire,
@@ -110,6 +111,7 @@ export {
   sessionReportFrameFromWire,
   sessionReportFrameSchema,
   sessionStopFrameSchema,
+  sessionTypedFrameSchema,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
@@ -125,6 +127,7 @@ export {
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
+  MAC_COMMAND_NOT_CLAIMED,
 } from "./mac-command-client.js";
 export {
   automationPath,

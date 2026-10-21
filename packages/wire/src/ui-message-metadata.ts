@@ -100,12 +100,17 @@ const spanInstant = nonNegativeInteger;
  * developer's typed ask, a spoken ask cut from a voice session, a chat
  * notice steered into a coding agent, or an observation the brain wrote down
  * for itself. Four structs rather than one with every field optional, so an
- * observation carrying a channel or a typed ask carrying a voice session has
- * no shape to arrive in.
+ * observation carrying a channel has no shape to arrive in. A typed ask
+ * names a voice session only where it was typed into that call, with the
+ * instant on the call's clock it was typed at, so the voice's reply to it
+ * finds it as the line it followed; it carries no span, since nothing of it
+ * was said.
  */
 const TYPED_ASK_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
+  voice_session_id: EffectSchema.optional(identifier),
+  from_ms: EffectSchema.optional(spanInstant),
 });
 
 export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;

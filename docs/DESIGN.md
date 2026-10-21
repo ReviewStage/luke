@@ -253,25 +253,6 @@ sits concentric in. The agent's context popover is a panel too, a bar and its
 legend rather than rows: it draws the menu's ground, edge, corner, and shadow,
 and pads what it holds with steps of the scale rather than a menu's inset.
 
-## The keys Luke takes from the machine
-
-A key Luke registers takes its chord away from every other app on the Mac, so
-which chord is a product decision and is argued about here rather than in
-`voice-hotkey.ts`.
-
-- **Option-Space talks.** It is where a macOS user already reaches for a voice
-  assistant: Superwhisper, the ChatGPT desktop app, and Alfred all sit there.
-- **Option-S stops.** S is for stop, and Option-letter is the family the talk
-  key lives in. It is a sibling of Escape rather than of the talk key: it
-  asks for quiet and nothing in its place, where speaking over a reply with
-  the talk key held interrupts Luke and carries the conversation on.
-- **There is no ask key.** Luke is voice only: there is no field to type to
-  him in, so no chord summons one. Option-L, which once did, is given back to
-  the machine.
-
-The two may not be able to land on one chord. `hotkeyCandidates` is where
-that is enforced, and says why.
-
 ## Copy: delete what describes, keep what instructs
 
 A line of text earns its place on the surface only by saying something its

@@ -88,7 +88,7 @@ import {
   type WebNoticeDoors,
   webNoticeDoors,
 } from "./web-notices";
-import { downloadText, openTab, webPlatform } from "./web-platform";
+import { copyPng, downloadText, openTab, webPlatform } from "./web-platform";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
 const STATE_ROOT = "/luke";
@@ -237,8 +237,9 @@ const noticeDoors = (
   );
 
 /**
- * The platform procedures the tab answers itself: a copy, a download, focus,
- * the contact mail, Settings' test notification, and feedback. Every other
+ * The platform procedures the tab answers itself: a copy of words or a
+ * picture, a download, focus, the contact mail, Settings' test notification,
+ * and feedback. Every other
  * platform kind is refused in its own words, since a page cannot carry it
  * yet: the updater, Browser tabs, the microphone, the system's notification
  * settings, the terminals and the Mac's own, the voice, the call window, and
@@ -255,6 +256,9 @@ function platformProcedures(
     ...refusedPlatformProcedures<WebSender>(),
     [KIND.WINDOW_COPY_TEXT]: port[KIND.WINDOW_COPY_TEXT].handler(({ input }) =>
       navigator.clipboard.writeText(input.words),
+    ),
+    [KIND.WINDOW_COPY_IMAGE]: port[KIND.WINDOW_COPY_IMAGE].handler(({ input }) =>
+      copyPng(Promise.resolve(input.png)),
     ),
     [KIND.WINDOW_SAVE_FILE]: port[KIND.WINDOW_SAVE_FILE].handler(({ input }) =>
       downloadText({ name: input.name, text: input.text }),
@@ -314,23 +318,17 @@ function portDependencies(
         [SETTING_SIDE_EFFECT.NONE]: nothing,
         [SETTING_SIDE_EFFECT.LOGIN_ITEM]: nothing,
         [SETTING_SIDE_EFFECT.VOICE]: nothing,
-        [SETTING_SIDE_EFFECT.TALK_HOTKEY]: nothing,
-        [SETTING_SIDE_EFFECT.STOP_HOTKEY]: nothing,
         [SETTING_SIDE_EFFECT.MEDIA_DUCK]: nothing,
       },
-      // A tab claims no global key, so no chord is ever held.
-      stopChordHolder: () => undefined,
     },
-    // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
+    // No voice stands in a tab, so an agent's Call press reaches none.
     tasks: {
       host,
       colourCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
       activeTaskId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutTask: nothing,
-      voiceReady: () => false,
-      callStanding: () => false,
+      talkTo: nothing,
     },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
@@ -413,8 +411,8 @@ const composedWeb = (
         node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
-      // No voice window and no talk key stand beside the panel.
-      operator.link({ sendToVoice: () => undefined, reapplyTalkHotkey: () => undefined });
+      // No voice window stands beside the panel.
+      operator.link({ sendToVoice: () => undefined });
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
       // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });

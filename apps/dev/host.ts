@@ -21,6 +21,7 @@ import {
   type ChatCall,
   type CoderHost,
   type CoderSessionPromptRecord,
+  type CoderTurnMessage,
   coderHost,
   type InboxCall,
 } from "@luke/service/agents/coder-host/host";
@@ -38,14 +39,15 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
+  type CallTool,
   type CODER_TOOL,
   type RepositoryTool,
   repositoryToolsOf,
-  type SpokenTurnTool,
+  runCallTool,
   type TaskTool,
   taskToolsOf,
-  turnToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
+import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
@@ -201,15 +203,14 @@ export function offeredTaskTools(
 }
 
 /**
- * The call's own tools the session is offered for the kind of turn it opens,
- * for those tools' own files (`turnToolsOf`): all three on a spoken turn,
- * none on a typed one. Note that it is read off the request alone, with no
- * admission, because the tools reach nothing when they run: the journal
- * carries their calls to the voice, and a session the host does not admit
- * runs no model step to call them from.
+ * One call of the call's own tools (`runCallTool`), for those tools' own
+ * files: run on a spoken turn and refused on any other, the turn's kind
+ * read off the request alone, with no admission, because the tools reach
+ * nothing when they run: the journal carries their calls to the voice, and
+ * a session the host does not admit runs no model step to call them from.
  */
-export function offeredTurnTools(auth: SessionAuth): ReadonlySet<SpokenTurnTool> {
-  return turnToolsOf(host.turnKind(auth));
+export function callTool(auth: SessionAuth, tool: CallTool, run: () => WireRecord): WireRecord {
+  return runCallTool(host.turnKind(auth), tool, run);
 }
 
 /**
@@ -264,6 +265,28 @@ export function offeredChatTools(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return false;
       return yield* host.chatOffered(admitted.success, prompt);
+    }),
+  );
+}
+
+/**
+ * The message a turn opens with after the history, the turn named by its
+ * store id, and what the session has handed once it is (`CoderHost`'s `turnMessage`), for the turn's message
+ * file (`instructions/turn-message.ts`); nothing to hand for a session the
+ * host does not admit.
+ */
+export function turnMessage(
+  auth: SessionAuth,
+  sessionId: string,
+  turnId: string,
+  handed: TurnHanded,
+): Promise<CoderTurnMessage> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return { text: undefined, handed };
+      const turn = { kind: host.turnKind(auth), turnId };
+      return yield* host.turnMessage(admitted.success, turn, handed);
     }),
   );
 }

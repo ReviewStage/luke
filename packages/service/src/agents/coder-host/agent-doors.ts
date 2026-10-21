@@ -319,10 +319,15 @@ export function runAgentShowPage(
       taskId,
       sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
     };
-    return yield* runShowPage(binding, input, {
-      kind: PAGE_SHOWER.AGENT,
-      agentId: found.success.id,
-    });
+    return yield* runShowPage(
+      binding,
+      input,
+      {
+        kind: PAGE_SHOWER.AGENT,
+        agentId: found.success.id,
+      },
+      "path",
+    );
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),

@@ -41,7 +41,7 @@ import { boardLiveStatement } from "@luke/database/models/board-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
-import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS, codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
   LIVE_USER_QUERY,
@@ -53,7 +53,11 @@ import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
+import {
+  agentFollowedBy,
+  taskFollowedBy,
+  transcriptLiveStatements,
+} from "../agents/coder-host/transcript-live.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -64,6 +68,11 @@ import {
 } from "../http/http-effect.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import {
+  brainStatusNow,
+  brainWorkerSession,
+  taskConversationLiveStatements,
+} from "../tasks/brain-transcript.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
 
@@ -213,6 +222,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts({ commands: statement.value }, input);
     }),
+    taskConversation: signedIn.taskConversation.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const taskId = yield* rowIdOf(input.id);
+      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = taskConversationLiveStatements(context.userId, taskId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
@@ -228,6 +246,37 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         read,
         target.conversationId,
         agentFollowedBy(target.userId, target.conversationId, context.userId),
+      );
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    taskWorkerTranscript: signedIn.taskWorkerTranscript.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const callId = yield* callIdOf(input.call);
+      const taskId = yield* rowIdOf(input.id);
+      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(task) || task.value.conversationId === undefined) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      }
+      const parent = { userId: context.userId, conversationId: task.value.conversationId };
+      const session = yield* hostedStoreOrUnavailable(brainWorkerSession(parent, callId));
+      if (session === undefined) {
+        // A call the planner's journal does not name yet may send more work to an earlier worker, so nothing is sealed until it names the worker the call reaches, and the reader asks again; once the planning has ended, none is none for good, as the page read says.
+        const status = yield* hostedStoreOrUnavailable(brainStatusNow(parent));
+        return yield* Effect.fail(
+          status === CODING_AGENT_STATUS.RUNNING
+            ? HOSTED_REFUSAL.UNAVAILABLE
+            : HOSTED_REFUSAL.NOT_FOUND,
+        );
+      }
+      const worker = {
+        userId: context.userId,
+        conversationId: childConversationId(parent.conversationId, session),
+      };
+      const statements = transcriptLiveStatements(
+        worker,
+        parent.conversationId,
+        taskFollowedBy(taskId, context.userId),
       );
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);

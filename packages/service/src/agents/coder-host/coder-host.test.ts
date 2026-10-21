@@ -94,6 +94,7 @@ import {
   BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
+  type BrainHostTurn,
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
@@ -108,7 +109,7 @@ import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, turnToolsOf } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, runCallTool } from "./tool-set.js";
 import {
   CURSOR_START,
   titleMayLand,
@@ -117,6 +118,7 @@ import {
   transcriptPast,
 } from "./transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
+import { handedAfterCompaction, type TurnHanded } from "./turn-context.js";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -1977,59 +1979,120 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
           clientKey: "post-1",
         });
-        assert.equal(
-          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
-          undefined,
-        );
+        const typed = (handed: TurnHanded) =>
+          host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined }, handed);
+        const off = yield* typed({});
+        assert.ok(!off.text?.includes(CHAT_DIGEST_HEADING), off.text ?? "");
         yield* chatOn(userId);
-        const digest =
-          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined)) ?? "";
-        assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), digest);
-        assert.ok(digest.endsWith("The invite table is mine."), digest);
+        const on = yield* typed(off.handed);
+        const text = on.text ?? "";
+        const digest = text.slice(text.indexOf(CHAT_DIGEST_HEADING));
+        assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), text);
+        assert.ok(digest.endsWith("The invite table is mine."), text);
+        // The same unread chat is not handed twice: the history already holds it.
+        const again = yield* typed(on.handed);
+        assert.ok(!again.text?.includes(CHAT_DIGEST_HEADING), again.text ?? "");
       }),
   );
 
   it.effect(
-    "a spoken turn opens with the call's words, how to talk the plan through, and the task as it stands, and is offered the call's own tools; a typed turn of a fresh agent opens with none of it and is offered none",
+    "the call's words open the first of a run of spoken turns as its message, a later spoken turn says in a line they still hold, and a typed turn after them says they no longer do",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
+        const turnOf = (kind: BrainHostTurn, handed: TurnHanded) =>
+          host.turnMessage(admitted, { kind, turnId: undefined }, handed);
 
-        const spoken =
-          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN, undefined)) ?? "";
+        const typed = yield* turnOf(BRAIN_HOST_TURN.TYPED, {});
+        assert.ok(!typed.text?.includes("This turn is"), typed.text ?? "");
+
+        const called = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, typed.handed);
         for (const told of [
           "## This turn is spoken",
           `\`${CODER_TOOL.QUEUE_QUESTION}\``,
           "## Talking the plan through",
-          "[the developer's time]",
-          "[saved document]",
-          "Name: Teammate invitations",
         ]) {
-          assert.ok(spoken.includes(told), told);
+          assert.ok(called.text?.includes(told), told);
         }
-        assert.deepEqual(
-          [...turnToolsOf(host.turnKind(spokenSeat(admitted.target)))],
-          [CODER_TOOL.QUEUE_QUESTION, CODER_TOOL.WITHDRAW_QUESTION, CODER_TOOL.END_CALL],
-        );
 
-        assert.equal(
-          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
-          undefined,
-        );
-        assert.deepEqual(
-          [
-            ...turnToolsOf(
-              host.turnKind(ownSeat(admitted.target.userId, admitted.target.conversationId)),
-            ),
-          ],
-          [],
-        );
+        const still = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, called.handed);
+        assert.ok(still.text?.startsWith("This turn is spoken too"), still.text ?? "");
+        assert.ok(!still.text?.includes("## Talking the plan through"), still.text ?? "");
+
+        const after = yield* turnOf(BRAIN_HOST_TURN.TYPED, still.handed);
+        assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
+        const again = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, after.handed);
+        assert.ok(again.text?.includes("## This turn is spoken"), again.text ?? "");
+
+        // A compaction may drop the call's words, so a spoken turn after it is handed them whole,
+        // and a typed one is still told they no longer hold.
+        const compacted = handedAfterCompaction(again.handed);
+        const resumed = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, compacted);
+        assert.ok(resumed.text?.includes("## This turn is spoken"), resumed.text ?? "");
+        const typedAfter = yield* turnOf(BRAIN_HOST_TURN.TYPED, compacted);
+        assert.ok(typedAfter.text?.startsWith("This turn is typed"), typedAfter.text ?? "");
       }),
   );
 
   it.effect(
-    "a typed turn is handed the task as it stands only once someone other than the agent saved the plan after the agent's previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
+    "the call's own tools run on a spoken turn and are refused on a typed one, so both are offered the same tools",
+    () =>
+      Effect.sync(() => {
+        const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED };
+        for (const tool of [
+          CODER_TOOL.QUEUE_QUESTION,
+          CODER_TOOL.WITHDRAW_QUESTION,
+          CODER_TOOL.END_CALL,
+        ] as const) {
+          assert.deepEqual(
+            runCallTool(BRAIN_HOST_TURN.SPOKEN, tool, () => accepted),
+            accepted,
+          );
+          const refused = runCallTool(BRAIN_HOST_TURN.TYPED, tool, () => accepted);
+          assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+          assert.match(String(refused.reason), /No call is live/u);
+        }
+      }),
+  );
+
+  it.effect(
+    "a spoken turn's message hands the task as it stands where the session has not handed it, then the time alone while nothing changed, and the task again once the rest of it changed",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        assert.ok(agent.taskId !== null);
+        const spoken = (handed: TurnHanded) =>
+          host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.SPOKEN, turnId: undefined }, handed);
+
+        const opening = yield* spoken({});
+        for (const told of [
+          "[the developer's time]",
+          "[saved document]",
+          "Name: Teammate invitations",
+        ]) {
+          assert.ok(opening.text?.includes(told), told);
+        }
+
+        const unchanged = yield* spoken(opening.handed);
+        assert.ok(unchanged.text?.includes("[the developer's time]"), unchanged.text ?? "");
+        assert.ok(!unchanged.text?.includes("[saved document]"), unchanged.text ?? "");
+
+        yield* updateTask(userId, agent.taskId, { name: "Teammate invitations, by link" });
+        const renamed = yield* spoken(unchanged.handed);
+        assert.ok(
+          renamed.text?.includes("Name: Teammate invitations, by link"),
+          renamed.text ?? "",
+        );
+        assert.ok(renamed.text?.includes("[saved document]"), renamed.text ?? "");
+        const after = yield* spoken(renamed.handed);
+        assert.ok(!after.text?.includes("[saved document]"), after.text ?? "");
+      }),
+  );
+
+  it.effect(
+    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the plan after its previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
     () =>
       Effect.gen(function* () {
         // The relay's clock, which stamps when a turn started, stands ten minutes into the test's.
@@ -2037,8 +2100,23 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { userId, agent, auth, sessionId, admitted } = yield* openAgent(host);
         assert.ok(agent.taskId !== null);
         const binding = { userId, taskId: agent.taskId };
+        let handed: TurnHanded = {};
+        // Each typed turn's message, the session keeping what it handed; the task's text, or nothing where it was not handed.
         const typedAt = (eveTurnId: string) =>
-          host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, hostTurnId(sessionId, eveTurnId));
+          Effect.map(
+            Effect.suspend(() =>
+              host.turnMessage(
+                admitted,
+                { kind: BRAIN_HOST_TURN.TYPED, turnId: hostTurnId(sessionId, eveTurnId) },
+                handed,
+              ),
+            ),
+            (message) => {
+              handed = message.handed;
+              const text = message.text ?? "";
+              return text.includes("[saved document]") ? text : undefined;
+            },
+          );
         const agentNotes = (notes: Parameters<typeof saveNotes>[1]) =>
           Effect.map(
             host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox),
@@ -2056,6 +2134,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
           yield* host.relay(event, admitted, session as never, state, {});
         }
+        // Once the first turn ran, the session hands the task whole once: its board, threads, and brief are new to it.
+        assert.ok(yield* typedAt("turn_1"));
         assert.equal(yield* typedAt("turn_1"), undefined);
 
         // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
@@ -2077,10 +2157,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Resending renews the link.")]),
           ACTION_RESULT_STATUS.ACCEPTED,
         );
-        const handed = (yield* typedAt("turn_1")) ?? "";
-        assert.ok(handed.includes("saved since your last turn by someone other than you"), handed);
-        assert.ok(handed.includes("A withdrawn invite never grants access."), handed);
-        assert.ok(!handed.includes("## This turn is spoken"), handed);
+        const changed = (yield* typedAt("turn_1")) ?? "";
+        assert.ok(changed.includes("A withdrawn invite never grants access."), changed);
+        assert.ok(!changed.includes("## This turn is spoken"), changed);
       }),
   );
 

@@ -267,8 +267,7 @@ function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
   return (
     <Text tone={TEXT_TONE.MUTED}>
       Tasks and Agents count those started in the last {list.activityDays} UTC days, and Merged the
-      distinct pull requests from the workspace's agents that merged in them; the table is sorted by
-      that week's activity. The headline counts read shared workspaces whatever the table lists.
+      distinct pull requests from the workspace's agents that merged in them.
       {truncated
         ? ` Only the ${formatNumber(list.rows.length)} busiest of ${formatNumber(list.total)} are listed. Search reads every workspace.`
         : ""}

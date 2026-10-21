@@ -47,8 +47,6 @@ import { BROWSER_TOOL, storedBrowserOutput } from "../browser/browser-tool.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
-  isBrainHostTurn,
   RECEIVED_LINE,
   RELAY_TURN,
   type RelayTurn,
@@ -432,21 +430,6 @@ const readTurnOfEvent = Schema.decodeUnknownOption(Schema.Struct({ turnId: Schem
 /** The turn an event of eve's stream belongs to, where it names one. */
 function turnIdOf(event: MessageStreamEvent): string | undefined {
   return Option.getOrUndefined(Option.map(readTurnOfEvent(event.data), (data) => data.turnId));
-}
-
-/**
- * The kind of turn an event's turn opened as, where the relay holds that
- * turn: what its start's request named, which a line of another kind joining
- * it under way leaves as it was, though eve moves the session's current auth
- * to that line's.
- */
-export function relayedTurnKind(
-  event: MessageStreamEvent,
-  state: RelayStateStore,
-): BrainHostTurn | undefined {
-  const eveTurnId = turnIdOf(event);
-  const kind = eveTurnId === undefined ? undefined : state.get().turns[eveTurnId]?.kind;
-  return kind !== undefined && isBrainHostTurn(kind) ? kind : undefined;
 }
 
 /** A step's draft as one of eve's text events grows it, and the step's finished words through it. */

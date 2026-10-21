@@ -181,7 +181,6 @@ export const APP_SLICE = {
   ACCOUNT: sliceAtom("account"),
   UPDATE: sliceAtom("update"),
   AUDIO: sliceAtom("audio"),
-  HOTKEYS: sliceAtom("hotkeys"),
   VOICE: sliceAtom("voice"),
   TASKS: sliceAtom("tasks"),
   CODING_AGENTS: sliceAtom("codingAgents"),

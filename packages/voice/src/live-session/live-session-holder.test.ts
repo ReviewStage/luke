@@ -25,6 +25,8 @@ import { LiveSessionHolder } from "./live-session-holder.js";
  */
 
 const INVITES_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+/** The agent of a task every call in these tests speaks into; only its task matters to the holder. */
+const INVITES_AGENT = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 
 class FakeSideband implements LiveSideband {
   readonly sent: LiveClientEvent[] = [];
@@ -98,6 +100,8 @@ interface Fixture {
   reports: boolean[];
   /** How many times the source's stop door was asked. */
   stops: number;
+  /** Every line the source's typed door was handed, in order. */
+  typed: string[];
   /** Every activity frame the holder told its caller, in order. */
   activity: TaskActivityFrame[];
   /** The service's activity frame, as the source's door would deliver it. */
@@ -137,6 +141,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     let workListener: ((work: TaskWorkFrame) => void) | undefined;
     let endingListener: ((ending: TaskCallEndingFrame) => void) | undefined;
     const callsEnded: string[] = [];
+    const typed: string[] = [];
     const state = {
       sourceAvailable: true,
       reportsActivity: true,
@@ -164,6 +169,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   },
                   stopSpeaking: () => {
                     state.stops += 1;
+                  },
+                  typeLine: (text: string, clientKey: string) => {
+                    typed.push(`${clientKey}:${text}`);
                   },
                   onTaskActivity: (listener: (activity: TaskActivityFrame) => void) => {
                     activityListener = listener;
@@ -225,6 +233,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       get stops() {
         return state.stops;
       },
+      typed,
       activity,
       tellActivity: (word) => {
         activityListener?.(word);
@@ -255,7 +264,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       open: (taskId = INVITES_TASK) =>
         Effect.gen(function* () {
-          const created = yield* holder.createSession("offer", taskId);
+          const created = yield* holder.createSession("offer", { taskId, agentId: INVITES_AGENT });
           assert.ok(created);
           const sideband = sidebands[sidebands.length - 1];
           assert.ok(sideband);
@@ -276,7 +285,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const created = yield* f.holder.createSession("offer", INVITES_TASK);
+      const created = yield* f.holder.createSession("offer", {
+        taskId: INVITES_TASK,
+        agentId: INVITES_AGENT,
+      });
       assert.deepEqual(created, {
         sessionId: "sess-1",
         sdpAnswer: "answer-for-offer",
@@ -290,5 +302,29 @@ it.effect(
       assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.STARTED]);
       // Nothing is sent at creation or start: the exchange is the service's, and it seeds nothing twice.
       assert.deepEqual(f.sidebands[0]?.sent, []);
+    }),
+);
+
+it.effect(
+  "a line typed to the agent the standing call speaks into reaches the service's door, and one typed to another agent, before the call starts, or after it ends does not",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", {
+        taskId: INVITES_TASK,
+        agentId: INVITES_AGENT,
+      });
+      assert.ok(created);
+      // Not started yet: nothing can hear it, so the line is the composer's to steer.
+      assert.equal(f.holder.typeLine(INVITES_AGENT, "Too early.", "send-0"), false);
+      f.sidebands[0]?.started(created.sessionId);
+      yield* settle();
+      assert.equal(f.holder.typeLine("another-agent", "Not this call's.", "send-1"), false);
+      assert.equal(f.holder.typeLine(INVITES_AGENT, "Use the fixture branch.", "send-2"), true);
+      assert.deepEqual(f.typed, ["send-2:Use the fixture branch."]);
+      f.sidebands[0]?.closedBy("close_requested", 3);
+      yield* settle();
+      assert.equal(f.holder.typeLine(INVITES_AGENT, "After the call.", "send-3"), false);
+      assert.deepEqual(f.typed, ["send-2:Use the fixture branch."]);
     }),
 );

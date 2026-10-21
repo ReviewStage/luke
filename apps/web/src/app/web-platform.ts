@@ -47,6 +47,19 @@ export function downloadText(file: {
 }
 
 /**
+ * Puts a PNG, its bytes in base64 once drawn, on the browser's clipboard as
+ * a picture. Note that the write is asked for now, with the picture still a
+ * promise, because Safari takes a write only in the press's own task.
+ */
+export function copyPng(png: Promise<string>): Promise<void> {
+  const blob = png.then((base64) => {
+    const bytes = Uint8Array.from(atob(base64), (each) => each.charCodeAt(0));
+    return new Blob([bytes], { type: "image/png" });
+  });
+  return navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+}
+
+/**
  * Opens a page in a tab of its own, which reaches nothing of this one, where
  * its address is an http or https one, as the desktop's `web.open` takes it.
  * Any other opens nothing, because a `javascript:` or `data:` address would
@@ -104,8 +117,7 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
 }
 
 /**
- * The tab's platform. A browser has no menu bar and no global keys, so those
- * answer nothing; focus is the tab's own, so bringing the panel forward is
+ * The tab's platform. A browser has no menu bar, so that answers nothing; focus is the tab's own, so bringing the panel forward is
  * asking the window for it; a surface event is counted by the host in the
  * tab, as every other event is; notifications are the browser's to grant,
  * for the site, asked for on Settings' press itself; unsaved work is held
@@ -119,12 +131,12 @@ export function webPlatform(
 ): AppPlatform {
   const platform: AppPlatform = {
     copyText: (words) => navigator.clipboard.writeText(words),
+    copyImage: copyPng,
     saveFile: downloadText,
     focusPanel: () => window.focus(),
     pageFrameUrl: () => new URL(PAGE_IN_MAC_APP, location.origin).href,
     assetBase: () => new URL(PANEL_ASSET_BASE, location.origin).href,
     onMenuCommand: () => ignore,
-    setShortcutCapturing: ignore,
     recordSurfaceEvent: shell.recordSurfaceEvent,
     openGitHub: openGitHubTab,
     openWeb: openTab,

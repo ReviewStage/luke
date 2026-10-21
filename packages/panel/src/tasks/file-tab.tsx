@@ -2,20 +2,20 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND, FILES_CHANGED_KEY, filesChangedKeyFor } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, type ErrorStatePlacement, SCROLL_FADE } from "@luke/ui";
+import {
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  type ErrorStatePlacement,
+  SCROLL_FADE,
+  ScrollArea,
+} from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { SpinnerRegion } from "../spinner.js";
 import { typingInto } from "./changes-list.js";
-import { CodeLinesView, useLinesLook } from "./code-lines.js";
-import {
-  FileNoteAnnotation,
-  type FileNotes,
-  type NoteLines,
-  noteLineOf,
-  notesAfter,
-} from "./file-note.js";
+import { CodeSnippet } from "./code-snippet.js";
+import { FileNoteAnnotation, type FileNotes, type NoteLines, noteLineOf } from "./file-note.js";
 import {
   FILE_READ,
   type FileRead,
@@ -259,10 +259,7 @@ export function FileTab({
   const page = useTaskMentions();
   const drop = useMentionDrop();
   const handle = useRef<WholeFileHandle | null>(null);
-  const look = useLinesLook();
   const viewSettings = useFileViewSettings();
-  // The lines of the note the pointer or the keyboard is on, over the lines Luke showed.
-  const [lit, setLit] = useState<NoteLines | undefined>(undefined);
   const told = useRef(onRead);
   told.current = onRead;
   useEffect(() => {
@@ -346,18 +343,10 @@ export function FileTab({
             />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
-          <CodeLinesView
-            look={look}
-            fade={SCROLL_FADE.START}
-            firstLine={snippet.firstLine}
-            lines={snippet.lines}
-            pointed={snippet.ref}
-            lit={lit}
-            after={notesAfter(
-              { ...notes, onLight: setLit },
-              snippet.firstLine + snippet.lines.length - 1,
-            )}
-          />
+          {/* The lines and their notes scroll up and down in the room the notice leaves; unwrapped lines scroll sideways in Pierre's own way. */}
+          <ScrollArea fade={SCROLL_FADE.START}>
+            <CodeSnippet code={snippet} notes={notes} />
+          </ScrollArea>
         </>
       )}
     </section>

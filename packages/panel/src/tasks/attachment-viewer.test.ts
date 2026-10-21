@@ -11,6 +11,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
@@ -26,7 +27,8 @@ import { IMAGE_OPENING, type ImageOpening } from "./use-image-zoom.js";
  * edges again, and a mouse counting its wheel in lines zooms as one counting
  * pixels does. Two fingers on a touch screen pinch it about the point
  * between them, and a picture asked to open at its own pixels does so from
- * its top left corner once it loads. jsdom lays nothing out, so each picture is
+ * its top left corner once it loads. Copy image puts the picture shown on
+ * the clipboard as the PNG it is. jsdom lays nothing out, so each picture is
  * given the 800 by 400 its frame of 800 by 500 would fit a 2400 by 1200
  * screenshot to.
  */
@@ -451,4 +453,41 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
     for (const root of roots.splice(0)) root.unmount();
   });
   vi.unstubAllGlobals();
+});
+
+test("Copy image puts the picture shown on the clipboard as its PNG, and its check stands beside that picture alone", async () => {
+  const copied: string[] = [];
+  let answer = Promise.resolve();
+  fakeAppPlatform({
+    copyImage: async (png) => {
+      copied.push(await png);
+      await answer;
+    },
+  });
+  const viewer = opened();
+  viewer.key("ArrowRight");
+  viewer.press("Copy image");
+  await act(async () => undefined);
+  assert.deepEqual(copied, [PIXEL], "the PNG's own bytes, whatever the address says after them");
+  const glyph = () =>
+    document
+      .querySelector('button[aria-label="Copy image"] .copy-glyph')
+      ?.getAttribute("data-state");
+  assert.equal(glyph(), "copied");
+  viewer.key("ArrowLeft");
+  assert.equal(glyph(), "idle", "the picture walked to was not the one copied");
+  viewer.key("ArrowRight");
+  assert.equal(glyph(), "copied", "back on the copied picture, the check stands again");
+  const refused = Promise.withResolvers<void>();
+  answer = refused.promise;
+  viewer.key("ArrowLeft");
+  viewer.press("Copy image");
+  await act(async () => undefined);
+  assert.equal(
+    glyph(),
+    "idle",
+    "a copy still asked for answers nothing yet, the last one's check included",
+  );
+  await act(async () => refused.reject(new Error("refused")));
+  assert.equal(glyph(), "failed", "its own answer lands beside it");
 });

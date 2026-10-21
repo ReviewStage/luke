@@ -8,7 +8,11 @@ import {
 } from "@luke/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
 import { type Context, Deferred, Duration, Effect, Exit, Fiber, Option, type Scope } from "effect";
-import type { VoiceCallTranscriptChange } from "../voice-view.js";
+import {
+  sameCallAbout,
+  type VoiceCallAbout,
+  type VoiceCallTranscriptChange,
+} from "../voice-view.js";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -43,7 +47,7 @@ interface LiveCallLine {
  * Everything said on the standing call so far, settled or not and whatever
  * the captions preference says: the store's id for the call's session, where
  * an account holds it, and its lines in the order they opened. It is what the
- * Tasks tab's transcript draws until the call ends and the record is read.
+ * agent tab's transcript draws until the call ends and the record is read.
  * It grows for the whole call, so it is never reported whole: each report
  * carries only what moved in it (`VoiceCallTranscriptChange`).
  */
@@ -69,8 +73,8 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own rows while they are still being said, under the captions preference alone. */
   developerCaptions: readonly string[] | undefined;
-  /** The task the standing call is about; none while no call stands. */
-  callTaskId: string | undefined;
+  /** The agent the standing call speaks into, and its task; none while no call stands. */
+  call: VoiceCallAbout | undefined;
   /** The store's id for the session of the last call Luke ended himself, so the transcript can say so; none before he has. */
   lukeEndedCall: string | undefined;
   /** Whether Luke's voice is silenced on this device for the standing call; never while none stands. */
@@ -93,7 +97,7 @@ export interface LiveVoiceBridge {
   requestMicrophone(): Effect.Effect<boolean>;
   /** The neutral note said when the hosted service's ceiling refuses a session. */
   hostedUnavailableNote(): Effect.Effect<string | undefined>;
-  /** Tells the host to stop Luke speaking, answering whether a session stood to tell; the stop key's ask alone, and only while he speaks. */
+  /** Tells the host to stop Luke speaking, answering whether a session stood to tell; Escape's ask alone, and only while he speaks. */
   stopSpeaking(): Effect.Effect<boolean>;
 }
 
@@ -163,7 +167,7 @@ function developerWordsOf(rows: readonly LiveCaptionRow[]): string {
 }
 
 const MICROPHONE_REFUSED_NOTE =
-  "The talk key needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.";
+  "A call needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.";
 
 function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
   return (
@@ -173,7 +177,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.talkOpening === right.talkOpening &&
     left.lukeCaptions === right.lukeCaptions &&
     left.developerCaptions === right.developerCaptions &&
-    left.callTaskId === right.callTaskId &&
+    sameCallAbout(left.call, right.call) &&
     left.lukeEndedCall === right.lukeEndedCall &&
     left.speakerMuted === right.speakerMuted &&
     left.listening === right.listening &&
@@ -185,12 +189,11 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  * The one voice session as the desktop drives it, following the live guide's
  * one-owner rule: the renderer owns the microphone switch and the hang-up,
  * the host owns every append and the close decision. Every session is a
- * task call about one task. The talk key is held to talk: its press
- * opens the call about the task the window has open if none stands, speaks
- * into the standing call whatever task is open if one does, and unmutes it;
- * its release mutes, and the microphone is open exactly between
- * the two; the stop key mutes the same way and silences Luke where he is
- * speaking. The host's `voiceLiveSession.changed` is obeyed rather than
+ * call into one agent of a task, and one stands at a time. An agent's Call
+ * button toggles: its press opens the call into the agent if none stands,
+ * hangs up another agent's first, and mutes or unmutes the agent's own;
+ * Escape mutes and silences Luke where he is speaking. The host's
+ * `voiceLiveSession.changed` is obeyed rather than
  * reasoned about: closing hangs up. No turn is committed, no reply is
  * claimed, and no words are
  * written here: both speakers' lines are the host's, from the transcript its
@@ -229,8 +232,8 @@ export class LiveVoiceOrchestrator {
   #talkOpening = false;
   /** Whether the developer silenced Luke's voice on this device for the call standing, which its end lets go of. */
   #speakerMuted = false;
-  /** The task the call standing or opening is about. */
-  #callTask: string | undefined;
+  /** The agent the call standing or opening speaks into, and its task. */
+  #callAbout: VoiceCallAbout | undefined;
   /** The open still negotiating: a second ask reads its answer rather than building a second call. */
   #opening: Deferred.Deferred<LiveVoiceCall | undefined> | undefined;
   /** The standing call's whole life, in the scope it was acquired into; interrupting this is what `stop` releases it with. */
@@ -247,19 +250,13 @@ export class LiveVoiceOrchestrator {
    */
   #closing: Deferred.Deferred<void> | undefined;
   /**
-   * Whether the talk key is down. A press's unmute follows the session it
-   * opened only while this still stands, so a key let go of, or a stop
-   * pressed, during the opening leaves the session muted rather than
-   * unmuting one nobody wants heard.
+   * Whether the developer is to be heard: a Call press stands until it is
+   * pressed again, Escape is pressed, or the call ends. A press's unmute
+   * follows the session it opened only while this still stands, so a second
+   * press, or Escape, during the opening leaves the session muted rather
+   * than unmuting one nobody wants heard.
    */
   #pressHeld = false;
-  /**
-   * Whether the talk key itself is down, apart from any press. It is what a
-   * press that first has to hang another call up reads once that call is
-   * gone, since the key may have come up during the wait, before the press
-   * had marked itself held.
-   */
-  #keyDown = false;
   #reported: LiveVoiceView | undefined;
   /** The transcript as last reported, which the next report's change is taken against. */
   #reportedTranscript: LiveCallTranscript | undefined;
@@ -288,47 +285,16 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The talk key going down. Against no session it opens one and unmutes it;
-   * against a standing session it unmutes. It never mutes: the key coming up
-   * does that, so a hold is heard for exactly as long as it lasts, and a
-   * hold that ended while the system's microphone dialog stood, or while the
-   * session was opening, unmutes nothing. A press speaks into the call
-   * standing or opening, whatever task the window has open, because the call
-   * outlives the task on screen and a hold must not hang it up: moving the
-   * call to another task is that task's own button. With no call, a press
-   * made while the window has a task open opens the call about that task,
-   * and a press naming no task does nothing: there is no call about no task.
+   * An agent tab's Call button, and the call a new voice chat opens. It
+   * toggles rather than holds, because a call runs for minutes: against the
+   * call into that agent, a press while the developer is heard mutes, and a
+   * press while muted unmutes. Against no call it opens one into the agent
+   * and unmutes it; against a call into another agent, that call is hung up
+   * first, since one microphone carries one call and no other call may
+   * carry the agent's words or hear its answers. The panel asks the
+   * developer before a press that hangs another call up.
    */
-  beginTalk(taskId?: string): Effect.Effect<void> {
-    return Effect.gen({ self: this }, function* () {
-      if (taskId === undefined && this.#call === undefined) return;
-      if (this.#surroundings.voiceAvailable === false) {
-        const unavailable = yield* this.#bridge.hostedUnavailableNote();
-        if (unavailable) this.#strip.showNotice(unavailable);
-        return;
-      }
-      this.#keyDown = true;
-      // A press over a call the host is closing waits it out. A key let go of
-      // meanwhile opens nothing, and nor does a press naming no task, which
-      // spoke into the call that has now gone.
-      if ((yield* this.#outlastClosing()) && (!this.#keyDown || taskId === undefined)) return;
-      const task = this.#call === undefined ? taskId : this.#callTask;
-      if (task === undefined) return;
-      yield* this.#talk(task);
-    });
-  }
-
-  /**
-   * The Tasks tab's microphone button, about the task the panel has
-   * open. It toggles rather than holds, because a task conversation runs
-   * for minutes: against the call about that task, a press while the
-   * developer is heard mutes, and a press while muted unmutes. Against no
-   * call it opens one about the task and unmutes it; against a call about
-   * another task, that call is hung up first,
-   * since only one task is ever the spoken conversation and no other call
-   * may carry the task's words or hear its answers.
-   */
-  talkAboutTask(taskId: string): Effect.Effect<void> {
+  talkTo(about: VoiceCallAbout): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
@@ -336,39 +302,40 @@ export class LiveVoiceOrchestrator {
         return;
       }
       const call = this.#call;
-      if (call !== undefined && this.#callTask === taskId && this.#pressHeld) {
+      const same = sameCallAbout(this.#callAbout, about);
+      if (call !== undefined && same && this.#pressHeld) {
         // A press while the call is still opening leaves it to open muted.
         this.#pressHeld = false;
         if (!this.#opening && call.standing) yield* call.mute();
         this.#touch();
         return;
       }
-      if (call !== undefined && this.#callTask !== taskId) yield* this.#hangUp();
+      if (call !== undefined && !same) yield* this.#hangUp();
       yield* this.#outlastClosing();
-      yield* this.#talk(taskId);
+      yield* this.#talk(about);
     });
   }
 
   /**
    * The microphone's mute chord, pressed wherever the panel stands: the call
-   * standing is toggled as its task's own button toggles it, whatever task
-   * is open, since the call outlives the task on screen. A press over no call,
+   * standing is toggled as its agent's own button toggles it, whatever tab
+   * is open, since the call outlives the tab on screen. A press over no call,
    * or over one the host is closing, opens nothing.
    */
   toggleMicrophone(): Effect.Effect<void> {
     return Effect.suspend(() => {
-      const task =
-        this.#call === undefined || this.#closing !== undefined ? undefined : this.#callTask;
-      return task === undefined ? Effect.void : this.talkAboutTask(task);
+      const about =
+        this.#call === undefined || this.#closing !== undefined ? undefined : this.#callAbout;
+      return about === undefined ? Effect.void : this.talkTo(about);
     });
   }
 
   /**
-   * The press's own work, for the talk key and the Tasks tab's button alike:
+   * The press's own work, for an agent's Call button and the mute chord alike:
    * the microphone asked for where it is not granted, the session opened if
    * none stands, and the developer heard for as long as the press stands.
    */
-  #talk(taskId: string): Effect.Effect<void> {
+  #talk(about: VoiceCallAbout): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       this.#pressHeld = true;
       if (!this.#surroundings.microphoneGranted) {
@@ -379,10 +346,10 @@ export class LiveVoiceOrchestrator {
         }
         if (!this.#pressHeld) return;
       }
-      const call = yield* this.#ensureSession(taskId);
-      // A key let go of during the opening leaves the session muted, and the
-      // mute is still sent: the press's device rode the offer, and only the
-      // release takes it back.
+      const call = yield* this.#ensureSession(about);
+      // A press taken back during the opening leaves the session muted, and
+      // the mute is still sent: the press's device rode the offer, and only
+      // the mute takes it back.
       if (call) yield* this.#pressHeld ? call.unmute() : call.mute();
       // The press is answered once the session hears the developer; between the
       // offer and the unmute the session passes through muted, which is not the
@@ -393,23 +360,7 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The talk key coming up: the microphone closes. A release while the
-   * press's session is still opening leaves it to open muted, and one with
-   * no press behind it does nothing.
-   */
-  endTalk(): Effect.Effect<void> {
-    return Effect.suspend(() => {
-      this.#keyDown = false;
-      if (!this.#pressHeld) return Effect.void;
-      this.#pressHeld = false;
-      if (this.#opening) return Effect.void;
-      const call = this.#call;
-      return call?.standing ? Effect.asVoid(call.mute()) : Effect.void;
-    });
-  }
-
-  /**
-   * The stop key, and the panel's Escape: the microphone closes, and where
+   * The panel's Escape: the microphone closes, and where
    * Luke is actually speaking his voice is silenced on this device at once
    * and the host tells the model to stop. The silence goes first because the
    * model obeys only when it next can, and the guide leaves blocking its
@@ -419,16 +370,15 @@ export class LiveVoiceOrchestrator {
    * even where the host could not be reached. A press
    * against a call that is merely listening sends none: the instruction is
    * standing text in the session, so telling a silent model to stop steers
-   * the answer it has not given yet. The talk key's release is `endTalk` and
-   * never carries the stop or the silence either: under hold-to-talk it
-   * mutes while Luke is routinely still answering. Pressed while a press's session is still
-   * opening, it cancels that press's unmute, so the session opens muted.
+   * the answer it has not given yet. Pressed while a press's session is
+   * still opening, it cancels that press's unmute, so the session opens
+   * muted.
    */
   stopSpeaking(): Effect.Effect<boolean> {
     return Effect.gen({ self: this }, function* () {
       this.#pressHeld = false;
       // A session still being opened has no peer to mute yet; the press
-      // remembers the key is no longer held and leaves the session muted.
+      // remembers it is no longer held and leaves the session muted.
       if (this.#opening) return true;
       const call = this.#call;
       if (!call?.standing) return false;
@@ -447,7 +397,7 @@ export class LiveVoiceOrchestrator {
    * not run on through the graceful close; then the microphone closes and
    * the call is let go of at once, so the view reads no call before the
    * close has finished behind it. Note that the host is never told to stop,
-   * unlike under the stop key, because its stop cancels the work Luke has
+   * unlike under Escape, because its stop cancels the work Luke has
    * under way, and hanging up ends the voice alone: Luke goes on working and
    * a call back finds him there. A press over no call does nothing.
    */
@@ -640,8 +590,8 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * A task call's press is a toggle that stands for minutes, so it ends
-   * with the call: nothing after it (the talk key's release) reads it as the
+   * A Call button's press is a toggle that stands for minutes, so it ends
+   * with the call: nothing after it (a later mute) reads it as the
    * developer still wanting to be heard.
    */
   #releasePress(): void {
@@ -662,14 +612,14 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * Waits out a call the host is closing, answering whether there was one.
-   * A press waits here, before it marks itself held, because the closing
-   * call's end releases whatever press stood when it went.
+   * Waits out a call the host is closing. A press waits here, before it
+   * marks itself held, because the closing call's end releases whatever
+   * press stood when it went.
    */
-  #outlastClosing(): Effect.Effect<boolean> {
+  #outlastClosing(): Effect.Effect<void> {
     return Effect.suspend(() => {
       const closing = this.#closing;
-      return closing ? Effect.as(Deferred.await(closing), true) : Effect.succeed(false);
+      return closing ? Deferred.await(closing) : Effect.void;
     });
   }
 
@@ -694,7 +644,7 @@ export class LiveVoiceOrchestrator {
    * closing is no session to speak into: the ask waits until it is let go
    * of, then opens the next.
    */
-  #ensureSession(taskId: string): Effect.Effect<LiveVoiceCall | undefined> {
+  #ensureSession(about: VoiceCallAbout): Effect.Effect<LiveVoiceCall | undefined> {
     return Effect.gen({ self: this }, function* () {
       yield* this.#outlastClosing();
       // A stop frees a press waiting on a closing call, and a stopped orchestrator opens nothing.
@@ -704,7 +654,7 @@ export class LiveVoiceOrchestrator {
       if (negotiating) return yield* Deferred.await(negotiating);
       const opened = Deferred.makeUnsafe<LiveVoiceCall | undefined>();
       this.#opening = opened;
-      this.#callTask = taskId;
+      this.#callAbout = about;
       this.#strip.clear();
       const call = this.#createCall({
         onStatus: (status, speakers) => this.#onStatus(call, status, speakers),
@@ -721,7 +671,7 @@ export class LiveVoiceOrchestrator {
       // status it reports — a task behind the view this verb has already
       // touched.
       this.#lifecycle = yield* Effect.forkDetach(
-        Effect.scoped(this.#lifecycleEffect(call, taskId, opened)),
+        Effect.scoped(this.#lifecycleEffect(call, about, opened)),
         { startImmediately: true },
       );
       return yield* Deferred.await(opened);
@@ -739,11 +689,11 @@ export class LiveVoiceOrchestrator {
    */
   #lifecycleEffect(
     call: LiveVoiceCall,
-    taskId: string,
+    about: VoiceCallAbout,
     opened: Deferred.Deferred<LiveVoiceCall | undefined>,
   ): Effect.Effect<void, never, Scope.Scope> {
     return Effect.gen({ self: this }, function* () {
-      const standing = yield* Effect.acquireRelease(call.open({ taskId }), () => call.close());
+      const standing = yield* Effect.acquireRelease(call.open(about), () => call.close());
       if (this.#opening === opened) this.#opening = undefined;
       if (!standing) {
         this.#talkOpening = false;
@@ -832,7 +782,7 @@ export class LiveVoiceOrchestrator {
       talkOpening: this.#talkOpening,
       lukeCaptions: this.#lukeCaptions,
       developerCaptions: this.#developerCaptions,
-      callTaskId: this.#call === undefined ? undefined : this.#callTask,
+      call: this.#call === undefined ? undefined : this.#callAbout,
       lukeEndedCall: this.#lukeEndedCall,
       speakerMuted: this.#speakerMuted,
     };

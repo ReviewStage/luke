@@ -817,19 +817,8 @@ function CreatorSection({
   );
 }
 
-/** What the list says where its filters leave nothing: by who the tasks are assigned to where it names one, else by who created them. */
-function emptyFilterWords(
-  createdBy: string | undefined,
-  assignedTo: string | undefined,
-  readerId: string | undefined,
-): string {
-  if (assignedTo !== undefined) {
-    return assignedTo === readerId
-      ? "Nothing assigned to you here."
-      : "Nothing assigned to them here.";
-  }
-  return createdBy === readerId ? "None of your tasks here." : "None of their tasks here.";
-}
+/** What the list says where its filters leave nothing, as the Tasks page says it. */
+const NONE_MATCH = "No tasks match this view.";
 
 /** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
 function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
@@ -1910,8 +1899,7 @@ function SidebarColumn({
                   tasks.listRead &&
                   !tasks.listFailed ? (
                     <p className="sidebar-note">
-                      {emptyFilterWords(createdBy, assignedTo, tasks.me)}{" "}
-                      <Button onClick={taskView.onEveryone}>Show all</Button>
+                      {NONE_MATCH} <Button onClick={taskView.onEveryone}>Show all</Button>
                     </p>
                   ) : null}
                   {tasks.listFailed ? (

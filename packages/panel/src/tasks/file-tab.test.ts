@@ -91,7 +91,7 @@ function service(asked: TaskFileRequest[]): ReadFileWindow {
               commit: HEAD,
               firstLine: 1,
               lineCount: 6,
-              lines: [[{ text: "const seats = 3;" }]],
+              lines: ["const seats = 3;"],
             },
           };
     return Promise.resolve(answer);

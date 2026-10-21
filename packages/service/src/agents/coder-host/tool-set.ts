@@ -2,7 +2,7 @@ import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
-import { WireValueSchema } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type WireRecord, WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Option, Schema } from "effect";
@@ -29,8 +29,8 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  * its workspace (`../coding-agent-tools.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
- * checks or a deploy with, and, on a spoken turn alone, the call's own
- * question queue and hang-up (`turnToolsOf`). The worker's own rows name
+ * checks or a deploy with, and the call's own question queue and hang-up,
+ * refused off a call (`runCallTool`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -137,26 +137,34 @@ export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<Tas
 }
 
 /** The call's own tools, which mean something only while someone is listening (`../../tasks/queue-question.ts`, `../../tasks/end-call.ts`). */
-const SPOKEN_TURN_TOOLS = [
-  CODER_TOOL.QUEUE_QUESTION,
-  CODER_TOOL.WITHDRAW_QUESTION,
-  CODER_TOOL.END_CALL,
-] as const;
-
-/** A tool a coding agent is offered on a spoken turn alone. */
-export type SpokenTurnTool = (typeof SPOKEN_TURN_TOOLS)[number];
+export type CallTool =
+  | typeof CODER_TOOL.QUEUE_QUESTION
+  | typeof CODER_TOOL.WITHDRAW_QUESTION
+  | typeof CODER_TOOL.END_CALL;
 
 /**
- * The tools a turn is offered by its kind: the call's own on a spoken turn,
- * and none of them on a typed one or one that names no kind, where a
- * question for the developer goes to the inbox instead. Note that `sleep`
- * and eve's `task_wait` are offered on every turn, spoken or not, because
- * eve offers a workflow tool on every turn (a resolver returns plain tools
- * alone) and adds `task_wait` beside any task tool, with no way to withhold
- * it; a spoken turn's words tell the model never to wait (`turn-context.ts`).
+ * Why each of the call's own tools is refused on a turn no call is live on.
+ * Note that they are offered on every turn, spoken or typed, so the tools a
+ * turn sends, which lead its prompt, are the same whichever kind it is, and
+ * a call that starts mid-PR reads the agent's history from the provider's
+ * cache; off a call each refuses as other tools refuse.
  */
-export function turnToolsOf(turn: BrainHostTurn | undefined): ReadonlySet<SpokenTurnTool> {
-  return turn === BRAIN_HOST_TURN.SPOKEN ? new Set(SPOKEN_TURN_TOOLS) : new Set();
+const OFF_CALL_REASON = {
+  [CODER_TOOL.QUEUE_QUESTION]:
+    "No call is live, so no one hears a queued question: post it to the developer's inbox instead.",
+  [CODER_TOOL.WITHDRAW_QUESTION]: "No call is live, so no question waits on one.",
+  [CODER_TOOL.END_CALL]: "No call is live to end.",
+} as const satisfies Record<CallTool, string>;
+
+/** One call of the call's own tools as the turn's kind answers it: its run on a spoken turn, refused on any other. */
+export function runCallTool(
+  turn: BrainHostTurn | undefined,
+  tool: CallTool,
+  run: () => WireRecord,
+): WireRecord {
+  return turn === BRAIN_HOST_TURN.SPOKEN
+    ? run()
+    : { status: ACTION_RESULT_STATUS.REJECTED, reason: OFF_CALL_REASON[tool] };
 }
 
 /** The tools only an agent working in a repository is offered: the pull request the service opens for it, the two that write into its checkout, and `show_code`, which puts lines of it on the developer's screen. */

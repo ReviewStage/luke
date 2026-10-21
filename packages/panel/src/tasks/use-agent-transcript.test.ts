@@ -225,3 +225,25 @@ test("a page a read already out hands over after the tab let go of its stream is
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   assert.deepEqual(heard, []);
 });
+
+test("an agent that ended stays followed while its tab is shown, so the lines a call into it writes still reach the tab", () => {
+  const { follower, asked, push } = scriptedFollower();
+  const { seen, draw } = drawn(follower);
+  const ended = (id: string, text: string): CodingAgentMessagesAnswerView => ({
+    ...pageOf(id, text),
+    status: CODING_AGENT_STATUS.COMPLETED,
+  });
+
+  draw(true);
+  push(AGENT, ended("m-1", "Invites now expire after seven days."));
+  // A call into the ended agent writes its spoken lines, which the stream still pushes.
+  push(AGENT, ended("said-1", "Walk me through the expiry job."));
+  push(AGENT, ended("said-2", "It reads pending invites oldest first."));
+
+  assert.deepEqual(
+    seen.current?.messages.map((message) => message.id),
+    ["m-1", "said-1", "said-2"],
+  );
+  assert.equal(seen.current?.pageStatus, CODING_AGENT_STATUS.COMPLETED);
+  assert.deepEqual(asked, ["follow:own"], "the ended agent's stream is never let go while shown");
+});

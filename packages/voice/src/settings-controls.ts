@@ -1,5 +1,4 @@
 import type { RunningBuild, UpdateSnapshot } from "@luke/settings/update";
-import type { ActionResult } from "@luke/wire";
 import type { MicrophoneStatus } from "./audio.js";
 
 /**
@@ -79,51 +78,4 @@ export interface UpdateControl {
   onInstall: () => void;
   /** Opens the latest release's page, fixed by the build, in the browser. */
   onOpenLatest: () => void;
-}
-
-/**
- * The talk, ask, and stop keys as registered, and the one way to move them
- * or to say a recording is under way. The keys the rows show are the ones
- * that actually answered, which can differ from the stored choice when
- * another app owns the chord — that stored choice is what Reset undoes.
- */
-export interface ShortcutControl {
-  /**
-   * The talk key as registered, as an accelerator: the row draws it as its
-   * separate keys and says it whole in the labels its buttons carry.
-   */
-  voiceHotkey?: string;
-  /** Whether that key can be held, which is what the row has to describe. */
-  voiceHotkeyHeld: boolean;
-  /** Whether a chosen talk chord is stored, which is what Reset has to undo. */
-  voiceChosen: boolean;
-  /**
-   * Whether the talk key was deleted outright: no chord registered, and no
-   * default standing in. The row says "None" rather than "Unavailable",
-   * because this absence is the user's own choice.
-   */
-  voiceOff: boolean;
-  /**
-   * Moves the talk key to a recorded chord, the none token, or back to the
-   * defaults when omitted. The store answers with why when it refuses, and
-   * the row is where that answer belongs.
-   */
-  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
-  /** The stop key as registered, an accelerator on the talk key's terms. */
-  stopHotkey?: string;
-  /** Whether a chosen stop chord is stored, on the other rows' terms. */
-  stopChosen: boolean;
-  /** Whether the stop key was deleted outright, on the other rows' terms. */
-  stopOff: boolean;
-  /**
-   * Moves the stop key to a recorded chord, the none token, or back to the
-   * default when omitted, on the other rows' terms: the store answers with
-   * why when it refuses, and the row is where that answer belongs.
-   */
-  onStopHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
-  /**
-   * Whether a recording control has the keyboard. While one does, no Luke
-   * key may act on its own press: the chord arriving is an entry, not an ask.
-   */
-  onCapture: (capturing: boolean) => void;
 }

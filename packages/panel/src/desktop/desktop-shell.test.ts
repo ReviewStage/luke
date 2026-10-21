@@ -97,16 +97,6 @@ const SETTINGS: SettingsPanelProps = {
     onInstall: ignore,
     onOpenLatest: ignore,
   },
-  shortcuts: {
-    voiceHotkeyHeld: false,
-    voiceChosen: false,
-    voiceOff: false,
-    onVoiceHotkeyChange: accepted,
-    stopChosen: false,
-    stopOff: false,
-    onStopHotkeyChange: accepted,
-    onCapture: ignore,
-  },
 };
 
 let root: Root | undefined;
@@ -1025,7 +1015,7 @@ test("walking every place in the window during a call about another plan, the ca
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
   }
   assert.deepEqual(
     standing,
@@ -1049,7 +1039,7 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
     act(() => root?.unmount());
     container.remove();
   }

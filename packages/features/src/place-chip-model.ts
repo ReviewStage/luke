@@ -39,7 +39,6 @@ const KIND_NAME = {
   [LINK_PLACE.COMMENT]: "Comment",
   [LINK_PLACE.VERSION]: "Version",
   [LINK_PLACE.PAGE]: "Page",
-  [LINK_PLACE.CALL]: "Call",
   [LINK_PLACE.TURN]: "Luke's work",
   [LINK_PLACE.AGENT]: "Agent",
   [LINK_PLACE.WORKER]: "Worker",

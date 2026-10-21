@@ -365,47 +365,30 @@ export function sectionName(heading: string): string {
 /** Where a revision was written, which its Open goes to. */
 export const REVISION_SOURCE = {
   AGENT: "agent",
-  CALL: "call",
-  WORK: "work",
 } as const;
 
-/**
- * The place that wrote a revision: a coding agent's tab, the call Luke wrote
- * it on in the Transcript, or, for Luke's save on no call the history names,
- * the Call tab's turn at the moment it was saved.
- */
-export type RevisionSource =
-  | { readonly kind: typeof REVISION_SOURCE.AGENT; readonly agentId: string }
-  | { readonly kind: typeof REVISION_SOURCE.CALL; readonly callId: string }
-  | { readonly kind: typeof REVISION_SOURCE.WORK; readonly at: number };
+/** The place that wrote a revision: an agent's tab. */
+export type RevisionSource = {
+  readonly kind: typeof REVISION_SOURCE.AGENT;
+  readonly agentId: string;
+};
 
 /**
  * Where a revision's Open goes: an agent's tab where the line names the
- * agent, the call where it names one, the Call tab at its latest save for
- * Luke's other saves, and nowhere for the developer's own, a restore, or the
- * plan before history, which nothing else in the window wrote.
+ * agent, and nowhere for the developer's own, a restore, Luke's own saves,
+ * whose work no tab draws, or the plan before history.
  */
 export function revisionSource(
-  line: Pick<PlanRevisionLine, "lastEdit" | "agentId" | "callId">,
+  line: Pick<PlanRevisionLine, "lastEdit" | "agentId">,
 ): RevisionSource | undefined {
   const { lastEdit } = line;
   if (lastEdit.actor === PLAN_ACTOR.AGENT && line.agentId !== undefined) {
     return { kind: REVISION_SOURCE.AGENT, agentId: line.agentId };
   }
-  if (lastEdit.actor !== PLAN_ACTOR.NOTETAKER) return undefined;
-  return line.callId === undefined
-    ? { kind: REVISION_SOURCE.WORK, at: lastEdit.at }
-    : { kind: REVISION_SOURCE.CALL, callId: line.callId };
+  return undefined;
 }
 
-/** What a revision's Open says: the agent's tab by its writer's name, or the tab Luke's work stands in. */
-export function sourceLabel(source: RevisionSource, author: Actor): string {
-  switch (source.kind) {
-    case REVISION_SOURCE.AGENT:
-      return `Open ${actorName(author)}`;
-    case REVISION_SOURCE.CALL:
-      return "Open in Transcript";
-    case REVISION_SOURCE.WORK:
-      return "Open in Work";
-  }
+/** What a revision's Open says: the agent's tab by its writer's name. */
+export function sourceLabel(_source: RevisionSource, author: Actor): string {
+  return `Open ${actorName(author)}`;
 }

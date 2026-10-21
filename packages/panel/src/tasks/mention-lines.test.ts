@@ -105,7 +105,7 @@ const readFile = (request: TaskFileRequest): Promise<TasksFileAnswer> =>
             commit: HEAD,
             firstLine: 1,
             lineCount: 4,
-            lines: [[{ text: "one" }]],
+            lines: ["one"],
           },
         },
   );

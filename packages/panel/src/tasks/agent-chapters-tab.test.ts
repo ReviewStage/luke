@@ -663,7 +663,7 @@ test("chapters made for an older head stand under a line saying new commits came
   assert.equal(heading(tab), "1. Read the expiry", "the chapters stand as they were");
   assert.match(tab.textContent ?? "", /Is the expiry read in the member's time zone\?/u);
   assert.deepEqual(listed(), [], "no diff is drawn for the chapter");
-  assert.match(tab.textContent ?? "", /These chapters were made before the newest commits\./u);
+  assert.match(tab.textContent ?? "", /Regenerate the chapters to see this chapter's changes\./u);
   const sweepRow =
     [...tab.querySelectorAll<HTMLButtonElement>(".chapter-rail button")].find((each) =>
       each.getAttribute("aria-label")?.startsWith("2."),
