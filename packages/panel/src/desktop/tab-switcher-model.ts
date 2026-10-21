@@ -60,10 +60,12 @@ export type Stop =
   | {
       readonly kind: typeof STOP_KIND.TASK;
       readonly taskId: string;
-      /** The column's tab: an agent's, or the draft agent's; none where it showed none, or the panel filled the window over it. */
+      /** The column's tab: an agent's, or the draft agent's; none where it showed none. */
       readonly column: MainTab | undefined;
       /** The side panel's tab; none while it was shut. */
       readonly panel: SidePanelTab | undefined;
+      /** Whether the side panel filled the window over the column. */
+      readonly fullScreen: boolean;
     }
   | { readonly kind: typeof STOP_KIND.PLACE; readonly place: SwitcherPlace }
   | { readonly kind: typeof STOP_KIND.AGENT; readonly agentId: string }
@@ -87,7 +89,8 @@ export function sameStop(a: Stop, b: Stop): boolean {
         b.kind === a.kind &&
         b.taskId === a.taskId &&
         sameTabOrNone(a.column, b.column) &&
-        sameTabOrNone(a.panel, b.panel)
+        sameTabOrNone(a.panel, b.panel) &&
+        a.fullScreen === b.fullScreen
       );
     case STOP_KIND.PLACE:
       return b.kind === a.kind && b.place === a.place;
@@ -219,10 +222,12 @@ export interface WindowStanding {
   readonly boundFor: string | undefined;
   /** The task the host has open, which the tabs below are of. */
   readonly openTaskId: string | undefined;
-  /** The column's tab, none where it shows none or the panel fills the window over it. */
+  /** The column's tab, none where it shows none. */
   readonly column: MainTab | undefined;
   /** The side panel's tab, none while it is shut. */
   readonly panel: SidePanelTab | undefined;
+  /** Whether the side panel fills the window over the column. */
+  readonly fullScreen: boolean;
 }
 
 /**
@@ -244,7 +249,14 @@ export function shownStop(standing: WindowStanding): Stop | undefined {
   const taskId = standing.boundFor;
   if (taskId === undefined) return place(SWITCHER_PLACE.HOME);
   if (taskId !== standing.openTaskId) return undefined;
-  return { kind: STOP_KIND.TASK, taskId, column: standing.column, panel: standing.panel };
+  const { column, panel } = standing;
+  return {
+    kind: STOP_KIND.TASK,
+    taskId,
+    column,
+    panel,
+    fullScreen: panel !== undefined && standing.fullScreen,
+  };
 }
 
 /**

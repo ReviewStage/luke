@@ -137,8 +137,8 @@ const STEP_OF = {
 /** The part of the window a stop's still is of: the work area beside the sidebar, both of a task's panes as they stand. */
 const WORK_AREA = ".desktop-main";
 
-/** A Browser tab's page as its pane lays it out, which its view is drawn over (`browser-pane.tsx`). */
-const BROWSER_PAGE = ".side-panel .browser-view";
+/** A Browser tab's page body as its pane lays it out under its address bar, which its view is drawn over (`browser-pane.tsx`). */
+const BROWSER_PAGE = ".side-panel .browser-view-body";
 
 /** What a place's card wears, as the sidebar's row for it does. */
 const PLACE_LOOK = {
@@ -280,8 +280,9 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
     automations: tasks.automationsView.open,
     boundFor: tasks.boundFor,
     openTaskId: tasks.activeTaskId,
-    column: sidePanel.fullScreen ? undefined : column,
+    column,
     panel: sidePanel.open ? sidePanel.tab : undefined,
+    fullScreen: sidePanel.fullScreen,
   });
 }
 
@@ -539,7 +540,8 @@ export function TabSwitcher({
     if (shownTab !== PANEL_TAB.TASKS) changeTab(PANEL_TAB.TASKS);
     switch (stop.kind) {
       case STOP_KIND.TASK:
-        showTask(control, stop);
+        // The whole screen is restored past one ask, so leaving unsaved work and cancelling changes neither pane.
+        control.leaveGuard.guard(() => showTask(control, stop))();
         break;
       case STOP_KIND.AGENT:
         control.agentView.onOpen(stop.agentId);
@@ -708,19 +710,27 @@ export function TabSwitcher({
 /**
  * Opens a task on the screen a stop held: its column's tab and its side
  * panel's, through the doors that show a tab on a task, opening it first
- * where it is another; the panel shut where the stop had it shut.
+ * where it is another; the panel shut where the stop had it shut, and
+ * filling the window where it did. It is run whole past the leave guard's
+ * ask (`go`), so a cancelled leave changes neither pane.
  */
 function showTask(tasks: TasksControl, stop: Extract<Stop, { kind: typeof STOP_KIND.TASK }>): void {
-  const { taskId, column, panel } = stop;
-  if (column !== undefined) tasks.onShowColumnTab(taskId, column);
+  const { taskId, column, panel, fullScreen } = stop;
+  const { sidePanel, mainTabs } = tasks;
+  // Note that the column's own door gives up a panel filling the window, so it is used only where the screen had the column in sight.
+  const columnShown = column !== undefined && !fullScreen;
+  if (columnShown) tasks.onShowColumnTab(taskId, column);
   if (panel !== undefined) {
     // Note that the panel's own door is used beside the column's, so the task is opened once.
-    if (column === undefined) tasks.onShowPanelTab(taskId, panel);
-    else tasks.sidePanel.onShow(taskId, panel);
-    return;
+    if (columnShown) sidePanel.onShow(taskId, panel);
+    else tasks.onShowPanelTab(taskId, panel);
+  } else {
+    if (!columnShown) tasks.onRestoreTask(taskId);
+    if (sidePanel.open) sidePanel.onSetOpen(false);
   }
-  if (column === undefined) tasks.onRestoreTask(taskId);
-  else if (tasks.sidePanel.open) tasks.sidePanel.onSetOpen(false);
+  if (column !== undefined && fullScreen) mainTabs.onShow(taskId, column);
+  const filling = columnShown ? false : sidePanel.fullScreen;
+  if (panel !== undefined && fullScreen !== filling) sidePanel.onToggleFullScreen();
 }
 
 /** Opens a place through its own door. */

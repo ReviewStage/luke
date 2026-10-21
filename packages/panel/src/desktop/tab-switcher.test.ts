@@ -455,3 +455,70 @@ test("the open task gone from the list after it was listed, as one deleted by a 
   letGo();
   assert.deepEqual(told, asked());
 });
+
+test("a screen picked past unsaved work is restored only once the leave is confirmed, both panes together", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const asks: (() => void)[] = [];
+  const guarded = {
+    stand: () => () => undefined,
+    pass: (leave: () => void) => leave(),
+    guard:
+      <Args extends readonly unknown[]>(leave: (...args: Args) => void) =>
+      (...args: Args) =>
+        asks.push(() => leave(...args)),
+  };
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { leaveGuard: guarded }, { agent: "x" }));
+  press();
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen(), leaveGuard: guarded }),
+  );
+
+  tab();
+  letGo();
+  assert.deepEqual(told.shown, [], "nothing moves while the ask stands");
+  asks[0]?.();
+  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: code"]);
+});
+
+test("a screen picked with its panel shut shuts the panel, and one with the panel filling the window fills it again", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const panel: string[] = [];
+  const doors = (control: TasksControl): TasksControl => ({
+    ...control,
+    sidePanel: {
+      ...control.sidePanel,
+      onSetOpen: (open) => panel.push(open ? "opened" : "shut"),
+      onToggleFullScreen: () => panel.push("full screen turned"),
+    },
+  });
+  const window = await mounted();
+  const shut = onTask(SIDE_PANEL_TAB.PLAN, told, {}, { agent: "x" });
+  await window.draw(doors({ ...shut, sidePanel: { ...shut.sidePanel, open: false } }));
+  press();
+  const filled = onTask(SIDE_PANEL_TAB.CODE, told, {}, { agent: "x" });
+  await window.draw(doors({ ...filled, sidePanel: { ...filled.sidePanel, fullScreen: true } }));
+  press();
+  await window.draw(doors(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() })));
+
+  tab();
+  letGo();
+  assert.deepEqual(told.shown, ["panel the task: code"]);
+  assert.deepEqual(panel, ["full screen turned"]);
+
+  press();
+  await window.draw(
+    doors(
+      onTask(SIDE_PANEL_TAB.PLAN, told, {
+        inboxView: { ...inboxOpen(), open: false },
+        chatView: { ...tasksControl().chatView, open: true },
+      }),
+    ),
+  );
+  tab(true);
+  letGo();
+  assert.deepEqual(told.shown, ["panel the task: code", 'column the task: {"agent":"x"}']);
+  assert.deepEqual(panel, ["full screen turned", "shut"]);
+});

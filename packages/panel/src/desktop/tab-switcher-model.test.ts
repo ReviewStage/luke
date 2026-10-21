@@ -31,11 +31,17 @@ import {
  * screen here going nowhere.
  */
 
-const screen = (taskId: string, column?: MainTab, panel?: SidePanelTab): Stop => ({
+const screen = (
+  taskId: string,
+  column?: MainTab,
+  panel?: SidePanelTab,
+  fullScreen = false,
+): Stop => ({
   kind: STOP_KIND.TASK,
   taskId,
   column,
   panel,
+  fullScreen,
 });
 const inbox: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.INBOX };
 const home: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.HOME };
@@ -215,6 +221,7 @@ describe("what is on screen", () => {
     openTaskId: "a",
     column: { agent: "x" },
     panel: SIDE_PANEL_TAB.PLAN,
+    fullScreen: false,
   };
 
   test("is the open task with both its panes' tabs, either of them none", () => {
@@ -224,6 +231,15 @@ describe("what is on screen", () => {
       screen("a", { draft: "d" }),
     );
     assert.deepEqual(shownStop({ ...standing, column: undefined, panel: undefined }), screen("a"));
+  });
+
+  test("keeps the column's tab under a panel filling the window, the screen told apart by it", () => {
+    const filled = shownStop({ ...standing, fullScreen: true });
+    assert.deepEqual(filled, screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN, true));
+    assert.equal(
+      filled !== undefined && sameStop(filled, screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN)),
+      false,
+    );
   });
 
   test("is the place standing in the task's place, and Home with no task", () => {
