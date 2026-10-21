@@ -20,6 +20,8 @@ import { Schema as EffectSchema } from "effect";
 import {
   CHAT_BOUNDS,
   chatAnswerSchema,
+  chatJoinAnswerSchema,
+  chatJoinRequestSchema,
   chatWriteAnswerSchema,
   chatWriteRequestSchema,
 } from "../chat-wire.js";
@@ -112,7 +114,11 @@ export const messagesContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_CHAT }))
     .input(EffectSchema.Struct({ workspaceId: queryValue, after: queryValue }))
     .output(EffectSchema.flip(chatAnswerSchema)),
-  /** One write to a workspace's chat: a post, an answer, a resolve, or a read. */
+  /**
+   * One write to a workspace's chat: a join, which makes the person's
+   * member and `#general` where they are not yet and answers their member,
+   * or a post, an answer, a resolve, or a read.
+   */
   chatWrite: hostedProcedure
     .meta(bodyCap(CHAT_WRITE_BODY_BYTES))
     .meta(
@@ -128,9 +134,9 @@ export const messagesContract = {
           params: EffectSchema.optionalKey(EffectSchema.Unknown),
           query: chatQuery,
           headers: EffectSchema.optionalKey(EffectSchema.Unknown),
-          body: chatWriteRequestSchema,
+          body: EffectSchema.Union([chatJoinRequestSchema, chatWriteRequestSchema]),
         }),
       ),
     )
-    .output(EffectSchema.flip(chatWriteAnswerSchema)),
+    .output(EffectSchema.flip(EffectSchema.Union([chatJoinAnswerSchema, chatWriteAnswerSchema]))),
 };
