@@ -29,7 +29,7 @@ import {
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const AGENT = "00000000-0000-4000-8000-0000000000a2";
-const LUKE = "00000000-0000-4000-8000-0000000000a3";
+const HELPER = "00000000-0000-4000-8000-0000000000a3";
 const MARIA = "00000000-0000-4000-8000-0000000000a4";
 const AGENT_ID = "00000000-0000-4000-8000-0000000000b1";
 const TASK_ID = "00000000-0000-4000-8000-0000000000c1";
@@ -126,7 +126,14 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
     members: [
       { id: ME, kind: MEMBER_KIND.HUMAN, name: "Dean", userId: "user-dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, agentId: AGENT_ID, left: false },
-      { id: LUKE, kind: MEMBER_KIND.LUKE, planId: TASK_ID, left: false },
+      {
+        id: HELPER,
+        kind: MEMBER_KIND.AGENT,
+        name: "Fix the flaky test",
+        agentId: "00000000-0000-4000-8000-0000000000b3",
+        planId: TASK_ID,
+        left: false,
+      },
       { id: MARIA, kind: MEMBER_KIND.HUMAN, name: "Maria Chen", userId: "user-maria", left: false },
     ],
     channels: [WITH_AGENT, TOPIC, OLD, TASK_CHANNEL, WITH_MARIA, GENERAL],
@@ -138,12 +145,12 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
 test("For you lists every open ask someone else posted, the oldest first, then each unread direct message and mention of the reader, the oldest first", () => {
   const chat = chatOf(5, [
     message(9, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
-    message(8, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
+    message(8, HELPER, TASK_CHANNEL.id, { mentions: [ME] }),
     message(7, AGENT, WITH_AGENT.id),
     message(6, AGENT, TASK_CHANNEL.id),
     // Read already, so neither the direct message nor the mention waits.
     message(4, AGENT, WITH_AGENT.id),
-    message(3, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
+    message(3, HELPER, TASK_CHANNEL.id, { mentions: [ME] }),
     // An ask waits until it is answered, read or not, and the reader's own never does.
     message(2, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
     message(10, ME, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
@@ -240,7 +247,7 @@ test("a channel reads as its roots in the order posted, each with its thread's r
     message(3, MARIA, TASK_CHANNEL.id, { parentId: "m1" }),
     message(1, AGENT, TASK_CHANNEL.id),
     message(4, AGENT, TASK_CHANNEL.id, { parentId: "m-unread" }),
-    message(2, LUKE, TASK_CHANNEL.id),
+    message(2, HELPER, TASK_CHANNEL.id),
     message(5, AGENT, TASK_CHANNEL.id, { parentId: "m1" }),
     message(6, AGENT, GENERAL.id),
   ]);
@@ -257,7 +264,7 @@ test("a channel reads as its roots in the order posted, each with its thread's r
   );
 });
 
-test("a line names an agent by its title, a task's Luke as Luke, the reader by their own name, a person by theirs, and one whose agent or account is gone as former", () => {
+test("a line names an agent by its title, or by the name the read gave it, with its task, the reader by their own name, a person by theirs, and one whose agent or account is gone as former", () => {
   const chat = {
     ...chatOf(0, []),
     members: [
@@ -267,13 +274,13 @@ test("a line names an agent by its title, a task's Luke as Luke, the reader by t
     ],
   };
   assert.deepEqual(
-    [AGENT, LUKE, ME, MARIA, "gone-agent", "gone-person"].map((id) => {
+    [AGENT, HELPER, ME, MARIA, "gone-agent", "gone-person"].map((id) => {
       const who = chatWho(chat, NAMES, id);
       return [who.name, who.taskName];
     }),
     [
       ["Invite emails", undefined],
-      ["Luke", "Teammate invitations"],
+      ["Fix the flaky test", "Teammate invitations"],
       ["Dean Stratakos", undefined],
       ["Maria Chen", undefined],
       ["Former agent", undefined],

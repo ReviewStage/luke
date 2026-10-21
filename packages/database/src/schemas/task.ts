@@ -11,7 +11,6 @@ import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
-import { conversations } from "./storage.js";
 
 /**
  * task.ts -- a named task and its plan, its one current document.
@@ -95,16 +94,6 @@ export const task = pgTable(
     pinnedAt: timestamptz("pinned_at"),
     /** When the task was archived, which the list leaves out unless asked for it; null while it is not. */
     archivedAt: timestamptz("archived_at"),
-    /**
-     * @deprecated The conversation of the task's own Luke, who is gone:
-     * every call and every turn is an agent's now. Nothing writes this, and
-     * only a task's delete reads it, to stamp that conversation with its
-     * agents' (`deleteTask`). It stands, with the conversations it names,
-     * until a later migration drops it.
-     */
-    conversationId: uuid("conversation_id").references(() => conversations.id, {
-      onDelete: "set null",
-    }),
     createdAt: createdAt(),
     /** The last save of the document; the start, before any. */
     updatedAt: updatedAt(),

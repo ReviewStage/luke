@@ -23,13 +23,7 @@ import { automation as automationTable } from "@luke/database/schemas/automation
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
-import {
-  getTestDB,
-  insertFormerLuke,
-  joinWorkspace,
-  openWorkspace,
-  startTask,
-} from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
@@ -226,7 +220,7 @@ const liveAnswerOf = (userId: string, readAt: number) =>
 
 it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
-    "a message that waits names its author by what they are called, a person by their account's name and an old task's Luke as Luke, alike in the live read and the held read",
+    "a message that waits names its author by what they are called, a person by their account's name, alike in the live read and the held read",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -243,21 +237,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const grace = Option.getOrThrow(
           yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
         );
-        // A task's Luke minted before no task had one, whose asks still stand.
-        const luke = { id: yield* insertFormerLuke(workspaceId, agent.taskId) };
-        const ask = (authorMemberId: string, key: string) =>
-          Effect.map(
-            postAsk(owner, workspaceId, {
-              authorMemberId,
-              to: { channelId: channel.id },
-              blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
-              clientKey: randomUUID(),
-              key,
-              ask: { response: { type: CHAT_ASK.APPROVAL } },
-            }),
-            Result.getOrThrow,
-          );
-        // A person posts as themselves, so Grace's ask is hers; Luke's is the owner's to post.
+        // A person posts as themselves, so Grace's ask is hers.
         const fromGrace = Result.getOrThrow(
           yield* postAsk(teammate, workspaceId, {
             authorMemberId: grace.id,
@@ -268,15 +248,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
             ask: { response: { type: CHAT_ASK.APPROVAL } },
           }),
         );
-        const fromLuke = yield* ask(luke.id, "ship-luke");
         const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
         const live = yield* liveAnswerOf(owner, held.readAt);
         assert.deepEqual({ ...live, cursor: held.cursor }, held);
         const fromOf = new Map(held.chat?.map((entry) => [entry.messageId, entry.from]));
-        assert.deepEqual(
-          [fromOf.get(fromGrace.message.id), fromOf.get(fromLuke.message.id)],
-          ["Grace Hopper", "Luke"],
-        );
+        assert.equal(fromOf.get(fromGrace.message.id), "Grace Hopper");
       }),
   );
 

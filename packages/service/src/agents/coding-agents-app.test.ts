@@ -7057,16 +7057,12 @@ const workspaceSlug = (workspaceId: string) =>
  * A chat member as a reader names it, written from the store's own rows the
  * way a chip writes one under the workspace's slug: its mention link, and
  * what it is called, a person by their account's name, an agent by its title
- * or else its model, a Luke as Luke.
+ * or else its model.
  */
 const memberNaming = (member: ChatMemberRow) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const place = { workspace: yield* workspaceSlug(member.organizationId), repository: null };
-    if (member.kind === MEMBER_KIND.LUKE) {
-      const mention = { kind: MENTION_KIND.LUKE, taskId: member.taskId ?? "" } as const;
-      return { name: "Luke", link: mentionMarkdown(mention, "Luke", place) };
-    }
     if (member.kind === MEMBER_KIND.AGENT) {
       const [agent] = yield* db
         .select({ title: codingAgent.title, model: codingAgent.model, taskId: codingAgent.taskId })
@@ -8278,15 +8274,17 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok("held" in toPerson);
         assert.deepEqual(toPerson.held, [person.link]);
 
-        const lukes = Effect.map(roster(chat.owner, workspace), (rows) =>
-          rows.filter((row) => row.kind === MEMBER_KIND.LUKE),
-        );
+        const before = (yield* roster(chat.owner, workspace)).length;
         const toLuke = yield* chat.post(chat.first, {
           text: `[@Luke](https://tryluke.dev/acme/plan/${chat.task.id}/luke) is the plan settled?`,
         });
         assert.ok("held" in toLuke);
         assert.deepEqual(toLuke.held, []);
-        assert.deepEqual(yield* lukes, [], "naming a task's Luke mints none");
+        assert.equal(
+          (yield* roster(chat.owner, workspace)).length,
+          before,
+          "naming a task's Luke mints no member",
+        );
       }),
   );
 

@@ -49,7 +49,7 @@ const openConversation = (userId: string, parentConversationId?: string) =>
     yield* db.insert(conversations).values({
       id,
       userId,
-      kind: parentConversationId === undefined ? CONVERSATION_KIND.TASK : CONVERSATION_KIND.CHILD,
+      kind: parentConversationId === undefined ? CONVERSATION_KIND.MAIN : CONVERSATION_KIND.CHILD,
       ...(parentConversationId === undefined ? undefined : { parentConversationId }),
     });
     return id;

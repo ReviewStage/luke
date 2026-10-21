@@ -190,21 +190,17 @@ export const MEMBER_KIND = {
   HUMAN: "human",
   /** A coding agent started on one of the workspace's plans. */
   AGENT: "agent",
-  /** A plan's Luke, one per plan, named by his task's `…/plan/<taskId>/luke` link. */
-  LUKE: "planner",
 } as const;
 
 /** @public */
 export type MemberKind = (typeof MEMBER_KIND)[keyof typeof MEMBER_KIND];
 
 /**
- * What a member is called where no mention link can be written of it, or no
- * name is known: a task's Luke is Luke, and an agent whose coding agent is
- * gone, or a person whose account is, a former one.
+ * What a member is called where no name is known: an agent whose coding
+ * agent is gone, or a person whose account is, a former one.
  * @public
  */
 export const CHAT_MEMBER_LABEL = {
-  LUKE: "Luke",
   FORMER_AGENT: "Former agent",
   FORMER_PERSON: "Former member",
 } as const;
@@ -528,18 +524,17 @@ export const editChannelInputSchema = EffectSchema.Struct({
 
 /**
  * A member as a reader sees one: its kind, what it is called, and what it
- * stands for by kind, a person's account, an agent, or a plan's planner; and
- * whether it has left, an archived agent or plan, which is still named in
- * the messages it wrote.
+ * stands for by kind, a person's account or an agent; and whether it has
+ * left, an archived agent, which is still named in the messages it wrote.
  */
 export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
-  /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a Luke, always Luke, and for a member whose account or agent is gone. */
+  /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a member whose account or agent is gone. */
   name: EffectSchema.optionalKey(EffectSchema.String),
   userId: EffectSchema.optionalKey(EffectSchema.String),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
-  /** The plan a planner is Luke on, or the plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
+  /** The plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
   planId: EffectSchema.optionalKey(wireUuidSchema),
   left: EffectSchema.Boolean,
 });
