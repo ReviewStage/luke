@@ -1961,6 +1961,27 @@ test("an invitation made stays listed with its link when the read after it fails
   assert.ok(button(row, "Copy link"));
 });
 
+test("an invitation's answer that lands after the stream told a newer list does not bring back what another window canceled", async () => {
+  let release: () => void = () => undefined;
+  inviteHeld = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+  // Another window cancels the invitation the moment it is made, and the stream tells the list after it.
+  act(() => {
+    for (const stream of invitationStreams) {
+      if (stream.workspaceId === ACME.id) stream.push({ invitations: [] });
+    }
+  });
+  await settle();
+  release();
+  await settle();
+
+  assert.deepEqual(invitationRows(page), []);
+});
+
 test("Cancel invitation sends nothing while an invitation is on its way", async () => {
   invitations = [
     {

@@ -893,6 +893,10 @@ function Invitations({
   // Note that only the list last asked for is shown, because a read, an
   // invite's re-read, and a cancel can answer out of the order they were asked.
   const latest = useRef(0);
+  // Note that a write's answer is passed over where the stream told a list
+  // while it was out, since that list may already hold a newer change, such
+  // as another window canceling what this one just invited.
+  const streamed = useRef(0);
   const show = (listed: Promise<readonly WorkspaceInvitation[]>) => {
     const asked = ++latest.current;
     listed.then(
@@ -909,13 +913,17 @@ function Invitations({
   };
   // Note that one write runs at a time, invite or cancel, so no list read
   // after one can see the service before another has settled.
-  const write = <A,>(made: () => Promise<A>, done: (answer: A) => void) => {
+  const write = <A,>(made: () => Promise<A>, done: (answer: A, fresh: boolean) => void) => {
     if (sending.current) return;
     sending.current = true;
     setBusy(true);
     setNote(undefined);
+    const before = streamed.current;
     made()
-      .then(done, (refused: Error) => setNote(refused.message))
+      .then(
+        (answer) => done(answer, streamed.current === before),
+        (refused: Error) => setNote(refused.message),
+      )
       .finally(() => {
         sending.current = false;
         setBusy(false);
@@ -944,6 +952,7 @@ function Invitations({
         (view) => {
           if (!("invitations" in view)) return;
           latest.current += 1;
+          streamed.current += 1;
           setPending(view.invitations);
         },
       ),
@@ -956,8 +965,9 @@ function Invitations({
     event.preventDefault();
     write(
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
-      (made) => {
+      (made, fresh) => {
         setEmail("");
+        if (!fresh) return;
         latest.current += 1;
         setPending((standing) => [...(standing ?? []).filter((one) => one.id !== made.id), made]);
       },
@@ -968,7 +978,8 @@ function Invitations({
     write(
       () => act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
       // The cancel's own answer is the list after it, so a read out before it is passed over.
-      (left) => {
+      (left, fresh) => {
+        if (!fresh) return;
         latest.current += 1;
         setPending(left);
       },
