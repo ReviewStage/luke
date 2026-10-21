@@ -7,6 +7,8 @@ import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   createAutomation,
   ownFailedRunsLiveStatement,
+  recordAutomationRun,
+  settleAutomationRun,
 } from "@luke/database/models/automation-store";
 import {
   ensureMember,
@@ -19,7 +21,7 @@ import {
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
-import { automation as automationTable } from "@luke/database/schemas/automation";
+import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
@@ -28,6 +30,9 @@ import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
@@ -37,6 +42,7 @@ import {
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK,
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -50,6 +56,7 @@ import {
 import {
   accountInboxLiveRowSchemas,
   accountInboxOfLiveRows,
+  FAILED_RUN_WINDOW_MILLIS,
   inboxOfLiveRows,
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
@@ -62,6 +69,7 @@ import {
   accountInboxLiveStatements,
   accountInboxTasks,
   accountWaitingItems,
+  answerInboxAsk,
   answerInboxItem,
   closeInboxItem,
   closeInboxItemAsMember,
@@ -75,6 +83,7 @@ import {
   memberAgentInboxLiveStatements,
   postInboxItem,
   postInboxMessage,
+  postInboxThread,
   readInboxAttachment,
   readInboxItem,
   replyInboxItem,
@@ -468,6 +477,114 @@ it.layer(getTestDB())("the inbox store", (it) => {
           "a notice of an ask is the ask",
         );
         assert.deepEqual((yield* accountInboxPast(outsider, INBOX_CURSOR_START)).chat, []);
+      }),
+  );
+
+  it.effect(
+    "the live statements of the account's read keep level with its held read through threads with asks, an ask answered or closed, a notice, a member's message, and failed runs in and out of the last week",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse("2026-10-21T12:00:00Z"));
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const decide = { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "sfo1" }] };
+        const thread = (key: string, ask?: typeof decide) =>
+          Effect.map(
+            postInboxThread(agent, {
+              key,
+              title: `About ${key}`,
+              body: "Two regions are free.",
+              ask,
+            }),
+            Result.getOrThrow,
+          );
+        const asking = yield* thread("deploy-region", decide);
+        const notice = yield* thread("heads-up");
+        const answered = yield* thread("preview-region", decide);
+        const closed = yield* thread("staging-region", decide);
+        const askOf = (item: typeof answered) => item.thread?.[0]?.id ?? "";
+        assert.ok(
+          Option.isSome(
+            yield* answerInboxAsk(teammate, answered.id, {
+              answers: { ask: askOf(answered), reply: INBOX_REPLY.CHOSE, choices: ["sfo1"] },
+              text: "Closer to the team.",
+              clientKey: randomUUID(),
+            }),
+          ),
+        );
+        assert.ok(
+          Option.isSome(
+            yield* closeInboxItemAsMember(owner, closed.id, closed.revision, randomUUID()),
+          ),
+        );
+        yield* postInboxMessage(teammate, asking.id, {
+          text: "Which is cheaper?",
+          clientKey: randomUUID(),
+        });
+        // The agent writes on the thread again, asking nothing, under the asking item's key.
+        yield* thread("deploy-region");
+
+        // A run of each of two of the owner's automations failed: one now, one past the last week.
+        const failedRun = (name: string) =>
+          Effect.gen(function* () {
+            const made = Option.getOrThrow(
+              yield* createAutomation(owner, {
+                taskId: agent.taskId,
+                name,
+                trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+                guards: AUTOMATION_DEFAULT_GUARDS,
+                nextRunAt: null,
+                webhookSecretHash: null,
+              }),
+            );
+            const run = Option.getOrThrow(
+              yield* recordAutomationRun(made, {
+                dedupeKey: randomUUID(),
+                firing: { kind: AUTOMATION_FIRING.MANUAL },
+                firedAt: yield* DateTime.nowAsDate,
+              }),
+            );
+            yield* settleAutomationRun(run.id, {
+              status: AUTOMATION_RUN_STATUS.FAILED,
+              reason: AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+            });
+            return run.id;
+          });
+        const recent = yield* failedRun("Nightly flaky-test sweep");
+        const old = yield* failedRun("Weekly dependency bump");
+        const now = yield* DateTime.nowAsDate;
+        yield* Database.use((db) =>
+          db
+            .update(automationRun)
+            .set({ settledAt: new Date(now.getTime() - FAILED_RUN_WINDOW_MILLIS - 60_000) })
+            .where(eq(automationRun.id, old)),
+        );
+
+        for (const reader of [owner, teammate]) {
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START, { archived: true });
+          const live = yield* liveAnswerOf(reader, held.readAt);
+          assert.deepEqual({ ...live, cursor: held.cursor }, held);
+          assert.notEqual(live.cursor, "", "the live cursor is a digest");
+        }
+        const read = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        assert.deepEqual(
+          read.items.map((item) => item.id).toSorted(),
+          [asking.id, notice.id].toSorted(),
+          "the asking item and the notice wait; the answered and the closed do not",
+        );
+        assert.deepEqual(
+          read.plans.map((plan) => plan.items),
+          [4],
+          "the task holds all four",
+        );
+        assert.deepEqual(
+          read.failedRuns?.map((run) => run.id),
+          [recent],
+          "the run past the last week is carried by neither",
+        );
       }),
   );
 

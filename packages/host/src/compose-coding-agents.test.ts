@@ -27,11 +27,14 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type {
-  AgentTranscriptLiveAnswer,
-  ScopeInboxLiveAnswer,
-  TranscriptNowAnswer,
-  WorkspaceChatLiveAnswer,
+import {
+  type AccountInboxLiveAnswer,
+  type AgentTranscriptLiveAnswer,
+  FAILED_RUN_WINDOW_MILLIS,
+  LIVE_SIGNED_OUT,
+  type ScopeInboxLiveAnswer,
+  type TranscriptNowAnswer,
+  type WorkspaceChatLiveAnswer,
 } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
@@ -58,7 +61,7 @@ import {
 } from "@luke/gateway";
 import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 import type { LiveClient } from "./live-follow.js";
@@ -251,6 +254,7 @@ function fakeService() {
   let cursor = CODING_AGENT_CURSOR_START;
   let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
   let chatLive: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined;
+  let accountLive: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly TranscriptNowAnswer[] = [];
   const client: CodingAgentClient = {
@@ -576,10 +580,10 @@ function fakeService() {
           taken: true,
         };
       }),
-    accountInbox: (after) =>
+    accountInboxLive: (userId, poll) =>
       Effect.sync(() => {
-        asked.push(`account-inbox:${after}`);
-        return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
+        asked.push(`account-inbox-live:${userId}${poll ? ":poll" : ""}`);
+        return accountLive ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     chatPost: (workspaceId, write) =>
       Effect.sync(() => {
@@ -622,6 +626,10 @@ function fakeService() {
     /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
     sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       scope = next;
+    },
+    /** What the service seals for following the account inbox, or that the session signed out; none answers unanswered. */
+    sealAccount: (next: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined) => {
+      accountLive = next;
     },
   };
 }
@@ -683,6 +691,7 @@ function subject(
     signedIn?: boolean;
     sendsNetwork?: boolean;
     typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
+    accountId?: () => string | undefined;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -696,7 +705,7 @@ function subject(
         now: () => NOW,
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
-      accountId: () => "user-dana",
+      accountId: options.accountId ?? (() => "user-dana"),
       client: service.client,
       openLive: realtime.open,
       ...(options.typeIntoCall === undefined ? undefined : { typeIntoCall: options.typeIntoCall }),
@@ -724,6 +733,7 @@ function subject(
         ),
       pageNow: service.pageNow,
       sealScope: service.sealScope,
+      sealAccount: service.sealAccount,
       realtime,
       /** Every followed plan's or agent's inbox the host told, in order. */
       told: () =>
@@ -994,10 +1004,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
     );
 
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
-      { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
         workspaceId: WORKSPACE_ID,
         write: { readTo: 4 },
@@ -1054,7 +1060,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,
-      `account-inbox:${INBOX_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
       `chat-attachment:${WORKSPACE_ID}:message-1:${ATTACHMENT_ID}`,
     ]);
@@ -1679,4 +1684,164 @@ it.effect("a sign-out lets every followed inbox go", () =>
     assert.deepEqual(realtime.closed, [SEALED_SCOPE.url]);
     assert.deepEqual(told(), []);
   }),
+);
+
+const ACCOUNT_PARTS = [
+  "items",
+  "planless",
+  "plans",
+  "automations",
+  "failedRuns",
+  "chatAsks",
+  "chatNotices",
+] as const;
+
+const SEALED_ACCOUNT: AccountInboxLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    items: sealed("items"),
+    planless: sealed("planless"),
+    plans: sealed("plans"),
+    automations: sealed("automations"),
+    failedRuns: sealed("failedRuns"),
+    chatAsks: sealed("chatAsks"),
+    chatNotices: sealed("chatNotices"),
+  },
+};
+
+/** A run of the account's own automation that failed a second short of a week before now. */
+const FAILED_RUN = {
+  id: "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+  automationId: "8d2e3f4a-5b6c-4d7e-9f8a-0b1c2d3e4f5a",
+  automationName: "Nightly flaky-test sweep",
+  workspaceId: WORKSPACE_ID,
+  reason: null,
+  failedAt: NOW - FAILED_RUN_WINDOW_MILLIS + 1_000,
+};
+
+/** Every part of the account's read delivered, the item and run given and nothing else. */
+function deliverAccount(
+  realtime: ReturnType<typeof fakeRealtime>,
+  rows: { readonly items?: readonly unknown[]; readonly failedRuns?: readonly unknown[] },
+) {
+  for (const part of ACCOUNT_PARTS) {
+    realtime.deliver(part, part === "items" || part === "failedRuns" ? (rows[part] ?? []) : []);
+  }
+}
+
+/** Main's read of what waits across the account past `after`, forked, as its loop holds it. */
+const readAccount = (
+  call: (
+    method: GatewayMethod,
+    params?: WireRecord,
+  ) => Effect.Effect<WireValue | undefined, unknown>,
+  after: string,
+) => Effect.forkChild(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after }));
+
+it.effect(
+  "what waits across the account is answered from its Realtime subscription as the held read answered it, a read at the answer's cursor held until the rows move, and a failed run ageing out of the week wakes it",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW);
+      const { call, asked, sealAccount, realtime } = yield* subject();
+      sealAccount(SEALED_ACCOUNT);
+
+      const first = yield* readAccount(call, INBOX_CURSOR_START);
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED_ACCOUNT.url]);
+      deliverAccount(realtime, { items: [WAITING], failedRuns: [FAILED_RUN] });
+      const answered = yield* Fiber.join(first);
+      assert.ok(isRecord(answered) && typeof answered.cursor === "string");
+      assert.notEqual(answered.cursor, "");
+      assert.deepEqual(
+        { ...answered, cursor: "" },
+        {
+          items: [WAITING],
+          plans: [],
+          planless: [],
+          automations: [],
+          failedRuns: [FAILED_RUN],
+          chat: [],
+          cursor: "",
+          readAt: NOW,
+        },
+      );
+      assert.ok(!JSON.stringify(answered).includes("capability"));
+
+      // Held at its cursor until a row moves.
+      const held = yield* readAccount(call, answered.cursor);
+      yield* settled;
+      assert.equal(held.pollUnsafe(), undefined);
+      deliverAccount(realtime, {
+        items: [{ ...WAITING, revision: 3, updatedAt: NOW }],
+        failedRuns: [FAILED_RUN],
+      });
+      const moved = yield* Fiber.join(held);
+      assert.ok(isRecord(moved) && Array.isArray(moved.items) && typeof moved.cursor === "string");
+      assert.notEqual(moved.cursor, answered.cursor);
+      assert.deepEqual(moved.items, [{ ...WAITING, revision: 3, updatedAt: NOW }]);
+
+      // No row moves as the run ages out of the week, and the read is woken all the same.
+      const ageing = yield* readAccount(call, moved.cursor);
+      yield* settled;
+      assert.equal(ageing.pollUnsafe(), undefined);
+      yield* TestClock.adjust("2 seconds");
+      const aged = yield* Fiber.join(ageing);
+      assert.ok(isRecord(aged));
+      assert.deepEqual(aged.failedRuns, []);
+      assert.notEqual(aged.cursor, moved.cursor);
+      assert.deepEqual(asked, ["account-inbox-live:user-dana"]);
+    }),
+);
+
+it.effect(
+  "a read at the account inbox's cursor that nothing moves is answered unchanged once the hold passes",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW);
+      const { call, sealAccount, realtime } = yield* subject();
+      sealAccount(SEALED_ACCOUNT);
+      const first = yield* readAccount(call, INBOX_CURSOR_START);
+      yield* settled;
+      deliverAccount(realtime, { items: [WAITING] });
+      const answered = yield* Fiber.join(first);
+      assert.ok(isRecord(answered) && typeof answered.cursor === "string");
+
+      const held = yield* readAccount(call, answered.cursor);
+      yield* settled;
+      yield* TestClock.adjust("24 seconds");
+      assert.equal(held.pollUnsafe(), undefined);
+      yield* TestClock.adjust("1 second");
+      assert.deepEqual(yield* Fiber.join(held), answered);
+    }),
+);
+
+it.effect(
+  "the account inbox is unanswered with nobody signed in, and a session the service signs out is unanswered and sealed again on the next read",
+  () =>
+    Effect.gen(function* () {
+      const nobody = yield* subject({ accountId: () => undefined });
+      nobody.sealAccount(SEALED_ACCOUNT);
+      assert.deepEqual(
+        yield* nobody.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, {
+          after: INBOX_CURSOR_START,
+        }),
+        { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      );
+      assert.deepEqual(nobody.asked, []);
+
+      const { call, asked, sealAccount, realtime } = yield* subject();
+      sealAccount(LIVE_SIGNED_OUT);
+      const unanswered = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
+        unanswered,
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
+        unanswered,
+      );
+      assert.deepEqual(asked, ["account-inbox-live:user-dana", "account-inbox-live:user-dana"]);
+      assert.deepEqual(realtime.opened, []);
+    }),
 );
