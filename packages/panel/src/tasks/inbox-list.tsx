@@ -24,6 +24,8 @@ import {
   LIST_ROW_META,
   List,
   ListRow,
+  ONE_LINE_END,
+  OneLine,
   SCROLL_FADE,
   ScrollArea,
   SKELETON_SHAPE,
@@ -87,7 +89,7 @@ import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
+import { RowHint, RowHintOptions, Tooltip, wholeWordsHint } from "../tooltip.js";
 import { useAppState } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
@@ -527,10 +529,10 @@ function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const workspaces = useAppState()?.tasks?.workspaces;
   if (holder.kind !== INBOX_HOLDER.TASK) {
     return (
-      <div className="task-card-standing">
+      <div className="task-card-standing" data-line="one">
         <span className="task-card-chip">
           <HolderGlyph holder={holder} />
-          {holderName(holder)}
+          <ChipWords words={holderName(holder)} />
         </span>
       </div>
     );
@@ -538,15 +540,24 @@ function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const { task } = holder;
   const workspaceName = workspaces?.find((each) => each.id === task.workspaceId)?.name;
   return (
-    <div className="task-card-standing">
+    <div className="task-card-standing" data-line="one">
       {task.number === undefined || workspaceName === undefined ? null : (
         <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
       )}
       <span className="task-card-chip">
         <PlanGlyph status={task.status} />
-        {task.name}
+        <ChipWords words={task.name} />
       </span>
     </div>
+  );
+}
+
+/** A holder chip's words, held to one line that ends in an ellipsis where the card cuts them short, and read whole in the hint while it does. */
+function ChipWords({ words }: { words: string }): React.JSX.Element {
+  return (
+    <OneLine end={ONE_LINE_END.ELLIPSIS} hint={wholeWordsHint(words)}>
+      {words}
+    </OneLine>
   );
 }
 
