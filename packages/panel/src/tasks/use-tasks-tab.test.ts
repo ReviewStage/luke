@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
@@ -57,7 +58,8 @@ import {
   type VoiceView,
 } from "@luke/voice/voice-view";
 import { AsyncIteratorClass } from "@orpc/client";
-import { Duration, Effect, Option, Schema } from "effect";
+import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
@@ -77,6 +79,7 @@ import {
   type PanelSpan,
 } from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -3208,3 +3211,174 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
     .map(({ payload }) => Option.getOrUndefined(readStanding(payload))?.status);
   assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });
+
+/** A registry whose atoms count on this clock, as the window's count on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry {
+  return AtomRegistryModule.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
+/** Lets `span` pass on the test's clock, then lets what fell due land. */
+const passing = (span: Duration.Input) => Effect.andThen(TestClock.adjust(span), landed);
+
+const FINISHED_ID = "4f6e2a1b-7c3d-4e5f-8a9b-0c1d2e3f4a5b";
+const UNSEEN_ID = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d";
+
+/** Two agents beside the running one: one whose turn ended and was seen, and one whose turn ended unseen. */
+const IDLE_AGENTS: readonly CodingAgentSummary[] = [
+  RUNNING_AGENT,
+  { ...RUNNING_AGENT, id: FINISHED_ID, createdAt: 4, status: CODING_AGENT_STATUS.COMPLETED },
+  { ...RUNNING_AGENT, id: UNSEEN_ID, createdAt: 5, status: CODING_AGENT_STATUS.COMPLETED },
+];
+
+/** An item waiting in the open task's Inbox, posted by the agent given. */
+function waitingFrom(agentId: string): AppInboxTask {
+  return {
+    taskId: TASK.id,
+    items: [{ id: `item-${agentId}`, agentId, title: "A question", postedAt: 1 }],
+  };
+}
+
+it.effect(
+  "a side panel tab not viewed for a day closes itself onto ⇧⌘T's stack, while the tab shown, a fixed tab, and a pinned one stay",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, tasks: { ...OPEN, shownCode: SHOWN } },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const panel = () => tab.control().sidePanel;
+      const file = { file: CODE.ref.path };
+      const pulls = { changes: AGENT_ID };
+      act(() => panel().onOpenFile(CODE.ref));
+      act(() => panel().onChoose(pulls));
+      act(() => panel().onPin(pulls, "Pull request"));
+      act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+      yield* landed;
+      const strip = panel().strip;
+      assert.deepEqual(strip, [
+        SIDE_PANEL_TAB.PLAN,
+        SIDE_PANEL_TAB.CODE,
+        file,
+        pulls,
+        SIDE_PANEL_TAB.BOARD,
+      ]);
+
+      yield* passing(Duration.hours(23));
+      assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
+
+      yield* passing(Duration.hours(1));
+      assert.deepEqual(
+        panel().strip,
+        [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.CODE, pulls, SIDE_PANEL_TAB.BOARD],
+        "the file's tab closed; the fixed tabs, the pinned Pull request, and the tab shown stay",
+      );
+      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+
+      act(() => tab.control().onReopenClosedTab?.());
+      assert.deepEqual(panel().strip, strip, "⇧⌘T stands it back where it stood");
+      assert.deepEqual(panel().tab, file);
+    }),
+);
+
+it.effect(
+  "an agent's tab not viewed for a day closes unless the agent works, waits on the developer, or ended unseen, and opens again as an Inbox item of its wakes it, where one closed by hand stays closed",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      const running = { agent: AGENT_ID };
+      const finished = { agent: FINISHED_ID };
+      const unseen = { agent: UNSEEN_ID };
+      act(() => column().onChoose(finished));
+      act(() => column().onChoose(running));
+      yield* landed;
+      assert.deepEqual(column().tabs, [running, finished, unseen]);
+
+      yield* passing(Duration.days(1));
+      assert.deepEqual(column().tabs, [running, unseen], "the finished agent's tab closed");
+      assert.deepEqual(column().tab, running);
+      assert.ok(tab.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
+
+      act(() => column().onClose(unseen));
+      tab.stand({ inboxWaiting: [waitingFrom(FINISHED_ID), waitingFrom(UNSEEN_ID)] });
+      yield* landed;
+      assert.deepEqual(
+        column().tabs,
+        [running, finished],
+        "the agent closed for being idle is back with its item, the one closed by hand is not",
+      );
+      assert.deepEqual(
+        column().tab,
+        running,
+        "and comes back without taking the shown tab's place",
+      );
+    }),
+);
+
+it.effect(
+  "when a tab was last viewed is kept across a launch, so a Pull request tab left a day before the window opens again closes as its task opens",
+  () =>
+    Effect.gen(function* () {
+      const clock = yield* Clock.Clock;
+      const listed = {
+        [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+      };
+      const pulls = { changes: AGENT_ID };
+      const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
+      yield* landed;
+      act(() => first.control().sidePanel.onChoose(pulls));
+      act(() => first.control().sidePanel.onChoose(SIDE_PANEL_TAB.PLAN));
+      yield* landed;
+      assert.deepEqual(first.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN, pulls]);
+      closeWindow();
+
+      yield* TestClock.adjust(Duration.hours(25));
+      const again = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
+      yield* landed;
+      assert.deepEqual(again.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN]);
+      assert.ok(again.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
+    }),
+);
+
+it.effect(
+  "a tab kept before the window counted when tabs were viewed counts as viewed now, so nothing closes the moment it is first counted",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Duration.toMillis(Duration.days(30)));
+      window.localStorage.setItem(
+        "luke.mainTabs",
+        JSON.stringify({
+          closedAgents: [],
+          tasks: { [TASK.id]: { recent: [{ agent: FINISHED_ID }, { agent: AGENT_ID }] } },
+        }),
+      );
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      const running = { agent: AGENT_ID };
+      const finished = { agent: FINISHED_ID };
+      const unseen = { agent: UNSEEN_ID };
+      yield* passing(Duration.minutes(1));
+      assert.deepEqual(
+        column().tabs,
+        [running, finished, unseen],
+        "its first count leaves it open",
+      );
+
+      yield* passing(Duration.days(1));
+      assert.deepEqual(column().tabs, [running, unseen], "a day unviewed after it closes it");
+    }),
+);

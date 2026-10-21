@@ -19,7 +19,9 @@
  * out and puts it back before the tab standing at its new place
  * (`movedOrder`); and closing the chosen tab chooses the one viewed before
  * it that still stands, and only where none does its neighbour
- * (`replacementOf`), as a browser's tabs do.
+ * (`replacementOf`), as a browser's tabs do. Each strip also keeps when each
+ * tab was last viewed (`stampedViewed`), from which a tab left unviewed long
+ * enough closes itself (`idleTabs`, the panel's `tasks/use-idle-tabs.ts`).
  */
 
 /**
@@ -395,4 +397,72 @@ export function replacementOf<T extends StripTab>(
   if (viewed !== undefined) return viewed;
   const place = strip.findIndex((other) => sameTab(other, tab));
   return strip[place + 1] ?? strip[place - 1];
+}
+
+/** When a tab of a strip was last viewed, in epoch milliseconds: shown on screen, or first known to the strip, whichever is later. */
+export interface ViewedAt<T extends StripTab> {
+  readonly tab: T;
+  readonly at: number;
+}
+
+/** When the tab was last viewed, as `stamps` holds it; none where it holds nothing of it. */
+export function viewedAtOf<T extends StripTab>(
+  stamps: readonly ViewedAt<T>[],
+  tab: T,
+): number | undefined {
+  return stamps.find((each) => sameTab(each.tab, tab))?.at;
+}
+
+/**
+ * The stamps with each of `viewed` viewed at `at`, and each of `standing`
+ * that holds no stamp yet stamped at `at` too, as a tab never seen or kept
+ * before stamps were counts as viewed now, the stamps newest last and the
+ * oldest let go past `kept`; nothing where every one already stood so.
+ */
+export function stampedViewed<T extends StripTab>(
+  before: readonly ViewedAt<T>[],
+  viewed: readonly T[],
+  standing: readonly T[],
+  at: number,
+  kept: number,
+): readonly ViewedAt<T>[] | undefined {
+  const unstamped = standing.filter((tab) => viewedAtOf(before, tab) === undefined);
+  const fresh = [...viewed, ...unstamped].filter(
+    (tab, place, all) =>
+      viewedAtOf(before, tab) !== at && all.findIndex((other) => sameTab(other, tab)) === place,
+  );
+  if (fresh.length === 0) return undefined;
+  const others = before.filter((each) => !fresh.some((tab) => sameTab(tab, each.tab)));
+  return [...others, ...fresh.map((tab) => ({ tab, at }))].slice(-kept);
+}
+
+/** The stamps without the tab's, as a close leaves them, so a tab opened again counts as viewed anew; the stamps as they are where none was its. */
+export function withoutViewedAt<T extends StripTab>(
+  stamps: readonly ViewedAt<T>[],
+  tab: T,
+): readonly ViewedAt<T>[] {
+  return stamps.some((each) => sameTab(each.tab, tab))
+    ? stamps.filter((each) => !sameTab(each.tab, tab))
+    : stamps;
+}
+
+/**
+ * The tabs of `strip` not viewed for `idle` or longer by `now`, those `keeps`
+ * holds open left out, the last in the strip first, so each closes at the
+ * place it stood and a reopen, latest closed first, stands each back there.
+ * A tab with no stamp counts as viewed now.
+ */
+export function idleTabs<T extends StripTab>(
+  strip: readonly T[],
+  stamps: readonly ViewedAt<T>[],
+  now: number,
+  idle: number,
+  keeps: (tab: T) => boolean,
+): readonly T[] {
+  return strip
+    .filter((tab) => {
+      const at = viewedAtOf(stamps, tab);
+      return at !== undefined && now - at >= idle && !keeps(tab);
+    })
+    .toReversed();
 }

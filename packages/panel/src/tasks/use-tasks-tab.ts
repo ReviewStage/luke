@@ -66,6 +66,7 @@ import {
   isAgentTab,
   isBrowserTab,
   isChangesTab,
+  isCloudBrowserTab,
   isDraftTab,
   isFileTab,
   isMacTerminalTab,
@@ -161,6 +162,7 @@ import {
 import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   startFailureNote as agentStartFailureNote,
+  agentStillWriting,
   agentTabLabel,
   choiceRequest,
 } from "./coding-agent-model.js";
@@ -171,6 +173,7 @@ import type { RepositoryChooser } from "./repository-chip.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
+import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
@@ -188,6 +191,7 @@ import {
   drawsSubagent,
   drawsTerminal,
   inColumn,
+  isPinnable,
   type PinnedTab,
   SIDE_PANEL_TAB,
   type SidePanelControl,
@@ -2954,8 +2958,8 @@ export function useTasksTab(input: {
   // Every tab closed is kept as it stood for ⇧⌘T to open again, but a draft's,
   // which lets its draft go.
   const openTabs = mainTabs.tabs;
-  const closeMainTab = mainTabs.onClose;
-  const closeColumnTab = useCallback(
+  const { onClose: closeMainTab, onDoze: dozeMainTab } = mainTabs;
+  const keepColumnClosed = useCallback(
     (tab: MainTab) => {
       const at = openTabs.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
@@ -2963,9 +2967,24 @@ export function useTasksTab(input: {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
+    },
+    [openTabs, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
+  );
+  const closeColumnTab = useCallback(
+    (tab: MainTab) => {
+      keepColumnClosed(tab);
       closeMainTab(tab);
     },
-    [openTabs, closeMainTab, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
+    [keepColumnClosed, closeMainTab],
+  );
+  // Note that an agent's tab closed for being idle opens again as the agent wakes (`use-idle-tabs.ts`).
+  const dozeColumnTab = useCallback(
+    (tab: MainTab) => {
+      keepColumnClosed(tab);
+      if (isAgentTab(tab)) dozeMainTab(tab);
+      else closeMainTab(tab);
+    },
+    [keepColumnClosed, closeMainTab, dozeMainTab],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
   const closeSidePanelTab = useCallback(
@@ -3008,6 +3027,64 @@ export function useTasksTab(input: {
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
+
+  // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
+  // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
+  // a draft's, which lets the draft go, a Browser tab's or a terminal of this Mac's, which take their
+  // page or shell with them, and a cloud Browser tab's, which the strip draws again on no open. The
+  // side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
+  const workingAgents = useMemo(
+    () =>
+      (agents.agents ?? []).flatMap((agent) => (agentStillWriting(agent.status) ? [agent.id] : [])),
+    [agents.agents],
+  );
+  const waitingAgents = useMemo(
+    () => input.inboxWaiting.flatMap((task) => task.items.map((item) => item.agentId)),
+    [input.inboxWaiting],
+  );
+  const awakeAgents = useMemo(
+    () => [...new Set([...workingAgents, ...waitingAgents])],
+    [workingAgents, waitingAgents],
+  );
+  const pinnedHere = (tab: StripTab) =>
+    isPinnable(tab) &&
+    sidePanel.pins.some((pin) => pin.task === viewed.activeTaskId && sameTab(pin.tab, tab));
+  useIdleTabs({
+    taskId: fixture === undefined ? viewed.activeTaskId : undefined,
+    column:
+      agents.agentIds === undefined
+        ? undefined
+        : {
+            tabs: mainTabs.tabs,
+            shown: mainTabs.tab,
+            viewedAt: mainTabs.viewedAt,
+            onViewedAt: mainTabs.onViewedAt,
+            onIdle: dozeColumnTab,
+            keeps: (tab) =>
+              isDraftTab(tab) ||
+              pinnedHere(tab) ||
+              awakeAgents.includes(tab.agent) ||
+              input.unseenAgents.includes(tab.agent),
+          },
+    panel:
+      inboxView !== undefined || pageAgents !== undefined
+        ? undefined
+        : {
+            tabs: sidePanel.strip,
+            shown: sidePanel.open ? sidePanel.tab : undefined,
+            viewedAt: sidePanel.viewedAt,
+            onViewedAt: sidePanel.onViewedAt,
+            onIdle: closeSidePanelTab,
+            keeps: (tab) =>
+              typeof tab === "string" ||
+              isBrowserTab(tab) ||
+              isCloudBrowserTab(tab) ||
+              isMacTerminalTab(tab) ||
+              pinnedHere(tab),
+          },
+    awake: awakeAgents,
+    onWake: mainTabs.onWake,
+  });
   // A closed tab opens again where it stood, in its strip at its place and
   // showing what it showed, so a version history or the window's Inbox over
   // the task gives way, and a side panel filling the window over its column.
