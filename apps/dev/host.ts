@@ -586,9 +586,10 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
  * through the one door every agent's call goes through
  * (`packages/service/src/agents/browser/browser-tool.ts`): the Chromium in
  * the root's sandbox, which a worker shares, with its tabs kept under the
- * agent's own conversation, which a worker's admission names too. A session
- * the host does not admit runs nothing. Its screenshots reach the model as
- * images and the transcript keeps the rest.
+ * agent's own conversation, which a worker's admission names too; or, where
+ * the call says so, the Browser tabs of the agent's task on its starter's
+ * Mac. A session the host does not admit runs nothing. Its screenshots reach
+ * the model as images and the transcript keeps the rest.
  */
 export function browserFor(admit: CoderHost["admit"]) {
   return defineTool({
@@ -606,6 +607,13 @@ export function browserFor(admit: CoderHost["admit"]) {
             conversationId: admitted.success.target.conversationId,
             // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
             openSandbox: () => ctx.getSandbox(),
+            // The starter's Mac, as `run_on_mac` reaches it, on the agent's task, a worker's its parent's, read only for a call that asks for the Mac.
+            mac: {
+              userId: admitted.success.target.userId,
+              taskId: Effect.map(host.agent(admitted.success), (found) =>
+                Result.isSuccess(found) ? found.success.taskId : null,
+              ),
+            },
           };
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
           return yield* runBrowserTool(call, unparsedWire(input as WireBoundaryInput));

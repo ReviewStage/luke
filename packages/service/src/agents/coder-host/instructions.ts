@@ -159,11 +159,13 @@ interface ToolWords {
  * What a coding agent is told of `browser`, the Chromium in its own sandbox
  * whose tabs the developer watches and may take over: for what the
  * developer should see or help with, while a throwaway check of its own
- * work stays on the sandbox's Playwright, which leaves no tab behind.
+ * work stays on the sandbox's Playwright, which leaves no tab behind; and
+ * of `on: "mac"`, the developer's own Mac's tabs, only for what only the Mac
+ * reaches, since there it acts as the developer.
  */
 const BROWSER_WORDS = `## Your browser
 
-\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab. With \`on: "mac"\` the same actions run on your task's Browser tabs in Luke on the developer's own Mac instead, where you act as the developer, signed in to whatever they are signed in to: use it only for the developer's own \`localhost\` or a site they are signed in to there, and keep your own dev server and anything they should watch or take over in your own browser.
 
 `;
 

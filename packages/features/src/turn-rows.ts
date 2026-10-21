@@ -40,6 +40,8 @@ export const CALL_KIND = {
   MAC_COMMAND: "mac-command",
   /** Actions an agent took in the browser in its own sandbox (`browser`), its line saying what it did and in which tab, with where it ran beside it. */
   BROWSER: "browser",
+  /** Actions an agent took on its task's Browser tabs on the developer's own Mac (`browser` with `on: "mac"`), drawn as a browser call is, with the Mac beside it. */
+  MAC_BROWSER: "mac-browser",
   READ_FILE: "read-file",
   WRITE_FILE: "write-file",
   EDIT: "edit",
@@ -112,6 +114,7 @@ export const CALL_WORDS = {
   [CALL_KIND.COMMAND]: { verb: "Ran", code: true },
   [CALL_KIND.MAC_COMMAND]: { verb: "Ran", code: true },
   [CALL_KIND.BROWSER]: { verb: "Used the browser", code: false },
+  [CALL_KIND.MAC_BROWSER]: { verb: "Used the browser", code: false },
   [CALL_KIND.READ_FILE]: { verb: "Read", code: true },
   [CALL_KIND.WRITE_FILE]: { verb: "Wrote", code: true },
   [CALL_KIND.EDIT]: { verb: "Edited", code: true },
@@ -169,6 +172,9 @@ const ON_YOUR_MAC = "On your Mac";
 
 /** What a row of a call in the agent's own browser says of where it ran, beside its line. */
 const IN_THE_BROWSER = "Browser";
+
+/** What a row of a call on the Browser tabs of the developer's own Mac says of where it ran, beside its line; a row that knows the agent's starter names their Mac in its place. */
+const IN_THE_MAC_BROWSER = "Browser · on your Mac";
 
 /** What each of the browser's actions says it did, on a browser call's line. */
 const BROWSER_ACTION_WORDS: Readonly<Record<string, string>> = {
@@ -249,7 +255,13 @@ export function isCommandKind(kind: CallKind): boolean {
  */
 export function callPlace(kind: CallKind): string | undefined {
   if (kind === CALL_KIND.MAC_COMMAND) return ON_YOUR_MAC;
+  if (kind === CALL_KIND.MAC_BROWSER) return IN_THE_MAC_BROWSER;
   return kind === CALL_KIND.BROWSER ? IN_THE_BROWSER : undefined;
+}
+
+/** Whether a call is a browser call, wherever it ran: its line says what it did, and the tab, in words. */
+export function isBrowserKind(kind: CallKind): boolean {
+  return kind === CALL_KIND.BROWSER || kind === CALL_KIND.MAC_BROWSER;
 }
 
 /** What a call's line says: the verb, or a described command's purpose, then the subject, and whether the subject is code. */
@@ -274,7 +286,7 @@ export function callLine(
 ): CallLine {
   const words = CALL_WORDS[kind];
   if (description === undefined) return { verb: words.verb, subject, code: words.code };
-  if (kind === CALL_KIND.BROWSER) return { verb: description, subject, code: false };
+  if (isBrowserKind(kind)) return { verb: description, subject, code: false };
   return {
     verb: description,
     subject: subject === undefined ? undefined : firstLine(subject),
