@@ -99,10 +99,11 @@ export const CODER_TOOL = {
   LOOK_AT_BOARD: AGENT_TOOL.LOOK_AT_BOARD,
 } as const;
 
-/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
+/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it, `look_at_picture`, which looks at a picture in its plan, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
 export type TaskTool =
   | typeof CODER_TOOL.EDIT_PLAN
   | typeof CODER_TOOL.SHOW_PAGE
+  | typeof CODER_TOOL.LOOK_AT_PICTURE
   | (typeof COMMENT_TASK_TOOLS)[number]
   | (typeof BOARD_TASK_TOOLS)[number];
 
@@ -131,6 +132,7 @@ export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<Tas
   return new Set([
     CODER_TOOL.EDIT_PLAN,
     CODER_TOOL.SHOW_PAGE,
+    CODER_TOOL.LOOK_AT_PICTURE,
     ...COMMENT_TASK_TOOLS,
     ...BOARD_TASK_TOOLS,
   ]);

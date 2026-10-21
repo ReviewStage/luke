@@ -435,7 +435,13 @@ test("an agent on a task is offered edit_plan, show_page, the comment tools, and
     CODER_TOOL.RESOLVE_THREAD,
   ];
   const board = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD];
-  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments, ...board].sort();
+  const all = [
+    CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.SHOW_PAGE,
+    CODER_TOOL.LOOK_AT_PICTURE,
+    ...comments,
+    ...board,
+  ].sort();
   const handedItsTask = { taskId: "plan-1", prompt: null };
   const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
   const automation = { taskId: null, prompt: "Sweep the flaky tests." };
