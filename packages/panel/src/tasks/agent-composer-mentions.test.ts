@@ -435,6 +435,29 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
   assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}`]);
 });
 
+test("the box names the @ list it opened and the row highlighted in it, as any combobox's field does, and names none once the list closes", async () => {
+  const { container } = await box(planPage([]));
+
+  typeInComposer(container, "Follow @roll");
+  await settle();
+  const field = composerEditor(container);
+  const list = container.querySelector('.mention-menu [role="listbox"]');
+  const highlighted = () => list?.querySelector('[role="option"][aria-selected="true"]')?.id;
+  const first = highlighted();
+  const named = [field.getAttribute("aria-controls"), field.getAttribute("aria-activedescendant")];
+  pressInComposer(container, "ArrowDown");
+  const moved = [field.getAttribute("aria-activedescendant"), highlighted()];
+  pressInComposer(container, "Escape");
+
+  assert.ok(list?.id, "the list has an id to be named by");
+  assert.deepEqual(named, [list?.id, first]);
+  assert.notEqual(moved[0], first);
+  assert.equal(moved[0], moved[1]);
+  assert.equal(field.getAttribute("aria-expanded"), "false");
+  assert.equal(field.getAttribute("aria-controls"), null);
+  assert.equal(field.getAttribute("aria-activedescendant"), null);
+});
+
 test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
   const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },

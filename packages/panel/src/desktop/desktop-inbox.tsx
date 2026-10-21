@@ -16,7 +16,13 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { INBOX_SCOPES, InboxList, InboxListNote, ItemMark } from "../tasks/inbox-list.js";
+import {
+  INBOX_SCOPES,
+  InboxList,
+  InboxListNote,
+  ItemMark,
+  newTaskAction,
+} from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -87,7 +93,8 @@ import { taskCardOf } from "./task-card.js";
  * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@luke/ui`'s `EmptyState`); with its scope leaving out every item, the list
+ * glyph (`@luke/ui`'s `EmptyState`) over New task, the window resting here
+ * with no task open (`resting-page.ts`); with its scope leaving out every item, the list
  * says so and offers the scope that holds something, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
@@ -192,6 +199,8 @@ function InboxShown({
     closeItem,
     onRetry,
   } = listing;
+  // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
+  const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   const openLink = useOpenLink();
   const now = useMinute();
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
@@ -403,6 +412,7 @@ function InboxShown({
                         onList={columns.onList}
                         onRetry={onRetry}
                         searched={searched}
+                        onNewTask={newTask}
                       />
                     }
                     onChoose={open}
@@ -435,7 +445,9 @@ function InboxShown({
                       />
                     ) : reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
-                      <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
+                      <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
+                        {NEEDS_YOU.NONE}
+                      </EmptyState>
                     )}
                   </section>
                 ) : (

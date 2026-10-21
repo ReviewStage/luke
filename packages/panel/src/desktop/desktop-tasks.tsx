@@ -24,10 +24,9 @@ import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab.js";
+import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
-import type { ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
@@ -84,7 +83,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
-import { DesktopHome } from "./desktop-home.js";
+import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, mainTabLabel, TAB_SKELETON_WIDTH } from "./main-tabs.js";
 import {
@@ -115,7 +114,9 @@ import {
  * The work column while Tasks is chosen: the open task's column, its
  * toolbar above and the call bar below, and the side panel beside it, the
  * window's full height, while that is open (or over it, while it fills the
- * window); or, with none open, the home page (`desktop-home.tsx`).
+ * window); or, with none open, a new account's welcome (`desktop-welcome.tsx`),
+ * every other account resting on a page standing in its place instead
+ * (`resting-page.ts`).
  * The task list itself is the sidebar's, and so is moving between tasks: the
  * toolbar offers no way out of the open task, only its actions: Start, which
  * hands the task to a coding agent, and the ⋯ menu, where Copy plan and the
@@ -838,7 +839,7 @@ function PlanDocument({
       region.kind === DOCUMENT_REGION.FAILED
         ? "The task could not be read."
         : "Choose a task, or start a new one.";
-    // A plan that cannot be drawn offers no menu, so its way back to the home page is said here.
+    // A plan that cannot be drawn offers no menu, so its way out is said here.
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
     return (
       <>
@@ -1145,7 +1146,7 @@ function PlanDocument({
 }
 
 /**
- * The Tasks tab's work column: the open task's page, or the home page.
+ * The Tasks tab's work column: the open task's page, or a new account's welcome.
  *
  * A memo boundary: the shell drawn again over the same tasks, as a setting
  * that moves draws it, leaves the open plan, its transcripts, and its side
@@ -1156,14 +1157,8 @@ export const DesktopTasks = memo(function DesktopTasks({
   looks,
   notice,
   summary,
-  room,
-  accountName,
 }: {
   tasks: TasksControl;
-  /** The room the panel's stage gives, which says how many tasks the home page lists; wide where left out. */
-  room?: ShellRoom | undefined;
-  /** The signed-in account's name, which the home page greets. */
-  accountName?: string | undefined;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: TaskLooks;
   /** The voice's notice line, while it rides the foot of the open task's call. */
@@ -1189,20 +1184,19 @@ export const DesktopTasks = memo(function DesktopTasks({
           {secondCall}
         </SkillFiles>
       );
-    // With no task open the column opens on New task's composer, and ⌘N's
-    // dialog stands over it as it stands over a task.
+    // With no task open the column is a new account's welcome, and ⌘N's
+    // dialog stands over it as it stands over a task; any other account rests
+    // on a page standing in the column's place.
     case TASKS_PAGE.HOME:
       // A launch reopening the task last open draws the window's ground
-      // alone until it opens, so the home page never flashes before it.
+      // alone until it opens, so the welcome never flashes before it.
       if (tasks.restoring) return <div className="desktop-drag-strip" />;
       return (
         <>
           <div className="desktop-drag-strip" />
-          <PageFind page={FIND_PAGE.HOME} active={tasks.shown}>
-            <section className="home" aria-label="Home">
-              <DesktopHome tasks={tasks} room={room} accountName={accountName} />
-            </section>
-          </PageFind>
+          <div className="home">
+            <DesktopWelcome tasks={tasks} />
+          </div>
           {secondCall}
         </>
       );

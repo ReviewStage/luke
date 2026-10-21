@@ -200,7 +200,24 @@ test("a launch that reopens the plan last open leaves nothing behind it to go ba
   assert.equal(window.history().canGoBack, false);
 });
 
-test("leaving a plan for the home page is a step Back returns from", () => {
+test("the Inbox the window rests on with no plan open is no step of its own, so resting on it after the plan is one step, and opening the Inbox past it is another", () => {
+  const window = mount(
+    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
+  );
+  const inboxOpen = { ...tasksControl().inboxView, open: true };
+  window.stand(tasksControl());
+  window.stand(tasksControl({ resting: true, inboxView: inboxOpen }));
+  assert.equal(window.history().canGoBack, true, "Back returns to the plan");
+
+  act(() => window.history().onBack());
+  assert.equal(window.history().canGoBack, false, "resting took no second step");
+
+  const opened = mount(tasksControl({ resting: true, inboxView: inboxOpen }));
+  opened.stand(tasksControl({ inboxView: inboxOpen }));
+  assert.equal(opened.history().canGoBack, true, "the Inbox opened is a step of its own");
+});
+
+test("leaving a plan for the page with no plan open is a step Back returns from", () => {
   const window = mount(
     tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
   );

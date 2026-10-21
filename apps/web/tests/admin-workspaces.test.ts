@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import type { AdminWorkspaceList, AdminWorkspaceRow } from "@luke/features/admin-answer-wire";
+import { SEARCH_DEBOUNCE_MS } from "@luke/panel/admin/routing";
+import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { SEARCH_DEBOUNCE_MS } from "../src/admin/routing";
-import { WorkspacesScreen } from "../src/admin/screens/workspaces";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-workspaces.test.ts -- the Workspaces tab heads its table with the
@@ -102,14 +103,16 @@ async function openWorkspaces(body: AdminWorkspaceList) {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(WorkspacesScreen, {
-        hideAdmins: true,
-        onHideAdminsChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onOpenAccount: (id) => opened.push(id),
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(WorkspacesScreen, {
+          hideAdmins: true,
+          onHideAdminsChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onOpenAccount: (id) => opened.push(id),
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return { page, asked, opened };

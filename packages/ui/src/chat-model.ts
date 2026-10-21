@@ -1,11 +1,10 @@
-import type { ChatMemberMention } from "@luke/features/chat-mentions";
+import { type ChatMemberMention, chatMentionsIn } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
   CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_MEMBER_LABEL,
-  CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
   type ChatEditRequest,
@@ -20,15 +19,9 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
-import {
-  encodeMention,
-  MENTION_KIND,
-  type MentionPlace,
-  mentionMarkdown,
-} from "@luke/features/mention-link";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
-import type { ChatTarget } from "./chat-mention.js";
 
 /**
  * chat-model.ts -- what the window's Chat draws of a workspace's chat: the rail of places, each channel's unread count, a channel's messages with their threads, and For you.
@@ -492,18 +485,11 @@ export function placeChannel(chat: ChatAnswer, place: ChatPlace): ChatChannel | 
   return chat.channels.find((channel) => channel.id === place.channelId);
 }
 
-/** The mention a chip writes a member as: a person by their account, an agent by its id; none for a member whose account or agent is gone, or for a task's Luke, whom no post names any more. */
-function mentionOf(member: ChatMember): ChatMemberMention | undefined {
-  if (member.kind === MEMBER_KIND.HUMAN && member.userId !== undefined) {
-    return { kind: MENTION_KIND.PERSON, userId: member.userId };
-  }
-  if (member.kind === MEMBER_KIND.AGENT && member.agentId !== undefined) {
-    // An agent on a task is linked under it, so its chip opens the task's tab for it rather than the agent alone.
-    return member.planId === undefined
-      ? { kind: MENTION_KIND.AGENT, agentId: member.agentId }
-      : { kind: MENTION_KIND.AGENT, taskId: member.planId, agentId: member.agentId };
-  }
-  return undefined;
+/** Whether a mention names the member: a person by their account, an agent by its id. */
+function namesMember(mention: ChatMemberMention, member: ChatMember): boolean {
+  return mention.kind === MENTION_KIND.PERSON
+    ? member.kind === MEMBER_KIND.HUMAN && member.userId === mention.userId
+    : member.agentId === mention.agentId;
 }
 
 /**
@@ -527,50 +513,100 @@ export function reachedIn(member: ChatMember, channel: ChatChannel): boolean {
   );
 }
 
+/** The members a post in the channel reaches but the reader, each still here. */
+function toldIn(chat: ChatAnswer, channel: ChatChannel | undefined): readonly ChatMember[] {
+  return chat.members
+    .filter((member) => !member.left && member.id !== chat.self)
+    .filter((member) => channel === undefined || reachedIn(member, channel));
+}
+
+/** A person a chat message may name: their member, their account, and their name. */
+interface ChatMentionablePerson {
+  readonly memberId: string;
+  readonly userId: string;
+  readonly name: string;
+}
+
+/** An agent a chat message may name: its member, its id, its name, and the task it works on, which tells it apart from another of its name. */
+interface ChatMentionableAgent {
+  readonly memberId: string;
+  readonly agentId: string;
+  readonly name: string;
+  readonly task?: { readonly id: string; readonly name: string | undefined } | undefined;
+}
+
+/** A channel a chat message's `#` may name: its name, the task whose channel it is, and that task's name. */
+interface ChatMentionableChannel {
+  readonly name: string;
+  readonly taskId: string | undefined;
+  readonly detail: string | undefined;
+}
+
+/** What a chat message's `@` and `#` offer: the people and the agents a mention tells, and the channels. */
+export interface ChatMentionables {
+  readonly people: readonly ChatMentionablePerson[];
+  readonly agents: readonly ChatMentionableAgent[];
+  readonly channels: readonly ChatMentionableChannel[];
+}
+
 /**
  * What the composer offers to name: every member who has not left but the
- * reader, by name, each with the link a chip writes them as in the
- * workspace's place, and every channel standing that is not a DM. Where
- * the composer posts in a channel, only the members a post there reaches
- * are offered (`reachedIn`), so an agent is never named where it cannot
- * hear it. Note that a member is offered only where that place is known,
- * since a member is written as their link and nothing else.
+ * reader, a person by their account and an agent by its id, each by name,
+ * and every channel standing that is not a DM. Where the composer posts in
+ * a channel, only the members a post there reaches are offered
+ * (`reachedIn`), so an agent is never named where it cannot hear it.
  */
-export function chatTargets(
+export function chatMentionables(
   chat: ChatAnswer,
   names: ChatNames,
-  place: MentionPlace | undefined,
   channel?: ChatChannel,
-): readonly ChatTarget[] {
-  const members = chat.members
-    .filter((member) => !member.left && member.id !== chat.self)
-    .filter((member) => channel === undefined || reachedIn(member, channel))
-    .flatMap((member): readonly ChatTarget[] => {
-      const mention = mentionOf(member);
-      if (mention === undefined || place === undefined) return [];
-      const who = chatWho(chat, names, member.id);
-      return [
-        {
-          sigil: CHAT_TARGET_SIGIL.MEMBER,
-          name: who.name,
-          // An agent or a Luke is told apart from another of its name by the task it works on.
-          detail: member.kind === MEMBER_KIND.HUMAN ? undefined : who.taskName,
-          mention,
-          link: encodeMention(mention, place),
-          markdown: mentionMarkdown(mention, who.name, place),
-        },
-      ];
-    });
+): ChatMentionables {
+  const told = toldIn(chat, channel);
+  const people = told.flatMap((member): readonly ChatMentionablePerson[] =>
+    member.kind === MEMBER_KIND.HUMAN && member.userId !== undefined
+      ? [{ memberId: member.id, userId: member.userId, name: chatWho(chat, names, member.id).name }]
+      : [],
+  );
+  const agents = told.flatMap((member): readonly ChatMentionableAgent[] => {
+    if (member.kind !== MEMBER_KIND.AGENT || member.agentId === undefined) return [];
+    const who = chatWho(chat, names, member.id);
+    const task =
+      member.planId === undefined ? undefined : { id: member.planId, name: who.taskName };
+    return [{ memberId: member.id, agentId: member.agentId, name: who.name, task }];
+  });
   const channels = chat.channels
-    .filter((channel) => !channel.archived && channel.kind !== CHANNEL_KIND.DM)
+    .filter((each) => !each.archived && each.kind !== CHANNEL_KIND.DM)
     .map(
-      (channel): ChatTarget => ({
-        sigil: CHAT_TARGET_SIGIL.CHANNEL,
-        name: channelLabel(chat, names, channel),
-        detail: channel.planId === undefined ? undefined : names.tasks.get(channel.planId),
+      (each): ChatMentionableChannel => ({
+        name: channelLabel(chat, names, each),
+        taskId: each.planId,
+        detail: each.planId === undefined ? undefined : names.tasks.get(each.planId),
       }),
     );
-  return [...members, ...channels];
+  return { people, agents, channels };
+}
+
+/**
+ * Whether a post of the words in the channel would address more members
+ * than a post tells: each member a post there reaches that the words
+ * mention, then, for a reply, the thread's root author and its repliers,
+ * each counted once and the reader not at all. A post tells the first
+ * `MAX_STEERS_PER_POST` of them and no more (`chat-notify.ts`); a direct
+ * message tells its other member alone, whatever it mentions.
+ */
+export function toldPastBound(
+  chat: ChatAnswer,
+  channel: ChatChannel,
+  text: string,
+  thread: readonly string[] = [],
+): boolean {
+  if (channel.kind === CHANNEL_KIND.DM) return false;
+  const reached = toldIn(chat, channel);
+  const named = chatMentionsIn(text).members.flatMap(({ mention }) =>
+    reached.filter((member) => namesMember(mention, member)).map((member) => member.id),
+  );
+  const addressed = new Set([...named, ...thread].filter((id) => id !== chat.self));
+  return addressed.size > CHAT_BOUNDS.MAX_STEERS_PER_POST;
 }
 
 /** What the wire refuses in a dictation's word: a line break, or an angle bracket. */

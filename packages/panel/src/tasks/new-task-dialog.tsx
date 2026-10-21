@@ -11,7 +11,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * whatever stood open, and a card holds New task's composer
  * (`new-task-composer.tsx`), which takes focus, the card named by the
  * composer's own head row: "New task", the repository chip after it, and
- * the Issue chip at the row's right end, as Home draws it too. The task starts in the workspace the
+ * the Issue chip at the row's right end, as the welcome draws it too. The task starts in the workspace the
  * window lists, and the dialog offers no other; the composer lists that
  * workspace's repositories and its Linear issues.
  *

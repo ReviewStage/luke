@@ -505,7 +505,6 @@ function fullMenuTemplate(
     {
       label: "Go",
       submenu: [
-        commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
         commandItem(APP_COMMAND.AUTOMATIONS),
         SEPARATOR,

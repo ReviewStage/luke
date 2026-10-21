@@ -10,8 +10,8 @@ import { layContainersAt, shown } from "../testing/container-width.js";
  * name the room, so what is said beside the name gives way; the topic's
  * menu at its end does not, since it is the only way to edit, archive, or
  * bring back a topic. The menu an `@` opens over a thread's box, which the
- * thread insets, stays inside a 360px window, and keeps its own width over
- * a wide one. jsdom lays nothing out, so the sheets are laid for a
+ * thread insets, stays inside a 360px window, and keeps the width every
+ * box's `@` menu keeps (`mention-picker.tsx`) over a wide one. jsdom lays nothing out, so the sheets are laid for a
  * touch screen (`testing/container-width.ts`) and the head is built in the
  * markup `chat-pane.tsx`'s `PlaceHead` draws.
  */
@@ -75,8 +75,10 @@ function mentionMenuWidth(room: string, card: number): number {
   shell.dataset.room = room;
   const composer = shell.appendChild(document.createElement("div"));
   composer.className = "chat-composer";
-  const menu = composer.appendChild(document.createElement("div"));
-  menu.className = "chat-mention-menu";
+  const field = composer.appendChild(document.createElement("div"));
+  field.className = "agent-composer-field";
+  const menu = field.appendChild(document.createElement("div"));
+  menu.className = "menu-surface searchable-menu mention-menu";
   const style = getComputedStyle(menu);
   const length = (value: string): number => {
     if (value.endsWith("%")) return (card * Number.parseFloat(value)) / 100;
@@ -97,6 +99,6 @@ test("in a narrow room the @ menu of a thread's box, inset by the thread, stays 
   assert.ok(left + mentionMenuWidth("narrow", card) <= PHONE - MARGIN);
 });
 
-test("in a wide room the @ menu stands at its own 320px over a wide card", () => {
-  assert.equal(mentionMenuWidth("wide", 640), 320);
+test("in a wide room the @ menu stands at every box's 360px over a wide card", () => {
+  assert.equal(mentionMenuWidth("wide", 640), 360);
 });

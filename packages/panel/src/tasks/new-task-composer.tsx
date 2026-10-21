@@ -65,7 +65,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * narrow for its words, as on a phone, where the model chip's words are cut
  * short too, so Start stays at the row's end in the card.
  * New task's own chips stand in a head row over the card, the same in the
- * dialog and on Home: the title, "New task", then the repository the task
+ * dialog and on a new account's welcome: the title, "New task", then the repository the task
  * is about (`repository-chip.tsx`), and at the row's right end the Issue
  * chip, where the workspace has GitHub or Linear connected
  * (`issue-picker-chip.tsx`, ⌘L from the card). The repository chip starts on the one the press chose
@@ -92,7 +92,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * chosen repository's: picking one of another repository, or with none
  * chosen, makes its repository the task's, and a change of repository lets
  * go the GitHub issues of the one before. The owner's workspace changing,
- * as Home's does, lets every one go. The task is named by the first issue
+ * as the welcome's does, lets every one go. The task is named by the first issue
  * picked, and the agent is handed a mention of each, by its page, before the
  * words (`agentPromptOf`), so an issue picked and Return starts an agent on
  * it.
@@ -126,7 +126,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * The words and files are New task's draft in the workspace it starts in,
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
- * and opened again, or Home's, finds them where they were left, the words
+ * and opened again, or the welcome's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
  * does. The card holds its own issues, repository, and model, so the owner
  * mounts it afresh to start those over; the workspace it starts in is the
@@ -254,7 +254,7 @@ export function NewTaskComposer({
   focusedByOwner?: boolean;
   /** The id the head row's title stands under, which names the dialog's card. */
   titleId?: string | undefined;
-  /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on Home, whose card stands at the page's top, where a list risen over it is cut off under the page's head. */
+  /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on the welcome, whose card stands near the page's top, where a list risen over it is cut off under the page's head. */
   listSide: MentionMenuSide;
 }): React.JSX.Element {
   const draft = useDraft(newTaskPlace(workspaceId));
@@ -286,7 +286,7 @@ export function NewTaskComposer({
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   // A repository or an issue picked in one workspace is none of another's,
-  // so the owner's switch, as Home's, lets them go, in the render that brings it; the scope first
+  // so the owner's switch, as the welcome's, lets them go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {

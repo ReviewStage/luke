@@ -48,8 +48,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * task opened on an agent shows its plan while the list is on its way, and
  * stays on it where the read fails. Before the list answers, the task's row
  * in the sidebar may already settle which tab it will be (`NamedAgents`):
- * the agent last viewed, where the row names it, or the strip's last, where
- * the row names every agent in the order started. The column then shows it
+ * the agent last viewed, where the row names it, or the task's one agent,
+ * where none viewed stands. The column then shows it
  * at once, its transcript read beside the list, and only where the row
  * cannot settle it does the column wait.
  *
@@ -278,8 +278,6 @@ export interface NamedAgents {
   ids: readonly string[];
   /** How many agents the task has in all. */
   total: number;
-  /** How many of them are at work. */
-  working: number;
 }
 
 /** What the open task holds for the tabs: its id, its agents, or nothing while unread, what its row names of them meanwhile, and its draft's key. */
@@ -352,15 +350,21 @@ function shownIn(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
 }
 
 /**
- * The task's agents in the order started, where its row names every one of
- * them in an order that says it: all at work, or none, so the row's newest
- * first is the whole order. Else nothing, as a row naming some, or a mix
- * whose order among the two it cannot tell.
+ * Whether the row names every one of the task's agents, so an agent it does
+ * not name is none of the task's.
+ */
+function namesAll(named: NamedAgents): boolean {
+  return named.ids.length === named.total;
+}
+
+/**
+ * The task's agents in the order started, where its row says it: one agent,
+ * or none. Note that the row's order cannot stand for more, because two
+ * agents started in the same moment stand in the row by id the other way
+ * round from the list's.
  */
 function wholeOrderOf(named: NamedAgents): readonly string[] | undefined {
-  const whole = named.ids.length === named.total;
-  const oneKind = named.working === 0 || named.working === named.total;
-  return whole && oneKind ? [...named.ids].reverse() : undefined;
+  return namesAll(named) && named.total <= 1 ? named.ids : undefined;
 }
 
 /**
@@ -369,10 +373,11 @@ function wholeOrderOf(named: NamedAgents): readonly string[] | undefined {
  * viewed that the row shows standing is it; one the row cannot place, an
  * agent it does not name among more than it names, leaves the choice to the
  * read, as does a task none of whose tabs viewed stands but whose order the
- * row cannot tell (`wholeOrderOf`).
+ * row cannot tell (`wholeOrderOf`), which is any with more than one agent.
  */
 function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   const { named } = drawn;
+  const all = named !== undefined && namesAll(named);
   const whole = named === undefined ? undefined : wholeOrderOf(named);
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
   for (const tab of [...recent].reverse()) {
@@ -382,8 +387,8 @@ function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined
     }
     if (held.closedAgents.includes(tab.agent)) continue;
     if (named?.ids.includes(tab.agent) === true) return tab;
-    // An agent the row does not name stands where the row names only some of the agents.
-    if (whole === undefined) return undefined;
+    // An agent the row does not name may stand where the row names only some of the agents.
+    if (!all) return undefined;
   }
   return whole === undefined ? undefined : stripOf(held, { ...drawn, agents: whole }).at(-1);
 }

@@ -454,6 +454,8 @@ interface Asked {
   closed: number;
   /** Each task it was asked to mark, by the mark, in order. */
   readonly marks: [string, TaskMark][];
+  /** How many times it was asked for New task. */
+  newTasks: number;
 }
 
 /** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks and archived tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
@@ -485,6 +487,7 @@ function mount(
     shownAutomations: [],
     closed: 0,
     marks: [],
+    newTasks: 0,
   };
   function Page({ sidePanel }: { sidePanel?: SidePanelControl | undefined }) {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
@@ -540,6 +543,9 @@ function mount(
       },
       onShowTask: (taskId) => asked.shownTasks.push(taskId),
       onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
+      onNewTask: () => {
+        asked.newTasks += 1;
+      },
       onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
       automationsView: {
         ...tasksControl().automationsView,
@@ -2882,24 +2888,34 @@ function backToList(page: HTMLElement): HTMLButtonElement {
 function emptyStateIn(page: HTMLElement, column: string): string | null {
   const shown = page.querySelector(column);
   assert.ok(shown, "the column is drawn");
-  const empty = shown.querySelector(".luke-empty-state");
+  const empty = shown.querySelector(".luke-empty-state-words");
   return empty === null || shown.hasAttribute("hidden") ? null : (empty.textContent ?? "");
+}
+
+/** The way on an empty state in `column` offers, by its words. */
+function emptyStateAction(page: HTMLElement, column: string): HTMLButtonElement | null {
+  return page.querySelector<HTMLButtonElement>(`${column} .luke-empty-state button`);
 }
 
 test("an Inbox with nothing in it stands its empty state in the pane beside the list, and in the list itself once the list stands alone", async () => {
   inboxes = new Map();
   listedAgents = [];
-  const { page } = mount();
+  const { page, asked } = mount();
   await settle();
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   assert.deepEqual(
     [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, "Nothing needs you"],
   );
+  const offered = emptyStateAction(page, ".inbox-view-items");
+  assert.equal(offered?.textContent, "New task", "the empty Inbox offers New task");
+  act(() => offered?.click());
+  assert.equal(asked.newTasks, 1, "New task asks for its dialog");
 
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
+  assert.equal(emptyStateAction(page, ".inbox-tasks")?.textContent, "New task");
 });
 
 test("on a phone, an Inbox with nothing chosen shows its list and says nothing needs you, under no panel, though the panel stands open as a first launch leaves it", async () => {

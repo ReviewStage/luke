@@ -38,6 +38,8 @@ export interface FakeSandbox {
   resumedWith: number[];
   /** Whether the snapshot the sandbox resumes from expired, so a resume is answered 410 as Vercel answers it. */
   snapshotExpired?: boolean;
+  /** When the sandbox was created, as Vercel's list says it: later for each sandbox opened. */
+  createdAt: number;
 }
 
 export interface FakeCommand {
@@ -82,6 +84,8 @@ export function runnerSandboxApi() {
   const sandboxes: FakeSandbox[] = [];
   /** How many stdin writes with data the API refuses next, as a passing outage. */
   const failStdin = { remaining: 0 };
+  /** How many deletes the API refuses next, as a passing outage. */
+  const failDelete = { remaining: 0 };
   const commands: FakeCommand[] = [];
   const uploads: Map<string, string>[] = [];
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
@@ -98,6 +102,7 @@ export function runnerSandboxApi() {
     status: sandbox.status,
     currentSessionId: sandbox.currentSessionId,
     tags: sandbox.tags,
+    createdAt: sandbox.createdAt,
     timeout: sandbox.timeout,
   });
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
@@ -117,6 +122,7 @@ export function runnerSandboxApi() {
         tags: asked.tags,
         snapshotId: asked.source.snapshotId,
         deleted: false,
+        createdAt: sandboxes.length + 1,
         timeout: asked.timeout,
         resumedWith: [],
       };
@@ -142,6 +148,10 @@ export function runnerSandboxApi() {
         if (asked.tags !== undefined) sandbox.tags = asked.tags;
         if (asked.timeout !== undefined) sandbox.timeout = asked.timeout;
         return Response.json({ sandbox: listed(sandbox) });
+      }
+      if (method === "DELETE" && failDelete.remaining > 0) {
+        failDelete.remaining -= 1;
+        return new Response(null, { status: 503 });
       }
       if (method === "DELETE") {
         sandbox.deleted = true;
@@ -241,6 +251,7 @@ export function runnerSandboxApi() {
     policies,
     runs,
     failStdin,
+    failDelete,
     hooks,
   };
 }

@@ -686,7 +686,7 @@ function AppWindow(): React.JSX.Element {
     () => ({
       workspaces: tasks.workspaces,
       workspaceId: settingsWorkspace.shownId,
-      // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
+      // A leave closes Settings onto the Tasks tab, which rests on its page with no task open.
       onLeft: leftWorkspace,
       listFailed: tasks.listFailed,
       onRetryList: tasks.onRetryList,

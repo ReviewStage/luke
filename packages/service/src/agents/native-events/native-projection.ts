@@ -18,6 +18,7 @@ import {
   NATIVE_ENDING,
   NATIVE_MOMENT,
   type NativeMoment,
+  type NativeWakeup,
   PLAN_STATUS,
   type PlanStatus,
 } from "./native-moments.js";
@@ -151,6 +152,8 @@ export const NATIVE_WRITE = {
   COMPACTED: "compacted",
   /** Record how a turn found the plan that pays for the agent, on its row. */
   PLAN_STATUS: "plan_status",
+  /** Replace the wakeups Luke delivers to the agent once due (`coding-agent-wakeups.ts`). */
+  WAKEUPS: "wakeups",
 } as const;
 
 export type NativeWrite =
@@ -162,6 +165,7 @@ export type NativeWrite =
       readonly clientId: string;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
+  | { readonly kind: typeof NATIVE_WRITE.WAKEUPS; readonly wakeups: readonly NativeWakeup[] }
   | { readonly kind: typeof NATIVE_WRITE.COMPACTED }
   | {
       readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
@@ -346,6 +350,10 @@ class Fold {
 
   /** The turn's end: its words told whole, then its status, cost, and why it failed, where it did. */
   #ended(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.ENDED }>): void {
+    // Note that the wakeups are the launch's, written whether or not a turn was under way.
+    if (moment.wakeups !== undefined) {
+      this.writes.push({ kind: NATIVE_WRITE.WAKEUPS, wakeups: moment.wakeups });
+    }
     const held = this.state.turn;
     if (held === undefined) return;
     const turn = this.#closed(held);
