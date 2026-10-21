@@ -173,6 +173,7 @@ import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-fol
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt } from "./task-code.js";
+import { followTaskList } from "./task-list-follow.js";
 import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
 import {
   followTranscript,
@@ -188,7 +189,9 @@ import {
  * this concern owes the panel is to show those writes as they happen. Every write happens during a task's call, and the notetaker's
  * drafts arrive on that call's own socket and are drawn in place: the list
  * and the open task are read when the Tasks tab shows, when a task opens, and
- * when one starts, and never on a clock. The open task's whiteboard is read
+ * when one starts, and never on a clock. The list itself is followed over
+ * Neon Realtime from the first refresh until a sign-out
+ * (`task-list-follow.ts`), and is read by none of those asks. The open task's whiteboard is read
  * with its document, and again whenever its mark moves on the Neon Realtime
  * subscription the host holds while the task stands open
  * (`board-follow.ts`); the panel saves the board's scene through here and
@@ -411,7 +414,7 @@ const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
   HostedTaskClient,
-  | "list"
+  | "listLive"
   | "open"
   | "create"
   | "delete"
@@ -503,7 +506,7 @@ export interface TasksDependencies {
   conversations: TasksConversationClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
-  /** Realtime's client at an address, which the open task's board and its conversation are followed over; Realtime's own outside a test. */
+  /** Realtime's client at an address, which the open task's board, its conversation, and the task list are followed over; Realtime's own outside a test. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /**
    * Ends the call standing about `taskId`, or whatever it is about
@@ -838,19 +841,35 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return summary;
   }
 
-  const readList = Effect.gen(function* () {
-    const listed = yield* served(client.list());
-    // A failed read keeps the list it last read: the panel says the read
-    // failed beside the tasks it already drew rather than emptying them.
-    write(
-      listed.ok
-        ? {
-            tasks: listed.answer.plans,
-            tasklessAgents: listed.answer.planlessAgents ?? [],
-            listStatus: TASKS_READ.READY,
-          }
-        : { listStatus: TASKS_READ.FAILED },
-    );
+  /** The one follow of the list, started on the first refresh and stopped by a sign-out. */
+  const listFollow = yield* FiberHandle.make<void>();
+
+  const followList = Effect.suspend(() => {
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
+    const userId = dependencies.accountId();
+    return followTaskList({
+      live: (poll, after) =>
+        userId === undefined
+          ? Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true })
+          : Effect.map(served(client.listLive(userId, poll, after)), (sealed) =>
+              sealed.ok
+                ? sealed.answer
+                : { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure },
+            ),
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: kernel.now,
+      publish: (listed) => {
+        write({
+          tasks: listed.plans,
+          tasklessAgents: listed.planlessAgents ?? [],
+          listStatus: TASKS_READ.READY,
+        });
+        // A name the service gave the open task reaches its document as the list carries it.
+        if (view.activeTaskId !== undefined) nameHeldAsListed(view.activeTaskId);
+      },
+      // A list that could not be read says so beside the tasks it already drew rather than emptying them.
+      failed: () => write({ listStatus: TASKS_READ.FAILED }),
+    });
   });
 
   /**
@@ -1640,21 +1659,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * One workspace call, then what it may have moved read again, whatever it
-   * answered, since a refusal can find it already moved elsewhere: the
-   * workspaces after a workspace made, a disconnection, or a removal, and the
-   * tasks beside them after a leave, which takes a workspace's tasks out of
-   * the list.
+   * One workspace call, then the workspaces read again, whatever it
+   * answered, since a refusal can find them already moved elsewhere: after a
+   * workspace made, a disconnection, or a removal. The tasks a leave takes
+   * out of the list move with the followed list.
    */
   function workspaceCall<Answer>(
     call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
-    moves: { readonly tasks: boolean },
   ): Effect.Effect<WorkspaceCallResult<Answer>> {
-    return Effect.tap(served(call), () =>
-      moves.tasks
-        ? Effect.all([readWorkspaces, serial(readList)], { concurrency: "unbounded" })
-        : readWorkspaces,
-    );
+    return Effect.tap(served(call), () => readWorkspaces);
   }
 
   /**
@@ -1726,13 +1739,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.TASKS_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
+        if (view.listStatus === TASKS_READ.IDLE) write({ listStatus: TASKS_READ.READING });
+        yield* FiberHandle.run(listFollow, followList, { onlyIfMissing: true });
         const open = view.activeTaskId;
         if (open !== undefined) yield* openConversation(open);
         if (open !== undefined) yield* openBoard(open, { onlyIfMissing: true });
         if (open !== undefined) yield* openRecord(open, { onlyIfMissing: true });
         const tasks = serial(
           Effect.gen(function* () {
-            yield* readList;
             yield* readRepositoryPins;
             yield* readTaskSections;
             const taskId = view.activeTaskId;
@@ -2223,7 +2237,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             yield* openConversation(task.id);
             yield* openBoard(task.id);
             yield* openRecord(task.id);
-            yield* readList;
             return carried<TasksStartAnswer>({
               planId: task.id,
               ...(agent === undefined ? undefined : { agentStart: agent }),
@@ -2253,7 +2266,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
             }
             write({ tasks });
-            yield* readList;
             return { deleted: true };
           }),
         );
@@ -2487,9 +2499,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = readEither(tasksWorkspaceCreateParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("making a workspace names it");
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const made = yield* workspaceCall(client.workspaces.create(read.success.name), {
-          tasks: false,
-        });
+        const made = yield* workspaceCall(client.workspaces.create(read.success.name));
         return carried<TasksWorkspaceAnswer>(
           made.ok ? { workspace: made.answer } : { failure: made.failure },
         );
@@ -2543,7 +2553,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
         const disconnected = yield* workspaceCall(
           client.workspaces.githubDisconnect(read.success.workspaceId),
-          { tasks: false },
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
@@ -2571,7 +2580,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
         const disconnected = yield* workspaceCall(
           client.workspaces.linearDisconnect(read.success.workspaceId),
-          { tasks: false },
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
@@ -2660,12 +2668,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, userId } = read.success;
-        const remaining = yield* workspaceCall(
-          client.workspaces.removeMember(workspaceId, userId),
-          {
-            tasks: false,
-          },
-        );
+        const remaining = yield* workspaceCall(client.workspaces.removeMember(workspaceId, userId));
         return carried<TasksWorkspaceMembersAnswer>(
           remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
         );
@@ -2682,7 +2685,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { workspaceId, userId, role } = read.success;
         const changed = yield* workspaceCall(
           client.workspaces.changeRole(workspaceId, userId, role),
-          { tasks: false },
         );
         return carried<TasksWorkspaceMembersAnswer>(
           changed.ok ? { members: changed.answer } : { failure: changed.failure },
@@ -2699,9 +2701,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, userId } = read.success;
-        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId), {
-          tasks: false,
-        });
+        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
         return carried<TasksWorkspaceMembersAnswer>(
           handedOver.ok ? { members: handedOver.answer } : { failure: handedOver.failure },
         );
@@ -2747,7 +2747,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               )
             : Effect.void,
         );
-        const left = yield* workspaceCall(leave, { tasks: true });
+        const left = yield* workspaceCall(leave);
         return carried<TasksWorkspaceLeaveAnswer>(
           left.ok ? { left: true } : { failure: left.failure },
         );
@@ -2834,6 +2834,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* RcMap.invalidate(workerTranscripts, key);
       }
       yield* FiberHandle.clear(recordFollow);
+      yield* FiberHandle.clear(listFollow);
       yield* serial(
         Effect.sync(() => {
           workspacesAskedAt = undefined;
@@ -2932,16 +2933,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.flatMap(Queue.take(nameReads), (taskId) =>
             Effect.andThen(
               Effect.sleep(NAME_SETTLE),
-              Effect.suspend(() =>
-                gate()
-                  ? serial(
-                      Effect.andThen(
-                        readList,
-                        Effect.sync(() => nameHeldAsListed(taskId)),
-                      ),
-                    )
-                  : Effect.void,
-              ),
+              // Note that the live list has carried the name by now, so the open document is named as listed.
+              Effect.sync(() => {
+                if (gate()) nameHeldAsListed(taskId);
+              }),
             ),
           ),
         ),
