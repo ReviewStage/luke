@@ -1,7 +1,6 @@
 import { TASK_STATUS_ORDER, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ArchiveIcon,
   CHIP_LOOK,
   Chip,
   ChipName,
@@ -51,12 +50,10 @@ import type { TaskListViewControl } from "./task-list-view.js";
  * section, and folded it counts what it holds. View options is the Inbox's
  * own sliders at the Tasks head's end, always in sight, dropping the
  * window's menu: Group by and Order by, each a submenu with its choice
- * checked, in a shared workspace Created by: Anyone, Me, or each member by
- * face, and last Archived tasks, which turns the section to the archived
- * tasks, out of the way of the list rather than a group at its foot. While
- * the view lists one member's tasks or the archived ones, a chip under the
- * head says so, its × lifts it, and the button wears a dot, so a filtered
- * list never passes for the whole of it.
+ * checked, and in a shared workspace Created by: Anyone, Me, or each member
+ * by face. While the view lists one member's tasks, a chip under the head
+ * says so, its × lifts it, and the button wears a dot, so a filtered list
+ * never passes for the whole of it.
  *
  * Beside it, revealed while the head is hovered or reached, stands the
  * status filter: which statuses' tasks the list holds, each checked, to do
@@ -183,18 +180,11 @@ function memberEntries(
   ];
 }
 
-/** Whether the Tasks section shows the archived tasks, and the press that turns it to them or back. */
-export interface ArchivedView {
-  readonly shown: boolean;
-  readonly onShown: (shown: boolean) => void;
-}
-
-/** The menu's choices: how the list groups, Creator only where the workspace is shared, how it orders, whose tasks it lists and who they are assigned to, where shared, and the archived tasks. */
+/** The menu's choices: how the list groups, Creator only where the workspace is shared, how it orders, and whose tasks it lists and who they are assigned to, where shared. */
 function viewEntries(
   control: TaskListViewControl,
   shared: boolean,
   reader: ReturnType<typeof useMemberDirectory>,
-  archive: ArchivedView,
 ): MenuEntry[][] {
   const { view } = control;
   const grouping = (
@@ -254,14 +244,6 @@ function viewEntries(
           ],
         ]
       : []),
-    [
-      {
-        label: "Archived tasks",
-        icon: <ArchiveIcon />,
-        checked: archive.shown,
-        onSelect: () => archive.onShown(!archive.shown),
-      },
-    ],
   ];
 }
 
@@ -273,7 +255,6 @@ export function TaskViewOptions({
   shown,
   control,
   shared,
-  archive,
   filtered,
 }: {
   /** Whether the sidebar is on screen, for the menu not to outlive it. */
@@ -281,7 +262,6 @@ export function TaskViewOptions({
   control: TaskListViewControl;
   /** Whether the workspace is shared, which alone groups and filters by creator. */
   shared: boolean;
-  archive: ArchivedView;
   /** Whether the view leaves any task out, which the button's dot says. */
   filtered: boolean;
 }): React.JSX.Element {
@@ -303,7 +283,7 @@ export function TaskViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={viewEntries(control, shared, reader, archive)}
+          groups={viewEntries(control, shared, reader)}
           onClose={menu.close}
         />
       )}
@@ -408,9 +388,8 @@ function ViewChip({
 /**
  * The chips under the Tasks head, while the view leaves tasks out: one
  * member's face and "Created by me" or "Created by" their name, whose ×
- * lists everyone's again; one member's face and "Assigned to me" or
- * "Assigned to" their name, whose × lists anyone's again; and Archived,
- * whose × goes back to the tasks.
+ * lists everyone's again; and one member's face and "Assigned to me" or
+ * "Assigned to" their name, whose × lists anyone's again.
  */
 export function ViewChips({
   createdBy,
@@ -418,7 +397,6 @@ export function ViewChips({
   tasks,
   onClearCreatedBy,
   onClearAssignedTo,
-  archive,
 }: {
   createdBy: string | undefined;
   assignedTo: string | undefined;
@@ -426,10 +404,9 @@ export function ViewChips({
   tasks: readonly TaskSummary[];
   onClearCreatedBy: () => void;
   onClearAssignedTo: () => void;
-  archive: ArchivedView;
 }): React.JSX.Element | null {
   const reader = useMemberDirectory();
-  if (createdBy === undefined && assignedTo === undefined && !archive.shown) return null;
+  if (createdBy === undefined && assignedTo === undefined) return null;
   const actor = createdBy === undefined ? undefined : filteredActor(createdBy, reader, tasks);
   const assignee = assignedTo === undefined ? undefined : filteredActor(assignedTo, reader, tasks);
   return (
@@ -452,14 +429,6 @@ export function ViewChips({
           onLift={onClearAssignedTo}
         />
       )}
-      {archive.shown ? (
-        <ViewChip
-          glyph={<ArchiveIcon />}
-          words="Archived"
-          lift="Back to the tasks"
-          onLift={() => archive.onShown(false)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -474,22 +443,20 @@ function offer(offered: boolean, changes: boolean, run: () => void): (() => void
  * the list: Group tasks by repository, by creator in a shared workspace, or
  * in one list; Order tasks by last updated, created, or name; Show my tasks,
  * the tasks assigned to the reader whoever created them, and Show everyone's
- * tasks, which lets go of both filters by person, in a shared workspace; and
- * Show or Hide archived tasks. They act as the View options menu's choices do.
+ * tasks, which lets go of both filters by person, in a shared workspace. They
+ * act as the View options menu's choices do.
  */
 export function useTaskViewCommands({
   offered,
   control,
   shared,
   readerId,
-  archive,
 }: {
   /** Whether the list stands to be changed: signed in, a workspace listed. */
   offered: boolean;
   control: TaskListViewControl;
   shared: boolean;
   readerId: string | undefined;
-  archive: ArchivedView;
 }): void {
   const { order, createdBy, assignedTo } = control.view;
   // A grouping by creator kept for a workspace nobody shares now is drawn by
@@ -524,13 +491,5 @@ export function useTaskViewCommands({
       createdBy !== undefined || assignedTo !== undefined,
       control.onEveryone,
     ),
-  );
-  useAppCommand(
-    APP_COMMAND.SHOW_ARCHIVED_TASKS,
-    offer(offered, !archive.shown, () => archive.onShown(true)),
-  );
-  useAppCommand(
-    APP_COMMAND.HIDE_ARCHIVED_TASKS,
-    offer(offered, archive.shown, () => archive.onShown(false)),
   );
 }

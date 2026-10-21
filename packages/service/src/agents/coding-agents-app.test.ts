@@ -4498,22 +4498,24 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       }),
   );
 
-  it.effect("a task's archive stops the sandboxes of the agents it archives, keeping them", () =>
-    Effect.gen(function* () {
-      const sandboxes = yield* scriptedSessionSandboxes();
-      const { owner, task, ask, sessionId } = yield* startedAgent(
-        fakeEve(),
-        { running: false },
-        sandboxes.layer,
-      );
+  it.effect(
+    "a task's archive, as an older build asks it, archives none of its agents, so it stops no sandbox: an unarchived agent's resumes as it did",
+    () =>
+      Effect.gen(function* () {
+        const sandboxes = yield* scriptedSessionSandboxes();
+        const { owner, task, ask } = yield* startedAgent(
+          fakeEve(),
+          { running: false },
+          sandboxes.layer,
+        );
 
-      const archived = yield* ask(
-        request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } }),
-      );
+        const archived = yield* ask(
+          request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } }),
+        );
 
-      assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
-      assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
-    }),
+        assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(yield* Queue.poll(sandboxes.stops), Option.none());
+      }),
   );
 
   it.effect(
@@ -4860,37 +4862,69 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a member's archive of a plan stops its running agent first and archives it with the plan, a message to it is refused as the plan's, and the plan's unarchive brings it back",
+    "a member's archive of a plan, as an older build asks it, stops its running agent first and settles the plan instead, Canceled with no merged pull request and Done with one, stamping no archive, and its unarchive puts the plan back to work",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, agent, ask, eve, sessionId } = yield* startedAgent(fakeEve(), {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
-        const marked = (archived: boolean) =>
+        const marked = (body: { archived?: boolean; status?: string }) =>
           Effect.map(
-            ask(request(TASK(task.id), other, { method: "PATCH", body: { archived } })),
+            ask(request(TASK(task.id), other, { method: "PATCH", body })),
             (answered) => answered.status,
           );
-        const archiveNow = () =>
-          Effect.map(readCodingAgent(owner, agent.id), (read) => {
-            const stored = Option.getOrThrow(read);
-            return { archived: stored.archivedAt !== null, by: stored.archivedBy };
+        const standing = () =>
+          Effect.map(readTask(owner, task.id), (read) => {
+            const { status, archivedAt, completedAt } = Option.getOrThrow(read).task;
+            return { status, archivedAt, finished: completedAt !== undefined };
           });
 
-        assert.equal(yield* marked(true), HOSTED_HTTP_STATUS.OK);
+        assert.equal(yield* marked({ archived: true }), HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
-        assert.deepEqual(yield* archiveNow(), {
-          archived: true,
-          by: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: other, withTask: true },
+        assert.deepEqual(yield* standing(), {
+          status: TASK_STATUS.CANCELED,
+          archivedAt: undefined,
+          finished: true,
         });
-        assert.deepEqual(
-          yield* ask(messageAs(owner, agent.id, { text: "Carry on.", clientKey: randomUUID() })),
-          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt,
+          null,
+          "the agent is stopped, not archived",
         );
 
-        assert.equal(yield* marked(false), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(yield* archiveNow(), { archived: false, by: null });
+        assert.equal(yield* marked({ archived: false }), HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(yield* standing(), {
+          status: TASK_STATUS.IN_PROGRESS,
+          archivedAt: undefined,
+          finished: false,
+        });
+
+        yield* recordCodingAgentPublished(owner, agent.id, {
+          number: 7,
+          title: "Invite teammates",
+          url: "https://github.com/acme/relay/pull/7",
+          state: PULL_REQUEST_STATE.MERGED,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 1,
+          deletions: 0,
+          changedFiles: 1,
+          mergedAt: Date.parse("2026-10-20T12:00:00.000Z"),
+        });
+        assert.equal(yield* marked({ archived: true }), HOSTED_HTTP_STATUS.OK);
+        assert.equal((yield* standing()).status, TASK_STATUS.DONE);
+        // A status named beside the archive is the one written.
+        assert.equal(
+          yield* marked({ archived: true, status: TASK_STATUS.BACKLOG }),
+          HOSTED_HTTP_STATUS.OK,
+        );
+        assert.equal((yield* standing()).status, TASK_STATUS.BACKLOG);
+        assert.equal(
+          (yield* ask(messageAs(owner, agent.id, { text: "Carry on.", clientKey: randomUUID() })))
+            .status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          "the plan stands, so a message still reaches its agent",
+        );
       }),
   );
 

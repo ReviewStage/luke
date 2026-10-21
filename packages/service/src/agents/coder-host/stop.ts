@@ -321,8 +321,8 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
 });
 
 /**
- * Whether an agent a task's archive stopped still stands stopped, read under
- * its conversation's lock as the archive holds it: neither starting, nor
+ * Whether an agent stands stopped, read under its conversation's lock as a
+ * task's finish holds it (`tasks/task-finish.ts`): neither starting, nor
  * running, nor holding a line awaiting the turn it opens, a turn whose Stop
  * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
  */

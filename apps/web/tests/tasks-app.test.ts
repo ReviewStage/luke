@@ -676,7 +676,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan starts to do and unweighed unless its start says otherwise, and a PATCH sets where it stands and how much it matters, refused while archived and as none to another account",
+    "a plan starts to do and unweighed unless its start says otherwise, a PATCH sets where it stands and how much it matters, and is refused as none to another account, and an archive from an older build settles it with no archive stamped",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -715,10 +715,20 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* patch(other, { status: TASK_STATUS.CANCELED }),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
-        yield* patch(owner, { archived: true });
-        assert.deepEqual(
-          yield* patch(owner, { priority: TASK_PRIORITY.LOW }),
-          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        // A plan is archived no longer: an older build's archive keeps a settled status and stamps nothing, and the plan still takes a change after it.
+        const settled = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* patch(owner, { archived: true }),
+        ).plan;
+        assert.deepEqual([settled.status, settled.archivedAt], [TASK_STATUS.DONE, undefined]);
+        assert.equal(
+          readAnswer(
+            taskAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* patch(owner, { priority: TASK_PRIORITY.LOW }),
+          ).plan.priority,
+          TASK_PRIORITY.LOW,
         );
       }),
   );
@@ -1172,7 +1182,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a member links, relates, and unlinks a plan's issues after its start, each read from its provider, read back with where it stands now and its chip's words refreshed, and an archived plan, a full one, an issue linked twice, or an account outside the workspace is refused",
+    "a member links, relates, and unlinks a plan's issues after its start, each read from its provider, read back with where it stands now and its chip's words refreshed, and a full plan, an issue linked twice, or an account outside the workspace is refused",
     () =>
       Effect.gen(function* () {
         const relay: InstallationFixture = {
@@ -1401,29 +1411,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
             yield* ask(request(ISSUES(plan.id), owner)),
           ).issues.length,
           TASK_BOUNDS.MAX_ISSUES,
-        );
-
-        readAnswer(
-          taskAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(
-            request(ONE_TASK(plan.id), owner, { method: "PATCH", body: { archived: true } }),
-          ),
-        );
-        const archived = refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED);
-        assert.deepEqual(yield* link(owner, githubIssue(20)), archived);
-        assert.deepEqual(
-          yield* ask(
-            request(ISSUE(plan.id, linkedSeven.issue.id), owner, {
-              method: "PATCH",
-              body: { relation: TASK_ISSUE_RELATION.CLOSES },
-            }),
-          ),
-          archived,
-        );
-        assert.deepEqual(
-          yield* ask(request(ISSUE(plan.id, linkedSeven.issue.id), owner, { method: "DELETE" })),
-          archived,
         );
       }),
   );

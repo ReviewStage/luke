@@ -148,7 +148,7 @@ import {
 } from "./sidebar-task-view.js";
 import { NO_SIDEBAR_WALK, usePublishSidebarWalk } from "./sidebar-walk.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
-import { useArchivedView, useTaskListView } from "./task-list-view.js";
+import { useTaskListView } from "./task-list-view.js";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
 import { useRowDrag } from "./use-row-drag.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
@@ -370,8 +370,6 @@ interface RowContext {
   readonly now: number;
   /** The list's order, whose time each of its rows shows. */
   readonly order: TaskOrder;
-  /** Whether the rows are the archived tasks, which no Archive is offered for. */
-  readonly archived: boolean;
   /** Which faces a task's row may wear: no creator's while the list holds one creator's tasks, and no assignee's while it holds those assigned to one member. */
   readonly faces: RowFaces;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
@@ -738,31 +736,26 @@ function PinnedSection({
  * repository's page, under GitHub's mark rather than the owner's picture,
  * since it is about GitHub. Mark tasks done asks nothing first, since it
  * stops no agent. The tasks with no repository have no pin, since they
- * always stand last, and no page to open. A group of archived plans, or of
- * tasks all done already, offers no Mark tasks done, so the plans with no
- * repository offer nothing there.
+ * always stand last, and no page to open. A group of tasks all done
+ * already offers no Mark tasks done, so the plans with no repository offer
+ * nothing there.
  */
-function repositoryActionGroups(
-  group: RepositoryGroup,
-  tasks: TasksControl,
-  archived: boolean,
-): MenuAction[][] {
+function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuAction[][] {
   const { repository } = group;
   const listed = groupTasks(group);
-  const settle: MenuAction[] =
-    archived || !listed.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
-      ? []
-      : [
-          {
-            label: "Mark tasks done",
-            icon: <MarkDoneIcon />,
-            onSelect: () =>
-              tasks.onSettleTasks(
-                listed.map(({ id }) => id),
-                SETTLED_STATUS.DONE,
-              ),
-          },
-        ];
+  const settle: MenuAction[] = !listed.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
+    ? []
+    : [
+        {
+          label: "Mark tasks done",
+          icon: <MarkDoneIcon />,
+          onSelect: () =>
+            tasks.onSettleTasks(
+              listed.map(({ id }) => id),
+              SETTLED_STATUS.DONE,
+            ),
+        },
+      ];
   if (repository === null) return settle.length === 0 ? [] : [settle];
   const pin: MenuAction = tasks.pinnedRepositories.includes(repository)
     ? {
@@ -825,7 +818,7 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived);
+  const actionGroups = repositoryActionGroups(group, context.tasks);
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -1469,9 +1462,8 @@ function NewTaskButton({
  * View options say and the workspace keeps on this Mac
  * (`task-list-view.ts`): under their repositories' headers by default, the
  * pinned repositories first, newest pinned first, then the group updated
- * most recently first; under their creators'; or in one run. The archived
- * ones stand in the list's place while View options' Archived tasks is
- * chosen, until its chip's × or another workspace turns it back.
+ * most recently first; under their creators'; or in one run. A task
+ * archived by an older build, before archiving went, stands nowhere.
  * It is where the developer moves between things; what they work on is the
  * column beside it.
  * The open task's row is marked, or, where the task was opened from a pin,
@@ -1596,13 +1588,11 @@ function SidebarColumn({
   const shared = memberCount === undefined ? (reader.members?.length ?? 0) > 1 : memberCount > 1;
   const createdBy = shared ? taskView.view.createdBy : undefined;
   const assignedTo = shared ? taskView.view.assignedTo : undefined;
-  const archive = useArchivedView(tasks.workspace?.id, sidebar.staged);
   useTaskViewCommands({
     offered: tasks.signedIn && tasks.workspace !== undefined,
     control: taskView,
     shared,
     readerId: tasks.me,
-    archive,
   });
   const unread = useUnreadTasks([...tasks.tasks, ...tasks.archived], {
     listRead: tasks.listRead,
@@ -1621,11 +1611,8 @@ function SidebarColumn({
   };
   // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows, listedAgents } = tasks;
-  const unlisted =
-    listedRows.tasks.length === 0 &&
-    listedRows.archived.length === 0 &&
-    listedAgents.standing.length === 0 &&
-    listedAgents.archived.length === 0;
+  // Note that an archived task or agent, which the list no longer shows, counts for nothing here.
+  const unlisted = listedRows.tasks.length === 0 && listedAgents.standing.length === 0;
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
   const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, pinnedAgents, tasks);
@@ -1642,9 +1629,8 @@ function SidebarColumn({
       row.pin.at === chosenPin.at,
   );
   const markedPin = pinMarked?.kind === TASK_ROW.TASK ? pinMarked.pin : undefined;
-  // The account's own sections stand while a workspace is listed and the archived tasks are not shown.
-  const sectionsShown =
-    tasks.signedIn && tasks.workspace !== undefined && !archive.shown && !listsInbox;
+  // The account's own sections stand while a workspace is listed.
+  const sectionsShown = tasks.signedIn && tasks.workspace !== undefined && !listsInbox;
   const sectioned = sectionedTasks(
     tasks,
     sectionsShown ? tasks.workspace?.id : undefined,
@@ -1715,7 +1701,6 @@ function SidebarColumn({
     now,
     order: taskView.view.order,
     faces: { creator: createdBy === undefined, assignee: assignedTo === undefined },
-    archived: archive.shown,
     inSight: overlay.inSight,
     dropOut: sectionsShown ? dropRow : undefined,
     // Note that an archived agent stands in no section, so it is offered none until it is brought back, as an archived task.
@@ -1748,24 +1733,19 @@ function SidebarColumn({
     );
   };
   // Note that the pins are never filtered, because a pin is already the
-  // reader's own choice, and stand aside while the archived tasks are shown.
-  // The agents with no plan stand among the plans, the archived ones among the archived.
-  const unpinnedTasks = archive.shown
-    ? listedRows.archived
-    : listedRows.tasks.filter(
-        (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
-      );
-  const unpinnedAgents = archive.shown
-    ? listedAgents.archived
-    : listedAgents.standing.filter(
-        (agent) => agent.pinnedAt === undefined && !sectioned.agentIds.has(agent.id),
-      );
+  // reader's own choice. The agents with no plan stand among the plans.
+  const unpinnedTasks = listedRows.tasks.filter(
+    (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
+  );
+  const unpinnedAgents = listedAgents.standing.filter(
+    (agent) => agent.pinnedAt === undefined && !sectioned.agentIds.has(agent.id),
+  );
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsAssignedTo(taskRowsCreatedBy(unpinned, createdBy), assignedTo);
-  // The status filter thins the tasks listed, never the archived ones, which are all settled out of the way.
+  // The status filter thins the tasks listed.
   const sectionRows = sectioned.sections.flatMap((drawn) => drawn.rows);
-  const hidden = archive.shown ? [] : hiddenStatuses([...sectionRows, ...rows], statuses);
-  const statusRows = archive.shown ? rows : taskRowsInStatuses(rows, statuses);
+  const hidden = hiddenStatuses([...sectionRows, ...rows], statuses);
+  const statusRows = taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
     statusRows,
@@ -1788,11 +1768,7 @@ function SidebarColumn({
   const sectionsDrawn = shownSections.flatMap(({ section, rows: held }) =>
     folds.sectionFolded(section.id) ? held.filter(currentRow) : held,
   );
-  const pinnedShownDrawn = archive.shown
-    ? []
-    : folds.pinnedFolded
-      ? pinnedDrawn.filter(currentRow)
-      : pinnedDrawn;
+  const pinnedShownDrawn = folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn;
   const drawn = [...pinnedShownDrawn, ...sectionsDrawn, ...drawnTasks(sections, folds, currentRow)];
   // Moving up and down the list as it reads: down from the home page, where
   // no row is open, is the first row. The ends go no further.
@@ -1912,9 +1888,7 @@ function SidebarColumn({
           <div className="sidebar-section-body">
             {narrow ? places : null}
             {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}
-            {tasks.signedIn &&
-            (pinnedSection.length > 0 || (sectionsShown && !coarse)) &&
-            !archive.shown ? (
+            {tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && !coarse)) ? (
               <PinnedSection
                 rows={pinnedSection}
                 folds={folds}
@@ -1980,11 +1954,11 @@ function SidebarColumn({
                 ) : null}
                 <nav
                   className="sidebar-group"
-                  aria-label={archive.shown ? "Archived tasks" : "Tasks"}
+                  aria-label="Tasks"
                   data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
                 >
                   {tasks.signedIn ? (
-                    <SidebarSectionHead name={archive.shown ? "Archived tasks" : "Tasks"}>
+                    <SidebarSectionHead name="Tasks">
                       {sectionsShown && tasks.workspace !== undefined ? (
                         <NewSectionButton
                           onNew={chosen(() => {
@@ -1993,21 +1967,16 @@ function SidebarColumn({
                           })}
                         />
                       ) : null}
-                      {archive.shown ? null : (
-                        <TaskStatusFilter
-                          menu={statusMenu}
-                          statuses={statuses}
-                          onStatuses={taskView.onStatuses}
-                        />
-                      )}
+                      <TaskStatusFilter
+                        menu={statusMenu}
+                        statuses={statuses}
+                        onStatuses={taskView.onStatuses}
+                      />
                       <TaskViewOptions
                         shown={tasks.shown && overlay.inSight}
                         control={taskView}
                         shared={shared}
-                        archive={archive}
-                        filtered={
-                          createdBy !== undefined || assignedTo !== undefined || archive.shown
-                        }
+                        filtered={createdBy !== undefined || assignedTo !== undefined}
                       />
                     </SidebarSectionHead>
                   ) : null}
@@ -2018,16 +1987,11 @@ function SidebarColumn({
                       tasks={unpinnedTasks}
                       onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
                       onClearAssignedTo={() => taskView.onAssignedTo(undefined)}
-                      archive={archive}
                     />
-                  ) : null}
-                  {archive.shown && unpinned.length === 0 && tasks.listRead && !tasks.listFailed ? (
-                    <p className="sidebar-note">No archived tasks.</p>
                   ) : null}
                   {(createdBy !== undefined || assignedTo !== undefined) &&
                   rows.length === 0 &&
                   !unlisted &&
-                  !(archive.shown && unpinned.length === 0) &&
                   tasks.listRead &&
                   !tasks.listFailed ? (
                     <p className="sidebar-note">
@@ -2046,25 +2010,8 @@ function SidebarColumn({
                   {tasks.signedIn && unlisted && !tasks.listRead && !tasks.listFailed ? (
                     <ListSkeleton />
                   ) : null}
-                  {tasks.signedIn &&
-                  unlisted &&
-                  tasks.listRead &&
-                  !tasks.listFailed &&
-                  !archive.shown ? (
+                  {tasks.signedIn && unlisted && tasks.listRead && !tasks.listFailed ? (
                     <p className="sidebar-note">No tasks yet.</p>
-                  ) : null}
-                  {/* Every task and agent archived, the list would stand empty with no word of where they went. */}
-                  {tasks.signedIn &&
-                  !archive.shown &&
-                  tasks.listRead &&
-                  !tasks.listFailed &&
-                  tasks.listed.tasks.length === 0 &&
-                  listedAgents.standing.length === 0 &&
-                  (tasks.listed.archived.length > 0 || listedAgents.archived.length > 0) ? (
-                    <p className="sidebar-note">
-                      Every task is archived.{" "}
-                      <Button onClick={() => archive.onShown(true)}>Show archived</Button>
-                    </p>
                   ) : null}
                   {tasks.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
                   <TaskGroups

@@ -80,6 +80,7 @@ import {
   recordTurnFastRefused,
   renameCodingAgent,
   settleCodingAgentAuthor,
+  taskHasMergedPullRequest,
   taskNamesOf,
   turnUsagesOf,
   unarchiveCodingAgentFrom,
@@ -1005,6 +1006,68 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
           [onTheWire],
         );
         assert.equal(yield* readCodingAgentPublished(starter, quiet.agentId), null);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's merged pull request on a task", (it) => {
+  const pullRequest = (merged: boolean) => ({
+    number: 7,
+    title: "Expire teammate invitations",
+    url: "https://github.com/acme/relay/pull/7",
+    state: merged ? PULL_REQUEST_STATE.MERGED : PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 12,
+    deletions: 3,
+    changedFiles: 2,
+    ...(merged ? { mergedAt: Date.parse("2026-10-17T09:00:00Z") } : undefined),
+  });
+
+  it.effect(
+    "a task has a merged pull request once any agent on it, an archived one or one on the starter's own token among them, kept one merged, for every member of its workspace and never for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const agentOn = (githubAccess?: typeof GITHUB_ACCESS.TOKEN) =>
+          Effect.map(
+            createCodingAgent(starter, {
+              taskId: task.id,
+              planSnapshot: "# Billing",
+              prompt: null,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/relay",
+              ...(githubAccess === undefined ? undefined : { githubAccess }),
+            }),
+            (started) => Option.getOrThrow(started).agent.id,
+          );
+        const open = yield* agentOn();
+        const merged = yield* agentOn();
+        yield* recordCodingAgentPublished(starter, open, pullRequest(false));
+
+        assert.equal(yield* taskHasMergedPullRequest(starter, task.id), false);
+
+        yield* recordCodingAgentPublished(starter, merged, pullRequest(true));
+        yield* archiveCodingAgent(starter, merged, true);
+
+        assert.equal(yield* taskHasMergedPullRequest(starter, task.id), true);
+        assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), true);
+        assert.equal(yield* taskHasMergedPullRequest(outsider, task.id), false);
+
+        // The one merged pull request on the starter's own token, which the teammate's token does not read, still counts for the teammate.
+        yield* archiveCodingAgent(starter, merged, false);
+        yield* recordCodingAgentPublished(starter, merged, null);
+        const onToken = yield* agentOn(GITHUB_ACCESS.TOKEN);
+        assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), false);
+        yield* recordCodingAgentPublished(starter, onToken, pullRequest(true));
+        assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), true);
       }),
   );
 });
