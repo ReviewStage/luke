@@ -219,6 +219,9 @@ function fresh(taskId: string | undefined): Held {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** The open task's inbox is let go with its items, so another task's, or a later look at this one, never starts from them. */
+const FORGET_LET_GO = { forget: true } as const;
+
 /**
  * Every attachment the items name: their blocks' pictures, the files their
  * answers and their threads' messages carried, and the item's own pictures
@@ -367,10 +370,13 @@ export function useTaskInbox(input: {
   // listed, one started on another Mac, posted.
   const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
   const active = shown && taskId !== undefined && readable;
+  // Note that a task taken up again holds nothing until its follow pushes anew, since the push kept
+  // from before lacks every item posted since, and the Inbox would draw it over its list's fresh read.
   const followed = useFollowedInboxes(
     kind,
     useMemo(() => (active && taskId !== undefined ? [taskId] : []), [active, taskId]),
     agents.inboxFollower,
+    FORGET_LET_GO,
   );
   const pushed = taskId === undefined ? undefined : followed.items.get(taskId);
   const notRead = taskId !== undefined && followed.failed.has(taskId);
