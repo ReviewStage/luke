@@ -204,8 +204,29 @@ interface KnownStrips {
   readonly side: ReadonlySet<string>;
 }
 
+/** What a step is called where the trail is listed: what stood in the window, and what it showed there, such as a task and its tabs. */
+export interface StepTitle {
+  readonly label: string;
+  readonly detail?: string | undefined;
+}
+
+/** A place with what it was called as the window stood on it, which no comparison of steps reads. */
+type Titled = Place & { readonly title?: StepTitle | undefined };
+
 /** The places the window has stood on, as its history adapter holds them. */
 type Trail = HistorySnapshot<Place>;
+
+/** What a place was called as the window stood on it, where it was told. */
+function titleOf(place: Place | undefined): StepTitle | undefined {
+  return place === undefined ? undefined : (place as Titled).title;
+}
+
+/** Whether two places were called the same. */
+function sameTitle(one: Place, other: Place): boolean {
+  const mine = titleOf(one);
+  const theirs = titleOf(other);
+  return mine?.label === theirs?.label && mine?.detail === theirs?.detail;
+}
 
 let installed: HistoryAdapter<Place> | undefined;
 
@@ -446,7 +467,13 @@ function visit(
     return;
   }
   if (standing !== undefined && sameStep(standing.state, place)) {
-    if (!samePlace(standing.state, place) || standing.address !== address) history.replace(entry);
+    if (
+      !samePlace(standing.state, place) ||
+      !sameTitle(standing.state, place) ||
+      standing.address !== address
+    ) {
+      history.replace(entry);
+    }
     return;
   }
   history.push(entry);
@@ -497,12 +524,69 @@ function asking(
     : latest.guard;
 }
 
+/** One step of the trail as Back's and Forward's lists draw it: where it stands on the trail, what it was called, and which page it was. */
+export interface HistoryStep {
+  readonly at: number;
+  readonly title: StepTitle | undefined;
+  /** The page it stood on, so the list can gather a page's steps together. */
+  readonly page: string;
+}
+
 /** The window's history as its buttons and keys use it. */
 export interface NavigationHistory {
   canGoBack: boolean;
   canGoForward: boolean;
   onBack: () => void;
   onForward: () => void;
+  /** The steps Back and Forward can still go to, nearest first, as their lists draw them. */
+  steps: { readonly back: readonly HistoryStep[]; readonly forward: readonly HistoryStep[] };
+  /** Goes straight to a step of the lists, asking first as any step does. */
+  onGoTo: (at: number) => void;
+}
+
+/** How many steps each way Back's and Forward's lists draw. */
+const LISTED_STEPS = 15;
+
+/** A key naming a place's page, the same for every step on one page. */
+function pageKey(place: Place): string {
+  switch (place.kind) {
+    case PLACE_KIND.TASK:
+    case PLACE_KIND.VERSION_HISTORY:
+      return `${place.kind}:${place.taskId}`;
+    case PLACE_KIND.AGENT:
+      return `${place.kind}:${place.agentId}`;
+    case PLACE_KIND.PERSON:
+      return `${place.kind}:${place.userId}`;
+    case PLACE_KIND.AUTOMATIONS:
+      return place.page.kind === AUTOMATIONS_PAGE.EDIT
+        ? `${place.kind}:${place.page.automationId}`
+        : `${place.kind}:${place.page.kind}`;
+    default:
+      return place.kind;
+  }
+}
+
+/**
+ * The steps one way along the trail the window can go to, nearest first, as
+ * Back's or Forward's list draws them: each one Back or Forward would reach
+ * pressed again and again, so a step it cannot reach and a run of one step
+ * held twice are passed over, as `nearest` passes over them.
+ */
+function listedSteps(
+  trail: Trail,
+  way: -1 | 1,
+  reachable: (place: Place) => boolean,
+): HistoryStep[] {
+  const listed: HistoryStep[] = [];
+  let from = trail.at;
+  while (listed.length < LISTED_STEPS) {
+    const at = nearest({ entries: trail.entries, at: from }, way, reachable);
+    const place = at === undefined ? undefined : trail.entries[at]?.state;
+    if (at === undefined || place === undefined) break;
+    listed.push({ at, title: titleOf(place), page: pageKey(place) });
+    from = at;
+  }
+  return listed;
 }
 
 /**
@@ -734,12 +818,10 @@ function useHistory(input: {
 
   // Note that the whole step is what asks, the trail's move with the window's, so a step
   // cancelled at the ask leaves the trail standing where the window still stands.
-  const step = useCallback(
-    (by: -1 | 1) => {
-      const asked = history.current();
-      const at = nearest(asked, by, latest.current.reachable);
-      const target = at === undefined ? undefined : asked.entries[at]?.state;
-      if (at === undefined || target === undefined) return;
+  const goTo = useCallback(
+    (at: number | undefined) => {
+      const target = at === undefined ? undefined : history.current().entries[at]?.state;
+      if (at === undefined || target === undefined || !latest.current.reachable(target)) return;
       asking(
         latest.current,
         target,
@@ -749,6 +831,10 @@ function useHistory(input: {
       })();
     },
     [history, own],
+  );
+  const step = useCallback(
+    (by: -1 | 1) => goTo(nearest(history.current(), by, latest.current.reachable)),
+    [history, goTo],
   );
 
   // A step back to `to`'s step only, answering whether it was the one behind.
@@ -780,6 +866,11 @@ function useHistory(input: {
     canGoForward: nearest(trail, 1, reachable) !== undefined,
     onBack: useCallback(() => step(-1), [step]),
     onForward: useCallback(() => step(1), [step]),
+    steps: {
+      back: listedSteps(trail, -1, reachable),
+      forward: listedSteps(trail, 1, reachable),
+    },
+    onGoTo: goTo,
     backTo,
     upTo,
   };
@@ -806,6 +897,8 @@ export function useWindowHistory(input: {
   known: boolean;
   /** The link of the step the window stands on, as Copy link names it (`CopyLink.standing`); none where it has none. */
   link: ReadLink | undefined;
+  /** What the step the window stands on is called, as Back's and Forward's lists name it; none where nothing names it. */
+  title?: StepTitle | undefined;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   settingsView: SettingsView;
@@ -903,7 +996,9 @@ export function useWindowHistory(input: {
   if (automationsPage.kind === AUTOMATIONS_PAGE.LIST && automationsPage.deleted !== undefined) {
     deletedAutomations.add(automationsPage.deleted);
   }
-  const place = useMemo((): Place | undefined => {
+  const titleLabel = input.title?.label;
+  const titleDetail = input.title?.detail;
+  const untitled = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) {
       return {
@@ -980,6 +1075,10 @@ export function useWindowHistory(input: {
     chatShownPlace,
     boardOpen,
   ]);
+  const place = useMemo((): Titled | undefined => {
+    if (untitled === undefined || titleLabel === undefined) return untitled;
+    return { ...untitled, title: { label: titleLabel, detail: titleDetail } };
+  }, [untitled, titleLabel, titleDetail]);
   // Whether the tabs a task's step showed still stand on its strips, as far as the window last saw them; a task not seen since is taken to.
   const tabsStand = (to: Extract<Place, { kind: typeof PLACE_KIND.TASK }>) => {
     const strips = knownStrips.get(to.taskId);

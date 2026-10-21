@@ -5,7 +5,9 @@
  * repository's raw-timer allowlist (`tools/anti-slop/effect-edges.json`)
  * names this file rather than the whole menu. Only the first finger down
  * (`isPrimary`) counts toward a hold: a second finger, as a pinch's, starts
- * none and lets go of the first one's.
+ * none and lets go of the first one's. A control that a mouse holds too, as
+ * a browser's Back opens its list when held, asks for the mouse's main
+ * button to count the same way (`mouse`).
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -101,11 +103,17 @@ export function useTouchHold() {
         stopCounting();
         held.current = true;
       },
-      /** A press going down: a touch starts counting, toward `open` at the point it went down. */
-      start: (event: React.PointerEvent<HTMLElement>, open: (point: HeldPoint) => void) => {
+      /** A press going down: a touch, or with `mouse` the mouse's main button, starts counting, toward `open` at the point it went down. */
+      start: (
+        event: React.PointerEvent<HTMLElement>,
+        open: (point: HeldPoint) => void,
+        counts: { readonly mouse?: boolean } = {},
+      ) => {
         letGo();
         held.current = false;
-        if (event.pointerType !== "touch" || !event.isPrimary) return;
+        const mouseHeld =
+          counts.mouse === true && event.pointerType === "mouse" && event.button === 0;
+        if ((event.pointerType !== "touch" && !mouseHeld) || !event.isPrimary) return;
         if (refusesMenu(event.target, event.currentTarget)) return;
         const { currentTarget: element, pointerId, clientX: x, clientY: y } = event;
         const timer = window.setTimeout(() => {
