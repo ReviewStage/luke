@@ -203,22 +203,24 @@ it.effect(
     }),
 );
 
-it.effect("the task list is sealed as its tasks and its agents for the bearer's own account", () =>
-  Effect.gen(function* () {
-    const dana = yield* ask({
-      bearer: "user-dana",
-      path: "/api/live/tasks",
-      sealing: Option.some(SCRIPTED),
-    });
+it.effect(
+  "the task list is sealed as its tasks, its agents, and its tasks' issues for the bearer's own account",
+  () =>
+    Effect.gen(function* () {
+      const dana = yield* ask({
+        bearer: "user-dana",
+        path: "/api/live/tasks",
+        sealing: Option.some(SCRIPTED),
+      });
 
-    assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
-    const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(dana.body);
-    assert.equal(answer.url, REALTIME_URL);
-    assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "plans"]);
-    for (const sealed of Object.values(answer.queries)) {
-      assert.ok(sealed.capability.includes('"user-dana"'), "read for the bearer");
-    }
-  }),
+      assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(dana.body);
+      assert.equal(answer.url, REALTIME_URL);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "issues", "plans"]);
+      for (const sealed of Object.values(answer.queries)) {
+        assert.ok(sealed.capability.includes('"user-dana"'), "read for the bearer");
+      }
+    }),
 );
 
 /** One box Luke drew, so the board has a row to read. */

@@ -8484,6 +8484,24 @@ button.tasks-board-card-press:focus-visible::after {
   line-height: var(--luke-type-caption-leading);
 }
 
+/* The issues a card's task links, a tag each, in a row under its name
+   that wraps where the column is too narrow for them. It stands over the
+   card's press as the foot does, which lets the pointer through between
+   the tags. */
+.tasks-board-tags {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  pointer-events: none;
+}
+
+.tasks-board-tags > * {
+  pointer-events: auto;
+}
+
 /* A card's foot: its priority's and its status's chips, which change them
    where the card stands, its repository, and the ⋯ at its end, which shows
    while the card is hovered, holds the keyboard, or has its menu open. It

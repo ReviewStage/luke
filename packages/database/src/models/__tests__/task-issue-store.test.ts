@@ -18,7 +18,7 @@ import {
   type TaskIssueLink,
   unlinkTaskIssue,
 } from "../task-issue-store.js";
-import { createTask, readTask, updateTask } from "../task-store.js";
+import { createTask, listTasks, readTask, updateTask } from "../task-store.js";
 
 /**
  * A task's links are its workspace's: every member reads and changes them,
@@ -283,6 +283,55 @@ it.layer(getTestDB())("a task's issue links", (it) => {
 
         yield* updateTask(dean, taskId, { archived: false });
         assert.equal(yield* unlinkTaskIssue(charles, taskId, link.id), true);
+      }),
+  );
+
+  it.effect(
+    "the task list names each task's links as tags, oldest first, to every member of its workspace and to no account outside it",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, priya, workspace, taskId } = yield* openSharedTask;
+        const first = yield* linked(dean, taskId, linear(7));
+        yield* TestClock.adjust("1 minute");
+        const second = yield* linked(charles, taskId, github(45));
+        yield* relateTaskIssue(charles, taskId, second.id, TASK_ISSUE_RELATION.PART_OF);
+        const { id: unlinked } = yield* createTask(dean, {
+          name: "Nothing linked",
+          organizationId: workspace,
+        });
+        const priyas = yield* createTask(priya, {
+          name: "Priya's own",
+          organizationId: yield* openWorkspace(priya),
+          issueLinks: [linear(99)],
+        });
+
+        const listed = yield* listTasks(charles);
+        const tagsOf = (id: string) => listed.find((each) => each.id === id)?.issues;
+        assert.deepEqual(tagsOf(taskId), [
+          {
+            id: first.id,
+            provider: TASK_ISSUE_PROVIDER.LINEAR,
+            key: "ENG-7",
+            url: "https://linear.app/acme/issue/ENG-7",
+            relation: TASK_ISSUE_RELATION.CLOSES,
+          },
+          {
+            id: second.id,
+            provider: TASK_ISSUE_PROVIDER.GITHUB,
+            key: "acme/relay#45",
+            url: "https://github.com/acme/relay/issues/45",
+            relation: TASK_ISSUE_RELATION.PART_OF,
+          },
+        ]);
+        assert.ok(listed.some((each) => each.id === unlinked));
+        assert.equal(tagsOf(unlinked), undefined, "a task that links nothing names no tags");
+        assert.equal(tagsOf(priyas.id), undefined, "another workspace's task is not listed");
+
+        const hers = yield* listTasks(priya);
+        assert.deepEqual(
+          hers.map((each) => [each.id, each.issues?.map((tag) => tag.key)]),
+          [[priyas.id, ["ENG-99"]]],
+        );
       }),
   );
 });

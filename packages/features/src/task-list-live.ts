@@ -21,6 +21,7 @@ import {
 import { integrationConnectionOf } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { countedNumber } from "./service-wire.js";
+import { type TaskIssueTag, taskIssueTagSchema } from "./task-issue-wire.js";
 import {
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
@@ -36,8 +37,9 @@ import {
 /**
  * task-list-live.ts -- the plan list followed over Neon Realtime: the sealed statements the service answers, the rows they deliver, and the list as the held read answers it, built from them at an instant.
  *
- * The plan list is two statements: the plans the account reaches, each with
- * its reader's own pin and its owner's name, and every agent of those plans
+ * The plan list is three statements: the plans the account reaches, each with
+ * its reader's own pin and its owner's name, the issues those plans link,
+ * which each plan names as its tags, oldest linked first, and every agent of those plans
  * and every agent with no plan in the account's workspaces, archived ones
  * among them, each with its newest turn, whether a line of the developer's
  * awaits its turn, what it last published, and the names of the members it
@@ -49,12 +51,13 @@ import {
  * orders it.
  */
 
-/** The plan list sealed for following: the address, and its two statements. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
+/** The plan list sealed for following: the address, and its three statements. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
 export const taskListLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
     plans: sealedLiveQuerySchema,
     agents: sealedLiveQuerySchema,
+    issues: sealedLiveQuerySchema,
   }),
 });
 
@@ -130,10 +133,20 @@ const agentLiveRowSchema = EffectSchema.Struct({
   awaitingLineAt: EffectSchema.NullOr(countedNumber),
 });
 
+/** One issue a plan links as its row delivers it: its tag, the plan it is of, and when it was linked. */
+const issueLiveRowSchema = EffectSchema.Struct({
+  ...taskIssueTagSchema.fields,
+  planId: EffectSchema.String,
+  createdAt: countedNumber,
+});
+
+type IssueLiveRow = typeof issueLiveRowSchema.Type;
+
 /** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const taskListLiveRowsSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(taskLiveRowSchema),
   agents: EffectSchema.Array(agentLiveRowSchema),
+  issues: EffectSchema.Array(issueLiveRowSchema),
 });
 
 export type TaskListLiveRows = typeof taskListLiveRowsSchema.Type;
@@ -279,6 +292,7 @@ function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgents
 function taskSummaryOf(
   row: TaskLiveRow,
   agents: readonly AgentLiveRow[] | undefined,
+  issues: readonly TaskIssueTag[] | undefined,
   now: number,
 ): TaskSummary {
   return {
@@ -305,7 +319,22 @@ function taskSummaryOf(
       ? undefined
       : { assignee: { userId: row.assigneeId, name: row.assigneeName } }),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
+    ...(issues === undefined ? undefined : { issues }),
   };
+}
+
+/** Each plan's issues as its tags, oldest linked first, as the held read orders them; a plan that links none is absent. */
+function tagsByPlan(rows: readonly IssueLiveRow[]): ReadonlyMap<string, readonly TaskIssueTag[]> {
+  const byPlan = new Map<string, TaskIssueTag[]>();
+  const ordered = rows.toSorted(
+    (a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  for (const { planId, createdAt: _createdAt, ...tag } of ordered) {
+    const held = byPlan.get(planId);
+    if (held === undefined) byPlan.set(planId, [tag]);
+    else held.push(tag);
+  }
+  return byPlan;
 }
 
 /** Who archived an agent as its banner says it: the member where their account stands, the agent acting for them, and why. */
@@ -416,10 +445,11 @@ export function taskListOfLiveRows(rows: TaskListLiveRows, now: number): TaskLis
     if (agent.planId === null) continue;
     byTask.set(agent.planId, [...(byTask.get(agent.planId) ?? []), agent]);
   }
+  const tags = tagsByPlan(rows.issues);
   return {
     plans: rows.plans
       .toSorted(newestFirst)
-      .map((row) => taskSummaryOf(row, byTask.get(row.id), now)),
+      .map((row) => taskSummaryOf(row, byTask.get(row.id), tags.get(row.id), now)),
     planlessAgents: rows.agents
       .filter((agent) => agent.planId === null)
       .toSorted(newestFirst)
