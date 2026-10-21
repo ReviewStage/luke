@@ -294,6 +294,22 @@ it.effect(
 );
 
 it.effect(
+  "a bridge that never comes up is given up on within one bound, its attempts' timeouts never stacked",
+  () =>
+    Effect.gen(function* () {
+      const peer = yield* fakeCdpPeer();
+      const { service } = browserOver(peer, {}, FAKE_BRIDGE.SILENT);
+
+      const bridging = yield* Effect.forkChild(
+        Effect.flip(Effect.scoped(service.connect(SESSION))),
+      );
+      yield* TestClock.adjust(Duration.seconds(20));
+
+      assert.equal((yield* Fiber.join(bridging)).reason, BROWSER_UNREACHABLE.BRIDGE_FAILED);
+    }),
+);
+
+it.effect(
   "a bridge that does not come up on its first PTY, as just after a fresh start, is tried again and the first connect succeeds",
   () =>
     Effect.gen(function* () {
