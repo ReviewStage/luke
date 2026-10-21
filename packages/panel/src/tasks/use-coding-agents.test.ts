@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
-  CODING_AGENT_PAYER,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -188,14 +187,13 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(again, draft, "the plan's one draft is answered again");
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
-  // The words, the choice, the servers off, and the payer picked are the draft's, held while another task opens a draft of its own.
+  // The words, the choice, and the servers off are the draft's, held while another task opens a draft of its own.
   const prompt = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
   act(() => tab.control().onDraftChange({ prompt }));
   act(() => tab.control().onDraftChange({ choice }));
   act(() => tab.control().onDraftChange({ disabledServers }));
-  act(() => tab.control().onDraftChange({ payer: CODING_AGENT_PAYER.API_KEY }));
   await tab.stand({ taskId: OTHER_TASK });
   assert.equal(tab.control().draft, undefined);
   let other = "";
@@ -210,7 +208,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
     attachments: [],
     choice,
     disabledServers,
-    payer: CODING_AGENT_PAYER.API_KEY,
   });
 
   let failed: Failure | undefined;
@@ -226,9 +223,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab
-      .control()
-      .startPrompt(draft, prompt, undefined, [notes], disabledServers, CODING_AGENT_PAYER.API_KEY);
+    failed = await tab.control().startPrompt(draft, prompt, undefined, [notes], disabledServers);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
@@ -239,7 +234,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
       prompt,
       attachments: [notes],
       disabledServers,
-      payer: CODING_AGENT_PAYER.API_KEY,
     },
   ]);
   assert.deepEqual(tab.started, [AGENT]);

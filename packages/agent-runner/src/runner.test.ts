@@ -195,7 +195,13 @@ it.effect(
       });
       yield* Queue.take(prompted);
       yield* Queue.take(prompted);
-      yield* write({ type: INPUT_LINE.MODEL, model: "claude-opus", effort: EFFORT.LOW });
+      yield* write({
+        type: INPUT_LINE.MODEL,
+        model: "claude-opus",
+        effort: EFFORT.LOW,
+        fast: true,
+      });
+      yield* write({ type: INPUT_LINE.MODEL, fast: false });
       yield* write({ type: INPUT_LINE.STOP });
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
@@ -206,6 +212,7 @@ it.effect(
       );
       assert.deepEqual(cli.models, ["claude-opus"]);
       assert.deepEqual(cli.efforts, [EFFORT.LOW]);
+      assert.deepEqual(cli.fastModes, [true, false]);
       assert.deepEqual(kinds(luke.applied).slice(-2), [
         "result/error_during_execution",
         RUNNER_EVENT.END,
@@ -505,6 +512,24 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+    }),
+);
+
+it.effect(
+  "starts the CLI with its own fast mode opted in where the config asks for it, and off otherwise",
+  () =>
+    Effect.gen(function* () {
+      const fast = yield* launch(SHORT_TURN, fakeLuke());
+      yield* fast.write({ ...CONFIG, fast: true });
+      yield* fast.write(FIRST_MESSAGE);
+      yield* Fiber.join(fast.run);
+      assert.deepEqual(fast.cli.options?.settings, { fastMode: true });
+
+      const standard = yield* launch(SHORT_TURN, fakeLuke());
+      yield* standard.write(CONFIG);
+      yield* standard.write(FIRST_MESSAGE);
+      yield* Fiber.join(standard.run);
+      assert.equal(standard.cli.options?.settings, undefined);
     }),
 );
 

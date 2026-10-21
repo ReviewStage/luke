@@ -60,7 +60,6 @@ import {
   type PlanTemplateRevisionAnswer,
   type PlanTemplateRevisionsAnswer,
 } from "@luke/features/plan-document-template";
-import type { FastAccess } from "@luke/features/provider-key-wire";
 import { failureKind } from "@luke/runtime/effect";
 import {
   accountPreferencesFromWire,
@@ -86,7 +85,11 @@ import {
 import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { acceptedModelChoice, type ModelCatalog } from "../providers/model-catalog.js";
+import {
+  type AccountFastOffer,
+  acceptedModelChoice,
+  type ModelCatalog,
+} from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
@@ -99,10 +102,10 @@ export interface AccountProcedureSeams extends EveReach {
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
   /** The role on the account's own row, as Better Auth stores it; nothing where it holds none. */
   readRole: (userId: string) => AccountSeamEffect<string | undefined>;
-  /** Whether the Anthropic key the account's agents run on may run fast mode, by which its coding-agent choice may name a fast version (`offeredToAccount`). */
-  anthropicFastAccess: (
+  /** Which fast versions the account is offered, by which its coding-agent choice may name one (`offeredToAccount`). */
+  accountFastOffer: (
     userId: string,
-  ) => Effect.Effect<FastAccess | undefined, TaskStoreFailure, DatabaseServices | ModelCatalog>;
+  ) => Effect.Effect<AccountFastOffer, TaskStoreFailure, DatabaseServices | ModelCatalog>;
   /** Writes each part the write carries and answers the snapshot as it then stands. */
   writePreferences: (
     userId: string,
@@ -196,8 +199,8 @@ const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog | DatabaseServices> {
   const read = readModelChoice(value);
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const fastAccess = yield* hostedStoreOrUnavailable(seams.anthropicFastAccess(userId));
-  return yield* acceptedModelChoice(read.success, fastAccess).pipe(
+  const fastOffer = yield* hostedStoreOrUnavailable(seams.accountFastOffer(userId));
+  return yield* acceptedModelChoice(read.success, fastOffer).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
       Effect.logWarning(

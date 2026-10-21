@@ -303,6 +303,25 @@ test("on Luke's key the resting Fast row says the same and links nowhere, since 
   assert.equal(note.querySelector("a"), null);
 });
 
+test("a GPT model whose ChatGPT plan pays draws no Fast row at all, while a Claude model on its plan keeps it", async () => {
+  const sol: CatalogModel = {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+    fastWithheldByPlan: true,
+  };
+  models = [OPUS, OPUS_FAST, sol];
+  stored = { model: sol.id, effort: "high" };
+  const onGpt = await mount();
+  assert.equal(onGpt.querySelector('[role="switch"][aria-label="Fast"]'), null);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  stored = { model: OPUS.id, effort: "high" };
+  const onClaude = await mount();
+  assert.ok(fastSwitch(onClaude));
+});
+
 test("replacing the account's own Anthropic key reads the models again, so Fast follows the new key's organization", async () => {
   models = [{ ...OPUS, fastNotEnabled: true }];
   keys = [OWN_ANTHROPIC];
