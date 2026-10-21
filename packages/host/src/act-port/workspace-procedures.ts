@@ -29,7 +29,7 @@ import type {
   WorkspacePeopleFollow,
   WorkspacePeopleFollowed,
 } from "@luke/features/tasks-view";
-import { Effect, MutableHashMap, Option, Queue, Stream } from "effect";
+import { Effect, MutableHashMap, Option, Queue, Semaphore, Stream } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
@@ -168,6 +168,7 @@ function streamed<A>(iterable: AsyncIterable<A>): AsyncIteratorObject<A, undefin
 function workspacePeople(
   host: WorkspaceProceduresDependencies["host"],
   open: MutableHashMap.MutableHashMap<string, number>,
+  turn: Semaphore.Semaphore,
   scope: WorkspacePeopleFollow,
 ): Stream.Stream<TasksWorkspaceMembersAnswer> {
   const { workspaceId } = scope;
@@ -181,27 +182,33 @@ function workspacePeople(
         ),
         (stop) => Effect.sync(stop),
       );
+      // Note that each count change and its ask of the host take the workspace's turn, so a last
+      // stream's unfollow reaches the host before a new stream's follow, never after it.
       yield* Effect.acquireRelease(
-        Effect.andThen(
-          Effect.sync(() =>
-            MutableHashMap.set(
-              open,
-              workspaceId,
-              Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 0) + 1,
+        turn.withPermit(
+          Effect.andThen(
+            Effect.sync(() =>
+              MutableHashMap.set(
+                open,
+                workspaceId,
+                Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 0) + 1,
+              ),
             ),
+            host.workspacePeopleFollow(scope),
           ),
-          host.workspacePeopleFollow(scope),
         ),
         () =>
-          Effect.suspend(() => {
-            const left = Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 1) - 1;
-            if (left > 0) {
-              MutableHashMap.set(open, workspaceId, left);
-              return Effect.void;
-            }
-            MutableHashMap.remove(open, workspaceId);
-            return host.workspacePeopleUnfollow(scope);
-          }),
+          turn.withPermit(
+            Effect.suspend(() => {
+              const left = Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 1) - 1;
+              if (left > 0) {
+                MutableHashMap.set(open, workspaceId, left);
+                return Effect.void;
+              }
+              MutableHashMap.remove(open, workspaceId);
+              return host.workspacePeopleUnfollow(scope);
+            }),
+          ),
       );
     }),
   );
@@ -211,6 +218,15 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each workspace's people, so the host lets them go only with the last. */
   const openPeople = MutableHashMap.empty<string, number>();
+  /** One turn per workspace whose people a window has followed, so the host hears its follows and unfollows in the order its streams opened and closed. */
+  const peopleTurns = new Map<string, Semaphore.Semaphore>();
+  const peopleTurnOf = (workspaceId: string): Semaphore.Semaphore => {
+    const standing = peopleTurns.get(workspaceId);
+    if (standing !== undefined) return standing;
+    const made = Semaphore.makeUnsafe(1);
+    peopleTurns.set(workspaceId, made);
+    return made;
+  };
   return {
     [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_CREATE].effect(
       function* ({ input, context, errors }) {
@@ -326,7 +342,9 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return streamed(
-          yield* Stream.toAsyncIterableEffect(workspacePeople(host, openPeople, input)),
+          yield* Stream.toAsyncIterableEffect(
+            workspacePeople(host, openPeople, peopleTurnOf(input.workspaceId), input),
+          ),
         );
       },
     ),
