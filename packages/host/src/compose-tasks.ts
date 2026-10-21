@@ -400,6 +400,13 @@ export interface TasksComposer extends Composer {
   showCode: (taskId: string, shown: TaskShownCode) => void;
   /** The call about `taskId` ended: what it was doing is no longer drawn. */
   callEnded: (taskId: string) => void;
+  /**
+   * Waits for a write's transaction to arrive on the task list followed
+   * live, which holds every task and agent row, so a write is confirmed once
+   * the list carries it; no txid, or a list not followed over Realtime,
+   * waits for nothing.
+   */
+  listed: (txid: string | undefined) => Effect.Effect<void>;
 }
 
 /**
@@ -636,6 +643,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The one follow of the list, started on the first refresh and stopped by a sign-out. */
   const listFollow = yield* FiberHandle.make<void>();
 
+  /** The list's wait for a write's transaction, while every part of it is followed over Realtime. */
+  let listWait: TxWait | undefined;
+
+  const listed = (txid: string | undefined): Effect.Effect<void> =>
+    Effect.suspend(() => confirmWrite(listWait, txid));
+
   const followList = Effect.suspend(() => {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
@@ -662,6 +675,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       },
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED }),
+      onTxWait: (wait) => {
+        listWait = wait;
+      },
     });
   });
 
@@ -1287,6 +1303,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.gen(function* () {
         const marked = yield* served(client.mark(taskId, marks));
         if (marked === undefined) return { changed: false };
+        yield* listed(marked.txid);
         takeMarks(marked.task);
         return { changed: true };
       }),
@@ -1777,6 +1794,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
             if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
+            yield* listed(started.answer.txid);
             const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
@@ -1808,6 +1826,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
             if (deleted === undefined) return { deleted: false };
+            yield* listed(deleted.txid);
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(boardFollow);
@@ -1832,6 +1851,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const written = yield* served(client.rename(taskId, { name }));
             if (written === undefined) return { renamed: false };
+            yield* listed(written.txid);
             const renamed = written.task;
             const tasks = view.tasks.map((task) =>
               task.id === taskId ? { ...task, name: renamed.name } : task,
@@ -1868,6 +1888,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const changed = yield* served(client.setStanding(taskId, standing));
             if (changed === undefined) return { changed: false };
+            yield* listed(changed.txid);
             takeAnswered(changed.task);
             return { changed: true };
           }),
@@ -1968,6 +1989,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const changed = yield* served(client.setRepository(taskId, repository));
             if (!changed.ok) return carried<TasksSetRepositoryAnswer>({ failure: changed.failure });
+            yield* listed(changed.answer.txid);
             takeAnswered(changed.answer.task);
             return carried<TasksSetRepositoryAnswer>({
               repository: changed.answer.task.repository,
@@ -1991,6 +2013,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const moved = yield* served(client.move(taskId, workspaceId));
             if (!moved.ok) return carried<TasksMoveAnswer>({ failure: moved.failure });
+            yield* listed(moved.answer.txid);
             takeAnswered(moved.answer.task);
             return carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId });
           }),
@@ -2407,6 +2430,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     showActivity,
     showCode,
     callEnded,
+    listed,
     reset: Effect.gen(function* () {
       yield* endTaskCall(undefined);
       yield* Cache.invalidateAll(pullRequestReads);

@@ -219,6 +219,13 @@ export interface CodingAgentsDependencies {
    * it. None where this Mac holds no calls, and every line steers.
    */
   typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
+  /**
+   * Waits for a write's transaction to arrive on the task list followed
+   * live, which holds every agent's row (`TasksComposer.listed`), so a
+   * Start, a rename, an archive, or a pin is confirmed once the list
+   * carries it; none waits for nothing.
+   */
+  listed?: (txid: string | undefined) => Effect.Effect<void>;
 }
 
 export interface CodingAgentsComposer extends Composer {
@@ -326,6 +333,7 @@ function composed(
   const asked = askedOf(dependencies, http);
   /** Each followed chat's wait for a write's transaction, by its workspace, while it is subscribed over Realtime. */
   const chatTxWaits = new Map<string, TxWait>();
+  const listed = dependencies.listed ?? (() => Effect.void);
 
   /**
    * The agent as a line handed to its call leaves it, as a message's answer
@@ -530,6 +538,7 @@ function composed(
         const answer = yield* asked(
           taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
         );
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
@@ -618,6 +627,7 @@ function composed(
           "renaming an agent names the agent and its title",
         );
         const answer = yield* asked(client.rename(agentId, request));
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_SERVERS]: (params) =>
@@ -638,6 +648,7 @@ function composed(
           "archiving an agent names the agent and whether it is archived",
         );
         const answer = yield* asked(client.archive(agentId, request));
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PIN]: (params) =>
@@ -648,6 +659,7 @@ function composed(
           "pinning an agent names the agent and whether it is pinned",
         );
         const answer = yield* asked(client.pin(agentId, request));
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>

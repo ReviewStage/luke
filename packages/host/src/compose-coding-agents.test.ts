@@ -265,6 +265,8 @@ function fakeService() {
   let pagesNow: readonly TranscriptNowAnswer[] = [];
   // The newest page, as the follow opens with it; none answers one with something on it.
   let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
+  // The transaction a pin answers it committed in, where it answers one.
+  let pinTxid: string | undefined;
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -373,7 +375,7 @@ function fakeService() {
     pin: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
-        return { agent: AGENT };
+        return pinTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: pinTxid };
       }),
     agent: (agentId) =>
       Effect.sync(() => {
@@ -672,6 +674,10 @@ function fakeService() {
     sealAccount: (next: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined) => {
       accountLive = next;
     },
+    /** The transaction a pin answers it committed in; none answers none. */
+    pinCommits: (txid: string | undefined) => {
+      pinTxid = txid;
+    },
   };
 }
 
@@ -692,6 +698,7 @@ function subject(
     sendsNetwork?: boolean;
     typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
     accountId?: () => string | undefined;
+    listed?: (txid: string | undefined) => Effect.Effect<void>;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -709,6 +716,7 @@ function subject(
       client: service.client,
       openLive: realtime.open,
       ...(options.typeIntoCall === undefined ? undefined : { typeIntoCall: options.typeIntoCall }),
+      ...(options.listed === undefined ? undefined : { listed: options.listed }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -724,6 +732,7 @@ function subject(
       call,
       pages,
       asked: service.asked,
+      pinCommits: service.pinCommits,
       sealTranscript: service.sealTranscript,
       sealChat: service.sealChat,
       answerWrites: service.answerWrites,
@@ -751,6 +760,24 @@ function subject(
     };
   });
 }
+
+it.effect(
+  "a pin that answers its transaction waits for the task list to carry it before it answers",
+  () =>
+    Effect.gen(function* () {
+      const waited: (string | undefined)[] = [];
+      const { call, pinCommits } = yield* subject({
+        listed: (txid) => Effect.sync(() => void waited.push(txid)),
+      });
+      pinCommits("9101");
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
+        { agent: AGENT, txid: "9101" },
+      );
+      assert.deepEqual(waited, ["9101"]);
+    }),
+);
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
