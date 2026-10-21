@@ -1015,6 +1015,27 @@ export interface RequestedStart {
  * its files carrying it alone. A new agent's summary is read as it was just
  * made, with no turn; one a retry found under its key, as it stands now.
  */
+/**
+ * The choice a Start request names, or none: a model without its effort,
+ * the reverse, or a window without a model is refused as invalid, since a
+ * choice is one thing. Every requested Start reads it before anything
+ * else, a retry included, so a request refused once is refused every time.
+ */
+export const requestedChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Pick<CodingAgentStartRequest, "model" | "effort" | "contextWindow">,
+): Effect.fn.Return<ModelChoice | undefined, HostedRefusal> {
+  const { model, effort, contextWindow } = request;
+  if (
+    (model === undefined) !== (effort === undefined) ||
+    (contextWindow !== undefined && model === undefined)
+  ) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return model !== undefined && effort !== undefined
+    ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
+    : undefined;
+});
+
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
@@ -1022,17 +1043,8 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: CodingAgentStartRequest,
   summaryModel?: SummaryModelOf,
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
-  const { model, effort, contextWindow, note } = request;
-  if (
-    (model === undefined) !== (effort === undefined) ||
-    (contextWindow !== undefined && model === undefined)
-  ) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const choice =
-    model !== undefined && effort !== undefined
-      ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
-      : undefined;
+  const { note } = request;
+  const choice = yield* requestedChoice(request);
   const { agent, created } = yield* startCodingAgent(eve, userId, {
     ...whereOf(where),
     idempotencyKey: request.idempotencyKey,

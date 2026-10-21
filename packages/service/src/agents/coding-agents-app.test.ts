@@ -9623,6 +9623,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           "a key reused for another Start is refused, never answered with the first's agent",
         );
+        assert.deepEqual(
+          yield* startFromAs(owner, source.id, { ...continueBody, model: SOL }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a retry naming a model without its effort is refused as the first would be",
+        );
 
         const forked = readAnswer(
           codingAgentAnswerSchema,

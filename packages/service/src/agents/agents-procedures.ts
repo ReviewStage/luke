@@ -86,6 +86,7 @@ import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay
 import {
   acceptedAgentChoice,
   placeOfAgent,
+  requestedChoice,
   startedFromBefore,
   startRequestedAgent,
 } from "./coder-host/start.js";
@@ -310,6 +311,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       if (input.body.from?.agentId !== sourceId) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
+      // A choice is read first, so a request refused for it is refused on a retry too.
+      yield* requestedChoice(input.body);
       // A retry is answered with the agent its key made before the source is read, which may be gone since.
       const made = yield* startedFromBefore(
         context.userId,
