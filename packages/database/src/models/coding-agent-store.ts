@@ -683,8 +683,8 @@ function newPersonaName(taskId: string | null) {
       taskId === null
         ? []
         : (yield* findTaskPersonaNames({ taskId })).flatMap((row) => row.personaName ?? []);
-    const draws = [yield* Random.next, yield* Random.next];
-    return pickPersonaName(taken, () => draws.shift() ?? 0);
+    const draw = yield* Random.next;
+    return pickPersonaName(taken, () => draw);
   });
 }
 

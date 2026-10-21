@@ -2083,7 +2083,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
 
 it.layer(getTestDB())("the coding-agent store's human names", (it) => {
   it.effect(
-    "every agent started on a task is given a human name whose first name no other agent of the task wears, and a Start that names one keeps it",
+    "every agent started on a task is given a first name alone that no other agent of the task wears, and a Start that names one keeps it",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -2103,11 +2103,10 @@ it.layer(getTestDB())("the coding-agent store's human names", (it) => {
         const names: string[] = [];
         for (let started = 0; started < 12; started += 1) {
           const agent = yield* start();
-          assert.match(agent.personaName ?? "", /^\S+ \S+$/u);
+          assert.match(agent.personaName ?? "", /^\S+$/u);
           names.push(agent.personaName ?? "");
         }
-        const firsts = names.map((name) => name.split(" ")[0]);
-        assert.equal(new Set(firsts).size, firsts.length);
+        assert.equal(new Set(names).size, names.length);
         assert.equal((yield* start("Maya Chen")).personaName, "Maya Chen");
       }),
   );
