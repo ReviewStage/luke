@@ -662,8 +662,8 @@ const START_AGENT_INPUT = Schema.Struct({
   title: Schema.optionalKey(
     describeWire(
       START_TITLE,
-      "The agent's title from the start, how the developer sees it named, such as the pull " +
-        "request it will open; leave it out to have it named from what it is told.",
+      "The agent's title from the start, what it works on, shown beside the human name it is " +
+        "given, such as the pull request it will open; leave it out to have it named from what it is told.",
     ),
   ),
   branch: Schema.optionalKey(
@@ -801,7 +801,7 @@ export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
     "List the coding agents of your workspace, on any task or none and started by any member, " +
-    "yourself left out: each with its id, its title (how the developer sees it named), the model " +
+    "yourself left out: each with its id, its name (the human name the developer sees it by, where it has one), its title (what it works on), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
     "sandbox is on if a turn " +
@@ -1172,7 +1172,9 @@ interface AgentReading {
   /** Whether the agent works on the call's own task. */
   readonly onYourTask: boolean;
   readonly archived: boolean;
-  /** The agent's title as its tab shows it; the model's id where it has none yet, which is what the tab falls back to. */
+  /** The human name the agent was given, as its tab shows it and its mention names it; none for an agent from before names were given, which goes by its title. */
+  readonly name?: string;
+  /** The agent's title, what it works on, which update_agent renames; the model's id where it has none yet. */
   readonly title: string;
   readonly model: string;
   /** The model as Luke says it and the screen shows it, without the maker's word (`modelLabel`). */
@@ -1248,6 +1250,7 @@ const readAgent = (
       id: agent.id,
       ...task,
       archived: agent.archivedAt !== null,
+      ...(agent.personaName === null ? undefined : { name: agent.personaName }),
       title: agent.title ?? agent.model,
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
@@ -1366,9 +1369,9 @@ function choiceRefusal(
   return `${lead}: ${refused}. The choices are: ${choices}.`;
 }
 
-/** An agent by the name its tab shows: its title, or its model's id where it has none yet. */
+/** An agent by the name its tab shows: its human name, else its title, or its model's id where it has none yet. */
 function agentName(agent: CodingAgent): string {
-  return agent.title ?? agent.model;
+  return agent.personaName ?? agent.title ?? agent.model;
 }
 
 /** The agent's mention under the workspace's step: under its task where it has one, else under the workspace, named as its tab is. */
@@ -1673,7 +1676,8 @@ export function runMessageAgent(
         delivery: sent.success,
         agent: {
           id: agent.id,
-          title: agentName(agent),
+          ...(agent.personaName === null ? undefined : { name: agent.personaName }),
+          title: agent.title ?? agent.model,
           model: agent.model,
           status: CODING_AGENT_STATUS.RUNNING,
           onYourTask: agent.taskId !== null && agent.taskId === callerTask(caller),
@@ -2364,7 +2368,8 @@ export function runStopAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
           id: agent.id,
-          title: agentName(agent),
+          ...(agent.personaName === null ? undefined : { name: agent.personaName }),
+          title: agent.title ?? agent.model,
           task: task.task === null ? null : { ...task.task },
           onYourTask: task.onYourTask,
           status,
@@ -2516,7 +2521,8 @@ export function runUpdateAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
           id: agent.id,
-          title: agentName(agent),
+          ...(agent.personaName === null ? undefined : { name: agent.personaName }),
+          title: agent.title ?? agent.model,
           model: agent.model,
           modelName: modelLabel(agent.model, offered),
           effort: agent.effort,

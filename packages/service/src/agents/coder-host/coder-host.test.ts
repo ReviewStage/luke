@@ -1212,7 +1212,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(stored.task.document.body, stored.text);
         // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
         const at = yield* Clock.currentTimeMillis;
-        assert.deepEqual(stored.task.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
+        assert.deepEqual(stored.task.agentEdits, [
+          { agentId: agent.id, label: agent.personaName ?? agent.model, at },
+        ]);
         assert.deepEqual(
           stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
           [["add", "add"]],

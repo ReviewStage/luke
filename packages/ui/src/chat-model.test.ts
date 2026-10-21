@@ -310,6 +310,16 @@ test("a line names an agent by its title, or by the name the read gave it, with 
   );
 });
 
+test("an agent given a human name is named by it ahead of its title", () => {
+  const line = NAMES.agents.get(AGENT_ID);
+  assert.ok(line);
+  const names: ChatNames = {
+    ...NAMES,
+    agents: new Map([[AGENT_ID, { ...line, personaName: "Maya Chen" }]]),
+  };
+  assert.equal(chatWho(chatOf(0, []), names, AGENT).name, "Maya Chen");
+});
+
 test("the reader posts in a standing channel and in a direct message of their own, never in an archived channel or a direct message between two others, which is named by both", () => {
   const between: ChatChannel = {
     id: "dm-others",

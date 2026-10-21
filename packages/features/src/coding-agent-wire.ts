@@ -659,6 +659,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_CODING_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
+  /** The human name the agent was given, which names it ahead of its title; absent for an agent from before names were given, and from a service before them. */
+  personaName: EffectSchema.optionalKey(EffectSchema.String),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),

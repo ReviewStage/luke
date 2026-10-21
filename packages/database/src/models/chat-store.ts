@@ -1315,6 +1315,7 @@ const findAgentMembers = SqlSchema.findAll({
     agentId: Schema.String,
     taskId: Schema.NullOr(Schema.String),
     title: Schema.NullOr(Schema.String),
+    personaName: Schema.NullOr(Schema.String),
     model: Schema.String,
   }),
   execute: ({ organizationId }) =>
@@ -1324,6 +1325,7 @@ const findAgentMembers = SqlSchema.findAll({
           agentId: codingAgent.id,
           taskId: codingAgent.taskId,
           title: codingAgent.title,
+          personaName: codingAgent.personaName,
           model: codingAgent.model,
         })
         .from(chatMember)
@@ -1347,7 +1349,7 @@ export interface ChatAgentMember {
  * Each agent member of the workspace as its coding agent names it, by the
  * agent's id, every agent's rather than the few a task's summary names, so
  * a window names an agent and draws its line under its task wherever it
- * stands: its task, and the name its tab shows, its title or else its
+ * stands: its task, and the name its tab shows, its human name, else its title, or else its
  * model's id. None for an agent whose coding agent is gone, and none where
  * the account is not in the workspace.
  */
@@ -1361,7 +1363,7 @@ export function agentMembersOf(
     return new Map(
       rows.map((row) => [
         row.agentId,
-        { taskId: row.taskId ?? undefined, name: row.title ?? row.model },
+        { taskId: row.taskId ?? undefined, name: row.personaName ?? row.title ?? row.model },
       ]),
     );
   });
@@ -2729,7 +2731,7 @@ export function chatWaitingLiveStatements(
     seq: chatMessage.seq,
     workspaceId: chatMessage.organizationId,
     from: sql<string>`case
-      when ${author.kind} = ${MEMBER_KIND.AGENT}::text then coalesce(${authorAgent.title}, ${authorAgent.model}, ${CHAT_MEMBER_LABEL.FORMER_AGENT}::text)
+      when ${author.kind} = ${MEMBER_KIND.AGENT}::text then coalesce(${authorAgent.personaName}, ${authorAgent.title}, ${authorAgent.model}, ${CHAT_MEMBER_LABEL.FORMER_AGENT}::text)
       else coalesce(${authorAccount.name}, ${CHAT_MEMBER_LABEL.FORMER_PERSON}::text)
     end`,
     planId: chatChannel.taskId,
@@ -2837,10 +2839,10 @@ export function workspaceChatLiveStatements(
           kind: chatMember.kind,
           // Note that a window from before members were named by their links still reads a handle, so it is handed the member's id in its place; nothing reads the retired column.
           handle: sql<string>`${chatMember.id}::text`,
-          // A person by their account's name; an agent by its title, else its model's id, as `agentMembersOf` names one.
+          // A person by their account's name; an agent by its human name, else its title, else its model's id, as `agentMembersOf` names one.
           name: sql<
             string | null
-          >`case when ${chatMember.userId} is null then coalesce(${codingAgent.title}, ${codingAgent.model}) else ${user.name} end`,
+          >`case when ${chatMember.userId} is null then coalesce(${codingAgent.personaName}, ${codingAgent.title}, ${codingAgent.model}) else ${user.name} end`,
           userId: chatMember.userId,
           agentId: chatMember.agentId,
           planId: codingAgent.taskId,

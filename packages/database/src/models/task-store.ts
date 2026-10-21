@@ -343,11 +343,17 @@ const findAgentLabels = SqlSchema.findAll({
     id: Schema.String,
     model: Schema.String,
     title: Schema.NullOr(Schema.String),
+    personaName: Schema.NullOr(Schema.String),
   }),
   execute: ({ taskId, agentIds }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id, model: codingAgent.model, title: codingAgent.title })
+        .select({
+          id: codingAgent.id,
+          model: codingAgent.model,
+          title: codingAgent.title,
+          personaName: codingAgent.personaName,
+        })
         .from(codingAgent)
         .where(and(eq(codingAgent.taskId, taskId), inArray(codingAgent.id, agentIds))),
     ),
@@ -356,7 +362,7 @@ const findAgentLabels = SqlSchema.findAll({
 /**
  * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
- * the row's title, or its model while it has none. The row's own account is
+ * the human name it was given, else the row's title, or its model while it has none. The row's own account is
  * the one they are read under.
  */
 function agentLabelsOf(
@@ -371,7 +377,8 @@ function agentLabelsOf(
   if (agentIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findAgentLabels({ taskId: row.id, agentIds }),
-    (agents) => new Map(agents.map((agent) => [agent.id, agent.title ?? agent.model])),
+    (agents) =>
+      new Map(agents.map((agent) => [agent.id, agent.personaName ?? agent.title ?? agent.model])),
   );
 }
 

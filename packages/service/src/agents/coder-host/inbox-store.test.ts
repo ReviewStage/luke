@@ -457,6 +457,14 @@ it.layer(getTestDB())("the inbox store", (it) => {
           shelvedRead.items.every((item) => item.planId !== shelved.id),
           "its item waits nowhere",
         );
+        // The notices name their sender by the human name it was given.
+        const [authorRow] = yield* Database.use((db) =>
+          db
+            .select({ personaName: codingAgent.personaName })
+            .from(codingAgent)
+            .where(eq(codingAgent.id, onTask.agent.agentId)),
+        );
+        const author = authorRow?.personaName;
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.equal(read.items.length + (read.planless?.length ?? 0), 3);
         const unreadOf = (answer: typeof read) =>
@@ -467,8 +475,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
           [
-            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, "anthropic/claude-opus-5.5"],
-            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, "anthropic/claude-opus-5.5"],
+            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, author],
+            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, author],
           ],
         );
         assert.deepEqual(

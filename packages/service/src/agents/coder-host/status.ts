@@ -274,6 +274,7 @@ function summaryFields(
       : undefined),
     ...(standing.runtime === undefined ? undefined : { runtime: standing.runtime }),
     title: agent.title,
+    ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {
       createdAt: agent.createdAt,
