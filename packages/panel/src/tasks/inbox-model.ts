@@ -1567,6 +1567,51 @@ export function holderName(holder: InboxHolder): string {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
 }
 
+/** The words a block says: Markdown's in plain words, a link's label, a file's path, a picture's alt; none of a block this build does not know. */
+function blockWords(block: InboxItem["blocks"][number]): string | undefined {
+  if (!knownBlock(block)) return undefined;
+  switch (block.type) {
+    case INBOX_BLOCK.MARKDOWN:
+      return plainWords(block.text);
+    case INBOX_BLOCK.LINK:
+      return block.label;
+    case INBOX_BLOCK.CODE:
+      return block.path;
+    case INBOX_BLOCK.IMAGE:
+      return block.alt;
+  }
+}
+
+/** The words an ask offers: a decision's options and a to-do's steps; none of an answer's fields, nor of an ask this build does not know. */
+function askWords(ask: InboxReadAsk | undefined): readonly string[] {
+  if (ask === undefined || !knownAsk(ask)) return [];
+  if (ask.type === INBOX_ASK.DECIDE) return ask.options.map((option) => option.label);
+  if (ask.type === INBOX_ASK.DO) return ask.steps.map(plainWords);
+  return [];
+}
+
+/**
+ * Every line of words an item says, as a search reads it: its title, its
+ * blocks, what it offers to choose, each message of its thread and what
+ * that asks or picks, and the answer it was given. Note that it names no
+ * address, id, or member, because a query typed is about what was said, and
+ * an address holds letters enough to match almost anything.
+ */
+export function inboxItemWords(item: InboxItem): readonly string[] {
+  const response = knownResponse(item.response) ? item.response : undefined;
+  const offered =
+    response?.type === INBOX_RESPONSE.CHOICE ? response.options.map((option) => option.label) : [];
+  const said = (item.thread ?? item.messages ?? []).flatMap((message) => [
+    plainWords(message.text),
+    ...askWords(message.ask),
+    ...(message.answers?.choices ?? []),
+  ]);
+  const answered = [...(item.answer?.choices ?? []), item.answer?.note ?? ""];
+  return [item.title, ...item.blocks.map(blockWords), ...offered, ...said, ...answered].filter(
+    (words): words is string => words !== undefined && words.length > 0,
+  );
+}
+
 /** What one group of agents no readable automation started is keyed by. */
 const NO_AUTOMATION_KEY = "no-automation";
 
