@@ -260,7 +260,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
     ...(input.timeZone === undefined ? undefined : { timeZone: input.timeZone }),
   };
 
-  // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
+  // The dispatch runs under the conversation's dispatch lock, so one dispatch at a time runs in a
   // conversation: of two retries for one client id the second finds the session written and
   // hands eve nothing, and of two first asks the second reads the session the first opened and
   // sends into it rather than opening a second the forward-only claim would lose. A Clear that

@@ -93,8 +93,8 @@ import { codingAgentStatusOf } from "./status.js";
  * deployment for the account, which the coder channel's table admits for
  * exactly this message (`coder-host/channel.ts`). An archived task's agents
  * take no message, so a send to one is refused before eve is asked, and
- * read again under the conversation's lock just before, the lock a task's
- * archive takes to archive the agent with it: a send that waited on the
+ * read again under the conversation's dispatch lock just before, the lock a
+ * task's archive waits out to archive the agent with it: a send that waited on the
  * archive is refused, and an archive that waited on a send finds the line
  * awaiting its turn and is refused instead. An agent archived on its own
  * takes none either, and is refused as one that names nothing, since every
@@ -360,14 +360,14 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       refused = failedCallRefusal(opened);
       return false;
     }
-    // Note that the fresh session claims the record here, still under the conversation's lock, rather
+    // Note that the fresh session claims the record here, still under the conversation's dispatch lock, rather
     // than only as its own start runs, because a message sent in between would read the ended session,
     // open a second fresh one, and the newer claim would refuse the first, words and all.
     yield* claimedFor(target, opened.sessionId);
     return true;
   });
-  // Note that the archive is read again here, under the conversation's lock, because a plan's archive
-  // takes that lock to archive the agent, so the two never cross.
+  // Note that the archive is read again here, under the conversation's dispatch lock, because a plan's
+  // archive waits that lock out to archive the agent, so the two never cross.
   const handOver = Effect.flatMap(refusalNow(userId, agent), (refusal) => {
     if (refusal === undefined) return send;
     refused = refusal;
@@ -387,8 +387,8 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   // Note that a native agent's servers are written just after its harness takes the words rather than
   // just before, still in this transaction, because a harness this function relays to (`native-relay.ts`)
   // writes the agent's row on its own connection as it launches, and would wait on this transaction's lock
-  // on it until the hand-over gave up. Its runner's first events take them under the conversation's lock,
-  // which waits for this transaction all the same, so the turn they are for still finds them.
+  // on it until the hand-over gave up. Its runner's first events wait out the conversation's dispatch lock,
+  // which this transaction holds, all the same, so the turn they are for still finds them.
   const native = isNativeRuntime(yield* hostedStoreOrUnavailable(runtimeOf(userId, agent)));
   const handing = native
     ? Effect.flatMap(handOver, (taken) =>

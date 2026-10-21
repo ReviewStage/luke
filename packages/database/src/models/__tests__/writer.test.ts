@@ -15,14 +15,15 @@ import { wireValidatedTool } from "@luke/features/brain/tool-set";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@luke/wire";
 import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Ref, Result, Schema } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
+import { sentLineId } from "../ids.js";
 import { listMessagesPast, readMessageByClientId } from "../message-reads.js";
-import { storeWriter } from "../writer.js";
+import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
 
 /**
  * The store writer's journal over a real dialect: as eve runs a step again,
@@ -333,5 +334,48 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
         ["no_conversation"],
       );
     }),
+  );
+});
+
+it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
+  it.effect(
+    "a send eve refused writes no row, so a retry under its key is handed to eve again, and a send repeated after it landed is answered as repeated without eve hearing it twice",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        const handed = yield* Ref.make(0);
+        const dispatch = (taken: boolean) =>
+          Effect.as(
+            Ref.update(handed, (n) => n + 1),
+            taken,
+          );
+        const line = {
+          text: "Fix the tile.",
+          clientKey: "fix",
+          sender: { kind: MESSAGE_SENDER.LUKE },
+        };
+        const rowOf = Effect.map(
+          readMessageByClientId(target.userId, target.conversationId, {}, sentLineId("fix")),
+          (read) => (read.ok ? read.value.length : -1),
+        );
+
+        const refused = yield* writer.writeAwaitingLine(target, line, dispatch(false));
+        const rowsAfterRefusal = yield* rowOf;
+        const sent = yield* writer.writeAwaitingLine(target, line, dispatch(true));
+        const repeated = yield* writer.writeAwaitingLine(target, line, dispatch(true));
+
+        assert.deepEqual(refused, Result.succeed(Option.none()));
+        assert.equal(rowsAfterRefusal, 0);
+        assert.ok(Result.isSuccess(sent) && Option.isSome(sent.success));
+        assert.equal(sent.success.value.effect, STORE_WRITE_EFFECT.WRITTEN);
+        assert.ok(Result.isSuccess(repeated) && Option.isSome(repeated.success));
+        assert.deepEqual(repeated.success.value, {
+          id: sent.success.value.id,
+          effect: STORE_WRITE_EFFECT.REPEATED,
+        });
+        assert.equal(yield* Ref.get(handed), 2);
+        assert.equal(yield* rowOf, 1);
+      }),
   );
 });

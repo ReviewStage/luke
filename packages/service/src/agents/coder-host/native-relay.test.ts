@@ -196,7 +196,7 @@ const serversOfConversation = (conversationId: string) =>
 /**
  * What a launch meets as it runs inside a message's hand-over, then its own write: whether the
  * message's transaction holds the agent's row, which a launch writes its runner's bearer to, and
- * the conversation's, which it holds while it hands the words over; and the servers standing.
+ * the conversation's, which it no longer holds while it hands the words over; and the servers standing.
  * A row the message holds is one a launch on the web's own connection would wait on until the
  * hand-over gave up. The bearer is then recorded as a launch records it.
  */
@@ -483,12 +483,13 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(
             relay.heard.map(({ call, names, seen }) => [call, names, seen]),
             [
-              // The message holds the conversation's row, and never the row the launch writes its bearer to.
-              ["send", session, { launchWaits: false, conversationHeld: true, servers: null }],
+              // The message holds the conversation's dispatch lock alone: neither its row, which the journal
+              // writes, nor the row the launch writes its bearer to.
+              ["send", session, { launchWaits: false, conversationHeld: false, servers: null }],
               [
                 "open",
                 launched.conversationId,
-                { launchWaits: false, conversationHeld: true, servers: null },
+                { launchWaits: false, conversationHeld: false, servers: null },
               ],
             ],
           );

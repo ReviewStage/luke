@@ -50,6 +50,7 @@ import { voiceSessions } from "../schemas/voice.js";
 import { readPlanTemplate } from "./account-store.js";
 import { followTaskArchive, moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
+import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -1310,6 +1311,20 @@ const handTaskCallsToSweep = SqlSchema.void({
     ),
 });
 
+/** The conversations of the task's agents still standing unarchived, in the order `lockStandingAgents` locks them. */
+const findStandingConversations = SqlSchema.findAll({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: codingAgent.conversationId })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.taskId, taskId), isNull(codingAgent.archivedAt)))
+        .orderBy(codingAgent.conversationId),
+    ),
+});
+
 /**
  * The task's agents still standing unarchived, each with its conversation
  * locked, the lock every write of its lines and turns takes, in the
@@ -1351,6 +1366,12 @@ const archivedAgents = Effect.fnUntraced(function* <R>(
   archivedAt: Date,
   guard: TaskArchiveGuard<R> | undefined,
 ) {
+  // A hand-over to eve under way in any of them is waited out first, in the conversations' order,
+  // so its line stands awaiting when the guard reads; an agent started meanwhile has none under way.
+  const standing = yield* findStandingConversations({ taskId });
+  yield* Effect.forEach(standing, ({ conversationId }) =>
+    waitOutConversationDispatch(conversationId),
+  );
   const agents = yield* lockStandingAgents({ taskId });
   if (agents.length === 0) return;
   if (guard !== undefined) {
