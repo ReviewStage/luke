@@ -2,6 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentPartParams,
+  type CodingAgentPartView,
+} from "@luke/features/coding-agent-view";
+import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -10,7 +15,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { MESSAGE_ROLE, type WireBoundaryInput } from "@luke/wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -116,19 +121,15 @@ async function settled(): Promise<void> {
 }
 
 /** The tab drawn over the cut turn, each part read whole answering as `answer` resolves, and the reads it was asked. */
-async function drawnTab(answer: (index: number) => Promise<WireBoundaryInput>) {
-  const asked: WireBoundaryInput[] = [];
+async function drawnTab(answer: (index: number) => Promise<CodingAgentPartView>) {
+  const asked: CodingAgentPartParams[] = [];
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
-    [ACT_KIND.CODING_AGENTS_PART]: (payload: WireBoundaryInput) => {
+    [ACT_KIND.CODING_AGENTS_PART]: (payload: CodingAgentPartParams) => {
       asked.push(payload);
-      const index =
-        typeof payload === "object" && payload !== null && "index" in payload
-          ? Number(payload.index)
-          : -1;
-      return answer(index);
+      return answer(payload.index);
     },
   });
   const control = codingAgentsControl({
@@ -173,7 +174,7 @@ function press(summary: HTMLElement | null): void {
 }
 
 test("a cut command output is read whole only as its fold opens, says it is reading meanwhile, and is then drawn whole", async () => {
-  let land: (part: WireBoundaryInput) => void = () => undefined;
+  let land: (part: CodingAgentPartView) => void = () => undefined;
   const { container, asked } = await drawnTab(
     () =>
       new Promise((resolve) => {
@@ -200,7 +201,7 @@ test("a cut thought is read whole as its fold opens, and one whose read fails dr
   const { container, asked } = await drawnTab((index) =>
     index === 1
       ? Promise.resolve({ part: { type: "reasoning", text: WHOLE_THOUGHT, state: "done" } })
-      : Promise.resolve({ failure: "not-found" }),
+      : Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
   );
 
   press(container.querySelector<HTMLElement>(".reasoning > summary"));
