@@ -14,7 +14,13 @@ import {
   sessionKey,
 } from "../../core.js";
 import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
-import { NATIVE_ENDING, NATIVE_MOMENT, type NativeMoment } from "./native-moments.js";
+import {
+  NATIVE_ENDING,
+  NATIVE_MOMENT,
+  type NativeMoment,
+  PLAN_STATUS,
+  type PlanStatus,
+} from "./native-moments.js";
 
 /**
  * native-projection.ts -- a native harness's moments folded into the store writer's events, as eve's relay folds eve's stream.
@@ -95,6 +101,8 @@ const NativeProjectionSchema = Schema.Struct({
   session: Schema.optionalKey(Schema.String),
   /** The plan's limit as it last refused the harness, kept until it lifts. */
   rateLimit: Schema.optionalKey(Schema.String),
+  /** When that limit resets, in epoch milliseconds, where the harness said. */
+  rateLimitResetsAt: Schema.optionalKey(Schema.Number),
   /** The running total a harness that reports one (Codex) last reported, which the next report is metered against. */
   metered: Schema.optionalKey(UsageSchema),
 });
@@ -137,6 +145,8 @@ export const NATIVE_WRITE = {
   SESSION: "session",
   /** Record that the harness folded its context. */
   COMPACTED: "compacted",
+  /** Record how a turn found the plan that pays for the agent, on its row. */
+  PLAN_STATUS: "plan_status",
 } as const;
 
 export type NativeWrite =
@@ -148,7 +158,13 @@ export type NativeWrite =
       readonly clientId: string;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
-  | { readonly kind: typeof NATIVE_WRITE.COMPACTED };
+  | { readonly kind: typeof NATIVE_WRITE.COMPACTED }
+  | {
+      readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
+      readonly status: PlanStatus;
+      /** When a reached limit resets, in epoch milliseconds, where the harness said. */
+      readonly resetsAt?: number;
+    };
 
 /** What one event is projected under: its conversation and number, the instant, the model the agent runs on, and which tools the record holds. */
 export interface NativeProjectionContext {
@@ -347,7 +363,7 @@ class Fold {
     });
     this.#setTurn(undefined);
     // Note that a limit is the launch's: the next launch is refused again or it is not.
-    const { rateLimit: _spent, ...rest } = this.state;
+    const { rateLimit: _spent, rateLimitResetsAt: _resets, ...rest } = this.state;
     this.state = rest;
   }
 
@@ -429,8 +445,27 @@ class Fold {
         this.writes.push({ kind: NATIVE_WRITE.COMPACTED });
         return;
       case NATIVE_MOMENT.RATE_LIMIT: {
-        const { rateLimit: _held, ...rest } = this.state;
-        this.state = moment.refused ? { ...rest, rateLimit: moment.detail } : rest;
+        const { rateLimit: _held, rateLimitResetsAt: _resets, ...rest } = this.state;
+        this.state = moment.refused
+          ? {
+              ...rest,
+              rateLimit: moment.detail,
+              ...(moment.resetsAt !== undefined
+                ? { rateLimitResetsAt: moment.resetsAt }
+                : undefined),
+            }
+          : rest;
+        return;
+      }
+      case NATIVE_MOMENT.PLAN: {
+        // Note that a reached limit resets when the limit the harness last reported says.
+        const resetsAt =
+          moment.status === PLAN_STATUS.LIMIT_REACHED ? this.state.rateLimitResetsAt : undefined;
+        this.writes.push({
+          kind: NATIVE_WRITE.PLAN_STATUS,
+          status: moment.status,
+          ...(resetsAt !== undefined ? { resetsAt } : undefined),
+        });
         return;
       }
       case NATIVE_MOMENT.WAITING: {

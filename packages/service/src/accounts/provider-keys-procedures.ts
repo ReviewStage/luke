@@ -145,6 +145,9 @@ const summariesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       addedAt: row.createdAt.getTime(),
       status: readable ? row.status : PROVIDER_KEY_STATUS.UNREADABLE,
       statusAt: row.statusAt.getTime(),
+      ...(readable && row.limitResetsAt !== null
+        ? { limitResetsAt: row.limitResetsAt.getTime() }
+        : undefined),
     };
     return { summary, forAgents: row.forAgents };
   });

@@ -8,7 +8,7 @@ import {
   type ProviderKeyProvider,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices } from "../core/query.js";
@@ -59,6 +59,7 @@ const SealedRowSchema = Schema.Struct({
   fastAccess: Schema.NullOr(FastAccessSchema),
   accessExpiresAt: Schema.NullOr(InstantColumnSchema),
   forAgents: Schema.Boolean,
+  limitResetsAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -86,6 +87,7 @@ const ROW_COLUMNS = {
   fastAccess: accountProviderKey.fastAccess,
   accessExpiresAt: accountProviderKey.accessExpiresAt,
   forAgents: accountProviderKey.forAgents,
+  limitResetsAt: accountProviderKey.limitResetsAt,
   createdAt: accountProviderKey.createdAt,
 } as const;
 
@@ -151,6 +153,7 @@ const upsertRow = SqlSchema.void({
       statusAt: write.now,
       fastAccess: write.fastAccess,
       accessExpiresAt: write.accessExpiresAt,
+      limitResetsAt: null,
       createdAt: write.now,
     };
     return Database.use((db) =>
@@ -275,12 +278,50 @@ const updateStatus = SqlSchema.void({
     Database.use((db) =>
       db
         .update(accountProviderKey)
-        .set({ status: write.status, statusAt: write.now })
+        .set({ status: write.status, statusAt: write.now, limitResetsAt: null })
         .where(
           and(
             eq(accountProviderKey.userId, write.userId),
             eq(accountProviderKey.provider, write.provider),
             eq(accountProviderKey.sealedKey, write.sealedKey),
+          ),
+        ),
+    ),
+});
+
+/** The statuses an agent's turn may write on its plan's row, as `setPlanStatus` says. */
+const PlanStatusSchema = Schema.Literals([
+  PROVIDER_KEY_STATUS.VERIFIED,
+  PROVIDER_KEY_STATUS.INVALID,
+  PROVIDER_KEY_STATUS.LIMIT_REACHED,
+  PROVIDER_KEY_STATUS.INELIGIBLE,
+]);
+
+/** A plan's status as a turn found it, on whatever credential the row holds now, as `setPlanStatus` bounds it. */
+const updatePlanStatus = SqlSchema.void({
+  Request: Schema.Struct({
+    ...KindKeySchema.fields,
+    status: PlanStatusSchema,
+    limitResetsAt: Schema.NullOr(Schema.Date),
+    now: Schema.Date,
+  }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({ status: write.status, statusAt: write.now, limitResetsAt: write.limitResetsAt })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.kind, write.kind),
+            ne(accountProviderKey.status, PROVIDER_KEY_STATUS.UNREADABLE),
+            ...(write.status === PROVIDER_KEY_STATUS.VERIFIED
+              ? [
+                  ne(accountProviderKey.status, PROVIDER_KEY_STATUS.VERIFIED),
+                  ne(accountProviderKey.status, PROVIDER_KEY_STATUS.INVALID),
+                ]
+              : []),
           ),
         ),
     ),
@@ -476,6 +517,36 @@ export function setProviderKeyStatus(
   now: Date,
 ): TaskStoreEffect<void> {
   return updateStatus({ userId, provider, sealedKey, status, now });
+}
+
+/** A status a coding agent's turn found its plan in. */
+export type PlanStatus = typeof PlanStatusSchema.Type;
+
+/**
+ * Writes how the provider answered a coding agent's turn on the account's
+ * plan of this kind, with when its reached limit resets where it said.
+ * Note that a row the service cannot read keeps saying so, since only a new
+ * credential mends it; that a turn that ran is no word against a renewal
+ * that found the sign-in ended, so verified never lifts invalid; and that a
+ * plan already verified is not written again, so every turn's success
+ * costs no write.
+ */
+export function setPlanStatus(
+  userId: string,
+  provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
+  status: PlanStatus,
+  limitResetsAt: Date | undefined,
+  now: Date,
+): TaskStoreEffect<void> {
+  return updatePlanStatus({
+    userId,
+    provider,
+    kind,
+    status,
+    limitResetsAt: status === PROVIDER_KEY_STATUS.LIMIT_REACHED ? (limitResetsAt ?? null) : null,
+    now,
+  });
 }
 
 /** Writes what a fast call on the key a step ran on showed of its organization, where the row still holds that key. */
