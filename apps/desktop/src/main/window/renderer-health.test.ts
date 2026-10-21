@@ -86,7 +86,7 @@ it.effect("a panel that stops answering is reported once per stretch, as it answ
     // Electron may say it again within the same stretch.
     panel.emit("unresponsive");
     yield* TestClock.adjust(Duration.seconds(4));
-    assert.deepEqual(reported, [], "nothing is reported while the page still does not answer");
+    assert.equal(reported.length, 0, "nothing is reported while the page still does not answer");
 
     panel.emit("responsive");
     yield* settle;
@@ -157,11 +157,11 @@ it.effect("a window's working set is noted once as it crosses its bound, and nev
       }),
     );
     yield* settle;
-    assert.deepEqual(noted, [], "nothing under the bound is noted");
+    assert.equal(noted.length, 0, "nothing under the bound is noted");
 
     metrics.set(4201, 1.6 * KILOBYTES_PER_GIGABYTE);
     yield* TestClock.adjust(Duration.seconds(30));
-    assert.deepEqual(noted, [], "nothing is read between samples");
+    assert.equal(noted.length, 0, "nothing is read between samples");
     yield* TestClock.adjust(Duration.seconds(30));
     assert.deepEqual(noted, [{ document: "index.html", workingSetBytes: 1.6 * 1024 ** 3 }]);
 
