@@ -202,7 +202,14 @@ interface RunningPage {
 }
 
 export interface VercelSandboxApi {
-  /** Every sandbox carrying the session's tag. */
+  /**
+   * Every sandbox carrying the session's tag, the newest first. Note that
+   * the order is made here rather than left to every reader's first pick,
+   * because an expired sandbox whose delete Vercel did not confirm stands
+   * beside the replacement that took its place, and the replacement is the
+   * one a session's readers (the runner, the terminal, a copy of its work,
+   * the browser) must find first.
+   */
   readonly listTagged: (
     sessionId: string,
   ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
@@ -631,7 +638,9 @@ export function vercelSandboxApi(
           if (!succeeded(listed.status) || Result.isFailure(page)) {
             return yield* new SandboxUnavailable({ status: listed.status });
           }
-          return page.success.sandboxes;
+          return page.success.sandboxes.toSorted(
+            (first, second) => (second.createdAt ?? 0) - (first.createdAt ?? 0),
+          );
         }),
       listRunning: (cursor, order) =>
         Effect.gen(function* () {
