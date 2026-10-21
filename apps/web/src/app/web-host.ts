@@ -27,7 +27,7 @@
 import { feedbackDelivery } from "@luke/features/feedback";
 import type { LinkPlatform } from "@luke/features/link-open";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
-import { highlightSnippet, runModeFor } from "@luke/host";
+import { runModeFor } from "@luke/host";
 import {
   type ActPortDependencies,
   type AgentProceduresDependencies,
@@ -77,6 +77,7 @@ import {
   VoiceSocket,
 } from "@luke/host/effect";
 import { effectServiceLayer } from "@luke/host/service-layer";
+import { highlightSnippet } from "@luke/host/task-code";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
 import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";

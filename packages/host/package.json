@@ -26,7 +26,10 @@
     "./build-commit": "./src/build-commit.js",
     "./sentry-environment": "./src/sentry-environment.js",
     "./service-layer": "./src/service-layer.js",
-    "./update-service": "./src/update-service.js"
+    "./update-service": "./src/update-service.js",
+    "./task-code": "./src/task-code.js",
+    "./task-code-remote": "./src/task-code-remote.js",
+    "./task-code-worker": "./src/task-code-worker.js"
   },
   "types": "./src/index.ts",
   "scripts": {
