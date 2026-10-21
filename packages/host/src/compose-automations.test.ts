@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { AutomationsLiveAnswer } from "@luke/features/automation-live";
+import type {
+  AutomationRunsLiveAnswer,
+  AutomationsLiveAnswer,
+} from "@luke/features/automation-live";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -55,6 +58,20 @@ const POLLED_LIST: AutomationsLiveAnswer = {
   },
 };
 
+/** An automation with no runs yet, its live read answered polled. */
+const POLLED_RUNS: AutomationRunsLiveAnswer = {
+  url: LIVE_POLL_URL,
+  queries: {
+    runs: {
+      capability: "",
+      queryFingerprint: "",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      rows: [],
+      digest: "r1",
+    },
+  },
+};
+
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
@@ -93,7 +110,12 @@ const CREATE = {
 function fakeService(options: { replaceRefused?: boolean } = {}) {
   const asked: unknown[] = [];
   /** What the list's live read answers first; a poll past it holds until the test ends, as nothing moves. */
-  const live: { list: AutomationsLiveAnswer | typeof LIVE_SIGNED_OUT } = { list: POLLED_LIST };
+  const live: {
+    list: AutomationsLiveAnswer | typeof LIVE_SIGNED_OUT;
+    /** What the runs' live read answers first, and what a poll past it answers; not found, and held, where unsaid. */
+    runs?: AutomationRunsLiveAnswer;
+    runsPolled?: { readonly failure: typeof AUTOMATION_CALL_FAILURE.NOT_FOUND };
+  } = { list: POLLED_LIST };
   const answer =
     <A>(name: string, value: A) =>
     (params: Parameters<AutomationsClient[keyof AutomationsClient]>[0]) =>
@@ -121,11 +143,16 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
             asked.push(["list-live", workspaceId, userId]);
             return live.list;
           }),
-    runsLive: (automationId, userId) =>
-      Effect.sync(() => {
-        asked.push(["runs-live", automationId, userId]);
-        return { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
-      }),
+    runsLive: (automationId, userId, poll) =>
+      poll
+        ? live.runsPolled === undefined
+          ? Effect.never
+          : // A poll is held a while before it answers, as the service holds one.
+            Effect.as(Effect.repeat(Effect.yieldNow, { times: 20 }), live.runsPolled)
+        : Effect.sync(() => {
+            asked.push(["runs-live", automationId, userId]);
+            return live.runs ?? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
+          }),
   };
   return { client, asked, live };
 }
@@ -312,5 +339,25 @@ it.effect(
       yield* settled;
       assert.deepEqual(signedOut.changed(), []);
       assert.equal(signedOut.asked.length, 1);
+    }),
+);
+
+it.effect(
+  "an automation deleted while its runs are followed is told not found at once, and the follow ends",
+  () =>
+    Effect.gen(function* () {
+      const runs = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID };
+      const { call, asked, changed, live } = yield* subject();
+      live.runs = POLLED_RUNS;
+      live.runsPolled = { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
+
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, runs);
+      yield* settled;
+
+      assert.deepEqual(changed(), [
+        { scope: runs, view: { runs: [] } },
+        { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
+      ]);
+      assert.deepEqual(asked, [["runs-live", AUTOMATION_ID, ACCOUNT_ID]], "nothing asks again");
     }),
 );

@@ -16,7 +16,13 @@ import {
 } from "@luke/features/automation-view";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows, type SealedRead } from "./live-follow.js";
+import {
+  LIVE_GONE,
+  LiveBroken,
+  type LiveClient,
+  liveRows,
+  type SealedRead,
+} from "./live-follow.js";
 
 /**
  * automation-follow.ts -- a workspace's automations, or an automation's runs, followed on the service's live read for the windows that draw them, built again whenever the rows move and whenever the clock alone moves a run's agent.
@@ -123,11 +129,17 @@ function followed<Part extends string, Rows, View>(
       yield* Effect.sleep(LIVE_RESTART);
       return true;
     }
+    /** Why the last renewal or poll failed, so a follow that ends for good is told as not found or ended unsaid. */
+    let lastFailure: string | undefined;
+    const noted = (read: Sealed<SealedRead<Part>>) => {
+      lastFailure = "failure" in read ? read.failure : undefined;
+      return goneWhereNotFound(read);
+    };
     const rows = liveRows(
       {
         openLive: dependencies.openLive,
-        reseal: () => Effect.map(kind.live(false), goneWhereNotFound),
-        poll: (after) => Effect.map(kind.live(true, after), goneWhereNotFound),
+        reseal: () => Effect.map(kind.live(false), noted),
+        poll: (after) => Effect.map(kind.live(true, after), noted),
         now: dependencies.now,
       },
       sealed,
@@ -139,10 +151,20 @@ function followed<Part extends string, Rows, View>(
         }),
       ),
     );
-    yield* Stream.runForEach(
+    // A follow the service ended for good, as one whose automation is gone, ends here at once, rather than starting again.
+    const gone = yield* Stream.runForEach(
       Stream.switchMap(rows, (decoded) => viewsOf(kind, decoded)),
       (view) => Effect.sync(() => kind.publish(view)),
-    ).pipe(Effect.catch(() => Effect.void));
+    ).pipe(
+      Effect.as(false),
+      Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
+    );
+    if (gone) {
+      if (lastFailure === AUTOMATION_CALL_FAILURE.NOT_FOUND) {
+        kind.failed(AUTOMATION_CALL_FAILURE.NOT_FOUND);
+      }
+      return false;
+    }
     yield* Effect.sleep(LIVE_RESTART);
     return true;
   });
