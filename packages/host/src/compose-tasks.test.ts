@@ -247,6 +247,10 @@ interface FakeService extends TasksClient {
   workspacesSignedOut: boolean;
   /** The name another Mac renames a workspace to just after this one's rename answers, where one does. */
   renamedAgain: string | undefined;
+  /** What a rename's answer waits on once the store has moved, so a test can have the follow deliver first. */
+  renameAnswered: Effect.Effect<void>;
+  /** Whether Realtime misses the store's changes, telling none of them. */
+  realtimeMisses: boolean;
   /** Realtime as the service's deployment holds it: each subscription to the workspaces is told the table as it stands, and again on every change. */
   realtime: ReturnType<typeof fakeServiceRealtime>;
   /** Realtime's client as the host opens it at the workspaces' address, each subscription told the workspaces at once, as Realtime's first result. */
@@ -384,7 +388,9 @@ function fakeService(tasks: Task[]): FakeService {
     return part === "capability-installations" ? rows.installations : undefined;
   };
   /** The workspaces told to every subscription that stands, as Realtime tells a change. */
+  let realtimeMisses = false;
   const pushWorkspaces = () => {
+    if (realtimeMisses) return;
     if (!realtime.subscribed().includes("capability-workspaces")) return;
     const rows = workspacesLiveRows(memberships);
     realtime.deliver("workspaces", rows.workspaces);
@@ -527,6 +533,12 @@ function fakeService(tasks: Task[]): FakeService {
       memberships = next;
       pushWorkspaces();
     },
+    get realtimeMisses() {
+      return realtimeMisses;
+    },
+    set realtimeMisses(next) {
+      realtimeMisses = next;
+    },
     realtime,
     openLive: (url) => {
       const client = realtime.open(url);
@@ -550,6 +562,7 @@ function fakeService(tasks: Task[]): FakeService {
     workspacesFail: false,
     workspacesSignedOut: false,
     renamedAgain: undefined,
+    renameAnswered: Effect.void,
     members: {},
     former: {},
     linearIssues: {},
@@ -640,7 +653,7 @@ function fakeService(tasks: Task[]): FakeService {
             each.id !== workspaceId ? each : again === undefined ? now : { ...now, name: again },
           );
           return { ok: true, answer: now } as const;
-        }),
+        }).pipe(Effect.tap(() => service.renameAnswered)),
       // A photo set stands as its version, the photo's own text, and null takes the version away.
       setPhoto: (workspaceId, photo) =>
         Effect.sync(() => {
@@ -2612,6 +2625,117 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+    }),
+);
+
+it.effect(
+  "a rename's answer that lands after the follow delivered a newer name is not drawn over it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      service.renamedAgain = "Acme Research";
+      const answered = yield* Deferred.make<void>();
+      service.renameAnswered = Deferred.await(answered);
+
+      const renaming = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+      );
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(renaming);
+      yield* settled;
+
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+    }),
+);
+
+it.effect(
+  "a rename's answer is drawn though the follow moved another workspace while it was out, where Realtime never told the rename itself",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const answered = yield* Deferred.make<void>();
+      service.renameAnswered = Deferred.await(answered);
+      service.realtimeMisses = true;
+
+      const renaming = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+      );
+      yield* settled;
+      // Only the other workspace's change reaches the follow; the rename's own is lost.
+      const missed = workspacesLiveRows([{ ...PERSONAL, name: "Dana's own" }, ACME]);
+      service.realtime.deliver("workspaces", missed.workspaces);
+      yield* settled;
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(renaming);
+
+      assert.deepEqual(last()?.workspaces, [
+        { ...PERSONAL, name: "Dana's own" },
+        { ...ACME, name: "Acme Labs" },
+      ]);
+    }),
+);
+
+it.effect(
+  "a rename's answer that lands after the follow moved the workspace and moved it back is not drawn over the latest delivery",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const answered = yield* Deferred.make<void>();
+      service.renameAnswered = Deferred.await(answered);
+
+      const renaming = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+      );
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
+      // A teammate renames it back before the first rename's answer lands.
+      service.memberships = [PERSONAL, ACME];
+      yield* settled;
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(renaming);
+
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+    }),
+);
+
+it.effect(
+  "of two renames out at once, the first one's answer landing last is not drawn over the second's, where Realtime tells neither",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      service.realtimeMisses = true;
+      const firstAnswered = yield* Deferred.make<void>();
+      service.renameAnswered = Deferred.await(firstAnswered);
+
+      const first = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Alpha" }),
+      );
+      yield* settled;
+      service.renameAnswered = Effect.void;
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Beta" });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
+      yield* Deferred.succeed(firstAnswered, undefined);
+      yield* Fiber.join(first);
+
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
     }),
 );
 

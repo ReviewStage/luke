@@ -881,6 +881,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one follow of the account's workspaces, from the first refresh after a launch or a sign-in until a sign-out. */
   const workspacesFollow = yield* FiberHandle.make<void>();
+  /** How many times the follow or a write's answer has moved each workspace, so an answer that lands after a newer move of it is not drawn over it. */
+  const workspaceMoves = new Map<string, number>();
 
   /**
    * Follows the account's workspaces over Realtime where nothing follows
@@ -917,7 +919,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       );
       // A follow gone mid-way was refused as signed out by a renewal or a poll, which no seal mends either.
       const gone = yield* Stream.runForEach(moves, (workspaces) =>
-        Effect.sync(() => write({ workspaces, workspacesStatus: TASKS_READ.READY })),
+        Effect.sync(() => {
+          const drawn = new Map(view.workspaces.map((each) => [each.id, JSON.stringify(each)]));
+          for (const each of workspaces) {
+            if (drawn.get(each.id) === JSON.stringify(each)) continue;
+            workspaceMoves.set(each.id, (workspaceMoves.get(each.id) ?? 0) + 1);
+          }
+          write({ workspaces, workspacesStatus: TASKS_READ.READY });
+        }),
       ).pipe(
         Effect.as(false),
         Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
@@ -1756,19 +1765,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * A write whose answer is the workspace as it then stands, drawn at once;
-   * the follow carries the same change a moment later.
+   * A write whose answer is the workspace as it then stands, drawn at once
+   * unless the follow or another write's answer moved that workspace while
+   * the write was out, since the view may then already hold a newer change, a
+   * teammate's or a later edit's; the follow carries this write's change a
+   * moment later either way.
    */
   function workspaceWrite(
     call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
   ): Effect.Effect<TasksWorkspaceAnswer> {
     return Effect.gen(function* () {
+      const movedBefore = new Map(workspaceMoves);
       const written = yield* served(call);
       if (!written.ok) return { failure: written.failure };
       const answered = written.answer;
-      write({
-        workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
-      });
+      if (workspaceMoves.get(answered.id) === movedBefore.get(answered.id)) {
+        workspaceMoves.set(answered.id, (workspaceMoves.get(answered.id) ?? 0) + 1);
+        write({
+          workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
+        });
+      }
       return { workspace: answered };
     });
   }
