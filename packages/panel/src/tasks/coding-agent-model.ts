@@ -1399,8 +1399,8 @@ interface AgentTurnPlace {
   readonly newestTodos?: string | undefined;
   /** Where each call's subagent stands as its own session says, which its row draws over the call's own state, since a call may settle the moment its worker is under way. */
   readonly workers?: ReadonlyMap<string, ToolState>;
-  /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
-  readonly said?: boolean;
+  /** How much of the turn the voice read aloud on a call, which folds that much of a finished turn: all of it, its lines standing ahead of it, or the work after a call's ask joined it, its lines standing among `arrived`; none where nothing was. */
+  readonly said?: TurnRead | undefined;
   /** The developer's lines that reached the turn while it ran (`arrivedIn`), each drawn among its parts after the steps it arrived after. */
   readonly arrived?: readonly CodingAgentMessage[];
 }
@@ -1520,9 +1520,9 @@ function drawnParts(
   return drawn;
 }
 
-/** The steps of its turn a line arrived after; none for a line no turn took in under way. */
+/** The steps of its turn a line arrived after, or a line the voice said answering a call's ask that joined it under way was read after; none for a line no turn took in under way. */
 function afterStepOf(line: CodingAgentMessage): number {
-  return line.arrivedIn?.afterStep ?? 0;
+  return line.arrivedIn?.afterStep ?? line.readFrom?.afterStep ?? 0;
 }
 
 /**
@@ -1542,9 +1542,13 @@ function afterStepOf(line: CodingAgentMessage): number {
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
-  { newestTodos, workers = NO_WORKERS, said = false, arrived = [] }: AgentTurnPlace = {},
+  { newestTodos, workers = NO_WORKERS, said, arrived = [] }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
   const parts = drawnParts(message, arrived);
+  // Note that what the voice read from a join on starts after its first line among the parts, the work it answered.
+  const joined = parts.findIndex(
+    (part) => part.kind === AGENT_PART.ARRIVED && part.line.readFrom?.afterStep !== undefined,
+  );
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     running: (part) =>
@@ -1560,7 +1564,8 @@ export function agentRows(
     key: message.id,
     moving,
     done: !moving,
-    said,
+    ...(said === TURN_READ.WHOLE ? { said: true } : undefined),
+    ...(said === TURN_READ.FROM_JOIN && joined >= 0 ? { saidFrom: joined + 1 } : undefined),
   });
 }
 
@@ -1595,23 +1600,65 @@ export function placedMessages(messages: readonly CodingAgentMessage[]): readonl
   });
 }
 
+/** How much of a turn the voice read aloud on a call, which folds that much of it once it has finished. */
+export const TURN_READ = {
+  /** All of it, answering an ask that was the whole turn's: the voice's lines stand ahead of the turn. */
+  WHOLE: "whole",
+  /** The work after a call's ask joined the turn under way: the voice's lines stand where the ask arrived, the work before it as it was. */
+  FROM_JOIN: "from-join",
+} as const;
+
+export type TurnRead = (typeof TURN_READ)[keyof typeof TURN_READ];
+
 /**
- * What a line the voice said on a call into the agent names of the turn it
- * read aloud: the turn's journal, by its message id (`read_from`), which the
- * service writes on a reply said within moments of the turn settling.
+ * A line the voice said on a call into the agent, and what a service older
+ * than `readFrom` named of the turn it read aloud: the turn's journal, by
+ * its message id (`read_from`), written only on a reply said within moments
+ * of the turn settling.
  */
-const ReadAloudSchema = Schema.Struct({
+const SpokenLineSchema = Schema.Struct({
   author: Schema.Literal(MESSAGE_AUTHOR.VOICE_MODEL),
   channel: Schema.Literal(MESSAGE_CHANNEL.VOICE),
-  read_from: Schema.String,
+  read_from: Schema.optionalKey(Schema.String),
 });
 
-const readAloud = Schema.decodeUnknownOption(ReadAloudSchema);
+const spokenLine = Schema.decodeUnknownOption(SpokenLineSchema);
 
-/** The journal of the turn a line the voice said read aloud; none for any other row. */
-function readFromOf(message: CodingAgentMessage): string | undefined {
+/** Whether a row is a line the voice said on a call, which reads a turn aloud rather than being one. */
+function isSpokenLine(message: CodingAgentMessage): boolean {
+  return message.role === MESSAGE_ROLE.ASSISTANT && Option.isSome(spokenLine(message.metadata));
+}
+
+/** Where among the rows a line the voice said names the turn it read aloud: the turn's journal, and where the call's ask joined that turn under way, the steps begun before it. */
+interface ReadAloudPlace {
+  readonly journalId: string;
+  readonly afterStep?: number | undefined;
+}
+
+/**
+ * The journal of the turn a line the voice said answers, among the rows by
+ * their turn: the turn the service names it read from (`readFrom`), or from
+ * a service older than that, the journal its metadata names (`read_from`);
+ * none for any other row.
+ */
+function readAloudPlaceOf(
+  message: CodingAgentMessage,
+  journals: ReadonlyMap<string, string>,
+): ReadAloudPlace | undefined {
   if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
-  return Option.getOrUndefined(Option.map(readAloud(message.metadata), (said) => said.read_from));
+  return Option.getOrUndefined(
+    Option.flatMap(spokenLine(message.metadata), (line) => {
+      if (message.readFrom === undefined) {
+        return Option.fromUndefinedOr(line.read_from).pipe(
+          Option.map((journalId) => ({ journalId })),
+        );
+      }
+      const { afterStep } = message.readFrom;
+      return Option.fromUndefinedOr(journals.get(message.readFrom.turnId)).pipe(
+        Option.map((journalId) => ({ journalId, afterStep })),
+      );
+    }),
+  );
 }
 
 /** A row the voice read nothing aloud of. */
@@ -1619,47 +1666,74 @@ const NOTHING_SAID: readonly CodingAgentMessage[] = [];
 
 /** One of a transcript's rows as the tab draws it, with what the voice said of it on a call. */
 export interface SpokenMessage extends PlacedMessage {
-  /** The lines the voice said on a call reading this turn aloud, in the order the transcript holds them, which the tab draws ahead of the turn, its work folded behind them; none on any other row. */
+  /** The lines the voice said on a call reading this whole turn aloud, in the order the transcript holds them, which the tab draws ahead of the turn, its work folded behind them; none on any other row. */
   readonly said: readonly CodingAgentMessage[];
+  /** How much of this turn the voice read aloud on a call, which folds that much of it once finished; none where it read nothing of it. */
+  readonly read?: TurnRead | undefined;
 }
 
 /**
  * A transcript's rows with each line the voice said reading a turn aloud
  * moved to that turn, so on a call the tab reads as a conversation: what
  * was said, then the work behind it folded under it, rather than the
- * turn's own answer and then the voice saying it again. The lines said or
- * typed on the call that reached such a turn while it ran are drawn ahead
+ * turn's own answer and then the voice saying it again, however long after
+ * the turn ended the line was said. A line answering an ask that was the
+ * whole turn's stands ahead of the turn, which folds whole. The lines said
+ * or typed on the call that reached such a turn while it ran are drawn ahead
  * of what the voice said, each a row of its own, since the voice answered
  * them too, so no question stands under its answer; any other line that
- * reached it, as GitHub's, stays where it arrived among the turn's work. A line whose turn is not among the
- * rows, and a line the service names no turn for, stand where the order
- * puts them, so a transcript with no call reads as it did.
+ * reached it, as GitHub's, stays where it arrived among the turn's work. A
+ * line answering a call's ask that joined a turn under way, as a call into
+ * a busy agent does, stands among the turn's work right after the ask,
+ * and only the work from there on folds under it, the turn's earlier work
+ * drawn as it was; the lines from that join on stay where they arrived. A
+ * line whose turn is not among the rows, and a line the service names no
+ * turn for, stand where the order puts them, so a transcript with no call
+ * reads as it did.
  */
 export function spokenMessages(placed: readonly PlacedMessage[]): readonly SpokenMessage[] {
-  const turns = new Set(
+  const journals = new Map(
     placed.flatMap(({ message }) =>
-      message.role === MESSAGE_ROLE.ASSISTANT && readFromOf(message) === undefined
-        ? [message.id]
+      message.role === MESSAGE_ROLE.ASSISTANT && !isSpokenLine(message)
+        ? [[message.turnId ?? message.id, message.id] as const]
         : [],
     ),
   );
+  const turns = new Set(journals.values());
   const said = new Map<string, CodingAgentMessage[]>();
+  const joined = new Map<string, CodingAgentMessage[]>();
+  const moved = new Set<string>();
   for (const { message } of placed) {
-    const turn = readFromOf(message);
-    if (turn === undefined || !turns.has(turn)) continue;
-    said.set(turn, [...(said.get(turn) ?? []), message]);
+    const place = readAloudPlaceOf(message, journals);
+    if (place === undefined || !turns.has(place.journalId)) continue;
+    const lines = place.afterStep === undefined ? said : joined;
+    lines.set(place.journalId, [...(lines.get(place.journalId) ?? []), message]);
+    moved.add(message.id);
   }
   return placed.flatMap((row) => {
-    const turn = readFromOf(row.message);
-    if (turn !== undefined && turns.has(turn)) return [];
+    if (moved.has(row.message.id)) return [];
     const lines = said.get(row.message.id);
-    if (lines === undefined) return [{ ...row, said: NOTHING_SAID }];
-    // Note that only a line said or typed on a call is lifted, because a line from anywhere else, as GitHub's, is no ask the voice answered.
-    const asked = row.arrived.filter((line) => callOfLine(line) !== undefined);
-    const kept = row.arrived.filter((line) => !asked.includes(line));
+    const answers = joined.get(row.message.id) ?? NOTHING_SAID;
+    const arrived = [...row.arrived, ...answers];
+    if (lines === undefined) {
+      return [
+        {
+          message: row.message,
+          arrived,
+          said: NOTHING_SAID,
+          read: answers.length === 0 ? undefined : TURN_READ.FROM_JOIN,
+        },
+      ];
+    }
+    // Note that only a line said or typed on a call before any join is lifted, because a line from anywhere else, as GitHub's, is no ask the voice answered, and one from a join on has its answer beside it.
+    const join = Math.min(...answers.map(afterStepOf));
+    const asked = row.arrived.filter(
+      (line) => callOfLine(line) !== undefined && afterStepOf(line) < join,
+    );
+    const kept = arrived.filter((line) => !asked.includes(line));
     return [
       ...asked.map((line) => ({ message: line, arrived: NOTHING_SAID, said: NOTHING_SAID })),
-      { message: row.message, arrived: kept, said: lines },
+      { message: row.message, arrived: kept, said: lines, read: TURN_READ.WHOLE },
     ];
   });
 }
