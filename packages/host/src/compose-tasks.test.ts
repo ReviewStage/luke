@@ -1755,7 +1755,7 @@ it.effect(
 );
 
 it.effect(
-  "code shown on the open task's call is drawn coloured, in the order shown and once, and code about another task is dropped",
+  "code shown on the open task's call is drawn with its lines, in the order shown and once, and code about another task is dropped",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -1789,9 +1789,7 @@ it.effect(
         showing.map((code) => code.callId),
         ["call-1", "call-3"],
       );
-      const line = showing[0]?.code.lines[0] ?? [];
-      assert.ok(line.length > 1, "a TypeScript line is coloured in runs");
-      assert.equal(line.map((run) => run.text).join(""), "const answer = 42;");
+      assert.deepEqual(showing[0]?.code.lines, ["const answer = 42;"]);
     }),
 );
 

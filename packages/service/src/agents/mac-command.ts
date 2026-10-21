@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  claimMacCommand,
   claimMacCommands,
   macCommandResult,
   macCommandsWaiting,
@@ -269,6 +270,28 @@ export function runOnMacTool(
     timeout_seconds === undefined
       ? { kind, command }
       : { kind, command, timeoutSeconds: timeout_seconds },
+  );
+}
+
+/**
+ * One command a Mac heard of live, claimed for it by its id where it still
+ * waits inside the claim window; none where another Mac took it, its call
+ * withdrew it, or it waited too long. The window is kept here, on the
+ * service's clock, because the live statement can measure nothing from
+ * one. Note that any kind is claimed, because the Mac hears only of the
+ * kinds it named.
+ */
+export function claimedMacCommand(
+  userId: string,
+  id: string,
+): TaskStoreEffect<Option.Option<MacCommand>> {
+  return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    claimMacCommand(
+      userId,
+      id,
+      new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),
+      Object.values(MAC_COMMAND_KIND),
+    ),
   );
 }
 

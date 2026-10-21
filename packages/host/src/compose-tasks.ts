@@ -158,7 +158,7 @@ import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
-import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
+import { codeExcerpt, highlightFile } from "./task-code.js";
 import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
 
 /**
@@ -976,33 +976,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return [...recorded, ...unread].sort((a, b) => a.startedAt - b.startedAt);
   }
 
-  /** A code shown as the Code tab's card draws it: the lines around those pointed at, coloured. */
-  function showingOf({ code, ...shown }: TaskShownCode): Effect.Effect<TaskCodeShowing> {
-    return Effect.map(highlightCode(codeExcerpt(code)), (coloured) => ({
-      ...shown,
-      code: coloured,
-    }));
+  /** A code shown as the Code tab's card draws it: the lines around those pointed at, which the window colours. */
+  function showingOf({ code, ...shown }: TaskShownCode): TaskCodeShowing {
+    return { ...shown, code: codeExcerpt(code) };
   }
 
   /**
    * The code the record holds, oldest first, then each a call showed that
    * the record does not hold yet. Note that a showing already held is kept
-   * rather than coloured again, because the task's work is read again on
-   * every refresh and colouring the windows is what costs.
+   * as it is, so a refresh hands the Code tab the same showings and it
+   * draws none of them again.
    */
-  function withShownCode(recorded: readonly TaskShownCode[]): Effect.Effect<TaskCodeShowing[]> {
+  function withShownCode(recorded: readonly TaskShownCode[]): TaskCodeShowing[] {
     const byCall = new Map((view.shownCode ?? []).map((showing) => [showing.callId, showing]));
-    return Effect.map(
-      Effect.forEach(recorded, (shown) => {
-        const held = byCall.get(shown.callId);
-        return held === undefined ? showingOf(shown) : Effect.succeed(held);
-      }),
-      (read) => {
-        const recordedCalls = new Set(recorded.map((shown) => shown.callId));
-        const held = view.shownCode ?? [];
-        return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
-      },
-    );
+    const read = recorded.map((shown) => byCall.get(shown.callId) ?? showingOf(shown));
+    const recordedCalls = new Set(recorded.map((shown) => shown.callId));
+    const held = view.shownCode ?? [];
+    return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
   }
 
   /**
@@ -1039,8 +1029,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         write({ workStatus: TASKS_READ.FAILED });
         return;
       }
-      const shownCode = yield* withShownCode(stored.code ?? []);
-      if (view.activeTaskId !== taskId) return;
+      const shownCode = withShownCode(stored.code ?? []);
       const work = withPage(stored.turns);
       const oldest = work[0]?.turnId;
       const olderHeld =
@@ -1343,17 +1332,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (showsCode(taskId, shown)) Queue.offerUnsafe(codeShows, { taskId, shown });
   }
 
-  /**
-   * Colours a code shown and draws it after the rest, where it is still for
-   * the screen both as the loop takes it and once coloured.
-   */
+  /** Draws a code shown after the rest, where it is still for the screen as the loop takes it. */
   function drawShownCode({ taskId, shown }: { taskId: string; shown: TaskShownCode }) {
-    if (!showsCode(taskId, shown)) return Effect.void;
-    return Effect.flatMap(showingOf(shown), (showing) =>
-      Effect.sync(() => {
-        if (showsCode(taskId, shown)) write({ shownCode: [...(view.shownCode ?? []), showing] });
-      }),
-    );
+    return Effect.sync(() => {
+      if (showsCode(taskId, shown)) {
+        write({ shownCode: [...(view.shownCode ?? []), showingOf(shown)] });
+      }
+    });
   }
 
   function showWork(taskId: string, turn: TaskWorkTurn): void {

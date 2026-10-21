@@ -1593,17 +1593,23 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = standing.value;
   const found = toolPartOf(row.parts, event.callId);
   if (found === undefined) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CALL });
+  // Note that an input told with the settlement replaces the one the start
+  // recorded, in the same write, so the call stands as it answered.
+  const settled = settledToolPart(
+    event.input === undefined ? found.part : { ...found.part, input: event.input },
+    event.settlement,
+  );
   // A call settles once. The same settlement told again is a repeat; a
   // different one, after the turn's end already settled the call as
   // unanswered, finds the call closed and is refused rather than rewritten.
   if (isSettledToolPartState(found.part.state)) {
-    return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
+    return isDeepStrictEqual(settled, found.part)
       ? Result.succeed(STORE_WRITE_EFFECT.REPEATED)
       : Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   }
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   const parts = [...row.parts];
-  parts[found.index] = settledToolPart(found.part, event.settlement);
+  parts[found.index] = settled;
   return yield* amendJournal(context, event.turnId, row, parts);
 });
 

@@ -27,8 +27,9 @@
  * connected at all; a workspace the account is not in is not found. A
  * workspace with nothing connected has no repositories. Beside them are
  * listed the repositories members added to the workspace on their own
- * tokens, each entry marked with which of the two reaches it, which a member
- * whose own token cannot push to one still sees. A member who saved their
+ * tokens that the member's own token may push to, each entry marked with
+ * which of the two reaches it; a member whose own token cannot push to one,
+ * or who saved none, is not offered it. A member who saved their
  * own GitHub token is answered apart, as addable, the repositories it may
  * push to that neither lists, which only Add repository offers. A GitHub or
  * a store the service could not reach is unavailable.
@@ -181,24 +182,6 @@ function nameKey(fullName: string): string {
   return fullName.toLowerCase();
 }
 
-/**
- * A repository a member added to the workspace on their token, as the
- * picker lists it where the reader's own token does not: only its name is
- * kept, so it reads as private, on no branch GitHub named, and changed when
- * it was added.
- */
-function addedEntry(row: WorkspaceTokenRepositoryRow): GitHubRepository {
-  const [owner = "", name = ""] = row.repository.split("/");
-  return {
-    owner,
-    name,
-    fullName: row.repository,
-    defaultBranch: "",
-    private: true,
-    updatedAt: row.addedAt,
-  };
-}
-
 /** The picker's repositories, and those Add repository offers. */
 interface PickedRepositories {
   readonly repositories: GitHubRepository[];
@@ -208,8 +191,9 @@ interface PickedRepositories {
 /**
  * The picker's repositories: the installation's, each marked the App's,
  * and those members added to the workspace on their tokens that it does not
- * list, marked the token's, so a member whose token cannot reach one still
- * sees it and hears the reach's refusal at a start. One list, most recently
+ * list and the member's own token may push to, marked the token's, so a
+ * member with no token, or whose token cannot push to one, or whose token's
+ * listing GitHub did not answer, is not offered it. One list, most recently
  * updated first. Beside it, the member's own token's that neither lists,
  * marked the token's, which Add repository offers and the picker does not,
  * since a token reaches a repository for a task only once it is added.
@@ -221,10 +205,12 @@ function pickedRepositories(
 ): PickedRepositories {
   const listed = new Set(throughApp.map((one) => nameKey(one.fullName)));
   const ownByName = new Map(onToken.map((one) => [nameKey(one.fullName), one]));
-  // Note that an added repository the member's token lists is drawn as GitHub answers it, because its row keeps only its name.
-  const addedOnly = added
-    .filter((row) => !listed.has(nameKey(row.repository)))
-    .map((row) => ownByName.get(nameKey(row.repository)) ?? addedEntry(row));
+  // Note that an added repository is drawn as the member's own token lists it, because its row keeps only its name.
+  const addedOnly = added.flatMap((row) => {
+    const key = nameKey(row.repository);
+    const own = ownByName.get(key);
+    return listed.has(key) || own === undefined ? [] : [own];
+  });
   for (const one of addedOnly) listed.add(nameKey(one.fullName));
   const byRecent = (left: GitHubRepository, right: GitHubRepository) =>
     right.updatedAt - left.updatedAt;

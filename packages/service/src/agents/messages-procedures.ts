@@ -88,7 +88,12 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
-import { readWorkspaceChat, workspaceOf, writeWorkspaceChat } from "./workspace-chat.js";
+import {
+  joinWorkspaceChatAsPerson,
+  readWorkspaceChat,
+  workspaceOf,
+  writeWorkspaceChat,
+} from "./workspace-chat.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -429,6 +434,9 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(accountMiddleware(seams.resolveUserId))
       .chatWrite.effect(function* ({ input, context }) {
         const workspaceId = yield* workspaceOf(input.query.workspaceId);
+        if ("join" in input.body) {
+          return yield* joinWorkspaceChatAsPerson(context.userId, workspaceId);
+        }
         return yield* writeWorkspaceChat(seams, context.userId, workspaceId, input.body);
       }),
   };

@@ -53,7 +53,7 @@ function shownOn(call: TranscriptCallRow, callId: string): TaskCodeShowing {
       repository: "acme/relay",
       firstLine: 1,
       lineCount: 1,
-      lines: [[{ text: "export const total = 0;" }]],
+      lines: ["export const total = 0;"],
     },
   };
 }

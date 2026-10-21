@@ -314,6 +314,8 @@ function settled(call: Answered): readonly NativeMoment[] {
       kind: NATIVE_MOMENT.TOOL_SETTLED,
       callId: call.callId,
       settlement: toolAnswerSettlement(call.answer, call.failed),
+      // Note that an item's input can fill in between its start and its completion (a file change's changes), so the completed one is told with the answer.
+      input: call.input,
     },
     { kind: NATIVE_MOMENT.STEP_CLOSED },
   ];

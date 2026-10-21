@@ -797,6 +797,36 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
     }),
   );
 
+  it.effect("a file change's completed changes replace the empty ones it started with", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Write the probe file."]);
+      const change = { type: "fileChange", id: "call_patch", status: "inProgress", changes: [] };
+      const changes = [
+        { path: "luke-probe/a1b2.txt", kind: { type: "add" }, diff: "a1b2c3d4e5f6\n" },
+      ];
+      const messagesOfTurn: WireValue[] = [
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        notification("turn/started", { turn: { id: "turn-1" } }),
+        notification("item/started", { item: change }),
+        notification("item/completed", { item: { ...change, status: "completed", changes } }),
+        notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+      ];
+      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+      const events = messagesOfTurn.map(
+        (message, sequence) => ({ sequence, message }) as RunnerEvent,
+      );
+      yield* post(agent.bearer, events);
+      const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+      const patch = rows.at(-1)?.parts.find((part) => part.type === "tool-fileChange");
+      assert.ok(patch !== undefined && "input" in patch);
+      assert.equal(patch.state, "output-available");
+      assert.deepEqual(patch.input, { changes });
+    }),
+  );
+
   it.effect("a retired bearer writes nothing of a Codex batch", () =>
     Effect.gen(function* () {
       const post = yield* standing;

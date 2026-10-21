@@ -1644,7 +1644,7 @@ function TabContent({
           {NO_CODE_LINE}
         </EmptyState>
       ) : (
-        <CodePane shown={shownCode} calls={NO_CODE_CALLS} onOpenFile={onOpenFile} />
+        <CodePane shown={shownCode} calls={NO_CODE_CALLS} taskId={taskId} onOpenFile={onOpenFile} />
       );
     case SIDE_PANEL_TAB.COMMENTS:
       return (

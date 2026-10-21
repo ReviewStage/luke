@@ -17,7 +17,7 @@ import {
   ZoomOutIcon,
 } from "lucide-react";
 import { useId } from "react";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import {
@@ -40,7 +40,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
  * far along the message's files it is, a note the place opening it gives
- * the file shown (who last edited it, for a plan's picture), beside Copy for a text file,
+ * the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
  * `@luke/ui`'s dialog fitted to the file shown: the window dims, Tab stays inside the card, and
@@ -60,6 +60,7 @@ const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
   NEXT: "Next file",
   COPY: "Copy text",
+  COPY_IMAGE: "Copy image",
   ZOOM_OUT: "Zoom out",
   ZOOM_IN: "Zoom in",
   DOWNLOAD: "Download",
@@ -99,6 +100,26 @@ function CopyTextButton({ text }: { text: string }): React.JSX.Element {
         icon={<CopyGlyph state={state} />}
         label={VIEWER_LABEL.COPY}
         onClick={() => copy(text)}
+      />
+    </Tooltip>
+  );
+}
+
+/**
+ * Copy for a picture, put on the clipboard as a copy from Preview puts one,
+ * answered on its glyph as every copy button is. Note that the answer is
+ * shown only beside the picture it was for, because the button stands
+ * while the files are walked and a copy may land after the next is shown.
+ */
+function CopyImageButton({ url }: { url: string }): React.JSX.Element {
+  const { state: copyState, answeredImage, copyImage } = useCopyFeedback();
+  const state: CopyState = answeredImage === url ? copyState : "idle";
+  return (
+    <Tooltip label={copyHint(state, VIEWER_LABEL.COPY_IMAGE)}>
+      <IconButton
+        icon={<CopyGlyph state={state} />}
+        label={VIEWER_LABEL.COPY_IMAGE}
+        onClick={() => copyImage(url)}
       />
     </Tooltip>
   );
@@ -269,6 +290,7 @@ export function AttachmentViewer({
           {text === undefined ? null : <CopyTextButton text={text} />}
           {image ? (
             <>
+              <CopyImageButton url={file.url} />
               <HeaderButton
                 label={VIEWER_LABEL.ZOOM_OUT}
                 chord={ZOOM_CHORD.OUT}

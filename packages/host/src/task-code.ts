@@ -1,16 +1,18 @@
 import type { ShownCode, TaskFileWindow } from "@luke/features/task-wire";
-import type { CodeToken, TaskCode, TaskFileShown } from "@luke/features/tasks-view";
+import type { CodeToken, TaskFileShown } from "@luke/features/tasks-view";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { Clock, Duration, Effect } from "effect";
 import type { HighlighterCore } from "shiki/core";
 
 /**
- * task-code.ts -- the code on screen during a task's call, coloured: the lines the service read from the task's repository, as the window draws them.
+ * task-code.ts -- code the window draws in this process's colours: a File tab's window of its file and a transcript's fenced block, and the part of a snippet Luke showed that the Code tab's card draws.
  *
  * Luke names code by place through the brain's `show_code`, and the
  * service reads the lines from the brain session's checkout and sends
- * them whole (`ShownCode`); nothing is read from this Mac's disk. What is
- * done here is the colouring, which runs in this process rather than in the
+ * them whole (`ShownCode`); nothing is read from this Mac's disk. The Code
+ * tab's card colours its lines itself, in the diff bundle
+ * (`code-snippet.tsx`), so only the part it draws is cut here
+ * (`codeExcerpt`). What else is done here is the colouring, which runs in this process rather than in the
  * window, because the window's content policy refuses WebAssembly and its
  * bundle has a budget; Shiki's JavaScript regex engine runs here and the
  * window draws spans. Every run carries its colour in both of GitHub's
@@ -57,8 +59,8 @@ const LANGUAGE_BY_EXTENSION: ReadonlyMap<string, string> = new Map([
  * How much of a window the Code tab's card for it draws: the lines pointed
  * at with this many of the file on either side, or, for a file shown from
  * its top, its head. Note that the rest of the window is left here rather
- * than in the window, because colouring is what costs and the view
- * carrying every code shown on a task is told to the window whole.
+ * than in the window, because the view carrying every code shown on a task
+ * is told to the window whole.
  */
 const CODE_EXCERPT_LINES = {
   CONTEXT: 3,
@@ -225,15 +227,13 @@ export function codeExcerpt(code: ShownCode): ShownCode {
   };
 }
 
-/** The three colourings the window asks for, each over one shared highlighter. */
+/** The two colourings the window asks for, each over one shared highlighter. */
 export interface TaskCodeColouring {
   /** A window of a whole file as the File tab draws it: the lines the service read from GitHub, coloured as the file's language. */
   readonly highlightFile: (window: TaskFileWindow) => Effect.Effect<TaskFileShown>;
-  /** The code as the screen draws it: the lines the service sent, coloured, under the place, the repository, and the commit they came from, with Luke's note where he wrote one. */
-  readonly highlightCode: (code: ShownCode) => Effect.Effect<TaskCode>;
   /**
    * A fenced block of a transcript's markdown as the window draws it: its code,
-   * line by line, coloured as the language its fence names, as the Code tab's
+   * line by line, coloured as the language its fence names, as a File tab's
    * lines are, and plain for a language the highlighter does not know.
    */
   readonly highlightSnippet: (language: string, code: string) => Effect.Effect<CodeToken[][]>;
@@ -253,19 +253,6 @@ export function taskCodeColouring(
         colouredLines(sharedHighlighter, languageOfPath(window.path), window.lines),
         (lines) => ({ ...window, lines }),
       ),
-    highlightCode: (code) =>
-      Effect.map(
-        colouredLines(sharedHighlighter, languageOfPath(code.ref.path), code.lines),
-        (lines) => ({
-          ref: code.ref,
-          repository: code.repository,
-          ...(code.commit === undefined ? undefined : { commit: code.commit }),
-          firstLine: code.firstLine,
-          lineCount: code.lineCount,
-          lines,
-          ...(code.note === undefined ? undefined : { note: code.note }),
-        }),
-      ),
     highlightSnippet: (language, code) =>
       Effect.flatMap(languageOfFence(sharedHighlighter, language), (fenced) =>
         colouredLines(sharedHighlighter, fenced, code.split("\n")),
@@ -274,7 +261,7 @@ export function taskCodeColouring(
 }
 
 /** This process's colourings, over Shiki loaded through one dynamic `import()` the first time code is coloured. */
-export const { highlightFile, highlightCode, highlightSnippet } = taskCodeColouring(
+export const { highlightFile, highlightSnippet } = taskCodeColouring(
   Effect.map(
     Effect.tryPromise(() => import("./task-code-highlighter.js")),
     (module) => module.createTaskCodeHighlighter(),

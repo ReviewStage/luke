@@ -1223,7 +1223,8 @@ interface CommentFilesProps {
 
 /**
  * The files the developer's answer or a message on the thread carried,
- * drawn after its words, never as a strip over them. A picture its words
+ * drawn over its words, as the agent's tab draws a sent message's and every
+ * box holds them over what is typed. A picture its words
  * name already stands there, as an agent's do, so it is not drawn again;
  * every other picture is drawn as one in the words is, side by side where
  * several, the item's viewer walking it with the rest (`inbox-pictures.tsx`),
@@ -1384,12 +1385,6 @@ function Answered({
       {settled.values === undefined || drawn ? null : (
         <AnswerValues values={item.answer?.values ?? []} texts={NO_TEXT_LABELS} />
       )}
-      {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
-      {settled.note === undefined ? null : (
-        <div className="inbox-words" data-inbox-note="">
-          <SentWords text={settled.note} asDocument />
-        </div>
-      )}
       <CommentFiles
         itemId={item.id}
         files={item.answerFiles ?? NO_FILES}
@@ -1398,6 +1393,12 @@ function Answered({
         onImage={onImage}
         onRetryImage={onRetryImage}
       />
+      {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
+      {settled.note === undefined ? null : (
+        <div className="inbox-words" data-inbox-note="">
+          <SentWords text={settled.note} asDocument />
+        </div>
+      )}
     </Comment>
   );
 }
@@ -1523,6 +1524,14 @@ function Message({
         </>
       }
     >
+      <CommentFiles
+        itemId={item.id}
+        files={message.files ?? NO_FILES}
+        words={message.text}
+        images={images}
+        onImage={onImage}
+        onRetryImage={onRetryImage}
+      />
       {message.text === "" ? null : (
         <div
           className="inbox-words"
@@ -1533,14 +1542,6 @@ function Message({
           <SentWords text={message.text} asDocument />
         </div>
       )}
-      <CommentFiles
-        itemId={item.id}
-        files={message.files ?? NO_FILES}
-        words={message.text}
-        images={images}
-        onImage={onImage}
-        onRetryImage={onRetryImage}
-      />
     </Comment>
   );
 }
@@ -2259,6 +2260,14 @@ function ThreadMessage({
           <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
+      <CommentFiles
+        itemId={item.id}
+        files={message.files ?? NO_FILES}
+        words={message.text}
+        images={control.images}
+        onImage={control.onImage}
+        onRetryImage={control.onRetryImage}
+      />
       {message.text === "" ? null : (
         <div
           className="inbox-words inbox-message-words"
@@ -2273,14 +2282,6 @@ function ThreadMessage({
           )}
         </div>
       )}
-      <CommentFiles
-        itemId={item.id}
-        files={message.files ?? NO_FILES}
-        words={message.text}
-        images={control.images}
-        onImage={control.onImage}
-        onRetryImage={control.onRetryImage}
-      />
       {message.ask === undefined ? null : (
         <AskBox
           item={item}

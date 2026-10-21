@@ -87,6 +87,8 @@ export type NativeMoment =
       readonly kind: typeof NATIVE_MOMENT.TOOL_SETTLED;
       readonly callId: string;
       readonly settlement: ToolCallSettlement;
+      /** The call's input as it stood when it answered, for a harness that fills it in after the start (Codex); it replaces the started one. */
+      readonly input?: UnparsedWireValue;
     }
   | { readonly kind: typeof NATIVE_MOMENT.USAGE; readonly usage: BrainRunUsage }
   | { readonly kind: typeof NATIVE_MOMENT.USAGE_TOTAL; readonly total: BrainRunUsage }

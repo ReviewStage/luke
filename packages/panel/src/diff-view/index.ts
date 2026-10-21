@@ -149,7 +149,9 @@ import { wholeOf } from "./whole-diff.js";
  * and each note under its line drawn in the element the view keeps for it,
  * as a list's are. Pierre numbers a file from its first line, so the file
  * is handed whole. One patch alone takes notes under its lines the same way
- * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's.
+ * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's;
+ * a feed of such cards colours each in the same pool (\`pooled\`), so many
+ * landing at once never hold the window's thread.
  *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
@@ -423,6 +425,14 @@ const FILL_CSS = `
   pre {
     min-height: 100%;
   }
+  /* A note under one patch's lines, Luke's under a Code card's snippet,
+     stands on the code's own ground, its numbers' column too, rather than
+     Pierre's context ground, which sets a comment's row apart in a diff:
+     a snippet's lines are a file's, so none of them stands apart. */
+  [data-line-annotation],
+  [data-gutter-buffer="annotation"] {
+    --diffs-annotation-bg: var(--diffs-bg);
+  }
 }
 `;
 
@@ -577,9 +587,13 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
   const release = adoptShadowStyles(root, lookSheets().fill);
   typeset(container, props.look);
-  const view = new PierreFileDiff<string, undefined>(optionsOf(props));
+  // A pooled patch is read under a name of its own, so the pool's cache never hands it another's colours.
+  const highlighting = props.pooled === true ? listHighlighting(props.look) : undefined;
+  const read = highlighting === undefined ? getSingularPatch : readPatch;
+  const view = new PierreFileDiff<string, undefined>(optionsOf(props), highlighting?.pool);
   let patch = props.patch;
-  let fileDiff = getSingularPatch(patch);
+  let look = props.look;
+  let fileDiff = read(patch);
   view.render({
     fileDiff,
     fileContainer: container,
@@ -590,8 +604,12 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
     update: (next) => {
       if (next.patch !== patch) {
         patch = next.patch;
-        fileDiff = getSingularPatch(patch);
+        fileDiff = read(patch);
       }
+      // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the patch's own.
+      if (highlighting !== undefined && !sameLook(next.look, look))
+        void highlighting.follow(next.look);
+      look = next.look;
       typeset(container, next.look);
       view.setOptions(optionsOf(next));
       view.render({
@@ -1100,7 +1118,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
 /** The id a whole file's one item stands under in its view. */
 const WHOLE_FILE_ITEM = "file";
 
-/** How much room stands above a whole file's first line and below its last, in pixels: the File tab's rows' own (`styles/tasks.css`'s `.code-lines`). */
+/** How much room stands above a whole file's first line and below its last, in pixels: what the File tab's rows of lines stood in before Pierre drew them. */
 const WHOLE_FILE_EDGE = 6;
 
 /**
