@@ -75,12 +75,11 @@ afterEach(() => {
   document.head.innerHTML = "";
 });
 
-/** A task the composer started: its name, repository, workspace, whether it plans, the agent it asked for, and the brief it handed Luke. */
+/** A task the composer started: its name, repository, workspace, the agent it asked for, and the brief it handed on. */
 interface Started {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
-  readonly planning: boolean;
   readonly agent: NewTaskAgent | undefined;
   readonly brief: string | undefined;
 }
@@ -93,12 +92,11 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
     workspaceId: LISTED_WORKSPACE,
     repositoriesIn: () => ({ ...tasksControl().repositories, recent: ["acme/relay"] }),
     readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
-    start: (name, repository, workspaceId, planning, from) => {
+    start: (name, repository, workspaceId, from) => {
       started.push({
         name,
         repository,
         workspaceId,
-        planning,
         agent: from?.handed,
         brief: from?.brief,
       });
@@ -219,7 +217,7 @@ test("the welcome's composer leaves the caret in a field the developer is typing
   assert.ok(document.activeElement === field, "the field keeps the caret");
 });
 
-test("Agent mode: Return in the welcome's composer starts the task in the listed workspace, without planning, and an agent on the words with the chip's model", async () => {
+test("Return in the welcome's composer starts the task in the listed workspace, and an agent on the words with the chip's model", async () => {
   const { page, started } = mount();
   await settle();
   typeInComposer(page, "Make the sidebar keep its folds.");
@@ -232,7 +230,6 @@ test("Agent mode: Return in the welcome's composer starts the task in the listed
     name: "",
     repository: "acme/relay",
     workspaceId: LISTED_WORKSPACE,
-    planning: false,
     brief: undefined,
   });
   assert.deepEqual(handed, {
@@ -242,26 +239,6 @@ test("Agent mode: Return in the welcome's composer starts the task in the listed
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
   assert.equal(started.length, 1);
-});
-
-test("Plan mode: Shift+Tab in the welcome's composer turns it on, and Return starts the plan and its call in the listed workspace, Untitled, handing Luke the words as its brief, with no agent", async () => {
-  const { page, started } = mount();
-  await settle();
-  pressInComposer(page, "Tab", { shiftKey: true });
-  typeInComposer(page, "Rethink automations");
-  pressInComposer(page, "Enter");
-  await settle();
-
-  assert.deepEqual(started, [
-    {
-      name: "",
-      repository: "acme/relay",
-      workspaceId: LISTED_WORKSPACE,
-      planning: true,
-      agent: undefined,
-      brief: "Rethink automations",
-    },
-  ]);
 });
 
 /**
@@ -312,23 +289,6 @@ async function mountUnderDialog() {
     },
   };
 }
-
-test("Plan turned on in the dialog over the welcome and the dialog put away, the welcome's composer is in Plan mode too, and starts the plan and its call", async () => {
-  const page = await mountUnderDialog();
-  pressInComposer(page.dialog(), "Tab", { shiftKey: true });
-  await page.closeDialog();
-
-  const toggle = page.welcome().querySelector('button[aria-label="Plan with Luke first"]');
-  assert.equal(toggle?.getAttribute("aria-pressed"), "true", "the welcome's card shows Plan mode");
-  typeInComposer(page.welcome(), "Rethink automations");
-  pressInComposer(page.welcome(), "Enter");
-  await settle();
-
-  assert.deepEqual(
-    page.started.map(({ planning, agent }) => ({ planning, agent })),
-    [{ planning: true, agent: undefined }],
-  );
-});
 
 test("the welcome's composer is drawn as the dialog's: New task's title with the repository chip after it in the head row over the box, and no chip in the box's foot", async () => {
   const page = await mountUnderDialog();

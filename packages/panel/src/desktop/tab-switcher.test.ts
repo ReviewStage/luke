@@ -407,7 +407,7 @@ test("a tab closed on its task's page stays let go once the Inbox stands in the 
   tab();
   assert.deepEqual(
     cards().map((card) => card.querySelector(".tab-switcher-detail")?.textContent),
-    ["", "Plan", ""],
+    ["", "Plan"],
   );
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
   letGo();
