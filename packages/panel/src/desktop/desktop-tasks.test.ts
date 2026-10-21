@@ -924,7 +924,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
     /Message #teammate-invitations/u,
     "its composer asks for a message to the channel",
   );
-  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 6);
+  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 8);
   act(() => own.root.unmount());
   own.container.remove();
 
