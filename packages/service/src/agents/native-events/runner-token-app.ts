@@ -22,7 +22,7 @@
 import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  readCodingAgentOfConversation,
+  readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
@@ -96,7 +96,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   if (Option.isNone(admitted)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const { target } = admitted.value;
   const agent = yield* hostedStoreOrUnavailable(
-    readCodingAgentOfConversation(target.userId, target.conversationId),
+    readCodingAgentHeaderOfConversation(target.userId, target.conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const routing = yield* hostedStoreOrUnavailable(

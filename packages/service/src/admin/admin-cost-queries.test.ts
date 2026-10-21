@@ -256,11 +256,9 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
       ]);
 
       const workspace = yield* openWorkspace(owner);
-      const agentConversation = yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT);
       const agentRow = {
         organizationId: workspace,
         userId: owner,
-        conversationId: agentConversation,
         model: MODEL.OPUS,
         effort: "high",
         repository: "owner/name",
@@ -278,17 +276,21 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
       yield* db.insert(codingAgent).values([
         {
           ...agentRow,
+          // Each agent on a conversation of its own, as every Start makes one.
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, mergedAt: AT_YESTERDAY.getTime() },
         },
         {
           ...agentRow,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, mergedAt: AT_YESTERDAY.getTime() },
         },
         // Open, never merged.
         {
           ...agentRow,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, state: PULL_REQUEST_STATE.OPEN },
         },
