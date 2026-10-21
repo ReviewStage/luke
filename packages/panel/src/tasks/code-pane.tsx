@@ -143,17 +143,26 @@ export function CodeCardHeader({
 function CodeCardContent({
   showing,
   taskId,
+  agentLabel,
   onOpenFile,
 }: {
   showing: TaskCodeShowing;
   taskId: string | undefined;
+  agentLabel: (agentId: string) => string | undefined;
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   const { code } = showing;
   const notes = useSnippetNote(
     code,
-    { callId: showing.callId, shownAt: showing.shownAt, note: code.note },
+    {
+      callId: showing.callId,
+      turnId: showing.turnId,
+      agentId: showing.agentId,
+      shownAt: showing.shownAt,
+      note: code.note,
+    },
     taskId,
+    agentLabel,
   );
   return (
     <article className="code-card" data-call-id={showing.callId} aria-label={fileRefText(code.ref)}>
@@ -222,7 +231,13 @@ function CodeFeedRun({
         <AgentTurnCheckpoint agent={agent} startedAt={call.startedAt} now={now} />
       )}
       {call.showings.map((showing) => (
-        <CodeCard key={showing.callId} showing={showing} taskId={taskId} onOpenFile={onOpenFile} />
+        <CodeCard
+          key={showing.callId}
+          showing={showing}
+          taskId={taskId}
+          agentLabel={agentLabel}
+          onOpenFile={onOpenFile}
+        />
       ))}
       {call.ended === undefined ? null : (
         <CallEnded line={call.ended} startedAt={call.startedAt} record={call.record} />

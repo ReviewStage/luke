@@ -1221,6 +1221,12 @@ export function taskCards(input: {
   };
 }
 
+/** An agent on the task as its tab names it, which heads the code it showed and its notes on it; none for an agent the task does not list. */
+function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | undefined {
+  const agent = agents.agents?.find((each) => each.id === agentId);
+  return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+}
+
 /** What the chosen tab shows. */
 function TabContent({
   tab,
@@ -1405,6 +1411,7 @@ function TabContent({
             onStep: (step) => onFileHistory(file.path, step),
           }}
           onFoldNote={(callId, folded) => onFoldNote(file.path, callId, folded)}
+          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
         />
       </Fragment>
     );
@@ -1470,10 +1477,7 @@ function TabContent({
           shown={shownCode}
           calls={NO_CODE_CALLS}
           taskId={taskId}
-          agentLabel={(agentId) => {
-            const agent = agents.agents?.find((each) => each.id === agentId);
-            return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
-          }}
+          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
           onOpenFile={onOpenFile}
         />
       );

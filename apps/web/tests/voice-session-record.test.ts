@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { user } from "@luke/database/schemas/auth";
@@ -14,7 +15,7 @@ import {
 } from "@luke/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@luke/live";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 /**
  * The live session row as the record now writes it: five effects over the
@@ -58,7 +59,7 @@ const readVoiceSession = (liveSessionId: string) =>
 
 /** A call registered about the task, started at the instant given, with the segments said on it in order. */
 const callWith = (
-  input: { userId: string; taskId: string; startedAt: number },
+  input: { userId: string; taskId: string; agentId?: string; startedAt: number },
   segments: ReadonlyArray<readonly [VoiceSegmentRole, string]>,
 ) =>
   Effect.gen(function* () {
@@ -68,6 +69,7 @@ const callWith = (
       userId: input.userId,
       sessionId: liveSessionId,
       taskId: input.taskId,
+      ...(input.agentId === undefined ? undefined : { agentId: input.agentId }),
       attachId: randomUUID(),
       model: LIVE_DEFAULTS.MODEL,
     });
@@ -155,36 +157,55 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
   );
 
   it.effect(
-    "a plan's earlier calls read back oldest first, one speaker's adjacent words on one call run together, every member's and never another plan's",
+    "an agent's earlier calls read back oldest first, one speaker's adjacent words on one call run together, every member's and never another agent's",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
         const teammate = yield* openUser;
-        const taskId = randomUUID();
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        const agentOn = (userId: string) =>
+          Effect.map(
+            createCodingAgent(userId, {
+              taskId: task.id,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: null,
+              planSnapshot: null,
+              prompt: "Draft the invite email.",
+            }),
+            (started) => Option.getOrThrow(started).agent.id,
+          );
+        const agentId = yield* agentOn(owner);
+        const otherAgent = yield* agentOn(owner);
+        const taskId = task.id;
         const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
         // Registered newest first, so the order read back is the calls' and not the rows'.
-        const second = yield* callWith({ userId: owner, taskId, startedAt: NOW - 60_000 }, [
+        const second = yield* callWith({ userId: owner, taskId, agentId, startedAt: NOW - 60_000 }, [
           [USER, "Seven days."],
         ]);
-        const first = yield* callWith({ userId: owner, taskId, startedAt: NOW - 3_600_000 }, [
-          [USER, "Invites "],
-          [USER, "should expire."],
-          [ASSISTANT, "After how many days?"],
+        const first = yield* callWith(
+          { userId: owner, taskId, agentId, startedAt: NOW - 3_600_000 },
+          [
+            [USER, "Invites "],
+            [USER, "should expire."],
+            [ASSISTANT, "After how many days?"],
+          ],
+        );
+        yield* callWith({ userId: owner, taskId, agentId: otherAgent, startedAt: NOW }, [
+          [USER, "Another agent's words."],
         ]);
-        yield* callWith({ userId: owner, taskId: randomUUID(), startedAt: NOW }, [
-          [USER, "Another plan's words."],
-        ]);
-        const teammates = yield* callWith({ userId: teammate, taskId, startedAt: NOW }, [
+        const teammates = yield* callWith({ userId: teammate, taskId, agentId, startedAt: NOW }, [
           [USER, "A teammate's."],
         ]);
 
-        assert.deepEqual(yield* record.earlierCalls({ userId: owner, taskId: taskId }), [
+        assert.deepEqual(yield* record.earlierCalls({ agentId }), [
           { voiceSessionId: first, role: USER, text: "Invites should expire." },
           { voiceSessionId: first, role: ASSISTANT, text: "After how many days?" },
           { voiceSessionId: second, role: USER, text: "Seven days." },
           { voiceSessionId: teammates, role: USER, text: "A teammate's." },
         ]);
-        assert.deepEqual(yield* record.earlierCalls({ userId: owner, taskId: randomUUID() }), []);
       }),
   );
 });

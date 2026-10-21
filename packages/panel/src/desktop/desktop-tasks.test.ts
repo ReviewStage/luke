@@ -130,8 +130,8 @@ test("a task whose column shows no tab offers a new voice chat and a new agent b
   assert.deepEqual(pane(drawn(undefined)), ["New agent"]);
 });
 
-/** The Code tab as the task's page draws it over the code the task holds, and whether its work read did not land, as markup. */
-function codeTab(shownCode: readonly never[] | undefined, workFailed = false): HTMLElement {
+/** The Code tab as the task's page draws it over the code the task holds, and whether its code read did not land, as markup. */
+function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -142,7 +142,7 @@ function codeTab(shownCode: readonly never[] | undefined, workFailed = false): H
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
         sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
         shownCode,
-        workFailed,
+        codeFailed,
       }),
     }),
   );
@@ -166,7 +166,7 @@ test("the Code tab waits while the task's code is unread, and says there is none
   assert.equal(none.querySelector("[role=status]"), null);
 });
 
-test("the Code tab whose work read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
+test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
   let retries = 0;
   const container = document.createElement("div");
   document.body.append(container);
@@ -182,8 +182,8 @@ test("the Code tab whose work read did not land says so with Retry while it hold
           region: { kind: DOCUMENT_REGION.READY, task: TASK },
           sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
           shownCode: undefined,
-          workFailed: true,
-          onRetryWork: () => {
+          codeFailed: true,
+          onRetryCode: () => {
             retries += 1;
           },
         }),

@@ -159,7 +159,6 @@ function subject(options: { videoOnCall?: boolean; avatar?: VideoAvatar } = {}) 
           Effect.succeed(
             agentId === AGENT_ID ? TASK_ID : agentId === OTHER_TASK_AGENT ? OTHER_TASK : undefined,
           ),
-        showPlanDraft: () => undefined,
         showTaskActivity: () => undefined,
         showTaskCode: () => undefined,
         showTaskWork: () => undefined,

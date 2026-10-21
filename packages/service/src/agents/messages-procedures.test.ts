@@ -87,8 +87,6 @@ it.effect(
       for (const path of [
         `${MESSAGES}?after=not-a-cursor`,
         `/api/agents/${AGENT_ID}/subagents/call-1/messages`,
-        `/api/plans/${AGENT_ID}/messages?after=x&before=y`,
-        `/api/plans/${AGENT_ID}/subagents/call-1/messages`,
         "/api/workspaces/chat?after=-1",
       ]) {
         assert.deepEqual(yield* answer(path, { signedIn: false }), unauthenticated, path);
@@ -104,12 +102,10 @@ it.effect(
     }),
 );
 
-it.effect("an agent or a task named by an id that is no UUID is not found", () =>
+it.effect("an agent named by an id that is no UUID is not found", () =>
   Effect.gen(function* () {
     const notFound = refused(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
     assert.deepEqual(yield* answer("/api/agents/not-an-id/messages"), notFound);
-    assert.deepEqual(yield* answer("/api/plans/not-an-id/messages"), notFound);
-    assert.deepEqual(yield* answer("/api/plans/not-an-id/subagents/call-1/messages"), notFound);
   }),
 );
 
@@ -178,10 +174,6 @@ it.effect("a held read's path under a method it does not take is refused as such
       HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
     assert.deepEqual(yield* answer(MESSAGES, { method: "PUT" }), notAllowed);
-    assert.deepEqual(
-      yield* answer(`/api/plans/${AGENT_ID}/messages`, { method: "POST" }),
-      notAllowed,
-    );
     assert.deepEqual(
       yield* answer(`/api/agents/${AGENT_ID}/subagents/call-1/messages`, { method: "POST" }),
       notAllowed,

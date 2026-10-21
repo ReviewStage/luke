@@ -86,10 +86,6 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_TALK]: "Could not call that agent on this system.",
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: "Could not save the board on this system.",
   [TASKS_ACT_KIND.TASKS_SET_STANDING]: "Could not change where that task stands on this system.",
-  [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: "Could not read that task's earlier work on this system.",
-  [TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER]:
-    "Could not read that task's earlier conversation on this system.",
-  [TASKS_ACT_KIND.TASKS_MESSAGES]: "Could not read that task's conversation on this system.",
   [TASKS_ACT_KIND.TASKS_FILE]: "Could not read that file on this system.",
   [TASKS_ACT_KIND.TASKS_TREE]: "Could not list that folder on this system.",
   [TASKS_ACT_KIND.TASKS_SKILLS]: "Could not read this repository's skills on this system.",
@@ -190,9 +186,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_TALK, payload: { agentId: AGENT_ID } },
   { kind: TASKS_ACT_KIND.TASKS_BOARD_SAVE, payload: BOARD },
   { kind: TASKS_ACT_KIND.TASKS_SET_STANDING, payload: { ...TASK, status: "done" } },
-  { kind: TASKS_ACT_KIND.TASKS_WORK_EARLIER, payload: undefined },
-  { kind: TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER, payload: undefined },
-  { kind: TASKS_ACT_KIND.TASKS_MESSAGES, payload: { ...TASK, after: "0:0" } },
   {
     kind: TASKS_ACT_KIND.TASKS_FILE,
     payload: { ...TASK, path: "README.md", firstLine: 1, lastLine: 2 },
@@ -316,13 +309,6 @@ function windowPort(
       ),
     tasksSetStanding: (params) =>
       ask(`standing:${params.taskId}:${params.status ?? ""}`, () => true),
-    tasksWorkEarlier: () => ask("earlier", () => undefined),
-    tasksConversationEarlier: () => ask("conversation-earlier", () => undefined),
-    tasksMessages: (params) =>
-      ask(
-        `messages:${params.taskId}:${params.callId}:${params.after}`,
-        () => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }) as const,
-      ),
     tasksFile: (params) =>
       ask(
         `file:${params.path}:${params.firstLine}-${params.lastLine}`,
@@ -688,10 +674,6 @@ it("what a task holds is read through the host from a panel, and answers what it
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_SET_STANDING, { ...TASK, status: "done" }), {
     answer: true,
   });
-  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_WORK_EARLIER, undefined), { answer: undefined });
-  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER, undefined), {
-    answer: undefined,
-  });
   assert.deepEqual(
     await ask(TASKS_ACT_KIND.TASKS_FILE, { ...TASK, path: "README.md", firstLine: 1, lastLine: 2 }),
     { answer: { refusal: TASK_FILE_REFUSAL.MISSING } },
@@ -716,8 +698,6 @@ it("what a task holds is read through the host from a panel, and answers what it
 
   assert.deepEqual(asked, [
     `standing:${TASK_ID}:done`,
-    "earlier",
-    "conversation-earlier",
     "file:README.md:1-2",
     "tree:src",
     "skills:acme/relay",
@@ -762,20 +742,6 @@ it("a page's source is read through the host for a panel, line by line and plain
   assert.deepEqual(answer.lines, [[{ text: "<h1>Invites</h1>" }], [], [{ text: "<p>sent</p>" }]]);
   assert.deepEqual(plain, { answer: { lines: [[{ text: long }]] } });
   assert.deepEqual(asked, ["page:page-funnel:2", "page:page-funnel:2", "page:page-funnel:2"]);
-});
-
-it("a planning worker's page is read through the host from a panel", async () => {
-  const { client, asked } = windowPort(PANEL);
-
-  assert.deepEqual(
-    await settled(client, TASKS_ACT_KIND.TASKS_MESSAGES, {
-      ...TASK,
-      callId: "call-models",
-      after: "0:0",
-    }),
-    { answer: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
-  );
-  assert.deepEqual(asked, [`messages:${TASK_ID}:call-models:0:0`]);
 });
 
 it("a plan's picture is read through the host from a panel, its absence answered rather than refused, and one is kept", async () => {

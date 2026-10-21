@@ -6,7 +6,7 @@ import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { createTask, openTaskConversation, readTask } from "@luke/database/models/task-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { planRevision } from "@luke/database/schemas/plan-revision";
@@ -62,7 +62,6 @@ import {
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
-import { taskWorkAnswerSchema } from "@luke/features/tasks-view";
 import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
@@ -148,12 +147,8 @@ const ORIGIN = "https://luke.test";
 const TASKS = "/api/plans";
 const ONE_TASK = (taskId: string) => `${TASKS}/${taskId}`;
 const BOARD = (taskId: string) => `${ONE_TASK(taskId)}/board`;
-const TRANSCRIPT = (taskId: string) => `${ONE_TASK(taskId)}/transcript`;
-const WORK = (taskId: string) => `${ONE_TASK(taskId)}/work`;
 const ISSUES = (taskId: string) => `${ONE_TASK(taskId)}/issues`;
 const ISSUE = (taskId: string, linkId: string) => `${ISSUES(taskId)}/${linkId}`;
-const MESSAGES = "/api/plans/messages";
-const SUBAGENT_MESSAGES = "/api/plans/subagent-messages";
 const CODE = (taskId: string) => `${ONE_TASK(taskId)}/code`;
 const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
 const SKILLS = (taskId: string) => `${ONE_TASK(taskId)}/skills`;
@@ -165,7 +160,6 @@ const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/revisions`;
 const REVISION = (taskId: string, seq: number) => `${REVISIONS(taskId)}/${seq}`;
 const RESTORE = (taskId: string, seq: number) => `${REVISION(taskId, seq)}/restore`;
 const EDIT = (taskId: string) => `${ONE_TASK(taskId)}/edit`;
-const STOP = (taskId: string) => `${ONE_TASK(taskId)}/stop`;
 const PAGE = (taskId: string, pageId: string, version: string) =>
   `${PAGES(taskId)}/${pageId}/versions/${version}`;
 
@@ -288,16 +282,12 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
     Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? "")));
 }
 
-/** The flattened paths the old group still serves, which a request names as the rewrite hands them to it. */
-const GROUP_PATHS: ReadonlySet<string> = new Set([MESSAGES, SUBAGENT_MESSAGES]);
-
 /**
  * The routes over the test's own database and the GitHub given, answering
  * one request: a plan's own routes as a client sends them, landed by the
  * platform through the committed rewrites and the grouped function's
- * dispatcher on the hosted oRPC router; the old group's at its own
- * flattened path, or, where a route key is named, landed on a function
- * holding the group under that key.
+ * dispatcher on the hosted oRPC router; or, where a route key is named,
+ * landed on a function holding the old group under that key.
  */
 const answer = (
   signedIn: SignedIn,
@@ -339,26 +329,10 @@ const answer = (
       taskFiles: taskFilesProcedures(seams),
     });
     const tasksRoute = { fetch: (each: Request) => routed(each, webServices) };
-    /** A task's transcript reads are the hosted oRPC router's, at the public paths their rewrites carry; the rest of the old group's flattened paths are its own. */
-    const flattened = (each: Request): Promise<Response> => {
-      const url = new URL(each.url);
-      const id = url.searchParams.get("id") ?? "";
-      const call = url.searchParams.get("call") ?? "";
-      if (url.pathname === MESSAGES) {
-        url.pathname = `/api/plans/${encodeURIComponent(id)}/messages`;
-        return routed(new Request(url, each), webServices);
-      }
-      if (url.pathname === SUBAGENT_MESSAGES) {
-        url.pathname = `/api/plans/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
-        return routed(new Request(url, each), webServices);
-      }
-      return handler(each);
-    };
     const response = yield* Effect.promise(() => {
       if (landedAs !== undefined) {
-        return dispatched(request, new Map([[landedAs, { fetch: (each) => flattened(each) }]]));
+        return dispatched(request, new Map([[landedAs, { fetch: (each) => handler(each) }]]));
       }
-      if (GROUP_PATHS.has(new URL(request.url).pathname)) return flattened(request);
       return dispatched(request, new Map([[ORPC_ROUTE_KEY, tasksRoute]]));
     });
     // SAFETY: the group answers JSON; the test compares it as the wire value it is.
@@ -413,22 +387,6 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 function startedId(started: Answer): string {
   return readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.id;
 }
-
-/** The task's own conversation, opened and recorded as running in an eve session of its own, as Luke's first turn on it leaves it: the session's id. */
-const sessionOn = (owner: string, taskId: string) =>
-  Effect.gen(function* () {
-    const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, taskId));
-    const sessionId = `wrun_${randomUUID()}`;
-    assert.equal(
-      yield* claimRuntimeSession(
-        { userId: owner, conversationId },
-        sessionId,
-        yield* DateTime.nowAsDate,
-      ),
-      true,
-    );
-    return sessionId;
-  });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
@@ -910,18 +868,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
         body: { plans: [], planlessAgents: [] },
       });
       assert.equal((yield* ask(request(ONE_TASK(taskId), owner))).status, HOSTED_HTTP_STATUS.OK);
-      assert.deepEqual(yield* ask(request(MESSAGES, other, { id: taskId })), notFound);
       assert.deepEqual(yield* ask(request(CODE(taskId), other)), notFound);
-      assert.deepEqual(yield* ask(request(STOP(taskId), other, { method: "POST" })), notFound);
-      assert.deepEqual(
-        yield* ask(request(SUBAGENT_MESSAGES, other, { id: taskId, query: { call: "call-0-0" } })),
-        notFound,
-      );
       // The reads that need only where the plan stands, not its document, refuse it as the open does, and a plan that is none alike.
       for (const id of [taskId, randomUUID()]) {
         const bearer = id === taskId ? other : owner;
         for (const read of [
-          request(WORK(id), bearer),
+          request(CODE(id), bearer),
           request(ISSUES(id), bearer),
           request(FILE(id), bearer, { query: README_WINDOW }),
           request(TREE(id), bearer),
@@ -930,10 +882,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           assert.deepEqual(yield* ask(read), notFound, read.url);
         }
       }
-      assert.deepEqual(
-        yield* ask(request(STOP(randomUUID()), owner, { method: "POST" })),
-        notFound,
-      );
     }),
   );
 
@@ -964,14 +912,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
         for (const read of [
-          request(MESSAGES, owner, { id: taskId }),
           request(CODE(taskId), owner),
-          request(WORK(taskId), owner),
           request(ISSUES(taskId), owner),
           request(FILE(taskId), owner, { query: README_WINDOW }),
           request(TREE(taskId), owner),
           request(SKILLS(taskId), owner),
-          request(STOP(taskId), owner, { method: "POST" }),
         ]) {
           const answered = yield* ask(read);
           assert.equal(
@@ -983,22 +928,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
-  it.effect("stopping Luke on a plan he never worked on stops nothing, and only a POST stops", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* openAccounts();
-      const taskId = startedId(yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })));
-
-      assert.deepEqual(yield* ask(request(STOP(taskId), owner, { method: "POST" })), {
-        status: HOSTED_HTTP_STATUS.OK,
-        body: {},
-      });
-      assert.deepEqual(
-        yield* ask(request(STOP(taskId), owner)),
-        refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
-      );
-    }),
-  );
-
   it.effect(
     "a session cookie's delete is refused as unavailable, stopping and deleting nothing, on a deployment that cannot reach eve as itself, while the bearer's delete goes on with its retires a courtesy",
     () =>
@@ -1007,8 +936,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const taskId = startedId(
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
-        yield* sessionOn(owner, taskId);
-
         assert.deepEqual(
           yield* ask(
             request(ONE_TASK(taskId), undefined, {
@@ -1031,7 +958,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a session cookie starts, reads, and deletes its account's task however the delete lands, retiring the task's session as the deployment acting for the cookie's account, while another account's cookie deletes and retires nothing",
+    "a session cookie starts, reads, and deletes its account's task however the delete lands, while another account's cookie deletes and retires nothing",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask, retired } = yield* openAccounts();
@@ -1040,8 +967,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           Effect.map(ask(request(TASKS, undefined, { method: "POST", body, cookie })), startedId);
         const relay = yield* started(RELAY);
         const ledger = yield* started(LEDGER);
-        const relaySession = yield* sessionOn(owner, relay);
-        const ledgerSession = yield* sessionOn(owner, ledger);
         const deletedBy = (taskId: string, by: string) =>
           ask(request(ONE_TASK(taskId), undefined, { method: "DELETE", cookie: by }));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
@@ -1058,57 +983,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         assert.deepEqual(yield* deletedBy(relay, cookie), deleted);
         assert.deepEqual(yield* deletedBy(ledger, cookie), deleted);
-        assert.deepEqual(retired, [
-          [deploymentFor(owner), relaySession],
-          [deploymentFor(owner), ledgerSession],
-        ]);
         assert.deepEqual(
           readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
             .plans,
           [],
         );
-      }),
-  );
-
-  it.effect(
-    "a plan never planned on reads as an empty conversation on the agent tab's wire, in one look as much as held, and as no code shown",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts();
-        const taskId = startedId(
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        );
-
-        const read = yield* ask(request(MESSAGES, owner, { id: taskId }));
-        const page = readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, read);
-        assert.deepEqual(
-          [page.messages, page.status, page.earlier],
-          [[], CODING_AGENT_STATUS.COMPLETED, undefined],
-        );
-        assert.deepEqual(yield* ask(request(CODE(taskId), owner)), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { code: [] },
-        });
-        assert.equal(
-          (yield* ask(
-            request(MESSAGES, owner, { id: taskId, query: { after: "0:0", before: taskId } }),
-          )).status,
-          HOSTED_HTTP_STATUS.BAD_REQUEST,
-        );
-        // One look past a cursor is the only read `hold` names, and `none` the only word it takes.
-        const look = yield* ask(
-          request(MESSAGES, owner, { id: taskId, query: { after: page.cursor, hold: "none" } }),
-        );
-        assert.deepEqual(
-          readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, look).messages,
-          [],
-        );
-        for (const query of [{ hold: "none" }, { after: page.cursor, hold: "forever" }]) {
-          assert.equal(
-            (yield* ask(request(MESSAGES, owner, { id: taskId, query }))).status,
-            HOSTED_HTTP_STATUS.BAD_REQUEST,
-          );
-        }
       }),
   );
 
@@ -1764,138 +1643,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
-  it.effect(
-    "a transcript reads each call oldest first in the lines its captions drew, and nothing of another plan",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, ask } = yield* openAccounts();
-        const taskId = startedId(
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        );
-        const read = () =>
-          Effect.map(
-            ask(request(TRANSCRIPT(taskId), owner)),
-            (answered) =>
-              readAnswer(taskTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
-          );
-        const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
-
-        assert.deepEqual(yield* read(), { calls: [], earlierOmitted: false });
-        // Made newest first, so the order read back is the calls' starts and not the rows'.
-        const second = yield* callAbout({ userId: owner, taskId, startedAt: 2_000_000 }, [
-          [USER, "Seven days.", 0],
-        ]);
-        // Luke's acknowledgment lands inside the developer's sentence, which a
-        // fragment written after it still finishes, as the captions draw it.
-        const first = yield* callAbout({ userId: owner, taskId, startedAt: 1_000_000 }, [
-          [USER, "Invites ", 0],
-          [ASSISTANT, "Mm.", 600],
-          [USER, "should expire.", 700],
-          [ASSISTANT, "After how many days?", 9_000],
-        ]);
-        yield* callAbout({ userId: owner, taskId, startedAt: 3_000_000 }, []);
-        const otherTask = startedId(
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        );
-        yield* callAbout({ userId: owner, taskId: otherTask, startedAt: 3_000_000 }, [
-          [USER, "Another plan's words.", 0],
-        ]);
-
-        assert.deepEqual(yield* read(), {
-          calls: [
-            {
-              id: first,
-              startedAt: 1_000_000,
-              messages: [
-                spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.", [0, 1_200]),
-                spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "Mm.", [600, 1_100]),
-                spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?", [9_000, 9_500]),
-              ],
-              by: { userId: owner, name: "Test User" },
-            },
-            {
-              id: second,
-              startedAt: 2_000_000,
-              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.", [0, 500])],
-              by: { userId: owner, name: "Test User" },
-            },
-          ],
-          earlierOmitted: false,
-        });
-        assert.deepEqual(
-          yield* ask(request(TRANSCRIPT(taskId), other)),
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
-        );
-        assert.deepEqual(
-          yield* ask(request(TRANSCRIPT(taskId), owner, { method: "PUT" })),
-          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
-        );
-      }),
-  );
-
-  it.effect(
-    "a teammate's call about a shared plan reads in every member's transcript, with what its record holds and whose call it was",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, ask } = yield* openAccounts();
-        const started = readAnswer(
-          taskAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        ).plan;
-        yield* joinWorkspace(started.workspaceId, other);
-        const read = (userId: string) =>
-          Effect.map(
-            ask(request(TRANSCRIPT(started.id), userId)),
-            (answered) =>
-              readAnswer(taskTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
-          );
-        const { USER } = VOICE_SEGMENT_ROLE;
-
-        const ownersCall = yield* callAbout(
-          { userId: owner, taskId: started.id, startedAt: 1_000_000 },
-          [[USER, "Invites should expire.", 0]],
-        );
-        const teammatesCall = yield* callAbout(
-          {
-            userId: other,
-            taskId: started.id,
-            startedAt: 2_000_000,
-            recorded: {
-              closedAt: new Date(2_060_000),
-              closeReason: VOICE_CLOSE_REASON.CONNECTION_LOST,
-              usage: { seconds: 60, confirmed: false },
-            },
-          },
-          [[USER, "After seven days.", 0]],
-        );
-
-        const expected = {
-          calls: [
-            {
-              id: ownersCall,
-              startedAt: 1_000_000,
-              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.", [0, 500])],
-              by: { userId: owner, name: "Test User" },
-            },
-            {
-              id: teammatesCall,
-              startedAt: 2_000_000,
-              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "After seven days.", [0, 500])],
-              endedAt: 2_060_000,
-              ending: VOICE_CLOSE_REASON.CONNECTION_LOST,
-              usage: { seconds: 60, confirmed: false },
-              // Whose call each was, which every member reads the same and the window says.
-              by: { userId: other, name: "Test User" },
-            },
-          ],
-          earlierOmitted: false,
-        };
-        assert.deepEqual(yield* read(owner), expected);
-        assert.deepEqual(yield* read(other), expected);
-      }),
-  );
-
   it.effect("the board one member saves is read by the rest of the workspace", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts();
@@ -1924,40 +1671,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         [NOTE],
       );
     }),
-  );
-
-  it.effect(
-    "a plan's work is read by the account that owns it alone, before a turn the query names by its id, and only read",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, ask } = yield* openAccounts();
-        const taskId = startedId(
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        );
-
-        assert.deepEqual(
-          readAnswer(
-            taskWorkAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(WORK(taskId), owner)),
-          ),
-          { turns: [], code: [] },
-        );
-        const older = new URL(WORK(taskId), ORIGIN);
-        older.searchParams.set("before", "turn-1");
-        assert.deepEqual(
-          yield* ask(new Request(older, { headers: { authorization: `Bearer ${owner}` } })),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
-        assert.deepEqual(
-          yield* ask(request(WORK(taskId), other)),
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
-        );
-        assert.deepEqual(
-          yield* ask(request(WORK(taskId), owner, { method: "PUT" })),
-          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
-        );
-      }),
   );
 
   it.effect(

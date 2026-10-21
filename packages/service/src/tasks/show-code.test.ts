@@ -46,6 +46,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const sandbox = sandboxDouble(() => undefined, { files: FILES });
+      // The agent's checkout stands, as its sandbox opened on one.
+      sandbox.checkedOut = RELAY_FULL_NAME;
       const checkout = Effect.succeed({ sandbox, repository: RELAY_FULL_NAME });
       const refused = (input: WireRecord) =>
         Effect.map(showCodeIn(checkout, unparsedWire({ note: NOTE, ...input })), (answer) => {

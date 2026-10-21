@@ -561,6 +561,7 @@ export function FileView({
   onBrowse,
   history,
   onFoldNote,
+  agentLabel,
 }: {
   taskId: string;
   /** The task's repository, `owner/name`, which the tree browses; none draws the tab alone. */
@@ -585,6 +586,8 @@ export function FileView({
   history: FileHistory;
   /** Folds or opens the note of the call that showed lines of the file, on this tab. */
   onFoldNote: FileNotes["onFold"];
+  /** An agent on the task as its tab names it, which heads its notes on the file; none for an agent not listed. */
+  agentLabel?: FileNotes["agentLabel"];
 }): React.JSX.Element {
   // The view's store of listings, one per task and repository. Note that
   // it lists through a ref to the latest door, so a parent drawing a fresh
@@ -620,6 +623,7 @@ export function FileView({
     folded: file.foldedNotes ?? [],
     onFold: onFoldNote,
     taskId,
+    agentLabel,
   };
 
   const [told, setTold] = useState<TabRead | undefined>(undefined);

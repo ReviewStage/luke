@@ -200,7 +200,7 @@ const inOrder = (retired: readonly (readonly [string, string])[]) =>
 
 it.layer(getTestDB())("an account's deletion", (it) => {
   it.effect(
-    "over a browser's session cookie erases the account the cookie names alone, retiring every session of that account's standing conversations as the deployment acting for it and none of another account's",
+    "over a browser's session cookie erases the account the cookie names alone, retiring every session of that account's standing agents' conversations as the deployment acting for it, none of another account's, and none of an old task's own Luke's",
     () =>
       Effect.gen(function* () {
         const eve = retiringEve();
@@ -219,13 +219,8 @@ it.layer(getTestDB())("an account's deletion", (it) => {
           { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } },
         );
 
-        assert.deepEqual(
-          inOrder(eve.retired),
-          inOrder([
-            [deploymentFor(owner), taskSession],
-            [deploymentFor(owner), agentSession],
-          ]),
-        );
+        assert.notEqual(taskSession, agentSession);
+        assert.deepEqual(eve.retired, [[deploymentFor(owner), agentSession]]);
         assert.equal(yield* stands(owner), false, "the cookie erased its account");
         assert.equal(yield* stands(other), true, "and no other");
       }),
@@ -237,8 +232,8 @@ it.layer(getTestDB())("an account's deletion", (it) => {
       Effect.gen(function* () {
         const eve = retiringEve();
         const { owner, other, stands, ask } = yield* openAccounts(eve);
-        const taskSession = yield* sessionOf(owner, CONVERSATION_KIND.TASK);
-        yield* sessionOf(other, CONVERSATION_KIND.TASK);
+        const agentSession = yield* sessionOf(owner, CONVERSATION_KIND.CODING_AGENT);
+        yield* sessionOf(other, CONVERSATION_KIND.CODING_AGENT);
 
         assert.deepEqual(
           yield* ask(
@@ -250,7 +245,7 @@ it.layer(getTestDB())("an account's deletion", (it) => {
           { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } },
         );
 
-        assert.deepEqual(eve.retired, [[`Bearer ${owner}`, taskSession]]);
+        assert.deepEqual(eve.retired, [[`Bearer ${owner}`, agentSession]]);
         assert.equal(yield* stands(owner), false);
         assert.equal(yield* stands(other), true);
       }),

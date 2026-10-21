@@ -237,7 +237,7 @@ it("an unpackaged run never records, whatever the host permitted", () => {
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 
-it("the voice and call windows are sent the document, and answered their first read of it, without the planning turns' work or the plan's planning conversation, and the rest of the plan as held", () => {
+it("the voice and call windows are sent the document, and answered their first read of it, without the call's turns' work, and the rest of the plan as held", () => {
   const held = initialAppState(RUN, true, []);
   const tasks = {
     ...held.tasks,
@@ -248,38 +248,16 @@ it("the voice and call windows are sent the document, and answered their first r
         startedAt: 0,
         state: TASK_WORK_STATE.DONE,
         earlierOmitted: false,
-        journal: [{ type: "text", text: "Invites live in one file." }],
+        journal: [{ type: "text", text: "On branch invite-expiry." }],
         workers: [],
       },
     ],
-    conversation: {
-      messages: [
-        {
-          id: "turn-1",
-          role: MESSAGE_ROLE.ASSISTANT,
-          turnId: "turn-1",
-          parts: [
-            {
-              type: "tool-run_on_mac",
-              toolCallId: "call-1",
-              state: "output-available",
-              input: { command: "git status" },
-              output: { status: "ran", stdout: "On branch invite-expiry", stderr: "" },
-            },
-          ],
-        },
-      ],
-      cursor: "1:1",
-      status: CODING_AGENT_STATUS.COMPLETED,
-      title: null,
-    },
   } as const;
   const sent = voiceWindowState({ ...held, tasks: tasks });
   assert.equal(sent.tasks.activeTaskId, "plan-1");
   assert.equal("work" in sent.tasks, false);
-  assert.equal("conversation" in sent.tasks, false);
   assert.doesNotMatch(JSON.stringify(sent), /invite-expiry/u);
-  // A window's first read of the document answers the same: the voice and call windows' without either, a panel's whole.
+  // A window's first read of the document answers the same: the voice and call windows' without it, a panel's whole.
   for (const window of [
     { voice: true, call: false },
     { voice: false, call: true },
@@ -290,7 +268,7 @@ it("the voice and call windows are sent the document, and answered their first r
     );
   }
   const panel = windowAppState({ ...held, tasks: tasks }, { voice: false, call: false });
-  assert.equal(panel.tasks.conversation?.cursor, "1:1");
+  assert.equal(panel.tasks.work?.length, 1);
   assert.deepEqual(sent.run, held.run);
 });
 

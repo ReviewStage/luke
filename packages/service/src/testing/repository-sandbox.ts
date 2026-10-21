@@ -1,5 +1,5 @@
 /**
- * repository-sandbox.ts -- a sandbox double at eve's boundary, for the tests that run the brain's repository shell.
+ * repository-sandbox.ts -- a sandbox double at eve's boundary, for the tests that run an agent's checkout of the task's repository.
  *
  * The double stands where eve's `ctx.getSandbox()` hands the shell a live
  * Vercel Sandbox: it answers each run from the contract the shell hands the

@@ -466,7 +466,6 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   });
   const cards = taskCards({
     agents,
-    workRows: [],
     held: NOTHING_HELD,
     chosen: () => false,
     shownCode: [],
@@ -522,7 +521,6 @@ test("a call about an agent names it by its chip in the place of the words, as i
   const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({
     agents,
-    workRows: [],
     held: NOTHING_HELD,
     chosen: () => false,
     shownCode: [],
