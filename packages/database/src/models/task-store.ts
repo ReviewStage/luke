@@ -50,6 +50,7 @@ import { voiceSessions } from "../schemas/voice.js";
 import { readPlanTemplate } from "./account-store.js";
 import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
+import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -1232,6 +1233,20 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   yield* Database.use((db) =>
     db.update(attachment).set({ organizationId }).where(eq(attachment.taskId, taskId)),
   );
+});
+
+/** The conversations of the task's agents still standing unarchived, in the order `lockStandingAgents` locks them. */
+const findStandingConversations = SqlSchema.findAll({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: codingAgent.conversationId })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.taskId, taskId), isNull(codingAgent.archivedAt)))
+        .orderBy(codingAgent.conversationId),
+    ),
 });
 
 /**

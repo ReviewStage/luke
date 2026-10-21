@@ -67,6 +67,7 @@ import {
   MESSAGE_SENDER,
 } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
+import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import {
   awaitingLinesOf,
   awaitingLinesOfReached,
@@ -2263,7 +2264,7 @@ export function updateCodingAgentServers(
  * took the message. The row is locked, the servers added, the hand-over
  * run, and the servers as they stood put back for one that answered
  * nothing, so a refused send leaves no server for a later turn. Note that
- * the caller runs this as the dispatch under the conversation's lock
+ * the caller runs this as the dispatch under the conversation's dispatch lock
  * (`writeAwaitingLine`), after its repeat check, so a send's servers are
  * added only for a send eve hears, and no other send's hand-over stands
  * between this one's servers and its message. Nothing is added for no
@@ -2526,6 +2527,8 @@ export function archiveIdleCodingAgent(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return IDLE_ARCHIVE.NOT_FOUND;
+        // A hand-over to eve under way is waited out first, so its line stands awaiting when `idle` reads.
+        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });

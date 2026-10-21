@@ -1073,9 +1073,9 @@ export class StreamRelay {
    * eve coalesced with it, which is taken as its awaiting row, and every
    * other line, a typed ask's among them, is written here as the turn's user
    * row. Note
-   * the order: the awaiting row is taken under the conversation's lock,
-   * which waits out an ask's dispatch still writing its delivery under that
-   * lock (`asks.ts`'s `dispatchOnce`), so the binding that follows reads a
+   * the order: the awaiting row is taken once the conversation's dispatch
+   * lock is free, which waits out an ask's dispatch still writing its
+   * delivery under that lock (`asks.ts`'s `dispatchOnce`), so the binding that follows reads a
    * delivery eve steered in before its dispatch committed; bound first, such
    * an ask would be missed and its line written twice.
    */
