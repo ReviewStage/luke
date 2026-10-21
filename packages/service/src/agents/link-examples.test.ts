@@ -52,7 +52,7 @@ function drawnAs(words: string): (string | undefined)[] {
   return examplesIn(words).map((target) => decodeMention(target, REPOSITORY)?.kind);
 }
 
-test("a coding agent is shown to name each kind as a mention Luke draws as its chip, its task's own under its task's link and only where it has a task", () => {
+test("a coding agent is shown to name each kind as a mention Luke draws as its chip, its task's own under its task's link and only where it has a task, and one on no task its own pages under its own link", () => {
   const shared = [MENTION_KIND.FILE, MENTION_KIND.FILE, MENTION_KIND.LINK, MENTION_KIND.LINK];
   const own = [MENTION_KIND.TASK, MENTION_KIND.SECTION, MENTION_KIND.PAGE];
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
@@ -61,7 +61,7 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
       const told = words.slice(words.indexOf("## What your messages are"));
       assert.deepEqual(
         drawnAs(told),
-        [...shared, ...(onTask ? own : []), MENTION_KIND.AGENT],
+        [...shared, ...(onTask ? own : [MENTION_KIND.PAGE]), MENTION_KIND.AGENT],
         `${brief} ${onTask}`,
       );
       assert.deepEqual(

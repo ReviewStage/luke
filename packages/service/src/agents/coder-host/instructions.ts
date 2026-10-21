@@ -387,7 +387,7 @@ function namingWords(repository: string, taskLink: string | null): string {
   const ownTask =
     taskLink === null
       ? `
-- A page you showed, which stands on you since you work on no task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](https://tryluke.dev/acme/agent/<your-id>/page/<page-id>)\`.`
+- A page you showed, which stands on you since you work on no task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](https://tryluke.dev/acme/agent/<agent-id>/page/<page-id>)\`.`
       : `
 - Your task's plan, whose link is \`${taskLink}\`: \`[@<the task's name>](${taskLink})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${taskLink}#rollout)\`.
 - A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;
