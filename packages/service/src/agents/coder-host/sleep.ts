@@ -12,9 +12,12 @@ import { CODER } from "./bounds.js";
  * a pull request's checks it watches, a deploy, a slow suite. Without a way
  * to wait, each check is a model step spent finding nothing changed. eve's
  * `sleep` parks the turn durably, holding no function open, and a message
- * from the developer ends it early, as it steers any turn; the sandbox and
- * what runs in it stand while the turn does, since only a turn's end stops
- * them (`../agent-runtime/sandbox.ts`). One pause is held to
+ * from the developer ends it early, as it steers any turn. A pause of
+ * `CODER.SLEEP_STOPS_AT` or more stops the sandbox where no process the
+ * agent started still runs in it, and the next step resumes it from its
+ * snapshot with its files as they stood; a command left running in the
+ * background keeps it up, and runs on through the pause
+ * (`../agent-runtime/sandbox.ts`'s `parksForLongSleep`). One pause is held to
  * `CODER.SLEEP_MAX`, inside what is left of the GitHub credential its
  * background commands reach GitHub with, since only a step renews it; a
  * longer wait is several pauses, each one's end a step.

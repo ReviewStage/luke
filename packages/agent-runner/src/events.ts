@@ -180,13 +180,15 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);
-  // Note that a heartbeat Luke did not take is let go, since the next follows within the interval.
+  // Note that a heartbeat Luke did not take, or did not answer within its bound, is let go, since the next follows within the interval.
   const heartbeat = yield* Effect.forkScoped(
     Effect.forever(
       Effect.andThen(
         Effect.sleep(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS)),
         Effect.ignore(
-          Effect.suspend(() => postOnce(client, { ...options, secrets }, { events: [] })),
+          Effect.suspend(() => postOnce(client, { ...options, secrets }, { events: [] })).pipe(
+            Effect.timeout(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS)),
+          ),
         ),
       ),
     ),

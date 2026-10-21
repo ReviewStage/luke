@@ -91,7 +91,7 @@ import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
-import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
+import { ColumnFoot } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
@@ -1414,8 +1414,6 @@ interface DesktopSidebarProps {
   updates: UpdateControl;
   /** Signs the account out, once the account menu's Log out is answered. */
   onSignOut: () => Promise<void>;
-  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
-  call: CallCardInput | undefined;
   /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
   onPressWithin: () => void;
   /** The room the panel's stage gives; narrow, the sidebar is a phone's drawer, whose page rows scroll away with its tasks. Wide where left out. */
@@ -1506,7 +1504,6 @@ function SidebarColumn({
   account,
   updates,
   onSignOut,
-  call,
   onPressWithin,
   room = SHELL_ROOM.WIDE,
   inboxListing,
@@ -2051,7 +2048,7 @@ function SidebarColumn({
         </ScrollArea>
       </div>
 
-      <ColumnFoot call={call}>
+      <ColumnFoot docked={!sidebar.collapsed}>
         <SidebarFoot
           account={account}
           updates={updates}

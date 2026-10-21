@@ -31,6 +31,8 @@ export const PANEL_SPAN_ATTRIBUTE = {
   MESSAGE_COUNT: "transcript.message_count",
   /** The size of the page that ended the span, as its JSON. */
   PAGE_BYTES: "transcript.page_bytes",
+  /** Whether the follow's first page was the window the host held from the last time it was followed, 1, or read from the service, 0. */
+  CACHE_HIT: "transcript.cache_hit",
   /** The size of the plan the task opened on, in characters. */
   PLAN_CHARS: "task.plan_chars",
 } as const;

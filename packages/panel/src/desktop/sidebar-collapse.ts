@@ -19,7 +19,7 @@
  */
 
 import { Option, Schema } from "effect";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PANE_FLOAT, type PaneFloat } from "./hover-pane.js";
 
 /** The storage keys the choices are kept under. */
@@ -168,14 +168,19 @@ export function useSidebarCollapse(fixtureMode: boolean, compact: boolean): Side
     }
   }, [keptWidth]);
 
-  return {
-    collapsed,
-    compact,
-    overlay: collapsed ? overlay : SIDEBAR_OVERLAY.CLOSED,
-    width,
-    onToggle,
-    onOverlay: setOverlay,
-    onResize,
-    staged: fixtureMode,
-  };
+  // Note that the fold is handed back steady, so the columns handed it hold while it does.
+  const shownOverlay = collapsed ? overlay : SIDEBAR_OVERLAY.CLOSED;
+  return useMemo(
+    () => ({
+      collapsed,
+      compact,
+      overlay: shownOverlay,
+      width,
+      onToggle,
+      onOverlay: setOverlay,
+      onResize,
+      staged: fixtureMode,
+    }),
+    [collapsed, compact, shownOverlay, width, onToggle, onResize, fixtureMode],
+  );
 }

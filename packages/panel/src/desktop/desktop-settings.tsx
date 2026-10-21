@@ -25,7 +25,7 @@ import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
-import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
+import { ColumnFoot } from "../call/call-card.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
@@ -192,7 +192,6 @@ export function DesktopSettings({
   step,
   history,
   settings,
-  call,
   onExit,
 }: {
   sidebar: SidebarCollapse;
@@ -200,8 +199,6 @@ export function DesktopSettings({
   step: SettingsStep;
   history: NavigationHistory;
   settings: SettingsPanelProps;
-  /** The call card, at the page list's foot, as the tasks' sidebar draws it above its account row. */
-  call: CallCardInput | undefined;
   /** Leaves Settings for wherever it was opened from. */
   onExit: () => void;
 }): React.JSX.Element {
@@ -283,7 +280,6 @@ export function DesktopSettings({
         room={room}
         history={history}
         account={settings.account}
-        call={call}
         onExit={() => setTemplateHistory(false)}
       />
     );
@@ -343,7 +339,7 @@ export function DesktopSettings({
             </ScrollArea>
           </div>
         </LinkWorkspaceProvider>
-        <ColumnFoot call={call} />
+        <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
       </nav>

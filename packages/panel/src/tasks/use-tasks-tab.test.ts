@@ -33,7 +33,12 @@ import {
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
+import {
+  type AppInboxTask,
+  type AppInboxTaskHolding,
+  type AppStateSnapshot,
+  RUN_PROFILE,
+} from "@luke/host/app-state";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -49,10 +54,10 @@ import {
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF } from "@luke/voice/avatar";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
-  type VoiceCallTranscript,
   type VoiceCommand,
   type VoiceView,
 } from "@luke/voice/voice-view";
@@ -78,7 +83,13 @@ import {
 } from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
+import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -135,9 +146,6 @@ interface Standing {
   tasks: TasksView;
   profile: string;
   fixtureMode: boolean;
-  voice: VoiceView;
-  /** The document's `voice.callTranscript`, held whole beside the view. */
-  callTranscript: VoiceCallTranscript | undefined;
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxTask[];
   inboxTasks: readonly AppInboxTaskHolding[];
@@ -182,8 +190,6 @@ function mount(
     tasks: IDLE_TASKS_VIEW,
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
-    voice: IDLE_VOICE_VIEW,
-    callTranscript: undefined,
     unseenAgents: [],
     inboxWaiting: [],
     inboxTasks: [],
@@ -260,12 +266,6 @@ function mount(
       inboxTasks: held.inboxTasks,
       inboxTaskless: [],
       failedRuns: [],
-      voice: {
-        view: held.voice,
-        callTranscript: held.callTranscript,
-        listening: false,
-        requestMicrophoneAccess: () => undefined,
-      },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
@@ -719,6 +719,81 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   const draft = { draft: launched.control().agents.draft?.id ?? assert.fail("no draft opened") };
   assert.deepEqual(again().tabs, [draft]);
   assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
+});
+
+/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all and at work. */
+function namingRow(lines: readonly string[], total: number, working = 0) {
+  return {
+    ...row(TASK.id, 1),
+    agents: {
+      total,
+      working,
+      agents: lines.map((id) => ({
+        id,
+        title: null,
+        model: RUNNING_AGENT.model,
+        effort: RUNNING_AGENT.effort,
+        status: working > 0 ? CODING_AGENT_STATUS.RUNNING : CODING_AGENT_STATUS.COMPLETED,
+      })),
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+}
+
+test("a task whose row settles its tab shows that agent's before its agents are read, and one whose row cannot say shows none until they are", async () => {
+  const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
+  const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
+  // The list of agents never answers, so whatever the column shows, the row chose.
+  const unread = { [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise<never>(() => undefined) };
+  const shownOn = async (
+    lines: readonly string[],
+    total: number,
+    recent: readonly string[] | undefined,
+    working = 0,
+  ) => {
+    window.localStorage.setItem(
+      "luke.mainTabs",
+      JSON.stringify({
+        closedAgents: [],
+        tasks:
+          recent === undefined ? {} : { [TASK.id]: { recent: recent.map((agent) => ({ agent })) } },
+      }),
+    );
+    const tab = mount(
+      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total, working)] } },
+      unread,
+    );
+    await settle();
+    assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
+    return tab.control().mainTabs.tab;
+  };
+
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER, UNNAMED], 5, [OLDER]),
+    { agent: OLDER },
+    "the agent last viewed, which the row names",
+  );
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER], 2, undefined),
+    { agent: AGENT_ID },
+    "the newest started, where the row names every agent and none was viewed",
+  );
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
+    { agent: OLDER },
+    "past one viewed since that the row shows is gone",
+  );
+  assert.equal(
+    await shownOn([AGENT_ID, OLDER], 4, [OLDER, UNNAMED]),
+    undefined,
+    "one viewed last that the row does not name may stand among those it leaves out",
+  );
+  assert.equal(
+    await shownOn([AGENT_ID, OLDER], 2, undefined, 1),
+    undefined,
+    "a row naming some at work and some not cannot say which started last",
+  );
 });
 
 test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
@@ -3097,7 +3172,16 @@ test("a platform with no voice takes no calls", async () => {
 });
 
 test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
-  handCapabilities(DESKTOP_CAPABILITIES);
+  // The voice arrives as main delivers it, a call into another agent landing after the first press.
+  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(stateWith({}, {})),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
   const otherCall: VoiceView = {
     ...IDLE_VOICE_VIEW,
     voiceStatus: LIVE_STATUS.LISTENING,
@@ -3118,7 +3202,12 @@ test("an agent's Call press opens a call into it at once, and over another agent
   act(() => tab.control().calls?.onPress(AGENT_ID));
   assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
 
-  tab.stand({ voice: otherCall });
+  act(() => {
+    for (const listener of listeners) {
+      listener(stateWith({}, { version: 2, voice: { avatar: AVATAR_OFF, view: otherCall } }));
+    }
+  });
+  await settle();
   act(() => tab.control().calls?.onPress(AGENT_ID));
   assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
   assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");

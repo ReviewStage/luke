@@ -94,7 +94,17 @@ import {
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberHandle, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
+import {
+  Effect,
+  Equal,
+  FiberHandle,
+  FiberMap,
+  Option,
+  RcMap,
+  Result,
+  type Schema,
+  type Scope,
+} from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followWorkspaceChat } from "./chat-follow.js";
@@ -115,9 +125,11 @@ import {
   followTranscript,
   type TranscriptFollows,
   TranscriptKey,
+  type TranscriptMemory,
   transcriptFollows,
   windowsPage,
 } from "./transcript-follow.js";
+import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 
 /**
  * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
@@ -275,6 +287,7 @@ export function composeCodingAgents(
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
     const txWaits = inboxTxWaits();
+    const held = yield* transcriptHeld<TranscriptKey>();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
         asked(
@@ -299,13 +312,19 @@ export function composeCodingAgents(
     return composed(
       dependencies,
       http,
-      transcripts,
-      followed,
+      { transcripts, followed, held },
       { inboxes, followed: inboxFollows, txWaits },
       chats,
       { accounts, followed: accountFollow },
     );
   });
+}
+
+/** The transcripts' subscriptions the windows share, the follows main asked for, one fiber each, and the windows this host held of the transcripts it followed last. */
+interface Transcripts {
+  readonly transcripts: TranscriptFollows;
+  readonly followed: FiberMap.FiberMap<TranscriptKey>;
+  readonly held: TranscriptHeld<TranscriptKey>;
 }
 
 /** The scopes' subscriptions the windows share, and the follows main asked for, one fiber per scope. */
@@ -326,9 +345,7 @@ interface AccountFollow {
 function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
-  transcripts: TranscriptFollows,
-  /** The transcripts main follows for its windows, one fiber each. */
-  followed: FiberMap.FiberMap<TranscriptKey>,
+  { transcripts, followed, held }: Transcripts,
   { inboxes, followed: inboxFollows, txWaits }: ScopeFollows,
   /** Each workspace's chat main follows for its windows, one fiber each. */
   chats: FiberMap.FiberMap<string>,
@@ -341,6 +358,23 @@ function composed(
   /** Each followed chat's wait for a write's transaction, by its workspace, while it is subscribed over Realtime. */
   const chatTxWaits = new Map<string, TxWait>();
   const listed = dependencies.listed ?? (() => Effect.void);
+
+  /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
+  const memoryOf = (key: TranscriptKey): TranscriptMemory => {
+    const userId = dependencies.accountId();
+    if (userId === undefined) {
+      return {
+        recall: Effect.succeed(Option.none()),
+        keep: () => Effect.void,
+        forget: Effect.void,
+      };
+    }
+    return {
+      recall: held.recall(key, userId),
+      keep: (window) => held.keep(key, userId, window),
+      forget: held.forget((other) => Equal.equals(other, key)),
+    };
+  };
 
   /**
    * A member's write on the inbox answered once a followed inbox has its
@@ -588,6 +622,7 @@ function composed(
                 newest: () => asked(client.messagesNewest(key.agentId, key.callId, true)),
                 after: (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
               },
+              memoryOf(key),
               tell,
             )
           : tell(UNANSWERED);
@@ -674,6 +709,8 @@ function composed(
           "archiving an agent names the agent and whether it is archived",
         );
         const answer = yield* asked(client.archive(agentId, request));
+        // Note that an agent archived lets go of what this host held of its transcript and its workers'.
+        if ("agent" in answer) yield* held.forget((key) => key.agentId === agentId);
         if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
@@ -1035,6 +1072,7 @@ function composed(
     yield* FiberMap.clear(inboxFollows);
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
+    yield* held.clear;
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
   });

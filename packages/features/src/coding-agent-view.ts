@@ -352,13 +352,16 @@ export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Typ
  * agent stands as it was read; or why there is none. The follow opens with
  * the transcript's `newest` page, which carries `before`, where the next
  * older page is read below (absent where nothing older stands), and each
- * later page is what moved past the last. `caughtUp` says the page came
+ * later page is what moved past the last. A newest page that is `held`
+ * came from the host's own memory of the transcript, not a read. `caughtUp` says the page came
  * back short, so every message written by then is told.
  */
 const codingAgentTranscriptPageSchema = EffectSchema.Union([
   EffectSchema.Struct({
     ...codingAgentMessagesAnswerSchema.fields,
     newest: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+    /** The newest page is the window the host held from the last time the transcript was followed, told before the service was asked anything. */
+    held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
     before: EffectSchema.optionalKey(codingAgentBeforeSchema),
     caughtUp: EffectSchema.Boolean,
   }),

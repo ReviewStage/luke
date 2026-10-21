@@ -333,6 +333,13 @@ export const TASKS_ACT_KIND = {
   TASKS_ISSUE: "tasks.issue",
   /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /**
+   * A task's agents' Browser tabs, followed while the window holds the
+   * stream open for the side panel's cloud Browser tabs: each time one
+   * moves, the agent's pointer among it, or a takeover lapses, over Neon
+   * Realtime, never on the document.
+   */
+  TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   TASKS_COLOUR_CODE: "tasks.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */

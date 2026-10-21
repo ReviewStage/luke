@@ -10,9 +10,12 @@ import {
   type WorkspaceCallResult,
 } from "@luke/features";
 import {
+  browserTabsOfLiveRows,
   LIVE_SIGNED_OUT,
+  nextBrowserTabLapse,
   pagesOfLiveRows,
   revisionsOfLiveRows,
+  taskBrowserTabsLiveRowsSchema,
   taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
@@ -62,6 +65,7 @@ import {
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
+  taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksArchiveParamsSchema,
@@ -300,6 +304,7 @@ export type TasksClient = Pick<
   | "recordLive"
   | "pagesLive"
   | "historyLive"
+  | "browserTabsLive"
   | "saveBoard"
   | "readCode"
   | "readFile"
@@ -578,6 +583,80 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         else historyTxWaits.set(taskId, wait);
       },
     });
+  }
+
+  /** The Browser tabs of each task a window's side panel follows, by the task. */
+  const browserTabsFollows = yield* FiberMap.make<string>();
+  const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
+
+  /**
+   * Follows `taskId`'s Browser tabs live until let go, each change emitted as
+   * `TASKS_BROWSER_TABS_CHANGED`. A takeover lapses with no row moving, so
+   * the rows last delivered are told again at each instant one lapses, until
+   * the next delivery takes their place.
+   */
+  function followBrowserTabs(taskId: string) {
+    type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    const tell = (rows: Rows | undefined, now: number) =>
+      kernel.emit(
+        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
+        carried({
+          taskId,
+          view:
+            rows === undefined
+              ? { failure: TASK_CALL_FAILURE.UNANSWERED }
+              : { tabs: browserTabsOfLiveRows(rows, now) },
+        }),
+      );
+    // The rows told as they arrive, then again at each takeover's lapse in turn.
+    const toldUntilMoved = (rows: Rows | undefined) =>
+      Effect.gen(function* () {
+        let now = yield* Clock.currentTimeMillis;
+        tell(rows, now);
+        if (rows === undefined) return;
+        let lapse = nextBrowserTabLapse(rows, now);
+        while (lapse !== undefined) {
+          yield* Effect.sleep(Duration.millis(lapse - now));
+          now = Math.max(lapse, yield* Clock.currentTimeMillis);
+          tell(rows, now);
+          lapse = nextBrowserTabLapse(rows, now);
+        }
+      });
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const delivered = yield* Queue.sliding<Rows | undefined>(1);
+        yield* Effect.forkScoped(
+          Stream.runDrain(
+            Stream.switchMap(Stream.fromQueue(delivered), (rows) =>
+              Stream.fromEffect(toldUntilMoved(rows)),
+            ),
+          ),
+        );
+        return yield* pushLive({
+          seal: (poll, after) =>
+            gate() && userId !== undefined
+              ? Effect.map(served(client.browserTabsLive(taskId, userId, poll, after)), (sealed) =>
+                  sealed.ok
+                    ? sealed.answer
+                    : {
+                        failure: sealed.failure,
+                        gone:
+                          sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                          sealed.failure === LIVE_SIGNED_OUT.failure,
+                      },
+                )
+              : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
+          decode: decodeBrowserTabs,
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+          publish: (rows) => {
+            Queue.offerUnsafe(delivered, rows);
+          },
+        });
+      }),
+    );
   }
 
   /** The pages of each task a window's Inbox follows, by the task. */
@@ -943,32 +1022,78 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
 
   /**
-   * Reads the active task's document. A copy of the same task already held
-   * stays drawn while the read is out, and stays drawn through a read that
-   * failed, so a save redraws in place and a moment offline blanks nothing;
-   * with no copy held, the failure is what the panel draws.
+   * The active task's document as a read of it left it. A copy of the same
+   * task already `held` stays drawn through a read that failed, so a moment
+   * offline blanks nothing; with no copy held, the failure is what the panel
+   * draws.
    */
-  function readDocument(taskId: string) {
+  function documentAfter(
+    opened: Effect.Success<ReturnType<typeof client.open>>,
+    held: Task | undefined,
+  ): TasksView["document"] {
+    if (opened.ok) return { status: TASKS_READ.READY, task: opened.answer };
+    if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) return { status: TASKS_READ.MISSING };
+    return held === undefined
+      ? { status: TASKS_READ.FAILED }
+      : { status: TASKS_READ.READY, task: held };
+  }
+
+  /** The view with the task's code as a read answered it: what it holds laid with what a call showed, or the read said to have failed. */
+  function withCodeRead(
+    was: TasksView,
+    stored: Effect.Success<ReturnType<typeof client.readCode>>,
+  ): TasksView {
+    if (stored === undefined) return { ...was, codeStatus: TASKS_READ.FAILED };
+    // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
+    return { ...was, shownCode: withShownCode(stored.code), codeStatus: TASKS_READ.READY };
+  }
+
+  /** The view with the task's pages as a read answered them; a failed read keeps the pages held. */
+  function withPagesRead(
+    was: TasksView,
+    pages: Effect.Success<ReturnType<typeof client.readPages>>,
+  ): TasksView {
+    if (pages === undefined) return was;
+    const { pages: _held, ...rest } = was;
+    return pages.length === 0 ? rest : { ...rest, pages };
+  }
+
+  /**
+   * Reads what the active task's page draws, its document, board, code, and
+   * pages, all at once, and tells the window them in one view, so the page
+   * lands whole rather than a part at a time, each part reflowing what the
+   * one before laid out. A copy of the same task already held stays drawn
+   * while the reads are out and through a document read that failed, so a
+   * save redraws in place; a failed board, code, or pages read keeps what is
+   * held of it, as their own reads do. The document and the code say they
+   * are reading only where nothing of them is held, which a switch has
+   * already told (`TASKS_OPEN`).
+   */
+  function readOpened(taskId: string) {
     return Effect.gen(function* () {
       const held = heldTaskOf(taskId);
-      if (held === undefined) write({ document: { status: TASKS_READ.READING } });
-      const opened = yield* served(client.open(taskId));
-      // Another task opened while this read was out: its answer is not the panel's any more.
-      if (view.activeTaskId !== taskId) return;
-      if (opened.ok) {
-        write({ document: { status: TASKS_READ.READY, task: opened.answer } });
-        return;
-      }
-      if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) {
-        write({ document: { status: TASKS_READ.MISSING } });
-        return;
-      }
       write({
-        document:
-          held === undefined
-            ? { status: TASKS_READ.FAILED }
-            : { status: TASKS_READ.READY, task: held },
+        ...(held === undefined ? { document: { status: TASKS_READ.READING } } : undefined),
+        ...(view.codeStatus === TASKS_READ.READY ? undefined : { codeStatus: TASKS_READ.READING }),
       });
+      const [opened, board, stored, pages] = yield* Effect.all(
+        [
+          served(client.open(taskId)),
+          served(client.readBoard(taskId)),
+          served(client.readCode(taskId)),
+          served(client.readPages(taskId)),
+        ],
+        { concurrency: "unbounded" },
+      );
+      // Another task opened while these reads were out: their answers are not the panel's any more.
+      if (view.activeTaskId !== taskId) return;
+      const read: TasksView = {
+        ...view,
+        document: documentAfter(opened, held),
+        ...(board === undefined ? undefined : { board }),
+      };
+      view = withPagesRead(withCodeRead(read, stored), pages);
+      publish();
     });
   }
 
@@ -1016,9 +1141,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function readPages(taskId: string) {
     return Effect.gen(function* () {
       const pages = yield* served(client.readPages(taskId));
-      if (pages === undefined || view.activeTaskId !== taskId) return;
-      const { pages: _held, ...rest } = view;
-      view = pages.length === 0 ? rest : { ...rest, pages };
+      if (view.activeTaskId !== taskId) return;
+      view = withPagesRead(view, pages);
       publish();
     });
   }
@@ -1036,12 +1160,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }
       const stored = yield* served(client.readCode(taskId));
       if (view.activeTaskId !== taskId) return;
-      if (stored === undefined) {
-        write({ codeStatus: TASKS_READ.FAILED });
-        return;
-      }
-      // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
-      write({ shownCode: withShownCode(stored.code), codeStatus: TASKS_READ.READY });
+      view = withCodeRead(view, stored);
+      publish();
     });
   }
 
@@ -1379,10 +1499,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const tasks = serial(
           Effect.gen(function* () {
             const taskId = view.activeTaskId;
-            if (taskId !== undefined) yield* readDocument(taskId);
-            if (taskId !== undefined) yield* readBoard(taskId);
-            if (taskId !== undefined) yield* readShownCode(taskId);
-            if (taskId !== undefined) yield* readPages(taskId);
+            if (taskId !== undefined) yield* readOpened(taskId);
           }),
         );
         yield* followWorkspaces;
@@ -1408,23 +1525,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // because the call outlives the task on screen: moving it to this
         // task is this task's own Talk press.
         if (view.activeTaskId !== taskId) {
+          // Note that the code says it is reading in the same view, so the
+          // page is told twice in all: that it is reading, then what it read.
           view = {
             ...withoutActivity(view),
             activeTaskId: taskId,
             document: { status: TASKS_READ.READING },
+            codeStatus: TASKS_READ.READING,
           };
           publish();
         }
         yield* openBoard(taskId);
         yield* openRecord(taskId);
-        yield* serial(
-          Effect.gen(function* () {
-            yield* readDocument(taskId);
-            yield* readBoard(taskId);
-            yield* readShownCode(taskId);
-            yield* readPages(taskId);
-          }),
-        );
+        yield* serial(readOpened(taskId));
         return { opened: true };
       }),
     [GATEWAY_METHOD.TASKS_FILE]: (params) =>
@@ -1673,6 +1786,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return yield* invalid("letting a task's history go names the task");
         }
         yield* FiberMap.remove(historyFollows, read.success.taskId);
+        return {};
+      }),
+    // A task's Browser tabs are followed for a window's side panel while it
+    // lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
+    // what is already followed does nothing.
+    [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("following a task's Browser tabs names the task");
+        if (!gate()) return {};
+        const { taskId } = read.success;
+        yield* FiberMap.run(browserTabsFollows, taskId, followBrowserTabs(taskId), {
+          onlyIfMissing: true,
+        });
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("letting a task's Browser tabs go names the task");
+        yield* FiberMap.remove(browserTabsFollows, read.success.taskId);
         return {};
       }),
     // A plan's pages are followed for a window's Inbox while it draws an item
@@ -2474,6 +2610,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(boardFollow);
       yield* FiberMap.clear(pagesFollows);
+      yield* FiberMap.clear(browserTabsFollows);
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);

@@ -356,7 +356,6 @@ function TaskMenuFooter({
     reader,
     sections: (opened ? region.task.sectionEdits : undefined) ?? [],
     agents: { control: tasks.agents, onOpen: undefined },
-    now,
   };
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (

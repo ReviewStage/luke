@@ -35,7 +35,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
-import { callControls } from "../call/call-card.js";
+import { CallCardContext, type CallCardInput, callControls } from "../call/call-card.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -159,11 +159,6 @@ function shellProps(
     },
     room: SHELL_ROOM.WIDE,
     settingsStep: { listed: true, onList: ignore },
-    call: undefined,
-    notice: {
-      notice: { content: undefined, shown: false },
-      onDismissHint: ignore,
-    },
     settings: SETTINGS,
   };
 }
@@ -825,7 +820,13 @@ function placed(place: Place) {
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
   const { tell } = useAct();
   const { tab, tasks } = placed(place);
-  return createElement(DesktopShell, {
+  // The card is handed down as the window's root hands it, past every page between.
+  const call: CallCardInput = {
+    card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
+    speakerMuted: false,
+    controls: callControls(tell, false),
+  };
+  const shell = createElement(DesktopShell, {
     gates: {
       accountRequired: false,
       onBeginSignIn: ignore,
@@ -855,17 +856,9 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
     },
     room: SHELL_ROOM.WIDE,
     settingsStep: { listed: true, onList: ignore },
-    call: {
-      card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
-      speakerMuted: false,
-      controls: callControls(tell, false),
-    },
-    notice: {
-      notice: { content: undefined, shown: false },
-      onDismissHint: ignore,
-    },
     settings: SETTINGS,
   });
+  return createElement(CallCardContext.Provider, { value: call }, shell);
 }
 
 /** Every act the window sent over the bridge, by kind, in order. */
