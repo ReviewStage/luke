@@ -10,6 +10,8 @@ import { voiceAvatarSessions, voiceSessions } from "@luke/database/schemas/voice
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { VOICE_DELEGATION_MODE } from "@luke/database/voice-vocabulary";
+import { COST_SOURCE } from "@luke/features/admin-cost-wire";
+import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
 import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
@@ -20,8 +22,6 @@ import { Effect } from "effect";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminCost, readAdminCostUsage } from "./admin-cost-queries.js";
-import { COST_SOURCE } from "./admin-cost-wire.js";
-import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * admin-cost-queries.test.ts -- the Cost screen's reads over a real dialect:

@@ -21,31 +21,29 @@ import type { GitHubInstallationStatus } from "@luke/database/github-installatio
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import type { CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
 import type { VoiceCloseReason } from "@luke/database/voice-vocabulary";
-import type { AutomationRunReason } from "@luke/features/automation-wire";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentFailure,
-  type CodingAgentStatus,
-  type ContextWindow,
-  PULL_REQUEST_STATE,
-  type PullRequestState,
-} from "@luke/features/coding-agent-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
-import {
-  type FastAccess,
-  PROVIDER_KEY_STATUS,
-  type ProviderKeyProvider,
-  type ProviderKeyStatus,
-} from "@luke/features/provider-key-wire";
-import { EXPERIMENTS, type Experiment, type ExperimentChoices } from "@luke/settings";
-import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
   ADMIN_WORKSPACE_KIND,
   type AdminPullRequest,
-  type AdminWorkspaceKind,
-} from "./admin-account-wire.js";
+} from "@luke/features/admin-account-wire";
+import type {
+  AdminAccountAgent,
+  AdminAccountConnection,
+  AdminAccountFailure,
+  AdminAccountProviderKey,
+  AdminAccountSupport,
+} from "@luke/features/admin-answer-wire";
+import type { AutomationRunReason } from "@luke/features/automation-wire";
+import {
+  CODING_AGENT_STATUS,
+  type ContextWindow,
+  PULL_REQUEST_STATE,
+  type PullRequestState,
+} from "@luke/features/coding-agent-wire";
+import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
+import { EXPERIMENTS, type ExperimentChoices } from "@luke/settings";
+import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { lastSeenInstant } from "./admin-users.js";
 
 /** How many of the account's newest coding agents the page lists. */
@@ -89,26 +87,6 @@ interface AdminAccountWorkspaceSource {
   github: readonly GitHubInstallationStatus[];
 }
 
-interface AdminAccountProviderKey {
-  provider: ProviderKeyProvider;
-  status: ProviderKeyStatus;
-  /** When the status was last set, in epoch milliseconds. */
-  statusAt: number;
-  fastAccess: FastAccess | null;
-}
-
-interface AdminAccountConnection {
-  provider: IntegrationProvider;
-  /** `INTEGRATION_ROW_STATUS`: pending, connected, or expired. */
-  status: string;
-  /**
-   * When the row last changed, in epoch milliseconds. No column keeps when
-   * a connection's status alone moved: a rename or a sign-in begun moves
-   * this too, so an expired connection is dated no earlier than that.
-   */
-  at: number;
-}
-
 /** The raw shape the queries produce for one account, before the builder reads statuses and folds the timeline. */
 export interface AdminAccountSource {
   /** The newest write of any of the account's sign-in sessions. */
@@ -141,76 +119,6 @@ export interface AdminAccountSource {
   droppedCalls: readonly { at: Date; reason: VoiceCloseReason }[];
   /** The window's newest failed runs of the account's automations, at most the timeline's bound. */
   failedRuns: readonly { at: Date; reason: AutomationRunReason | null }[];
-}
-
-export interface AdminAccountAgent {
-  id: string;
-  /** When it was started, in epoch milliseconds. */
-  createdAt: number;
-  repository: string | null;
-  model: string;
-  effort: string;
-  contextWindow: ContextWindow;
-  status: CodingAgentStatus;
-  /** Why it failed, as the wire's word; null for an agent that did not, or failed with no word. */
-  failure: CodingAgentFailure | null;
-  pullRequest: AdminPullRequest;
-}
-
-export interface AdminAccountWorkspace {
-  id: string;
-  name: string;
-  kind: AdminWorkspaceKind;
-  role: string;
-  memberCount: number;
-  /** The status of each GitHub installation connected to it; empty where none is. */
-  github: readonly GitHubInstallationStatus[];
-}
-
-/** One entry of the failures timeline: what failed, when, and the enumerated word for why. */
-export type AdminAccountFailure =
-  | { kind: typeof ADMIN_FAILURE_KIND.AGENT; at: number; reason: CodingAgentFailure | null }
-  | { kind: typeof ADMIN_FAILURE_KIND.CALL; at: number; reason: VoiceCloseReason }
-  | {
-      kind: typeof ADMIN_FAILURE_KIND.KEY;
-      at: number;
-      provider: ProviderKeyProvider;
-      reason: ProviderKeyStatus;
-    }
-  | {
-      kind: typeof ADMIN_FAILURE_KIND.CONNECTION;
-      at: number;
-      provider: IntegrationProvider;
-      reason: string;
-    }
-  | { kind: typeof ADMIN_FAILURE_KIND.AUTOMATION; at: number; reason: AutomationRunReason | null };
-
-export interface AdminAccountSupport {
-  /** When the account last touched the service, as the roster's `lastSeenInstant` folds it; null where nothing says. */
-  lastSeenAt: number | null;
-  totals: {
-    tasksCreated: number;
-    agentsStarted: number;
-    /** Failed agents among the ones read, which `agentsRead` counts. */
-    agentsFailed: number;
-    agentsRead: number;
-    pullRequestsOpened: number;
-    pullRequestsMerged: number;
-    callMinutes: number;
-  };
-  recentAgents: AdminAccountAgent[];
-  workspaces: AdminAccountWorkspace[];
-  providerKeys: AdminAccountProviderKey[];
-  connections: AdminAccountConnection[];
-  /** The account's coding-agent defaults; null on each the account never chose. */
-  defaults: {
-    model: string | null;
-    effort: string | null;
-    contextWindow: ContextWindow | null;
-    experiments: { key: Experiment; name: string }[];
-  };
-  /** The window's failures, newest first, at most `ADMIN_ACCOUNT_FAILURES_LIMIT`. */
-  failures: AdminAccountFailure[];
 }
 
 /** The pull request's state as the page draws it, a draft being open. */

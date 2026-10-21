@@ -1,5 +1,5 @@
 import type { ActionResult } from "@luke/wire";
-import { useId, useRef } from "react";
+import { useId, useMemo, useRef } from "react";
 import {
   CONFIRM_STAGE,
   type ConfirmSurroundings,
@@ -72,7 +72,7 @@ export function useConfirmDialog(
   if (!standing && held.rejection !== undefined && held.stage !== CONFIRM_STAGE.ACTING) {
     held.clear();
   }
-  return { ...held, standing };
+  return useMemo(() => ({ ...held, standing }), [held, standing]);
 }
 
 /**

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
   TASK_SECTION_ICON_COLOR,
   TASK_SECTION_ICON_KIND,
@@ -10,7 +11,13 @@ import {
 } from "@luke/features/task-section-wire";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { applySectionWrite, sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
+import {
+  applySectionWrite,
+  memberOf,
+  sectionOrder,
+  sectionTaskIds,
+  workspaceSections,
+} from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -93,6 +100,7 @@ const SECTIONS: TaskSections = {
     },
   ],
   entries: [{ taskId: INVITES.id, sectionId: LAUNCH, addedAt: 2 }],
+  agentEntries: [],
 };
 
 const SOMEDAY = "0a1b2c3d-0000-4000-8000-000000000002";
@@ -104,6 +112,7 @@ const ICONLESS: TaskSections = {
     { id: SOMEDAY, workspaceId: WORKSPACE.id, title: "Someday", createdAt: 2 },
   ],
   entries: [...SECTIONS.entries, { taskId: RETRIES.id, sectionId: SOMEDAY, addedAt: 3 }],
+  agentEntries: [],
 };
 
 /** Lets the window's document land, as main hands it, and what it moves settle. */
@@ -140,6 +149,7 @@ const GLYPHS: TaskSections = {
     },
   ],
   entries: SECTIONS.entries,
+  agentEntries: [],
 };
 
 /** Lets what the sidebar and the picker load on demand land: Lucide whole, and the emoji. */
@@ -354,6 +364,7 @@ const BOTH_IN_LAUNCH: TaskSections = {
     { taskId: INVITES.id, sectionId: LAUNCH, addedAt: 3 },
     { taskId: RETRIES.id, sectionId: LAUNCH, addedAt: 2 },
   ],
+  agentEntries: [],
 };
 
 /** Opens the section titled `title`'s menu from its ⋯. */
@@ -399,6 +410,7 @@ test("a section holding no task offers only Edit and Delete", async () => {
   const sidebar = await mountSidebar([], {
     sections: ICONLESS.sections,
     entries: ICONLESS.entries.filter((entry) => entry.sectionId !== SOMEDAY),
+    agentEntries: [],
   });
 
   openSectionMenu(sidebar, "Someday");
@@ -417,11 +429,8 @@ test("a section's Move tasks to puts every task in it on top of the section chos
   const moved = writes.reduce((held, write) => applySectionWrite(held, write, 10), BOTH_IN_LAUNCH);
 
   assert.deepEqual(offered, ["Someday", "New section…"]);
-  assert.deepEqual(
-    sectionOrder(moved, SOMEDAY).map((entry) => entry.taskId),
-    [INVITES.id, RETRIES.id],
-  );
-  assert.deepEqual(sectionOrder(moved, LAUNCH), []);
+  assert.deepEqual(sectionTaskIds(moved, SOMEDAY), [INVITES.id, RETRIES.id]);
+  assert.deepEqual(sectionTaskIds(moved, LAUNCH), []);
 });
 
 test("a section's Remove tasks from section takes every task in it out of every section", async () => {
@@ -489,7 +498,7 @@ test("a section's Delete question goes when the section does, deleted on another
   act(() => item("Delete section").click());
   assert.ok(document.querySelector('[role="alertdialog"]'), "the question is asked");
 
-  await draw({ sections: [], entries: [] });
+  await draw({ sections: [], entries: [], agentEntries: [] });
 
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(writes, []);
@@ -626,6 +635,7 @@ async function mountDraggable(
   summaries: readonly TaskSummary[],
   sections: TaskSections,
   asked: Asked,
+  rest: Partial<TasksControl> = {},
 ): Promise<HTMLElement> {
   const tasks = tasksControl({
     tasks: [...summaries],
@@ -635,6 +645,7 @@ async function mountDraggable(
     onWriteSections: (writes) => asked.writes.push(...writes),
     onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
     onMovePins: (moves) => asked.moves.push(...moves),
+    ...rest,
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -739,10 +750,7 @@ test("a pinned task dragged into a section is unpinned and lands where it was le
     (state, write) => applySectionWrite(state, write, AFTER_FIXTURES),
     SECTIONS,
   );
-  assert.deepEqual(
-    sectionOrder(after, LAUNCH).map((entry) => entry.taskId),
-    [INVITES.id, PINNED.id],
-  );
+  assert.deepEqual(sectionTaskIds(after, LAUNCH), [INVITES.id, PINNED.id]);
 });
 
 test("Pinned stands while nothing is pinned and takes the first pin", async () => {
@@ -982,6 +990,7 @@ test("editing a section in an emoji the grid leaves out names it in the emoji fi
       },
     ],
     entries: SECTIONS.entries,
+    agentEntries: [],
   };
   const sidebar = await mountSidebar([], newest);
   const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
@@ -1123,7 +1132,7 @@ test("under a finger, a task held in a section moves down within it by its menu"
     entries: [...SECTIONS.entries, { taskId: RETRIES.id, sectionId: LAUNCH, addedAt: 3 }],
   };
   const sidebar = await mountDraggable([INVITES, RETRIES], both, asked);
-  const first = sectionOrder(both, LAUNCH)[0]?.taskId === INVITES.id ? INVITES : RETRIES;
+  const first = sectionTaskIds(both, LAUNCH)[0] === INVITES.id ? INVITES : RETRIES;
   const second = first === INVITES ? RETRIES : INVITES;
 
   longPress(rowPress(sidebar, first.name));
@@ -1133,8 +1142,119 @@ test("under a finger, a task held in a section moves down within it by its menu"
     (state, write) => applySectionWrite(state, write, AFTER_FIXTURES),
     both,
   );
-  assert.deepEqual(
-    sectionOrder(after, LAUNCH).map((entry) => entry.taskId),
-    [second.id, first.id],
+  assert.deepEqual(sectionTaskIds(after, LAUNCH), [second.id, first.id]);
+});
+
+/** An agent Ada started with no task, last active before either task was saved. */
+const SWEEP: TasklessAgent = {
+  id: "0a1b2c3d-0000-4000-8000-200000000001",
+  planId: null,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Sweep flaky tests",
+  createdAt: 1,
+  status: CODING_AGENT_STATUS.COMPLETED,
+  turnId: null,
+  startedBy: { userId: "user-ada", name: "Ada Lovelace" },
+  automationId: null,
+  workspaceId: WORKSPACE.id,
+  repository: "acme/relay",
+  activityAt: 1,
+};
+
+/** The sidebar's agents with no task: Sweep flaky tests alone. */
+const WITH_SWEEP: Partial<TasksControl> = { listedAgents: { standing: [SWEEP], archived: [] } };
+
+/** Launch holding Invite expiry and, put there after it, Sweep flaky tests. */
+const SWEEP_IN_LAUNCH: TaskSections = {
+  ...SECTIONS,
+  agentEntries: [{ agentId: SWEEP.id, sectionId: LAUNCH, addedAt: 3 }],
+};
+
+test("an agent kept in a section stands among its tasks in its order, which Tasks leaves out, and goes back under Tasks once the section is deleted", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const { container: sidebar, draw } = await mountSidebarRedrawn(
+    writes,
+    SWEEP_IN_LAUNCH,
+    WITH_SWEEP,
   );
+
+  // Put there last and never dragged, it stands on top.
+  assert.deepEqual(namesIn(sidebar, "Sections"), ["Sweep flaky tests", "Invite expiry"]);
+  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+
+  await draw(
+    applySectionWrite(SWEEP_IN_LAUNCH, { kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }, 9),
+  );
+  assert.deepEqual(namesIn(sidebar, "Sections"), []);
+  assert.deepEqual(namesIn(sidebar, "Tasks"), [
+    "Invite expiry",
+    "Retry audit",
+    "Sweep flaky tests",
+  ]);
+});
+
+test("an agent's menu offers Move to section after Pin and Archive, as a task's does, and a section chosen writes it there", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes, SECTIONS, WITH_SWEEP);
+
+  openRowMenu(sidebar, "Sweep flaky tests");
+  const labels = menuLabels();
+  assert.deepEqual(labels.slice(labels.indexOf("Pin"), labels.indexOf("Pin") + 3), [
+    "Pin",
+    "Archive agent",
+    "Move to section",
+  ]);
+  act(() => item("Move to section").click());
+  act(() => item("Launch").click());
+
+  assert.deepEqual(writes, [
+    { kind: TASK_SECTION_WRITE.PLACE_AGENT, agentId: SWEEP.id, sectionId: LAUNCH },
+  ]);
+});
+
+test("an agent's Move to section checks the section it stands in and offers Remove from section", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes, SWEEP_IN_LAUNCH, WITH_SWEEP);
+
+  openMoveToSection(sidebar, "Sweep flaky tests");
+  assert.equal(item("Launch").getAttribute("aria-checked"), "true");
+  act(() => item("Remove from section").click());
+
+  assert.deepEqual(writes, [
+    { kind: TASK_SECTION_WRITE.PLACE_AGENT, agentId: SWEEP.id, sectionId: null },
+  ]);
+});
+
+test("an agent dragged from Tasks into a section lands where it was let go, among the section's tasks", async () => {
+  const asked = noneAsked();
+  // Down the column: Pinned's word, Invite expiry under Launch, then Retry audit and Sweep flaky tests under Tasks.
+  const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked, WITH_SWEEP);
+
+  drag(sidebar, "Sweep flaky tests", 2 * ROW_HEIGHT - 4);
+
+  assert.deepEqual(asked.marks, []);
+  const after = asked.writes.reduce(
+    (state, write) => applySectionWrite(state, write, AFTER_FIXTURES),
+    SECTIONS,
+  );
+  assert.deepEqual(
+    sectionOrder(after, LAUNCH).map((entry) => memberOf(entry)),
+    [
+      { agent: false, id: INVITES.id },
+      { agent: true, id: SWEEP.id },
+    ],
+  );
+});
+
+test("an agent dragged from a section onto Tasks leaves every section", async () => {
+  const asked = noneAsked();
+  // Down the column: Pinned's word, Sweep flaky tests and Invite expiry under Launch, Retry audit under Tasks.
+  const sidebar = await mountDraggable([INVITES, RETRIES], SWEEP_IN_LAUNCH, asked, WITH_SWEEP);
+
+  drag(sidebar, "Sweep flaky tests", 4 * ROW_HEIGHT - 4);
+
+  assert.deepEqual(asked.writes, [
+    { kind: TASK_SECTION_WRITE.PLACE_AGENT, agentId: SWEEP.id, sectionId: null },
+  ]);
 });

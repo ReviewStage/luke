@@ -1,4 +1,10 @@
 import assert from "node:assert/strict";
+import {
+  ADMIN_COST_TOP_ACCOUNTS_LIMIT,
+  type AdminCostAccountInfo,
+  COST_SOURCE,
+} from "@luke/features/admin-cost-wire";
+import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
 import { test } from "vitest";
 import type { OfferedModel } from "../providers/model-catalog.js";
 import {
@@ -7,12 +13,6 @@ import {
   buildAdminCost,
   priceCostUsage,
 } from "./admin-cost.js";
-import {
-  ADMIN_COST_TOP_ACCOUNTS_LIMIT,
-  type AdminCostAccountInfo,
-  COST_SOURCE,
-} from "./admin-cost-wire.js";
-import { ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * admin-cost.test.ts -- the Cost screen's pricing and shaping: tokens are

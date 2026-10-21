@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@luke/panel/testing/resize-observer";
-import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
+import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";

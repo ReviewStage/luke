@@ -1,7 +1,9 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import type { MentionPlace } from "@luke/features/mention-link";
+import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
+import type { CodeRef } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   ArchiveIcon,
   BackIcon,
@@ -33,9 +35,10 @@ import {
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
-import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
+import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MailOpenIcon, MessagesSquareIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { FoldingButton } from "../folding-button.js";
@@ -44,13 +47,15 @@ import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor } from "../tasks/chat-actors.js";
-import { ChatPane } from "../tasks/chat-pane.js";
+import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
+import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
+import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -99,6 +104,61 @@ function mentionPlaceOf(tasks: TasksControl): MentionPlace | undefined {
   return { workspace: workspace.slug ?? workspace.id, repository: null };
 }
 
+/** What a press on a task's chip does with no opener at hand, as in a test of one surface: nothing. */
+const OPEN_NOTHING = (): void => undefined;
+
+/**
+ * The doors of each task the window lists, by its id, that its channel's
+ * messages read through: its code read through the task and opened in it,
+ * as the window's Inbox opens an item's (`desktop-inbox.tsx`), and, where
+ * `mentions` asks, its mentions, so a file's chip opens the file in its
+ * task and a GitHub link is read against its repository. Note that the
+ * mentions name no task, as a page no task holds does (`tasklessMentions`),
+ * because the window holds no text of the plan here, and a section of it
+ * would otherwise be drawn gone. The plan's Chat tab asks no mentions,
+ * since the task's page it stands on hands its own.
+ */
+function useTaskDoors(
+  tasks: TasksControl,
+  mentions: boolean,
+): (taskId: string) => ChatTaskDoors | undefined {
+  const { act } = useAct();
+  const openTask = useOpenTask() ?? OPEN_NOTHING;
+  // Note that a file is opened through the latest control, so the doors stand while the window's lists move.
+  const latest = useRef(tasks);
+  latest.current = tasks;
+  const workspace = mentionPlaceOf(tasks)?.workspace;
+  const { tasks: listed, archived } = tasks;
+  const doors = useMemo(() => {
+    const held = new Map<string, ChatTaskDoors>();
+    for (const task of [...listed, ...archived]) {
+      const showFile = (ref: CodeRef, commit: string | undefined) =>
+        latest.current.onShowFile(task.id, ref, commit);
+      const code: InboxCodeDoors = {
+        repository: task.repository,
+        readFile: (window) => act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
+        onOpenFile: showFile,
+      };
+      if (!mentions || workspace === undefined) {
+        held.set(task.id, { code });
+        continue;
+      }
+      const { repository, workspaceId } = task;
+      const taskless = tasklessMentions({ workspace, workspaceId, repository }, openTask);
+      const onOpenFile = (path: string, lines: MentionLines | undefined) =>
+        lines === undefined
+          ? showFile({ path }, undefined)
+          : showFile({ path, startLine: lines.startLine, endLine: lines.endLine }, lines.commit);
+      held.set(task.id, {
+        code,
+        mentions: { ...taskless, taskName: task.name, doors: { ...taskless.doors, onOpenFile } },
+      });
+    }
+    return held;
+  }, [listed, archived, act, openTask, workspace, mentions]);
+  return (taskId) => doors.get(taskId);
+}
+
 /** What the way back from a place to the rail says, in a narrow room. */
 const CHAT_LIST = "Chat";
 
@@ -121,7 +181,7 @@ function taskGrouping(tasks: TasksControl): ChatTaskGrouping {
           id: section.id,
           title: section.title,
           icon: section.icon,
-          taskIds: sectionOrder(state, section.id).map((entry) => entry.taskId),
+          taskIds: sectionTaskIds(state, section.id),
         }));
   return { pinned, sections };
 }
@@ -637,6 +697,8 @@ function ChatView({
     onResize,
   });
   const screen = useNarrowFocus(room, view.listed);
+  // Note that the window's Chat stands on no task's page, so a task's channel is handed its task's mentions here.
+  const taskDoors = useTaskDoors(tasks, true);
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
@@ -749,6 +811,7 @@ function ChatView({
           ) : undefined
         }
         readPicture={view.readPicture}
+        taskDoors={taskDoors}
         lead={
           room === SHELL_ROOM.NARROW ? (
             <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={view.onList} />
@@ -808,6 +871,7 @@ export function TaskChatTab({
   const read = view.chat;
   const listed = tasks.tasks;
   const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
+  const taskDoors = useTaskDoors(tasks, false);
   const channel = read?.answer.channels.find(
     (each) => each.kind === CHANNEL_KIND.TASK && each.planId === taskId,
   );
@@ -837,6 +901,7 @@ export function TaskChatTab({
       onPost={view.onPost}
       onAnswer={view.onAnswer}
       readPicture={view.readPicture}
+      taskDoors={taskDoors}
     />
   );
 }

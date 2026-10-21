@@ -32,14 +32,19 @@ import {
 import { useSideBundles } from "../bundle-loader.js";
 import { imageFiles } from "../feedback-images.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
+import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type ComposerQuote,
+  type PlanEditorModule,
+} from "../plan-editor/contract.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
-import { useComposerPickers } from "./composer-pickers.js";
+import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import {
   acknowledgedOnOpen,
@@ -138,7 +143,7 @@ const REPLY_PLACEHOLDER = "Reply";
 const NEWER_LUKE = "Answer this in a newer Luke.";
 
 /** What the note says while the editor bundle could not be loaded. */
-const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
+export const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /** What the box's round Send is called, which is its tooltip too. */
 const SEND = "Send";
@@ -158,22 +163,23 @@ function carriesFiles(event: React.DragEvent): boolean {
 }
 
 /**
- * What the note line asks for: a note, where the question's controls stand
- * over it as the answer; the agent's own placeholder on an older item that
- * asks for words; and a reply otherwise.
+ * What a box's note line asks for: a note, where a question's controls
+ * stand over it as the answer; the asker's own placeholder where it gave
+ * one for words; and a reply otherwise.
  */
-function placeholderOf(item: InboxItem, answering: boolean, asks: boolean): string {
+export function answerPlaceholder(asks: boolean, own: string | undefined): string {
   if (asks) return NOTE_PLACEHOLDER;
+  return own ?? REPLY_PLACEHOLDER;
+}
+
+/** What an item's note line asks for, the agent's own placeholder standing only on an older item that asks for words. */
+function placeholderOf(item: InboxItem, answering: boolean, asks: boolean): string {
   const response = item.response;
-  if (
-    answering &&
-    knownResponse(response) &&
-    response.type === INBOX_RESPONSE.TEXT &&
-    response.placeholder !== undefined
-  ) {
-    return response.placeholder;
-  }
-  return REPLY_PLACEHOLDER;
+  const own =
+    answering && knownResponse(response) && response.type === INBOX_RESPONSE.TEXT
+      ? response.placeholder
+      : undefined;
+  return answerPlaceholder(asks, own);
 }
 
 /**
@@ -196,6 +202,205 @@ function holdsSend(
   return thread === undefined
     ? inboxMessageOf(draft) !== undefined
     : inboxThreadSend(thread, draft) !== undefined;
+}
+
+/** A box's field as its owner holds it: its editor, the field it stands in, the editor's bundle, and its lists and dictation. */
+export interface AnswerField {
+  readonly editor: RefObject<ComposerEditorHandle | undefined>;
+  readonly room: RefObject<HTMLDivElement | null>;
+  /** The editor's bundle, once it has loaded; none while it loads or where it could not. */
+  readonly module: PlanEditorModule | undefined;
+  /** Whether the editor's bundle could not be loaded. */
+  readonly failed: boolean;
+  readonly pickers: ComposerPickers;
+}
+
+/**
+ * A box's field, its editor, its lists, and its dictation, all its own: an
+ * `@` lists what the page hands, a `/` the repository's skills, and a
+ * server's chip says what a send does with it, a turn opened or the running
+ * one steered, by the agent the words go to.
+ */
+export function useAnswerField({
+  draft,
+  placeholder,
+  self,
+  agent,
+  skills,
+  keywords,
+  statuses,
+  onNote,
+}: {
+  draft: string;
+  placeholder: string;
+  /** The agent the words go to, which the `@` list does not offer; none where they go to no agent. */
+  self: string | undefined;
+  /** That agent as its holder's read lists it, whose servers' switches a server's chip reads; none before the read lands, or for no agent. */
+  agent: CodingAgentSummary | undefined;
+  skills: SkillSource | undefined;
+  keywords: readonly string[];
+  statuses: IntegrationStatuses;
+  /** Says why a dictation left nothing, or clears what the last one said. */
+  onNote: (note: string | undefined) => void;
+}): AnswerField {
+  const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  const room = useRef<HTMLDivElement>(null);
+  const bundle = useAtomValue(useSideBundles().planEditor);
+  const pickers = useComposerPickers({
+    editor,
+    room,
+    draft,
+    placeholder,
+    self,
+    skills,
+    keywords,
+    // A server's chip says what the answer does with it: opens a turn, or steers the one running.
+    servers: {
+      statuses,
+      place: {
+        disabled: agent?.disabledServers ?? [],
+        handed:
+          agent?.status === CODING_AGENT_STATUS.RUNNING
+            ? SERVER_HANDED.STEERS
+            : SERVER_HANDED.OPENS,
+      },
+    },
+    onNote,
+  });
+  return {
+    editor,
+    room,
+    module: AsyncResult.isSuccess(bundle) ? bundle.value : undefined,
+    failed: AsyncResult.isFailure(bundle),
+    pickers,
+  };
+}
+
+/** What a box's card is drawn with: its field, what stands over the note line, the note line, and the foot's presses. */
+interface AnswerFormProps {
+  readonly field: AnswerField;
+  /** Whether a question's controls stand over the note line. */
+  readonly asks: boolean;
+  /** Whether the box writes a message on a settled thread rather than an answer. */
+  readonly messages: boolean;
+  /** The question's controls, the card's body over the note line; nothing where none stand. */
+  readonly controls: React.ReactNode;
+  /** The files the box holds, as chips over the note line; nothing where it takes none. */
+  readonly chips?: React.ReactNode;
+  readonly note: string;
+  readonly onNote: (note: string) => void;
+  readonly placeholder: string;
+  readonly maxLength: number;
+  readonly onEnter: () => void;
+  /** Takes files pasted into the line, answering whether it took them; none where the box takes no files. */
+  readonly onPasteFiles?: ((files: readonly File[]) => boolean) | undefined;
+  /** How a quote block the line holds is drawn; none where the box takes no quote. */
+  readonly quote?: ((quote: ComposerQuote) => React.ReactNode) | undefined;
+  /** What leads the foot, the + of files; nothing where the box takes none. */
+  readonly tools?: React.ReactNode;
+  /** Whether Send reads Got it, a nod that messages nobody. */
+  readonly nod: boolean;
+  readonly sending: boolean;
+  /** Whether a send waits, while one is out or files are read. */
+  readonly held: boolean;
+  /** Whether the box holds something to send, which lights its Send. */
+  readonly sendable: boolean;
+  readonly onSubmit: () => void;
+}
+
+/**
+ * A box's card: the question's controls as its body, the files it holds,
+ * the note line on its own over the foot, and the foot's + at its left and
+ * the microphone and Send at its right, a dictation's strip in their place;
+ * Send reading Got it where the box nods.
+ */
+export function AnswerForm({
+  field,
+  asks,
+  messages,
+  controls,
+  chips,
+  note,
+  onNote,
+  placeholder,
+  maxLength,
+  onEnter,
+  onPasteFiles,
+  quote,
+  tools,
+  nod,
+  sending,
+  held,
+  sendable,
+  onSubmit,
+}: AnswerFormProps): React.JSX.Element {
+  const { editor, room, module, pickers } = field;
+  const { dictation, dictating } = pickers;
+  return (
+    <PromptInput
+      className="inbox-answer"
+      data-asks={asks ? "" : undefined}
+      data-messages={messages ? "" : undefined}
+      onSubmit={onSubmit}
+    >
+      {controls}
+      {chips}
+      {/* The note line stands on its own over the foot, as the agent's box's field does. */}
+      <ComposerField
+        module={module}
+        editor={editor}
+        room={room}
+        draft={note}
+        setDraft={onNote}
+        placeholder={placeholder}
+        label={placeholder}
+        input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
+        maxLength={maxLength}
+        takesFocus={false}
+        {...pickers.field}
+        onEnter={onEnter}
+        onPasteFiles={onPasteFiles ?? takesNoFiles}
+        quote={quote}
+      />
+      {/* The foot is the agent box's: the + at its left, the microphone and Send at its right, a dictation's strip in their place. */}
+      <PromptInputFooter className="inbox-answer-foot">
+        {dictating ? (
+          <DictationStrip dictation={dictation} />
+        ) : (
+          <>
+            <PromptInputTools>{tools}</PromptInputTools>
+            <div className="inbox-answer-actions">
+              <DictateButton dictation={dictation} disabled={module === undefined} />
+              {nod ? (
+                <Button
+                  type={BUTTON_TYPE.SUBMIT}
+                  variant={BUTTON_VARIANT.INK}
+                  busy={sending}
+                  busyLabel="Sending"
+                  disabled={held}
+                >
+                  {GOT_IT}
+                </Button>
+              ) : (
+                <Tooltip label={SEND}>
+                  <PromptInputSubmit
+                    label={SEND}
+                    status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+                    disabled={held || !sendable}
+                  />
+                </Tooltip>
+              )}
+            </div>
+          </>
+        )}
+      </PromptInputFooter>
+    </PromptInput>
+  );
+}
+
+/** Takes no pasted file, so the paste writes as it always does. */
+function takesNoFiles(): boolean {
+  return false;
 }
 
 /** What an item's box is drawn with, beside where the account's servers stand. */
@@ -238,8 +443,6 @@ function AnswerCard({
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const toast = useToast();
-  const editor = useRef<ComposerEditorHandle | undefined>(undefined);
-  const room = useRef<HTMLDivElement>(null);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const [dropping, setDropping] = useState(false);
   // How many hand-offs of files are still being read, during which the answer waits.
@@ -261,34 +464,21 @@ function AnswerCard({
   const sendable = nod || holdsSend(item, draft, answering, thread);
   const asks = controls !== undefined;
   const placeholder = placeholderOf(item, answering, asks);
-  const bundle = useAtomValue(useSideBundles().planEditor);
-  const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
-  const pickers = useComposerPickers({
-    editor,
-    room,
+  const field = useAnswerField({
     draft: draft.note,
     placeholder,
     self: item.agentId,
+    agent,
     skills,
     keywords,
-    // A server's chip says what the answer does with it: opens a turn, or steers the one running.
-    servers: {
-      statuses,
-      place: {
-        disabled: agent?.disabledServers ?? [],
-        handed:
-          agent?.status === CODING_AGENT_STATUS.RUNNING
-            ? SERVER_HANDED.STEERS
-            : SERVER_HANDED.OPENS,
-      },
-    },
+    statuses,
     onNote: setRefusal,
   });
-  const { dictation, dictating } = pickers;
+  const { editor, room, module } = field;
+  const { dictating } = field.pickers;
   const kept = control.notes.get(item.id);
   const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent);
-  const note =
-    noted?.words ?? refusal ?? (AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined);
+  const note = noted?.words ?? refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
   // Note that the note is let go once the agent is back, since what it said no longer stands, and only that note, never one a later send left meanwhile.
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
@@ -365,88 +555,50 @@ function AnswerCard({
       }}
     >
       {takes ? (
-        <PromptInput
-          className="inbox-answer"
-          data-asks={asks ? "" : undefined}
-          data-messages={answering ? undefined : ""}
+        <AnswerForm
+          field={field}
+          asks={asks}
+          messages={!answering}
+          controls={controls}
+          chips={
+            <AttachedFileChips
+              files={attachmentChips(draft.attachments)}
+              onRemove={(index) => {
+                setRefusal(undefined);
+                control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
+              }}
+            />
+          }
+          note={draft.note}
+          onNote={(text) => control.onDraft(item, { ...draft, note: text })}
+          placeholder={placeholder}
+          maxLength={answering ? INBOX_BOUNDS.MAX_NOTE_CHARS : INBOX_BOUNDS.MAX_MESSAGE_CHARS}
+          onEnter={() => {
+            if (room.current === null) return;
+            // Note that an older item's Enter goes to its own send, which takes the keyboard to what an answer lacks.
+            if (answering) room.current.closest("form")?.requestSubmit();
+            else submitPromptInput(room.current);
+          }}
+          onPasteFiles={(files) => {
+            // Only images are taken from the clipboard; text pastes as it always does.
+            const pasted = imageFiles(files);
+            if (pasted.length === 0) return false;
+            attach(pasted);
+            return true;
+          }}
+          quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
+          tools={<AttachFilesButton onFiles={attach} />}
+          nod={nod}
+          sending={sending}
+          held={held}
+          sendable={sendable}
           onSubmit={() => {
             if (reading > 0) return;
             if (answering) send();
             else if (nod) acknowledge();
             else message();
           }}
-        >
-          {controls}
-          <AttachedFileChips
-            files={attachmentChips(draft.attachments)}
-            onRemove={(index) => {
-              setRefusal(undefined);
-              control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
-            }}
-          />
-          {/* The note line stands on its own over the foot, as the agent's box's field does. */}
-          <ComposerField
-            module={module}
-            editor={editor}
-            room={room}
-            draft={draft.note}
-            setDraft={(text) => control.onDraft(item, { ...draft, note: text })}
-            placeholder={placeholder}
-            label={placeholder}
-            input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
-            maxLength={answering ? INBOX_BOUNDS.MAX_NOTE_CHARS : INBOX_BOUNDS.MAX_MESSAGE_CHARS}
-            takesFocus={false}
-            {...pickers.field}
-            onEnter={() => {
-              if (room.current === null) return;
-              // Note that an older item's Enter goes to its own send, which takes the keyboard to what an answer lacks.
-              if (answering) room.current.closest("form")?.requestSubmit();
-              else submitPromptInput(room.current);
-            }}
-            onPasteFiles={(files) => {
-              // Only images are taken from the clipboard; text pastes as it always does.
-              const pasted = imageFiles(files);
-              if (pasted.length === 0) return false;
-              attach(pasted);
-              return true;
-            }}
-            quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
-          />
-          {/* The foot is the agent box's: the + at its left, the microphone and Send at its right, a dictation's strip in their place. */}
-          <PromptInputFooter className="inbox-answer-foot">
-            {dictating ? (
-              <DictationStrip dictation={dictation} />
-            ) : (
-              <>
-                <PromptInputTools>
-                  <AttachFilesButton onFiles={attach} />
-                </PromptInputTools>
-                <div className="inbox-answer-actions">
-                  <DictateButton dictation={dictation} disabled={module === undefined} />
-                  {nod ? (
-                    <Button
-                      type={BUTTON_TYPE.SUBMIT}
-                      variant={BUTTON_VARIANT.INK}
-                      busy={sending}
-                      busyLabel="Sending"
-                      disabled={held}
-                    >
-                      {GOT_IT}
-                    </Button>
-                  ) : (
-                    <Tooltip label={SEND}>
-                      <PromptInputSubmit
-                        label={SEND}
-                        status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                        disabled={held || !sendable}
-                      />
-                    </Tooltip>
-                  )}
-                </div>
-              </>
-            )}
-          </PromptInputFooter>
-        </PromptInput>
+        />
       ) : (
         <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
       )}

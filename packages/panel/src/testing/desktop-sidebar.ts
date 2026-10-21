@@ -55,6 +55,5 @@ export function sidebarProps(tasks: TasksControl): ComponentProps<typeof Desktop
       onOpenLatest: ignore,
     },
     onSignOut: () => Promise.resolve(),
-    call: undefined,
   };
 }

@@ -389,6 +389,39 @@ it.layer(getTestDB())("the runner events route", (it) => {
       }),
   );
 
+  it.effect(
+    "a heartbeat with no events keeps a run's sandbox alive through its harness's silence, applying nothing, and none before the launch applied an event",
+    () =>
+      Effect.gen(function* () {
+        const told: RunnerAlive[] = [];
+        const post = yield* standingWith({
+          alive: (alive) => Effect.sync(() => void told.push(alive)),
+        });
+        const agent = yield* agentWithBearer;
+        const events = workflowTurn(agent.lineId);
+
+        const early = yield* post(agent.bearer, []);
+        yield* post(agent.bearer, events.slice(0, 9));
+        const silence = [];
+        // An hour and more of a background command, the harness saying nothing, and the runner beating.
+        for (const _beat of [1, 2, 3, 4, 5, 6, 7]) {
+          yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+          silence.push(yield* post(agent.bearer, []));
+        }
+        const midway = yield* transcriptOf(agent.target.conversationId);
+        // The END, a moment after the last heartbeat, is the stop's to settle.
+        yield* post(agent.bearer, events.slice(9));
+
+        assert.deepEqual(early.body, { applied: 0, sequence: null });
+        assert.equal(told.length, 8, "the first batch, then each heartbeat an interval apart");
+        assert.ok(silence.every((beat) => beat.body.applied === 0 && beat.body.sequence === 8));
+        assert.deepEqual(
+          midway.turns.map((turn) => turn.status),
+          [TURN_STATUS.RUNNING],
+        );
+      }),
+  );
+
   it.effect("a batch posted again, whole or overlapping, changes nothing", () =>
     Effect.gen(function* () {
       const post = yield* standing;

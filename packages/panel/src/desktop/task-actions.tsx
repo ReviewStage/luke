@@ -356,7 +356,6 @@ function TaskMenuFooter({
     reader,
     sections: (opened ? region.task.sectionEdits : undefined) ?? [],
     agents: { control: tasks.agents, onOpen: undefined },
-    now,
   };
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
@@ -445,7 +444,7 @@ export function useTaskMenu(
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
     task !== undefined && task.archivedAt === undefined
-      ? moveToSectionEntry(tasks, task, sections.askNew)
+      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
   const menu =
     drawn === undefined ? null : (

@@ -5,7 +5,11 @@
  * one before it, and a batch that fails is posted again whole with the same
  * numbers, which Luke applies at most once. Everything emitted while a post
  * is in flight waits in the queue and goes in the next batch, so a stream of
- * partial messages costs a post per round trip rather than per token.
+ * partial messages costs a post per round trip rather than per token. Beside
+ * the sender, a heartbeat posts a batch with no events every
+ * `RUNNER_HEARTBEAT` for as long as the launch runs, once each, since the
+ * next is never far, so Luke keeps the sandbox alive through a harness's
+ * long silence; it stops as the sink drains.
  */
 
 import {
@@ -22,7 +26,12 @@ import {
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import type { RunnerEvent, RunnerEventBatch, RunnerMessage } from "./protocol.js";
+import {
+  RUNNER_HEARTBEAT,
+  type RunnerEvent,
+  type RunnerEventBatch,
+  type RunnerMessage,
+} from "./protocol.js";
 
 /** The most events one post carries. */
 const BATCH_MAX = 256;
@@ -112,17 +121,17 @@ function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[
   return JSON.stringify(redacted(json, values));
 }
 
-/** One batch, posted until Luke takes it or answers that it never will. */
-const postBatch = Effect.fn("agent-runner/postBatch")(function* (
+/** One batch, posted once: taken, or why Luke did not take it. */
+function postOnce(
   client: HttpClient.HttpClient,
   options: SinkOptions,
   batch: RunnerEventBatch,
-) {
+): Effect.Effect<void, EventsUndelivered> {
   const request = HttpClientRequest.post(options.url).pipe(
     HttpClientRequest.bearerToken(options.bearer),
     HttpClientRequest.bodyText(batchText(batch, options.secrets), "application/json"),
   );
-  const once = client.execute(request).pipe(
+  return client.execute(request).pipe(
     // Note that the error is not kept as the cause, because the request it
     // carries holds the bearer in its headers.
     Effect.mapError(() => new EventsUndelivered({ transient: true, detail: "Luke unreachable" })),
@@ -134,7 +143,15 @@ const postBatch = Effect.fn("agent-runner/postBatch")(function* (
       );
     }),
   );
-  return yield* once.pipe(
+}
+
+/** One batch, posted until Luke takes it or answers that it never will. */
+const postBatch = Effect.fn("agent-runner/postBatch")(function* (
+  client: HttpClient.HttpClient,
+  options: SinkOptions,
+  batch: RunnerEventBatch,
+) {
+  return yield* postOnce(client, options, batch).pipe(
     Effect.retry({
       schedule: POST_BACKOFF,
       times: POST_RETRY.TIMES,
@@ -163,6 +180,19 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);
+  // Note that a heartbeat Luke did not take, or did not answer within its bound, is let go, since the next follows within the interval.
+  const heartbeat = yield* Effect.forkScoped(
+    Effect.forever(
+      Effect.andThen(
+        Effect.sleep(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS)),
+        Effect.ignore(
+          Effect.suspend(() => postOnce(client, { ...options, secrets }, { events: [] })).pipe(
+            Effect.timeout(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS)),
+          ),
+        ),
+      ),
+    ),
+  );
 
   const emit = (message: RunnerMessage) =>
     Effect.suspend(() => {
@@ -171,7 +201,10 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
       return Queue.offer(queue, { sequence, message });
     }).pipe(Effect.asVoid);
 
-  const drain = Queue.end(queue).pipe(Effect.andThen(Fiber.join(sender)));
+  const drain = Fiber.interrupt(heartbeat).pipe(
+    Effect.andThen(Queue.end(queue)),
+    Effect.andThen(Fiber.join(sender)),
+  );
   const undelivered = Fiber.join(sender).pipe(
     Effect.flip,
     Effect.catch(() => Effect.never),

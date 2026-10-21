@@ -720,7 +720,7 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
  * `do` that names none ticked where it was marked done, and an `answer`'s
  * values. A field or a step the answer left empty stands empty.
  */
-export function answeredDraft(ask: InboxKnownAsk, answers: InboxAnswers): InboxDraft {
+export function answeredDraft(ask: InboxAsk, answers: InboxAnswers): InboxDraft {
   const titleStep = ask.type === INBOX_ASK.DO && ask.steps.length === 0;
   const done = answers.reply === INBOX_REPLY.DONE;
   return {
@@ -909,10 +909,10 @@ export function answerOf(
 /**
  * The two ways an approval and a to-do are decided, the one that holds
  * back and the one that goes ahead, and the nod a note is answered by:
- * the Inbox's cards in the question and a chat ask's presses (`chat-ask.tsx`)
- * name them alike, and a settled item keeps them as what it offered.
+ * the Inbox's cards in the question name them so, and a settled item keeps
+ * them as what it offered.
  */
-export const INBOX_PRESSES = {
+const INBOX_PRESSES = {
   [INBOX_RESPONSE.APPROVAL]: {
     back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
     ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
@@ -927,8 +927,8 @@ export const INBOX_PRESSES = {
   },
 } as const;
 
-/** The presses a chat ask answers the response by, or nothing where words, a pick, or a form answer it. */
-export function pressesOf(
+/** The presses a response from before version 5 is answered by, or nothing where words, a pick, or a form answer it. */
+function pressesOf(
   response: InboxReadResponse,
 ): (typeof INBOX_PRESSES)[keyof typeof INBOX_PRESSES] | undefined {
   if (!knownResponse(response)) return undefined;
@@ -1035,6 +1035,13 @@ function valueLines(answer: InboxReply): string | undefined {
   return values.length === 0 ? undefined : values.join("\n");
 }
 
+/** What an answer's answerer did, in a few words after who they are: "chose Postgres", "marked it done". */
+export function answerDid(answer: InboxReply): string {
+  return answer.reply === INBOX_REPLY.CHOSE
+    ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
+    : REPLY_WORDS[answer.reply];
+}
+
 /** How an item was settled, or nothing while it waits: what its answerer did and wrote, or the agent taking it back and why. */
 export function settlementOf(item: InboxItem): Settlement | undefined {
   if (item.status === INBOX_STATUS.OPEN) return undefined;
@@ -1049,10 +1056,7 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
   const answer = item.answer;
   if (answer === undefined)
     return { by: SETTLED_BY.DEVELOPER, did: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
-  const did =
-    answer.reply === INBOX_REPLY.CHOSE
-      ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
-      : REPLY_WORDS[answer.reply];
+  const did = answerDid(answer);
   const values = valueLines(answer);
   return {
     by: SETTLED_BY.DEVELOPER,

@@ -18,6 +18,7 @@ import {
 } from "../../testing/source-sandbox.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { vercelSandboxApi } from "../vercel-sandbox-api.js";
+import { CODER } from "./bounds.js";
 import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from "./snapshot.js";
 
 /**
@@ -268,6 +269,41 @@ it.effect(
 
       assert.ok(outcome.copied);
       assert.deepEqual([sandbox.state.status, sandbox.stops], ["running", []]);
+    }),
+);
+
+it.effect(
+  "a stopped sandbox opened before the timeout was shortened has it lowered ahead of its wake, so a woken session kept up lives the timeout",
+  (t) =>
+    Effect.gen(function* () {
+      const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
+      const order: string[] = [];
+      const updates: unknown[] = [];
+      // As Vercel lists a sandbox opened before the cap: its configured timeout a day.
+      const respond = async (url: string, init: RequestInit): Promise<Response> => {
+        const parsed = new URL(url);
+        if (init.method === "PATCH") {
+          order.push("lowered");
+          updates.push(JSON.parse(String(init.body)));
+          return Response.json({ sandbox: { name: parsed.pathname.split("/").at(-1) } });
+        }
+        if (parsed.searchParams.get("resume") === "true") order.push("woken");
+        const answered = await answerOf(sandbox, url, init);
+        if (parsed.pathname !== "/api/v2/sandboxes") return answered;
+        const listed: { sandboxes: object[] } = await answered.json();
+        return Response.json({
+          sandboxes: listed.sandboxes.map((each) => ({
+            ...each,
+            timeout: CODER.SANDBOX_MAX_LIFETIME_MS,
+          })),
+        });
+      };
+
+      const outcome = yield* copyOver(respond, Effect.succeed(true));
+
+      assert.ok(outcome.copied);
+      assert.deepEqual(order.slice(0, 2), ["lowered", "woken"]);
+      assert.deepEqual(updates, [{ timeout: CODER.SANDBOX_TIMEOUT_MS }]);
     }),
 );
 

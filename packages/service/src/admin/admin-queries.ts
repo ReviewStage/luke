@@ -5,6 +5,11 @@ import { account, session, user } from "@luke/database/schemas/auth";
 import { adminFavorite } from "@luke/database/schemas/favorite";
 import { hostedUsage } from "@luke/database/schemas/usage";
 import {
+  ADMIN_METRICS_SCOPE,
+  type AdminMetricsScope,
+  type AdminMetricsWindow,
+} from "@luke/features/admin-wire";
+import {
   and,
   asc,
   count,
@@ -42,7 +47,6 @@ import {
   lastSeenInstant,
   searchLikePattern,
 } from "./admin-users.js";
-import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
 export type AdminQueryFailure = QueryError | Schema.SchemaError;
 

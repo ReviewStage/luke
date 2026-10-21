@@ -89,6 +89,8 @@ function vercel() {
   const commands: FakeCommand[] = [];
   const uploads: Map<string, string>[] = [];
   const snapshots: string[] = [];
+  /** The files the build wrote in a session, by session and path. */
+  const written = new Map<string, string>();
   const clock = { now: 0 };
   /** What the test does once, the next time a sandbox is read by name, before the read is answered. */
   const hooks: { onceOnRead?: (() => Promise<void>) | undefined } = {};
@@ -179,6 +181,10 @@ function vercel() {
       taking.currentSnapshotId = snapshot;
       return Response.json({ snapshot: { id: snapshot }, session: { id: sessionId } });
     }
+    if (rest === "fs/read") {
+      const contents = written.get(`${sessionId}:${(await body()).path}`);
+      return contents === undefined ? new Response(null, { status: 404 }) : new Response(contents);
+    }
     if (rest === "fs/write") {
       uploads.push(untar(new Uint8Array(await new Response(init.body).arrayBuffer())));
       return Response.json({});
@@ -212,6 +218,11 @@ function vercel() {
     /** The build of the template named ends with the exit code given. */
     finishBuild: (exitCode: number) => {
       for (const command of commands) command.exitCode = command.exitCode ?? exitCode;
+    },
+    /** The build wrote its marker, while Vercel never recorded its command's exit. */
+    writeMarker: (contents: string) => {
+      for (const command of commands)
+        written.set(`${command.session}:/tmp/luke-template/exit`, contents);
     },
   };
 }
@@ -465,5 +476,34 @@ it.effect("the template starts from the base image of the eve this repository in
     const manifest = createRequire(import.meta.url).resolve("eve/package.json");
     const { version } = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
     assert.equal(EVE_BASE_IMAGE, `vcr.vercel.com/vercel/eve/base:${version.split("+")[0]}`);
+  }),
+);
+
+it.effect(
+  "a build whose command Vercel never records an exit for is read from its marker: 0 is ready",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      const { api, build } = yield* setUp(fake);
+      yield* advanceTemplate(api, build);
+      assert.equal((yield* advanceTemplate(api, build)).state, TEMPLATE_STATE.PREPARING);
+
+      fake.writeMarker("0\n");
+      const ready = yield* advanceTemplate(api, build);
+
+      assert.deepEqual(ready, { state: TEMPLATE_STATE.READY, snapshotId: fake.snapshots[0] });
+    }),
+);
+
+it.effect("a marker holding any other status is a failed preparation", () =>
+  Effect.gen(function* () {
+    const fake = vercel();
+    const { api, build } = yield* setUp(fake);
+    yield* advanceTemplate(api, build);
+
+    fake.writeMarker("2\n");
+
+    assert.equal((yield* advanceTemplate(api, build)).state, TEMPLATE_STATE.FAILED);
+    assert.equal(fake.snapshots.length, 0);
   }),
 );

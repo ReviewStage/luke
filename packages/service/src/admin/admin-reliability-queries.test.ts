@@ -25,6 +25,11 @@ import {
   type VoiceCloseReason,
 } from "@luke/database/voice-vocabulary";
 import {
+  ADMIN_ATTENTION_KIND,
+  ADMIN_METRICS_SCOPE,
+  ADMIN_METRICS_WINDOW,
+} from "@luke/features/admin-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
@@ -44,7 +49,6 @@ import { REPOSITORY_REFUSAL } from "../agents/repository-shell.js";
 import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS, type TurnStatus } from "../core.js";
 import { buildAdminReliability } from "./admin-reliability.js";
 import { readAdminReliabilitySource } from "./admin-reliability-queries.js";
-import { ADMIN_ATTENTION_KIND, ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * The Reliability read over a real dialect: ended work counted by kind

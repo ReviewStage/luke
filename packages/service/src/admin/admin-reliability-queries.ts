@@ -24,6 +24,20 @@ import { conversations, turns } from "@luke/database/schemas/storage";
 import { voiceSessions } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
+import type {
+  AdminAttentionAccount,
+  AdminAttentionProblem,
+  AdminAutomationCount,
+  AdminDatabaseHealth,
+  AdminFailureCount,
+  AdminIntegration,
+} from "@luke/features/admin-answer-wire";
+import {
+  ADMIN_ATTENTION_AGENT_DAYS,
+  ADMIN_ATTENTION_KIND,
+  type AdminMetricsScope,
+  type AdminMetricsWindow,
+} from "@luke/features/admin-wire";
 import {
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
@@ -44,7 +58,6 @@ import { CODER } from "../agents/coder-host/bounds.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS } from "../core.js";
 import { isAdminRole } from "./admin-access.js";
-import type { AdminDatabaseHealth, AdminIntegration } from "./admin-health.js";
 import { lastNDayKeys } from "./admin-metrics.js";
 import {
   AdminMetricsScopeSchema,
@@ -52,20 +65,7 @@ import {
   keptByScope,
   UserRoleSchema,
 } from "./admin-queries.js";
-import {
-  ADMIN_ATTENTION_LIMIT,
-  type AdminAttentionAccount,
-  type AdminAttentionProblem,
-  type AdminAutomationCount,
-  type AdminFailureCount,
-  type AdminReliabilitySource,
-} from "./admin-reliability.js";
-import {
-  ADMIN_ATTENTION_AGENT_DAYS,
-  ADMIN_ATTENTION_KIND,
-  type AdminMetricsScope,
-  type AdminMetricsWindow,
-} from "./http.js";
+import { ADMIN_ATTENTION_LIMIT, type AdminReliabilitySource } from "./admin-reliability.js";
 
 type AdminQueryFailure = QueryError | Schema.SchemaError;
 

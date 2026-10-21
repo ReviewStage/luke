@@ -94,6 +94,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   credentialPolicy,
   OPEN_INTERNET_POLICY,
@@ -713,6 +714,8 @@ export const runnerSessions = <
             return accepted;
           }
           // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
+          // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+          yield* capSandboxTimeout(api, found.value);
           const resumed = yield* Effect.result(api.resume(found.value.name));
           if (Result.isFailure(resumed)) {
             if (resumed.failure.status !== SNAPSHOT_GONE_STATUS) return yield* resumed.failure;

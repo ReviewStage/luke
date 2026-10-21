@@ -278,3 +278,42 @@ test("with a mouse, a tab's menu offers no move, which its drag makes", async ()
 
   assert.deepEqual(menuWords(), ["Close"]);
 });
+
+test("a preview tab wears its name in italics, and a double-click keeps it, while a tab of its own takes no keep", async () => {
+  const kept: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TabStrip, {
+          label: "Tabs",
+          onMove: ignore,
+          children: ["Preview", "Kept"].map((label) =>
+            createElement(Tab, {
+              key: label,
+              icon: createElement("svg"),
+              label,
+              selected: label === "Preview",
+              preview: label === "Preview",
+              onSelect: ignore,
+              onKeep: () => kept.push(label),
+            }),
+          ),
+        }),
+      ),
+    ),
+  );
+  assert.equal(pill(container, "Preview").dataset.preview, "true");
+  assert.equal(pill(container, "Kept").dataset.preview, "false");
+  for (const label of ["Preview", "Kept"]) {
+    act(() => {
+      pill(container, label)
+        .querySelector('[role="tab"]')
+        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+  }
+  assert.deepEqual(kept, ["Preview"]);
+});

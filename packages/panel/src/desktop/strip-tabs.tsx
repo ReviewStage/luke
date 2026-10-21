@@ -275,7 +275,11 @@ export interface TabLook {
   quiet?: boolean;
   /** Stands first in its strip, never dragged nor dropped before. */
   anchored?: boolean;
+  /** Stands as its strip's preview (`Tab`'s). */
+  preview?: boolean;
   onSelect: () => void;
+  /** Keeps a preview as a tab of its own (`Tab`'s). */
+  onKeep?: (() => void) | undefined;
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   pinPositionsForInsert,
   pinPositionsForMove,
 } from "@luke/features/pin-order";
-import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
+import type { TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -64,9 +64,12 @@ import {
   taskRowTime,
 } from "@luke/ui/task-list-model";
 import {
+  isAgentEntry,
+  memberSection,
   placeWrites,
-  sectionEntries,
+  type SectionMember,
   sectionOrder,
+  unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
 import {
@@ -91,7 +94,7 @@ import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
-import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
+import { ColumnFoot } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
@@ -113,7 +116,7 @@ import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
@@ -128,7 +131,9 @@ import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
   type DrawnSection,
+  moveToSectionEntry,
   PINNED_DROP_ZONE,
+  rowMember,
   SidebarSections,
   TASKS_DROP_ZONE,
   useSectionDialogs,
@@ -370,6 +375,8 @@ interface RowContext {
   readonly inSight: boolean;
   /** Hears a row let go over a section, Tasks, or Pinned, while the account keeps sections; none while it does not. */
   readonly dropOut: ((row: TaskRow, zone: string, at: number) => void) | undefined;
+  /** An agent's Move to section, as a task's menu offers it; none for an archived agent. */
+  readonly sectionEntry: (agent: TasklessAgent) => MenuEntry | undefined;
 }
 
 /**
@@ -431,6 +438,7 @@ function TaskRows({
             shown={context.tasks.shown && context.inSight}
             onOpen={() => context.onOpenAgent(row.agent.id)}
             onPin={pinOf(context.tasks, row.agent)}
+            section={context.sectionEntry(row.agent)}
           />
         ),
       )}
@@ -552,11 +560,9 @@ function unpin(row: PinnedRow, tasks: TasksControl): void {
   else tasks.sidePanel.onUnpin(row.pin.task, row.pin.tab);
 }
 
-/** The write that takes a task out of the section it is kept in, a pinned one's included; none where it is in none. */
-function leaveSection(tasks: TasksControl, taskId: string): TaskSectionWrite[] {
-  return sectionEntries(tasks.taskSections).has(taskId)
-    ? [{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]
-    : [];
+/** The write that takes a task or an agent out of the section it is kept in, a pinned one's included; none where it is in none. */
+function leaveSection(tasks: TasksControl, member: SectionMember): TaskSectionWrite[] {
+  return memberSection(tasks.taskSections, member) === undefined ? [] : unplaceAllWrites([member]);
 }
 
 /** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans and its agents, a pinned tab being its plan's. */
@@ -623,6 +629,7 @@ function PinnedRows({
                 shown={context.tasks.shown && context.inSight}
                 onOpen={() => context.onOpenAgent(agent.id)}
                 onPin={pinOf(context.tasks, agent)}
+                section={context.sectionEntry(agent)}
               />
             </RowPlaced>
           );
@@ -1332,45 +1339,53 @@ function SidebarAdminRow({
   );
 }
 
-/** The listed workspace's sections as the sidebar draws them, and the tasks standing in any of them, which Tasks leaves out. */
+/** The listed workspace's sections as the sidebar draws them, and the tasks and agents standing in any of them, which Tasks leaves out. */
 interface SectionedTasks {
   readonly sections: readonly DrawnSection[];
   readonly taskIds: ReadonlySet<string>;
+  readonly agentIds: ReadonlySet<string>;
 }
 
 /**
  * The account's sections in the workspace, each with the tasks of `free`,
- * the listed tasks no pin holds, it keeps, in its order. A task in a
- * section that stands elsewhere, pinned or archived, is no row of it,
- * and comes back to it once it stands free again. None while the account
- * keeps no sections here.
+ * the listed tasks no pin holds, and the agents of `freeAgents`, the listed
+ * agents with no task no pin holds, it keeps, in its order. A row in a
+ * section that stands elsewhere, pinned or archived, is no row of it, and
+ * comes back to it once it stands free again. None while the account keeps
+ * no sections here.
  */
 function sectionedTasks(
   tasks: TasksControl,
   workspaceId: string | undefined,
   free: readonly TaskSummary[],
+  freeAgents: readonly TasklessAgent[],
 ): SectionedTasks {
-  if (workspaceId === undefined) return { sections: [], taskIds: new Set() };
+  if (workspaceId === undefined) return { sections: [], taskIds: new Set(), agentIds: new Set() };
   const state = tasks.taskSections;
   const byId = new Map(free.map((task) => [task.id, task]));
+  const agentsById = new Map(freeAgents.map((agent) => [agent.id, agent]));
   const sections = workspaceSections(state, workspaceId).map((section): DrawnSection => {
-    const entries = sectionOrder(state, section.id).filter((entry) => byId.has(entry.taskId));
-    const held = entries.flatMap((entry) => byId.get(entry.taskId) ?? []);
-    return { section, entries, tasks: held };
+    const held = sectionOrder(state, section.id).flatMap((entry) => {
+      const agent = isAgentEntry(entry) ? agentsById.get(entry.agentId) : undefined;
+      const task = isAgentEntry(entry) ? undefined : byId.get(entry.taskId);
+      if (agent !== undefined) return [{ entry, row: agentRow(agent) }];
+      return task === undefined ? [] : [{ entry, row: taskRow(task) }];
+    });
+    return { section, entries: held.map(({ entry }) => entry), rows: held.map(({ row }) => row) };
   });
-  const standing = new Set(sections.map((drawn) => drawn.section.id));
-  const taskIds = new Set(
-    [...sectionEntries(state).values()]
-      .filter((entry) => standing.has(entry.sectionId) && byId.has(entry.taskId))
-      .map((entry) => entry.taskId),
+  const rows = sections.flatMap((drawn) => drawn.rows);
+  const taskIds = new Set(rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : [])));
+  const agentIds = new Set(
+    rows.flatMap((row) => (row.kind === TASK_ROW.AGENT ? [row.agent.id] : [])),
   );
-  return { sections, taskIds };
+  return { sections, taskIds, agentIds };
 }
 
 /**
  * A section as the view's filters leave it: its tasks of the statuses shown,
- * and any with no status, of the creator and the assignee the view names,
- * where it names them, each with its entry, in its order.
+ * and any with no status, an agent's among them, of the creator and the
+ * assignee the view names, where it names them, each with its entry, in its
+ * order.
  */
 function sectionInView(
   drawn: DrawnSection,
@@ -1378,19 +1393,20 @@ function sectionInView(
   createdBy: string | undefined,
   assignedTo: string | undefined,
 ): DrawnSection {
-  const people = new Set(
-    taskRowsAssignedTo(taskRowsCreatedBy(drawn.tasks.map(taskRow), createdBy), assignedTo).map(
-      (row) => (row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id),
-    ),
-  );
-  const kept = drawn.tasks.filter(
-    (task) => people.has(task.id) && (task.status === undefined || statuses.includes(task.status)),
-  );
-  const keptIds = new Set(kept.map((task) => task.id));
+  const people = new Set(taskRowsAssignedTo(taskRowsCreatedBy(drawn.rows, createdBy), assignedTo));
+  const shown = (row: TaskRow) =>
+    people.has(row) &&
+    (row.kind === TASK_ROW.AGENT ||
+      row.task.status === undefined ||
+      statuses.includes(row.task.status));
+  const kept = drawn.rows.flatMap((row, at) => {
+    const entry = drawn.entries[at];
+    return entry !== undefined && shown(row) ? [{ entry, row }] : [];
+  });
   return {
     ...drawn,
-    entries: drawn.entries.filter((entry) => keptIds.has(entry.taskId)),
-    tasks: kept,
+    entries: kept.map(({ entry }) => entry),
+    rows: kept.map(({ row }) => row),
   };
 }
 
@@ -1414,8 +1430,6 @@ interface DesktopSidebarProps {
   updates: UpdateControl;
   /** Signs the account out, once the account menu's Log out is answered. */
   onSignOut: () => Promise<void>;
-  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
-  call: CallCardInput | undefined;
   /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
   onPressWithin: () => void;
   /** The room the panel's stage gives; narrow, the sidebar is a phone's drawer, whose page rows scroll away with its tasks. Wide where left out. */
@@ -1506,7 +1520,6 @@ function SidebarColumn({
   account,
   updates,
   onSignOut,
-  call,
   onPressWithin,
   room = SHELL_ROOM.WIDE,
   inboxListing,
@@ -1660,6 +1673,7 @@ function SidebarColumn({
     tasks,
     sectionsShown ? tasks.workspace?.id : undefined,
     tasks.listed.tasks.filter((task) => task.pinnedAt === undefined),
+    listedAgents.standing.filter((agent) => agent.pinnedAt === undefined),
   );
   // The view's filters thin the sections' tasks as they thin the list's, a row dropped among them landing among those drawn.
   const statuses = shownStatuses(taskView.view);
@@ -1671,40 +1685,40 @@ function SidebarColumn({
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
   // stands where it was let go, under Tasks or in a section.
   const dropRow = (row: TaskRow, zone: string, at: number) => {
+    const member = rowMember(row);
     if (zone === PINNED_DROP_ZONE) {
-      if (row.kind === TASK_ROW.TASK) tasks.onWriteSections(leaveSection(tasks, row.task.id));
+      tasks.onWriteSections(leaveSection(tasks, member));
       pinAt(pinnedSection, row, at, tasks);
       return;
     }
-    if (row.kind !== TASK_ROW.TASK) return;
-    const taskId = row.task.id;
     if (zone === TASKS_DROP_ZONE) {
-      if (!sectioned.taskIds.has(taskId)) return;
-      tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
+      const sectionedIds = member.agent ? sectioned.agentIds : sectioned.taskIds;
+      if (sectionedIds.has(member.id)) tasks.onWriteSections(unplaceAllWrites([member]));
       return;
     }
     const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined) return;
-    tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
-  };
-  const dropTask = (taskId: string, zone: string, at: number) => {
-    const task = tasks.listed.tasks.find((each) => each.id === taskId);
-    if (task !== undefined) dropRow(taskRow(task), zone, at);
+    tasks.onWriteSections(placeWrites(target.entries, member, zone, at, Date.now()));
   };
   // A tab pinned to the sidebar is no task, so it goes into no section, though Tasks unpins it as any pin.
   const dropPinned = (row: PinnedRow, zone: string, at: number) => {
-    const task = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.task : undefined;
+    const member =
+      row.kind === TASK_ROW.AGENT
+        ? rowMember(agentRow(row.agent))
+        : row.pin === undefined
+          ? rowMember(taskRow(row.task))
+          : undefined;
     if (zone === TASKS_DROP_ZONE) {
       unpin(row, tasks);
-      if (task !== undefined) tasks.onWriteSections(leaveSection(tasks, task.id));
+      if (member !== undefined) tasks.onWriteSections(leaveSection(tasks, member));
       return;
     }
     const target = shownSections.find((drawn) => drawn.section.id === zone);
-    if (target === undefined || task === undefined) return;
+    if (target === undefined || member === undefined) return;
     unpin(row, tasks);
     tasks.onWriteSections([
-      ...leaveSection(tasks, task.id),
-      ...placeWrites(target.entries, task.id, zone, at, Date.now()),
+      ...leaveSection(tasks, member),
+      ...placeWrites(target.entries, member, zone, at, Date.now()),
     ]);
   };
   const { chosen } = overlay;
@@ -1725,6 +1739,16 @@ function SidebarColumn({
     archived: archive.shown,
     inSight: overlay.inSight,
     dropOut: sectionsShown ? dropRow : undefined,
+    // Note that an archived agent stands in no section, so it is offered none until it is brought back, as an archived task.
+    sectionEntry: (agent) =>
+      agent.archivedAt === undefined
+        ? moveToSectionEntry(
+            tasks,
+            { agent: true, id: agent.id },
+            agent.workspaceId,
+            sectionDialogs.askNew,
+          )
+        : undefined,
   };
   // A pinned tab is on show where its task is open and its column shows it:
   // an agent's or the Inbox in the task's own column, any other in the side panel. The
@@ -1754,11 +1778,13 @@ function SidebarColumn({
       );
   const unpinnedAgents = archive.shown
     ? listedAgents.archived
-    : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
+    : listedAgents.standing.filter(
+        (agent) => agent.pinnedAt === undefined && !sectioned.agentIds.has(agent.id),
+      );
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsAssignedTo(taskRowsCreatedBy(unpinned, createdBy), assignedTo);
   // The status filter thins the tasks listed, never the archived ones, which are all settled out of the way.
-  const sectionRows = sectioned.sections.flatMap((drawn) => drawn.tasks.map(taskRow));
+  const sectionRows = sectioned.sections.flatMap((drawn) => drawn.rows);
   const hidden = archive.shown ? [] : hiddenStatuses([...sectionRows, ...rows], statuses);
   const statusRows = archive.shown ? rows : taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
@@ -1780,8 +1806,8 @@ function SidebarColumn({
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
-  const sectionsDrawn = shownSections.flatMap(({ section, tasks: held }) =>
-    (folds.sectionFolded(section.id) ? held.filter((task) => current(task.id)) : held).map(taskRow),
+  const sectionsDrawn = shownSections.flatMap(({ section, rows: held }) =>
+    folds.sectionFolded(section.id) ? held.filter(currentRow) : held,
   );
   const drawn = [
     ...(archive.shown ? [] : folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn),
@@ -1925,25 +1951,41 @@ function SidebarColumn({
                     context={{
                       tasks,
                       dialogs: sectionDialogs,
-                      current,
+                      current: currentRow,
                       unread,
                       inSight: overlay.inSight,
                       folded: folds.sectionFolded,
                       onToggle: folds.toggleSection,
-                      row: (task) => (
-                        <SidebarTask
-                          key={task.id}
-                          tasks={tasks}
-                          task={task}
-                          current={context.marked(task.id, undefined)}
-                          open={current(task.id)}
-                          unread={unread(task)}
-                          now={now}
-                          faces={context.faces}
-                          onOpen={() => context.onOpen(task.id)}
-                        />
-                      ),
-                      onDropTask: dropTask,
+                      row: (row) =>
+                        row.kind === TASK_ROW.TASK ? (
+                          <SidebarTask
+                            key={row.task.id}
+                            tasks={tasks}
+                            task={row.task}
+                            current={context.marked(row.task.id, undefined)}
+                            open={current(row.task.id)}
+                            unread={unread(row.task)}
+                            now={now}
+                            faces={context.faces}
+                            onOpen={() => context.onOpen(row.task.id)}
+                          />
+                        ) : (
+                          <SidebarAgent
+                            key={row.agent.id}
+                            agent={row.agent}
+                            agents={tasks.agents}
+                            current={currentRow(row)}
+                            unread={context.unseenAgent(row.agent.id)}
+                            now={now}
+                            at={taskRowTime(row, context.order)}
+                            face={context.faces.creator && context.faces.assignee}
+                            shown={tasks.shown && overlay.inSight}
+                            onOpen={() => context.onOpenAgent(row.agent.id)}
+                            onPin={pinOf(tasks, row.agent)}
+                            section={context.sectionEntry(row.agent)}
+                          />
+                        ),
+                      onDropRow: dropRow,
                     }}
                   />
                 ) : null}
@@ -2051,7 +2093,7 @@ function SidebarColumn({
         </ScrollArea>
       </div>
 
-      <ColumnFoot call={call}>
+      <ColumnFoot docked={!sidebar.collapsed}>
         <SidebarFoot
           account={account}
           updates={updates}

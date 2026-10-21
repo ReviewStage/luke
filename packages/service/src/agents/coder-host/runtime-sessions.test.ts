@@ -791,6 +791,34 @@ const CATALOG = modelCatalogOf([
   },
 ]);
 
+/** The catalog with a GPT model it lists no fast version of, as AI Gateway lists every GPT model. */
+const PLAN_CATALOG = modelCatalogOf([
+  {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+  },
+  {
+    id: "openai/gpt-5.5",
+    name: "GPT-5.5",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "medium", "high"],
+  },
+  {
+    id: "openai/gpt-5.5-fast",
+    name: "GPT-5.5 (Fast)",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "medium", "high"],
+  },
+  {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  },
+]);
+
 /** How the owner's ChatGPT sign-in stands: none, one Codex launches on, one OpenAI signed out, or one sealed under a key the ring no longer holds. */
 type SignIn = "none" | "signed_in" | "signed_out" | "rotated_out";
 
@@ -1288,7 +1316,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "with the ChatGPT plan selected no GPT fast version is offered, its base model saying so, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before",
+      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before",
       () =>
         Effect.gen(function* () {
           for (const forAgents of [true, false]) {
@@ -1304,7 +1332,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const { eve, codex, native } = runtimes();
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
-              CATALOG,
+              PLAN_CATALOG,
               environment(),
               native,
             );
@@ -1321,7 +1349,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             if (forAgents) {
               assert.deepEqual(
                 gpt.map((model) => [model.id, model.fastWithheldByPlan]),
-                [["openai/gpt-5.5", true]],
+                [
+                  ["openai/gpt-5.5", true],
+                  ["openai/gpt-6.1-sol", true],
+                ],
               );
               assert.ok(Result.isFailure(started));
               assert.deepEqual([heard(eve), heard(codex)], [[], []]);
@@ -1331,6 +1362,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 [
                   ["openai/gpt-5.5", undefined],
                   ["openai/gpt-5.5-fast", undefined],
+                  ["openai/gpt-6.1-sol", undefined],
                 ],
               );
               assert.ok(Result.isSuccess(started));

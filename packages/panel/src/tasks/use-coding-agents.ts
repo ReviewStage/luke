@@ -41,6 +41,7 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import { rendererPause } from "../renderer-runtime.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -1436,12 +1437,17 @@ export function useCodingAgents(input: {
     );
   }, [act, taskId, workspaceId, agentRepository, repository]);
 
+  // A start reads the agents as they stand when it is pressed, so the doors to it stand across draws.
+  const steadyStartPrompt = useSteadyDoor(startPrompt);
+  const steadyStartFork = useSteadyDoor(startFork);
+
   const readInboxImage = useCallback<InboxImageReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
     [act],
   );
 
-  return {
+  // Handed back steady, so a part drawn from the agents holds while they do (`memo`).
+  return useSteadyDoors({
     chatOn,
     agents,
     archived: archivedAgents,
@@ -1460,8 +1466,8 @@ export function useCodingAgents(input: {
     onTaskStarted,
     onDraftAttachments,
     onDiscardDraft,
-    startPrompt,
-    startFork,
+    startPrompt: steadyStartPrompt,
+    startFork: steadyStartFork,
     listFailed,
     listMissing,
     onRetryList: readAgain,
@@ -1512,5 +1518,5 @@ export function useCodingAgents(input: {
     answerInbox,
     messageInbox,
     readInboxImage,
-  };
+  });
 }

@@ -16,17 +16,11 @@
  * definition every read here that says "active" counts through.
  */
 
-import {
-  ADMIN_RETENTION_WEEKS,
-  ADMIN_TREND_DAYS,
-  type AdminMetricsSource,
-  type AdminRetentionCohort,
-  type AdminTrend,
-  buildRetentionCohorts,
-  lastNDayKeys,
-  sum,
-  trailingTrend,
-} from "./admin-metrics.js";
+import type {
+  AdminActivityDay,
+  AdminOverview,
+  AdminOverviewAccount,
+} from "@luke/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
   type ActivityFeature,
@@ -36,100 +30,22 @@ import {
   type FunnelStep,
   REACH_FEATURE,
   type ReachFeature,
-} from "./admin-overview-vocabulary.js";
-import type { AdminMetricsWindow } from "./http.js";
+} from "@luke/features/admin-overview-vocabulary";
+import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+import {
+  ADMIN_RETENTION_WEEKS,
+  ADMIN_TREND_DAYS,
+  type AdminMetricsSource,
+  buildRetentionCohorts,
+  lastNDayKeys,
+  sum,
+  trailingTrend,
+} from "./admin-metrics.js";
 
 /** How many of the most active accounts the overview names. */
 export const ADMIN_OVERVIEW_ACCOUNTS_LIMIT = 10;
 
 const SECONDS_PER_MINUTE = 60;
-
-/** One UTC day of the activity chart: its key, and each feature's count that day. */
-export type AdminActivityDay = { day: string } & Record<ActivityFeature, number>;
-
-/**
- * One funnel step: how many of the window's new accounts ever took it, and
- * their share of everyone who signed up in the window. `share` is null when
- * nobody signed up, because a share of nothing would pose as precision.
- */
-export interface AdminFunnelStep {
-  step: FunnelStep;
-  accounts: number;
-  share: number | null;
-}
-
-/** One feature's reach: how many of the week's active developers used it, and their share. */
-interface AdminReachRow {
-  feature: ReachFeature;
-  developers: number;
-  share: number | null;
-}
-
-/**
- * One of the most active accounts over the window, ranked by the days it took
- * a meaningful action rather than by volume: who lives in Luke daily, which a
- * single heavy day cannot fake. The account fields match the roster row's,
- * because both tables draw the same account cell, and the id goes back into
- * the detail endpoint's gate, never into a rendered string.
- */
-export interface AdminOverviewAccount {
-  id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  admin: boolean;
-  /** Window days with at least one meaningful action. */
-  activeDays: number;
-  /** Tasks the account created in the window. */
-  tasks: number;
-  /** Coding agents started under the account in the window. */
-  agents: number;
-  /** Pull requests of the account's agents merged in the window. */
-  prsMerged: number;
-  /** Minutes of voice calls the account started in the window, rounded. */
-  callMinutes: number;
-  /** The account's freshest sign-in session write, in epoch milliseconds; null when none stands. */
-  lastSeenAt: number | null;
-}
-
-export interface AdminOverview {
-  headline: {
-    /** Distinct accounts with a meaningful action in each run. */
-    activeDevelopers: AdminTrend;
-    tasksCreated: AdminTrend;
-    agentsStarted: AdminTrend;
-    /** Of the agents started in the recent run, how many an automation started. */
-    agentsFromAutomations: number;
-    prsMerged: AdminTrend;
-    /**
-     * The pull requests of the agents started in the recent run, and how many
-     * of them are merged: a conversion of that week's agents, not of the
-     * merges `prsMerged` dates. A pull request records no instant it was
-     * opened, so the week's openings cannot be counted on their own, and one
-     * an older agent opened this week is in neither figure.
-     */
-    prsOpened: { opened: number; merged: number };
-  };
-  activity: {
-    /** The window's UTC days, oldest first, zero-filled. */
-    daily: AdminActivityDay[];
-    /** Every feature's count summed, over the trend's two runs. */
-    trend: AdminTrend;
-  };
-  /** The window's new accounts, step by step, in the vocabulary's order. */
-  funnel: AdminFunnelStep[];
-  reach: {
-    /** The week's active developers: the headline's recent run, the base of every share. */
-    activeDevelopers: number;
-    features: AdminReachRow[];
-  };
-  topAccounts: AdminOverviewAccount[];
-  /** Signup cohorts retained by a meaningful action, on the hosted grid's own weeks. */
-  retention: {
-    weeks: number;
-    cohorts: AdminRetentionCohort[];
-  };
-}
 
 /** One ranked account as the query reads it, before its per-feature counts join it. */
 interface AdminActiveAccountSource {

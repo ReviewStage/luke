@@ -83,10 +83,13 @@ import {
  * log and passed over, as eve's relay passes one over, since the runner
  * posting the batch again would be refused again. The answer names the last
  * event applied, which a relaunch numbers its events after. A runner posting
- * is a run under way, so a batch that applied events keeps its sandbox alive
- * past its short timeout, at most every keep-alive interval
- * (`../sandbox-keep-alive.ts`), stamped in the projection under the same
- * lock, unless the batch ends the launch, whose sandbox is stopped instead.
+ * is a run under way, so a post keeps its sandbox alive past its short
+ * timeout, at most every keep-alive interval (`../sandbox-keep-alive.ts`),
+ * stamped in the projection under the same lock, unless it ends the launch,
+ * whose sandbox is stopped instead. A batch with no events is the runner's
+ * heartbeat (`@luke/agent-runner`'s `RUNNER_HEARTBEAT`), posted while its
+ * harness says nothing, as it may for an hour while a background command
+ * runs; it applies nothing but that.
  */
 
 /** The path a runner posts its events to. */
@@ -389,9 +392,12 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
     const ends = endsOf(batch, held.sequence);
-    // A batch that ends the launch keeps nothing alive: its sandbox is stopped once it lands.
+    // Any post is the runner still running, a heartbeat with no events among them, but a batch that
+    // ends the launch keeps nothing alive, since its sandbox is stopped once it lands; and a launch
+    // that has applied nothing yet has a sandbox that opened moments ago.
+    const sequence = last ?? held.sequence;
     const keepsAlive =
-      last !== undefined && ends.length === 0 && keepAliveDue(state.keptAliveAt, now);
+      sequence !== null && ends.length === 0 && keepAliveDue(state.keptAliveAt, now);
     if (keepsAlive) state = { ...state, keptAliveAt: now };
     const result = {
       applied: { applied: events.length, sequence: last ?? held.sequence } satisfies Applied,
@@ -399,9 +405,9 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       turns: turnsMovedBy(writes),
       keepsAlive,
     };
-    return last === undefined
+    return sequence === null || (last === undefined && !keepsAlive)
       ? { result }
-      : { result, saved: { sequence: last, projection: state } };
+      : { result, saved: { sequence, projection: state } };
   });
 }
 

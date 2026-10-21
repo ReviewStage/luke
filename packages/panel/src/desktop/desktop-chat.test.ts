@@ -5,16 +5,18 @@ import {
   ASK_STATUS,
   CHANNEL_KIND,
   CHAT_ASK,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_IMAGE_TYPE,
   type ChatAnswer,
+  type ChatMessage,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { CodeRef, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -36,6 +38,7 @@ import {
   stagedPost,
   stagedRead,
 } from "../tasks/chat-fixture.js";
+import { FIXTURE_TASK_ID } from "../tasks/tasks-fixture.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
@@ -498,49 +501,118 @@ test("before the workspace is known, an @ offers no member, since a member is wr
   assert.equal(page.querySelector('[role="option"]'), null);
 });
 
-test("an open choice in For you is answered by a pick and its send, which marks the pick, says who answered, and leaves For you's count one less", async () => {
-  const page = mount();
-  const card = page.querySelector<HTMLElement>('.chat-ask[data-status="open"]');
-  assert.ok(card, "the choice's card stands open");
-  const fourteen = [...card.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((option) =>
-    option.textContent?.startsWith("14 days"),
+/** The open ask whose title is `title`, as For you or a channel draws it. */
+function openAsk(page: HTMLElement, title: string): HTMLElement {
+  const card = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
+    (each) => [...each.querySelectorAll("p")].some((line) => line.textContent === title),
   );
-  act(() => fourteen?.click());
+  assert.ok(card, `no open ask ${title}`);
+  return card;
+}
+
+/** The settled ask of the message at `seq` in the channel shown. */
+function settledAsk(page: HTMLElement, seq: number): HTMLElement {
+  const card = page.querySelector<HTMLElement>(`.chat-message[data-seq="${seq}"] .chat-ask`);
+  assert.ok(card, `no ask on message ${seq}`);
+  return card;
+}
+
+/** The press in the card whose words are `label`. */
+function pressNamed(card: HTMLElement, label: string): HTMLButtonElement {
+  const press = [...card.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === label,
+  );
+  assert.ok(press, `no ${label} press`);
+  return press;
+}
+
+/** A key pressed on the element that has the keyboard. */
+function pressKey(target: Element, key: string): void {
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+}
+
+/** The card's Send. */
+function sendOf(card: HTMLElement): HTMLButtonElement {
   const send = card.querySelector<HTMLButtonElement>('button[aria-label="Send"]');
-  assert.equal(send?.disabled, false);
-  act(() => send?.click());
+  assert.ok(send, "the card has its Send");
+  return send;
+}
+
+const EXPIRY = "Invite links expire after 7 days or 14?";
+const UNIQUE_INDEX = "Add a unique index on (organization_id, email) to memberships?";
+
+test("an open choice is headed as the Inbox heads one, picked by its option's number key and sent by the box's Send, and once answered its pick stands checked under the answerer's comment", async () => {
+  const page = mount();
+  const card = openAsk(page, EXPIRY);
+  assert.equal(card.querySelector(".inbox-ask-kind")?.textContent, "Pick one");
+  const options = [...card.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+  assert.deepEqual(
+    options.map((option) => option.getAttribute("aria-checked")),
+    ["false", "false"],
+  );
+  // Send stands held until the card holds something to send.
+  assert.equal(sendOf(card).disabled, true);
+  const [first] = options;
+  assert.ok(first);
+  act(() => first.focus());
+  pressKey(first, "2");
+  const fourteen = options.find((option) => option.textContent?.startsWith("14 days"));
+  assert.equal(fourteen?.getAttribute("aria-checked"), "true");
+  assert.equal(
+    document.activeElement,
+    fourteen,
+    "the key takes the keyboard to the option it picks",
+  );
+  assert.equal(rail(page)[0], "▸ For you (4)", "a pick sends nothing on its own");
+  act(() => sendOf(card).click());
   await settle();
   assert.equal(rail(page)[0], "▸ For you (3)");
   // The answered ask leaves For you, so the channel shows it settled.
   act(() => railRow(page, "teammate-invitations").click());
-  const settled = page.querySelector('.chat-ask[data-status="answered"]');
-  assert.equal(
-    [...(settled?.querySelectorAll("li") ?? [])]
-      .find((option) => option.textContent?.includes("Picked"))
-      ?.textContent?.startsWith("14 days"),
-    true,
+  const settled = settledAsk(page, 46);
+  assert.equal(settled.querySelector(".inbox-ask-standing")?.textContent, "Answered");
+  const answer = settled.querySelector('.inbox-comment[data-inbox-comment="answered"]');
+  assert.ok(answer, "the answer stands as its answerer's comment");
+  assert.match(answer.querySelector(".inbox-comment-when")?.textContent ?? "", /Sent to/u);
+  const picked = [...answer.querySelectorAll('[role="radio"][aria-checked="true"]')];
+  assert.deepEqual(
+    picked.map((option) => option.textContent?.startsWith("14 days")),
+    [true],
   );
-  assert.ok(
-    [...(settled?.querySelectorAll("p") ?? [])].some(
-      (line) => line.textContent === 'Dean Stratakos: Chose "14 days".',
-    ),
-    "the card says who answered and how",
-  );
+  assert.equal(settled.querySelector('button[aria-label="Send"]'), null);
 });
 
-test("an approval is answered by its press, and a reply typed under an opened thread lands in that thread", async () => {
+test("an approval's Approve is held until Send sends it, a note with no decision sends nothing and takes the keyboard to Approve, and once answered Approve stands pressed in green; a reply typed under an opened thread lands in that thread", async () => {
   const page = mount();
-  const approval = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
-    (card) => card.textContent?.startsWith("Ask · Approval"),
-  );
-  const approve = [...(approval?.querySelectorAll("button") ?? [])].find(
-    (button) => button.textContent === "Approve",
-  );
-  act(() => approve?.click());
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "go ahead");
+  act(() => sendOf(card).click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (4)", "an approval takes a decision");
+  assert.equal(document.activeElement, pressNamed(card, "Approve"));
+  // A number key picks one of the two presses and takes the keyboard to it, wherever in the card it stood.
+  act(() => sendOf(card).focus());
+  pressKey(sendOf(card), "2");
+  assert.equal(pressNamed(card, "Decline").getAttribute("aria-pressed"), "true");
+  assert.equal(document.activeElement, pressNamed(card, "Decline"));
+  act(() => pressNamed(card, "Approve").click());
+  assert.equal(pressNamed(card, "Decline").getAttribute("aria-pressed"), "false");
+  assert.equal(pressNamed(card, "Approve").getAttribute("aria-pressed"), "true");
+  assert.equal(rail(page)[0], "▸ For you (4)", "Approve sends nothing on its own");
+  act(() => sendOf(card).click());
   await settle();
   assert.equal(rail(page)[0], "▸ For you (3)");
 
   act(() => railRow(page, "teammate-invitations").click());
+  const settled = settledAsk(page, 51);
+  const approve = pressNamed(settled, "Approve");
+  assert.equal(approve.getAttribute("aria-pressed"), "true");
+  assert.ok(approve.querySelector('.inbox-ask-pressed[data-tone="ahead"]'), "Approve wears green");
+  assert.equal(pressNamed(settled, "Decline").getAttribute("aria-pressed"), "false");
+  assert.equal(settled.querySelector("[data-inbox-note]")?.textContent?.trim(), "go ahead");
+
   const toggle = page.querySelector<HTMLButtonElement>(
     '.chat-message[data-seq="48"] button[aria-expanded]',
   );
@@ -559,7 +631,7 @@ test("an approval is answered by its press, and a reply typed under an opened th
   );
 });
 
-test("a form's answer stands under its card field by field, and the reply in its thread says the same", async () => {
+test("a form's text field is the composer's own field, its answer stands in its fields read-only, and the reply in its thread says the same", async () => {
   const page = mount((chat) => ({
     ...chat,
     answer: {
@@ -584,29 +656,24 @@ test("a form's answer stands under its card field by field, and the reply in its
       ),
     },
   }));
-  const card = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
-    (each) =>
-      [...each.querySelectorAll("p")].some((line) => line.textContent === "Where do the seats go?"),
-  );
-  assert.ok(card, "the form's card stands open");
-  const [region, seats] = [...card.querySelectorAll<HTMLInputElement>("input")];
+  const card = openAsk(page, "Where do the seats go?");
+  assert.equal(card.querySelector(".inbox-ask-kind")?.textContent, "Fill in");
+  const region = card.querySelector<HTMLElement>('[data-inbox-field="text"]');
+  const seats = card.querySelector<HTMLInputElement>('[data-inbox-field="number"] input');
   assert.ok(region && seats);
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(region, "US");
-    region.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => {
-    setValue?.call(seats, "12");
-    seats.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => card.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  typeInComposer(region, "US");
+  fill(seats, "12");
+  act(() => sendOf(card).click());
   await settle();
   act(() => railRow(page, "teammate-invitations").click());
-  const settled = page.querySelector('.chat-message[data-seq="51"] .chat-ask');
-  assert.deepEqual(
-    [...(settled?.querySelectorAll("li") ?? [])].map((row) => row.textContent),
-    ["Region: US", "Seats: 12"],
+  const settled = settledAsk(page, 51);
+  assert.equal(
+    settled.querySelector('[data-inbox-answered-field="text"] .inbox-field-words')?.textContent,
+    "US",
+  );
+  assert.equal(
+    settled.querySelector<HTMLInputElement>('[data-inbox-answered-field="number"] input')?.value,
+    "12",
   );
   act(() =>
     page
@@ -614,6 +681,105 @@ test("a form's answer stands under its card field by field, and the reply in its
       ?.click(),
   );
   assert.match(words(page).join("\n"), /↳ Filled in the form\.\s*Region: US\s*Seats: 12/u);
+});
+
+test("a form none of whose fields must be filled may be sent empty", async () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      messages: chat.answer.messages.map((message) =>
+        message.seq === 51 && message.ask !== undefined
+          ? {
+              ...message,
+              ask: {
+                ...message.ask,
+                title: "Anything to add?",
+                response: { type: CHAT_ASK.FORM, fields: [{ type: "number", label: "Seats" }] },
+              },
+            }
+          : message,
+      ),
+    },
+  }));
+  const card = openAsk(page, "Anything to add?");
+  assert.equal(sendOf(card).disabled, false);
+  act(() => sendOf(card).click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (3)");
+});
+
+test("an ask its poster resolved says it was withdrawn and why, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      messages: chat.answer.messages.map((message) => {
+        if (message.ask === undefined) return message;
+        if (message.seq === 46) {
+          return {
+            ...message,
+            ask: {
+              ...message.ask,
+              status: ASK_STATUS.CLOSED,
+              closedReason: "Settled in the plan.",
+            },
+          };
+        }
+        return { ...message, ask: { ...message.ask, response: { type: CHAT_ASK.NONE } } };
+      }),
+    },
+  }));
+  const notice = openAsk(page, UNIQUE_INDEX);
+  assert.equal(
+    notice.querySelector(".inbox-ask-head"),
+    null,
+    "a notice asks nothing, so wears no head",
+  );
+  act(() => pressNamed(notice, "Got it").click());
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(
+    settledAsk(page, 46).querySelector(".inbox-ask-head")?.textContent,
+    "Pick oneWithdrawn: Settled in the plan.",
+  );
+  assert.equal(settledAsk(page, 46).querySelector('[role="radio"]'), null);
+  assert.equal(
+    settledAsk(page, 51).querySelector("[data-inbox-pick]")?.textContent,
+    "Acknowledged it",
+  );
+});
+
+test("an ask of the developer's own waits on the members it names, with nothing to answer it by", () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      messages: chat.answer.messages.map((message) =>
+        message.seq === 52
+          ? {
+              ...message,
+              ask: {
+                key: "split",
+                revision: 1,
+                status: ASK_STATUS.OPEN,
+                title: "Split it this way?",
+                needsReply: true,
+                response: { type: CHAT_ASK.APPROVAL },
+              },
+            }
+          : message,
+      ),
+    },
+  }));
+  act(() => railRow(page, "teammate-invitations").click());
+  const card = openAsk(page, "Split it this way?");
+  assert.equal(
+    card.querySelector("[data-inbox-marker]")?.textContent,
+    "Waiting on Add teammate invitations and Invite emails",
+  );
+  // Note that the words' mention chips are presses of their own, so the card is read for its box alone.
+  assert.equal(card.querySelector(".inbox-answer"), null);
 });
 
 test("an Enter that confirms what an input method composed leaves the mention list's word as typed", () => {
@@ -729,9 +895,12 @@ test("a direct message between two others reads as theirs, named by both, with n
     /Only Add teammate invitations and Invite emails post in this conversation\./u,
   );
   assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
-  // Its open ask reads as waiting, with nothing to answer it by.
+  // Its open ask reads as waiting on the other of the two, with nothing to answer it by.
   const ask = page.querySelector('.chat-ask[data-status="open"]');
-  assert.match(ask?.textContent ?? "", /Waiting on an answer/u);
+  assert.equal(
+    ask?.querySelector("[data-inbox-marker]")?.textContent,
+    "Waiting on Add teammate invitations",
+  );
   assert.equal(ask?.querySelector("button"), null);
 });
 
@@ -1340,6 +1509,7 @@ function railTasks(): Partial<TasksControl> {
         },
       ],
       entries: [{ taskId: billing.id, sectionId: section, addedAt: 1 }],
+      agentEntries: [],
     },
   };
 }
@@ -1465,4 +1635,182 @@ test("a group's ⋯ and a right-click on its header offer Mark all as read, whic
     [],
     "nothing in the group waits unread",
   );
+});
+
+/** The fixture's chat with messages posted in a channel, named by its name, each by the member named and holding the blocks given, after every other. */
+function withPosts(
+  chat: FixtureChat,
+  channelName: string,
+  posts: readonly { readonly by: string; readonly blocks: ChatMessage["blocks"] }[],
+): FixtureChat {
+  const { answer } = chat;
+  const channel = answer.channels.find((each) => each.name === channelName);
+  assert.ok(channel, `no channel ${channelName}`);
+  const last = Math.max(...answer.messages.map((message) => message.touchedSeq));
+  const posted = posts.map(({ by, blocks }, index): ChatMessage => {
+    const author = answer.members.find((member) => member.name === by);
+    assert.ok(author, `no member ${by}`);
+    const seq = last + index + 1;
+    return {
+      id: `7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c${String(seq).padStart(2, "0")}`,
+      seq,
+      touchedSeq: seq,
+      channelId: channel.id,
+      authorId: author.id,
+      blocks,
+      mentions: [],
+      postedAt: AT,
+    };
+  });
+  return { ...chat, answer: { ...answer, messages: [...answer.messages, ...posted] } };
+}
+
+/** The words a message drew, by its place in the chat's sequence. */
+function messageWords(page: HTMLElement, seq: number): HTMLElement {
+  const words = page.querySelector<HTMLElement>(`.chat-message[data-seq="${seq}"] .chat-words`);
+  assert.ok(words, `no words for m ${seq}`);
+  return words;
+}
+
+test("a person's words keep each line break they typed, as the Inbox draws a member's, while an agent's lines join as Markdown joins them", () => {
+  let seqs: number[] = [];
+  const page = mount((chat) => {
+    const posted = withPosts(chat, "teammate-invitations", [
+      {
+        by: "Dean Stratakos",
+        blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "first line\nsecond line" }],
+      },
+      {
+        by: "Invite emails",
+        blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "first line\nsecond line" }],
+      },
+    ]);
+    seqs = posted.answer.messages.slice(-2).map((message) => message.seq);
+    return posted;
+  });
+  act(() => railRow(page, "teammate-invitations").click());
+  const [person, agent] = seqs.map((seq) => messageWords(page, seq ?? 0));
+  assert.equal(person?.querySelectorAll("br").length, 1, "the person's Shift-Enter stands");
+  assert.equal(agent?.querySelectorAll("br").length, 0, "the agent's lines are one paragraph");
+});
+
+/** The task the fixture's chat names for its plan's channel, as the window lists it, over a repository. */
+const INVITES_TASK: TaskSummary = {
+  id: FIXTURE_TASK_ID,
+  workspaceId: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
+  name: "Teammate invitations",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
+};
+
+/** A commit the code a message points at is read at. */
+const SHA = "0123456789abcdef0123456789abcdef01234567";
+
+test("in a task's channel, a code block and a link to lines alone on its line are the Inbox's cards, read through the task, and a file's chip opens the file in its task", async () => {
+  const read: { taskId: string; path: string; ref: string | undefined }[] = [];
+  const shown: [string, CodeRef, string | undefined][] = [];
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    // A file's lines are held unread, so a card stands as it reads them.
+    [ACT_KIND.TASKS_FILE]: ({ taskId, path, ref }) => {
+      read.push({ taskId, path, ref });
+      return new Promise<never>(() => undefined);
+    },
+  });
+  let seqs: number[] = [];
+  const page = mount(
+    (chat) => {
+      const posted = withPosts(chat, "teammate-invitations", [
+        {
+          by: "Invite emails",
+          blocks: [
+            {
+              type: CHAT_BLOCK.CODE,
+              repo: "acme/relay",
+              path: "src/invites.ts",
+              sha: SHA,
+              startLine: 3,
+              endLine: 5,
+            },
+            {
+              type: CHAT_BLOCK.MARKDOWN,
+              text: `https://github.com/acme/relay/blob/${SHA}/src/seats.ts#L7-L9`,
+            },
+          ],
+        },
+        {
+          by: "Dean Stratakos",
+          blocks: [
+            {
+              type: CHAT_BLOCK.MARKDOWN,
+              text: "see [@roles.ts](https://github.com/acme/relay/blob/HEAD/src/roles.ts) too",
+            },
+          ],
+        },
+      ]);
+      seqs = posted.answer.messages.slice(-2).map((message) => message.seq);
+      return posted;
+    },
+    ACME,
+    undefined,
+    undefined,
+    { tasks: [INVITES_TASK], onShowFile: (...asked) => shown.push(asked) },
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  const [agentSeq, personSeq] = seqs;
+  const agent = page.querySelector(`.chat-message[data-seq="${agentSeq}"]`);
+  assert.ok(agent);
+  assert.deepEqual(
+    [...agent.querySelectorAll("[data-inbox-code]")].map((card) => card.getAttribute("aria-label")),
+    ["src/invites.ts, Lines 3–5", "src/seats.ts, Lines 7–9"],
+  );
+  // The fixture's own code in the channel is read too, so the reads of these lines are picked out by their commit.
+  assert.deepEqual(
+    read.filter((each) => each.ref === SHA),
+    [
+      { taskId: FIXTURE_TASK_ID, path: "src/invites.ts", ref: SHA },
+      { taskId: FIXTURE_TASK_ID, path: "src/seats.ts", ref: SHA },
+    ],
+  );
+  const open = agent.querySelector<HTMLButtonElement>('button[aria-label="Open file"]');
+  assert.ok(open, "the code card opens its file");
+  act(() => open.click());
+  assert.deepEqual(shown.at(-1), [
+    FIXTURE_TASK_ID,
+    { path: "src/invites.ts", startLine: 3, endLine: 5 },
+    SHA,
+  ]);
+
+  const chip = page.querySelector<HTMLButtonElement>(
+    `.chat-message[data-seq="${personSeq}"] button[data-mention-ref]`,
+  );
+  assert.ok(chip, "the file's chip is a press, read against the task's repository");
+  act(() => chip.click());
+  assert.deepEqual(shown.at(-1), [FIXTURE_TASK_ID, { path: "src/roles.ts" }, undefined]);
+});
+
+test("outside a task's channel, a code block still names its file and lines, with nothing to read them through", () => {
+  const page = mount((chat) =>
+    withPosts(chat, "general", [
+      {
+        by: "Dean Stratakos",
+        blocks: [
+          {
+            type: CHAT_BLOCK.CODE,
+            repo: "acme/relay",
+            path: "src/invites.ts",
+            sha: SHA,
+            startLine: 3,
+            endLine: 5,
+          },
+        ],
+      },
+    ]),
+  );
+  act(() => railRow(page, "general").click());
+  assert.equal(page.querySelector("[data-inbox-code]"), null);
+  assert.match(page.querySelector(".chat-stream")?.textContent ?? "", /invites\.ts/u);
 });

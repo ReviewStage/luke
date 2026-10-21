@@ -1,4 +1,4 @@
-import type { AdminDailyUsage } from "@luke/service/admin/admin-metrics";
+import type { AdminDailyUsage } from "@luke/features/admin-answer-wire";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
 import { formatNumber, formatTooltipDay } from "@luke/ui/admin-format";

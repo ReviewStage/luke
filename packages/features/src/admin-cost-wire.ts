@@ -6,7 +6,7 @@
  * imports into the browser's bundle.
  */
 
-import type { AdminTrend } from "./admin-metrics.js";
+import type { AdminTrend } from "./admin-answer-wire.js";
 
 /** Where a dollar went: the two kinds of model turns, and the three kinds of metered seconds. */
 export const COST_SOURCE = {

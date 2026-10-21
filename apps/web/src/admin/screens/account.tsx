@@ -1,7 +1,7 @@
+import type { AdminUserAccount, AdminUserDetail } from "@luke/features/admin-answer-wire";
+import type { AdminMetricsWindow, AdminUserQuery } from "@luke/features/admin-wire";
 import { browserClient } from "@luke/features/contract/browser-client";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
-import type { AdminUserAccount, AdminUserDetail } from "@luke/service/admin/admin-user";
-import type { AdminMetricsWindow, AdminUserQuery } from "@luke/service/admin/http";
 import {
   AVATAR_SIZE,
   BADGE_TONE,
@@ -42,7 +42,7 @@ const ACCOUNT_TITLE = "Account";
 const readUserDetail =
   (query: AdminUserQuery): AdminReader<AdminUserDetail> =>
   async (signal) =>
-    // SAFETY: the admin user procedure answers an AdminUserDetail (`@luke/service/admin/admin-user`), which the contract cannot name.
+    // SAFETY: the admin user procedure answers an AdminUserDetail (`@luke/features/admin-answer-wire`), for which the contract declares no output.
     (await browserClient.admin.user(query, { signal })) as AdminUserDetail;
 
 /** One account's own sections. */
