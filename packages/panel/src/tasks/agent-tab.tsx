@@ -1633,7 +1633,9 @@ function AgentTranscriptView({
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
             {placed.map(({ message }, index) => (
               <Fragment key={message.id}>
-                <CallOpen call={places.opens.get(message.id)} now={now} />
+                {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
+                  <CallOpen key={call.key} call={call} now={now} />
+                ))}
                 <SteadyAgentMessage
                   message={message === first && opening !== undefined ? opening.brief : message}
                   plan={message === plan}
@@ -1675,7 +1677,9 @@ function AgentTranscriptView({
                 {earlierOmitted && message === plan ? (
                   <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
                 ) : null}
-                <CallClose call={places.closes.get(message.id)} />
+                {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
+                  <CallClose key={call.key} call={call} />
+                ))}
               </Fragment>
             ))}
             {heard.map((tail) => (

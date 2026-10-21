@@ -298,10 +298,10 @@ export interface HeardTail {
  * calls began, each under its divider where none of its lines is held.
  */
 export interface CallPlaces {
-  /** Each call by the transcript row it begins before. */
-  readonly opens: ReadonlyMap<string, TranscriptCallRow>;
-  /** Each ended call by the transcript row it closes after. */
-  readonly closes: ReadonlyMap<string, TranscriptCallRow>;
+  /** The calls that begin before a transcript row, by the row, in the order they began: two calls whose lines reached one running turn begin at its one row. */
+  readonly opens: ReadonlyMap<string, readonly TranscriptCallRow[]>;
+  /** The ended calls that close after a transcript row, by the row, in the order they began. */
+  readonly closes: ReadonlyMap<string, readonly TranscriptCallRow[]>;
   readonly heard: readonly HeardTail[];
 }
 
@@ -327,19 +327,29 @@ function wordsOf(text: string): string {
 const HELD_WORDS = 4;
 
 /**
- * Whether the rows of a call hold a line heard on it. A caption line may be
- * one row or several, and a row grows in place, so a line counts as held
- * once its first words stand among the call's rows, wherever they were
- * cut, or a row holds the start of it still growing.
+ * The lines heard on a call that its rows do not hold yet. Lines and rows
+ * are matched in the order said, each row holding one line at most, so a
+ * phrase said twice is held twice only where two rows hold it. A caption
+ * line may be one row or two, and a row grows in place, so a row holds a
+ * line where it holds the line's first words, alone or run on into the
+ * next row, or holds the start of it still growing.
  */
-function heldIn(rows: readonly string[], line: UIMessage): boolean {
-  const said = wordsOf(messageText(line));
-  const opening = said.split(" ").slice(0, HELD_WORDS).join(" ");
-  return (
-    opening === "" ||
-    rows.join(" ").includes(opening) ||
-    rows.some((row) => row !== "" && said.startsWith(row))
-  );
+function unheldLines(rows: readonly string[], lines: readonly UIMessage[]): UIMessage[] {
+  let next = 0;
+  return lines.filter((line) => {
+    const said = wordsOf(messageText(line));
+    const opening = said.split(" ").slice(0, HELD_WORDS).join(" ");
+    if (opening === "") return false;
+    for (let at = next; at < rows.length; at += 1) {
+      const row = rows[at] ?? "";
+      const runOn = `${row} ${rows[at + 1] ?? ""}`;
+      if (runOn.includes(opening) || (row !== "" && said.startsWith(row))) {
+        next = at + 1;
+        return false;
+      }
+    }
+    return true;
+  });
 }
 
 /**
@@ -366,23 +376,22 @@ export function callPlaces(
       wordsHeld.set(call, [...(wordsHeld.get(call) ?? []), wordsOf(lineText(line))]);
     }
   }
-  const opens = new Map<string, TranscriptCallRow>();
-  const closes = new Map<string, TranscriptCallRow>();
+  const opens = new Map<string, TranscriptCallRow[]>();
+  const closes = new Map<string, TranscriptCallRow[]>();
   const heard: HeardTail[] = [];
   for (const call of calls) {
     const drawn = rowsOf.get(call.key) ?? [];
     const [first] = drawn;
     const last = drawn.at(-1);
-    if (first !== undefined) opens.set(first, call);
+    if (first !== undefined) opens.set(first, [...(opens.get(first) ?? []), call]);
     if (call.live || call.record === undefined) {
-      const held = wordsHeld.get(call.key) ?? [];
-      const lines = call.messages.filter((line) => !heldIn(held, line));
+      const lines = unheldLines(wordsHeld.get(call.key) ?? [], call.messages);
       if (lines.length > 0) {
         heard.push({ call, opened: first !== undefined, lines });
         continue;
       }
     }
-    if (!call.live && last !== undefined) closes.set(last, call);
+    if (!call.live && last !== undefined) closes.set(last, [...(closes.get(last) ?? []), call]);
   }
   return { opens, closes, heard };
 }

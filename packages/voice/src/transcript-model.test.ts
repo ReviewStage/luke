@@ -539,3 +539,52 @@ test("a heard line the record wrote as two rows counts as held, and a later line
 
   assert.deepEqual(places.heard[0]?.lines.map(messageText), ["It reads the oldest first."]);
 });
+
+test("a phrase said twice on a call with one row holding it keeps its second saying at the foot", () => {
+  const heard = heardCalls({
+    held: [],
+    voice: standing(LIVE_CALL, ["Yes.", "Seven days?", "Yes."]),
+    agentId: AGENT,
+    now: 9_000,
+  });
+  const rows = [
+    spokenRow("said-1", LIVE_CALL, "Yes."),
+    spokenRow("said-2", LIVE_CALL, "Seven days?"),
+  ];
+  const places = callPlaces(rows, heardOnly(heard));
+
+  assert.deepEqual(places.heard[0]?.lines.map(messageText), ["Yes."]);
+});
+
+test("two calls whose lines reached one running turn both begin and end at that turn's row, in the order they began", () => {
+  const [stored] = STORED.calls;
+  assert.ok(stored);
+  const region = transcriptRegion({
+    transcript: {
+      status: TASKS_READ.READY,
+      transcript: {
+        calls: [
+          { ...stored, id: EARLIER_CALL, startedAt: 1_000 },
+          { ...stored, id: NEXT_CALL, startedAt: 2_000 },
+        ],
+        earlierOmitted: false,
+      },
+    },
+    heard: [],
+  });
+  const calls = region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
+  const turn = {
+    id: "turn-1",
+    arrived: [spokenRow("said-1", EARLIER_CALL), spokenRow("said-2", NEXT_CALL)],
+  };
+  const places = callPlaces([turn], calls);
+
+  assert.deepEqual(
+    places.opens.get("turn-1")?.map((call) => call.key),
+    [EARLIER_CALL, NEXT_CALL],
+  );
+  assert.deepEqual(
+    places.closes.get("turn-1")?.map((call) => call.key),
+    [EARLIER_CALL, NEXT_CALL],
+  );
+});
