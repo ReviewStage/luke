@@ -444,7 +444,7 @@ export function useTaskMenu(
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
     task !== undefined && task.archivedAt === undefined
-      ? moveToSectionEntry(tasks, task, sections.askNew)
+      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
   const menu =
     drawn === undefined ? null : (
