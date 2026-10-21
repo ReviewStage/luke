@@ -78,6 +78,8 @@ const taskLiveRowSchema = EffectSchema.Struct({
   pinnedAt: EffectSchema.NullOr(countedNumber),
   pinPosition: EffectSchema.NullOr(EffectSchema.String),
   archivedAt: EffectSchema.NullOr(countedNumber),
+  /** Absent from a service before it kept when a task was finished. */
+  completedAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   createdAt: countedNumber,
   updatedAt: countedNumber,
   status: taskStatusSchema,
@@ -322,6 +324,9 @@ function taskSummaryOf(
       ? undefined
       : { pinPosition: row.pinPosition }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt }),
+    ...(row.completedAt === undefined || row.completedAt === null
+      ? undefined
+      : { completedAt: row.completedAt }),
     status: row.status,
     priority: row.priority,
     number: row.number,

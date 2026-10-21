@@ -71,6 +71,7 @@ function tasksStatement(userId: string) {
         {
           pinnedAt: taskPin.pinnedAt,
           archivedAt: task.archivedAt,
+          completedAt: task.completedAt,
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,
         },

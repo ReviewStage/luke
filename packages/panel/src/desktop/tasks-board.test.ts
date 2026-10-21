@@ -14,6 +14,7 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
   NO_TASKS_FILTER,
   TASKS_GROUPING,
@@ -77,6 +78,9 @@ let sent: [string, TaskStanding][] = [];
 /** Whether the service keeps the changes sent. */
 let keeps = true;
 
+/** Each display the board asked for, in order. */
+let displayed: TasksDisplay[] = [];
+
 /** How many times the board was closed. */
 let closed = 0;
 
@@ -89,6 +93,7 @@ beforeEach(() => {
   sent = [];
   keeps = true;
   closed = 0;
+  displayed = [];
   pages = [];
   window.localStorage.clear();
   fakeAppPlatform({
@@ -187,7 +192,13 @@ async function mountBoard(
               tasks: control,
               room,
               title: "Tasks",
-              frame: { toolbar: null, chips: null, filter: NO_TASKS_FILTER, display: shown },
+              frame: {
+                toolbar: null,
+                chips: null,
+                filter: NO_TASKS_FILTER,
+                display: shown,
+                onDisplay: (next) => displayed.push(next),
+              },
             }),
           }),
           createElement(ToastHost),
@@ -232,14 +243,18 @@ function cardOf(board: HTMLElement, taskId: string): HTMLButtonElement {
   return card;
 }
 
-test("each status but Canceled has its column, its cards the most pressing first, each its key, priority, name, and creator's face", async () => {
-  const board = await mountBoard();
+test("each status has its column, its cards the most pressing first, each its key, priority, name, and creator's face", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
+    ...DEFAULT_BOARD_DISPLAY,
+    completed: COMPLETED_WINDOW.ALL,
+  });
 
   assert.deepEqual(columns(board), [
     ["Backlog", ["ACME-38", "ACME-36"]],
     ["Todo", ["ACME-40", "ACME-39"]],
     ["In progress", ["ACME-42"]],
     ["Done", ["ACME-35"]],
+    ["Canceled", ["ACME-33"]],
   ]);
   const card = cardOf(board, "t-39");
   assert.equal(
@@ -277,9 +292,23 @@ test("a press on a card opens its task", async () => {
   assert.deepEqual(opened, ["t-42"]);
 });
 
-test("Canceled shows its column once the view asks for it, and by priority the columns run from the most pressing, empty ones left out where asked", async () => {
+test("the settled finished before the past week give way to a line counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
   const board = await mountBoard();
-  redrawBoard({ ...DEFAULT_BOARD_DISPLAY, canceled: true });
+  const done = board.querySelector<HTMLElement>('[data-task-column="done"]');
+  assert.deepEqual(columns(board).slice(-2), [
+    ["Done", []],
+    ["Canceled", []],
+  ]);
+  const older = [...(done?.querySelectorAll<HTMLElement>("button") ?? [])].find(
+    (button) => button.textContent === "+ 1 older",
+  );
+  act(() => (older ?? assert.fail("no older line under Done")).click());
+  assert.deepEqual(
+    displayed.map((each) => each.completed),
+    [COMPLETED_WINDOW.ALL],
+  );
+
+  redrawBoard({ ...DEFAULT_BOARD_DISPLAY, completed: COMPLETED_WINDOW.ALL });
   assert.deepEqual(columns(board).at(-1), ["Canceled", ["ACME-33"]]);
 
   redrawBoard({ ...DEFAULT_BOARD_DISPLAY, grouping: TASKS_GROUPING.PRIORITY, emptyGroups: false });
@@ -397,7 +426,7 @@ test("in a narrow room the board shows one column at a time, Todo first, and a t
   const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
 
   assert.deepEqual(columnTabs(board), {
-    names: ["Backlog", "Todo", "In progress", "Done"],
+    names: ["Backlog", "Todo", "In progress", "Done", "Canceled"],
     chosen: "Todo",
   });
   assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
@@ -408,15 +437,16 @@ test("in a narrow room the board shows one column at a time, Todo first, and a t
   assert.deepEqual(columns(board), [["In progress", ["ACME-42"]]]);
 });
 
-test("in a narrow room Canceled adds its tab, and hiding it again while shown goes back to Todo, which showing it again keeps", async () => {
-  const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
-  const withCanceled = { ...DEFAULT_BOARD_DISPLAY, canceled: true };
+test("in a narrow room showing completed adds the Canceled tab, and hiding it again while shown goes back to Todo, which showing it again keeps", async () => {
+  const none = { ...DEFAULT_BOARD_DISPLAY, completed: COMPLETED_WINDOW.NONE };
+  const board = await mountBoard(TASKS, SHELL_ROOM.NARROW, none);
+  const withCanceled = { ...DEFAULT_BOARD_DISPLAY, completed: COMPLETED_WINDOW.ALL };
 
   redrawBoard(withCanceled);
   pressTab(board, "Canceled");
   assert.deepEqual(columns(board), [["Canceled", ["ACME-33"]]]);
 
-  redrawBoard(DEFAULT_BOARD_DISPLAY);
+  redrawBoard(none);
   assert.equal(columnTabs(board).chosen, "Todo");
   assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
   redrawBoard(withCanceled);
@@ -441,7 +471,7 @@ test("in a wide room every column stands side by side, with no tabs, and a card'
   const board = await mountBoard();
 
   assert.equal(board.querySelector('[role="tablist"]'), null);
-  assert.equal(columns(board).length, 4);
+  assert.equal(columns(board).length, 5);
   assert.equal(chipOf(board, "t-39", "Status").dataset.iconOnly, "true");
   assert.equal(chipOf(board, "t-39", "Priority").dataset.iconOnly, "true");
 });
