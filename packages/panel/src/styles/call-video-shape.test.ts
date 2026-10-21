@@ -129,3 +129,25 @@ test("an agent's tab's captions stand beside its tile while the row has room for
   assert.equal(drawn.flexBasis, "var(--caption-width-min)");
   assert.equal(drawn.maxWidth, "var(--caption-width-max)");
 });
+
+test("a clip still being read beside a call's controls wraps them onto a line of their own where the card is too narrow for both", () => {
+  laid = layContainersAt({});
+  const foot = document.body.appendChild(document.createElement("div"));
+  foot.className = "prompt-input-footer";
+  const strip = foot.appendChild(document.createElement("div"));
+  strip.className = "dictation-strip";
+  const controls = foot.appendChild(document.createElement("fieldset"));
+  controls.className = "agent-call-controls";
+  assert.equal(getComputedStyle(foot).flexWrap, "wrap");
+  assert.equal(
+    getComputedStyle(strip).flexBasis,
+    "160px",
+    "the strip keeps room for its word and Cancel",
+  );
+  controls.remove();
+  assert.equal(
+    getComputedStyle(foot).flexWrap,
+    "nowrap",
+    "a dictation off a call keeps its one row",
+  );
+});
