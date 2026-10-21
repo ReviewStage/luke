@@ -8,8 +8,13 @@ import {
   type CollectionState,
   DetailPage,
   PAGE_FRAME,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
+import { createContext, useContext } from "react";
 import type { AdminTab } from "../routing.js";
 import { adminPlace } from "./places.js";
 
@@ -71,6 +76,22 @@ function WayBackHeading({ title, back }: { title: string; back: AdminWayBack }):
 }
 
 /**
+ * What leads every admin toolbar under it, before the page's heading: the
+ * app's way back to the section list where a narrow room stands a view
+ * alone (`desktop-admin.tsx`), as a version's toolbar leads with its way
+ * back to the versions. None elsewhere.
+ */
+const AdminToolbarLeadContext = createContext<React.ReactNode>(undefined);
+
+/** Hands what leads the toolbar to every admin page under it. */
+export const AdminToolbarLead = AdminToolbarLeadContext.Provider;
+
+/** What leads the toolbar here, for a view that draws in its place. */
+export function useAdminToolbarLead(): React.ReactNode {
+  return useContext(AdminToolbarLeadContext);
+}
+
+/**
  * The page's toolbar, the app's own (`shell.css`): the page's title at the
  * dialog heading's size, or, under a section, the way back to it and then
  * the page's name; and the view's controls at its end. It stands still over
@@ -78,24 +99,34 @@ function WayBackHeading({ title, back }: { title: string; back: AdminWayBack }):
  */
 function AdminToolbar({
   title,
+  note,
   back,
   controls,
 }: {
   title: string;
+  /** What the page covers, said after its title, such as its time range, in place of a control that would say it. */
+  note: string | undefined;
   back: AdminWayBack | undefined;
   controls: React.ReactNode;
 }): React.JSX.Element {
+  const lead = useContext(AdminToolbarLeadContext);
   // Note that a narrow room's toolbar wraps its controls under its heading
   // rather than cut the heading down to a letter or two; the heading then
   // asks for its words' width, which the shared sheet's `flex: 1` gives up,
   // and stands a control's height, so its words stay level with the toggle.
   return (
     <header className="desktop-toolbar in-data-[room=narrow]:flex-wrap">
-      <div className="desktop-toolbar-heading in-data-[room=narrow]:flex in-data-[room=narrow]:min-h-(--luke-control-height) in-data-[room=narrow]:basis-auto! in-data-[room=narrow]:items-center">
+      {lead}
+      <div className="desktop-toolbar-heading flex items-baseline gap-(--luke-space-8) in-data-[room=narrow]:min-h-(--luke-control-height) in-data-[room=narrow]:basis-auto! in-data-[room=narrow]:items-center">
         {back === undefined ? (
           <h1 className="desktop-toolbar-title">{title}</h1>
         ) : (
           <WayBackHeading title={title} back={back} />
+        )}
+        {note === undefined ? null : (
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {note}
+          </Text>
         )}
       </div>
       {controls === null || controls === undefined ? null : (
@@ -111,30 +142,33 @@ function AdminToolbar({
  * view stands under a section, and the view's controls; the view's own
  * content, or what stands in its place where it could not be read, under
  * it. The page owns the scroll, so the toolbar stays put while the content
- * moves beneath it. The `main` landmark is this page's, which is why the
- * shell's content region is a div.
+ * moves beneath it. The `main` landmark is the mount's: the web page's
+ * content region, and the app's work column.
  */
 export function AdminPage({
   title,
+  note,
   back,
   controls,
   children,
 }: {
   title: string;
+  /** What the page covers, after its title (`AdminToolbar`). */
+  note?: string | undefined;
   back?: AdminWayBack | undefined;
   controls: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <main className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <DetailPage
         frame={PAGE_FRAME.TOOLBAR}
         label={title}
-        toolbar={<AdminToolbar title={title} back={back} controls={controls} />}
+        toolbar={<AdminToolbar title={title} note={note} back={back} controls={controls} />}
       >
         {children}
       </DetailPage>
-    </main>
+    </div>
   );
 }
 
@@ -146,6 +180,7 @@ export function AdminPage({
  */
 export function AdminCollectionPage({
   title,
+  note,
   controls,
   filters,
   state,
@@ -155,6 +190,8 @@ export function AdminCollectionPage({
   children,
 }: {
   title: string;
+  /** What the page covers, after its title (`AdminToolbar`). */
+  note?: string | undefined;
   controls: React.ReactNode;
   filters: React.ReactNode;
   state: CollectionState;
@@ -164,11 +201,11 @@ export function AdminCollectionPage({
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <main className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <CollectionPage
         frame={PAGE_FRAME.TOOLBAR}
         label={title}
-        toolbar={<AdminToolbar title={title} back={undefined} controls={controls} />}
+        toolbar={<AdminToolbar title={title} note={note} back={undefined} controls={controls} />}
         filters={filters}
         state={state}
         loadingLabel={loadingLabel}
@@ -177,6 +214,6 @@ export function AdminCollectionPage({
       >
         {children}
       </CollectionPage>
-    </main>
+    </div>
   );
 }

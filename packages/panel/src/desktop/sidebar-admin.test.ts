@@ -1,16 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { tellAct } from "../act.js";
-import type { AppPlatform } from "../app-platform.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
-import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
@@ -19,24 +15,11 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
  * sidebar-admin.test.ts -- the Admin row stands after Automations for an
- * admin alone, and a non-admin is drawn nothing in its place; in a browser
- * tab it is a link to the dashboard in a tab of its own, and in the Mac app
- * its press asks the host to open the dashboard, naming no address; and it
- * is never the place shown.
+ * admin alone, and a non-admin is drawn nothing in its place; its press
+ * opens the window's Admin place rather than a browser, asking the host for
+ * nothing; the place then takes the window, its own list where this sidebar
+ * stood (`desktop-admin.test.ts`).
  */
-
-/** The dashboard's page as a browser tab's platform names it, on the tab's own origin. */
-const WEB_ADMIN = "https://luke.test/admin";
-
-/** A browser tab's way to the dashboard: a link to its page (`web-platform.ts`). */
-const WEB: Pick<AppPlatform, "adminDashboard"> = {
-  adminDashboard: () => ({ href: WEB_ADMIN }),
-};
-
-/** The Mac app's way to the dashboard: a press that asks the host to open it (`desktop-platform.ts`). */
-const DESKTOP: Pick<AppPlatform, "adminDashboard"> = {
-  adminDashboard: () => ({ open: () => tellAct(ACT_KIND.ADMIN_OPEN) }),
-};
 
 const roots: Root[] = [];
 
@@ -58,13 +41,20 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The sidebar beside the work, for an account that is an admin or not, on the platform given. */
-async function mount(
-  admin: boolean,
-  platform: Pick<AppPlatform, "adminDashboard">,
-): Promise<HTMLElement> {
-  fakeAppPlatform(platform);
+/** The sidebar beside the work, for an account that is an admin or not. */
+async function mount(admin: boolean): Promise<{ sidebar: HTMLElement; opened: number }> {
   handState({}, { access: { admin } });
+  const counted = { opened: 0 };
+  const tasks = tasksControl();
+  const control = {
+    ...tasks,
+    adminView: {
+      ...tasks.adminView,
+      onOpen: () => {
+        counted.opened += 1;
+      },
+    },
+  };
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -72,14 +62,19 @@ async function mount(
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopSidebar, { ...sidebarProps(tasksControl()), room: SHELL_ROOM.WIDE }),
+        createElement(DesktopSidebar, { ...sidebarProps(control), room: SHELL_ROOM.WIDE }),
       ),
     ),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  return container;
+  return {
+    sidebar: container,
+    get opened() {
+      return counted.opened;
+    },
+  };
 }
 
 /** The names of the rows the sidebar's places draw, top to bottom. */
@@ -96,40 +91,23 @@ function adminRow(sidebar: HTMLElement): HTMLElement | undefined {
 }
 
 test("an account that is no admin is drawn no Admin row, neither hidden nor held back", async () => {
-  for (const platform of [WEB, DESKTOP]) {
-    const sidebar = await mount(false, platform);
+  const { sidebar } = await mount(false);
 
-    assert.equal(adminRow(sidebar), undefined);
-    assert.doesNotMatch(sidebar.textContent ?? "", /Admin/u);
-    act(() => {
-      for (const root of roots.splice(0)) root.unmount();
-    });
-  }
+  assert.equal(adminRow(sidebar), undefined);
+  assert.doesNotMatch(sidebar.textContent ?? "", /Admin/u);
 });
 
 test("an admin's Admin row stands right after Automations", async () => {
-  const sidebar = await mount(true, DESKTOP);
+  const { sidebar } = await mount(true);
   const names = placeNames(sidebar);
 
   assert.equal(names.at(-1), "Admin");
   assert.equal(names.at(-2), "Automations");
 });
 
-test("in a browser tab the Admin row is a link to the dashboard that opens in a tab of its own", async () => {
-  const sidebar = await mount(true, WEB);
-  const row = adminRow(sidebar) ?? assert.fail("the Admin row");
-
-  assert.ok(row instanceof HTMLAnchorElement);
-  assert.deepEqual(
-    [row.getAttribute("href"), row.getAttribute("target"), row.getAttribute("rel")],
-    [WEB_ADMIN, "_blank", "noopener"],
-  );
-  assert.equal(row.hasAttribute("aria-current"), false);
-});
-
-test("in the Mac app pressing the Admin row asks the host to open the dashboard, naming no address, and it never becomes the place shown", async () => {
-  const sidebar = await mount(true, DESKTOP);
-  const row = adminRow(sidebar) ?? assert.fail("the Admin row");
+test("pressing the Admin row opens the window's Admin place and asks the host for nothing", async () => {
+  const mounted = await mount(true);
+  const row = adminRow(mounted.sidebar) ?? assert.fail("the Admin row");
 
   assert.ok(row instanceof HTMLButtonElement);
   act(() => row.click());
@@ -137,9 +115,6 @@ test("in the Mac app pressing the Admin row asks the host to open the dashboard,
     for (let tick = 0; tick < 4; tick += 1) await Promise.resolve();
   });
 
-  assert.deepEqual(sent, [{ kind: ACT_KIND.ADMIN_OPEN }]);
-  assert.equal(
-    (adminRow(sidebar) ?? assert.fail("the Admin row")).hasAttribute("aria-current"),
-    false,
-  );
+  assert.equal(mounted.opened, 1);
+  assert.deepEqual(sent, []);
 });

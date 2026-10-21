@@ -6,9 +6,7 @@ import {
 } from "@luke/features/admin-wire";
 import {
   COLLECTION_STATE,
-  EmptyState,
   SearchField,
-  SearchIcon,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -22,16 +20,10 @@ import { useAdminDoors } from "../admin-doors.js";
 import { SignInMethodsChart } from "../charts/signups-chart.js";
 import { AdminSection } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls.js";
+import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { RosterNote } from "../chrome/notes.js";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header.js";
-import {
-  SEARCH_DEBOUNCE_MS,
-  searchFromLocation,
-  searchHref,
-  searchTerm,
-  usersReadQuery,
-} from "../routing.js";
+import { SEARCH_DEBOUNCE_MS, searchTerm, usersReadQuery } from "../routing.js";
 import { adminReadFailure, useAdminRead, useAdminWrite } from "../use-admin-read.js";
 
 const USERS_ERROR = "The users endpoint did not answer.";
@@ -83,23 +75,19 @@ export function UsersScreen({
   // the query redraws on every keystroke and filters the loaded rows at once,
   // while the read's own debounce commits it into the address the roster is
   // refetched under, so the whole account table is not scanned per keystroke.
-  // Typing rides the address bar in place, so a searched roster is shareable
-  // without the back button walking keystrokes.
-  const [query, setQuery] = useState(searchFromLocation);
+  // Typing is kept where the mount keeps an address, in place, so on the web
+  // page a searched roster is shareable without the back button walking
+  // keystrokes.
+  const { reads, gate, address } = useAdminDoors();
+  const [query, setQuery] = useState(address.search);
   // Note that the query is held to the service's own bound, as a field's
   // `maxLength` would, so a pasted run past it never reaches the read.
   const changeQuery = (typed: string) => {
     const next = typed.slice(0, ADMIN_USERS_SEARCH_MAX_LENGTH);
     setQuery(next);
-    window.history.replaceState(null, "", searchHref(next.trim()));
+    address.keepSearch(next.trim());
   };
-  useEffect(() => {
-    const onPopState = () => setQuery(searchFromLocation());
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  const { reads, gate } = useAdminDoors();
+  useEffect(() => address.onSearchMoved(() => setQuery(address.search())), [address]);
 
   const asked = usersReadQuery(hideAdmins, windowDays, searchTerm(query));
   const { state, refreshing, reload, withdraw, revise } = useAdminRead(
@@ -132,10 +120,15 @@ export function UsersScreen({
     frame(
       <AdminCollectionPage
         title="Users"
+        note={windowWords(windowDays)}
         controls={
           <>
-            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            <AdminViewOptions
+              windowDays={windowDays}
+              onWindowDaysChange={onWindowDaysChange}
+              hideAdmins={hideAdmins}
+              onHideAdminsChange={onHideAdminsChange}
+            />
           </>
         }
         loadingLabel="Loading…"
@@ -210,18 +203,10 @@ export function UsersScreen({
             </Text>
           </>
         ),
-        state: rows.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY,
-        empty: refreshed(
-          <>
-            <AdminSection>
-              <EmptyState icon={<SearchIcon />}>{USERS_EMPTY}</EmptyState>
-              {truncatedTo === undefined ? null : (
-                <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
-              )}
-            </AdminSection>
-            {signInMethods}
-          </>,
-        ),
+        // An empty answer stands where the table stands, in the table's own
+        // frame under the filters, rather than centred in the page apart
+        // from them, so the page keeps its line whatever the search finds.
+        state: COLLECTION_STATE.READY,
         children: refreshed(
           <>
             <AdminSection>

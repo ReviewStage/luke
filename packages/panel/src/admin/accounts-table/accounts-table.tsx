@@ -24,9 +24,10 @@ import {
 } from "@luke/ui/accounts-sort";
 import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
 import { useState } from "react";
+import { useAdminDoorsIfAny } from "../admin-doors.js";
 import { AccountAvatar } from "../chrome/page-header.js";
 import { ACCOUNTS_SORT } from "../prefs.js";
-import { accountHref, plainLeftClick } from "../routing.js";
+import { plainLeftClick } from "../routing.js";
 
 /**
  * The narrowest each surface's table may draw before its scroll wrapper takes
@@ -89,8 +90,9 @@ function favoriteColumn<Row extends AccountsTableRow>(
 /**
  * An account's cell, the same wherever an admin table lists accounts: its
  * avatar, its name with an admin's badge, and its email under a name that is
- * not the email itself. The name is a real anchor, so a keyboard reaches the
- * account and a modified click still gets the browser's own gesture.
+ * not the email itself. Where the mount keeps addresses, the name is a real
+ * anchor, so a keyboard reaches the account and a modified click still gets
+ * the browser's own gesture; where it keeps none, it is a button.
  */
 export function AccountCell({
   account,
@@ -99,16 +101,9 @@ export function AccountCell({
   account: Pick<AccountsTableRow, "id" | "name" | "email" | "image" | "admin">;
   onOpen: (id: string) => void;
 }): React.JSX.Element {
-  return (
-    <a
-      href={accountHref(account.id)}
-      className="flex items-center gap-(--luke-space-12) outline-offset-2"
-      onClick={(event) => {
-        if (!plainLeftClick(event)) return;
-        event.preventDefault();
-        onOpen(account.id);
-      }}
-    >
+  const href = useAdminDoorsIfAny()?.address.accountHref(account.id);
+  const content = (
+    <>
       <span className="flex shrink-0">
         <AccountAvatar
           account={{ name: account.name, email: account.email, image: account.image ?? undefined }}
@@ -127,6 +122,32 @@ export function AccountCell({
           </Text>
         )}
       </div>
+    </>
+  );
+  // Where the mount keeps no address, the account opens on a press alone,
+  // so nothing poses as a link a modified click could open elsewhere.
+  if (href === undefined) {
+    return (
+      <button
+        type="button"
+        className="flex cursor-pointer items-center gap-(--luke-space-12) border-0 bg-transparent p-0 text-start text-inherit outline-offset-2"
+        onClick={() => onOpen(account.id)}
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className="flex items-center gap-(--luke-space-12) outline-offset-2"
+      onClick={(event) => {
+        if (!plainLeftClick(event)) return;
+        event.preventDefault();
+        onOpen(account.id);
+      }}
+    >
+      {content}
     </a>
   );
 }

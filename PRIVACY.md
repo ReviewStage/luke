@@ -664,8 +664,10 @@ Luke's own maintainers can see your name, email address, profile picture,
 sign-in method, whether you are an administrator, when you joined and were
 last active, and your daily counts, and the names of your workspaces and
 their members, roles, invitations, connected integrations, GitHub
-installation, and activity counts, on an admin page of our site that only an
-account we have marked as an administrator can open. Beside them it shows
+installation, and activity counts, on an admin page that only an account we
+have marked as an administrator can open: on our site, and in the Mac app and
+the web app, where it reads the same answers through the app's own
+connection to our service. Beside them it shows
 how many tasks you created and minutes of calls you held over a window; your
 coding agents, each with when it started, the repository it works in, its
 model and effort, whether it is running, finished, or failed with the fixed
@@ -998,7 +1000,8 @@ skills and MCP servers, and the files you attach there; a Browser tab, with
 the still of its page drawn while something covers it, and a cloud Browser
 tab with the live view of its page; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
-webhook secret, the one time it is shown; and the cards
+webhook secret, the one time it is shown; the admin page in the app, which
+only our maintainers can open and which names other people's accounts; and the cards
 that open over a row or a chip on hover, a page's preview among them. The
 whiteboard and a Terminal tab's shell draw their words as pixels, which the
 masking cannot reach, so leaving them out is

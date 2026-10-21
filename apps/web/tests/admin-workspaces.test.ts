@@ -6,12 +6,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { underWebAdminDoors } from "./support/admin-doors";
+import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
  * admin-workspaces.test.ts -- the Workspaces tab heads its table with the
  * shared workspaces' four counts, lists each workspace with its owner,
  * GitHub installation, and integrations, narrows the rows as a maintainer
- * types, asks for every workspace once "Shared only" is cleared, and opens a
+ * types, asks for every workspace once View options' "Shared only" is cleared, and opens a
  * row's owner on a press. The network, the HTTP boundary to Luke, is a fake
  * that answers every read with the list given and writes down what it was
  * asked.
@@ -172,15 +173,14 @@ test("typing narrows the loaded workspaces at once, and a miss says so", async (
   expect(page.textContent).toContain("Shared workspaces20");
 });
 
-test("clearing Shared only asks for every workspace, and is remembered", async () => {
+test("View options offer Shared only, on, beside Include admins, and clearing it asks for every workspace and is remembered", async () => {
   const { page, asked } = await openWorkspaces(workspaces());
   expect(asked).toEqual(["/api/admin/workspaces"]);
 
-  const sharedOnly = Array.from(page.querySelectorAll("label")).find(
-    (label) => label.textContent === "Shared only",
-  );
+  openViewOptions(page);
+  expect(menuItems().map((item) => item.label)).toEqual(["Shared only", "Include admins"]);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  await act(async () => sharedOnly?.click());
+  await act(async () => choose("Shared only"));
   await act(async () => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
 
   expect(asked.at(-1)).toBe("/api/admin/workspaces?kind=all");

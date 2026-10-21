@@ -4,6 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "./accounts-table/accounts-table.js";
+import { type AdminDoors, AdminDoorsProvider } from "./admin-doors.js";
 
 /**
  * admin-accounts-table.test.ts -- the one table both account lists draw
@@ -15,6 +16,20 @@ import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "./accounts-table/accoun
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+
+/** A mount that keeps an address for each account's page, as the web page does; the table reads nothing else of it. */
+const ADDRESSED: AdminDoors = {
+  // SAFETY: the table reads no read and no gate, only an account's address.
+  reads: {} as AdminDoors["reads"],
+  // SAFETY: as above.
+  gate: {} as AdminDoors["gate"],
+  address: {
+    accountHref: (id) => `/admin?user=${id}`,
+    search: () => "",
+    keepSearch: () => undefined,
+    onSearchMoved: () => () => undefined,
+  },
+};
 
 const ADA: AccountsTableRow = {
   id: "account-ada",
@@ -87,7 +102,15 @@ function mount(
   };
   if (starred) props.favorite = favorite;
   root = createRoot(table);
-  act(() => root?.render(createElement(AccountsTable<AccountsTableRow>, props)));
+  act(() =>
+    root?.render(
+      createElement(
+        AdminDoorsProvider,
+        { value: ADDRESSED },
+        createElement(AccountsTable<AccountsTableRow>, props),
+      ),
+    ),
+  );
   return { table, opened, toggled };
 }
 

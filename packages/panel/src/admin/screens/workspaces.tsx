@@ -12,17 +12,14 @@ import {
   BADGE_TONE,
   Badge,
   type BadgeTone,
-  Checkbox,
   COLLECTION_STATE,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
   type DataTableColumn,
-  EmptyState,
   GAP,
   Inline,
   SearchField,
-  SearchIcon,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -35,16 +32,10 @@ import { AccountCell } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { HideAdminsToggle, Refreshing } from "../chrome/controls.js";
+import { AdminViewOptions, Refreshing } from "../chrome/controls.js";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
-import {
-  SEARCH_DEBOUNCE_MS,
-  searchFromLocation,
-  searchHref,
-  searchTerm,
-  workspacesReadQuery,
-} from "../routing.js";
+import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
 import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 /**
@@ -285,26 +276,21 @@ export function WorkspacesScreen({
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   // The search follows the roster's: the box filters what is loaded at once,
-  // the debounced read searches every workspace, and the address keeps it.
-  const [query, setQuery] = useState(searchFromLocation);
+  // the debounced read searches every workspace, and the mount's address keeps it.
+  const { reads, gate, address } = useAdminDoors();
+  const [query, setQuery] = useState(address.search);
   const changeQuery = (typed: string) => {
     const next = typed.slice(0, ADMIN_USERS_SEARCH_MAX_LENGTH);
     setQuery(next);
-    window.history.replaceState(null, "", searchHref(next.trim()));
+    address.keepSearch(next.trim());
   };
-  useEffect(() => {
-    const onPopState = () => setQuery(searchFromLocation());
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  useEffect(() => address.onSearchMoved(() => setQuery(address.search())), [address]);
 
   const [sharedOnly, setSharedOnly] = useState(WORKSPACES_SHARED_ONLY.read);
   const changeSharedOnly = (next: boolean) => {
     WORKSPACES_SHARED_ONLY.write(next);
     setSharedOnly(next);
   };
-
-  const { reads, gate } = useAdminDoors();
 
   const asked = workspacesReadQuery(hideAdmins, sharedOnly, searchTerm(query));
   const { state, refreshing, reload, withdraw } = useAdminRead(
@@ -325,12 +311,12 @@ export function WorkspacesScreen({
       <AdminCollectionPage
         title="Workspaces"
         controls={
-          <>
-            <Checkbox checked={sharedOnly} onChange={changeSharedOnly}>
-              Shared only
-            </Checkbox>
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-          </>
+          <AdminViewOptions
+            hideAdmins={hideAdmins}
+            onHideAdminsChange={onHideAdminsChange}
+            sharedOnly={sharedOnly}
+            onSharedOnlyChange={changeSharedOnly}
+          />
         }
         loadingLabel="Loading…"
         {...content}
@@ -373,7 +359,7 @@ export function WorkspacesScreen({
         ? list.rows.filter((row) => row.name.toLowerCase().includes(needle))
         : list.rows;
       // Note that the tiles stand whatever the search narrows, so they lead
-      // both the table and the empty answer.
+      // the table whether or not it holds a row.
       const body = (table: React.ReactNode) => (
         <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
           <WorkspaceTiles list={list} />
@@ -394,8 +380,9 @@ export function WorkspacesScreen({
             </Text>
           </>
         ),
-        state: rows.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY,
-        empty: body(<EmptyState icon={<SearchIcon />}>{WORKSPACES_EMPTY}</EmptyState>),
+        // An empty answer stands where the table stands, in its own frame
+        // under the tiles, as the Users roster's does.
+        state: COLLECTION_STATE.READY,
         children: body(
           <DataTable
             label="Workspaces"

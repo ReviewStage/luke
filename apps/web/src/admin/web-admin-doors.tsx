@@ -5,7 +5,8 @@
  * this page hands them its own (`admin-doors.tsx`). A refusal is worded
  * here, by its status, as the screens tell it apart, and an answer that came
  * through a redirect is something in front of the service answering, such as
- * a preview's deployment protection. Until a sign-in has been pressed on
+ * a preview's deployment protection. The page keeps an account's page and a
+ * typed search in its address bar. Until a sign-in has been pressed on
  * this page once, every read is held at the gate, whatever cookie the
  * browser holds (`SIGN_IN_CHOSEN`).
  */
@@ -37,6 +38,7 @@ import {
   type AdminReads,
 } from "@luke/panel/admin/admin-doors";
 import { SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
+import { accountHref, searchFromLocation, searchHref } from "@luke/panel/admin/routing";
 import { ForbiddenCard, SignInCard } from "./chrome/gate-cards";
 
 /** The word the screens tell a refusal apart by, from the status it was answered under. */
@@ -94,6 +96,17 @@ const WEB_ADMIN_DOORS: AdminDoors = {
     heldAtGate: () => !SIGN_IN_CHOSEN.read(),
     signedOut: () => <SignInCard />,
     forbidden: ({ email, onSignOut }) => <ForbiddenCard email={email} onSignOut={onSignOut} />,
+  },
+  // The page keeps an account's page and a typed search in its address bar,
+  // the search in place, so the back button walks views rather than keystrokes.
+  address: {
+    accountHref,
+    search: searchFromLocation,
+    keepSearch: (query) => window.history.replaceState(null, "", searchHref(query)),
+    onSearchMoved: (listener) => {
+      window.addEventListener("popstate", listener);
+      return () => window.removeEventListener("popstate", listener);
+    },
   },
 };
 
