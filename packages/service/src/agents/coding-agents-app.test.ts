@@ -128,14 +128,18 @@ import {
   codingAgentAnswerSchema,
   codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
+  codingAgentMessageAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentNewestAnswerSchema,
   codingAgentOlderAnswerSchema,
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPartAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  PART_CUT_FIELD,
   PULL_REQUEST_STATE,
+  TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ANSWER_LEAD,
@@ -173,6 +177,7 @@ import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_LIST_ARCHIVED,
   TASK_STATUS,
+  taskDeleteAnswerSchema,
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
@@ -346,6 +351,9 @@ const TASK_PATH =
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 const CHAT_ATTACHMENT = "/api/workspaces/chat/attachment";
+/** One part of a message of an agent's or a worker's transcript, whole, at its public path on the hosted oRPC router. */
+const TRANSCRIPT_PART_PATH =
+  /^\/api\/agents\/[^/]+\/(?:subagents\/[^/]+\/)?messages\/[^/]+\/parts\/[^/]+$/u;
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -689,7 +697,13 @@ const standing = (
           url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages/newest`;
           return routed(new Request(url, request), webServices);
         }
-        if (pathname === CHAT || pathname === WORKSPACE_AGENTS) return routed(request, webServices);
+        if (
+          pathname === CHAT ||
+          pathname === WORKSPACE_AGENTS ||
+          TRANSCRIPT_PART_PATH.test(pathname)
+        ) {
+          return routed(request, webServices);
+        }
         if (pathname === CHAT_ATTACHMENT) return chatPictures.handler(request);
         return pathname === TASKS || TASK_PATH.test(pathname)
           ? routed(request, webServices)
@@ -721,6 +735,7 @@ function request(
     call?: string;
     wait?: string;
     before?: string;
+    parts?: string;
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
@@ -742,6 +757,7 @@ function request(
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.wait !== undefined) url.searchParams.set("wait", init.wait);
   if (init.before !== undefined) url.searchParams.set("before", init.before);
+  if (init.parts !== undefined) url.searchParams.set("parts", init.parts);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
@@ -1697,6 +1713,101 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a page asked cut carries a 2 MB command output as its two ends, its size, and the part's place, and the part is read whole by its owner and by no other account",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        const output = "built one more file\n".repeat(100_000);
+        const half = CODING_AGENT_BOUNDS.MAX_PART_CHARS / 2;
+        const command = {
+          type: "tool-bash",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { command: "pnpm build" },
+          output,
+        };
+        const thought = "Weigh the build again. ".repeat(500);
+        const thinking = { type: "reasoning", text: thought, state: "done" };
+        // An answer the window reads for what it means is carried whole, however long.
+        const read = {
+          type: "tool-read_agent",
+          toolCallId: "call-2",
+          state: "output-available",
+          input: { agentId: agent.id },
+          output: { agent: { id: agent.id, title: "Builder" }, tail: "x".repeat(10_000) },
+        };
+        const journal = yield* transcriptRow(stored, 1, MESSAGE_ROLE.ASSISTANT, [
+          text("Building."),
+          command,
+          thinking,
+          read,
+        ]);
+
+        const answered = yield* ask(
+          request(AGENT_MESSAGES, owner, { id: agent.id, parts: TRANSCRIPT_PARTS_QUERY.CUT }),
+        );
+        assert.ok(JSON.stringify(answered.body).length < 20_000);
+        const [cutJournal] = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          answered,
+        ).messages;
+        assert.deepEqual(cutJournal?.cutParts, [
+          {
+            index: 1,
+            field: PART_CUT_FIELD.OUTPUT,
+            bytes: 2_000_000,
+            head: output.slice(0, half),
+            tail: output.slice(-half),
+          },
+          {
+            index: 2,
+            field: PART_CUT_FIELD.TEXT,
+            bytes: 11_500,
+            head: thought.slice(0, half),
+            tail: thought.slice(-half),
+          },
+        ]);
+        const { output: _output, ...withoutOutput } = command;
+        const { text: _text, ...withoutText } = thinking;
+        assert.deepEqual(cutJournal?.parts, [text("Building."), withoutOutput, withoutText, read]);
+        // A reader that asks no cut, as a released desktop, is answered the part whole.
+        const [wholeJournal] = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        ).messages;
+        assert.deepEqual(wholeJournal?.parts, [text("Building."), command, thinking, read]);
+        assert.equal(wholeJournal?.cutParts, undefined);
+        // The read back from the end cuts the same parts where it is asked to.
+        const [newestJournal] = readAnswer(
+          codingAgentNewestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT_NEWEST, owner, { id: agent.id, parts: TRANSCRIPT_PARTS_QUERY.CUT }),
+          ),
+        ).messages;
+        assert.deepEqual(newestJournal?.cutParts, cutJournal?.cutParts);
+
+        const part = (bearer: string, index: number) =>
+          ask(request(`/api/agents/${agent.id}/messages/${journal}/parts/${index}`, bearer));
+        assert.deepEqual(
+          readAnswer(codingAgentPartAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* part(owner, 1)),
+          { part: command },
+        );
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(yield* part(other, 1), notFound);
+        assert.deepEqual(yield* part(owner, 4), notFound);
+        assert.deepEqual(
+          yield* ask(request(`/api/agents/${agent.id}/messages/not-an-id/parts/1`, owner)),
+          notFound,
         );
       }),
   );
@@ -4284,7 +4395,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
       const sent = (text: string, clientKey = randomUUID()) =>
         Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
-          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
+          readAnswer(codingAgentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
@@ -4408,7 +4519,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
 
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
         assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
         assert.deepEqual(eve.reset, [sessionId]);
@@ -4454,7 +4568,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [[deploymentFor(messaged.other), messaged.sessionId]],
         );
         assert.equal(agentStop.status, HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
         assert.deepEqual(stopped.eve.cancelled, [[stopped.sessionId, "turn_0"]]);
         assert.deepEqual(stopped.eve.cancelledAs, [deploymentFor(stopped.other)]);
         assert.deepEqual(stopped.eve.reset, [stopped.sessionId]);
@@ -4751,7 +4868,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(userTexts(read), [SNAPSHOT]);
 
         const sent = readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* asOther("Rename the subject line too."),
         );
@@ -4897,7 +5014,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const sent = readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
@@ -5232,7 +5349,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const steer = () =>
           ask(messageAs(other, agent.id, { text: "Use seven days, not five.", clientKey }));
 
-        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        const first = readAnswer(
+          codingAgentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* steer(),
+        );
+        // The send that wrote the line answers the transaction that wrote it.
+        assert.match(first.txid ?? "", /^\d+$/u);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
           [[`Bearer ${other}`, sessionId, target.conversationId]],
@@ -5246,7 +5369,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           status: CODING_AGENT_STATUS.RUNNING,
         });
 
-        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        const again = readAnswer(
+          codingAgentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* steer(),
+        );
+        // A repeat wrote nothing, so there is no transaction to wait for.
+        assert.equal(again.txid, undefined);
         assert.equal(eve.sent.length, 1);
       }),
   );
@@ -5270,7 +5399,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // Charles answers a minute later, which the time each line names says.
         yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
@@ -5658,7 +5787,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
         // The bounds themselves are taken.
         readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, {
@@ -6633,15 +6762,22 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [[id, true]],
         );
 
-        assert.deepEqual(
-          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("PUT")),
-          { id, unread: false },
+        // Each mark answers the transaction it was written in, which a window following the inbox waits for.
+        const { txid: readIn, ...markedRead } = readAnswer(
+          inboxReadStateSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* mark("PUT"),
         );
+        assert.deepEqual(markedRead, { id, unread: false });
+        assert.match(readIn ?? "", /^\d+$/u);
         assert.equal(yield* unread(), false);
-        assert.deepEqual(
-          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("DELETE")),
-          { id, unread: true },
+        const { txid: unreadIn, ...markedUnread } = readAnswer(
+          inboxReadStateSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* mark("DELETE"),
         );
+        assert.deepEqual(markedUnread, { id, unread: true });
+        assert.match(unreadIn ?? "", /^\d+$/u);
         assert.equal(yield* unread(), true);
 
         assert.deepEqual(
@@ -6665,14 +6801,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* all({ workspaceId: "" }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(
-          readAnswer(
-            inboxReadAllSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* all({ workspaceId: task.workspaceId }),
-          ),
-          { marked: 1 },
+        const marked = readAnswer(
+          inboxReadAllSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* all({ workspaceId: task.workspaceId }),
         );
+        assert.equal(marked.marked, 1);
+        assert.match(marked.txid ?? "", /^\d+$/u);
         assert.equal(yield* unread(), false);
         assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
           marked: 0,
@@ -10937,10 +11072,11 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const asked = yield* chat.agentAsks("Ship it?");
         const { channelId, seq } = asked.message;
 
-        assert.deepEqual(yield* chat.wrote({ readTo: seq, channelId }), {
-          readSeq: floor,
-          reads: [{ channelId, readSeq: seq }],
-        });
+        const { txid, ...moved } = yield* chat.wrote({ readTo: seq, channelId });
+        assert.deepEqual(moved, { readSeq: floor, reads: [{ channelId, readSeq: seq }] });
+        assert.match(String(txid), /^\d+$/u, "the move answers the transaction it committed in");
+        // Read to where it already stands, nothing is written, so no transaction is answered.
+        assert.ok(!("txid" in (yield* chat.wrote({ readTo: seq, channelId }))));
         const read = yield* chat.read;
         assert.equal(read.readSeq, floor, "the cursor everywhere stays where it was");
         assert.deepEqual(read.reads, [{ channelId, readSeq: seq }]);

@@ -379,7 +379,12 @@ const TYPED_LINE_METADATA: TypedAskMetadata = {
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
 type AwaitingLineWritten = Result.Result<
-  Option.Option<{ readonly id: string; readonly effect: StoreWriteEffect }>,
+  Option.Option<{
+    readonly id: string;
+    readonly effect: StoreWriteEffect;
+    /** The transaction that wrote the row, where this write wrote it. */
+    readonly txid?: string;
+  }>,
   typeof NO_CONVERSATION | MessageRefused
 >;
 
@@ -619,6 +624,12 @@ const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
 
 const RowIdSchema = Schema.Struct({ id: Schema.String });
 
+/** A message row as its insert answers it: its id, and the transaction that wrote it, which Neon Realtime names the change by. */
+const InsertedRowSchema = Schema.Struct({ id: Schema.String, txid: Schema.String });
+
+/** The id of the transaction a statement runs in, read in its own `RETURNING`, as a decimal string so its 64 bits stay exact. */
+const CURRENT_TXID = sql<string>`pg_current_xact_id()::text`;
+
 /**
  * The `jsonb` fields a row is found by or read out of, which the builder has
  * no operator for: a spoken row's session, span, and delegation on its own
@@ -805,7 +816,7 @@ const findVoiceSessionStart = SqlSchema.findOneOption({
 
 const insertMessageRow = SqlSchema.findOneOption({
   Request: MessageInsertSchema,
-  Result: RowIdSchema,
+  Result: InsertedRowSchema,
   execute: (row) =>
     Database.use((db) =>
       db
@@ -828,7 +839,7 @@ const insertMessageRow = SqlSchema.findOneOption({
           senderModel: row.senderModel,
           senderAgentId: row.senderAgentId,
         })
-        .returning({ id: messages.id }),
+        .returning({ id: messages.id, txid: CURRENT_TXID }),
     ),
 });
 
@@ -1313,6 +1324,8 @@ function landJournals(context: WriterContext): Write<void> {
 interface InsertedMessage {
   readonly id: string;
   readonly seq: number;
+  /** The transaction that wrote the row. */
+  readonly txid: string;
 }
 
 /**
@@ -1375,7 +1388,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.agentId ?? null) : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
-  return { id: written.id, seq };
+  return { id: written.id, seq, txid: written.txid };
 });
 
 type Journal = Result.Result<
@@ -2373,14 +2386,14 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);
   if (!(yield* dispatchedWithinDeadline(dispatch))) return Result.succeed(Option.none());
-  const { id } = yield* insertMessage(context, {
+  const { id, txid } = yield* insertMessage(context, {
     clientId: read.success.id,
     turnId: undefined,
     message: read.success,
     finishedAt: context.now,
     sender: line.sender,
   });
-  return Result.succeed(Option.some({ id, effect: STORE_WRITE_EFFECT.WRITTEN }));
+  return Result.succeed(Option.some({ id, effect: STORE_WRITE_EFFECT.WRITTEN, txid }));
 });
 
 const writeTypedCallLine = /* @__PURE__ */ Effect.fn("web/writeTypedCallLine")(function* (

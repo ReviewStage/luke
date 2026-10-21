@@ -235,8 +235,22 @@ export const boardSchema = EffectSchema.Struct({
 
 export type Board = typeof boardSchema.Type;
 
-/** A board read (GET), and what a scene's write answers (PUT). */
+/** A board read (GET). */
 export const boardAnswerSchema = EffectSchema.Struct({ board: boardSchema });
+
+/**
+ * What a scene's write answers (PUT): the board as written, and, where the
+ * write moved the board's live row (`boardLiveStatement`), the id of the
+ * transaction that wrote it as a decimal string, which a desktop following
+ * the board over Neon Realtime waits to see before it confirms the save. A
+ * save the live row does not show answers none, so there is nothing to wait for.
+ */
+export const boardSaveAnswerSchema = EffectSchema.Struct({
+  board: boardSchema,
+  txid: EffectSchema.optionalKey(EffectSchema.String.check(EffectSchema.isPattern(/^\d+$/))),
+});
+
+export type BoardSaveAnswer = typeof boardSaveAnswerSchema.Type;
 
 /**
  * The Mac's write (PUT): the whole scene, and the number of Luke's drawing it

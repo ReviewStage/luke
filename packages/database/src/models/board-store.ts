@@ -52,6 +52,16 @@ const BoardRowSchema = Schema.Struct({
 
 type BoardRow = typeof BoardRowSchema.Type;
 
+/** A scene's row as its write returns it: the board, whether it holds an image, and the id of the transaction that wrote it. */
+const SavedSceneRowSchema = Schema.Struct({
+  ...BoardRowSchema.fields,
+  imaged: Schema.Boolean,
+  txid: Schema.String,
+});
+
+/** The id of the transaction a write runs in, read in the write's own `RETURNING`, as text so its 64 bits stay exact. */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
 const BOARD_COLUMNS = {
   elements: taskBoard.elements,
   appliedDrawing: taskBoard.appliedDrawing,
@@ -74,17 +84,37 @@ const findBoard = SqlSchema.findOneOption({
     ),
 });
 
-/** The task's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account reaches no such task. */
+/** Where the board's live row (`boardLiveStatement`) stands: the drawing the scene holds and whether it holds its image, each null before the board was first written. */
+const LiveMarkSchema = Schema.Struct({
+  appliedDrawing: Schema.NullOr(Schema.Int),
+  imaged: Schema.NullOr(Schema.Boolean),
+});
+
+type LiveMark = typeof LiveMarkSchema.Type;
+
+/**
+ * The task's id, whether it is archived, and where its board's live row
+ * stands, under the task row's lock until the transaction ends; nothing
+ * where the account reaches no such task.
+ */
 const lockTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
+  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean, ...LiveMarkSchema.fields }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: task.id, archived: sql<boolean>`${task.archivedAt} is not null` })
+        .select({
+          id: task.id,
+          archived: sql<boolean>`${task.archivedAt} is not null`,
+          appliedDrawing: taskBoard.appliedDrawing,
+          imaged: sql<
+            boolean | null
+          >`case when ${taskBoard.taskId} is null then null else ${taskBoard.image} is not null end`,
+        })
         .from(task)
+        .leftJoin(taskBoard, eq(taskBoard.taskId, task.id))
         .where(reachableTask(userId, taskId))
-        .for("update"),
+        .for("update", { of: task }),
     ),
 });
 
@@ -97,7 +127,7 @@ const lockTask = SqlSchema.findOneOption({
 function upsertScene(elements: readonly BoardElement[], image: string | undefined) {
   return SqlSchema.findOne({
     Request: Schema.Struct({ taskId: Schema.String, appliedDrawing: Schema.Int, now: Schema.Date }),
-    Result: BoardRowSchema,
+    Result: SavedSceneRowSchema,
     execute: ({ taskId, appliedDrawing, now }) => {
       const scene = { elements, appliedDrawing, updatedAt: now };
       // Note that a save moving to a new drawing with no image drops the old one, which shows a drawing gone.
@@ -110,7 +140,11 @@ function upsertScene(elements: readonly BoardElement[], image: string | undefine
             target: taskBoard.taskId,
             set: { ...scene, image: image ?? kept },
           })
-          .returning(BOARD_COLUMNS),
+          .returning({
+            ...BOARD_COLUMNS,
+            imaged: sql<boolean>`${taskBoard.image} is not null`,
+            txid: TXID,
+          }),
       );
     },
   });
@@ -171,18 +205,22 @@ function boardOf(row: BoardRow): Board {
  * Runs one write under the task row's lock, handed whether the task is
  * archived as the lock read it; nothing where the account reaches no such task.
  */
-function underTaskLock<E>(
+function underTaskLock<A, E>(
   userId: string,
   taskId: string,
-  write: (now: Date, archived: boolean) => Effect.Effect<BoardRow, E, DatabaseServices>,
+  write: (
+    now: Date,
+    locked: { readonly archived: boolean; readonly mark: LiveMark },
+  ) => Effect.Effect<A, E, DatabaseServices>,
 ) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockTask({ userId, taskId });
-        if (Option.isNone(locked)) return Option.none<Board>();
+        if (Option.isNone(locked)) return Option.none<A>();
         const now = yield* DateTime.nowAsDate;
-        return Option.some(boardOf(yield* write(now, locked.value.archived)));
+        const { archived, appliedDrawing, imaged } = locked.value;
+        return Option.some(yield* write(now, { archived, mark: { appliedDrawing, imaged } }));
       }),
     ),
   );
@@ -211,9 +249,15 @@ export function readBoardImage(
 
 /**
  * The Mac's scene, written whole with the number of Luke's drawing it holds
- * and any image of it; the board as written. An archived task takes no scene
- * of the developer's, read under the same lock, while a drawing of Luke's on
- * a call that stood when it was archived still lands.
+ * and any image of it; the board as written and, where the write moved the
+ * board's live row (`boardLiveStatement`), the id of the transaction that
+ * wrote it, which a desktop following the board waits on before it
+ * confirms the save, as Neon's guide to optimistic mutations has it. A save
+ * that leaves that row as it stood, such as one moving only the scene's
+ * elements, answers none, since no follower would ever see its
+ * transaction. An archived task takes no scene of the developer's, read
+ * under the same lock, while a drawing of Luke's on a call that stood when
+ * it was archived still lands.
  */
 export function writeScene(
   userId: string,
@@ -221,14 +265,26 @@ export function writeScene(
   elements: readonly BoardElement[],
   appliedDrawing: number,
   image?: string,
-): Effect.Effect<Option.Option<Board>, TaskStoreFailure | TaskArchived, DatabaseServices> {
-  return underTaskLock(userId, taskId, (now, archived) =>
-    archived
-      ? Effect.fail(new TaskArchived())
-      : upsertScene(
-          elements,
-          image,
-        )({ taskId, appliedDrawing, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+): Effect.Effect<
+  Option.Option<{ readonly board: Board; readonly txid?: string }>,
+  TaskStoreFailure | TaskArchived,
+  DatabaseServices
+> {
+  return underTaskLock(userId, taskId, (now, { archived, mark }) =>
+    Effect.andThen(
+      archived ? Effect.fail(new TaskArchived()) : Effect.void,
+      upsertScene(
+        elements,
+        image,
+      )({ taskId, appliedDrawing, now }).pipe(
+        Effect.catchTag("NoSuchElementError", Effect.die),
+        Effect.map((row) => {
+          const board = boardOf(row);
+          const moved = mark.appliedDrawing !== row.appliedDrawing || mark.imaged !== row.imaged;
+          return moved ? { board, txid: row.txid } : { board };
+        }),
+      ),
+    ),
   );
 }
 
@@ -240,7 +296,10 @@ export function writeDrawing(
 ): TaskStoreEffect<Option.Option<Board>> {
   // An upsert that returned no row is the database breaking its own contract, not an outcome.
   return underTaskLock(userId, taskId, (now) =>
-    upsertDrawing(drawing)({ taskId, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+    upsertDrawing(drawing)({ taskId, now }).pipe(
+      Effect.catchTag("NoSuchElementError", Effect.die),
+      Effect.map(boardOf),
+    ),
   );
 }
 

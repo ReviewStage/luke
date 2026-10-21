@@ -4,15 +4,18 @@ import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from 
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
+  codingAgentAnswerSchema,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
+  codingAgentMessageAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentOverviewChecksAnswerSchema,
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPartAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
@@ -294,11 +297,22 @@ export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;
 
 /** An agent started, messaged, or stopped, as the window hears it: the agent as it then stands, or why it was not. */
 export const codingAgentAgentAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ agent: codingAgentSummarySchema }),
+  EffectSchema.Struct({
+    agent: codingAgentSummarySchema,
+    txid: codingAgentAnswerSchema.fields.txid,
+  }),
   failedReaching,
 ]);
 
 export type CodingAgentAgentAnswer = typeof codingAgentAgentAnswerSchema.Type;
+
+/** A message handed to an agent, as the host hears the service answer it: the agent, and the transaction that wrote its row where one did; or why there is none. */
+export const codingAgentMessageAnswerViewSchema = EffectSchema.Union([
+  codingAgentMessageAnswerSchema,
+  failedReaching,
+]);
+
+export type CodingAgentMessageAnswerView = typeof codingAgentMessageAnswerViewSchema.Type;
 
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const codingAgentMessagesParamsSchema = EffectSchema.Struct({
@@ -642,6 +656,21 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
+
+/** One part of a message of an agent's transcript, or one of its workers' where `callId` names the delegation call that started it, by the message's id and the part's index among its parts: what the page carried cut (`cutParts`). */
+export const codingAgentPartParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  messageId: EffectSchema.NonEmptyString,
+  index: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  callId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentPartParams = typeof codingAgentPartParamsSchema.Type;
+
+/** The part whole, as the window hears it, or why there is none. */
+export const codingAgentPartViewSchema = EffectSchema.Union([codingAgentPartAnswerSchema, failed]);
+
+export type CodingAgentPartView = typeof codingAgentPartViewSchema.Type;
 
 /** One picture a chat message carries, as the window asks it: the workspace, the message, and the attachment its image block names. */
 export const codingAgentChatAttachmentParamsSchema = EffectSchema.Struct({

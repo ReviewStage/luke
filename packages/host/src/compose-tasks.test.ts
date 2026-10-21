@@ -8,6 +8,7 @@ import {
   type GitHubRepositoryPullRequestAnswer,
   type TaskCallResult,
   type TaskStarted,
+  type TaskWritten,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
@@ -845,7 +846,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.pins = pinned
           ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
           : others;
-        return service.pins;
+        return { pins: service.pins };
       }),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
@@ -985,7 +986,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.images[taskId] = image;
         const board = { ...service.boards[taskId], elements, appliedDrawing };
         service.boards[taskId] = board;
-        return board;
+        return { board };
       }),
     listLive: () =>
       Effect.sync(() => {
@@ -1010,7 +1011,7 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     // The service keeps the repository on the task and answers the task whole.
     setRepository: (taskId, repository) =>
-      Effect.sync((): TaskCallResult<Task, RepositoryCallFailure> => {
+      Effect.sync((): TaskCallResult<TaskWritten, RepositoryCallFailure> => {
         if (service.repositoryUnreachable) {
           return { ok: false, failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
         }
@@ -1020,18 +1021,18 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
-        return { ok: true, answer: changed };
+        return { ok: true, answer: { task: changed } };
       }),
     // The service moves the task and answers it whole.
     move: (taskId, workspaceId) =>
-      Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
+      Effect.sync((): TaskCallResult<TaskWritten, TaskCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
         const moved = { ...found, workspaceId };
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? moved : candidate,
         );
-        return { ok: true, answer: moved };
+        return { ok: true, answer: { task: moved } };
       }),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
@@ -1042,7 +1043,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? renamed : candidate,
         );
-        return renamed;
+        return { task: renamed };
       }),
     // The service sets the status, the priority, and the assignee named, naming the assignee by
     // their account, and leaves the rest standing; null assigns the task to no one.
@@ -1060,7 +1061,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
-        return changed;
+        return { task: changed };
       }),
     // The service stamps a pin or an archive at its own clock, and a false takes it away.
     mark: (taskId, { pinned, archived }) =>
@@ -1078,13 +1079,13 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? marked : candidate,
         );
-        return marked;
+        return { task: marked };
       }),
     delete: (taskId) =>
       Effect.sync(() => {
-        if (service.deleteFails) return false;
+        if (service.deleteFails) return undefined;
         service.tasks = service.tasks.filter((candidate) => candidate.id !== taskId);
-        return true;
+        return {};
       }),
   };
   return service;
@@ -1106,6 +1107,7 @@ function fakeRealtime() {
         return () => listeners.delete(query.capability);
       },
       renew: () => Promise.resolve(),
+      awaitTxId: () => Promise.resolve(),
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => void closed.push(url),
@@ -3161,6 +3163,7 @@ function fakeBoardRealtime() {
         return () => listeners.delete(query.capability);
       },
       renew: () => Promise.resolve(),
+      awaitTxId: () => Promise.resolve(),
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => {},

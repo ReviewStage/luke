@@ -1264,7 +1264,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.gen(function* () {
         const marked = yield* served(client.mark(taskId, marks));
         if (marked === undefined) return { changed: false };
-        takeMarks(marked);
+        takeMarks(marked.task);
         return { changed: true };
       }),
     );
@@ -1780,7 +1780,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return yield* serial(
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
-            if (!deleted) return { deleted: false };
+            if (deleted === undefined) return { deleted: false };
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(boardFollow);
@@ -1803,8 +1803,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, name } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const renamed = yield* served(client.rename(taskId, { name }));
-            if (renamed === undefined) return { renamed: false };
+            const written = yield* served(client.rename(taskId, { name }));
+            if (written === undefined) return { renamed: false };
+            const renamed = written.task;
             const tasks = view.tasks.map((task) =>
               task.id === taskId ? { ...task, name: renamed.name } : task,
             );
@@ -1840,7 +1841,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const changed = yield* served(client.setStanding(taskId, standing));
             if (changed === undefined) return { changed: false };
-            takeAnswered(changed);
+            takeAnswered(changed.task);
             return { changed: true };
           }),
         );
@@ -1870,9 +1871,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { repository, pinned } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const pins = yield* served(client.pinRepository(repository, pinned));
-            if (pins === undefined) return { changed: false };
-            write({ repositoryPins: pins });
+            const answer = yield* served(client.pinRepository(repository, pinned));
+            if (answer === undefined) return { changed: false };
+            write({ repositoryPins: answer.pins });
             return { changed: true };
           }),
         );
@@ -1888,8 +1889,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const asked = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const sections = yield* served(client.writeTaskSection(asked));
-            if (sections === undefined) return { changed: false };
+            const written = yield* served(client.writeTaskSection(asked));
+            if (written === undefined) return { changed: false };
+            const { txid: _txid, ...sections } = written;
             write({ taskSections: sections });
             return { changed: true };
           }),
@@ -1939,8 +1941,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const changed = yield* served(client.setRepository(taskId, repository));
             if (!changed.ok) return carried<TasksSetRepositoryAnswer>({ failure: changed.failure });
-            takeAnswered(changed.answer);
-            return carried<TasksSetRepositoryAnswer>({ repository: changed.answer.repository });
+            takeAnswered(changed.answer.task);
+            return carried<TasksSetRepositoryAnswer>({
+              repository: changed.answer.task.repository,
+            });
           }),
         );
       }),
@@ -1960,8 +1964,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const moved = yield* served(client.move(taskId, workspaceId));
             if (!moved.ok) return carried<TasksMoveAnswer>({ failure: moved.failure });
-            takeAnswered(moved.answer);
-            return carried<TasksMoveAnswer>({ workspaceId: moved.answer.workspaceId });
+            takeAnswered(moved.answer.task);
+            return carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId });
           }),
         );
       }),
@@ -2356,9 +2360,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate() || view.activeTaskId !== taskId) return { saved: false };
         return yield* serial(
           Effect.gen(function* () {
-            const board = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
-            if (board === undefined) return { saved: false };
-            if (view.activeTaskId === taskId) write({ board });
+            const saved = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
+            if (saved === undefined) return { saved: false };
+            if (view.activeTaskId === taskId) write({ board: saved.board });
             return { saved: true };
           }),
         );

@@ -37,12 +37,14 @@ import {
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
+  type CodingAgentMessageAnswerView,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
+  type CodingAgentPartView,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
@@ -81,6 +83,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
+  TRANSCRIPT_PARTS_QUERY,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
 import { planLimitReachedDataSchema } from "./contract/errors.js";
@@ -721,18 +724,24 @@ export class HostedCodingAgentClient {
    * One agent's transcript past the cursor, or a worker's, read at once
    * rather than held, with whether the held read would have held on it: for
    * a reader following the transcript's live statements, which reads again
-   * once they move.
+   * once they move. Where `cut` asks, its heavy parts come cut to their two
+   * ends, which the reader fetches whole as it opens one (`agentPart`).
    */
   messagesNow(
     agentId: string,
     after: string,
     callId?: string,
+    cut = false,
   ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
-    const wait = TRANSCRIPT_NOW_QUERY.NONE;
+    const query = {
+      after,
+      wait: TRANSCRIPT_NOW_QUERY.NONE,
+      ...(cut ? { parts: TRANSCRIPT_PARTS_QUERY.CUT } : undefined),
+    };
     const asked =
       callId === undefined
-        ? askHosted(this.#hosted.messages.agent, { id: agentId, after, wait })
-        : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, after, wait });
+        ? askHosted(this.#hosted.messages.agent, { id: agentId, ...query })
+        : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, ...query });
     return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
   }
 
@@ -741,14 +750,16 @@ export class HostedCodingAgentClient {
    * its newest page, with all the page past a cursor carries, the cursor
    * `messagesNow` follows on from with nothing written meanwhile missed, and
    * where the next older page is read below (`messagesBefore`); none where
-   * nothing older stands.
+   * nothing older stands. Where `cut` asks, its heavy parts come cut to
+   * their two ends, as `messagesNow`'s do.
    */
   messagesNewest(
     agentId: string,
     callId?: string,
+    cut = false,
   ): Effect.Effect<CodingAgentNewestAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.map(
-      hostedAnswer(this.#newest(agentId, callId), ROW_REFUSALS),
+      hostedAnswer(this.#newest(agentId, callId, undefined, cut), ROW_REFUSALS),
       // Note that a read naming no `before` is answered the newest page, which an older page alone is not.
       (answer) => ("failure" in answer || "status" in answer ? answer : UNANSWERED),
     );
@@ -764,9 +775,10 @@ export class HostedCodingAgentClient {
     agentId: string,
     before: string,
     callId?: string,
+    cut = false,
   ): Effect.Effect<CodingAgentOlderAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.map(
-      hostedAnswer(this.#newest(agentId, callId, before), ROW_REFUSALS),
+      hostedAnswer(this.#newest(agentId, callId, before, cut), ROW_REFUSALS),
       (answer): CodingAgentOlderAnswer | Failed =>
         "failure" in answer
           ? answer
@@ -777,12 +789,35 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** A transcript read back from its end, the agent's or its worker's, below `before` where it names one. */
-  #newest(agentId: string, callId?: string, before?: string) {
-    const page = before === undefined ? {} : { before };
+  /** A transcript read back from its end, the agent's or its worker's, below `before` where it names one, its heavy parts cut where `cut` asks. */
+  #newest(agentId: string, callId?: string, before?: string, cut = false) {
+    const page = {
+      ...(before === undefined ? undefined : { before }),
+      ...(cut ? { parts: TRANSCRIPT_PARTS_QUERY.CUT } : undefined),
+    };
     return callId === undefined
       ? askHosted(this.#hosted.messages.agentNewest, { id: agentId, ...page })
       : askHosted(this.#hosted.messages.agentWorkerNewest, { id: agentId, call: callId, ...page });
+  }
+
+  /**
+   * One part of a message of an agent's transcript, or a worker's where
+   * `callId` names the delegation call, whole: what a page carried cut. Not
+   * found where the agent is not one the account reaches or no such part
+   * stands; unanswered for anything else.
+   */
+  agentPart(
+    agentId: string,
+    messageId: string,
+    index: number,
+    callId?: string,
+  ): Effect.Effect<CodingAgentPartView, never, HttpClient.HttpClient> {
+    const part = { id: agentId, message: messageId, index: String(index) };
+    const asked =
+      callId === undefined
+        ? askHosted(this.#hosted.messages.agentPart, part)
+        : askHosted(this.#hosted.messages.agentWorkerPart, { ...part, call: callId });
+    return hostedAnswer(asked, ROW_REFUSALS);
   }
 
   /**
@@ -824,7 +859,7 @@ export class HostedCodingAgentClient {
   message(
     agentId: string,
     request: CodingAgentMessageRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+  ): Effect.Effect<CodingAgentMessageAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(codingAgentMessageRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(

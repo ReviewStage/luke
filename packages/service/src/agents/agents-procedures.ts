@@ -34,14 +34,15 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  archiveCodingAgent,
+  archiveCodingAgentCommitted,
+  type CodingAgentCommitted,
   type CodingAgentLine,
   hasRepository,
   listCodingAgentLines,
   listWorkspaceCodingAgentLines,
   nativeRuntimesOfReached,
-  pinCodingAgent,
-  renameCodingAgent,
+  pinCodingAgentCommitted,
+  renameCodingAgentCommitted,
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
@@ -164,6 +165,22 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * An agent as a write left it, answered with the transaction the write
+ * committed in where it changed a row, as Neon's mutations guide says, so a
+ * desktop following the task list waits for it to arrive before it
+ * confirms the write.
+ */
+const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  changed: Option.Option<CodingAgentCommitted>,
+): Effect.fn.Return<{ agent: CodingAgentSummary; txid?: string }, HostedRefusal, DatabaseServices> {
+  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const agent = yield* summaryOf(userId, changed.value.agent);
+  const { txid } = changed.value;
+  return txid === undefined ? { agent } : { agent, txid };
+});
+
+/**
  * The agent the path names, still standing, and the eve session its sandbox
  * is tagged with, or none where the agent has not run yet. An archived agent
  * is gone, as its tab is, and one on its starter's own GitHub token gives its
@@ -236,9 +253,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
   const startAnswer = (started: {
     readonly agent: CodingAgentSummary;
     readonly created: boolean;
+    readonly txid?: string;
   }) => ({
     status: started.created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
-    body: { agent: started.agent },
+    body:
+      started.txid === undefined
+        ? { agent: started.agent }
+        : { agent: started.agent, txid: started.txid },
   });
   return {
     /**
@@ -396,10 +417,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const { body } = input;
       if ("title" in body) {
         const { title } = body;
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            renameCodingAgent(userId, agent.id, title.length === 0 ? null : title),
+            renameCodingAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
           ),
         );
       }
@@ -409,19 +430,19 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           yield* stoppedForGood(seams, writer, context.request, userId, agent);
         }
         const archived = yield* hostedStoreOrUnavailable(
-          archiveCodingAgent(userId, agent.id, body.archived),
+          archiveCodingAgentCommitted(userId, agent.id, body.archived),
         );
         // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
         if (body.archived && Option.isSome(archived)) {
           yield* Effect.provide(stoppedInBackground([agent]), seams.sessionSandboxes);
         }
-        return yield* changedAgent(userId, archived);
+        return yield* committedAgent(userId, archived);
       }
       if ("pinned" in body) {
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            pinCodingAgent(userId, agent.id, body.pinned, body.position),
+            pinCodingAgentCommitted(userId, agent.id, body.pinned, body.position),
           ),
         );
       }

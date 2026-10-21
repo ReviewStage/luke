@@ -358,6 +358,18 @@ export const repositoryPinsAnswerSchema = EffectSchema.Struct({
   pins: EffectSchema.Array(repositoryPinSchema),
 });
 
+/**
+ * A pin's answer (PUT): the pins as they then stand, and the transaction
+ * that wrote them, which a follower of the sidebar waits for before it draws
+ * the pin as done; absent where the pin changed no row.
+ */
+export const repositoryPinsWrittenSchema = EffectSchema.Struct({
+  ...repositoryPinsAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type RepositoryPinsWritten = typeof repositoryPinsWrittenSchema.Type;
+
 /** Pinning a repository, or unpinning it (PUT): asking twice for either moves nothing, and a pin keeps the instant it was first made. */
 export const repositoryPinRequestSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
@@ -642,8 +654,30 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
-/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved. */
-export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
+/**
+ * The id of the transaction a write committed in, as Postgres counts it, in
+ * decimal: present where the write changed a row, so the desktop following
+ * the task list waits for it to arrive before it confirms the write, and
+ * absent where nothing changed, as Neon's mutations guide says.
+ */
+const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved, and the transaction a write committed in. */
+export const taskAnswerSchema = EffectSchema.Struct({
+  plan: taskSchema,
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
+
+/**
+ * A restored revision (POST): the plan as it now stands, and the id of the
+ * transaction the restore's revision was written in, which a reader
+ * following the history over Neon Realtime waits for; none where the
+ * restore changed nothing.
+ */
+export const taskRestoreAnswerSchema = EffectSchema.Struct({
+  ...taskAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
 
 /**
  * Why the agent a start asked for was not started beside the task it made,
@@ -669,12 +703,16 @@ export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   agent: EffectSchema.optionalKey(codingAgentSummarySchema),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
 });
 
 export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
-export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
+export const taskDeleteAnswerSchema = EffectSchema.Struct({
+  deleted: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
 
 /** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
 export const UNKNOWN_AGENT_LABEL = "a coding agent";

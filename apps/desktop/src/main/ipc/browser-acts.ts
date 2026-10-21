@@ -40,7 +40,7 @@ export function browserProcedures(
     }) {
       const contents = panelOf(context.actor);
       if (contents === undefined) return yield* Effect.fail(errors.REFUSED());
-      const page = views.open(contents, input.browserId, input.address, input.taskId);
+      const page = views.open(contents, input.browserId, input.address);
       if (page === undefined) return yield* Effect.fail(errors.REFUSED());
       return page;
     }),
@@ -77,16 +77,6 @@ export function browserProcedures(
         return views.capture(contents, input.browserId);
       },
     ),
-    // Note that a Stop is answered even with the experiment off, as a close is, because it only ever keeps an agent off a page.
-    [BROWSER_ACT_KIND.BROWSER_STOP]: browserPort[BROWSER_ACT_KIND.BROWSER_STOP].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      if (!context.actor.panel || !views.stop(context.actor.sender, input.browserId)) {
-        return yield* Effect.fail(errors.REFUSED());
-      }
-    }),
     // Note that a close is answered even with the experiment off, because a
     // tab closed as it was turned off must not leave its page standing.
     [BROWSER_ACT_KIND.BROWSER_CLOSE]: browserPort[BROWSER_ACT_KIND.BROWSER_CLOSE].effect(

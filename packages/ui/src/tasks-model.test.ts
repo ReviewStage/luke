@@ -20,10 +20,13 @@ import {
   settleChanges,
   settledNote,
   settleOffered,
+  statusedView,
   TASK_MARK,
   taskNameOfIssue,
+  undoStillDue,
   unsettledMarks,
   unsettledPinPositions,
+  unsettledStatuses,
 } from "./tasks-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -322,14 +325,30 @@ test("a task already done is offered no Mark done, and one already canceled no C
   );
 });
 
-test("a status given here is drawn on the task until the list carries it, then let go", () => {
+test("a status given here is drawn on the task until the list carries it, then let go, apart from a pin given with it", () => {
   const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
-  const marks = new Map([[INVITES, { status: TASK_STATUS.DONE }]]);
+  const statuses = new Map([[INVITES, { status: TASK_STATUS.DONE }]]);
+  const pinned = new Map([[INVITES, pendingMark(TASK_MARK.PIN, 4)]]);
 
-  assert.equal(markedView(listed, marks).tasks[0]?.status, TASK_STATUS.DONE);
-  assert.equal(unsettledMarks(marks, listed).size, 1);
-  assert.equal(
-    unsettledMarks(marks, _view({ tasks: [standingTask(INVITES, TASK_STATUS.DONE)] })).size,
-    0,
-  );
+  assert.equal(statusedView(listed, statuses).tasks[0]?.status, TASK_STATUS.DONE);
+  assert.equal(unsettledStatuses(statuses, listed).size, 1);
+  const done = _view({ tasks: [standingTask(INVITES, TASK_STATUS.DONE)] });
+  assert.equal(unsettledStatuses(statuses, done).size, 0);
+  // Note that the status landing lets go of nothing the pin still waits on.
+  assert.equal(unsettledMarks(pinned, done).size, 1);
+});
+
+test("Mark done's Undo puts back only the tasks still done, leaving one given another status since as it was chosen", () => {
+  const undo = [
+    { taskId: "task-still-done", status: TASK_STATUS.TODO },
+    { taskId: "task-moved-since", status: TASK_STATUS.TODO },
+  ];
+  const now = [
+    standingTask("task-still-done", TASK_STATUS.DONE),
+    standingTask("task-moved-since", TASK_STATUS.IN_PROGRESS),
+  ];
+
+  assert.deepEqual(undoStillDue(undo, SETTLED_STATUS.DONE, now), [
+    { taskId: "task-still-done", status: TASK_STATUS.TODO },
+  ]);
 });

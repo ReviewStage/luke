@@ -32,6 +32,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  useDisclosureState,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
@@ -85,6 +86,7 @@ import {
   type MouseEvent,
   type ReactNode,
   useContext,
+  useEffect,
   useMemo,
 } from "react";
 import remarkBreaks from "remark-breaks";
@@ -130,6 +132,7 @@ import {
   TranscriptMarkdownSource,
 } from "./transcript-markdown.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
+import { type CutBody, WHOLE_PART } from "./whole-parts.js";
 import { WorkingTime } from "./working-time.js";
 
 /**
@@ -725,12 +728,73 @@ const REASONING_PREVIEW_LENGTH = 400;
  * stands still once the line fills the row, because a line rewritten word by
  * word draws the eye from the reply it sits in.
  */
-export function TranscriptReasoning({ text }: { text: string }): ReactNode {
+export function TranscriptReasoning({
+  text,
+  cut,
+}: {
+  text: string;
+  /** For a thought its page carried cut, its ends and its whole read, which its body asks for as it opens. */
+  cut?: CutBody | undefined;
+}): ReactNode {
+  const shown = cut === undefined ? text : cut.head;
   return (
     <Reasoning>
-      <ReasoningTrigger preview={cardTitle(text).slice(0, REASONING_PREVIEW_LENGTH)} />
-      <ReasoningContent text={text.replace(LEADING_BLANK_LINES, "").trimEnd()} />
+      <ReasoningTrigger preview={cardTitle(shown).slice(0, REASONING_PREVIEW_LENGTH)} />
+      {cut === undefined ? (
+        <ReasoningContent text={text.replace(LEADING_BLANK_LINES, "").trimEnd()} />
+      ) : (
+        <FoldBody className="reasoning-body">
+          <CutWords cut={cut} waiting={CUT_WORDS.THOUGHT}>
+            <p className="reasoning-words">{cutText(cut)}</p>
+          </CutWords>
+        </FoldBody>
+      )}
     </Reasoning>
+  );
+}
+
+/** What a cut part's body says while its whole is read, and between its two ends where it could not be. */
+const CUT_WORDS = {
+  THOUGHT: "Reading the whole thought…",
+  OUTPUT: "Reading the whole output…",
+} as const;
+
+/** A size in bytes as a reader says it. */
+function sizeWords(bytes: number): string {
+  const kilobytes = bytes / 1024;
+  return kilobytes < 1024 ? `${Math.round(kilobytes)} kB` : `${(kilobytes / 1024).toFixed(1)} MB`;
+}
+
+/** A cut part's two ends, the middle that could not be read said between them. */
+function cutText(cut: CutBody): string {
+  return `${cut.head}\n\n… ${sizeWords(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
+}
+
+/**
+ * A cut part's body: it asks for the part whole once its fold stands open,
+ * not while a find only looks through it, and says so while the read is
+ * under way; where the read failed, it draws the part's two ends.
+ */
+function CutWords({
+  cut,
+  waiting,
+  children,
+}: {
+  cut: CutBody;
+  waiting: string;
+  /** The two ends as the part draws them, where its whole could not be read. */
+  children: ReactNode;
+}): ReactNode {
+  const { open } = useDisclosureState();
+  const { onOpen } = cut;
+  useEffect(() => {
+    if (open) onOpen();
+  }, [open, onOpen]);
+  if (cut.state === WHOLE_PART.FAILED) return children;
+  return (
+    <p data-part-reading="">
+      <Shimmer>{waiting}</Shimmer>
+    </p>
   );
 }
 
@@ -739,7 +803,6 @@ const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
   [CALL_KIND.BROWSER]: GlobeIcon,
-  [CALL_KIND.MAC_BROWSER]: GlobeIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
   [CALL_KIND.WRITE_FILE]: FilePenIcon,
   [CALL_KIND.EDIT]: FilePenIcon,
@@ -888,6 +951,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     /** Nothing while the call has not answered. */
     output: ToolBlock | undefined;
     errorText: string | undefined;
+    /** For a call whose answer its page carried cut, its ends and its whole read, which its body asks for as it opens. */
+    cut?: CutBody | undefined;
   };
 
 /**
@@ -907,6 +972,7 @@ export function TranscriptTool({
   input,
   output,
   errorText,
+  cut,
   ...props
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
@@ -936,12 +1002,6 @@ export function TranscriptTool({
               <ActorRef actor={macOwner} sentence possessive />
               {" Mac"}
             </ActorLine>
-          ) : kind === CALL_KIND.MAC_BROWSER && macOwner !== undefined ? (
-            <ActorLine>
-              {"Browser · on "}
-              <ActorRef actor={macOwner} sentence possessive />
-              {" Mac"}
-            </ActorLine>
           ) : (
             callPlace(kind)
           )
@@ -949,7 +1009,16 @@ export function TranscriptTool({
       />
       <ToolContent>
         <ToolInput block={input} />
-        <ToolOutput block={output} errorText={errorText} />
+        {cut === undefined ? (
+          <ToolOutput block={output} errorText={errorText} />
+        ) : (
+          <CutWords cut={cut} waiting={CUT_WORDS.OUTPUT}>
+            <ToolOutput
+              block={{ kind: TOOL_BLOCK.TEXT, text: cutText(cut) }}
+              errorText={undefined}
+            />
+          </CutWords>
+        )}
       </ToolContent>
     </Tool>
   );

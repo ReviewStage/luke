@@ -15,8 +15,6 @@ export const HOST_NATIVE_NODE_ID = "native";
 export const HOST_NODE_CAPABILITY = {
   /** Hands an address to the operating system, as a row press does: the pressing panel has stood itself down already. */
   OPEN_EXTERNAL: "os.openExternal",
-  /** Runs an agent's browser actions on a task's Browser tabs (`mac-browser-tabs.ts`), answering the command's result. */
-  BROWSER_ACT: "browser.act",
 } as const;
 
 export type HostNodeCapability = (typeof HOST_NODE_CAPABILITY)[keyof typeof HOST_NODE_CAPABILITY];

@@ -400,6 +400,8 @@ export type StartAsk = StartPlace & {
 export interface CodingAgentStart {
   readonly agent: CodingAgent;
   readonly created: boolean;
+  /** The transaction the agent's row was written in, where this Start wrote it. */
+  readonly txid?: string;
 }
 
 /** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to eve. */
@@ -965,7 +967,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { agent, created } = started.value;
+  const { agent, created, txid } = started.value;
   if (!created) return { agent, created };
   // The session opens with the plan or the prompt as its first message; an eve that did not take
   // it leaves no agent behind, so the retry under the same key starts afresh. A blank agent opens
@@ -1045,13 +1047,15 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
     has_task: ask.taskId !== null,
   });
-  return { agent, created };
+  return txid === undefined ? { agent, created } : { agent, created, txid };
 });
 
 /** A Start as a request reached the service, answered: the agent's summary, and whether this request made it or found it under its key. */
 export interface RequestedStart {
   readonly agent: CodingAgentSummary;
   readonly created: boolean;
+  /** The transaction the agent's row was written in, where this request wrote it. */
+  readonly txid?: string;
 }
 
 /**
@@ -1100,7 +1104,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
-  const { agent, created } = yield* startCodingAgent(eve, userId, {
+  const { agent, created, txid } = yield* startCodingAgent(eve, userId, {
     ...whereOf(where),
     idempotencyKey: request.idempotencyKey,
     choice,
@@ -1129,5 +1133,6 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
       names,
     ),
     created,
+    ...(txid === undefined ? undefined : { txid }),
   };
 });

@@ -6,7 +6,11 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "../task-section-wire.js";
+import {
+  taskSectionsAnswerSchema,
+  taskSectionsWrittenSchema,
+  taskSectionWriteSchema,
+} from "../task-section-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
 /** A write is two ids, a title, and an emoji at most, so a body past this is not one. */
@@ -20,5 +24,5 @@ export const taskSectionsContract = {
     .meta(bodyCap(WRITE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.TASK_SECTIONS }))
     .input(exactInput(taskSectionWriteSchema))
-    .output(EffectSchema.flip(taskSectionsAnswerSchema)),
+    .output(EffectSchema.flip(taskSectionsWrittenSchema)),
 };

@@ -103,34 +103,6 @@ test("a browser call says what it did and in which tab, by the title its answer 
   });
 });
 
-test("a browser call on the developer's Mac reads as a browser call does, and says it ran on the Mac", () => {
-  const actions = [{ action: "open", url: "http://localhost:5173/" }, { action: "snapshot" }];
-  const onMac = toolCallView({
-    tool: "browser",
-    input: { actions, on: "mac" },
-    output: {
-      status: "ran",
-      steps: [],
-      skipped: 0,
-      tabs: [{ tab: "mac-7", url: "http://localhost:5173/", title: "My app" }],
-    },
-  });
-  const onSandbox = toolCallView({
-    tool: "browser",
-    input: { actions, on: "sandbox" },
-    output: undefined,
-  });
-
-  assert.equal(onMac.kind, CALL_KIND.MAC_BROWSER);
-  assert.deepEqual(callLine(onMac.kind, onMac.subject, onMac.description), {
-    verb: "Opened, read the page in",
-    subject: "My app",
-    code: false,
-  });
-  assert.equal(callPlace(onMac.kind), "Browser · on your Mac");
-  assert.equal(callPlace(onSandbox.kind), "Browser");
-});
-
 test("a command run on the Mac is the command it ran, described as a command is, and its answer says how it ended: its exit, its timeout, or why it was not run", () => {
   const ran = (output: Record<string, string | number | boolean | null>) =>
     toolCallView({
