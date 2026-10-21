@@ -1,7 +1,4 @@
-import {
-  RETENTION_BASIS,
-  type RetentionBasis,
-} from "@luke/service/admin/admin-overview-vocabulary";
+import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
 import { TEXT_TONE, Text } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 

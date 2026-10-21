@@ -8,11 +8,8 @@
  * apart by the heading alone, and the tooltip carries each day's exact counts.
  */
 
-import type { AdminOverview } from "@luke/service/admin/admin-overview";
-import {
-  ACTIVITY_FEATURE,
-  type ActivityFeature,
-} from "@luke/service/admin/admin-overview-vocabulary";
+import type { AdminOverview } from "@luke/features/admin-answer-wire";
+import { ACTIVITY_FEATURE, type ActivityFeature } from "@luke/features/admin-overview-vocabulary";
 import { formatDayTick, formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
 import {
   type ChartConfig,

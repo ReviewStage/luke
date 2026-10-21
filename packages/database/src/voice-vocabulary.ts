@@ -1,15 +1,6 @@
 import { MESSAGE_ROLE } from "@luke/wire";
 
-/** Why a session ended, as the Live API's `session.closed` names it. */
-export const VOICE_CLOSE_REASON = {
-  CLOSE_REQUESTED: "close_requested",
-  EXPIRED: "expired",
-  CONTENT: "content",
-  REMOTE_HANGUP: "remote_hangup",
-  CONNECTION_LOST: "connection_lost",
-} as const;
-
-export type VoiceCloseReason = (typeof VOICE_CLOSE_REASON)[keyof typeof VOICE_CLOSE_REASON];
+export { VOICE_CLOSE_REASON, type VoiceCloseReason } from "@luke/features/voice-close-wire";
 
 /** Who the session hands a delegation to: the client that opened it. */
 export const VOICE_DELEGATION_MODE = {

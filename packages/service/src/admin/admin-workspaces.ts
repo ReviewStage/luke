@@ -12,10 +12,14 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { GitHubInstallationStatus } from "@luke/database/github-installation-vocabulary";
-import type { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { Clock, Effect } from "effect";
+import type {
+  AdminWorkspaceInstallation,
+  AdminWorkspaceIntegration,
+  AdminWorkspaceList,
+  AdminWorkspaceOwner,
+  AdminWorkspaceRow,
+  AdminWorkspaceSummary,
+} from "@luke/features/admin-answer-wire";
 import {
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
@@ -24,7 +28,8 @@ import {
   adminMetricsScope,
   adminUsersSearch,
   adminWorkspacesKind,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
@@ -47,85 +52,6 @@ export const INVITATION_STATUS = {
   PENDING: "pending",
   ACCEPTED: "accepted",
 } as const;
-
-/** The account a row names as its workspace's owner, the shared account cell's fields. */
-interface AdminWorkspaceOwner {
-  id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  admin: boolean;
-}
-
-/** One GitHub App installation on a workspace: the account it is on and where it stands. */
-export interface AdminWorkspaceInstallation {
-  login: string;
-  status: GitHubInstallationStatus;
-}
-
-/** One integration a workspace connected for its members, and whether its grant still works. */
-export interface AdminWorkspaceIntegration {
-  provider: IntegrationProvider;
-  status: typeof INTEGRATION_ROW_STATUS.CONNECTED | typeof INTEGRATION_ROW_STATUS.EXPIRED;
-}
-
-export interface AdminWorkspaceRow {
-  id: string;
-  /** The workspace's name as its members read it; a personal one goes by its owner's name. */
-  name: string;
-  personal: boolean;
-  /** The workspace's first owner, or none once every owner's account is gone. */
-  owner: AdminWorkspaceOwner | null;
-  members: number;
-  /** Every installation connected to it, the first linked first. */
-  installations: AdminWorkspaceInstallation[];
-  integrations: AdminWorkspaceIntegration[];
-  tasksWeek: number;
-  agentsWeek: number;
-  /** Distinct pull requests from its agents that merged inside the week. */
-  prsMergedWeek: number;
-  /** When the workspace was made, in epoch milliseconds. */
-  createdAt: number;
-}
-
-interface AdminWorkspaceSummary {
-  /** Workspaces with two or more members that are nobody's personal one. */
-  shared: number;
-  /** Shared workspaces with a task or agent started, or a plan revised, inside the week. */
-  sharedActiveWeek: number;
-  invitations: {
-    accepted: number;
-    /** Still pending and not yet past their expiry. */
-    pending: number;
-    /** Still pending, but past their expiry, so never to be accepted. */
-    expired: number;
-    /** Every invitation no longer open: accepted, expired, or otherwise ended. */
-    settled: number;
-    /** Accepted over settled; null before any invitation has settled. */
-    acceptanceRate: number | null;
-  };
-  github: {
-    /** Shared workspaces with at least one active installation. */
-    sharedWithActive: number;
-    /** Shared workspaces with at least one suspended installation. */
-    sharedWithSuspended: number;
-    /** Shared workspaces with an active installation over all shared; null with none shared. */
-    activeShare: number | null;
-  };
-}
-
-export interface AdminWorkspaceList {
-  generatedAt: number;
-  activityDays: number;
-  kind: AdminWorkspacesKind;
-  /** The term the rows and total were filtered by, echoed so the page words the answer it shows. */
-  search: string | undefined;
-  /** Every workspace the scope, kind, and search keep, counted past the row bound. */
-  total: number;
-  limit: number;
-  summary: AdminWorkspaceSummary;
-  rows: AdminWorkspaceRow[];
-}
 
 /** A workspace as the main read answers it, before its owner and connections are folded on. */
 type AdminWorkspaceSourceRow = Omit<AdminWorkspaceRow, "owner" | "installations" | "integrations">;

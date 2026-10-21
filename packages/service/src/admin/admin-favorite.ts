@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { adminUserId } from "@luke/features/admin-wire";
 import { Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
-import { adminUserId } from "./http.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 

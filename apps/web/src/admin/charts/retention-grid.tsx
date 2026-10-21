@@ -1,4 +1,4 @@
-import type { AdminMetrics, AdminRetentionCell } from "@luke/service/admin/admin-metrics";
+import type { AdminMetrics, AdminRetentionCell } from "@luke/features/admin-answer-wire";
 import {
   SCROLL_AXIS,
   SCROLL_OVERSCROLL,

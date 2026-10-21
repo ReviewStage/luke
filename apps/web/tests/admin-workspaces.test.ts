@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AdminWorkspaceList, AdminWorkspaceRow } from "@luke/service/admin/admin-workspaces";
+import type { AdminWorkspaceList, AdminWorkspaceRow } from "@luke/features/admin-answer-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
