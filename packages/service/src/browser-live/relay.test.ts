@@ -189,6 +189,10 @@ function world(
       row = undefined;
     },
     driveAs: (userId: string, heldUntil: Date) => setDriver(userId, heldUntil),
+    /** Moves the tab onto the target given, as a browser that started afresh reopens it. */
+    reopenAs: (targetId: string) => {
+      if (row !== undefined) row = { ...row, tab: { ...row.tab, targetId } };
+    },
   };
 }
 
@@ -581,6 +585,42 @@ it.effect(
         BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.NOT_OPENED],
       ]);
       assert.deepEqual(unopened.commands, [], "no browser is reached for an agent that never ran");
+    }),
+);
+
+it.effect(
+  "a tab its browser reopened on a new target as it started afresh is cast on that target, not closed as gone",
+  () =>
+    Effect.gen(function* () {
+      const reopened = "page-reopened";
+      const { peer, browser, commands } = yield* liveBrowser({
+        pages: [{ targetId: reopened, url: "https://example.test/start", title: "Start" }],
+      });
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      // The connection reopens the kept tab on a new target, as `connectRestoring` does after a resume.
+      const deps: BrowserLiveDependencies = {
+        ...store.deps,
+        browser: {
+          connect: (sessionId) =>
+            Effect.andThen(
+              Effect.sync(() => store.reopenAs(reopened)),
+              browser.connect(sessionId),
+            ),
+        },
+      };
+
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), deps)),
+      );
+
+      const attach = commands.find((command) => command.method === "Target.attachToTarget");
+      assert.deepEqual(attach?.params, { targetId: reopened, flatten: true });
+      assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.CLOSED), []);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
     }),
 );
 

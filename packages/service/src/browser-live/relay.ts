@@ -4,8 +4,10 @@
  * The tab was read under the member's reach before the socket stood
  * (`service.ts`); the relay reaches the browser of the agent whose
  * conversation holds it through `AgentBrowser`, which resumes a stopped
- * sandbox and starts the browser where it is not running, attaches to the
- * tab's target, and runs the page's screencast. Each frame goes to the
+ * sandbox and starts the browser where it is not running, and which in
+ * production reopens the agent's kept tabs where it started afresh
+ * (`connectRestoring`), so the tab is read again for the target it now
+ * stands on; then it attaches to that target and runs the page's screencast. Each frame goes to the
  * panel as it came, the page's size beside it, and is acknowledged no
  * sooner than `FRAME_EVERY` after the last, so Chromium sends no faster
  * than that; a frame the panel's socket has not drained the last of is
@@ -78,8 +80,8 @@ import {
 import { BROWSER_TAKEOVER_HOLD_MS } from "../agents/agent-browser-tabs-procedures.js";
 import { controlsAgent } from "../agents/agent-reach.js";
 import {
-  type AgentBrowserService,
   BROWSER_UNREACHABLE,
+  type BrowserUnreachable,
   type CdpCommand,
   type CdpEvent,
   type CdpFailure,
@@ -131,7 +133,17 @@ export interface BrowserLiveDependencies {
   ) => Effect.Effect<Option.Option<ReachedBrowserTab>, unknown>;
   /** The eve session the agent's sandbox is tagged with; none before the agent first ran. */
   readonly sessionOf: (conversationId: string) => Effect.Effect<Option.Option<string>, unknown>;
-  readonly browser: Pick<AgentBrowserService, "connect">;
+  /**
+   * Connects to the browser in the sandbox the session names, for the
+   * caller's scope; in production through `connectRestoring`, which first
+   * reopens the conversation's kept tabs where the browser started afresh.
+   */
+  readonly browser: {
+    readonly connect: (
+      sessionId: string,
+      conversationId: string,
+    ) => Effect.Effect<CdpSession, BrowserUnreachable, Scope.Scope>;
+  };
   /** Makes the member the tab's driver until the instant given, answering whether they now drive it. */
   readonly takeOver: (
     tabId: string,
@@ -345,6 +357,8 @@ interface LiveView {
   readonly page: Ref.Ref<PixelSize | undefined>;
   readonly pageState: Ref.Ref<PageState>;
   readonly live: Ref.Ref<LiveTarget | undefined>;
+  /** The browser's target for the tab, read again once the browser is reached, since a fresh start reopens the tab on a new one. */
+  readonly targetId: Ref.Ref<string>;
   readonly lastActive: Ref.Ref<number>;
   readonly lastHeld: Ref.Ref<number>;
   readonly lastFrame: Ref.Ref<number | undefined>;
@@ -392,6 +406,7 @@ function openView(
         loading: false,
       }),
       live: yield* Ref.make<LiveTarget | undefined>(undefined),
+      targetId: yield* Ref.make(tab.targetId),
       lastActive: yield* Ref.make(startedAt.getTime()),
       lastHeld: yield* Ref.make(startedAt.getTime()),
       lastFrame: yield* Ref.make<number | undefined>(undefined),
@@ -665,7 +680,7 @@ function relayFrame(
 /** One event of the agent's browser: the tab's frames, its page's changes, and its end; any other tab's are passed over. */
 function onEvent(view: LiveView, event: CdpEvent): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const { targetId } = view.reached.tab;
+    const targetId = yield* Ref.get(view.targetId);
     const target = yield* Ref.get(view.live);
     const gone = Deferred.succeed(view.browserEnded, BROWSER_LIVE_CLOSE_REASON.GONE);
     switch (event.method) {
@@ -725,7 +740,7 @@ function castTab(
   cdp: CdpSession,
 ): Effect.Effect<LiveTarget | undefined, CdpFailure, Scope.Scope> {
   return Effect.gen(function* () {
-    const { targetId } = view.reached.tab;
+    const targetId = yield* Ref.get(view.targetId);
     const pages = yield* cdp.pages;
     const page = pages.find((candidate) => candidate.targetId === targetId);
     if (page === undefined) return undefined;
@@ -760,13 +775,22 @@ function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope
     const session = yield* Effect.result(deps.sessionOf(view.reached.tab.conversationId));
     if (Result.isFailure(session)) return BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
     if (Option.isNone(session.success)) return BROWSER_LIVE_CLOSE_REASON.NOT_OPENED;
-    const connected = yield* Effect.result(deps.browser.connect(session.success.value));
+    const connected = yield* Effect.result(
+      deps.browser.connect(session.success.value, view.reached.tab.conversationId),
+    );
     if (Result.isFailure(connected)) {
       return connected.failure.reason === BROWSER_UNREACHABLE.NOT_OPENED
         ? BROWSER_LIVE_CLOSE_REASON.NOT_OPENED
         : BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
     }
     const cdp = connected.success;
+    // The tab is read again, since a browser that started afresh reopened it on a new target.
+    const current = yield* Effect.result(
+      deps.readTab(view.ask.userId, view.ask.taskId, view.ask.tabId),
+    );
+    if (Result.isSuccess(current) && Option.isSome(current.success)) {
+      yield* Ref.set(view.targetId, current.success.value.tab.targetId);
+    }
     // Note that the events are read from before the first command, so the screencast's first frame, after
     // which Chromium sends none until it is acknowledged, is never missed.
     yield* Effect.forkScoped(
