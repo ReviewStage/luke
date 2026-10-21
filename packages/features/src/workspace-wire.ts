@@ -62,6 +62,14 @@ export const WORKSPACE_ROLE = {
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE];
 
+const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
+
+/** The highest role the plugin's role text names, which may list several comma-separated, read as a member where it names none Luke knows. */
+export function roleOf(text: string): WorkspaceRole {
+  const named = text.split(",").map((part) => part.trim());
+  return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
+}
+
 /**
  * The roles a member is given, by an invitation or by the owner: a
  * workspace has one owner, its creator, so nobody is made one but by the

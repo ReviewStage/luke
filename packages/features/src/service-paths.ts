@@ -111,6 +111,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AUTOMATIONS: "/api/live/automations",
   /** One automation's runs under `?id=`, sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
   LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
+  /** The account's workspaces, sealed for following over Neon Realtime (GET): the workspaces and their installations, or their rows inline where polled. */
+  LIVE_WORKSPACES: "/api/live/workspaces",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

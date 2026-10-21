@@ -92,6 +92,7 @@
     "./terminal-wire": "./src/terminal-wire.js",
     "./transcript-wire": "./src/transcript-wire.js",
     "./workspace-invitation-wire": "./src/workspace-invitation-wire.js",
+    "./workspace-live": "./src/workspace-live.js",
     "./workspace-wire": "./src/workspace-wire.js",
     "./workspace-key": "./src/workspace-key.js",
     "./sign-in-provider": "./src/sign-in-provider.js",

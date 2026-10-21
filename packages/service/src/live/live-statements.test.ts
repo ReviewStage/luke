@@ -5,6 +5,7 @@ import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-sto
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { workspacesLiveStatements } from "@luke/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
@@ -107,6 +108,12 @@ function liveStatements() {
     ),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(workspacesLiveStatements(USER_ID))).map(([part, query]) => [
+        `workspaces.${part}`,
+        query,
+      ]),
+    ),
   };
 }
 
