@@ -1621,9 +1621,12 @@ export interface SpokenMessage extends PlacedMessage {
  * A transcript's rows with each line the voice said reading a turn aloud
  * moved to that turn, so on a call the tab reads as a conversation: what
  * was said, then the work behind it folded under it, rather than the
- * turn's own answer and then the voice saying it again. A line whose turn
- * is not among the rows, and a line the service names no turn for, stand
- * where the order puts them, so a transcript with no call reads as it did.
+ * turn's own answer and then the voice saying it again. The developer's
+ * lines that reached such a turn while it ran are drawn ahead of what the
+ * voice said, each a row of its own, since the voice answered them too, so
+ * no question stands under its answer. A line whose turn is not among the
+ * rows, and a line the service names no turn for, stand where the order
+ * puts them, so a transcript with no call reads as it did.
  */
 export function spokenMessages(placed: readonly PlacedMessage[]): readonly SpokenMessage[] {
   const turns = new Set(
@@ -1642,7 +1645,14 @@ export function spokenMessages(placed: readonly PlacedMessage[]): readonly Spoke
   return placed.flatMap((row) => {
     const turn = readFromOf(row.message);
     if (turn !== undefined && turns.has(turn)) return [];
-    return [{ ...row, said: said.get(row.message.id) ?? NOTHING_SAID }];
+    const lines = said.get(row.message.id);
+    if (lines === undefined) return [{ ...row, said: NOTHING_SAID }];
+    const asked = row.arrived.map((line) => ({
+      message: line,
+      arrived: NOTHING_SAID,
+      said: NOTHING_SAID,
+    }));
+    return [...asked, { message: row.message, arrived: NOTHING_SAID, said: lines }];
   });
 }
 

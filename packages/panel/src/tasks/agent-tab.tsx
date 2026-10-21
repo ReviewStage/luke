@@ -1250,7 +1250,24 @@ export function AgentMessage({
   // Note that Copy waits for whole words, while Fork takes a turn of no words, or one still running, as it stands.
   const copyable = words !== "" && !moving;
   const forks = forkable && forkCut?.messageSteps !== 0;
-  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
+  const foot = (
+    <TurnFoot
+      workedFor={workedFor}
+      copy={
+        copyable || (forks && forkOffered) ? (
+          <CopyMessageAction
+            words={words}
+            copyable={copyable}
+            messageId={message.id}
+            forkable={forks}
+            forkCut={forkCut}
+            placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
+          />
+        ) : null
+      }
+    />
+  );
+  // A spoken turn's foot, how long it worked with its Copy and Fork, stays inside its fold, under the words it holds.
   return stretches.map((stretch, index) => {
     if (stretch.line !== undefined) {
       const line = stretch.line;
@@ -1276,27 +1293,11 @@ export function AgentMessage({
       >
         {index === 0 ? named : null}
         <MessageContent>
-          <TranscriptRows rows={stretch.rows} trailer={said && ends ? workedFor : undefined}>
+          <TranscriptRows rows={stretch.rows} trailer={said && ends ? foot : undefined}>
             {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
           </TranscriptRows>
         </MessageContent>
-        {said || !ends ? null : (
-          <TurnFoot
-            workedFor={workedFor}
-            copy={
-              copyable || (forks && forkOffered) ? (
-                <CopyMessageAction
-                  words={words}
-                  copyable={copyable}
-                  messageId={message.id}
-                  forkable={forks}
-                  forkCut={forkCut}
-                  placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
-                />
-              ) : null
-            }
-          />
-        )}
+        {said || !ends ? null : foot}
         {ends ? <ForkedToLine messageId={message.id} /> : null}
       </Message>
     );

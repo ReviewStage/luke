@@ -293,6 +293,47 @@ test("on a call, the turn the voice read aloud folds closed under what was said,
   assert.match(opened, /Worked for 11s/u, "how long it worked is inside the fold");
 });
 
+test("a line the developer said while the turn ran stands ahead of what the voice said, since the voice answered it too, and the turn's work folds whole under the answer", async () => {
+  const steer: CodingAgentMessage = {
+    ...ASKED,
+    id: "steer",
+    parts: [{ type: "text", text: "Check resent invites too." }],
+    arrivedIn: { journalId: "spoken-turn", afterStep: 1 },
+    sentAt: CALL_START + 8_000,
+  };
+  const container = await drawnTab([TASK, ASKED, ACK, steer, SPOKEN_TURN, REPLY]);
+
+  assert.deepEqual(drawnOrder(container), [
+    "message: task",
+    "call begins",
+    "message: asked",
+    "message: ack",
+    "message: steer",
+    "message: reply",
+    "message: spoken-turn",
+    "fold: 1 tool call, 1 message (closed)",
+    "call ended",
+  ]);
+});
+
+test("a spoken turn keeps its Copy and its Copy link inside its fold, under its written answer", async () => {
+  const container = await drawnTab([TASK, ASKED, ACK, SPOKEN_TURN, REPLY]);
+  const turn = container.querySelector('[data-message-id="spoken-turn"]');
+  assert.equal(turn?.querySelector("[data-turn-foot]"), null, "no foot stands outside the fold");
+
+  pressFold(container, "1 tool call, 1 message");
+  const fold = turn?.querySelector("[data-turn-fold]");
+  const foot = fold?.querySelector("[data-turn-foot]");
+  assert.ok(foot, "the fold ends on the turn's foot");
+  assert.match(foot.textContent ?? "", /Worked for 11s/u);
+  assert.ok(
+    [...foot.querySelectorAll("button")].some(
+      (button) => button.getAttribute("aria-label") === "Copy" || button.textContent === "Copy",
+    ),
+    "its Copy is in the foot",
+  );
+});
+
 test("a line typed on the call folds the same way: the line, what the voice said, then the turn behind it, closed", async () => {
   const container = await drawnTab([TASK, TYPED, TYPED_TURN, TYPED_REPLY]);
 
