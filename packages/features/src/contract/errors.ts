@@ -44,6 +44,19 @@ const upstreamErrorData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(upstreamErrorDataSchema),
 );
 
+/**
+ * What a plan's reached limit carries beside its slug: when it resets, in
+ * epoch milliseconds, where the provider said, which the refusal's words
+ * name. The client reads it with this as it stands (`hosted-link.ts`).
+ */
+export const planLimitReachedDataSchema = EffectSchema.Struct({
+  resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+});
+
+const planLimitReachedData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(planLimitReachedDataSchema),
+);
+
 /** Every hosted refusal, the slug its code, and the extra fields of each that carries some. */
 export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: {},
@@ -68,7 +81,7 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: {},
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: {},
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: {},
-  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: {},
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: { data: planLimitReachedData },
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: {},
   [HOSTED_API_ERROR.TASK_ARCHIVED]: {},
   [HOSTED_API_ERROR.NOT_PERMITTED]: {},

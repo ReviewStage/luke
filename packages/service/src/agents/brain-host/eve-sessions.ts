@@ -256,6 +256,8 @@ interface EveFailed {
   readonly outcome: typeof EVE_SEND_OUTCOME.FAILED;
   readonly status: number;
   readonly planRefusal?: PlanRefusal;
+  /** When the plan's reached limit resets, in epoch milliseconds, where the provider said. */
+  readonly planResetsAt?: number;
   readonly runtimeRefusal?: RuntimeRefusal;
 }
 

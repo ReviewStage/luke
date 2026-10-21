@@ -1331,12 +1331,25 @@ export function agentToolRejected(reason: string): WireRecord {
 
 /** A steer's refusal in the model's words. */
 function refusalWords(refusal: HostedRefusal): string {
-  return REFUSAL_WORDS.get(refusal.error) ?? CODING_AGENT_TOOL_REFUSAL.UNAVAILABLE;
+  return withReset(
+    REFUSAL_WORDS.get(refusal.error) ?? CODING_AGENT_TOOL_REFUSAL.UNAVAILABLE,
+    refusal,
+  );
+}
+
+/** A refusal's words, with when a plan's reached limit resets where the provider said. */
+function withReset(words: string, refusal: HostedRefusal): string {
+  return refusal.resetsAt === undefined
+    ? words
+    : `${words} It resets at ${new Date(refusal.resetsAt).toISOString()}.`;
 }
 
 /** A start's refusal in the model's words. */
 function startRefusalWords(refusal: HostedRefusal): string {
-  return START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE;
+  return withReset(
+    START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE,
+    refusal,
+  );
 }
 
 /** A choice the catalog refused, the one named or the member's stored default, said with every model offered and the efforts each lists, so the model can try again or ask. */

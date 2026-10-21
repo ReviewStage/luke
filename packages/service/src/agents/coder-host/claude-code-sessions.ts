@@ -7,7 +7,10 @@
  * runner's config names the image's `claude` and appends Luke's coder
  * instructions to Claude Code's prompt; the plan's token, opened from the
  * account's sealed `claude_setup_token` row, or an Anthropic API key in test
- * mode, is the launch's credential; and every message to a running runner
+ * mode, is the launch's credential, refused in its plan's words where the
+ * row is gone, refused, unreadable, or at a limit whose named reset is
+ * still ahead, so the agent waits on its plan and never turns to another
+ * payer; and every message to a running runner
  * goes behind a `model` line with the agent's model and effort as they
  * stand. The CLI's own session id is the conversation's `native_session`,
  * which the events route records from the runner's `init`, and a relaunch
@@ -26,11 +29,16 @@ import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { Effect, Redacted, Result } from "effect";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+} from "@luke/features/provider-key-wire";
+import { DateTime, Effect, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
+import { PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -89,8 +97,31 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
     }
     const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
     const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-    if (row === undefined)
-      return yield* Effect.fail(new LaunchRefused({ reason: "no setup-token" }));
+    if (row === undefined) {
+      return yield* new LaunchRefused({
+        reason: "no setup-token",
+        planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+      });
+    }
+    if (row.status === PROVIDER_KEY_STATUS.INVALID) {
+      return yield* new LaunchRefused({
+        reason: "setup-token refused",
+        planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+      });
+    }
+    const now = yield* DateTime.nowAsDate;
+    // Note that a limit with no reset named holds until a turn finds it lifted, which needs a launch, so only a named reset still ahead refuses.
+    if (
+      row.status === PROVIDER_KEY_STATUS.LIMIT_REACHED &&
+      row.limitResetsAt !== null &&
+      row.limitResetsAt.getTime() > now.getTime()
+    ) {
+      return yield* new LaunchRefused({
+        reason: "plan limit reached",
+        planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+        planResetsAt: row.limitResetsAt.getTime(),
+      });
+    }
     const opened = openProviderKey(
       parsed.success,
       {
@@ -100,8 +131,12 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
       },
       row,
     );
-    if (Result.isFailure(opened))
-      return yield* Effect.fail(new LaunchRefused({ reason: "setup-token unreadable" }));
+    if (Result.isFailure(opened)) {
+      return yield* new LaunchRefused({
+        reason: "setup-token unreadable",
+        planRefusal: PLAN_REFUSAL.UNREADABLE,
+      });
+    }
     return { env: { [RUNNER_ENV.CLAUDE_TOKEN]: Redacted.value(opened.success) } };
   });
 

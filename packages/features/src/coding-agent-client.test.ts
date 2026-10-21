@@ -155,6 +155,37 @@ it.effect(
 );
 
 it.effect(
+  "a message refused at its plan's limit carries the reset the service named, and one with none is the bare refusal",
+  () =>
+    Effect.gen(function* () {
+      const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
+      const refusingWith = (body: JsonValue) =>
+        fakeCloudApi({
+          "POST /api/agents/agent-1/messages": {
+            answer: () => body,
+            status: HTTP_STATUS.CONFLICT,
+          },
+        });
+      const request = { text: "Also the emails.", clientKey: "key-1" };
+
+      const named = yield* Effect.provide(
+        client().message("agent-1", request),
+        refusingWith({ error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, resetsAt }).layer,
+      );
+      const bare = yield* Effect.provide(
+        client().message("agent-1", request),
+        refusingWith({ error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED }).layer,
+      );
+
+      assert.deepEqual(named, {
+        failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
+        resetsAt,
+      });
+      assert.deepEqual(bare, { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED });
+    }),
+);
+
+it.effect(
   "reads, saves, and removes the account's own provider keys, a save carrying the key once in its body and every answer its hint alone",
   () =>
     Effect.gen(function* () {

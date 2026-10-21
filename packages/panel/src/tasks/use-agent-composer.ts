@@ -5,6 +5,7 @@ import {
 import {
   type CodingAgentAttachment,
   type CodingAgentMessage,
+  type CodingAgentPayer,
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
@@ -138,6 +139,8 @@ export function useAgentComposer(input: {
   /** Whether a turn runs now, which a line sent now steers rather than opening one; none where none does. */
   running?: boolean | undefined;
   send: MessageSender;
+  /** Who pays for the agent, which a plan's refusal names; none for an agent from before payers. */
+  payer?: CodingAgentPayer | undefined;
   /** The service said where the agent stands now, which is newer than the list. */
   onStatus: (agentId: string, run: AgentRun) => void;
 }): HeldComposer {
@@ -191,7 +194,7 @@ export function useAgentComposer(input: {
         // An answer to another agent's tab, or to a tab since remounted, is nobody's.
         if (latest.current.agentId !== agentId) return;
         if ("failure" in answer) {
-          const note = messageFailureNote(answer, latest.current.taskId);
+          const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);
           // A line a row has already read back reached the agent whatever the answer said: the
           // row stands, so there is nothing to send again and nothing to put back in the box.
           if (!heldNow.current.sent.some((each) => each.id === id)) {

@@ -42,7 +42,7 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Context, Effect, Option, Stream } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import { HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
+import { HOSTED_REFUSAL, type HostedRefusal, planLimitReached } from "../../http/http-effect.js";
 import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
@@ -315,12 +315,13 @@ export function failedCallRefusal(failed: {
   readonly status: number;
   readonly runtimeRefusal?: RuntimeRefusal | undefined;
   readonly planRefusal?: PlanRefusal | undefined;
+  readonly planResetsAt?: number | undefined;
 }): HostedRefusal {
   if (failed.planRefusal === PLAN_REFUSAL.UNREACHABLE) {
     return HOSTED_REFUSAL.AGENT_PLAN_UNREACHABLE;
   }
   if (failed.planRefusal === PLAN_REFUSAL.LIMIT_REACHED) {
-    return HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED;
+    return planLimitReached(failed.planResetsAt);
   }
   if (failed.planRefusal === PLAN_REFUSAL.INELIGIBLE) return HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE;
   if (failed.planRefusal !== undefined) return HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT;

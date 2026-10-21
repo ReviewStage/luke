@@ -133,10 +133,11 @@ const failureSchema = EffectSchema.Literals(Object.values(CODING_AGENT_CALL_FAIL
 /** A failed call, as every answer below spells one. */
 const failed = EffectSchema.Struct({ failure: failureSchema });
 
-/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`). */
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), and when a plan's reached limit resets where it is that. */
 const failedReaching = EffectSchema.Struct({
   failure: failureSchema,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
+  resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
 });
 
 /** The models the service offers, as the window hears them: the list, or why there is none. */

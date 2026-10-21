@@ -96,7 +96,12 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 function recording(sessionPrefix: string) {
   const calls: string[] = [];
   const messages: EveMessage[] = [];
-  const answers: { open: string; status: number; planRefusal?: PlanRefusal } = {
+  const answers: {
+    open: string;
+    status: number;
+    planRefusal?: PlanRefusal;
+    planResetsAt?: number;
+  } = {
     open: EVE_SEND_OUTCOME.ACCEPTED,
     status: 0,
   };
@@ -128,6 +133,7 @@ function recording(sessionPrefix: string) {
               outcome: EVE_SEND_OUTCOME.FAILED,
               status: answers.status,
               planRefusal: answers.planRefusal,
+              ...(answers.planResetsAt === undefined ? {} : { planResetsAt: answers.planResetsAt }),
             };
       }),
     cancel: (sessionId, turnId) =>
@@ -672,6 +678,53 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED.error,
             HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE.error,
           ]);
+          assert.deepEqual(eve.calls, []);
+        }),
+    );
+
+    it.effect(
+      "a Claude Code agent whose starter's Claude plan is refused or at its limit is refused by name, the limit with the reset Claude Code named, and nothing turns to eve",
+      () =>
+        Effect.gen(function* () {
+          const { owner, taskId } = yield* openTeam;
+          const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
+          const { eve, claudeCode, native } = runtimes();
+          yield* claimRuntimeSession(
+            { userId: owner, conversationId: onClaudeCode.conversationId },
+            `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
+            new Date(0),
+          );
+          const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
+          const send = Effect.result(
+            steerCodingAgent(
+              sessions,
+              storeWriter({ tools: CODER_TOOL_SET }),
+              owner,
+              onClaudeCode,
+              {
+                text: "Also the emails.",
+                clientKey: randomUUID(),
+                sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+              },
+            ),
+          );
+
+          claudeCode.answers.status = 422;
+          claudeCode.answers.planRefusal = PLAN_REFUSAL.SIGNED_OUT;
+          const refused = yield* send;
+          const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
+          claudeCode.answers.planRefusal = PLAN_REFUSAL.LIMIT_REACHED;
+          claudeCode.answers.planResetsAt = resetsAt;
+          const limited = yield* send;
+
+          assert.ok(Result.isFailure(refused) && Result.isFailure(limited));
+          assert.deepEqual(
+            [refused.failure, limited.failure],
+            [
+              HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT,
+              { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt },
+            ],
+          );
           assert.deepEqual(eve.calls, []);
         }),
     );
