@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { PAGE_SHOWER, type PageShower } from "@luke/features/page-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+import { PAGE_OWNER, PAGE_SHOWER, type PageOwner, type PageShower } from "@luke/features/page-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { codingAgent } from "../../schemas/coding-agent.js";
 import { planPageVersion } from "../../schemas/plan-page.js";
+import { conversations } from "../../schemas/storage.js";
+import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { listPages, readPageById, readPageVersion, writePage } from "../plan-pages.js";
-import { createTask } from "../task-store.js";
+import { createTask, deleteTask } from "../task-store.js";
 
 /**
  * A task's pages read by the page's id alone, over a real dialect: any
@@ -20,10 +24,66 @@ import { createTask } from "../task-store.js";
  * a member reads on the plan's list and on the version, and a version shown
  * before that was kept reads as shown by no one named.
  *
+ * A coding agent on no task shows its pages on itself, and they are read by
+ * the agent's rule of who may read it rather than any task's: a member of
+ * its workspace who sees the agent reads them, an account of another
+ * workspace or one the agent's GitHub access hides it from reads nothing,
+ * and a task's pages and an agent's never read as each other's.
+ *
  * Synthetic accounts and pages throughout.
  */
 
 const LUKE: PageShower = { kind: PAGE_SHOWER.LUKE };
+
+const onTask = (taskId: string): PageOwner => ({ kind: PAGE_OWNER.TASK, taskId });
+
+const onAgent = (agentId: string): PageOwner => ({ kind: PAGE_OWNER.AGENT, agentId });
+
+const shownByAgent = (agentId: string): PageShower => ({ kind: PAGE_SHOWER.AGENT, agentId });
+
+/** A coding agent of the workspace, on the task named or on none, reached as its GitHub access says. */
+const openAgent = (
+  userId: string,
+  organizationId: string,
+  taskId: string | null,
+  githubAccess: GitHubAccess = GITHUB_ACCESS.APP,
+) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const id = randomUUID();
+    const conversationId = randomUUID();
+    yield* db
+      .insert(conversations)
+      .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    yield* db.insert(codingAgent).values({
+      id,
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/api",
+      repositories: ["acme/api"],
+      githubAccess,
+      idempotencyKey: randomUUID(),
+    });
+    return id;
+  });
+
+/** Each version's owner columns as the row holds them. */
+const ownerColumnsOf = (pageId: string) =>
+  Effect.flatMap(Database, (db) =>
+    db
+      .select({
+        version: planPageVersion.version,
+        taskId: planPageVersion.taskId,
+        agentId: planPageVersion.agentId,
+      })
+      .from(planPageVersion)
+      .where(eq(planPageVersion.pageId, pageId))
+      .orderBy(planPageVersion.version),
+  );
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -45,11 +105,16 @@ it.layer(getTestDB())("a page read by its id", (it) => {
         yield* openWorkspace(outsider);
         const task = yield* createTask(owner, { organizationId: workspace, name: "Invitations" });
         const first = Option.getOrThrow(
-          yield* writePage(owner, task.id, { title: "Invites", html: "<h1>One</h1>" }, LUKE),
+          yield* writePage(
+            owner,
+            onTask(task.id),
+            { title: "Invites", html: "<h1>One</h1>" },
+            LUKE,
+          ),
         );
         yield* writePage(
           owner,
-          task.id,
+          onTask(task.id),
           { pageId: first.id, title: "Invites by week", html: "<h1>Two</h1>" },
           LUKE,
         );
@@ -59,13 +124,13 @@ it.layer(getTestDB())("a page read by its id", (it) => {
 
         assert.deepEqual(
           [
-            newest.taskId,
+            newest.owner,
             newest.page.version,
             newest.page.title,
             newest.page.html,
             newest.newestVersion,
           ],
-          [task.id, 2, "Invites by week", "<h1>Two</h1>", 2],
+          [onTask(task.id), 2, "Invites by week", "<h1>Two</h1>", 2],
         );
         assert.deepEqual(
           [earlier.page.version, earlier.page.html, earlier.newestVersion],
@@ -88,18 +153,23 @@ it.layer(getTestDB())("a page read by its id", (it) => {
         yield* joinWorkspace(workspace, teammate);
         yield* openWorkspace(outsider);
         const task = yield* createTask(owner, { organizationId: workspace, name: "Invitations" });
-        const agent: PageShower = { kind: PAGE_SHOWER.AGENT, agentId: randomUUID() };
+        const agent = shownByAgent(yield* openAgent(owner, workspace, task.id));
         const shown = Option.getOrThrow(
-          yield* writePage(owner, task.id, { title: "Invites", html: "<h1>One</h1>" }, agent),
+          yield* writePage(
+            owner,
+            onTask(task.id),
+            { title: "Invites", html: "<h1>One</h1>" },
+            agent,
+          ),
         );
         yield* writePage(
           owner,
-          task.id,
+          onTask(task.id),
           { pageId: shown.id, title: "Invites", html: "<h1>Two</h1>" },
           LUKE,
         );
         const older = Option.getOrThrow(
-          yield* writePage(owner, task.id, { title: "Old", html: "<h1>Old</h1>" }, LUKE),
+          yield* writePage(owner, onTask(task.id), { title: "Old", html: "<h1>Old</h1>" }, LUKE),
         );
         // A version shown before who showed it was kept, as the column's migration leaves it.
         const db = yield* Database;
@@ -108,8 +178,8 @@ it.layer(getTestDB())("a page read by its id", (it) => {
           .set({ shownBy: null })
           .where(eq(planPageVersion.pageId, older.id));
 
-        const listed = yield* listPages(teammate, task.id);
-        const first = yield* readPageVersion(teammate, task.id, shown.id, 1);
+        const listed = yield* listPages(teammate, onTask(task.id));
+        const first = yield* readPageVersion(teammate, onTask(task.id), shown.id, 1);
 
         assert.deepEqual(
           // Pages written in the same millisecond list in no particular order, so they are read by title.
@@ -125,8 +195,182 @@ it.layer(getTestDB())("a page read by its id", (it) => {
           Option.map(first, (page) => page.shownBy),
           Option.some(agent),
         );
-        assert.deepEqual(yield* listPages(outsider, task.id), []);
-        assert.ok(Option.isNone(yield* readPageVersion(outsider, task.id, shown.id, 1)));
+        assert.deepEqual(yield* listPages(outsider, onTask(task.id)), []);
+        assert.ok(Option.isNone(yield* readPageVersion(outsider, onTask(task.id), shown.id, 1)));
+      }),
+  );
+
+  it.effect(
+    "an agent on no task shows pages on itself, which a teammate reads by its list, its versions, and its id, and an account of another workspace, one the agent is hidden from, or a task reads nothing of",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const agentId = yield* openAgent(owner, workspace, null);
+        // An agent on the owner's own GitHub token, which the teammate's token never read the repository of.
+        const hidden = yield* openAgent(owner, workspace, null, GITHUB_ACCESS.TOKEN);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Invitations" });
+        const shower = shownByAgent(agentId);
+        const first = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            onAgent(agentId),
+            { title: "Funnel", html: "<h1>One</h1>" },
+            shower,
+          ),
+        );
+        yield* writePage(
+          teammate,
+          onAgent(agentId),
+          { pageId: first.id, title: "Funnel by week", html: "<h1>Two</h1>" },
+          shower,
+        );
+        const secret = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            onAgent(hidden),
+            { title: "Hidden", html: "<p>x</p>" },
+            shownByAgent(hidden),
+          ),
+        );
+
+        const listed = yield* listPages(teammate, onAgent(agentId));
+        const byId = Option.getOrThrow(yield* readPageById(teammate, first.id, undefined));
+
+        assert.deepEqual(
+          listed.map(({ id, title, version, shownBy }) => ({ id, title, version, shownBy })),
+          [{ id: first.id, title: "Funnel by week", version: 2, shownBy: shower }],
+        );
+        assert.equal(
+          Option.getOrThrow(yield* readPageVersion(teammate, onAgent(agentId), first.id, 1)).html,
+          "<h1>One</h1>",
+        );
+        assert.deepEqual(
+          [byId.owner, byId.page.version, byId.newestVersion],
+          [onAgent(agentId), 2, 2],
+        );
+        assert.deepEqual(yield* ownerColumnsOf(first.id), [
+          { version: 1, taskId: null, agentId },
+          { version: 2, taskId: null, agentId },
+        ]);
+        // Another workspace's member reads and writes nothing of the agent's pages.
+        assert.deepEqual(yield* listPages(outsider, onAgent(agentId)), []);
+        assert.ok(Option.isNone(yield* readPageById(outsider, first.id, undefined)));
+        assert.ok(Option.isNone(yield* readPageVersion(outsider, onAgent(agentId), first.id, 1)));
+        assert.ok(
+          Option.isNone(
+            yield* writePage(outsider, onAgent(agentId), { title: "Mine", html: "<p>x</p>" }, LUKE),
+          ),
+        );
+        // A teammate the agent's GitHub access hides it from reads nothing of its pages; its owner does.
+        assert.deepEqual(yield* listPages(teammate, onAgent(hidden)), []);
+        assert.ok(Option.isNone(yield* readPageById(teammate, secret.id, undefined)));
+        assert.equal((yield* listPages(owner, onAgent(hidden))).length, 1);
+        // An agent's page is no task's, and a task's page no agent's own.
+        assert.ok(Option.isNone(yield* readPageVersion(owner, onTask(task.id), first.id, 1)));
+        assert.ok(
+          Option.isNone(
+            yield* writePage(
+              owner,
+              onTask(task.id),
+              { pageId: first.id, title: "Taken", html: "<p>x</p>" },
+              LUKE,
+            ),
+          ),
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent on a task shows its pages on the task and is named on each version, and the task's deletion takes them while an agent on no task keeps its own",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Invitations" });
+        const onIt = yield* openAgent(owner, workspace, task.id);
+        const apart = yield* openAgent(owner, workspace, null);
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            onTask(task.id),
+            { title: "Plan", html: "<p>1</p>" },
+            shownByAgent(onIt),
+          ),
+        );
+        yield* writePage(
+          owner,
+          onTask(task.id),
+          { pageId: shown.id, title: "Plan", html: "<p>2</p>" },
+          LUKE,
+        );
+        const own = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            onAgent(apart),
+            { title: "Own", html: "<p>x</p>" },
+            shownByAgent(apart),
+          ),
+        );
+
+        assert.deepEqual(yield* ownerColumnsOf(shown.id), [
+          { version: 1, taskId: task.id, agentId: onIt },
+          { version: 2, taskId: task.id, agentId: null },
+        ]);
+        // The agent's own list holds the pages it showed on no task, never the task's.
+        assert.deepEqual(yield* listPages(owner, onAgent(onIt)), []);
+
+        yield* deleteTask(owner, task.id);
+
+        assert.deepEqual(yield* ownerColumnsOf(shown.id), []);
+        assert.deepEqual(
+          (yield* listPages(owner, onAgent(apart))).map(({ id }) => id),
+          [own.id],
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's deletion clears its name from a task's versions and keeps them whole, and is refused while it holds pages of its own on no task",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Invitations" });
+        const onIt = yield* openAgent(owner, workspace, task.id);
+        const apart = yield* openAgent(owner, workspace, null);
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            onTask(task.id),
+            { title: "Plan", html: "<p>1</p>" },
+            shownByAgent(onIt),
+          ),
+        );
+        yield* writePage(
+          owner,
+          onAgent(apart),
+          { title: "Own", html: "<p>x</p>" },
+          shownByAgent(apart),
+        );
+        const db = yield* Database;
+
+        yield* db.delete(codingAgent).where(eq(codingAgent.id, onIt));
+        const refused = yield* Effect.exit(db.delete(codingAgent).where(eq(codingAgent.id, apart)));
+
+        assert.deepEqual(yield* ownerColumnsOf(shown.id), [
+          { version: 1, taskId: task.id, agentId: null },
+        ]);
+        assert.equal(
+          Option.getOrThrow(yield* readPageVersion(owner, onTask(task.id), shown.id, 1)).html,
+          "<p>1</p>",
+        );
+        assert.ok(refused._tag === "Failure");
+        assert.equal((yield* listPages(owner, onAgent(apart))).length, 1);
       }),
   );
 });

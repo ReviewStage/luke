@@ -100,3 +100,18 @@ const pageVersionSchema = EffectSchema.Struct({
 export type PageVersion = typeof pageVersionSchema.Type;
 
 export const planPageVersionAnswerSchema = EffectSchema.Struct({ page: pageVersionSchema });
+
+/** What a page stands on: the task it was shown on, or the coding agent on no task that showed it. */
+export const PAGE_OWNER = {
+  TASK: "task",
+  AGENT: "agent",
+} as const;
+
+/**
+ * What a page stands on, by its id: a task, whose pages every agent on it
+ * and Luke show and revise, or a coding agent on no task, whose pages are
+ * its own. Its rule of who may read the page is the owner's.
+ */
+export type PageOwner =
+  | { readonly kind: typeof PAGE_OWNER.TASK; readonly taskId: string }
+  | { readonly kind: typeof PAGE_OWNER.AGENT; readonly agentId: string };
