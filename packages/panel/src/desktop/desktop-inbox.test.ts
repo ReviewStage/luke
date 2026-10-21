@@ -464,6 +464,7 @@ function mount(
     archived = [],
     room,
     sidebar = false,
+    panel,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -471,6 +472,8 @@ function mount(
     room?: ShellRoom;
     /** Whether the inbox-first sidebar lists the Inbox, read once for it and the page, which then shows the chosen item alone. */
     sidebar?: boolean;
+    /** The side panel the Inbox opens what its item names in, where the test records what it opened. */
+    panel?: SidePanelControl;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -566,7 +569,10 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = room === undefined ? createElement(Page) : createElement(Panelled, { at: room });
+  const page =
+    room === undefined
+      ? createElement(Page, { sidePanel: panel })
+      : createElement(Panelled, { at: room });
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
 }
@@ -3921,7 +3927,7 @@ async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
 /** Where the release skill's file stands on GitHub. */
 const RELEASE_ON_GITHUB = "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md";
 
-test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md on GitHub", async () => {
+test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md in the panel beside it, as a file the item names does", async () => {
   const answered: InboxItem = {
     ...RETRY,
     answer: {
@@ -3935,12 +3941,18 @@ test("in the window's Inbox a skill an answered note names is the chip a sent me
     [INVITES.id, [EXPIRY]],
   ]);
   const opened = skillReads();
-  const { page } = mount();
+  const files: string[] = [];
+  const panel: SidePanelControl = {
+    ...tasksControl().sidePanel,
+    onOpenFile: (ref) => files.push(ref.path),
+  };
+  const { page } = mount([], { panel });
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await pressNoteSkill(page, "/release");
 
-  assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
+  assert.deepEqual(files, [".agents/skills/release/SKILL.md"]);
+  assert.deepEqual(opened, [], "nothing leaves for GitHub");
 });
 
 test("a skill named by a settled item of an agent with no plan that a link reached opens in the agent's own repository, which its group names none of", async () => {
