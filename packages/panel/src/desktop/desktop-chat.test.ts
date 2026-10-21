@@ -1343,6 +1343,7 @@ function railTasks(): Partial<TasksControl> {
         },
       ],
       entries: [{ taskId: billing.id, sectionId: section, addedAt: 1 }],
+      agentEntries: [],
     },
   };
 }
