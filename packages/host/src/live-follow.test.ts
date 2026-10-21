@@ -5,12 +5,14 @@ import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
+  confirmWrite,
   LiveBroken,
   type LiveClient,
   liveRows,
   openRealtimeClient,
   type SealedRead,
   shareLiveClients,
+  type TxWait,
 } from "./live-follow.js";
 
 /**
@@ -51,7 +53,9 @@ function read(round: number, expiresAt: number): SealedRead<Part> {
  * subscribed with, the seals it was renewed with, a way to deliver rows to
  * one or stop it for good, and whether the client was closed.
  */
-function fakeRealtime(options: { readonly refuseRenewal?: boolean } = {}) {
+function fakeRealtime(
+  options: { readonly refuseRenewal?: boolean; readonly arrivesOn?: string } = {},
+) {
   const listeners = new Map<
     string,
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
@@ -70,6 +74,11 @@ function fakeRealtime(options: { readonly refuseRenewal?: boolean } = {}) {
           ? Promise.reject(new Error("refused"))
           : Promise.resolve();
       },
+      // A transaction arrives on the one part named, as a write reaches only the parts whose rows it changes.
+      awaitTxId: () =>
+        query.capability === (options.arrivesOn ?? query.capability)
+          ? Promise.resolve()
+          : Promise.reject(new Error("timed out")),
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => {
@@ -365,6 +374,7 @@ function scriptedClients() {
           return () => undefined;
         },
         renew: () => Promise.resolve(),
+        awaitTxId: () => Promise.resolve(),
         unsubscribe: () => undefined,
       }),
       close: () => void closed.push(url),
@@ -438,3 +448,104 @@ test("a client that failed to load is loaded afresh by the next read", async () 
   await shared.open(ADDRESS);
   assert.deepEqual(clients.opened, [ADDRESS]);
 });
+
+it.effect(
+  "hands out a wait for a write's transaction once every part is live, settled by the part it reaches, and none once let go",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime({ arrivesOn: "right-0" });
+      const handed: { wait?: TxWait | undefined } = {};
+      const following = yield* Effect.forkChild(
+        liveRows<Part>(
+          {
+            openLive: () => realtime.client,
+            reseal: () => Effect.succeed(read(1, 3_600_000)),
+            poll: () => Effect.succeed({ failure: "unavailable" }),
+            now: () => 0,
+            onTxWait: (next) => {
+              handed.wait = next;
+            },
+          },
+          read(0, 3_600_000),
+        ).pipe(Stream.runDrain),
+      );
+      yield* settled;
+      assert.ok(handed.wait === undefined, "no wait before every part is live");
+      realtime.deliver("left-0", []);
+      realtime.deliver("right-0", []);
+      yield* settled;
+      const wait = handed.wait as TxWait | undefined;
+      assert.ok(wait, "a wait once every part is live");
+      yield* wait("42", Duration.seconds(5));
+      yield* Fiber.interrupt(following);
+      assert.equal(handed.wait, undefined, "none once let go");
+    }),
+);
+
+it.effect(
+  "a read that falls back to polling hands out no wait, so its writes confirm at once",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const handed: { wait?: TxWait | undefined } = {};
+      const following = yield* Effect.forkChild(
+        liveRows<Part>(
+          {
+            openLive: () => realtime.client,
+            reseal: () => Effect.succeed(read(1, 3_600_000)),
+            poll: () => Effect.succeed(polledRead([], "0")),
+            now: () => 0,
+            onTxWait: (next) => {
+              handed.wait = next;
+            },
+          },
+          read(0, 3_600_000),
+        ).pipe(Stream.runDrain),
+      );
+      yield* settled;
+      realtime.deliver("left-0", []);
+      realtime.deliver("right-0", []);
+      yield* settled;
+      assert.ok(handed.wait !== undefined, "a wait while live");
+      realtime.fail("left-0");
+      yield* settled;
+      assert.equal(handed.wait, undefined, "no wait while polled");
+      const confirmed = yield* Effect.forkChild(confirmWrite(handed.wait, "42"));
+      yield* settled;
+      assert.ok(confirmed.pollUnsafe(), "confirmed without waiting");
+      yield* Fiber.interrupt(following);
+    }),
+);
+
+it.effect(
+  "a write confirms at once where it changed no row, and waits for its transaction where it did",
+  () =>
+    Effect.gen(function* () {
+      const arrived = new Set<string>();
+      const wait: TxWait = (txid) =>
+        Effect.repeat(Effect.sleep(Duration.millis(100)), { until: () => arrived.has(txid) });
+      const unchanged = yield* Effect.forkChild(confirmWrite(wait, undefined));
+      yield* settled;
+      assert.ok(unchanged.pollUnsafe(), "no txid, nothing to wait for");
+
+      const committed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.equal(committed.pollUnsafe(), undefined, "still waiting");
+      arrived.add("42");
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.ok(committed.pollUnsafe(), "confirmed once it arrived");
+    }),
+);
+
+it.effect("a write whose transaction never arrives is confirmed still once ten seconds pass", () =>
+  Effect.gen(function* () {
+    const wait: TxWait = (_txid, timeout) =>
+      Effect.andThen(Effect.sleep(timeout), Effect.fail(new LiveBroken({ reason: "timed out" })));
+    const committed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+    yield* TestClock.adjust(Duration.seconds(9));
+    assert.equal(committed.pollUnsafe(), undefined, "still waiting");
+    yield* TestClock.adjust(Duration.seconds(1));
+    const exit = committed.pollUnsafe();
+    assert.ok(exit !== undefined && Exit.isSuccess(exit), "confirmed, since it committed");
+  }),
+);
