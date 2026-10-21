@@ -111,6 +111,7 @@ import {
   decidedOf,
   decisionsOf,
   doDecision,
+  EMPTY_INBOX_DRAFT,
   fieldValueOf,
   INBOX_HOLDER,
   INBOX_MISSING,
@@ -260,7 +261,9 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * its answer to the reply rather than sending it, and a press pressed
  * again takes it off. Answered, it leaves the agent's message
  * for the reply that answered it, or says "Answered" alone where that
- * reply is no longer read; replaced, it says it was replaced by a newer question, or message, alone;
+ * reply is no longer read; replaced, it keeps its controls as it offered
+ * them, dimmed and taking nothing, over a pill saying a newer question, or
+ * message, replaced it;
  * withdrawn, it says why, or who closed the item.
  *
  * Words selected in what the agent wrote, its question's Markdown, its
@@ -1914,56 +1917,43 @@ function AnsweredPress({
 }
 
 /**
- * The ask a member's reply answered, at the head of that reply under their
- * face and name, in the reply's stamp's place: the ask's controls alone,
- * standing in the reply with no card around them, as the answer left them, in the look they had
- * while it waited and taking nothing, which say how it was answered: a
- * `decide`'s options with the picks checked, or its two small buttons with
- * the one pressed marked; a `do`'s steps ticked as they were sent, over
- * Mark done and Couldn't do it with the one pressed marked; an `answer`'s
- * fields, each holding what it was given, empty where it was left empty.
- * An `answer` of no fields draws no card, its reply's words being the
- * answer and the agent's message saying it was answered (`AskBox`).
+ * An ask's controls as they were left, in the look they had while it
+ * waited and taking nothing: a `decide`'s options with `draft`'s picks
+ * checked, or its two small buttons with the one pressed marked; a `do`'s
+ * steps ticked as `draft` holds them, over Mark done and Couldn't do it
+ * with the one `draft` pressed marked; an `answer`'s fields, each holding
+ * what `draft` gives it. An `answer` of no fields has none, and draws nothing.
  */
-function AnsweredCard({
+function HeldControls({
   ask,
   title,
-  answers,
+  draft,
 }: {
   ask: InboxKnownAsk;
   /** The item's title, which stands as the one step of a to-do that names none. */
   title: string;
-  answers: InboxAnswers;
+  draft: InboxDraft;
 }): React.JSX.Element | null {
-  const draft = answeredDraft(ask, answers);
-  const body = (controls: React.ReactNode) => (
-    // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
-    <div className="inbox-ask-answered" data-inbox-answered="">
-      {controls}
-    </div>
-  );
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
-      return body(
-        decideButtons(ask) ? (
-          <div className="inbox-ask-presses">
-            {ask.options.map((option, at) => (
-              <AnsweredPress
-                key={option.label}
-                label={option.label}
-                tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
-                pressed={draft.choices.includes(option.label)}
-              />
-            ))}
-          </div>
-        ) : (
-          <ChoiceOptions choice={ask} draft={draft} disabled={false} readOnly onDraft={heldStill} />
-        ),
+      return decideButtons(ask) ? (
+        <div className="inbox-ask-presses">
+          {ask.options.map((option, at) => (
+            <AnsweredPress
+              key={option.label}
+              label={option.label}
+              tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
+              pressed={draft.choices.includes(option.label)}
+            />
+          ))}
+        </div>
+      ) : (
+        <ChoiceOptions choice={ask} draft={draft} disabled={false} readOnly onDraft={heldStill} />
       );
     case INBOX_ASK.DO: {
       const steps = ask.steps.length === 0 ? [title] : ask.steps;
       const ticked = new Set(draft.steps ?? []);
-      return body(
+      return (
         <>
           <ul className="inbox-ask-steps" aria-label="Steps">
             {steps.map((step, at) => (
@@ -1979,31 +1969,61 @@ function AnsweredCard({
             <AnsweredPress
               label={ASK_PRESS.DONE}
               tone={ANSWER_TONE.AHEAD}
-              pressed={answers.reply === INBOX_REPLY.DONE}
+              pressed={draft.press === INBOX_REPLY.DONE}
             />
             <AnsweredPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
               tone={ANSWER_TONE.BACK}
-              pressed={answers.reply === INBOX_REPLY.NOT_DONE}
+              pressed={draft.press === INBOX_REPLY.NOT_DONE}
             />
           </div>
-        </>,
+        </>
       );
     }
     case INBOX_ASK.ANSWER:
-      return ask.fields === undefined
-        ? null
-        : body(
-            <FormFields
-              form={{ fields: ask.fields }}
-              draft={draft}
-              disabled={false}
-              readOnly
-              onDraft={heldStill}
-            />,
-          );
+      return ask.fields === undefined ? null : (
+        <FormFields
+          form={{ fields: ask.fields }}
+          draft={draft}
+          disabled={false}
+          readOnly
+          onDraft={heldStill}
+        />
+      );
   }
+}
+
+/** Whether an ask draws any controls once it no longer waits: every one but an `answer` of words alone. */
+function hasControls(ask: InboxKnownAsk): boolean {
+  return ask.type !== INBOX_ASK.ANSWER || ask.fields !== undefined;
+}
+
+/**
+ * The ask a member's reply answered, at the head of that reply under their
+ * face and name, in the reply's stamp's place: the ask's controls alone
+ * (`HeldControls`), standing in the reply with no card around them, as the
+ * answer left them, which say how it was answered. An `answer` of no fields
+ * draws no card, its reply's words being the answer and the agent's message
+ * saying it was answered (`AskBox`).
+ */
+function AnsweredCard({
+  ask,
+  title,
+  answers,
+}: {
+  ask: InboxKnownAsk;
+  /** The item's title, which stands as the one step of a to-do that names none. */
+  title: string;
+  answers: InboxAnswers;
+}): React.JSX.Element | null {
+  if (!hasControls(ask)) return null;
+  return (
+    // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
+    <div className="inbox-ask-answered" data-inbox-answered="">
+      <HeldControls ask={ask} title={title} draft={answeredDraft(ask, answers)} />
+    </div>
+  );
 }
 
 /**
@@ -2021,15 +2041,23 @@ function AnsweredMarker(): React.JSX.Element {
 }
 
 /**
- * What ends an agent's message whose ask was replaced: the same small
- * pill, in the muted ink alone, saying what replaced it, a newer question
- * where a later message of the agent's on the thread asks one and a newer
- * message otherwise, with no card.
+ * What ends an agent's message whose ask was replaced: its controls as it
+ * offered them (`HeldControls`), dimmed, nothing picked and taking nothing,
+ * so what it used to ask still reads in the thread, then the same small
+ * pill as an answered ask's, in the muted ink alone, saying what replaced
+ * it, a newer question where a later message of the agent's on the thread
+ * asks one and a newer message otherwise. An `answer` of words alone, which
+ * has no controls, ends with the pill alone.
  */
-function ReplacedMarker({
+function ReplacedAsk({
+  ask,
+  title,
   message,
   thread,
 }: {
+  ask: InboxKnownAsk;
+  /** The item's title, which stands as the one step of a to-do that names none. */
+  title: string;
   message: InboxMessage;
   thread: readonly InboxMessage[];
 }): React.JSX.Element {
@@ -2037,10 +2065,19 @@ function ReplacedMarker({
   const asked = thread
     .slice(at + 1)
     .some((said) => said.author === INBOX_MESSAGE_AUTHOR.AGENT && said.ask !== undefined);
-  return (
+  const marker = (
     <span className="inbox-ask-settled" data-inbox-settled="replaced">
       {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
     </span>
+  );
+  if (!hasControls(ask)) return marker;
+  return (
+    <div className="inbox-ask-replaced" data-inbox-replaced="">
+      <div className="inbox-ask-replaced-controls" aria-disabled="true">
+        <HeldControls ask={ask} title={title} draft={EMPTY_INBOX_DRAFT} />
+      </div>
+      {marker}
+    </div>
   );
 }
 
@@ -2099,8 +2136,9 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * alone, which draws no card, a small "Answered" marker (`AnsweredMarker`);
  * a card saying
  * "Answered" alone where the thread read no longer carries that reply; for
- * a replaced ask, no card, a small marker saying a newer question, or
- * message, replaced it (`ReplacedMarker`); a withdrawn one's card with
+ * a replaced ask, no card, its controls as it offered them, dimmed, over a
+ * small marker saying a newer question, or message, replaced it
+ * (`ReplacedAsk`); a withdrawn one's card with
  * why, or who closed the item; and an ask this build does not know a card
  * naming a newer Luke.
  */
@@ -2129,7 +2167,9 @@ function AskBox({
     );
   }
   if (ask.status === INBOX_ASK_STATUS.REPLACED) {
-    return <ReplacedMarker message={message} thread={thread} />;
+    return (
+      <ReplacedAsk ask={ask} title={cardTitle(item.title)} message={message} thread={thread} />
+    );
   }
   if (ask.status === INBOX_ASK_STATUS.OPEN) {
     return <AskMarker on={waitingOn} />;
