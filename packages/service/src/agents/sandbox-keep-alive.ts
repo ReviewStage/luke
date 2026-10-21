@@ -11,11 +11,16 @@
  * (`keepAliveExtension`, which `session-sandboxes.ts`'s `keepAliveFor`
  * applies). The rule reads instants alone, so the eve roots' sandbox policy
  * reads it without the service it is applied through.
+ *
+ * A sandbox opened before the timeout was shortened keeps the old one in its
+ * configuration, which Vercel reapplies at every resume, so each resume Luke
+ * asks for, and each keep-alive, lowers it first (`capSandboxTimeout`): the
+ * session a resume opens then lives the timeout too, rather than a day.
  */
 
-import { Duration } from "effect";
+import { Duration, Effect } from "effect";
 import { CODER } from "./coder-host/bounds.js";
-import type { SessionLifetime } from "./vercel-sandbox-api.js";
+import type { ListedSandbox, SessionLifetime, VercelSandboxApi } from "./vercel-sandbox-api.js";
 
 /** The least Vercel extends a session's timeout by, as its REST reference states it. */
 const MIN_EXTENSION_MS = 1_000;
@@ -46,4 +51,27 @@ export function keepAliveExtension(lifetime: SessionLifetime, now: number): numb
   if (wanted < Duration.toMillis(CODER.SANDBOX_KEEP_ALIVE_EVERY)) return undefined;
   const extension = Math.min(wanted, CODER.SANDBOX_MAX_LIFETIME_MS - lifetime.timeoutMs);
   return extension >= MIN_EXTENSION_MS ? extension : undefined;
+}
+
+/**
+ * The sandbox's configured timeout lowered to the timeout where it was opened
+ * with a longer one, so every session Vercel opens for it from now on lives
+ * the timeout; one already within it is left. A lowering Vercel did not
+ * confirm is logged by its status alone, and the caller goes on, since the
+ * next resume or keep-alive tries again.
+ */
+export function capSandboxTimeout(
+  api: Pick<VercelSandboxApi, "updateTimeout">,
+  sandbox: ListedSandbox,
+): Effect.Effect<void> {
+  if (sandbox.timeout === undefined || sandbox.timeout <= CODER.SANDBOX_TIMEOUT_MS) {
+    return Effect.void;
+  }
+  return api
+    .updateTimeout(sandbox.name, CODER.SANDBOX_TIMEOUT_MS)
+    .pipe(
+      Effect.catch((failure) =>
+        Effect.logWarning(`a sandbox's timeout was not lowered: ${failure.message}`),
+      ),
+    );
 }

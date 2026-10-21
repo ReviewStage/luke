@@ -434,7 +434,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         );
         // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
         if (body.archived && Option.isSome(archived)) {
-          yield* Effect.provide(stoppedInBackground([agent]), seams.sessionSandboxes);
+          yield* stoppedInBackground(seams, [agent]);
         }
         return yield* committedAgent(userId, archived);
       }

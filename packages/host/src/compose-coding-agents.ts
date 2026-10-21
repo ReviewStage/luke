@@ -101,6 +101,7 @@ import { followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type InboxTxWaits, inboxTxWaits } from "./inbox-tx-waits.js";
 import { confirmWrite, type LiveClient, openRealtimeClient, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
@@ -110,6 +111,7 @@ import {
   scopeInboxes,
 } from "./scope-inbox-follow.js";
 import {
+  confirmTranscriptWrite,
   followTranscript,
   type TranscriptFollows,
   TranscriptKey,
@@ -272,6 +274,7 @@ export function composeCodingAgents(
       now: dependencies.kernel.now,
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
+    const txWaits = inboxTxWaits();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
         asked(
@@ -282,11 +285,13 @@ export function composeCodingAgents(
       accountId: dependencies.accountId,
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
+      txWaits,
     });
     const accounts = yield* accountInboxes({
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
+      txWaits,
     });
     const chats = yield* FiberMap.make<string>();
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
@@ -296,7 +301,7 @@ export function composeCodingAgents(
       http,
       transcripts,
       followed,
-      { inboxes, followed: inboxFollows },
+      { inboxes, followed: inboxFollows, txWaits },
       chats,
       { accounts, followed: accountFollow },
     );
@@ -307,6 +312,8 @@ export function composeCodingAgents(
 interface ScopeFollows {
   readonly inboxes: ScopeInboxes;
   readonly followed: FiberMap.FiberMap<InboxScopeKey>;
+  /** The followed inboxes' waits, the account's among them, which a mark, an answer, or a close waits on. */
+  readonly txWaits: InboxTxWaits;
 }
 
 /** The account's subscriptions, and the one follow main asked for. */
@@ -322,7 +329,7 @@ function composed(
   transcripts: TranscriptFollows,
   /** The transcripts main follows for its windows, one fiber each. */
   followed: FiberMap.FiberMap<TranscriptKey>,
-  { inboxes, followed: inboxFollows }: ScopeFollows,
+  { inboxes, followed: inboxFollows, txWaits }: ScopeFollows,
   /** Each workspace's chat main follows for its windows, one fiber each. */
   chats: FiberMap.FiberMap<string>,
   /** What waits across the account, and main's one follow of it. */
@@ -334,6 +341,19 @@ function composed(
   /** Each followed chat's wait for a write's transaction, by its workspace, while it is subscribed over Realtime. */
   const chatTxWaits = new Map<string, TxWait>();
   const listed = dependencies.listed ?? (() => Effect.void);
+
+  /**
+   * A member's write on the inbox answered once a followed inbox has its
+   * transaction, so the window's next draw already shows it, as Neon's
+   * guide confirms a write (`inbox-tx-waits.ts`); at once where it changed
+   * nothing, failed, or no inbox is followed over Realtime.
+   */
+  const confirmed = <A extends object>(answer: Effect.Effect<A>): Effect.Effect<A> =>
+    Effect.tap(answer, (written) =>
+      txWaits.confirm(
+        "txid" in written && typeof written.txid === "string" ? written.txid : undefined,
+      ),
+    );
 
   /**
    * The agent as a line handed to its call leaves it, as a message's answer
@@ -607,7 +627,13 @@ function composed(
           return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));
         }
         const answer = yield* asked(client.message(agentId, request));
-        return carried<CodingAgentAgentAnswer>(answer);
+        if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
+        // The send is confirmed once its row reached the transcript a window follows now, and at once where none does.
+        const key = new TranscriptKey({ agentId, callId: undefined });
+        if (yield* FiberMap.has(followed, key)) {
+          yield* confirmTranscriptWrite(transcripts, key, answer.txid);
+        }
+        return carried<CodingAgentAgentAnswer>({ agent: answer.agent });
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHOOSE]: (params) =>
       Effect.gen(function* () {
@@ -877,7 +903,7 @@ function composed(
           params,
           "answering an inbox item names the item, the revision it answers, the answer, and the answer's key",
         );
-        const answer = yield* asked(client.answerInbox(itemId, request));
+        const answer = yield* confirmed(asked(client.answerInbox(itemId, request)));
         return carried<CodingAgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE]: (params) =>
@@ -887,7 +913,7 @@ function composed(
           params,
           "closing an inbox item names the item, the revision it closes, and the close's key",
         );
-        const answer = yield* asked(client.closeInbox(itemId, request));
+        const answer = yield* confirmed(asked(client.closeInbox(itemId, request)));
         return carried<CodingAgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE]: (params) =>
@@ -897,7 +923,7 @@ function composed(
           params,
           "a message on an inbox item names the item, the words or files, and the message's key",
         );
-        const answer = yield* asked(client.messageInbox(itemId, request));
+        const answer = yield* confirmed(asked(client.messageInbox(itemId, request)));
         return carried<CodingAgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE]: (params) =>
@@ -907,8 +933,8 @@ function composed(
           params,
           "marking an inbox item names the item and whether it reads as unread",
         );
-        const answer = yield* asked(
-          unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId),
+        const answer = yield* confirmed(
+          asked(unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId)),
         );
         return carried<CodingAgentInboxReadStateView>(answer);
       }),
@@ -919,7 +945,7 @@ function composed(
           params,
           "marking the inbox read names no more than the workspace it lists",
         );
-        const answer = yield* asked(client.markInboxRead(request));
+        const answer = yield* confirmed(asked(client.markInboxRead(request)));
         return carried<CodingAgentInboxReadAllView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_POST]: (params) =>

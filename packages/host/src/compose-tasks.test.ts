@@ -1475,12 +1475,15 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
 );
 
 it.effect(
-  "a rename that answers its transaction is answered once the followed list carries it",
+  "a rename that answers its transaction is drawn at once and answered once the followed list carries it, holding no other task write meanwhile",
   () =>
     Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const service = fakeService([
+        task(INVITES, "Teammate invitations", "# Invites", 10),
+        task(BILLING, "Billing export", "# Billing", 20),
+      ]);
       service.renameTxid = "7301";
-      const { call, listed, realtime, settled } = yield* subject(service);
+      const { call, listed, realtime, settled, last } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
 
@@ -1490,6 +1493,18 @@ it.effect(
       yield* settled;
       assert.deepEqual(realtime.awaitingTxids(), ["7301"]);
       assert.equal(renaming.pollUnsafe(), undefined, "the rename waits for its transaction");
+      assert.equal(
+        last()?.tasks.find((each) => each.id === INVITES)?.name,
+        "Invitations",
+        "the answer is drawn before the wait, so a newer row the list carries lands over it",
+      );
+
+      service.renameTxid = undefined;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: BILLING, name: "Billing" }),
+        { renamed: true },
+        "another write is not held behind the wait",
+      );
 
       realtime.arrive("7301");
       assert.deepEqual(yield* Fiber.join(renaming), { renamed: true });
@@ -3427,10 +3442,13 @@ it.effect(
       service.boardSaveTxid = undefined;
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
 
-      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once.
+      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once,
+      // while a save queued behind it goes out under the follow standing then, and waits on that one.
       service.boardSaveTxid = "44";
       service.boardSaveHeld = yield* Deferred.make<void>();
       const inFlight = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
+      yield* boardSettled;
+      const queued = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
       yield* boardSettled;
       realtime.fail("board");
       yield* TestClock.adjust(Duration.seconds(15));
@@ -3442,7 +3460,15 @@ it.effect(
       yield* Deferred.succeed(service.boardSaveHeld, undefined);
       service.boardSaveHeld = undefined;
       assert.deepEqual(yield* Fiber.join(inFlight), { saved: true });
-      assert.deepEqual(realtime.awaitingTxids(), []);
+      yield* boardSettled;
+      assert.deepEqual(realtime.awaitingTxids(), ["44"]);
+      assert.equal(
+        queued.pollUnsafe(),
+        undefined,
+        "the queued save waits on the follow it went out under",
+      );
+      realtime.arrive("44");
+      assert.deepEqual(yield* Fiber.join(queued), { saved: true });
 
       // A follow Realtime stopped is polled, which hands out no wait, so a save answers at once.
       delete service.boardSeals[INVITES];

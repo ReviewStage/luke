@@ -28,7 +28,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { confirmWrite, LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
@@ -92,7 +92,12 @@ type LiveState =
 
 /** What a transcript's read is answered from. */
 type Standing =
-  | { readonly kind: "live"; readonly state: SubscriptionRef.SubscriptionRef<LiveState> }
+  | {
+      readonly kind: "live";
+      readonly state: SubscriptionRef.SubscriptionRef<LiveState>;
+      /** The wait for a write's transaction on the subscription standing now; none while it is polled or not yet live. */
+      readonly txWait: () => TxWait | undefined;
+    }
   | { readonly kind: "refused" };
 
 /** A failure as the service answered one. */
@@ -165,6 +170,21 @@ function cursorParts(cursor: string): { readonly seq: number; readonly revision:
   return { seq: Number(seq), revision };
 }
 
+/**
+ * The read as the host follows it: every statement the service sealed but
+ * the count of its messages, which released desktops wake on and this host
+ * needs no longer, since the window's own rows carry the messages.
+ */
+function followedRead(sealed: AgentTranscriptLiveAnswer) {
+  const { messages: _messages, ...queries } = sealed.queries;
+  return { url: sealed.url, queries };
+}
+
+/** A seal's answer as the host follows it: the read without the count of its messages, or the failure as answered. */
+function followedAnswer<Failure extends Failed>(answer: AgentTranscriptLiveAnswer | Failure) {
+  return "failure" in answer ? answer : followedRead(answer);
+}
+
 /** The transcript sealed, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
 function sealedOf(
   seal: (poll: boolean, after?: string) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
@@ -202,17 +222,21 @@ export function transcriptFollows<Key = TranscriptKey>(
         const first = yield* sealedOf(seal);
         if (Option.isNone(first)) return { kind: "refused" } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
+        let txWait: TxWait | undefined;
         /** One seal followed until its subscription stops, which marks the state broken. */
         const follow = (sealed: AgentTranscriptLiveAnswer) =>
           Stream.runForEach(
             liveRows(
               {
                 openLive: dependencies.openLive,
-                reseal: () => seal(false),
-                poll: (after) => seal(true, after),
+                reseal: () => Effect.map(seal(false), followedAnswer),
+                poll: (after) => Effect.map(seal(true, after), followedAnswer),
                 now: dependencies.now,
+                onTxWait: (wait) => {
+                  txWait = wait;
+                },
               },
-              sealed,
+              followedRead(sealed),
             ),
             (read) =>
               Option.match(decode(read), {
@@ -241,7 +265,7 @@ export function transcriptFollows<Key = TranscriptKey>(
             }
           }),
         );
-        return { kind: "live", state } as const;
+        return { kind: "live", state, txWait: () => txWait } as const;
       }),
   });
 }
@@ -400,4 +424,28 @@ export function followTranscript<Key>(
       }
     }),
   );
+}
+
+/**
+ * Confirms a write to a transcript once its transaction has reached the
+ * transcript's live subscription, so the page it moved is told first; at
+ * once where the transcript is not followed, is polled, or the write
+ * answered no transaction.
+ */
+export function confirmTranscriptWrite<Key>(
+  follows: TranscriptFollows<Key>,
+  key: Key,
+  txid: string | undefined,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    if (txid === undefined || !(yield* RcMap.has(follows, key))) return;
+    yield* Effect.scoped(
+      Effect.flatMap(RcMap.get(follows, key), (standing) =>
+        standing.kind === "live" ? confirmWrite(standing.txWait(), txid) : Effect.void,
+      ),
+    ).pipe(
+      // A follow the service never sealed shows nothing to wait for.
+      Effect.catchTag("SealUnanswered", () => Effect.void),
+    );
+  });
 }

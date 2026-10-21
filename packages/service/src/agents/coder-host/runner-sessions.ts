@@ -93,6 +93,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   credentialPolicy,
   OPEN_INTERNET_POLICY,
@@ -702,15 +703,28 @@ export const runnerSessions = <
             return accepted;
           }
           // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
+          // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+          yield* capSandboxTimeout(api, found.value);
           const resumed = yield* Effect.result(api.resume(found.value.name));
           if (Result.isFailure(resumed)) {
             if (resumed.failure.status !== SNAPSHOT_GONE_STATUS) return yield* resumed.failure;
             // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
-            // it is deleted and the session goes on in a fresh one, a clean checkout of the repository
-            // with the session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
-            // gone). The harness's own session files went with the old filesystem, so none is resumed.
-            yield* api.deleteSandbox(found.value.name);
+            // the session goes on in a fresh one, a clean checkout of the repository under the
+            // session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
+            // gone). The harness's own session files went with the old filesystem, so none is
+            // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
+            // that fails (the image still preparing, a clone refused) leaves the session standing
+            // for the next message to try again rather than retired.
             yield* openedSandbox(agent, sessionId, sent);
+            yield* api
+              .deleteSandbox(found.value.name)
+              .pipe(
+                Effect.catch((failure) =>
+                  Effect.logWarning(
+                    `An expired ${harness.name} sandbox was not deleted: ${failure.message}`,
+                  ),
+                ),
+              );
             return accepted;
           }
           const running = resumed.success.currentSessionId;

@@ -3106,6 +3106,23 @@ ul.actor-stack {
 .inbox-search {
   min-width: 0;
   flex: 1;
+  animation:
+    inbox-search-unfold var(--duration-pane) var(--motion-pane),
+    popup-fade var(--duration-quick) var(--motion-pane);
+}
+
+/* Opening, the field unfolds leftward from where the magnifier stood at its
+   end, over the name it takes the place of: revealed rather than stretched,
+   so its words never squash. It is uncovered a little past its edge, so the
+   focus ring the caret brings is never clipped on the way. Reduced motion
+   zeroes the durations (`base.css`), so it then simply stands. */
+@keyframes inbox-search-unfold {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(calc(-1 * var(--luke-space-4)));
+  }
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle
@@ -5207,10 +5224,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* A place's glyph (#, @, a document) stands at the size an actor's row
-   mark does beside it, as a menu's glyph does. */
+   mark does beside it, as a menu's glyph does, in the muted ink. A task's
+   status mark keeps the colour its status gives it. */
 .chat-rail .inbox-row-mark > svg {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
+}
+
+.chat-rail .inbox-row-mark > svg:not(.luke-task-status-mark) {
   color: var(--luke-color-text-muted);
 }
 
@@ -5261,7 +5282,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: auto;
 }
 
-/* The stream's body, inside the `ScrollArea` that scrolls it. */
+/* The stream's body, the block a log's lines stand in (`ConversationContent`). */
 .chat-stream-body {
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5276,7 +5297,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A message is laid out as Slack's is: its author's face in a column of its
    own at a card's 32px, a rounded square for everyone, then their name in
-   bold and the clock time in the caption's muted ink on one line, and the
+   bold and how long ago in the caption's muted ink on one line, and the
    words under it. Rows sit tight and light up while hovered. */
 .chat-message,
 .chat-reply {
@@ -5308,10 +5329,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .chat-face {
   display: flex;
   padding-top: var(--luke-space-2);
-}
-
-.chat-face :is(.actor-mark, .luke-avatar) {
-  border-radius: 22%;
 }
 
 /* A continued message's time stands in its face's column, shown only while
@@ -5388,16 +5405,28 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .chat-byline-action {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
   margin-left: auto;
   opacity: 0;
+}
+
+/* The presses show as their row does, so a message's Copy stands with its
+   Reply rather than waiting on a transcript's hover of its own. */
+.chat-byline-action > .message-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .chat-byline-action:focus-within {
   opacity: 1;
 }
 
+/* Note that a root's own byline is reached by children alone, so hovering a
+   reply in its open thread shows that reply's presses and not the root's. */
 @media (hover: hover) {
-  .chat-message:hover .chat-byline-action {
+  :is(.chat-message, .chat-reply):hover > .chat-message-body > .chat-byline > .chat-byline-action {
     opacity: 1;
   }
 }
@@ -5412,6 +5441,26 @@ polygon.factory-campus-edge[data-edge="selected"] {
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-reading-leading);
+}
+
+/* The line before the first message posted since the reader last read the
+   channel, as Slack's "New" line is: a rule in the unread dot's accent with
+   its word at its end, kept a step below the log's top when it opens there. */
+.chat-unread-line {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin-block: var(--luke-space-8);
+  color: var(--luke-color-accent-text);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-bold);
+  scroll-margin-top: var(--luke-space-16);
+}
+
+.chat-unread-line::before {
+  flex: 1;
+  border-top: 1px solid var(--luke-color-accent);
+  content: "";
 }
 
 /* An ask draws as a card in its row (`Card`), a step under the byline. */
@@ -5467,9 +5516,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
    shared composer card (`PromptInput`) around the box, its foot saying what
    the box takes with the round send at its end. */
 .chat-composer {
-  position: relative;
   width: calc(100% - 2 * var(--column-inset));
   margin: var(--luke-space-12) auto var(--luke-space-16);
+  padding: 0;
 }
 
 /* Where no box is offered (an archived channel, or a direct message
@@ -5501,23 +5550,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
   outline: none; /* no ring: the caret marks the field */
 }
 
+/* A thread's box stands a line high, its field and its placeholder at
+   the plain field's compact insets, as a plan comment's field does
+   (`.comment-field .agent-composer-input`). */
 .chat-composer[data-compact="true"] .chat-composer-field {
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
-.chat-composer-note {
-  margin: var(--luke-space-6) 0 0;
+.chat-composer[data-compact="true"] .agent-composer-field {
+  --agent-composer-field-block: calc(var(--luke-space-8) + var(--luke-space-4));
 }
 
-/* The pictures a post will carry, as chips over the box's words at the
-   agent composer's inset (`.agent-composer .attached-files`); and files
-   dragged over the box brighten the card's edge, as the agent box's do. */
-.chat-composer .attached-files {
-  padding: var(--luke-space-12) var(--luke-space-12) 0;
+.chat-composer[data-compact="true"] .agent-composer-input {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
-.chat-composer[data-dropping] form {
-  border-color: var(--luke-color-border-selected);
+.chat-composer[data-compact="true"] .agent-composer-placeholder {
+  padding: var(--luke-space-8) var(--luke-space-12) 0;
 }
 
 /* A picture a message carries (`chat-pane.tsx`'s ChatPicture): a plan's
@@ -6602,7 +6651,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
 .side-panel-content .draft-fork-dock,
-.side-panel-content .agent-composer {
+.side-panel-content .agent-composer:not(.chat-composer) {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
 

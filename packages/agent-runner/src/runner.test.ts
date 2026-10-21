@@ -1,10 +1,10 @@
 /**
- * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake Luke: the config line in, messages in, Stop, every event out in order through failed posts, and the launch's end where the agent's turn ends.
+ * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake Luke: the config line in, messages in, Stop, every event out in order through failed posts, a heartbeat while the CLI says nothing, and the launch's end where the agent's turn ends.
  */
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Cause, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
@@ -16,6 +16,7 @@ import {
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
+  RUNNER_HEARTBEAT,
   type RunnerConfig,
   type RunnerEvent,
 } from "./protocol.js";
@@ -195,7 +196,13 @@ it.effect(
       });
       yield* Queue.take(prompted);
       yield* Queue.take(prompted);
-      yield* write({ type: INPUT_LINE.MODEL, model: "claude-opus", effort: EFFORT.LOW });
+      yield* write({
+        type: INPUT_LINE.MODEL,
+        model: "claude-opus",
+        effort: EFFORT.LOW,
+        fast: true,
+      });
+      yield* write({ type: INPUT_LINE.MODEL, fast: false });
       yield* write({ type: INPUT_LINE.STOP });
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
@@ -206,6 +213,7 @@ it.effect(
       );
       assert.deepEqual(cli.models, ["claude-opus"]);
       assert.deepEqual(cli.efforts, [EFFORT.LOW]);
+      assert.deepEqual(cli.fastModes, [true, false]);
       assert.deepEqual(kinds(luke.applied).slice(-2), [
         "result/error_during_execution",
         RUNNER_EVENT.END,
@@ -260,6 +268,38 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
       RUNNER_EVENT.END,
     ]);
   }),
+);
+
+it.effect(
+  "posts a heartbeat with no events every interval while the harness says nothing, and none once the launch ended",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke([], "Working on the first message.");
+      const { prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
+      const heartbeats = () =>
+        luke.bodies.filter((body) => JSON.parse(body).events.length === 0).length;
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+      const beforeAny = heartbeats();
+      // Each interval is let run out, and its heartbeat land, before the next begins.
+      for (const beat of [1, 2]) {
+        yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS));
+        for (let step = 0; step < 500 && heartbeats() < beat; step += 1) yield* Effect.yieldNow;
+      }
+      const whileSilent = heartbeats();
+      yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
+      yield* Queue.take(prompted);
+      yield* Queue.take(prompted);
+      yield* release;
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      yield* TestClock.adjust(Duration.millis(2 * RUNNER_HEARTBEAT.EVERY_MS));
+
+      assert.equal(beforeAny, 0);
+      assert.equal(whileSilent, 2);
+      assert.equal(heartbeats(), 2, "a launch that ended posts no heartbeat");
+      assert.ok(luke.bearers.every((header) => header === `Bearer ${BEARER}`));
+    }),
 );
 
 it.effect("interrupts a turn a wakeup started when Luke stops it", () =>
@@ -505,6 +545,24 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+    }),
+);
+
+it.effect(
+  "starts the CLI with its own fast mode opted in where the config asks for it, and off otherwise",
+  () =>
+    Effect.gen(function* () {
+      const fast = yield* launch(SHORT_TURN, fakeLuke());
+      yield* fast.write({ ...CONFIG, fast: true });
+      yield* fast.write(FIRST_MESSAGE);
+      yield* Fiber.join(fast.run);
+      assert.deepEqual(fast.cli.options?.settings, { fastMode: true });
+
+      const standard = yield* launch(SHORT_TURN, fakeLuke());
+      yield* standard.write(CONFIG);
+      yield* standard.write(FIRST_MESSAGE);
+      yield* Fiber.join(standard.run);
+      assert.equal(standard.cli.options?.settings, undefined);
     }),
 );
 

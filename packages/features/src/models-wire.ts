@@ -82,6 +82,12 @@ export const catalogModelSchema = EffectSchema.Struct({
    * does not know reads a key it does not know as nothing at all.
    */
   fastNotEnabled: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * Whether this model's fast version is withheld because the plan that pays
+   * for the account's agents on it runs no fast mode (the ChatGPT plan, on
+   * Codex), so no Fast is drawn for it; absent otherwise.
+   */
+  fastWithheldByPlan: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CatalogModel = typeof catalogModelSchema.Type;

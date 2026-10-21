@@ -11,10 +11,11 @@
  * row is gone, refused, unreadable, or at a limit whose named reset is
  * still ahead, so the agent waits on its plan and never turns to another
  * payer; and every message to a running runner
- * goes behind a `model` line with the agent's model and effort as they
- * stand. The CLI's own session id is the conversation's `native_session`,
- * which the events route records from the runner's `init`, and a relaunch
- * resumes.
+ * goes behind a `model` line with the agent's model, effort, and fast mode
+ * as they stand: a fast version runs its base model with Claude Code's own
+ * fast mode on, which Anthropic bills to the account's usage credits. The
+ * CLI's own session id is the conversation's `native_session`, which the
+ * events route records from the runner's `init`, and a relaunch resumes.
  */
 
 import {
@@ -162,6 +163,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         executable: CLAUDE_EXECUTABLE,
         model: model.modelId,
         ...(effort === undefined ? undefined : { effort }),
+        ...(model.fast ? { fast: true } : undefined),
         append: yield* options.instructions(agent),
         ...(resume === undefined ? undefined : { resume }),
         firstSequence,
@@ -172,7 +174,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
       return written;
     });
 
-  // The agent's model and effort as they stand go ahead of every message, which a change since the launch takes effect from.
+  // The agent's model, effort, and fast mode as they stand go ahead of every message, which a change since the launch takes effect from.
   // Note that the plan is asked first, so a message to a live runner on a refused or limited plan is refused as a launch would be.
   const ahead = (agent: CodingAgent) => {
     const effort = effortOf(agent.effort);
@@ -182,7 +184,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
       lines: [
         {
           type: INPUT_LINE.MODEL,
-          ...(model === undefined ? undefined : { model: model.modelId }),
+          ...(model === undefined ? undefined : { model: model.modelId, fast: model.fast }),
           ...(effort === undefined ? undefined : { effort }),
         },
       ],

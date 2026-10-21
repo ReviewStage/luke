@@ -11,7 +11,10 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -31,10 +34,12 @@ import {
   stagedAnswer,
   stagedChannel,
   stagedPost,
+  stagedRead,
 } from "../tasks/chat-fixture.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
-import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -71,9 +76,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  // A box's words left unsent wait as its draft, which the next test's box must not find.
+  window.localStorage.clear();
 });
 
 /** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them, its pictures read as the test answers them. */
@@ -83,6 +92,7 @@ function mount(
   readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer> = () =>
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
   opened: ReadLink[] | undefined = undefined,
+  control: Partial<TasksControl> = {},
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -100,6 +110,7 @@ function mount(
       accountName: "Dean Stratakos",
       tasks: tasksControl({
         workspace,
+        ...control,
         chatView: {
           open: true,
           available: true,
@@ -116,6 +127,7 @@ function mount(
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
           onChannel: (change) => stage((held) => stagedChannel(held, change)),
+          onRead: (channelIds) => void stage((held) => stagedRead(held, channelIds)),
           readPicture,
         },
       }),
@@ -140,19 +152,21 @@ function mount(
 function rail(page: HTMLElement): string[] {
   const nav = page.querySelector(".chat-rail");
   assert.ok(nav, "the rail is drawn");
-  return [...nav.querySelectorAll(".sidebar-repository-header button, li .luke-list-row-main")].map(
-    (node) => {
-      if (node.closest(".sidebar-repository-header") !== null) return `# ${headName(node)}`;
-      const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
-      // For you says under its name how many wait on the reader, which it is read by.
-      const waiting = /^(\d+) waits? on you$/u.exec(
-        node.querySelector(".luke-list-row-description")?.textContent ?? "",
-      )?.[1];
-      if (waiting !== undefined) return `${shown}${railName(node)} (${waiting})`;
-      const unread = node.closest("li")?.querySelector(".inbox-row-unread") ? " •" : "";
-      return `${shown}${railName(node)}${unread}`;
-    },
-  );
+  return [
+    ...nav.querySelectorAll(
+      ".sidebar-repository-header button:not(.sidebar-repository-actions *), li .luke-list-row-main",
+    ),
+  ].map((node) => {
+    if (node.closest(".sidebar-repository-header") !== null) return `# ${headName(node)}`;
+    const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
+    // For you says under its name how many wait on the reader, which it is read by.
+    const waiting = /^(\d+) waits? on you$/u.exec(
+      node.querySelector(".luke-list-row-description")?.textContent ?? "",
+    )?.[1];
+    if (waiting !== undefined) return `${shown}${railName(node)} (${waiting})`;
+    const unread = node.closest("li")?.querySelector(".inbox-row-unread") ? " •" : "";
+    return `${shown}${railName(node)}${unread}`;
+  });
 }
 
 /** The pane's messages as a reader hears them: each author and where it was posted, then its replies where the thread is open. */
@@ -236,6 +250,133 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Invite emails",
     "  ↳ Add teammate invitations",
     "  ↳ Invite emails",
+  ]);
+});
+
+/**
+ * Lays out every log the window draws as a box 100 tall over 1000 of
+ * lines, since jsdom lays nothing out, its scroll position kept as written,
+ * and the "New" line standing `lineTop` from the box's top.
+ */
+function layOutLogs(lineTop = 0): void {
+  const tops = new WeakMap<Element, number>();
+  const log = (element: Element) => element.getAttribute("role") === "log";
+  vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(function (this: Element) {
+    return log(this) ? 1000 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    return log(this) ? 100 : 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
+    return tops.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "set").mockImplementation(function (
+    this: Element,
+    top: number,
+  ) {
+    tops.set(this, top);
+  });
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const top = this.classList.contains("chat-unread-line") ? lineTop : 0;
+    return DOMRect.fromRect({ x: 0, y: top, width: 0, height: 0 });
+  });
+}
+
+/** The shown place's log: the box its messages scroll in. */
+function shownLog(page: HTMLElement): HTMLElement {
+  const log = page.querySelector<HTMLElement>('.chat-stream [role="log"]');
+  assert.ok(log, "the place's messages stand in a log");
+  return log;
+}
+
+/** The way back to the newest message, where it floats over the log. */
+function toNewest(page: HTMLElement): HTMLButtonElement | null {
+  return page.querySelector('button[aria-label="Scroll to the newest line"]');
+}
+
+/** The shown channel's roots in order, by seq, and its "New" line where it stands. */
+function roots(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".chat-messages > li")].map((node) =>
+    node.classList.contains("chat-unread-line")
+      ? (node.textContent ?? "")
+      : (node.getAttribute("data-seq") ?? ""),
+  );
+}
+
+test("a channel opens as a log at its newest message, a New line before the first message someone posted since the developer read it, and the way back floats once they scroll up", () => {
+  layOutLogs();
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const log = shownLog(page);
+  assert.equal(log.scrollTop, 1000);
+  // The developer read up to 46, so the line stands between it and 47, and once alone.
+  const shown = roots(page);
+  assert.deepEqual(shown.slice(shown.indexOf("New") - 1, shown.indexOf("New") + 2), [
+    "46",
+    "New",
+    "47",
+  ]);
+  assert.equal(shown.filter((each) => each === "New").length, 1);
+  // The first unread message heads a run of its own, named and faced, though its author spoke last.
+  assert.equal(
+    page.querySelector('.chat-message[data-seq="47"]')?.getAttribute("data-continued"),
+    "false",
+  );
+  assert.equal(toNewest(page), null);
+  log.scrollTop = 400;
+  act(() => {
+    log.dispatchEvent(new Event("scroll"));
+  });
+  assert.ok(toNewest(page), "scrolled up, the way back to the newest message floats");
+  act(() => toNewest(page)?.click());
+  assert.equal(log.scrollTop, 1000);
+  assert.equal(toNewest(page), null);
+  act(() => railRow(page, "general").click());
+  assert.equal(page.querySelector(".chat-unread-line"), null);
+});
+
+test("a channel whose unread run is taller than the box opens with its New line at the top, let go of the newest message", () => {
+  layOutLogs(-600);
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(shownLog(page).scrollTop, 400);
+  assert.ok(toNewest(page), "opened above the newest message, the way back floats");
+});
+
+test("For you is a log too, opened at its newest entry", () => {
+  layOutLogs();
+  const page = mount();
+  assert.equal(shownLog(page).scrollTop, 1000);
+});
+
+test("a message says how long ago it was posted, as every row and thread in the window does, a continued one too", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AT);
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const time = (seq: number) =>
+    page.querySelector(`.chat-message[data-seq="${seq}"] time.chat-time`)?.textContent;
+  assert.equal(time(47), "16m");
+  assert.equal(time(51), "3m");
+});
+
+test("a message's Copy takes its words as Markdown, beside the Reply its byline offers", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const actions = page.querySelector('.chat-message[data-seq="51"] .chat-byline-action');
+  assert.deepEqual(
+    [...(actions?.querySelectorAll("button") ?? [])].map(
+      (button) => button.getAttribute("aria-label") ?? button.textContent,
+    ),
+    ["Copy", "Reply"],
+  );
+  act(() => actions?.querySelector<HTMLButtonElement>('button[aria-label="Copy"]')?.click());
+  await settle();
+  assert.deepEqual(copied, [
+    "Two invites to one address in one workspace would otherwise both go pending. It's one " +
+      "migration, online, and nothing writes the pair twice today.",
   ]);
 });
 
@@ -527,35 +668,6 @@ test("until the chat is read, its wait stands centred in the window's Chat and i
   assert.ok(tabWait.closest(".luke-spinner-region"), "the wait fills the plan's Chat tab");
 });
 
-test("a post still out names the composer's send Sending and busy, and the box empties once it is taken", async () => {
-  const gate = Promise.withResolvers<string | undefined>();
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(ChatComposer, {
-          label: "Message #general",
-          targets: [],
-          keywords: [],
-          onSend: () => gate.promise,
-        }),
-      ),
-    ),
-  );
-  const box = boxNamed(container, "Message #general");
-  typeInComposer(box, "Shipping today.");
-  pressInComposer(box, "Enter");
-  const sending = container.querySelector<HTMLButtonElement>('button[aria-label="Sending"]');
-  assert.equal(sending?.getAttribute("aria-busy"), "true");
-  act(() => gate.resolve(undefined));
-  await settle();
-  assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
-  assert.equal(boxWords(box), "");
-});
-
 test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
   const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
   const page = mount((chat) => {
@@ -654,6 +766,7 @@ async function plainChat() {
         onSideBundles(
           bundles,
           createElement(ChatComposer, {
+            channelId: "general",
             label: "Message #general",
             targets: [
               {
@@ -1150,4 +1263,206 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
   assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
   assert.match(count?.textContent ?? "", /^1 unread/u);
+});
+
+test("the rail's rows draw in the sidebar's ink, and a message's face is the app's own mark, never tiled", () => {
+  const page = mount((chat) => chat);
+  const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];
+  assert.ok(rows.length > 0, "the rail holds rows");
+  assert.deepEqual(
+    [...new Set(rows.map((each) => each.getAttribute("data-ink")))],
+    ["sidebar"],
+    "every rail row wears the sidebar's ink",
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const faces = [...page.querySelectorAll(".chat-face .actor-mark")];
+  assert.ok(faces.length > 0, "messages lead with faces");
+  assert.deepEqual(
+    faces.filter((each) => each.getAttribute("data-tiled") === "true"),
+    [],
+    "no face stands on a tile outside a pile",
+  );
+});
+
+/** The fixture's task channel by its name, with the plan it is of. */
+function planOf(name: string): string {
+  const staged = fixtureChat({ fixtureMode: true }, AT);
+  const planId = staged?.answer.channels.find((channel) => channel.name === name)?.planId;
+  assert.ok(planId, `the fixture holds #${name}`);
+  return planId;
+}
+
+/** The fixture's two tasks as the sidebar lists them: invitations pinned with an agent at work, billing in a section of its own wearing an emoji. */
+function railTasks(): Partial<TasksControl> {
+  const invitations: TaskSummary = {
+    id: planOf("teammate-invitations"),
+    workspaceId: ACME.id,
+    name: "Teammate invitations",
+    repository: "acme/relay",
+    createdAt: 1,
+    updatedAt: 2,
+    pinnedAt: 3,
+    agents: {
+      total: 1,
+      working: 1,
+      agents: [
+        {
+          id: "5b0e7a52-0c3a-4c1e-9d5e-0a0b0c0d0e01",
+          title: "Wire the invites",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.RUNNING,
+        },
+      ],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  const billing: TaskSummary = {
+    id: planOf("billing-export"),
+    workspaceId: ACME.id,
+    name: "Billing export",
+    repository: "acme/relay",
+    createdAt: 1,
+    updatedAt: 2,
+  };
+  const section = "6c1f8b63-1d4b-4d2f-8e6f-1b2c3d4e5f02";
+  return {
+    tasks: [invitations, billing],
+    taskSections: {
+      sections: [
+        {
+          id: section,
+          workspaceId: ACME.id,
+          title: "Launch",
+          icon: { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🚀" },
+          createdAt: 1,
+        },
+      ],
+      entries: [{ taskId: billing.id, sectionId: section, addedAt: 1 }],
+    },
+  };
+}
+
+/** The rail mounted in Acme over the fixture's tasks, its members read as no one. */
+function mountRail(): HTMLElement {
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+  });
+  return mount(undefined, ACME, undefined, undefined, railTasks());
+}
+
+/** A group's header in the rail, by its name. */
+function railHead(page: HTMLElement, name: string): HTMLElement {
+  const head = [
+    ...page.querySelectorAll<HTMLElement>(".chat-rail .sidebar-repository-header"),
+  ].find((each) => {
+    const fold = each.querySelector("button:not(.sidebar-repository-actions *)");
+    return fold !== null && headName(fold) === name;
+  });
+  assert.ok(head, `the rail heads ${name}`);
+  return head;
+}
+
+/** The items of the menu opened last, a menu closed before it perhaps still on its way out. */
+function menuItems(): HTMLButtonElement[] {
+  const menu = [...document.querySelectorAll('[role="menu"]')].at(-1);
+  return [...(menu?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+}
+
+/** What a right-click on an element offers. */
+function rightClick(target: Element): HTMLButtonElement[] {
+  act(() => {
+    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }));
+  });
+  return menuItems();
+}
+
+function menuItem(items: readonly HTMLButtonElement[], label: string): HTMLButtonElement {
+  return items.find((each) => each.textContent === label) ?? assert.fail(`offers ${label}`);
+}
+
+/** The card hung once the pointer rests on a row. */
+function restOn(row: HTMLElement): Element | null {
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  return document.querySelector(".luke-tooltip-card");
+}
+
+test("the rail heads the tasks' channels as the sidebar heads their tasks, Pinned and Tasks with no glyph and a section with its own icon, and a task's row ends in its task's mark", () => {
+  const page = mountRail();
+  assert.deepEqual(
+    rail(page).filter((line) => line.startsWith("# ")),
+    ["# Channels", "# Pinned", "# Launch", "# Direct messages"],
+  );
+  assert.equal(railHead(page, "Pinned").querySelector(".luke-nav-item-icon"), null);
+  assert.equal(
+    railHead(page, "Launch").querySelector(".luke-nav-item-icon")?.textContent,
+    "🚀",
+    "a section wears its own emoji",
+  );
+  const invitations = railRow(page, "teammate-invitations").closest("li");
+  assert.ok(
+    invitations?.querySelector(".home-row-meta .state-glyph"),
+    "an agent at work on the task turns at the row's end",
+  );
+  assert.equal(
+    railRow(page, "billing-export").closest("li")?.querySelector(".home-row-meta .state-glyph"),
+    null,
+    "a task with nothing at work wears no mark",
+  );
+});
+
+test("rested on, a task's row hangs its task's card, an agent's direct message its tab's card, a person's their card, and a channel's its name alone", () => {
+  const page = mountRail();
+  assert.ok(restOn(railRow(page, "teammate-invitations"))?.querySelector("[data-task-card]"));
+  assert.ok(restOn(railRow(page, "Invite emails"))?.querySelector("[data-tab-card]"));
+  assert.ok(restOn(railRow(page, "Maria Chen"))?.querySelector('[data-actor-card="person"]'));
+  const general = restOn(railRow(page, "general"));
+  assert.equal(general, null, "a channel hangs no card");
+});
+
+test("a row's right-click offers Mark as read while something waits unread in it, and Copy link; a topic's edits and archives it too; Mark as read takes its dot away", () => {
+  const page = mountRail();
+  const topic = rightClick(railRow(page, "members-schema")).map((each) => each.textContent);
+  assert.deepEqual(topic, ["Copy link", "Edit channel", "Archive channel"]);
+  const offered = rightClick(railRow(page, "teammate-invitations"));
+  assert.deepEqual(
+    offered.map((each) => each.textContent),
+    ["Mark as read", "Copy link"],
+  );
+  act(() => menuItem(offered, "Mark as read").click());
+  assert.ok(rail(page).includes("teammate-invitations"), "the row is read, its dot gone");
+});
+
+test("an unread row's hover Mark as read marks it read, and a row with nothing unread offers none", () => {
+  const page = mountRail();
+  assert.equal(
+    railRow(page, "general").closest("li")?.querySelector('button[aria-label="Mark as read"]'),
+    null,
+  );
+  const invitations = railRow(page, "teammate-invitations").closest("li");
+  const mark = invitations?.querySelector<HTMLButtonElement>('button[aria-label="Mark as read"]');
+  assert.ok(mark, "an unread row offers Mark as read on hover");
+  act(() => mark.click());
+  assert.ok(rail(page).includes("teammate-invitations"), "the row is read, its dot gone");
+});
+
+test("a group's ⋯ and a right-click on its header offer Mark all as read, which reads every place in it, and which stands dimmed where nothing waits", () => {
+  const page = mountRail();
+  const launch = rightClick(railHead(page, "Launch"));
+  assert.equal(menuItem(launch, "Mark all as read").disabled, true);
+  const ellipsis = railHead(page, "Pinned").querySelector<HTMLButtonElement>(
+    'button[aria-label="Actions for Pinned"]',
+  );
+  assert.ok(ellipsis, "the group's header offers its actions");
+  act(() => ellipsis.click());
+  act(() => menuItem(menuItems(), "Mark all as read").click());
+  assert.deepEqual(
+    rail(page).filter((line) => line.endsWith(" •")),
+    [],
+    "nothing in the group waits unread",
+  );
 });

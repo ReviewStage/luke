@@ -39,7 +39,6 @@ import {
   CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
-  type CodingAgentPayer,
   type CodingAgentStartFrom,
   type CodingAgentStartRequest,
   type CodingAgentSummary,
@@ -92,8 +91,11 @@ import {
 import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { anthropicFastAccess } from "./account-keys.js";
-import { type AgentRuntimeChoice, agentRuntimeChoice } from "./agent-runtime-choice.js";
+import {
+  type AgentRuntimeChoice,
+  accountFastOffer,
+  agentRuntimeChoice,
+} from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import {
@@ -390,8 +392,6 @@ export type StartAsk = StartPlace & {
   readonly serverWords?: string | undefined;
   /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
   readonly branch?: string | undefined;
-  /** Who Start picked to pay for this one agent; none for the account's default (`agentRuntimeChoice`). */
-  readonly payer?: CodingAgentPayer | undefined;
   /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
 };
@@ -426,7 +426,7 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<AccountModelChoices, HostedRefusal, DatabaseServices | ModelCatalog> {
   const stored = (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent;
-  const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(userId));
+  const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(userId));
   const catalog = yield* ModelCatalog;
   const read = yield* catalog.read.pipe(
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
@@ -436,7 +436,7 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
   );
   return {
-    offered: offeredToAccount(read, fastAccess),
+    offered: offeredToAccount(read, fastOffer),
     defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE,
   };
 });
@@ -837,8 +837,8 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
  * whatever the account's routing would choose: a call reaches eve alone
  * (`voice/opening.ts` refuses an agent on any other runtime). Every
  * other Start is decided by the account's routing (`agentRuntimeChoice`),
- * with its payer, after the blank case: the payer the ask picked where it
- * picked one, the account's default otherwise, a continue and a fork alike.
+ * with its payer, after the blank case: the credential Settings chose, a
+ * continue and a fork alike.
  */
 function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
   if (ask.blank === true || ask.call === true) {
@@ -847,7 +847,7 @@ function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
       payer: undefined,
     });
   }
-  return agentRuntimeChoice(userId, model, ask.payer);
+  return agentRuntimeChoice(userId, model);
 }
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
@@ -1118,7 +1118,6 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     note: note === "" ? undefined : note,
     blank: request.blank,
     call: request.call,
-    payer: request.payer,
     summaryModel,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };

@@ -8,6 +8,7 @@
  */
 
 import { Effect, Layer, Queue } from "effect";
+import type { SandboxStopReach } from "../agents/session-sandboxes.js";
 import { SessionSandboxes } from "../agents/session-sandboxes.js";
 import type { SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 
@@ -26,3 +27,7 @@ export function scriptedSessionSandboxes(
     return { layer, stops };
   });
 }
+
+/** What keeps the function awake for an archive's stop in a test, which has no request to outlive: the stop forked detached. */
+export const keepAwakeDetached: SandboxStopReach["keepAwake"] = (work) =>
+  Effect.asVoid(Effect.forkDetach(work));

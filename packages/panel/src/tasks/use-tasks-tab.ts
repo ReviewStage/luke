@@ -467,6 +467,8 @@ interface ChatViewControl {
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
+  /** Marks channels read to the newest message each holds, as a rail row's or group's Mark as read asks. */
+  readonly onRead: (channelIds: readonly string[]) => void;
   /** Reads one picture a message carries, by the message and the attachment its block names; a fixture run's are not there to read. */
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
@@ -3274,6 +3276,10 @@ export function useTasksTab(input: {
         liveRun
           ? liveChat.onChannel(change)
           : stage((held, staging) => staging.stagedChannel(held, change)),
+      onRead: (channelIds) =>
+        liveRun
+          ? liveChat.onRead(channelIds)
+          : void stage((held, staging) => staging.stagedRead(held, channelIds)),
       readPicture: liveChat.readPicture,
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.

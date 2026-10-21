@@ -4,27 +4,24 @@
  * An agent runs on a native harness when, and only when, that provider's
  * plan pays for it. The plan is offered to every account that connected it:
  *
- * - Claude Code, paid for by the account's Claude plan, on a Claude model
- *   Claude Code runs (no fast variant), where the account keeps a Claude
- *   setup-token and this
- *   function reaches a harness (`NativeAgentSessions`: a web function's own,
- *   or the eve app's relay to one, so a Start from an eve agent decides as
- *   the panel's does).
+ * - Claude Code, paid for by the account's Claude plan, on any Claude model,
+ *   a fast version running with Claude Code's own fast mode on, where the
+ *   account keeps a Claude setup-token and this function reaches a harness
+ *   (`NativeAgentSessions`: a web function's own, or the eve app's relay to
+ *   one, so a Start from an eve agent decides as the panel's does).
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
- *   GPT model (no fast variant), where the account keeps a ChatGPT sign-in
- *   (`chatgpt_oauth`) that OpenAI has not signed out and the deployment can
- *   still open.
+ *   GPT model; Codex has no fast mode, so an account whose ChatGPT plan pays
+ *   is offered no GPT fast version (`accountFastOffer`), where the account
+ *   keeps a ChatGPT sign-in (`chatgpt_oauth`)
+ *   that OpenAI has not signed out and the deployment can still open.
  *
- * Where a plan is offered, the payer is the one Start picked for this
- * agent, else the account's default: the plan where its row's "Use my
- * Claude plan" or "Use my ChatGPT plan for coding agents" is on, eve's
- * payer where it is off. eve's payer is the account's own API key for the
+ * Where a plan is offered, Settings' choice for that harness decides: the
+ * plan where its row's `forAgents` is on (Subscription), eve's payer where
+ * it is off (API key). eve's payer is the account's own API key for the
  * model's provider where it saved one, and Luke's key where it did not,
- * since that is the key eve's steps run on (`account-keys.ts`), so a pick of
- * either names eve and the payer recorded is the one eve bills. A pick of
- * the other provider's plan is no pick of this one's. Where no plan is
- * offered, as for an account that connected none, the agent runs on eve
- * exactly as before, with no payer recorded, whatever was picked.
+ * since that is the key eve's steps run on (`account-keys.ts`). Where no
+ * plan is offered, as for an account that connected none, the agent runs on
+ * eve exactly as before, with no payer recorded.
  *
  * The choice is written on the agent as it is made and never changes: a
  * plan that later runs out or is disconnected pauses the agent, and never
@@ -45,7 +42,12 @@ import {
 import { Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
-import { providerModelOf } from "../../providers/model-catalog.js";
+import {
+  type AccountFastOffer,
+  type ModelCatalog,
+  providerModelOf,
+} from "../../providers/model-catalog.js";
+import { anthropicFastAccess } from "./account-keys.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
 /** What a new agent runs on, and who pays for it; no payer for an agent on eve outside a plan's offer, as before payers were recorded. */
@@ -121,20 +123,33 @@ const evePayer = Effect.fnUntraced(function* (
   };
 });
 
-/** The runtime and payer of a new agent of the account's on the model given, the payer Start picked honoured where a plan is offered, as above. */
+/** The runtime and payer of a new agent of the account's on the model given, by Settings' choice where a plan is offered, as above. */
 export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   model: string,
-  picked?: CodingAgentPayer,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure, DatabaseServices> {
   const provider = providerModelOf(model);
-  if (provider === undefined || provider.fast) return ON_EVE;
+  if (provider === undefined) return ON_EVE;
   if (Option.isNone(yield* Effect.serviceOption(NativeAgentSessions))) return ON_EVE;
   const environment = yield* Effect.serviceOption(HostedEnvironment);
   const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
   const plan = yield* keptPlan(userId, provider.provider, ring);
   if (plan === undefined) return ON_EVE;
-  const onPlan = onPlanOf(provider.provider);
-  const chosen = picked === undefined ? plan.forAgents : picked === onPlan.payer;
-  return chosen ? onPlan : yield* evePayer(userId, provider.provider);
+  return plan.forAgents ? onPlanOf(provider.provider) : yield* evePayer(userId, provider.provider);
+});
+
+/**
+ * Which fast versions the account is offered (`offeredToAccount`): by the
+ * Anthropic key its steps run on, and whether its ChatGPT plan pays for its
+ * GPT agents, as Start would choose it here, since Codex runs no fast mode
+ * and a Fast it cannot run is never offered.
+ */
+export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<AccountFastOffer, StoreFailure, DatabaseServices | ModelCatalog> {
+  const anthropic = yield* anthropicFastAccess(userId);
+  const environment = yield* Effect.serviceOption(HostedEnvironment);
+  const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
+  const plan = yield* keptPlan(userId, MODEL_PROVIDER.OPENAI, ring);
+  return { anthropic, chatGptPlan: plan?.forAgents === true };
 });

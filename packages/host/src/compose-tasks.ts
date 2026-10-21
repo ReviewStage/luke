@@ -649,6 +649,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const listed = (txid: string | undefined): Effect.Effect<void> =>
     Effect.suspend(() => confirmWrite(listWait, txid));
 
+  /**
+   * A task write run under the serial lock, its answer drawn there, then
+   * confirmed once its transaction reaches the followed list, outside the
+   * lock, so no other read or write waits on Realtime, and a newer row the
+   * list publishes meanwhile is drawn over the answer rather than under it.
+   */
+  const writtenThenListed = <
+    Written extends readonly [answer: unknown, txid: string | undefined],
+    E,
+    R,
+  >(
+    write: Effect.Effect<Written, E, R>,
+  ): Effect.Effect<Written[0], E, R> =>
+    Effect.flatMap(serial(write), ([answer, txid]) => Effect.as(listed(txid), answer));
+
   const followList = Effect.suspend(() => {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
@@ -1304,13 +1319,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** Pins or archives one task on the service, or undoes either, and draws what it answered. */
   function markTask(taskId: string, marks: TaskMarks) {
-    return serial(
+    return writtenThenListed(
       Effect.gen(function* () {
         const marked = yield* served(client.mark(taskId, marks));
-        if (marked === undefined) return { changed: false };
-        yield* listed(marked.txid);
+        if (marked === undefined) return [{ changed: false }, undefined] as const;
         takeMarks(marked.task);
-        return { changed: true };
+        return [{ changed: true }, marked.txid] as const;
       }),
     );
   }
@@ -1795,11 +1809,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const request = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
-            if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
-            yield* listed(started.answer.txid);
+            if (!started.ok) {
+              return [carried<TasksStartAnswer>({ failure: started.failure }), undefined] as const;
+            }
             const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
@@ -1811,10 +1826,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             publish();
             yield* openBoard(task.id);
             yield* openRecord(task.id);
-            return carried<TasksStartAnswer>({
-              planId: task.id,
-              ...(agent === undefined ? undefined : { agentStart: agent }),
-            });
+            return [
+              carried<TasksStartAnswer>({
+                planId: task.id,
+                ...(agent === undefined ? undefined : { agentStart: agent }),
+              }),
+              started.answer.txid,
+            ] as const;
           }),
         );
       }),
@@ -1827,11 +1845,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return { deleted: false };
         const { taskId } = read.success;
         yield* endTaskCall(taskId);
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
-            if (deleted === undefined) return { deleted: false };
-            yield* listed(deleted.txid);
+            if (deleted === undefined) return [{ deleted: false }, undefined] as const;
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(boardFollow);
@@ -1840,7 +1857,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
             }
             write({ tasks });
-            return { deleted: true };
+            return [{ deleted: true }, deleted.txid] as const;
           }),
         );
       }),
@@ -1852,11 +1869,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (Result.isFailure(read)) return yield* invalid("renaming a task names it and its name");
         if (!gate()) return { renamed: false };
         const { taskId, name } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const written = yield* served(client.rename(taskId, { name }));
-            if (written === undefined) return { renamed: false };
-            yield* listed(written.txid);
+            if (written === undefined) return [{ renamed: false }, undefined] as const;
             const renamed = written.task;
             const tasks = view.tasks.map((task) =>
               task.id === taskId ? { ...task, name: renamed.name } : task,
@@ -1873,7 +1889,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                     },
                   },
             );
-            return { renamed: true };
+            return [{ renamed: true }, written.txid] as const;
           }),
         );
       }),
@@ -1889,13 +1905,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return { changed: false };
         const { taskId, ...standing } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const changed = yield* served(client.setStanding(taskId, standing));
-            if (changed === undefined) return { changed: false };
-            yield* listed(changed.txid);
+            if (changed === undefined) return [{ changed: false }, undefined] as const;
             takeAnswered(changed.task);
-            return { changed: true };
+            return [{ changed: true }, changed.txid] as const;
           }),
         );
       }),
@@ -1993,15 +2008,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksSetRepositoryAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const { taskId, repository } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const changed = yield* served(client.setRepository(taskId, repository));
-            if (!changed.ok) return carried<TasksSetRepositoryAnswer>({ failure: changed.failure });
-            yield* listed(changed.answer.txid);
+            if (!changed.ok) {
+              return [
+                carried<TasksSetRepositoryAnswer>({ failure: changed.failure }),
+                undefined,
+              ] as const;
+            }
             takeAnswered(changed.answer.task);
-            return carried<TasksSetRepositoryAnswer>({
-              repository: changed.answer.task.repository,
-            });
+            return [
+              carried<TasksSetRepositoryAnswer>({ repository: changed.answer.task.repository }),
+              changed.answer.txid,
+            ] as const;
           }),
         );
       }),
@@ -2017,13 +2037,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksMoveAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const { taskId, workspaceId } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const moved = yield* served(client.move(taskId, workspaceId));
-            if (!moved.ok) return carried<TasksMoveAnswer>({ failure: moved.failure });
-            yield* listed(moved.answer.txid);
+            if (!moved.ok) {
+              return [carried<TasksMoveAnswer>({ failure: moved.failure }), undefined] as const;
+            }
             takeAnswered(moved.answer.task);
-            return carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId });
+            return [
+              carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId }),
+              moved.answer.txid,
+            ] as const;
           }),
         );
       }),
@@ -2416,17 +2440,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return yield* invalid("saving a board names a task and its scene");
         const { taskId, elements, appliedDrawing, image } = read.success;
         if (!gate() || view.activeTaskId !== taskId) return { saved: false };
-        const sentUnder = boardWait?.taskId === taskId ? boardWait.wait : undefined;
-        const saved = yield* serial(
+        const sent = yield* serial(
           Effect.gen(function* () {
+            // The follow standing as the save goes out, which alone may see its transaction.
+            const sentUnder = boardWait?.taskId === taskId ? boardWait.wait : undefined;
             const answer = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
             if (answer !== undefined && view.activeTaskId === taskId)
               write({ board: answer.board });
-            return answer;
+            return { answer, sentUnder };
           }),
         );
+        const { answer: saved, sentUnder } = sent;
         if (saved === undefined) return { saved: false };
-        // Note that the save waits only on the follow that stood as it was sent, and only while that one still stands, since a replacement may never see a transaction the one before it already did; it runs outside `serial` so the wait holds up nothing else.
+        // Note that the save waits only on the follow that stood as it went out, and only while that one still stands, since a replacement may never see a transaction the one before it already did; it runs outside `serial` so the wait holds up nothing else.
         const still =
           boardWait?.taskId === taskId && boardWait.wait === sentUnder ? sentUnder : undefined;
         yield* confirmWrite(still, saved.txid);

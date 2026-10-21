@@ -15,7 +15,6 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import {
   EmptyState,
-  ScrollArea,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -39,33 +38,41 @@ import {
   chatWho,
   continuesRun,
   type ForYouEntry,
+  firstUnreadSeq,
   forYou,
+  messageMarkdown,
   placeChannel,
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "../ai-elements/conversation.js";
+import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
 import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
-import { Tooltip } from "../tooltip.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
 import { ChatComposer } from "./chat-composer.js";
+import { CopyMessageAction } from "./copy-message.js";
 import { FileRef } from "./file-ref.js";
 import { LinkBlock } from "./inbox-pane.js";
-import { clockText, momentText } from "./task-time.js";
+import { RelativeTime } from "./relative-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * chat-pane.tsx -- one place of the window's Chat at reading size: For you, or a channel's messages with their threads.
  *
  * A message is a row led by its author's mark, an agent's own glyph as its
- * tab wears it, Luke's initial in his blue, a person's initial, then a line
+ * tab wears it, or a person's photo or initial, then a line
  * naming the author and when it was posted, and under it the
  * blocks it carries: Markdown as the transcript draws it, a link by its
  * label, a code block by the file and lines it points at as a transcript
@@ -76,7 +83,11 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * place (`chat-ask.tsx`). A root with replies says how many under it, and
  * a press folds the thread open there with a box to reply in under it; a
  * root with none offers Reply at its byline's end while it is hovered,
- * which opens the box alone. A channel's
+ * which opens the box alone, beside the Copy every message offers there.
+ * A place's messages are a log, as every conversation in the window is:
+ * it opens at the newest, follows new ones while the reader is there, and
+ * a channel opened with messages unread draws a "New" line before the
+ * first of them. A channel's
  * messages close on the composer (`chat-composer.tsx`), which posts to it.
  * For you lists what waits on the developer (`chat-model.ts`'s `forYou`),
  * each row saying the channel it was posted in, or that it is a direct
@@ -273,18 +284,7 @@ function Body({
   );
 }
 
-/** When a message was posted, on the clock as Slack says it ("10:42 AM"), the full moment on hover. */
-function ClockTime({ at, now }: { at: number; now: number }): React.JSX.Element {
-  return (
-    <Tooltip label={momentText(at)}>
-      <time className="chat-time" dateTime={new Date(at).toISOString()}>
-        {clockText(at, now)}
-      </time>
-    </Tooltip>
-  );
-}
-
-/** The line over a message's words, as Slack's is: its author by name in bold, their card on it, where it was said, and when on the clock. */
+/** The line over a message's words, as Slack's is: its author by name in bold, their card on it, where it was said, and how long ago, the full moment on hover, as every row and thread in the window says it. */
 function Byline({
   actor,
   at,
@@ -297,7 +297,7 @@ function Byline({
   at: number;
   where: string | undefined;
   now: number;
-  /** A press at the line's end, shown while the message is hovered or the press has the keyboard. */
+  /** The presses at the line's end, shown while the message is hovered or one has the keyboard. */
   action?: React.ReactNode;
   /** Whether the message continues its author's run, so the line names no one and holds its press alone. */
   continued?: boolean;
@@ -321,7 +321,7 @@ function Byline({
         )}
       </span>
       {where === undefined ? null : <FadingWords className="chat-byline-where" words={where} />}
-      <ClockTime at={at} now={now} />
+      <RelativeTime className="chat-time" at={at} now={now} />
       {action}
     </div>
   );
@@ -329,7 +329,7 @@ function Byline({
 
 /**
  * The face a message leads with, in a column of its own at a card's size: the
- * author's photo, Luke, or the agent's harness. A message continuing its
+ * person's photo or initial, as a circle, or the agent's own mark, as a rounded square. A message continuing its
  * author's run leads with its time instead, shown while it is hovered, as
  * Slack's grouped messages do.
  */
@@ -347,25 +347,56 @@ function Face({
   if (continued) {
     return (
       <span className="chat-face" data-continued="true">
-        <ClockTime at={at} now={now} />
+        <RelativeTime className="chat-time" at={at} now={now} />
       </span>
     );
   }
   return (
     <span className="chat-face">
-      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} tiled />
+      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
     </span>
   );
 }
 
-/** One message of a thread: its face, its byline, and its body. */
+/**
+ * The presses at a message's byline's end: Copy of its words as Markdown,
+ * the one every transcript's message offers (`copy-message.tsx`), where it
+ * has any, and the press the caller adds. Note that it offers no Copy
+ * link, since no Luke link names one message of the chat.
+ */
+function RowActions({
+  message,
+  extra,
+}: {
+  message: ChatMessage;
+  extra?: React.ReactNode;
+}): React.JSX.Element | undefined {
+  const words = messageMarkdown(message);
+  if (words === "" && extra === undefined) return undefined;
+  return (
+    <span className="chat-byline-action">
+      {words === "" ? null : (
+        <CopyMessageAction words={words} placement={MESSAGE_ACTIONS_PLACEMENT.INLINE} />
+      )}
+      {extra}
+    </span>
+  );
+}
+
+/** One message of a thread: its face, its byline with its Copy, and its body. */
 function Reply({ message, context }: { message: ChatMessage; context: MessageContext }) {
   const actor = context.actorOf(message.authorId);
   return (
     <li className="chat-reply" data-seq={message.seq}>
       <Face actor={actor} at={message.postedAt} now={context.now} />
       <div className="chat-message-body">
-        <Byline actor={actor} at={message.postedAt} where={undefined} now={context.now} />
+        <Byline
+          actor={actor}
+          at={message.postedAt}
+          where={undefined}
+          now={context.now}
+          action={<RowActions message={message} />}
+        />
         <Body message={message} context={context} />
       </div>
     </li>
@@ -403,25 +434,8 @@ function ThreadRow({
       {threadToggleWords(open, replies.length)}
     </TextButton>
   );
-  // A message nobody has replied to offers Reply at its byline's end, out of the way until wanted.
+  // A message nobody has replied to offers Reply at its byline's end beside its Copy, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
-  if (quiet && !canReply) {
-    return (
-      <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
-        <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
-        <div className="chat-message-body">
-          <Byline
-            actor={actor}
-            at={message.postedAt}
-            where={where}
-            now={context.now}
-            continued={continued}
-          />
-          <Body message={message} context={context} />
-        </div>
-      </li>
-    );
-  }
   return (
     <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
       <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
@@ -432,7 +446,7 @@ function ThreadRow({
           where={where}
           now={context.now}
           continued={continued}
-          action={quiet ? <span className="chat-byline-action">{toggle}</span> : undefined}
+          action={<RowActions message={message} extra={quiet && canReply ? toggle : undefined} />}
         />
         <Body message={message} context={context} />
         {quiet ? null : (
@@ -447,6 +461,8 @@ function ThreadRow({
             ) : null}
             {open && canReply ? (
               <ChatComposer
+                channelId={message.channelId}
+                replyTo={message.seq}
                 label="Reply in thread"
                 targets={context.targetsIn(message.channelId)}
                 keywords={context.keywords}
@@ -460,6 +476,82 @@ function ThreadRow({
         )}
       </div>
     </li>
+  );
+}
+
+/** What the line before a channel's first unread message says. */
+const UNREAD_LINE = "New";
+
+/**
+ * A channel's messages as a log, as every conversation in the window is
+ * (`../ai-elements/conversation.tsx`): it opens at its newest message,
+ * follows each new one while the reader is there, and floats the way back
+ * once they scroll up. A channel opened with messages someone else posted
+ * since the reader last read it draws a "New" line before the first of
+ * them, taken as it opened and held while it stays open, since the read
+ * the window then tells moves the cursor past them. Where the unread run
+ * is taller than the box, it opens with that line at its top instead,
+ * scrolled from the newest message there before the paint, and told so the
+ * log lets go of its newest line.
+ */
+function ChannelStream({
+  channelId,
+  threads,
+  context,
+}: {
+  channelId: string;
+  threads: readonly ChatThread[];
+  context: MessageContext;
+}): React.JSX.Element {
+  // The first unread message as the channel opened, taken again as another opens in its place.
+  const [opened, setOpened] = useState(() => ({
+    channelId,
+    unreadFrom: firstUnreadSeq(context.chat, channelId),
+  }));
+  if (opened.channelId !== channelId) {
+    setOpened({ channelId, unreadFrom: firstUnreadSeq(context.chat, channelId) });
+  }
+  const unreadFrom = opened.channelId === channelId ? opened.unreadFrom : undefined;
+  const list = useRef<HTMLDivElement>(null);
+  const line = useRef<HTMLLIElement>(null);
+  // Note that this runs after the log has taken itself to the channel's newest message, since a parent's layout effect follows its children's.
+  useLayoutEffect(() => {
+    if (opened.unreadFrom === undefined) return;
+    const box = list.current;
+    const at = line.current;
+    if (box === null || at === null) return;
+    const room = Number.parseFloat(window.getComputedStyle(at).scrollMarginTop) || 0;
+    const above = at.getBoundingClientRect().top - box.getBoundingClientRect().top - room;
+    if (above >= 0) return;
+    box.scrollTop += above;
+    box.dispatchEvent(new Event("scroll"));
+  }, [opened]);
+  return (
+    <Conversation subject={channelId} list={list}>
+      <ConversationContent className="chat-stream-body">
+        <ol className="chat-messages">
+          {threads.map((thread, index) => {
+            const first = thread.message.seq === unreadFrom;
+            return (
+              <Fragment key={thread.message.id}>
+                {first ? (
+                  <li ref={line} className="chat-unread-line">
+                    {UNREAD_LINE}
+                  </li>
+                ) : null}
+                <ThreadRow
+                  thread={thread}
+                  where={undefined}
+                  context={context}
+                  continued={!first && continuesRun(threads[index - 1], thread)}
+                />
+              </Fragment>
+            );
+          })}
+        </ol>
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
   );
 }
 
@@ -612,8 +704,8 @@ export function ChatPane({
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
         ) : (
-          <ScrollArea>
-            <div className="chat-stream-body">
+          <Conversation>
+            <ConversationContent className="chat-stream-body">
               <ol className="chat-messages">
                 {entries.map((entry) => (
                   <ThreadRow
@@ -624,8 +716,9 @@ export function ChatPane({
                   />
                 ))}
               </ol>
-            </div>
-          </ScrollArea>
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
         )}
       </section>
     );
@@ -645,26 +738,13 @@ export function ChatPane({
           {NOTHING_POSTED}
         </EmptyState>
       ) : (
-        <ScrollArea>
-          <div className="chat-stream-body">
-            <ol className="chat-messages">
-              {threads.map((thread, index) => (
-                <ThreadRow
-                  key={thread.message.id}
-                  thread={thread}
-                  where={undefined}
-                  context={context}
-                  continued={continuesRun(threads[index - 1], thread)}
-                />
-              ))}
-            </ol>
-          </div>
-        </ScrollArea>
+        <ChannelStream channelId={channel.id} threads={threads} context={context} />
       )}
-      {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another. */}
+      {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another, and each channel's draft waits under its own. */}
       {postsIn(chat, channel) ? (
         <ChatComposer
           key={channel.id}
+          channelId={channel.id}
           label={composerLabel(chat, names, channel)}
           targets={targetsIn(channel.id)}
           keywords={keywords}

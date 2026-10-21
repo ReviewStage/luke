@@ -65,8 +65,8 @@ import { useCapability } from "../use-app-state.js";
  * button opens the harness's dialog: a radio card per credential, each
  * holding its own controls, the checked radio being the default. The
  * default is the plan's `forAgents`: Subscription checked is on, API key
- * checked is off, so the Start payer picker, which reads it, follows the
- * radio. A radio is pressable only once its credential is saved; with
+ * checked is off, and every agent Start makes on that provider's models
+ * runs on the credential checked; there is no choice at Start. A radio is pressable only once its credential is saved; with
  * neither saved, agents run on Luke's key as before.
  *
  * The service never answers a key or a token, so nothing here holds one but
@@ -145,7 +145,6 @@ const WORDS = {
   CONTINUE: "Continue with ChatGPT",
   WAITING: "Waiting for ChatGPT…",
   CONNECTED: "Connected",
-  UNVERIFIED: "Connected · Not yet checked",
   USAGE_LIMIT: "Usage limit reached",
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
   TOKEN_QUOTA: "Out of usage on your Claude plan.",
@@ -244,7 +243,6 @@ function limitWords(plan: SubscriptionKeySummary): string {
 function tokenWords(plan: SubscriptionKeySummary): string {
   switch (plan.status) {
     case PROVIDER_KEY_STATUS.UNVERIFIED:
-      return WORDS.UNVERIFIED;
     case PROVIDER_KEY_STATUS.VERIFIED:
       return WORDS.CONNECTED;
     case PROVIDER_KEY_STATUS.LIMIT_REACHED:
@@ -275,7 +273,7 @@ function signInWords(plan: SubscriptionKeySummary): string {
   }
 }
 
-/** What an API key's status says, by the provider it names; nothing once verified, which its ✓ says. */
+/** What an API key's status says, by the provider it names; nothing while it stands, which its ✓ says. */
 function keyStatusWords(
   provider: ProviderKeyProvider,
   status: ProviderKeyStatus,
@@ -283,6 +281,7 @@ function keyStatusWords(
   const name = HARNESS[provider].keyName;
   switch (status) {
     case PROVIDER_KEY_STATUS.VERIFIED:
+    case PROVIDER_KEY_STATUS.UNVERIFIED:
       return undefined;
     case PROVIDER_KEY_STATUS.INVALID:
       return `${name} rejected this key.`;
@@ -293,8 +292,6 @@ function keyStatusWords(
       return `Out of quota or credit at ${name}.`;
     case PROVIDER_KEY_STATUS.UNREADABLE:
       return "This key can no longer be read.";
-    case PROVIDER_KEY_STATUS.UNVERIFIED:
-      return "Not checked yet";
   }
 }
 

@@ -20,7 +20,8 @@ import { readKept, writeKept } from "./desktop/folded-groups.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, and an inbox
+ * the task starts in, a chat's box its message per channel and per thread
+ * (`chat-composer.tsx`), and an inbox
  * card its answer per item, at the revision it was written against, the
  * options picked, the fields filled, and, on a thread, the steps ticked and
  * the answer pressed beside its note. A draft is known by where
@@ -52,12 +53,13 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, or a task not yet started. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, or a chat's channel or thread. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
+  CHAT: "chat",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -99,6 +101,12 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
     /** The workspace the task starts in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.CHAT),
+    channelId: Schema.String,
+    /** The thread's root, by its place in the chat, where the draft is a reply in it rather than a post at the channel's foot. */
+    replyTo: Schema.optionalKey(Schema.Number),
   }),
 ]);
 
@@ -167,6 +175,9 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 
 /** An inbox card's place. */
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
+
+/** A chat box's place: a channel's foot, or a thread in it. */
+export type ChatDraftPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT }>;
 
 /** A box holding nothing. */
 export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
