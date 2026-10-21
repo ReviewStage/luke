@@ -22,6 +22,7 @@ import { auth } from "./auth.js";
 import { SESSION_COOKIE_CACHE } from "./auth-policy.js";
 import {
   hostedUserId,
+  relayUserId,
   requestUserId,
   resolveHostedBearerUserId,
   resolveHostedUserId,
@@ -210,6 +211,28 @@ it.effect("a request with no Authorization is the account its browser session co
       "Ada's own session, signed under a secret the deployment never held",
     );
   }),
+);
+
+it.effect(
+  "a relay's upgrade names the account the desktop's bearer names, or the one a page's cookie names",
+  () =>
+    Effect.gen(function* () {
+      const { ada, grace, graceCookie, userInfo, plugin } = yield* openAccounts;
+      const named = (credential: Parameters<typeof relayUserId>[0]) =>
+        relayUserId(credential, userInfo, plugin.resolveSessionUserId);
+
+      assert.deepEqual(yield* named({ bearer: ADA_BEARER }), Option.some(ada));
+      assert.deepEqual(yield* named({ bearer: GRACE_BEARER }), Option.none());
+      assert.deepEqual(
+        yield* named({ page: new Headers({ cookie: graceCookie }) }),
+        Option.some(grace),
+      );
+      assert.deepEqual(
+        yield* named({ page: new Headers({ cookie: yield* signedElsewhere(graceCookie) }) }),
+        Option.none(),
+        "Grace's own session, signed under a secret the deployment never held",
+      );
+    }),
 );
 
 it.effect("a request with no cookie, or a blank one, asks the auth service for no session", () =>

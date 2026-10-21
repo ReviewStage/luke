@@ -6,12 +6,11 @@ import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { test } from "vitest";
-import { RELAY_UPGRADE_STATUS } from "../terminal/service.js";
+import { RELAY_UPGRADE_STATUS, type RelayCredential } from "../http/relay-upgrade.js";
 import {
   admitBrowserLiveAccount,
   admitBrowserLiveUpgrade,
   type BrowserLiveAdmission,
-  type BrowserLiveCredential,
 } from "./service.js";
 
 /**
@@ -110,7 +109,7 @@ const REACHED: ReachedBrowserTab = {
 
 /** An account store that answers the bearer and cookie given for their members, and a tab store reached by one member alone. */
 const admission: BrowserLiveAdmission = {
-  resolveUserId: (credential: BrowserLiveCredential) =>
+  resolveUserId: (credential: RelayCredential) =>
     Effect.succeed(
       "bearer" in credential
         ? Option.some("member-1").pipe(

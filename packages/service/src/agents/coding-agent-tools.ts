@@ -337,6 +337,10 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     "Not sent: the plan that pays for that agent is signed out, so it cannot run until its starter signs in again in Settings; it never turns to another payer.",
   PLAN_UNREACHABLE:
     "Not sent: the provider of the plan that pays for that agent did not answer; the same message in a minute or two may be taken.",
+  PLAN_LIMIT_REACHED:
+    "Not sent: the plan that pays for that agent has reached its usage limit; it waits until the limit resets, and never turns to another payer.",
+  PLAN_INELIGIBLE:
+    "Not sent: the plan that pays for that agent is not eligible to run it, its provider said; it never turns to another payer.",
 } as const;
 
 /** How the task tools word a priority. */
@@ -443,6 +447,10 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: the plan that would pay for it is signed out; its starter signs in again in Settings.",
   PLAN_UNREACHABLE:
     "Not started: the plan's provider did not answer; start it again in a minute or two.",
+  PLAN_LIMIT_REACHED:
+    "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or on another payer.",
+  PLAN_INELIGIBLE:
+    "Not started: the plan's provider said the account is not eligible to run it; start it on another payer.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -488,6 +496,8 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_CODING_AGENT_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_CODING_AGENT_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_CODING_AGENT_REFUSAL.PLAN_UNREACHABLE],
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_CODING_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
 ]);
 
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
@@ -501,6 +511,8 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE, CODING_AGENT_TOOL_REFUSAL.NATIVE_NOT_HERE],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, CODING_AGENT_TOOL_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, CODING_AGENT_TOOL_REFUSAL.PLAN_UNREACHABLE],
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, CODING_AGENT_TOOL_REFUSAL.PLAN_LIMIT_REACHED],
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, CODING_AGENT_TOOL_REFUSAL.PLAN_INELIGIBLE],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
@@ -605,9 +617,10 @@ const START_BRANCH = Schema.String.check(
   Schema.isPattern(/^[^\s~^:?*[\\]+$/u),
 );
 
-/** A payer a start may pick for its one agent: the Claude plan, or eve's payer by either name. */
+/** A payer a start may pick for its one agent: the Claude or ChatGPT plan, or eve's payer by either name. */
 const START_PAYER = Schema.Literals([
   CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
   CODING_AGENT_PAYER.API_KEY,
   CODING_AGENT_PAYER.LUKE,
 ]);
@@ -678,9 +691,10 @@ const START_AGENT_INPUT = Schema.Struct({
     describeWire(
       START_PAYER,
       "Who pays for this one agent: claude_plan for the member's Claude plan, which runs it on " +
-        "Claude Code, or api_key or luke, which run it as today on the member's own API key " +
-        "where they saved one and on Luke's key where they did not. Leave it out for the " +
-        "member's default; a plan is used only where it is connected and the model is Claude's.",
+        "Claude Code, chatgpt_plan for the member's ChatGPT plan, which runs it on Codex, or " +
+        "api_key or luke, which run it as today on the member's own API key where they saved " +
+        "one and on Luke's key where they did not. Leave it out for the member's default; a " +
+        "plan is used only where it is connected and the model is its provider's.",
     ),
   ),
   from: Schema.optionalKey(

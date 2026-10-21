@@ -12,12 +12,22 @@ import {
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
+import {
+  listProviderKeyRows,
+  type ProviderKeyRow,
+  saveProviderKey,
+} from "@luke/database/models/provider-key-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+} from "@luke/features/provider-key-wire";
 import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { asc, eq } from "drizzle-orm";
@@ -98,7 +108,14 @@ const HARNESS = {
 } as const;
 
 /** A coding agent on the harness given, a runner's bearer recorded for it, and the developer's lines awaiting their turns. */
-const agentOn = (harness: (typeof HARNESS)[keyof typeof HARNESS], lines: readonly string[]) =>
+const agentOn = (
+  harness: {
+    readonly model: string;
+    readonly runtime: (typeof HARNESS)[keyof typeof HARNESS]["runtime"];
+    readonly payer: CodingAgentPayer;
+  },
+  lines: readonly string[],
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
@@ -983,6 +1000,200 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ],
         );
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
+      }),
+  );
+
+  /** The account's ChatGPT sign-in, kept as connecting keeps it: sealed, and not yet answered. */
+  const signedIn = (userId: string, at = new Date(0)) =>
+    saveProviderKey(
+      userId,
+      PROVIDER_KEY_PROVIDER.OPENAI,
+      PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+      { keyVersion: 1, sealedDataKey: "sealed-data-key", sealedKey: "sealed-sign-in" },
+      "ChatGPT",
+      null,
+      at,
+    );
+
+  /** The ChatGPT row as it stands: its status, and when a reached limit resets. */
+  const planRow = (userId: string) =>
+    Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH), (rows) => {
+      const row: ProviderKeyRow | undefined = rows[0];
+      return [row?.status, row?.limitResetsAt?.toISOString() ?? null] as const;
+    });
+
+  /** One launch whose one turn OpenAI refused as said, numbered from `from`, with what Codex heard first. */
+  const refusedLaunch = (
+    lineId: string,
+    from: number,
+    error: WireRecord,
+    heard: readonly WireValue[] = [],
+  ): readonly RunnerEvent[] =>
+    (
+      [
+        { type: RUNNER_EVENT.ACCEPTED, uuid: lineId },
+        notification("turn/started", { turn: { id: "turn-1" } }),
+        ...heard,
+        notification("turn/completed", { turn: { id: "turn-1", status: "failed", error } }),
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.FAILED },
+      ] satisfies readonly WireValue[]
+    ).map(
+      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+      (message, index) => ({ sequence: from + index, message }) as RunnerEvent,
+    );
+
+  it.effect(
+    "a ChatGPT plan's row takes how each turn found it: verified by P16's recorded turn, its limit reached with the reset Codex heard, then signed out, and a turn that ran never lifts a sign-in OpenAI refused",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CODEX, [
+          "The probe's first turn.",
+          "Also append the steered line.",
+          "Run sleep 600.",
+          "What exact line did you first write?",
+          "Go on.",
+          "Go on again.",
+        ]);
+        yield* signedIn(agent.userId);
+        const [first, stopped, resumed] = codexLaunches(agent.lineIds);
+        assert.ok(first && stopped && resumed);
+        const statuses: (readonly [string | undefined, string | null])[] = [];
+
+        yield* post(agent.bearer, first);
+        statuses.push(yield* planRow(agent.userId));
+
+        const resetsAt = Date.UTC(2026, 9, 22, 9);
+        const limited = refusedLaunch(
+          agent.lineIds[4] ?? "",
+          (first.at(-1)?.sequence ?? 0) + 1,
+          {
+            message:
+              'unexpected status 429: {"error":{"code":"subscription_sharing_usage_limit_exceeded"}}',
+            codexErrorInfo: "usageLimitExceeded",
+            additionalDetails: null,
+          },
+          [
+            {
+              method: "account/rateLimits/updated",
+              params: {
+                rateLimits: {
+                  limitId: null,
+                  limitName: null,
+                  primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: resetsAt / 1000 },
+                  secondary: null,
+                  rateLimitReachedType: "rate_limit_reached",
+                },
+              },
+            },
+          ],
+        );
+        yield* post(agent.bearer, limited);
+        statuses.push(yield* planRow(agent.userId));
+
+        const signedOut = refusedLaunch(
+          agent.lineIds[5] ?? "",
+          (limited.at(-1)?.sequence ?? 0) + 1,
+          {
+            message:
+              'unexpected status 401: {"error":{"code":"subscription_sharing_invalid_user"}}',
+            codexErrorInfo: "unauthorized",
+            additionalDetails: null,
+          },
+        );
+        yield* post(agent.bearer, signedOut);
+        statuses.push(yield* planRow(agent.userId));
+
+        // A turn that ran after the refusal leaves the refusal standing: only a new sign-in mends it.
+        const ranAgain = resumed.map((event, index) => ({
+          ...event,
+          sequence: (signedOut.at(-1)?.sequence ?? 0) + 1 + index,
+        }));
+        yield* post(agent.bearer, ranAgain);
+        statuses.push(yield* planRow(agent.userId));
+
+        assert.deepEqual(statuses, [
+          [PROVIDER_KEY_STATUS.VERIFIED, null],
+          [PROVIDER_KEY_STATUS.LIMIT_REACHED, new Date(resetsAt).toISOString()],
+          [PROVIDER_KEY_STATUS.INVALID, null],
+          [PROVIDER_KEY_STATUS.INVALID, null],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "an account OpenAI says is not eligible is marked so; a failure that says nothing of the plan, or an agent a key pays for, leaves the row as it stood",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const ineligible = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(ineligible.userId);
+        yield* post(
+          ineligible.bearer,
+          refusedLaunch(ineligible.lineId, 0, {
+            message:
+              'unexpected status 403: {"error":{"code":"subscription_sharing_user_not_eligible"}}',
+            codexErrorInfo: null,
+            additionalDetails: null,
+          }),
+        );
+
+        const unrelated = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(unrelated.userId);
+        yield* post(
+          unrelated.bearer,
+          refusedLaunch(unrelated.lineId, 0, {
+            message: "context window exceeded",
+            codexErrorInfo: "contextWindowExceeded",
+            additionalDetails: null,
+          }),
+        );
+
+        const onKey = yield* agentOn({ ...HARNESS.CODEX, payer: CODING_AGENT_PAYER.API_KEY }, [
+          "Fix the test.",
+        ]);
+        yield* signedIn(onKey.userId);
+        yield* post(
+          onKey.bearer,
+          refusedLaunch(onKey.lineId, 0, {
+            message: "unauthorized",
+            codexErrorInfo: "unauthorized",
+            additionalDetails: null,
+          }),
+        );
+
+        assert.deepEqual(
+          [
+            yield* planRow(ineligible.userId),
+            yield* planRow(unrelated.userId),
+            yield* planRow(onKey.userId),
+          ],
+          [
+            [PROVIDER_KEY_STATUS.INELIGIBLE, null],
+            [PROVIDER_KEY_STATUS.UNVERIFIED, null],
+            [PROVIDER_KEY_STATUS.UNVERIFIED, null],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a turn that opened before its starter connected ChatGPT again leaves the new sign-in as it was saved",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(agent.userId);
+        const refused = refusedLaunch(agent.lineId, 0, {
+          message: 'unexpected status 401: {"error":{"code":"subscription_sharing_invalid_user"}}',
+          codexErrorInfo: "unauthorized",
+          additionalDetails: null,
+        });
+        yield* post(agent.bearer, refused.slice(0, 2));
+        yield* signedIn(agent.userId, new Date(60_000));
+        yield* post(agent.bearer, refused.slice(2));
+
+        assert.deepEqual(yield* planRow(agent.userId), [PROVIDER_KEY_STATUS.UNVERIFIED, null]);
       }),
   );
 });

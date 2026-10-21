@@ -21,25 +21,10 @@ import type { HttpClient } from "effect/http";
 import { AgentBrowser, agentBrowserLayer } from "../agents/browser/agent-browser.js";
 import { connectRestoring } from "../agents/browser/restore-tabs.js";
 import { sandboxPtyLayer } from "../agents/sandbox-pty.js";
-import { hostedUserInfo, requestUserId, userIdForAuthorization } from "../auth/bearer.js";
-import { resolveBrowserSessionUserId } from "../auth/browser-session.js";
 import type { BrowserLiveDependencies } from "./relay.js";
-import type { BrowserLiveCredential } from "./service.js";
 
 /** What the live view's dependencies answer over. */
 export type BrowserLiveServices = DatabaseServices | HttpClient.HttpClient;
-
-/** The base a page's headers are read against: only the headers are read. */
-const PAGE_BASE = "http://localhost/";
-
-/** The account a credential answers for: the desktop's bearer as every hosted route reads one, or a page's cookie as every route reads a browser's. */
-export function browserLiveUserId(
-  credential: BrowserLiveCredential,
-): Effect.Effect<Option.Option<string>> {
-  if ("bearer" in credential) return userIdForAuthorization(credential.bearer, hostedUserInfo);
-  const request = new Request(PAGE_BASE, { headers: credential.page });
-  return requestUserId(request, hostedUserInfo, resolveBrowserSessionUserId);
-}
 
 /** The live view's dependencies over the services the runtime holds now. */
 export const browserLiveDependencies: Effect.Effect<

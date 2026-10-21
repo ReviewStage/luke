@@ -1003,11 +1003,18 @@ test("start_agent takes a payer for its one agent, which an account the plan is 
   assert.deepEqual(
     await call(
       CODER_TOOL.START_AGENT,
-      { prompt: "Pay for it.", payer: "chatgpt_plan" },
-      "call-gpt",
+      { prompt: "Pay for it.", payer: "gemini_plan" },
+      "call-unknown",
     ),
     { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.UNREADABLE },
   );
+
+  const onChatGpt = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt: "Pay for this one on ChatGPT.", payer: "chatgpt_plan" },
+    "call-gpt",
+  );
+  assert.equal(onChatGpt.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(onChatGpt));
 });
 
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {

@@ -17,7 +17,9 @@ import {
   removeProviderKey,
   resealProviderKey,
   saveProviderKey,
+  setPlanStatus,
   setProviderKeyForAgents,
+  setProviderKeyStatus,
   withProviderKeyLocked,
 } from "../provider-key-store.js";
 
@@ -288,5 +290,71 @@ it.layer(getTestDB())("the provider key store", (it) => {
       assert.equal(racing[1], racing[2]);
       assert.notEqual(racing[1], first);
     }),
+  );
+
+  it.effect(
+    "a turn's word on a plan lands on its account's row alone, with a limit's reset, and never over an unreadable row, a sign-in saved after the turn, or invalid with verified",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const { OPENAI } = PROVIDER_KEY_PROVIDER;
+        const { CHATGPT_OAUTH } = PROVIDER_KEY_KIND;
+        for (const account of [owner, other]) {
+          yield* saveProviderKey(
+            account,
+            OPENAI,
+            CHATGPT_OAUTH,
+            sealed("sign-in"),
+            "ChatGPT",
+            null,
+            new Date(1_000),
+          );
+        }
+        const read = (account: string) =>
+          Effect.map(listProviderKeyRows(account, CHATGPT_OAUTH), ([row]) => [
+            row?.status,
+            row?.limitResetsAt?.getTime() ?? null,
+          ]);
+        const write = (
+          status: Parameters<typeof setPlanStatus>[3],
+          savedBy: number,
+          resets?: number,
+        ) =>
+          setPlanStatus(
+            owner,
+            OPENAI,
+            CHATGPT_OAUTH,
+            status,
+            resets === undefined ? undefined : new Date(resets),
+            new Date(savedBy),
+            new Date(5_000),
+          );
+        const seen: unknown[] = [];
+
+        yield* write(PROVIDER_KEY_STATUS.LIMIT_REACHED, 2_000, 9_000);
+        seen.push(yield* read(owner), yield* read(other));
+        yield* write(PROVIDER_KEY_STATUS.INVALID, 500);
+        seen.push(yield* read(owner));
+        yield* write(PROVIDER_KEY_STATUS.INVALID, 2_000);
+        yield* write(PROVIDER_KEY_STATUS.VERIFIED, 2_000);
+        seen.push(yield* read(owner));
+        yield* setProviderKeyStatus(
+          owner,
+          OPENAI,
+          "sign-in",
+          PROVIDER_KEY_STATUS.UNREADABLE,
+          new Date(5_000),
+        );
+        yield* write(PROVIDER_KEY_STATUS.INELIGIBLE, 2_000);
+        seen.push(yield* read(owner));
+
+        assert.deepEqual(seen, [
+          [PROVIDER_KEY_STATUS.LIMIT_REACHED, 9_000],
+          [PROVIDER_KEY_STATUS.UNVERIFIED, null],
+          [PROVIDER_KEY_STATUS.LIMIT_REACHED, 9_000],
+          [PROVIDER_KEY_STATUS.INVALID, null],
+          [PROVIDER_KEY_STATUS.UNREADABLE, null],
+        ]);
+      }),
   );
 });

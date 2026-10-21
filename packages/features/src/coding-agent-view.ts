@@ -119,6 +119,10 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
   /** The agent runs on its starter's plan, whose provider did not answer; the same call a little later may be taken. */
   AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
+  /** The agent runs on its starter's plan, whose usage limit is reached until it resets. */
+  AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
+  /** The agent runs on its starter's plan, which its provider said is not eligible to run it. */
+  AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
 } as const;
 
 export type CodingAgentCallFailure =

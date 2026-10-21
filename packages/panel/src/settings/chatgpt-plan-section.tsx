@@ -29,7 +29,8 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { HarnessMark } from "../harness-marks.js";
-import { dayText } from "../tasks/task-time.js";
+import { dayAndTimeText, dayText } from "../tasks/task-time.js";
+import { SwitchRow } from "./switch-row.js";
 
 /**
  * chatgpt-plan-section.tsx -- Settings › Coding agents › Codex: the account's ChatGPT plan, connected with Continue with ChatGPT and disconnected.
@@ -41,7 +42,10 @@ import { dayText } from "../tasks/task-time.js";
  * the developer's browser (`compose-chatgpt-sign-in.ts`) while the row waits
  * with a Cancel beside it. Connected, the row says so and offers Disconnect,
  * asked first; a sign-in OpenAI has since refused says so and offers
- * Continue with ChatGPT again. Nothing here ever holds a token: a press
+ * Continue with ChatGPT again. Connected, a switch beneath the row says
+ * whether the plan pays for the account's coding agents on GPT models by
+ * default, on as it is connected; Start may pick another payer for one
+ * agent whatever it says. Nothing here ever holds a token: a press
  * crosses to the host and the keys come back as hints and statuses alone.
  *
  * The first sign-in on this Mac is met with OpenAI's notice that Luke uses
@@ -58,6 +62,9 @@ const WORDS = {
   CONNECTED: "Connected",
   SIGNED_OUT: "ChatGPT ended this sign-in. Continue with ChatGPT to connect again.",
   UNREADABLE: "This sign-in can no longer be read. Continue with ChatGPT to connect again.",
+  INELIGIBLE:
+    "OpenAI says this ChatGPT account isn't eligible for Codex. Continue with ChatGPT to use another.",
+  LIMIT_REACHED: "Usage limit reached",
   CONTINUE: "Continue with ChatGPT",
   WAITING: "Waiting for ChatGPT…",
   CANCEL: "Cancel",
@@ -72,6 +79,10 @@ const WORDS = {
   NOTICE_BODY:
     "Eligible usage in Luke uses your ChatGPT plan. Manage usage in your ChatGPT settings.",
   GOT_IT: "Got it",
+  FOR_AGENTS: "Use my ChatGPT plan for coding agents",
+  FOR_AGENTS_DETAIL:
+    "New agents on a GPT model run on Codex with your plan. You can pick another payer when you start one.",
+  FOR_AGENTS_FAILED: "The default could not be changed. Try again.",
 } as const;
 
 /** Where this Mac keeps that the notice was seen, in the renderer's own storage. */
@@ -102,17 +113,39 @@ function chatGptOf(answer: ProviderKeysAnswer): SubscriptionKeySummary | undefin
   return answer.subscriptions?.find((one) => one.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH);
 }
 
-/** Whether a stored sign-in still stands for the plan: kept, or answered by OpenAI. */
+/** Whether a stored sign-in still stands for the plan: kept, answered by OpenAI, or only out of usage until its limit resets. */
 function standing(stored: SubscriptionKeySummary): boolean {
   return (
     stored.status === PROVIDER_KEY_STATUS.UNVERIFIED ||
-    stored.status === PROVIDER_KEY_STATUS.VERIFIED
+    stored.status === PROVIDER_KEY_STATUS.VERIFIED ||
+    stored.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
   );
+}
+
+/** What a sign-in that no longer stands says on its row. */
+function endedWords(stored: SubscriptionKeySummary): string {
+  switch (stored.status) {
+    case PROVIDER_KEY_STATUS.UNREADABLE:
+      return WORDS.UNREADABLE;
+    case PROVIDER_KEY_STATUS.INELIGIBLE:
+      return WORDS.INELIGIBLE;
+    default:
+      return WORDS.SIGNED_OUT;
+  }
 }
 
 /** What the row says under its label, by where the sign-in stands. */
 function rowDescription(stored: SubscriptionKeySummary | undefined): React.ReactNode {
   if (stored === undefined) return WORDS.OFFER;
+  if (stored.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
+    return (
+      <span className="settings-state" data-state="attention" role="status">
+        {stored.limitResetsAt === undefined
+          ? WORDS.LIMIT_REACHED
+          : `${WORDS.LIMIT_REACHED} · Resets ${dayAndTimeText(stored.limitResetsAt)}`}
+      </span>
+    );
+  }
   if (standing(stored)) {
     return (
       <>
@@ -125,7 +158,7 @@ function rowDescription(stored: SubscriptionKeySummary | undefined): React.React
   }
   return (
     <span className="settings-state" data-state="attention" role="alert">
-      {stored.status === PROVIDER_KEY_STATUS.UNREADABLE ? WORDS.UNREADABLE : WORDS.SIGNED_OUT}
+      {endedWords(stored)}
     </span>
   );
 }
@@ -229,6 +262,23 @@ export function ChatGptPlanSection({ signedIn }: { signedIn: boolean }): React.J
         }),
     [act],
   );
+  const turnForAgents = useCallback(
+    (forAgents: boolean): Promise<ActionResult> =>
+      act(ACT_KIND.PROVIDER_KEYS_FOR_AGENTS, {
+        provider: PROVIDER_KEY_PROVIDER.OPENAI,
+        kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+        forAgents,
+      })
+        .catch(() => undefined)
+        .then((turned): ActionResult => {
+          if (turned === undefined || "failure" in turned) {
+            return { status: ACTION_RESULT_STATUS.REJECTED, reason: WORDS.FOR_AGENTS_FAILED };
+          }
+          setAnswer(turned);
+          return { status: ACTION_RESULT_STATUS.ACCEPTED };
+        }),
+    [act],
+  );
   const removal = useConfirmDialog(
     { subject: stored !== undefined, surfaceOpen: true },
     disconnect,
@@ -246,53 +296,63 @@ export function ChatGptPlanSection({ signedIn }: { signedIn: boolean }): React.J
         {!signedIn ? (
           <SettingsLine>{WORDS.SIGNED_OUT_PAGE}</SettingsLine>
         ) : answer !== undefined ? (
-          <SettingsRow
-            leading={
-              <span className="settings-row-mark">
-                <HarnessMark provider={MODEL_PROVIDER.OPENAI} />
-              </span>
-            }
-            label={WORDS.LABEL}
-            description={rowDescription(stored)}
-            error={error}
-            below={
-              unconfirmed
-                ? () => (
-                    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                      {WORDS.REVOCATION_UNCONFIRMED}
-                    </Text>
-                  )
-                : undefined
-            }
-          >
-            {() =>
-              connected ? (
-                <Button
-                  variant={BUTTON_VARIANT.OUTLINE}
-                  disabled={removal.busy}
-                  onClick={removal.ask}
-                >
-                  {WORDS.DISCONNECT}
-                </Button>
-              ) : (
-                <>
-                  {signingIn ? (
-                    <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={cancel}>
-                      {WORDS.CANCEL}
-                    </TextButton>
-                  ) : null}
+          <div className="api-key">
+            <SettingsRow
+              leading={
+                <span className="settings-row-mark">
+                  <HarnessMark provider={MODEL_PROVIDER.OPENAI} />
+                </span>
+              }
+              label={WORDS.LABEL}
+              description={rowDescription(stored)}
+              error={error}
+              below={
+                unconfirmed
+                  ? () => (
+                      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                        {WORDS.REVOCATION_UNCONFIRMED}
+                      </Text>
+                    )
+                  : undefined
+              }
+            >
+              {() =>
+                connected ? (
                   <Button
                     variant={BUTTON_VARIANT.OUTLINE}
-                    busy={signingIn}
-                    busyLabel={WORDS.WAITING}
-                    onClick={signIn}
+                    disabled={removal.busy}
+                    onClick={removal.ask}
                   >
-                    {WORDS.CONTINUE}
+                    {WORDS.DISCONNECT}
                   </Button>
-                </>
-              )
-            }
-          </SettingsRow>
+                ) : (
+                  <>
+                    {signingIn ? (
+                      <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={cancel}>
+                        {WORDS.CANCEL}
+                      </TextButton>
+                    ) : null}
+                    <Button
+                      variant={BUTTON_VARIANT.OUTLINE}
+                      busy={signingIn}
+                      busyLabel={WORDS.WAITING}
+                      onClick={signIn}
+                    >
+                      {WORDS.CONTINUE}
+                    </Button>
+                  </>
+                )
+              }
+            </SettingsRow>
+            {connected ? (
+              <SwitchRow
+                label={WORDS.FOR_AGENTS}
+                detail={WORDS.FOR_AGENTS_DETAIL}
+                checked={stored.forAgents !== false}
+                onChange={turnForAgents}
+              />
+            ) : null}
+          </div>
         ) : readFailed ? (
           <SettingsLine>
             <ErrorState onRetry={() => setAttempt((count) => count + 1)}>

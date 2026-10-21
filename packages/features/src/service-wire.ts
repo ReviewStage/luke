@@ -95,6 +95,18 @@ export const HOSTED_API_ERROR = {
    */
   AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
   /**
+   * The agent runs on its starter's plan, whose usage limit refused its last
+   * turn and has not reset; nothing was written, nothing turned to another
+   * payer, and the same request after the reset may be taken.
+   */
+  AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
+  /**
+   * The agent runs on its starter's plan, whose provider said the account
+   * is not eligible to run it; nothing was written, and nothing turned to
+   * another payer.
+   */
+  AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
+  /**
    * The task is archived: it is read, and takes nothing — no edit, no call,
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.

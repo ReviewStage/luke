@@ -4,20 +4,16 @@
  * The function exports the `http.Server` this builds, and Vercel upgrades
  * WebSockets into it, as it does the terminal relay's. An upgrade is
  * refused before any socket stands where it is not this service's path or
- * names no task and tab; then by who is asking. The desktop connects from
- * its main process, which names no `Origin`, under the account's bearer, as
- * it connects a terminal. A browser always names the page's origin on an
- * upgrade, and no page can set it, so an upgrade naming one is taken only
- * from the deployment's own pages (`authDeployment`'s `ownOrigins`, never
- * Better Auth's `trustedOrigins`), and its account is read as every hosted
- * route reads a browser's (`bearer.ts`'s `requestUserId`): the session
- * cookie the browser carried. So another site's page that opens a socket
- * here with the member's cookie is refused before it is read. An account
- * that does not resolve is refused, and so is a tab it does not reach
- * (`readTaskBrowserTab`), as not found, so no socket ever stands for a tab
- * its member cannot read. Every admitted socket is one fiber of the
- * service's own set, so the service's scope ending ends them all, each
- * handing back a takeover it took.
+ * names no task and tab; then by who is asking, on the terms the terminal
+ * relay keeps too (`http/relay-upgrade.ts`): the desktop's bearer with no
+ * `Origin`, or a page of the deployment's own origins by its session
+ * cookie, read as every hosted route reads a browser's, so another site's
+ * page that opens a socket here with the member's cookie is refused before
+ * it is read. An account that does not resolve is refused, and so is a tab
+ * it does not reach (`readTaskBrowserTab`), as not found, so no socket ever
+ * stands for a tab its member cannot read. Every admitted socket is one
+ * fiber of the service's own set, so the service's scope ending ends them
+ * all, each handing back a takeover it took.
  */
 
 import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
@@ -27,9 +23,13 @@ import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, FiberSet, Option, Result, type Scope } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
-import { CREDENTIAL_HEADER } from "../auth/session-credential.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
-import { RELAY_UPGRADE_STATUS } from "../terminal/service.js";
+import {
+  RELAY_UPGRADE_STATUS,
+  type RelayCredential,
+  refuseUpgrade,
+  relayCredential,
+} from "../http/relay-upgrade.js";
 import { voiceSocket } from "../voice/socket.js";
 import { type BrowserLiveAsk, type BrowserLiveDependencies, relayBrowserTab } from "./relay.js";
 
@@ -39,33 +39,15 @@ const UPGRADE_REQUIRED = 426;
 /** The most bytes one message from a panel may carry: a text message's largest is well under it. */
 const MAXIMUM_FRAME_BYTES = 64 * 1024;
 
-const BEARER_SCHEME = "Bearer ";
-
 const readId = readEither(wireUuidSchema);
-
-/** Who an upgrade says it is: the desktop's bearer, or a page's session cookie, as headers. */
-export type BrowserLiveCredential = { readonly bearer: string } | { readonly page: Headers };
 
 /** What an upgrade asks for before its credential is resolved: the credential, and the task and tab it names. */
 export type BrowserLiveUpgrade =
   | { readonly status: number }
   | {
-      readonly credential: BrowserLiveCredential;
+      readonly credential: RelayCredential;
       readonly ask: Omit<BrowserLiveAsk, "userId">;
     };
-
-/** The headers a page's session is read from: its cookie alone, which is all a browser's socket can carry; none where it carries none. */
-function pageHeaders(headers: IncomingHttpHeaders): Headers | undefined {
-  const cookie = headers.cookie?.trim();
-  return cookie ? new Headers({ [CREDENTIAL_HEADER.COOKIE]: cookie }) : undefined;
-}
-
-/** The desktop's bearer, where the upgrade carries one with something in it. */
-function bearerOf(headers: IncomingHttpHeaders): string | undefined {
-  const authorization = headers.authorization;
-  if (authorization === undefined || !authorization.startsWith(BEARER_SCHEME)) return undefined;
-  return authorization.slice(BEARER_SCHEME.length).trim() === "" ? undefined : authorization;
-}
 
 /** Whether an upgrade is this service's to take, read from its address and headers alone, against the deployment's own origins. */
 export function admitBrowserLiveUpgrade(
@@ -81,21 +63,9 @@ export function admitBrowserLiveUpgrade(
   if (Result.isFailure(taskId) || Result.isFailure(tabId)) {
     return { status: RELAY_UPGRADE_STATUS.BAD_REQUEST };
   }
-  const ask = { taskId: taskId.success, tabId: tabId.success };
-  if (headers.origin !== undefined) {
-    if (!ownOrigins.has(headers.origin)) return { status: RELAY_UPGRADE_STATUS.FORBIDDEN };
-    const page = pageHeaders(headers);
-    if (page === undefined) return { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED };
-    return { credential: { page }, ask };
-  }
-  const bearer = bearerOf(headers);
-  if (bearer === undefined) return { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED };
-  return { credential: { bearer }, ask };
-}
-
-/** Refuses one upgrade before any socket stands, with the status given. */
-function refuseUpgrade(socket: Duplex, status: number): void {
-  socket.end(`HTTP/1.1 ${status} Refused\r\nConnection: close\r\n\r\n`);
+  const credential = relayCredential(headers, ownOrigins);
+  if ("status" in credential) return credential;
+  return { credential, ask: { taskId: taskId.success, tabId: tabId.success } };
 }
 
 /** What a server hands a service that stands on it, which is what `ws` upgrades on. */
@@ -140,15 +110,13 @@ export function browserLiveServer(): BrowserLiveServer {
 /** Who may watch a tab: the account an upgrade's credential resolves to, and the tab it reaches. */
 export interface BrowserLiveAdmission {
   /** The account a credential answers for, or none. */
-  readonly resolveUserId: (
-    credential: BrowserLiveCredential,
-  ) => Effect.Effect<Option.Option<string>>;
+  readonly resolveUserId: (credential: RelayCredential) => Effect.Effect<Option.Option<string>>;
   readonly readTab: BrowserLiveDependencies["readTab"];
 }
 
 /** An admitted upgrade's account and tab, or the status it is refused with before a socket stands. */
 export function admitBrowserLiveAccount(
-  decision: Extract<BrowserLiveUpgrade, { credential: BrowserLiveCredential }>,
+  decision: Extract<BrowserLiveUpgrade, { credential: RelayCredential }>,
   admission: BrowserLiveAdmission,
 ): Effect.Effect<
   | { readonly status: number }
@@ -212,7 +180,7 @@ export function standBrowserLive(
       readTab: options.dependencies.readTab,
     };
     const connection = (
-      decision: Extract<BrowserLiveUpgrade, { credential: BrowserLiveCredential }>,
+      decision: Extract<BrowserLiveUpgrade, { credential: RelayCredential }>,
       request: IncomingMessage,
       socket: Duplex,
       head: Buffer,
