@@ -1455,6 +1455,7 @@ function TabContent({
   cloudBrowsers,
   plan,
   inbox,
+  chat,
   onTabActions,
 }: {
   tab: SidePanelTab;
@@ -1512,6 +1513,8 @@ function TabContent({
   plan: React.ReactNode;
   /** The task's Inbox, drawn by the task's page on the same terms. */
   inbox: React.ReactNode;
+  /** The task's Chat, its channel, drawn by the task's page on the same terms. */
+  chat: React.ReactNode;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
 }): React.JSX.Element {
@@ -1691,6 +1694,8 @@ function TabContent({
       return <>{plan}</>;
     case SIDE_PANEL_TAB.INBOX:
       return <>{inbox}</>;
+    case SIDE_PANEL_TAB.CHAT:
+      return <>{chat}</>;
     case SIDE_PANEL_TAB.BOARD:
       // An archived task's board only shows, as its agents only read.
       return (
@@ -1957,6 +1962,7 @@ export function SidePanel({
   plan,
   task,
   inbox,
+  chat,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1997,6 +2003,8 @@ export function SidePanel({
   inbox?:
     | { readonly body: React.ReactNode; readonly waiting: number; readonly drafted: boolean }
     | undefined;
+  /** The task's Chat, its channel, which its Chat tab shows; none where Chat is off or beside anything but a task's page. */
+  chat?: React.ReactNode;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
@@ -2147,7 +2155,12 @@ export function SidePanel({
     (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
   const offers = panelEntries({
     panel,
-    kinds: HOLDER_KINDS[holder].filter((kind) => kind !== SIDE_PANEL_TAB.INBOX || inboxOffered),
+    // The Chat is offered only where the task's page draws one, which it does while Chat is on.
+    kinds: HOLDER_KINDS[holder].filter(
+      (kind) =>
+        (kind !== SIDE_PANEL_TAB.INBOX || inboxOffered) &&
+        (kind !== SIDE_PANEL_TAB.CHAT || chat !== undefined),
+    ),
     workers,
     files: offered,
     changes: changesOffers(agents, changes),
@@ -2282,6 +2295,7 @@ export function SidePanel({
             cloudBrowsers={cloudBrowsers}
             plan={plan}
             inbox={inbox?.body}
+            chat={chat}
             onTabActions={handTabActions}
           />
         </FindScope>

@@ -6,6 +6,7 @@ import {
   type CodingAgentPlace,
   createCodingAgent,
   discardCodingAgent,
+  nativeRuntimesOfReached,
   readCodingAgentByKey,
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
@@ -1105,10 +1106,15 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
+  const runtimes = yield* hostedStoreOrUnavailable(nativeRuntimesOfReached([agent.conversationId]));
   return {
     agent: codingAgentSummary(
       agent,
-      { turn: undefined, awaitingLineAt: undefined },
+      {
+        turn: undefined,
+        awaitingLineAt: undefined,
+        runtime: runtimes.get(agent.conversationId),
+      },
       yield* Clock.currentTimeMillis,
       names,
     ),

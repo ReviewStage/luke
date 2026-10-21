@@ -317,6 +317,81 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
   }
 });
 
+test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
+  // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
+  const LUKES = [
+    "`bash`",
+    "`read_file`",
+    "`write_file`",
+    "`glob`",
+    "`grep`",
+    `\`${CODER_TOOL.SLEEP}\``,
+    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
+    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    "`write_todos`",
+    "`delegate`",
+    "task_wait",
+  ];
+  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool", "Bash"];
+  const CODEXES = [
+    "`apply_patch`",
+    "`update_plan`",
+    "Codex's own web search",
+    "Codex's own subagents",
+  ];
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const repository of ["Acme/Relay", null]) {
+      for (const memberToken of [false, true]) {
+        const codex = coderInstructions(
+          repository,
+          brief,
+          true,
+          TASK_ADDRESS,
+          undefined,
+          true,
+          null,
+          memberToken,
+          CODER_HARNESS.CODEX,
+        );
+        const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
+        assert.deepEqual(
+          LUKES.filter((tool) => codex.includes(tool)),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CLAUDE_CODES.filter((tool) => codex.includes(tool)),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CODEXES.filter((tool) => !codex.includes(tool)),
+          [],
+          label,
+        );
+        // An agent with a repository is pointed at its skills where Codex keeps them.
+        assert.equal(codex.includes("`.agents/skills`"), repository !== null, label);
+        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+          assert.ok(codex.includes(`\`${kept}\``), `${label}: ${kept}`);
+        }
+      }
+    }
+    const watching = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.CODEX,
+    );
+    assert.ok(watching.includes("gh pr checks <number> --watch --fail-fast"), brief);
+  }
+});
+
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of none", () => {
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;

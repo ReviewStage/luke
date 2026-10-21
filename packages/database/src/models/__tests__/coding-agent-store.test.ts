@@ -60,6 +60,7 @@ import {
   listWorkspaceCodingAgents,
   listWorldCodingAgents,
   type NewCodingAgent,
+  nativeRuntimesOfReached,
   pinCodingAgent,
   readCodingAgent,
   readCodingAgentPublished,
@@ -1880,6 +1881,37 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         assert.ok(Option.isNone(yield* readNativeRunStanding(randomUUID())));
         assert.ok(Option.isNone(yield* readNativeRunStanding("not-an-agent-id")));
       }),
+  );
+
+  it.effect("the native runtimes read names the native agents' conversations alone", () =>
+    Effect.gen(function* () {
+      const starter = yield* openAccount;
+      const workspace = yield* openWorkspace(starter);
+      const eve = yield* startIn(starter, workspace);
+      const claude = yield* startIn(starter, workspace, {
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+      });
+      const codex = yield* startIn(starter, workspace, {
+        runtime: CONVERSATION_RUNTIME.CODEX,
+        payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+      });
+
+      const read = yield* nativeRuntimesOfReached([
+        eve.conversationId,
+        claude.conversationId,
+        codex.conversationId,
+      ]);
+
+      assert.deepEqual(
+        [...read.entries()].sort(([a], [b]) => a.localeCompare(b)),
+        [
+          [claude.conversationId, CONVERSATION_RUNTIME.CLAUDE_CODE] as const,
+          [codex.conversationId, CONVERSATION_RUNTIME.CODEX] as const,
+        ].sort(([a], [b]) => a.localeCompare(b)),
+      );
+      assert.equal((yield* nativeRuntimesOfReached([])).size, 0);
+    }),
   );
 
   it.effect(

@@ -33,7 +33,6 @@ import { HOSTED_API_ERROR } from "../../http/http.js";
 import { ACCOUNT_ID_PATTERN, BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import {
-  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
@@ -43,17 +42,19 @@ import {
   RUNTIME_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { NATIVE_SESSION_PREFIX, type NativeRuntime } from "./native-runtime.js";
-import { NativeAgentSessions } from "./runtime-sessions.js";
+import { NativeAgentSessions, type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 
 /** The path the web function answers a relayed call on. */
 export const NATIVE_RELAY_PATH = "/api/agents/native-sessions";
 
-/** The four calls a harness takes by name; `stream` is none, since a runner posts its own events. */
+/** The calls a harness takes by name; `stream` is none, since a runner posts its own events. */
 export const NATIVE_RELAY_CALL = {
   OPEN: "open",
   SEND: "send",
   CANCEL: "cancel",
   RESET: "reset",
+  /** The agent's model and effort as its row now holds them, handed to its runner (`runnerChoiceApplied`). */
+  RETUNE: "retune",
 } as const;
 
 /** Every native harness, by the prefix each mints its sessions under, so one added to the column is relayed with no change here. */
@@ -104,6 +105,13 @@ export const NativeRelayCallSchema = Schema.Union([
     runtime: NativeRuntimeSchema,
     account: AccountSchema,
     sessionId: SessionIdSchema,
+  }),
+  Schema.Struct({
+    call: Schema.Literal(NATIVE_RELAY_CALL.RETUNE),
+    runtime: NativeRuntimeSchema,
+    account: AccountSchema,
+    sessionId: SessionIdSchema,
+    conversationId: SessionIdSchema,
   }),
 ]);
 
@@ -163,6 +171,8 @@ const ResetSchema = Schema.Union([
 
 const RefusalSchema = Schema.Struct({ error: Schema.String });
 
+const RetunedSchema = Schema.Struct({ choice: Schema.Literals(Object.values(RUNNER_CHOICE)) });
+
 const OK_STATUS = 200;
 const JSON_CONTENT_TYPE = "application/json";
 
@@ -203,7 +213,7 @@ function relayOver(
   origin: string,
   runtime: NativeRuntime,
   account: string,
-): AgentSessions<BrainHostTurn> {
+): NativeSessions<BrainHostTurn> {
   const post = (body: NativeRelayCall) =>
     client
       .execute(
@@ -247,6 +257,17 @@ function relayOver(
       ),
     // A runner posts its events to Luke itself, so there is no stream of its session to follow.
     stream: () => Stream.empty,
+    // A change the route did not answer with the runner's own word is said as failed; the row already holds it.
+    retune: (sessionId, conversationId) =>
+      post({ call: NATIVE_RELAY_CALL.RETUNE, ...named, sessionId, conversationId }).pipe(
+        Effect.map(({ status, body }) => {
+          const read = readEither(RetunedSchema, { excess: EXCESS_KEYS.DROP })(body);
+          return status === OK_STATUS && Result.isSuccess(read)
+            ? read.success.choice
+            : RUNNER_CHOICE.FAILED;
+        }),
+        Effect.orElseSucceed(() => RUNNER_CHOICE.FAILED),
+      ),
   };
 }
 

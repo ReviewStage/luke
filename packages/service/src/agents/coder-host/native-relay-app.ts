@@ -16,8 +16,8 @@
  * the harness reaches only what that account reaches. A message is also
  * held to the conversation's own agent: one the account reaches, on the
  * harness named, and one it may write to (`admitsPlanWriter`, under
- * `PLAN_AGENT_WRITER_POLICY`); a cancel or a reset to a session the harness
- * named minted. The answer is the harness's outcome alone, which carries no
+ * `PLAN_AGENT_WRITER_POLICY`), as is a change of its model handed to its
+ * runner; a call naming a session, to one the harness named minted. The answer is the harness's outcome alone, which carries no
  * token. A function with no harness answers `NATIVE_AGENT_NOT_HERE`.
  */
 
@@ -43,7 +43,7 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { admitsPlanWriter } from "../agent-reach.js";
-import type { AgentSessions, EveUnreachable } from "../brain-host/eve-sessions.js";
+import type { EveUnreachable } from "../brain-host/eve-sessions.js";
 import {
   NATIVE_RELAY_CALL,
   NATIVE_RELAY_PATH,
@@ -52,7 +52,7 @@ import {
   relayedMessage,
 } from "./native-relay.js";
 import { nativeRuntimeOfSession } from "./native-runtime.js";
-import { NativeAgentSessions } from "./runtime-sessions.js";
+import { NativeAgentSessions, type NativeSessions } from "./runtime-sessions.js";
 
 const HTTP_METHOD = { POST: "POST" } as const;
 
@@ -62,11 +62,12 @@ const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const readCall = readEither(NativeRelayCallSchema);
 
 /** The conversation's agent, held to the account, the harness named, and the account's right to write to it. */
-const admittedMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
-  call: Extract<NativeRelayCall, { readonly message: unknown }>,
+const admittedConversation = /* @__PURE__ */ Effect.fnUntraced(function* (
+  call: NativeRelayCall,
+  conversationId: string,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices> {
   const agent = yield* hostedStoreOrUnavailable(
-    readCodingAgentOfConversation(call.account, call.message.conversationId),
+    readCodingAgentOfConversation(call.account, conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const routing = yield* hostedStoreOrUnavailable(
@@ -80,7 +81,7 @@ const admittedMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The call made on the harness, once admitted, answering the harness's outcome. */
 const answered = (
-  sessions: AgentSessions,
+  sessions: NativeSessions,
   call: NativeRelayCall,
 ): Effect.Effect<object, EveUnreachable> => {
   switch (call.call) {
@@ -92,6 +93,10 @@ const answered = (
       return sessions.cancel(call.sessionId, call.turnId);
     case NATIVE_RELAY_CALL.RESET:
       return sessions.reset(call.sessionId);
+    case NATIVE_RELAY_CALL.RETUNE:
+      return Effect.map(sessions.retune(call.sessionId, call.conversationId), (choice) => ({
+        choice,
+      }));
   }
 };
 
@@ -115,10 +120,12 @@ const nativeRelayEndpoint = /* @__PURE__ */ Effect.fn("web/nativeRelayEndpoint")
     const read = readCall(yield* parseJsonBytes(yield* readBodyBytesEffect(MAX_BODY_BYTES)));
     if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     const call = read.success;
-    if ("message" in call) {
-      yield* admittedMessage(call);
-    } else if (nativeRuntimeOfSession(call.sessionId) !== call.runtime) {
+    if ("sessionId" in call && nativeRuntimeOfSession(call.sessionId) !== call.runtime) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    }
+    if ("message" in call) yield* admittedConversation(call, call.message.conversationId);
+    if (call.call === NATIVE_RELAY_CALL.RETUNE) {
+      yield* admittedConversation(call, call.conversationId);
     }
     const native = yield* Effect.serviceOption(NativeAgentSessions);
     const reached = Option.flatMap(native, (service) =>

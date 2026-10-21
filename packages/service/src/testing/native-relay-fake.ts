@@ -19,7 +19,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import {
-  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
@@ -30,6 +29,8 @@ import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import {
   NativeAgentSessions,
   type NativeAgentSessionsService,
+  type NativeSessions,
+  RUNNER_CHOICE,
 } from "../agents/coder-host/runtime-sessions.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 
@@ -116,7 +117,7 @@ function recordingHarness(
           ...(message === undefined ? {} : { message }),
           ...(seen === undefined ? {} : { seen }),
         });
-      const sessions: AgentSessions = {
+      const sessions: NativeSessions = {
         open: (message) =>
           Effect.map(seenOf(message.conversationId), (seen) => {
             write("open", message.conversationId, message.message, seen);
@@ -141,6 +142,11 @@ function recordingHarness(
             return { outcome: EVE_RESET_OUTCOME.RESET };
           }),
         stream: () => Stream.empty,
+        retune: (sessionId) =>
+          Effect.sync(() => {
+            write("retune", sessionId);
+            return RUNNER_CHOICE.WRITTEN;
+          }),
       };
       return Option.some(Effect.succeed(sessions));
     },

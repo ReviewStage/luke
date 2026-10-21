@@ -50,7 +50,12 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { NATIVE_RELAY_CALL, NATIVE_RELAY_PATH } from "./native-relay.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
-import { routedSessions, sessionsRouter } from "./runtime-sessions.js";
+import {
+  RUNNER_CHOICE,
+  routedSessions,
+  runnerChoiceApplied,
+  sessionsRouter,
+} from "./runtime-sessions.js";
 import { startCodingAgent } from "./start.js";
 import { STEER_OUTCOME, steerCodingAgent } from "./steer.js";
 import { type EveReach, stoppedTurn } from "./stop.js";
@@ -245,6 +250,13 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             ["Expire invitations after a week.", "And the emails.", undefined, undefined],
           );
           assert.equal(eve.calls.length, 4, "eve heard nothing of the Claude Code agent");
+          // A change of its model, which update_agent hands its runner, reaches it alike, acting for its starter.
+          assert.equal(
+            yield* runnerChoiceApplied(onClaudeCode).pipe(Effect.provide(relay.layer)),
+            RUNNER_CHOICE.WRITTEN,
+          );
+          assert.deepEqual(relay.heard.at(-1)?.call, "retune");
+          assert.deepEqual(relay.heard.at(-1)?.account, owner);
           // The session the relayed launch opened is the conversation's record, claimed in the eve app as the router claims one.
           assert.equal(
             yield* recordedRuntimeSession({
