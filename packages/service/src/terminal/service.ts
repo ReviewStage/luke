@@ -1,46 +1,45 @@
 /**
- * service.ts -- the terminal relay as a WebSocket service: one socket per attached shell, admitted under the account's bearer and piped by `relay.ts`.
+ * service.ts -- the terminal relay as a WebSocket service: one socket per attached shell, admitted under the account's bearer from the desktop or under its session cookie from one of the deployment's own pages, and piped by `relay.ts`.
  *
  * The function exports the `http.Server` this builds, and Vercel upgrades
  * WebSockets into it, as it does the voice service's. An upgrade is refused
- * before any socket stands where it is not the relay's path, carries a
- * browser `Origin` (the desktop connects from its main process, never a
- * page), has no bearer, or names no agent, shell, and size; then the bearer
+ * before any socket stands where it is not the relay's path; where it
+ * carries neither credential `http/relay-upgrade.ts` takes, the desktop's
+ * bearer with no `Origin` or the session cookie of a page on one of the
+ * deployment's own origins, another site's page being refused whatever it
+ * carries; or where it names no agent, shell, and size. Then the credential
  * is resolved to its account, and an upgrade the account does not answer for
- * is refused too. Every admitted socket is one fiber of the service's own
+ * is refused too. The agent a socket reaches is read under that account
+ * alone, by the one rule every agent route keeps (`relay.ts`): an agent of a
+ * workspace the account is in, and one on its starter's own GitHub token by
+ * its starter alone, so a page reaches no shell its account could not open
+ * from the desktop. Every admitted socket is one fiber of the service's own
  * set, so the service's scope ending ends them all, each closing its PTY
  * socket and leaving its shell running in tmux. A socket lives as long as
- * the function may run, then the desktop reconnects to the same shell.
+ * the function may run, then the panel reconnects to the same shell.
  */
 
 import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
-import { HTTP_STATUS } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, FiberSet, Option, Result, Schema, type Scope } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
 import { unparsedWire, wireUuidSchema } from "../core.js";
+import {
+  RELAY_UPGRADE_STATUS,
+  type RelayCredential,
+  refuseUpgrade,
+  relayCredential,
+} from "../http/relay-upgrade.js";
 import { voiceSocket } from "../voice/socket.js";
 import { type RelayAsk, type RelayDependencies, relayTerminal } from "./relay.js";
-
-/** The statuses an upgrade is refused with, before any socket stands. */
-export const RELAY_UPGRADE_STATUS = {
-  BAD_REQUEST: 400,
-  UNAUTHORIZED: HTTP_STATUS.UNAUTHORIZED,
-  /** The handshake carried a browser `Origin`; the caller is no page, so it sets none. */
-  FORBIDDEN: HTTP_STATUS.FORBIDDEN,
-  NOT_FOUND: HTTP_STATUS.NOT_FOUND,
-  SERVICE_UNAVAILABLE: 503,
-} as const;
 
 /** A plain request to the relay's path: the answer says what the path is for. */
 const UPGRADE_REQUIRED = 426;
 
-/** The most bytes one frame from the desktop may carry: a paste is sent in pieces well under it. */
+/** The most bytes one frame from a panel may carry: a paste is sent in pieces well under it. */
 const MAXIMUM_FRAME_BYTES = 1024 * 1024;
-
-const BEARER_SCHEME = "Bearer ";
 
 const SizeSchema = Schema.NumberFromString.pipe(
   Schema.decodeTo(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 }))),
@@ -49,26 +48,21 @@ const SizeSchema = Schema.NumberFromString.pipe(
 const readId = readEither(wireUuidSchema);
 const readSize = readEither(SizeSchema);
 
-/** What an upgrade asks for before its bearer is resolved: the bearer, and the agent, shell, and size it names. */
+/** What an upgrade asks for before its credential is resolved: who it says it is, and the agent, shell, and size it names. */
 export type RelayUpgrade =
   | { readonly status: number }
-  | { readonly bearer: string; readonly ask: Omit<RelayAsk, "userId"> };
+  | { readonly credential: RelayCredential; readonly ask: Omit<RelayAsk, "userId"> };
 
-/** Whether an upgrade is the relay's to take, read from its address and headers alone. */
+/** Whether an upgrade is the relay's to take, read from its address and headers alone, against the deployment's own origins. */
 export function admitRelayUpgrade(
   url: string | undefined,
   headers: IncomingHttpHeaders,
+  ownOrigins: ReadonlySet<string>,
 ): RelayUpgrade {
   const address = new URL(url ?? "/", "http://localhost");
   if (address.pathname !== TERMINAL_RELAY.PATH) return { status: RELAY_UPGRADE_STATUS.NOT_FOUND };
-  if (headers.origin !== undefined) return { status: RELAY_UPGRADE_STATUS.FORBIDDEN };
-  const authorization = headers.authorization;
-  if (authorization === undefined || !authorization.startsWith(BEARER_SCHEME)) {
-    return { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED };
-  }
-  if (authorization.slice(BEARER_SCHEME.length).trim().length === 0) {
-    return { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED };
-  }
+  const credential = relayCredential(headers, ownOrigins);
+  if ("status" in credential) return credential;
   const query = (name: string) => unparsedWire(address.searchParams.get(name) ?? "");
   const agentId = readId(query(TERMINAL_RELAY.QUERY.AGENT));
   const terminalId = readId(query(TERMINAL_RELAY.QUERY.TERMINAL));
@@ -83,7 +77,7 @@ export function admitRelayUpgrade(
     return { status: RELAY_UPGRADE_STATUS.BAD_REQUEST };
   }
   return {
-    bearer: authorization,
+    credential,
     ask: {
       agentId: agentId.success,
       terminalId: terminalId.success,
@@ -91,11 +85,6 @@ export function admitRelayUpgrade(
       rows: rows.success,
     },
   };
-}
-
-/** Refuses one upgrade before any socket stands, with the status given. */
-function refuseUpgrade(socket: Duplex, status: number): void {
-  socket.end(`HTTP/1.1 ${status} Refused\r\nConnection: close\r\n\r\n`);
 }
 
 /** What a server hands a service that stands on it, which is what `ws` upgrades on. */
@@ -140,8 +129,10 @@ export function terminalRelayServer(): TerminalRelayServer {
 
 export interface TerminalRelayOptions {
   readonly server: TerminalRelayServer;
-  /** The account a bearer answers for, or none. */
-  readonly resolveUserId: (authorization: string) => Effect.Effect<Option.Option<string>>;
+  /** The origins the deployment's own pages are served from, the only ones a page's upgrade is taken from. */
+  readonly ownOrigins: ReadonlySet<string>;
+  /** The account a credential answers for, or none. */
+  readonly resolveUserId: (credential: RelayCredential) => Effect.Effect<Option.Option<string>>;
   readonly dependencies: RelayDependencies;
 }
 
@@ -173,13 +164,13 @@ export function standTerminalRelay(
         });
       });
     const connection = (
-      decision: Extract<RelayUpgrade, { bearer: string }>,
+      decision: Extract<RelayUpgrade, { credential: RelayCredential }>,
       request: IncomingMessage,
       socket: Duplex,
       head: Buffer,
     ) =>
       Effect.gen(function* () {
-        const account = yield* options.resolveUserId(decision.bearer);
+        const account = yield* options.resolveUserId(decision.credential);
         if (Option.isNone(account)) {
           refuseUpgrade(socket, RELAY_UPGRADE_STATUS.UNAUTHORIZED);
           return;
@@ -200,7 +191,7 @@ export function standTerminalRelay(
     yield* Effect.acquireRelease(
       Effect.sync(() =>
         options.server.serve((request, socket, head) => {
-          const decision = admitRelayUpgrade(request.url, request.headers);
+          const decision = admitRelayUpgrade(request.url, request.headers, options.ownOrigins);
           if ("status" in decision) {
             refuseUpgrade(socket, decision.status);
             return;

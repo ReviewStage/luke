@@ -1,5 +1,5 @@
 /**
- * relay.ts -- one attached shell: the desktop's socket piped to the shell's PTY in the agent's sandbox, held while someone types and closed when nobody has for five minutes.
+ * relay.ts -- one attached shell: a panel's socket, the desktop's or the web app's, piped to the shell's PTY in the agent's sandbox, held while someone types and closed when nobody has for five minutes.
  *
  * A connection reaches its agent through the one rule every agent route
  * keeps, then attaches only to a sandbox that is running: a stopped one is
@@ -30,8 +30,8 @@
  * token set, and what was typed before waits for it, up to a bound past
  * which the shell attaches at once.
  *
- * How the connection ended is the close code the desktop reads as the tab's
- * state (`@luke/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
+ * How the connection ended is the close code the panel's host reads as the
+ * tab's state (`@luke/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
  */
 
 import {
