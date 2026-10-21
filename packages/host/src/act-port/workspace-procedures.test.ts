@@ -183,6 +183,8 @@ interface Script {
   connectUrl: string;
   /** The address a Linear connection answers to open. */
   linearConnectUrl: string;
+  /** What a people unfollow waits on once the host has heard it, so a test can open a stream while it is on its way. */
+  peopleUnfollowed: Promise<void>;
 }
 
 const ports: TestActPort<unknown>[] = [];
@@ -206,6 +208,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     alreadyInvited: false,
     connectUrl: INSTALL_URL,
     linearConnectUrl: LINEAR_SIGN_IN_URL,
+    peopleUnfollowed: Promise.resolve(),
   };
   const refusal = () =>
     script.notPermitted
@@ -312,7 +315,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceInvitationCancel: (params) =>
       ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
     workspacePeopleFollow: (scope) => ask(`peopleFollow:${scope.workspaceId}`, () => undefined),
-    workspacePeopleUnfollow: (scope) => ask(`peopleUnfollow:${scope.workspaceId}`, () => undefined),
+    workspacePeopleUnfollow: (scope) =>
+      Effect.andThen(
+        ask(`peopleUnfollow:${scope.workspaceId}`, () => undefined),
+        Effect.promise(() => script.peopleUnfollowed),
+      ),
     onWorkspacePeopleChanged: (listener) => {
       peopleListeners.add(listener);
       return () => peopleListeners.delete(listener);
@@ -633,6 +640,32 @@ it("a workspace's people stream to every window following them, each workspace's
   await two.return(undefined);
   await until(() => asked.length === 3);
   assert.deepEqual(asked.at(-1), `peopleUnfollow:${ACME.id}`);
+});
+
+it("a people stream opened while the last one's unfollow is on its way asks the host to follow only once that unfollow is done, so the new follow stands", async () => {
+  const { client, asked, script } = windowPort(PANEL);
+  const unfollowed = Promise.withResolvers<void>();
+  script.peopleUnfollowed = unfollowed.promise;
+
+  const first = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  void first.next();
+  await until(() => asked.length === 1);
+  const closed = first.return(undefined);
+  await until(() => asked.length === 2);
+  const second = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  void second.next();
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, [`peopleFollow:${ACME.id}`, `peopleUnfollow:${ACME.id}`]);
+
+  unfollowed.resolve();
+  await closed;
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, [
+    `peopleFollow:${ACME.id}`,
+    `peopleUnfollow:${ACME.id}`,
+    `peopleFollow:${ACME.id}`,
+  ]);
+  await second.return(undefined);
 });
 
 it("the voice window is refused a workspace's people, and the host is not asked", async () => {
