@@ -129,10 +129,21 @@ function followed<Part extends string, Rows, View>(
       yield* Effect.sleep(LIVE_RESTART);
       return true;
     }
-    /** Why the last renewal or poll failed, so a follow that ends for good is told as not found or ended unsaid. */
-    let lastFailure: string | undefined;
+    /**
+     * Why the follow ended for good, the first renewal's or poll's terminal
+     * failure, kept whatever answers after it, since a poll and a renewal may
+     * run side by side; so a follow that ends is told as not found or ended unsaid.
+     */
+    let endedBy: string | undefined;
     const noted = (read: Sealed<SealedRead<Part>>) => {
-      lastFailure = "failure" in read ? read.failure : undefined;
+      if (
+        endedBy === undefined &&
+        "failure" in read &&
+        (read.failure === AUTOMATION_CALL_FAILURE.NOT_FOUND ||
+          read.failure === LIVE_SIGNED_OUT.failure)
+      ) {
+        endedBy = read.failure;
+      }
       return goneWhereNotFound(read);
     };
     const rows = liveRows(
@@ -160,7 +171,7 @@ function followed<Part extends string, Rows, View>(
       Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
     );
     if (gone) {
-      if (lastFailure === AUTOMATION_CALL_FAILURE.NOT_FOUND) {
+      if (endedBy === AUTOMATION_CALL_FAILURE.NOT_FOUND) {
         kind.failed(AUTOMATION_CALL_FAILURE.NOT_FOUND);
       }
       return false;
