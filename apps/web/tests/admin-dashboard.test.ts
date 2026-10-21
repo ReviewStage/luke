@@ -5,8 +5,9 @@ import {
   FUNNEL_STEP,
   REACH_FEATURE,
 } from "@luke/features/admin-overview-vocabulary";
+import { ADMIN_READ } from "@luke/features/admin-wire";
 import { DashboardScreen } from "@luke/panel/admin/screens/dashboard";
-import { ADMIN_READ, type AdminRead } from "@luke/panel/admin/use-admin-read";
+import type { AdminRead } from "@luke/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

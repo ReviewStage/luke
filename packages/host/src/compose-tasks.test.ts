@@ -644,6 +644,19 @@ function fakeService(tasks: Task[]): FakeService {
           return { ok: true as const, answer: service.connection };
         }),
     },
+    // The service answers an admin read with what it read, and stars any account.
+    admin: {
+      read: (params) =>
+        Effect.sync(() => {
+          service.reads.push(`admin:${params.procedure}`);
+          return { answer: { procedure: params.procedure, query: params.query } };
+        }),
+      favorite: (id, favorite) =>
+        Effect.sync(() => {
+          service.reads.push(`admin-favorite:${id}:${favorite}`);
+          return true;
+        }),
+    },
     // The service's workspaces as a table the test edits, each write moving it as the store does.
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
@@ -2657,6 +2670,35 @@ it.effect(
 
       assert.deepEqual(page, { url: service.connectPages[0] });
       assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+    }),
+);
+
+it.effect(
+  "an admin read and a star ask the service and answer the caller as the service answered, holding nothing in the view",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const readsBefore = service.reads.length;
+      const viewBefore = last();
+
+      const read = yield* call(GATEWAY_METHOD.ADMIN_READ, {
+        procedure: "users",
+        query: { window: "7" },
+      });
+      const starred = yield* call(GATEWAY_METHOD.ADMIN_FAVORITE, {
+        id: "user-ada",
+        favorite: true,
+      });
+
+      assert.deepEqual(read, { answer: { procedure: "users", query: { window: "7" } } });
+      assert.equal(starred, true);
+      assert.deepEqual(service.reads.slice(readsBefore), [
+        "admin:users",
+        "admin-favorite:user-ada:true",
+      ]);
+      assert.equal(last(), viewBefore);
     }),
 );
 

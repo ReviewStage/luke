@@ -1,5 +1,12 @@
 import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import {
+  ADMIN_UNANSWERED,
+  type AdminFavoriteParams,
+  type AdminReadAnswer,
+  type AdminReadParams,
+  adminReadAnswerSchema,
+} from "@luke/features/admin-wire";
 import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -557,6 +564,10 @@ export interface HostOperator {
   githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
   githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
+  /** One admin dashboard read under the account's session; the service's answer as it came, or why there is none. */
+  adminRead(params: AdminReadParams): Effect.Effect<AdminReadAnswer>;
+  /** The admin dashboard's star set or taken back on one account; whether it landed. */
+  adminFavorite(params: AdminFavoriteParams): Effect.Effect<boolean>;
   /** A workspace made under a name, owned by the account; the workspace, or why none was. */
   workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace renamed by an owner or admin; the workspace under its new name, or why it was not. */
@@ -1593,6 +1604,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 ),
               )
             : undefined) ?? { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED },
+      ),
+    adminRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.ADMIN_READ, {
+          procedure: params.procedure,
+          query: params.query,
+        }),
+        (answer): AdminReadAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(adminReadAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { refused: ADMIN_UNANSWERED },
+      ),
+    adminFavorite: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.ADMIN_FAVORITE, { id: params.id, favorite: params.favorite }),
+        (answer) => answer.ok && answer.result === true,
       ),
     workspaceCreate: (params) =>
       Effect.map(

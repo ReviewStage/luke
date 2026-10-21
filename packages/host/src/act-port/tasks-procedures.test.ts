@@ -14,6 +14,12 @@
 
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import {
+  ADMIN_QUERY,
+  ADMIN_READ,
+  ADMIN_REFUSED,
+  type AdminReadAnswer,
+} from "@luke/features/admin-wire";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
@@ -85,6 +91,8 @@ const REFUSAL = {
   [TASKS_ACT_KIND.WEB_OPEN]: "Could not open that link on this system.",
   [TASKS_ACT_KIND.GITHUB_CONNECT]: "Could not open GitHub's connection page on this system.",
   [TASKS_ACT_KIND.ADMIN_OPEN]: "Could not open the admin dashboard on this system.",
+  [TASKS_ACT_KIND.ADMIN_READ]: "Could not read the admin dashboard on this system.",
+  [TASKS_ACT_KIND.ADMIN_FAVORITE]: "Could not star that account on this system.",
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: "Could not disconnect GitHub on this system.",
   [TASKS_ACT_KIND.TASKS_TALK]: "Could not call that agent on this system.",
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: "Could not save the board on this system.",
@@ -175,6 +183,15 @@ const BROWSER_TAB = {
   lastActedAt: 2_000,
 } as const;
 
+/** One admin read, of the roster at a week, admins counted. */
+const ADMIN_READ_PARAMS = {
+  procedure: ADMIN_READ.USERS,
+  query: { [ADMIN_QUERY.WINDOW]: "7", [ADMIN_QUERY.SCOPE]: "all" },
+};
+/** The one account the fake service names, and the roster it answers for it. */
+const ADMIN_ACCOUNT_ID = "user-ada";
+const ADMIN_ROSTER = { total: 1, rows: [{ id: ADMIN_ACCOUNT_ID, name: "Ada" }] };
+
 /** One ask of every task kind, with a payload its schema admits. */
 const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_REFRESH, payload: undefined },
@@ -201,6 +218,8 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
   { kind: TASKS_ACT_KIND.GITHUB_CONNECT, payload: undefined },
   { kind: TASKS_ACT_KIND.ADMIN_OPEN, payload: undefined },
+  { kind: TASKS_ACT_KIND.ADMIN_READ, payload: ADMIN_READ_PARAMS },
+  { kind: TASKS_ACT_KIND.ADMIN_FAVORITE, payload: { id: ADMIN_ACCOUNT_ID, favorite: true } },
   { kind: TASKS_ACT_KIND.GITHUB_DISCONNECT, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_TALK, payload: { agentId: AGENT_ID } },
   { kind: TASKS_ACT_KIND.TASKS_BOARD_SAVE, payload: BOARD },
@@ -244,6 +263,8 @@ interface Script {
   startExtra: boolean;
   /** The HTML the service answers for a page's version, none where it does not answer. */
   pageHtml: string | undefined;
+  /** What an admin read answers. */
+  adminRead: AdminReadAnswer;
 }
 
 const ports: TestActPort<unknown>[] = [];
@@ -273,6 +294,7 @@ function windowPort(
     lastSignIn: false,
     startExtra: false,
     pageHtml: undefined,
+    adminRead: { answer: ADMIN_ROSTER },
   };
   const ask = <A>(line: string, answer: () => A) =>
     Effect.sync(() => {
@@ -330,6 +352,13 @@ function windowPort(
             ? { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED }
             : { connection: { connected: false, login: null } },
       ),
+    adminRead: (params) =>
+      ask(
+        `admin-read:${params.procedure}:${new URLSearchParams(params.query)}`,
+        () => script.adminRead,
+      ),
+    adminFavorite: (params) =>
+      ask(`admin-favorite:${params.id}:${params.favorite}`, () => params.id === ADMIN_ACCOUNT_ID),
     tasksSetStanding: (params) =>
       ask(`standing:${params.taskId}:${params.status ?? ""}`, () => true),
     tasksFile: (params) =>
@@ -678,6 +707,47 @@ it("the admin dashboard is refused, and nothing opens, where the service's origi
     });
     assert.deepEqual(browsed, []);
   }
+});
+
+it("an admin read reaches the host from a panel and answers what the service answered, its refusal by its word, and the star answers whether it landed", async () => {
+  const { client, asked, script } = windowPort(PANEL);
+
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_READ, ADMIN_READ_PARAMS), {
+    answer: { answer: ADMIN_ROSTER },
+  });
+  script.adminRead = { refused: ADMIN_REFUSED.FORBIDDEN };
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_READ, ADMIN_READ_PARAMS), {
+    answer: { refused: ADMIN_REFUSED.FORBIDDEN },
+  });
+  assert.deepEqual(
+    await settled(client, TASKS_ACT_KIND.ADMIN_FAVORITE, { id: ADMIN_ACCOUNT_ID, favorite: true }),
+    { answer: true },
+  );
+  assert.deepEqual(
+    await settled(client, TASKS_ACT_KIND.ADMIN_FAVORITE, { id: "user-gone", favorite: false }),
+    { answer: false },
+  );
+
+  assert.deepEqual(asked, [
+    "admin-read:users:window=7&scope=all",
+    "admin-read:users:window=7&scope=all",
+    `admin-favorite:${ADMIN_ACCOUNT_ID}:true`,
+    "admin-favorite:user-gone:false",
+  ]);
+});
+
+it("an admin read naming no procedure the service serves is refused in its own words, and the host is not asked", async () => {
+  const { client, asked } = windowPort(PANEL);
+
+  assert.deepEqual(
+    // SAFETY: a procedure no admin read is served under, sent on purpose to be refused.
+    await settled(client, TASKS_ACT_KIND.ADMIN_READ, {
+      procedure: "secrets",
+      query: {},
+    } as AnyPayload),
+    { refused: REFUSAL[TASKS_ACT_KIND.ADMIN_READ] },
+  );
+  assert.deepEqual(asked, []);
 });
 
 it("a GitHub page the host names off the service's own origin is refused and nothing opens", async () => {

@@ -9,6 +9,7 @@ import type {
 import type { AdminCost } from "@luke/features/admin-cost-wire";
 import type {
   AdminDayQuery,
+  AdminRefused,
   AdminUserQuery,
   AdminUsersQuery,
   AdminWindowedQuery,
@@ -27,23 +28,7 @@ import { createContext, useContext } from "react";
  * moment it reads or writes.
  */
 
-/** Why a read was refused before it answered, in the words the screens tell apart. */
-export const ADMIN_REFUSED = {
-  /** No signed-in session the gate accepts; the mount's sign-in is the answer. */
-  SIGNED_OUT: "signed-out",
-  /** Signed in, but the account is no admin. */
-  FORBIDDEN: "forbidden",
-  /** The account a detail read named does not exist. */
-  MISSING: "missing",
-  /** The service, or a seam behind it, did not answer. */
-  UNAVAILABLE: "unavailable",
-  /** Something in front of the service answered instead, such as a preview's deployment protection. */
-  INTERCEPTED: "intercepted",
-} as const;
-
-export type AdminRefused = (typeof ADMIN_REFUSED)[keyof typeof ADMIN_REFUSED];
-
-/** A read the mount's client refused, by the word the screens tell it apart by. */
+/** A read the mount's client refused, by the word the screens tell it apart by (`ADMIN_REFUSED`). */
 export class AdminReadRefused extends Error {
   constructor(readonly refused: AdminRefused) {
     super(`The admin read was refused: ${refused}.`);

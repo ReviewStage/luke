@@ -7,6 +7,7 @@ import type {
 import {
   ADMIN_ATTENTION_AGENT_DAYS,
   ADMIN_ATTENTION_KIND,
+  ADMIN_READ,
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
 } from "@luke/features/admin-wire";
@@ -43,7 +44,7 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
 import { CHART_PAIR_EVEN, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
-import { ADMIN_READ, adminReadFailure, useAdminRead } from "../use-admin-read.js";
+import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 /**
  * reliability.tsx -- the admin Reliability screen: how often the service's

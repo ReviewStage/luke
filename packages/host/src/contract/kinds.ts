@@ -313,6 +313,10 @@ export const TASKS_ACT_KIND = {
   GITHUB_CONNECT: "github.connect",
   /** The admin dashboard, opened in the default browser on the service's own origin, an address the host names and never one a window hands in. The service's gate decides who reads it. */
   ADMIN_OPEN: "admin.open",
+  /** One admin dashboard read, asked of the service under the account's session and answered to the window that asked as it came, or why there is none; never held in app state. The service's gate decides it. */
+  ADMIN_READ: "admin.read",
+  /** The admin dashboard's star set or taken back on one account, for the viewing admin alone; whether it landed. */
+  ADMIN_FAVORITE: "admin.favorite",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
   /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */

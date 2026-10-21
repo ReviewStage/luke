@@ -10,6 +10,7 @@
  */
 
 import { HTTP_STATUS } from "@luke/wire";
+import { Schema as EffectSchema } from "effect";
 
 /**
  * Where the dashboard's page is served on the service's own origin: what the
@@ -283,3 +284,81 @@ export function adminUserId(value: string | undefined): string | undefined {
   if (id.length === 0 || id.length > 128) return undefined;
   return id;
 }
+
+/**
+ * The admin reads, by their procedure's name: what a screen asks, what the
+ * app's host carries to the service for it, and where each is served.
+ */
+export const ADMIN_READ = {
+  COST: "cost",
+  DAY: "day",
+  METRICS: "metrics",
+  RELIABILITY: "reliability",
+  USER: "user",
+  USERS: "users",
+  WORKSPACES: "workspaces",
+} as const;
+
+export type AdminReadProcedure = (typeof ADMIN_READ)[keyof typeof ADMIN_READ];
+
+/** Where each admin read is served. */
+export const ADMIN_READ_PATH = {
+  [ADMIN_READ.COST]: ADMIN_ROUTE_PATH.COST,
+  [ADMIN_READ.DAY]: ADMIN_ROUTE_PATH.DAY,
+  [ADMIN_READ.METRICS]: ADMIN_ROUTE_PATH.METRICS,
+  [ADMIN_READ.RELIABILITY]: ADMIN_ROUTE_PATH.RELIABILITY,
+  [ADMIN_READ.USER]: ADMIN_ROUTE_PATH.USER,
+  [ADMIN_READ.USERS]: ADMIN_ROUTE_PATH.USERS,
+  [ADMIN_READ.WORKSPACES]: ADMIN_ROUTE_PATH.WORKSPACES,
+} as const satisfies Record<AdminReadProcedure, string>;
+
+/**
+ * Why an admin read was refused before it answered, in the words a screen
+ * tells apart, whichever client asked: the gate's two refusals, a detail
+ * read whose account is gone, the service not answering, and something in
+ * front of the service answering instead, such as a preview's deployment
+ * protection.
+ */
+export const ADMIN_REFUSED = {
+  SIGNED_OUT: "signed-out",
+  FORBIDDEN: "forbidden",
+  MISSING: "missing",
+  UNAVAILABLE: "unavailable",
+  INTERCEPTED: "intercepted",
+} as const;
+
+export type AdminRefused = (typeof ADMIN_REFUSED)[keyof typeof ADMIN_REFUSED];
+
+/** An admin read that failed for no reason a screen tells apart: the screen words it as its own. */
+export const ADMIN_UNANSWERED = "unanswered";
+
+/** One admin read as the app's window asks its host for it: the procedure, and its query parameters. */
+export const adminReadParamsSchema = EffectSchema.Struct({
+  procedure: EffectSchema.Literals(Object.values(ADMIN_READ)),
+  query: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
+});
+
+export type AdminReadParams = typeof adminReadParamsSchema.Type;
+
+/**
+ * What an admin read answered through the host: the service's answer,
+ * passed through as it came (each procedure's shape is
+ * `admin-answer-wire.ts`'s, which a screen names for the procedure it
+ * asked), or why there is none.
+ */
+export const adminReadAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ answer: EffectSchema.Unknown }),
+  EffectSchema.Struct({
+    refused: EffectSchema.Literals([...Object.values(ADMIN_REFUSED), ADMIN_UNANSWERED]),
+  }),
+]);
+
+export type AdminReadAnswer = typeof adminReadAnswerSchema.Type;
+
+/** The star set or taken back on one account, as the app's window asks its host for it. */
+export const adminFavoriteParamsSchema = EffectSchema.Struct({
+  id: EffectSchema.NonEmptyString,
+  favorite: EffectSchema.Boolean,
+});
+
+export type AdminFavoriteParams = typeof adminFavoriteParamsSchema.Type;
