@@ -52,6 +52,12 @@ export interface Exchange {
   readonly reply: readonly RecordedMessage[];
   /** Holds the answer back, writing the reply's notifications first, until this settles. */
   readonly holdAnswer?: Effect.Effect<void>;
+  /**
+   * Runs before anything of the reply is written, with the process as the
+   * operating system saw it: what app-server does on its own meanwhile, such
+   * as running its provider's token command as a turn's requests go out.
+   */
+  readonly beforeReply?: (process: Spawned) => Effect.Effect<void>;
 }
 
 /** One spawned process's script: its exchanges in order, and, where it crashes, what it last says. */
@@ -62,7 +68,7 @@ export interface Script {
 }
 
 /** One process as the operating system saw it. */
-interface Spawned {
+export interface Spawned {
   readonly program: string;
   readonly args: readonly string[];
   readonly cwd: string | undefined;
@@ -188,6 +194,7 @@ export function fakeAppServer(scripts: readonly Script[]) {
             return;
           }
           next += 1;
+          if (exchange.beforeReply !== undefined) yield* exchange.beforeReply(record);
           const lines = replyLines(exchange.reply, message);
           const held = exchange.holdAnswer;
           const first = held === undefined ? lines : lines.filter(({ isAnswer }) => !isAnswer);
