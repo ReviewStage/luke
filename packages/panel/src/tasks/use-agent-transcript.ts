@@ -118,6 +118,8 @@ export interface AgentTranscriptControl {
   hasOlder: boolean;
   /** Whether an older page is being read. */
   loadingOlder: boolean;
+  /** Whether the last older read did not answer, until the next is asked for. */
+  olderFailed: boolean;
   /** Reads the page older than the oldest message held and puts it before them; nothing while one is out or none stands. */
   loadOlder: () => void;
   /** How many pages have been read, which an ask counts from to know a page landed after it. */
@@ -151,6 +153,8 @@ interface Held {
   before: string | undefined;
   /** The `before` an older read is out for; none while none is. */
   olderOut: string | undefined;
+  /** Whether the last older read did not answer. */
+  olderFailed: boolean;
   /** How many pages have been pushed, which an ask counts from to know a page landed after it. */
   pages: number;
   pageTitle: string | undefined;
@@ -172,6 +176,7 @@ function fresh(transcript: CodingAgentTranscriptKey): Held {
     caughtUp: false,
     before: undefined,
     olderOut: undefined,
+    olderFailed: false,
     pages: 0,
     pageTitle: undefined,
     subagentTitles: new Map(),
@@ -364,14 +369,14 @@ export function useAgentTranscript(input: {
     if (before === undefined || olderOut !== undefined) return;
     setHeld((was) =>
       sameTranscript(was.transcript, transcript) && was.before === before
-        ? { ...was, olderOut: before }
+        ? { ...was, olderOut: before, olderFailed: false }
         : was,
     );
     // Note that an answer is put before the messages only while they still begin where it was asked, so one for a transcript left or replaced since is dropped.
     const settle = (answer: CodingAgentTranscriptOlderAnswer) =>
       setHeld((was) => {
         if (!sameTranscript(was.transcript, transcript) || was.olderOut !== before) return was;
-        if ("failure" in answer) return { ...was, olderOut: undefined };
+        if ("failure" in answer) return { ...was, olderOut: undefined, olderFailed: true };
         const held = new Set(was.messages.map((message) => message.id));
         return {
           ...was,
@@ -404,6 +409,7 @@ export function useAgentTranscript(input: {
     caughtUp: held.caughtUp,
     hasOlder: held.before !== undefined,
     loadingOlder: held.olderOut !== undefined,
+    olderFailed: held.olderFailed,
     loadOlder,
     pages: held.pages,
     pageTitle: held.pageTitle,

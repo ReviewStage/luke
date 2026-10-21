@@ -260,8 +260,10 @@ export function followTranscript<Key>(
             toldNotFound = answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
             return tell(answer);
           }),
+          // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as a seal is, and then ends the follow on the failure told, so the window offers Try again.
           Effect.repeat({
             schedule: Schedule.spaced(RESEAL),
+            times: RESEALS,
             until: (answer) => !unanswered(answer),
           }),
         ),

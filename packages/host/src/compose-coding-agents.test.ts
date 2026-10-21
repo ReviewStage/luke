@@ -259,7 +259,7 @@ function fakeService() {
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly TranscriptNowAnswer[] = [];
   // The newest page, as the follow opens with it; none answers one with something on it.
-  let newestPage: CodingAgentNewestAnswer | undefined;
+  let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -652,7 +652,7 @@ function fakeService() {
       pagesNow = pages;
     },
     /** The newest page the service answers. */
-    pageNewest: (page: CodingAgentNewestAnswer) => {
+    pageNewest: (page: CodingAgentNewestAnswer | { readonly failure: "unanswered" }) => {
       newestPage = page;
     },
     /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
@@ -1407,6 +1407,31 @@ it.effect(
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
       assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}`).length, 2);
+    }),
+);
+
+it.effect(
+  "a newest page the service keeps not answering is asked for a bounded number of times, then the follow ends on the failure told",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, pages, sealTranscript, pageNewest } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      pageNewest({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      const newest = () => asked.filter((ask) => ask === `messages-newest:${AGENT_ID}`).length;
+      const read = newest();
+      assert.ok(read > 1 && read < 60, `read the newest page ${read} times`);
+      assert.deepEqual(pages().at(-1), {
+        transcript: FOLLOWED,
+        page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      });
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      assert.equal(newest(), read);
+      assert.ok(!asked.some((ask) => ask.startsWith("messages-now")));
     }),
 );
 

@@ -2303,6 +2303,7 @@ export function AgentTab({
     shown,
     caughtUp: transcript.caughtUp,
     whole: !transcript.hasOlder,
+    olderFailed: transcript.olderFailed,
     loadOlder: transcript.loadOlder,
     pages: transcript.pages,
     settled: !agentStillWriting(agent.status),

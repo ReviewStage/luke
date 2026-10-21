@@ -394,6 +394,7 @@ test("a tab opens on the newest page and reads older pages one at a time below i
   assert.equal(seen.current?.hasOlder, false);
   act(() => seen.current?.loadOlder());
   assert.equal(asked.length, 2);
+  assert.equal(seen.current?.olderFailed, false);
 });
 
 test("an older read that failed leaves what is held and may be asked again", async () => {
@@ -405,6 +406,7 @@ test("an older read that failed leaves what is held and may be asked again", asy
   push(AGENT, newestOf(["m-3"], "3"));
   act(() => seen.current?.loadOlder());
   await hand({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.equal(seen.current?.olderFailed, true);
   assert.deepEqual(
     seen.current?.messages.map((message) => message.id),
     ["m-3"],

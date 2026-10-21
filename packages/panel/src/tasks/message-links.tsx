@@ -74,7 +74,9 @@ export const MessageRevealProvider = MessageRevealContext.Provider;
  * to the middle of its scroller, the scroller told it moved so a log that
  * follows its newest line lets go of the bottom, and lit once. A message
  * not drawn while older ones than the transcript's first held stand is
- * looked for on the older pages (`loadOlder`), read one by one. It is said
+ * looked for on the older pages (`loadOlder`), read one by one, and while
+ * one of them did not answer it waits, the ask standing, for the reader to
+ * ask again. It is said
  * gone through `gone` only once the transcript has `caughtUp`, is held
  * `whole`, and has no such message: for an agent that has `settled`, its last page; for one still
  * writing, a page read after the ask, since an empty page from before it
@@ -89,6 +91,8 @@ export function useMessageReveal(input: {
   caughtUp: boolean;
   /** Whether no messages older than the first held stand. */
   whole: boolean;
+  /** Whether the last older read did not answer, so the older pages are not read again on their own. */
+  olderFailed: boolean;
   /** Reads the page older than the first message held. */
   loadOlder: () => void;
   pages: number;
@@ -118,7 +122,8 @@ export function useMessageReveal(input: {
       }
       element.setAttribute("data-message-revealed", "");
     } else if (!input.whole) {
-      input.loadOlder();
+      // Note that an older read that failed is not asked again here, so a service that does not answer is not asked on every draw; the reader scrolling up asks again.
+      if (!input.olderFailed) input.loadOlder();
       return;
     } else if (caughtUp && (settled || pages > since)) {
       input.gone();
