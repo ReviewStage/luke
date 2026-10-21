@@ -35,10 +35,12 @@ import {
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import {
+  type AgentTranscriptLiveAnswer,
   LIVE_POLL_URL,
   type TaskBoardLiveAnswer,
   type TaskConversationLiveAnswer,
   type TaskRecordLiveAnswer,
+  type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
@@ -956,6 +958,14 @@ interface FakeConversations extends TasksConversationClient {
   answer: (taskId: string, answer: CodingAgentMessagesAnswerView) => Effect.Effect<void>;
   /** The older pages, by the turn each is read before. */
   older: Record<string, CodingAgentMessagesAnswer>;
+  /** What the service seals for following a planning worker's transcript; none answers unanswered. */
+  workerSealed: AgentTranscriptLiveAnswer | undefined;
+  /** Every read of a worker's transcript at once, as `task:call:cursor`, in order. */
+  readonly workerReads: string[];
+  /** The account each seal of a worker's transcript named, in order. */
+  readonly workerSeals: string[];
+  /** Hands the next read of a worker's transcript at once its answer. */
+  answerWorker: (answer: TranscriptNowAnswer) => Effect.Effect<void>;
   /** What the service seals for following a plan's conversation; none answers unanswered. */
   sealed: TaskConversationLiveAnswer | undefined;
   /** Every plan a seal was asked for, in order. */
@@ -975,7 +985,22 @@ function fakeConversations(): Effect.Effect<FakeConversations> {
     for (const taskId of [INVITES, BILLING]) {
       pages.set(taskId, yield* Queue.unbounded<CodingAgentMessagesAnswerView>());
     }
+    const workerPages = yield* Queue.unbounded<TranscriptNowAnswer>();
     const conversations: FakeConversations = {
+      workerSealed: undefined,
+      workerReads: [],
+      workerSeals: [],
+      answerWorker: (answer) => Effect.asVoid(Queue.offer(workerPages, answer)),
+      taskWorkerTranscriptLive: (_taskId, _callId, userId) =>
+        Effect.sync(() => {
+          conversations.workerSeals.push(userId);
+          return conversations.workerSealed ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        }),
+      taskWorkerMessagesNow: (taskId, callId, after) =>
+        Effect.suspend(() => {
+          conversations.workerReads.push(`${taskId}:${callId}:${after}`);
+          return Queue.take(workerPages);
+        }),
       asks: [],
       nextAsk: Queue.take(asked),
       older: {},
@@ -1149,6 +1174,64 @@ function fakeRealtime() {
   };
 }
 
+/** The parts a transcript is followed by. */
+const TRANSCRIPT_PARTS = ["messages", "turns", "conversation", "agent", "workers"] as const;
+
+/** A planning worker's transcript sealed as the service answers it, each part named by its capability. */
+const SEALED_WORKER: AgentTranscriptLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    messages: sealedPart("messages"),
+    turns: sealedPart("turns"),
+    conversation: sealedPart("conversation"),
+    agent: sealedPart("agent"),
+    workers: sealedPart("workers"),
+  },
+};
+
+function sealedPart(part: string) {
+  return { capability: part, queryFingerprint: part, expiresAt: 3_600_000 };
+}
+
+/** Realtime as a script: each subscription by its capability, and a way to deliver every part's rows once the host subscribed. */
+function fakeTranscriptRealtime() {
+  const listeners = new Map<
+    string,
+    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
+  >();
+  const open = (_url: string): LiveClient => ({
+    subscribe: (query) => ({
+      onChange: (listener) => {
+        listeners.set(query.capability, listener);
+        return () => listeners.delete(query.capability);
+      },
+      renew: () => Promise.resolve(),
+      unsubscribe: () => void listeners.delete(query.capability),
+    }),
+    close: () => undefined,
+  });
+  /** A transcript's rows, at the messages' count, delivered to every part once each is subscribed. */
+  const deliver = (rows: number) =>
+    Effect.gen(function* () {
+      for (let turn = 0; turn < 100 && listeners.size < TRANSCRIPT_PARTS.length; turn += 1) {
+        yield* Effect.yieldNow;
+      }
+      const data = {
+        messages: [{ rows, seq: rows }],
+        turns: [],
+        conversation: [{ id: "worker-conversation", title: null, revision: 0 }],
+        agent: [],
+        workers: [],
+      };
+      for (const part of TRANSCRIPT_PARTS) {
+        const listener = listeners.get(part);
+        assert.ok(listener, `no subscription to ${part}`);
+        listener({ status: "live", data: data[part] });
+      }
+    });
+  return { open, deliver };
+}
+
 /** The one voice call as the live composer holds it: about a task, about the desk, or none. */
 interface StandingCall {
   about: { readonly taskId: string | undefined } | undefined;
@@ -1165,6 +1248,8 @@ function subject(
     breaksOn?: (view: TasksView) => boolean;
     /** Realtime's client, which the open task's board is followed over. */
     openLive?: (url: string) => LiveClient;
+    /** The account signed in now, Dana's where none is named. */
+    accountId?: () => string;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -1207,7 +1292,7 @@ function subject(
       client: service,
       conversations,
       openLive: options.openLive ?? realtime.open,
-      accountId: () => "user-dana",
+      accountId: options.accountId ?? (() => "user-dana"),
       endTaskCall: (taskId) =>
         Effect.gen(function* () {
           const about = standing.about?.taskId;
@@ -3747,57 +3832,113 @@ it.effect(
     }),
 );
 
+/** A planning worker's page read at once, with whether the service's held read would have held on it. */
+function workerPage(
+  messages: readonly CodingAgentMessage[],
+  status: CodingAgentStatus,
+  holds: boolean,
+): TranscriptNowAnswer {
+  return { ...conversationPage(messages, "3:0", status), holds };
+}
+
 it.effect(
-  "a followed planning worker's transcript is told page by page from its start on the service's held read, and the follow ends once the worker ended with nothing more",
+  "a followed planning worker's transcript is told page by page on its live statements: the next asked at once after one that said something, and an empty one again only once they move",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, pages, conversations } = yield* subject(service);
+      const realtime = fakeTranscriptRealtime();
+      const { call, pages, conversations } = yield* subject(service, { openLive: realtime.open });
+      conversations.workerSealed = SEALED_WORKER;
       const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-0-0" };
-      const said = conversationPage(
+      const said = workerPage(
         [journal("worker-1", "Compared them.")],
-        "3:0",
         CODING_AGENT_STATUS.RUNNING,
+        true,
       );
-      const ended = conversationPage([], "3:0", CODING_AGENT_STATUS.COMPLETED);
-      yield* conversations.answer(INVITES, said);
-      yield* conversations.answer(INVITES, ended);
+      const quiet = workerPage([], CODING_AGENT_STATUS.RUNNING, true);
+      const ended = workerPage([], CODING_AGENT_STATUS.COMPLETED, false);
+      yield* conversations.answerWorker(said);
+      yield* conversations.answerWorker(quiet);
+      yield* conversations.answerWorker(quiet);
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript), {});
-      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+      // The statements' first rows are read again, since the page before them may have missed what they say.
+      yield* realtime.deliver(1);
+      // The same rows again, and a long wait, ask nothing more.
+      yield* realtime.deliver(1);
+      yield* TestClock.adjust(Duration.minutes(5));
+      assert.equal(conversations.workerReads.length, 3);
 
+      yield* conversations.answerWorker(ended);
+      yield* realtime.deliver(2);
+      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+      const { holds: _said, ...saidPage } = said;
+      const { holds: _quiet, ...quietPage } = quiet;
+      const { holds: _ended, ...endedPage } = ended;
       assert.deepEqual(pages, [
-        { transcript, page: said },
-        { transcript, page: ended },
+        { transcript, page: saidPage },
+        { transcript, page: quietPage },
+        { transcript, page: quietPage },
+        { transcript, page: endedPage },
       ]);
-      assert.deepEqual(conversations.asks, [
-        [INVITES, CONVERSATION_READ.AFTER, CODING_AGENT_CURSOR_START],
-        [INVITES, CONVERSATION_READ.AFTER, "3:0"],
+      assert.deepEqual(conversations.workerReads, [
+        `${INVITES}:call-0-0:${CODING_AGENT_CURSOR_START}`,
+        `${INVITES}:call-0-0:3:0`,
+        `${INVITES}:call-0-0:3:0`,
+        `${INVITES}:call-0-0:3:0`,
+      ]);
+      assert.deepEqual(conversations.asks, []);
+    }),
+);
+
+it.effect(
+  "a planning worker the service seals nothing for yet is sealed again each second, then read",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const realtime = fakeTranscriptRealtime();
+      const { call, pages, conversations } = yield* subject(service, { openLive: realtime.open });
+      const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-7" };
+      yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript);
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.deepEqual(conversations.workerReads, []);
+      conversations.workerSealed = SEALED_WORKER;
+      const starting = workerPage([], CODING_AGENT_STATUS.STARTING, true);
+      yield* conversations.answerWorker(starting);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+      const { holds: _holds, ...page } = starting;
+      assert.deepEqual(pages, [{ transcript, page }]);
+      assert.deepEqual(conversations.workerReads, [
+        `${INVITES}:call-7:${CODING_AGENT_CURSOR_START}`,
       ]);
     }),
 );
 
 it.effect(
-  "a planning worker not yet recorded, whose page is empty and starting at once, is told again only after a pause",
+  "a sign-out lets a planning worker's follow go at once, so another account that opens the worker inside the follow's idle while is sealed for its own",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, pages, conversations } = yield* subject(service);
-      const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-7" };
-      const starting = conversationPage(
-        [],
-        CODING_AGENT_CURSOR_START,
-        CODING_AGENT_STATUS.STARTING,
-      );
-      yield* conversations.answer(INVITES, starting);
-      yield* conversations.answer(INVITES, starting);
+      const realtime = fakeTranscriptRealtime();
+      let account = "user-dana";
+      const { call, tasks, conversations } = yield* subject(service, {
+        openLive: realtime.open,
+        accountId: () => account,
+      });
+      conversations.workerSealed = SEALED_WORKER;
+      const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-0-0" };
+      const quiet = workerPage([], CODING_AGENT_STATUS.RUNNING, true);
+      yield* conversations.answerWorker(quiet);
       yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript);
       yield* Effect.repeat(Effect.yieldNow, { times: 100 });
-      assert.deepEqual(pages, [{ transcript, page: starting }]);
-      yield* TestClock.adjust(Duration.seconds(1));
+      yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_UNFOLLOW, transcript);
+
+      yield* tasks.reset;
+      account = "user-eli";
+      yield* conversations.answerWorker(quiet);
+      yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript);
       yield* Effect.repeat(Effect.yieldNow, { times: 100 });
-      assert.deepEqual(pages, [
-        { transcript, page: starting },
-        { transcript, page: starting },
-      ]);
+
+      assert.deepEqual(conversations.workerSeals, ["user-dana", "user-eli"]);
     }),
 );

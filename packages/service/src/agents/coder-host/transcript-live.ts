@@ -6,10 +6,11 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import { agentReachableBy } from "@luke/database/models/workspace-store";
+import { agentReachableBy, taskReachableBy } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
+import { task } from "@luke/database/schemas/task";
 import { and, eq, exists, isNull, type SQL, sql } from "drizzle-orm";
 import { Option } from "effect";
 
@@ -79,6 +80,16 @@ export function agentFollowedBy(
           agentReachableBy(readerId),
         ),
       ),
+  );
+}
+
+/** The condition that `readerId` may follow a planning worker's transcript under the task `taskId`: it is a member of the task's workspace, joined in each statement as `agentFollowedBy` is. */
+export function taskFollowedBy(taskId: string, readerId: string): SQL {
+  return exists(
+    queryBuilder
+      .select({ one: task.id })
+      .from(task)
+      .where(and(eq(task.id, taskId), taskReachableBy(readerId))),
   );
 }
 
