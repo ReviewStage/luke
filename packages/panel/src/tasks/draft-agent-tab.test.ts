@@ -29,6 +29,8 @@ import {
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
+import { appSettingsWire, settingsView } from "@luke/settings/testing";
+import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -48,10 +50,11 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import type { AgentCallDoors } from "./agent-call.js";
 import { startFailureNote } from "./coding-agent-model.js";
 import { DraftAgentTab } from "./draft-agent-tab.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy.js";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentDraft, CodingAgentsControl, DraftCallStart } from "./use-coding-agents.js";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
@@ -149,6 +152,7 @@ function mount(
   answers: (Failure | undefined)[],
   draft: AgentDraft = DRAFT,
   extra: Partial<CodingAgentsControl> = {},
+  call?: AgentCallDoors,
 ) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
@@ -202,7 +206,7 @@ function mount(
             createElement(
               RepositoryRemedyProvider,
               { value: doors },
-              createElement(DraftAgentTab, { draft, control }),
+              createElement(DraftAgentTab, { draft, control, call }),
             ),
           ),
         ),
@@ -759,4 +763,83 @@ test("a cohort account with ChatGPT connected sees ChatGPT plan beside a GPT mod
   assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: ChatGPT plan");
   await tab.send();
   assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]);
+});
+
+/** A desktop whose voice can take a call, the microphone granted. */
+function voiced(): void {
+  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
+}
+
+/** A draft's tab whose Call starts the agent given, each draft it was handed and each call opened written down. */
+function callTab(
+  draft: AgentDraft,
+  answer: DraftCallStart,
+  extra: Partial<CodingAgentsControl> = {},
+) {
+  const called: AgentDraft[] = [];
+  const opened: string[] = [];
+  const tab = mount(
+    [],
+    draft,
+    {
+      startCall: (held) => {
+        called.push(held);
+        return Promise.resolve(answer);
+      },
+      ...extra,
+    },
+    { onPress: (agentId) => opened.push(agentId) },
+  );
+  return { ...tab, called, opened };
+}
+
+test("Call on an empty draft starts its agent blank and opens a call into the agent it started", async () => {
+  voiced();
+  const tab = callTab({ ...DRAFT, prompt: "" }, { agentId: "agent-voice" });
+  await settle();
+  await tab.press(CALL_LABEL);
+
+  assert.deepEqual(
+    tab.called.map((held) => [held.id, held.prompt]),
+    [[DRAFT.id, ""]],
+  );
+  assert.deepEqual(tab.opened, ["agent-voice"]);
+});
+
+test("Call on a draft holding words starts its agent on them and opens a call into it, and one that did not start keeps the words, its Retry calling again", async () => {
+  voiced();
+  const tab = callTab(DRAFT, { agentId: "agent-words" });
+  await settle();
+  await tab.press(CALL_LABEL);
+  assert.deepEqual(
+    tab.called.map((held) => held.prompt),
+    [DRAFT.prompt],
+  );
+  assert.deepEqual(tab.opened, ["agent-words"]);
+
+  const refused = callTab(DRAFT, {
+    failure: startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
+  });
+  await settle();
+  await refused.press(CALL_LABEL);
+  assert.match(refused.note() ?? "", /could not be started/u);
+  assert.equal(refused.draft(), DRAFT.prompt);
+  await refused.press("Retry");
+  assert.equal(refused.called.length, 2, "Retry presses Call again");
+  assert.deepEqual(refused.starts, [], "and never sends the words without a call");
+  assert.deepEqual(refused.opened, []);
+});
+
+test("a draft offers no Call where the platform takes no calls, nor on a fork, which starts from its source", async () => {
+  voiced();
+  const web = mount([], DRAFT, { startCall: () => Promise.resolve({ agentId: "x" }) });
+  await settle();
+  assert.equal(web.button(CALL_LABEL), undefined);
+
+  const fork = callTab(
+    { ...DRAFT, fork: { agentId: "agent-source", messageId: "message-1", opening: "Fix it." } },
+    { agentId: "x" },
+  );
+  await settle();
+  assert.equal(fork.button(CALL_LABEL), undefined);
 });

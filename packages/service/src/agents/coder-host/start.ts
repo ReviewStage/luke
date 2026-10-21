@@ -392,6 +392,8 @@ export type StartAsk = StartPlace & {
   readonly branch?: string | undefined;
   /** Who Start picked to pay for this one agent; none for the account's default (`agentRuntimeChoice`). */
   readonly payer?: CodingAgentPayer | undefined;
+  /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
+  readonly call?: boolean | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -828,16 +830,16 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The runtime a new agent's conversation is recorded on. A blank Start is
- * always eve's, whatever the account's routing would choose: only a voice
- * chat starts blank, its first words are spoken, and a call reaches eve
- * alone (`voice/opening.ts` refuses an agent on any other runtime). Every
+ * The runtime a new agent's conversation is recorded on. A blank Start, and
+ * one a Call opens a call into as it lands (`call`), is always eve's,
+ * whatever the account's routing would choose: a call reaches eve alone
+ * (`voice/opening.ts` refuses an agent on any other runtime). Every
  * other Start is decided by the account's routing (`agentRuntimeChoice`),
  * with its payer, after the blank case: the payer the ask picked where it
  * picked one, the account's default otherwise, a continue and a fork alike.
  */
 function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
-  if (ask.blank === true) {
+  if (ask.blank === true || ask.call === true) {
     return Effect.succeed<AgentRuntimeChoice>({
       runtime: CONVERSATION_RUNTIME.EVE,
       payer: undefined,
@@ -1106,6 +1108,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     from: request.from,
     note: note === "" ? undefined : note,
     blank: request.blank,
+    call: request.call,
     payer: request.payer,
     summaryModel,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));

@@ -22,7 +22,11 @@ import { afterEach, test } from "vitest";
 import type { ActHandle } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
-import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
+import {
+  type CodingAgentsControl,
+  type DraftCallStart,
+  useCodingAgents,
+} from "./use-coding-agents.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -1023,4 +1027,47 @@ test("no continue is offered while no Start could run: an archived task, or a ta
   bare.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await bare.mount();
   assert.equal(bare.control().continueAgent, undefined);
+});
+
+test("a draft's Call starts an empty draft's agent blank under a key of its own, and a draft's words under the draft's key marked for a call, letting the draft go for the agent's tab", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [STARTED] }, { agents: [] });
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: STARTED }, { agent: STARTED });
+  await tab.mount();
+
+  let empty = "";
+  act(() => {
+    empty = tab.control().onNewDraft();
+  });
+  const blank = tab.control().draft;
+  assert.ok(blank);
+  let answer: DraftCallStart | undefined;
+  await act(async () => {
+    answer = await tab.control().startCall?.(blank);
+  });
+  assert.deepEqual(answer, { agentId: STARTED.id });
+  assert.equal(tab.control().draft, undefined, "the draft gives way to the agent");
+  assert.deepEqual(tab.started, [STARTED.id]);
+
+  let worded = "";
+  act(() => {
+    worded = tab.control().onNewDraft();
+  });
+  const prompt = "Walk me through the invite flow.";
+  const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+  act(() => tab.control().onDraftChange({ prompt }));
+  act(() => tab.control().onDraftChange({ choice }));
+  const held = tab.control().draft;
+  assert.ok(held);
+  await act(async () => {
+    answer = await tab.control().startCall?.(held);
+  });
+  assert.deepEqual(answer, { agentId: STARTED.id });
+  assert.equal(tab.control().draft, undefined);
+
+  const [first, second] = startPayloads(tab.asked);
+  assert.equal(first?.blank, true, "an empty draft starts blank");
+  assert.equal(first?.prompt, undefined);
+  assert.notEqual(first?.idempotencyKey, empty, "under a key of the press's own");
+  assert.deepEqual(second, { taskId: TASK, idempotencyKey: worded, prompt, call: true, ...choice });
 });
