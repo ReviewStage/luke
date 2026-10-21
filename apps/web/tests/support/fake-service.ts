@@ -37,7 +37,7 @@ export const LISTED_TASK = {
   repository: null,
 } as const;
 
-/** The rows each part of the task list delivers: the listed task, owned by the signed-in user, and no agent. */
+/** The rows each part of the task list delivers: the listed task, owned by the signed-in user, no agent, and no linked issue. */
 const LIVE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<string, readonly WireValue[]>([
   [
     "plans",
@@ -58,10 +58,11 @@ const LIVE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<string, rea
     ],
   ],
   ["agents", []],
+  ["issues", []],
 ]);
 
 /** Where the task list's rows stand, which never moves in the fake: each part's digest, in the parts' name order. */
-const LIVE_DIGEST = "1,1";
+const LIVE_DIGEST = "1,1,1";
 
 /** The task list as a polled read answers it: each part's rows inline at the poll address, or only where they stand where they have not moved. */
 function polledTaskList(unchanged: boolean): WireValue {
@@ -72,7 +73,10 @@ function polledTaskList(unchanged: boolean): WireValue {
     digest: "1",
     ...(unchanged ? undefined : { rows: JSON.stringify(LIVE_ROWS.get(name) ?? []) }),
   });
-  return { url: LIVE_POLL_URL, queries: { plans: part("plans"), agents: part("agents") } };
+  return {
+    url: LIVE_POLL_URL,
+    queries: { plans: part("plans"), agents: part("agents"), issues: part("issues") },
+  };
 }
 
 /** Where the fake sends a browser to sign in to Notion. */
