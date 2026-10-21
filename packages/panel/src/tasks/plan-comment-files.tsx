@@ -19,13 +19,10 @@ import { readFiles, withFiles } from "./attached-files.js";
  * opening over the window. A chip whose bytes have not landed, or whose read
  * failed, is drawn by its name alone.
  *
- * A comment's field takes files by its + picker, a paste of pictures, or a
- * drop, read into the coding agent's file shape (`attached-files.ts`) and
- * held to the bounds a message to an agent is.
+ * A comment's field takes files by its + (`attach-files-button.tsx`), a
+ * paste of pictures, or a drop, read into the coding agent's file shape
+ * (`attached-files.ts`) and held to the bounds a message to an agent is.
  */
-
-/** The label of the field's + and its picker. */
-export const ATTACH_FILES = "Attach files";
 
 /** A comment's files under its words, each read once as it is first drawn. */
 export function CommentFiles({

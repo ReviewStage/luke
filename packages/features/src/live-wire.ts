@@ -44,6 +44,17 @@ export const LIVE_POLL_URL = "luke-poll:";
 export const LIVE_POLL = { QUERY: "poll", ON: "true", AFTER: "after" } as const;
 
 /**
+ * The query every live read names the account it was started for under, as
+ * Neon's guide says a page sends its user ("When the session changes"): the
+ * service answers a session of anyone else, or a read naming none, as
+ * signed out.
+ */
+export const LIVE_USER_QUERY = "userId";
+
+/** A live read the service refused as signed out: no session, or one of another account than the read names. */
+export const LIVE_SIGNED_OUT = { failure: "signed-out" } as const;
+
+/**
  * Where a polled read's rows stand as one value: each part's digest, in
  * the parts' name order. A reader sends the one it last saw as `after`, and
  * the service holds the poll until the rows move past it.

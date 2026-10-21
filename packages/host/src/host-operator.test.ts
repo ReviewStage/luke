@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INBOX_REPLY, type InboxAnswers } from "@luke/features/inbox-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import {
   carried,
@@ -102,6 +103,36 @@ it.effect(
         ],
       );
     }),
+);
+
+it.effect("a save names the kind of credential it carries, and an API key's names none", () =>
+  Effect.gen(function* () {
+    const { client, requests } = recordingClient();
+    const operator = operatorOver(client);
+    const key = "sk-ant-oat01-fake-setup-token-0000";
+
+    yield* operator.providerKeySave({
+      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+      key,
+    });
+    yield* operator.providerKeySave({ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key });
+
+    assert.deepEqual(
+      requests.map((request) => [request.method, request.params]),
+      [
+        [
+          GATEWAY_METHOD.PROVIDER_KEYS_SAVE,
+          {
+            provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+            kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+            key,
+          },
+        ],
+        [GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key }],
+      ],
+    );
+  }),
 );
 
 it.effect("a task filed for later carries its status and priority to the host", () =>

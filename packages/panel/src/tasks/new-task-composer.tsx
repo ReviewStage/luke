@@ -283,24 +283,36 @@ export function NewTaskComposer({
     linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined;
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
+  // The repositories the chip's last read listed, an App's and a member's token's alike.
+  const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   // A repository or an issue picked in one workspace is none of another's,
   // so the owner's switch, as Home's, lets them go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
+    setListed(undefined);
     if (scope !== undefined) {
       setChosen(undefined);
       setLinks([]);
     }
     setScope(repositories.scope);
   }
-  // Note that a press's repository the workspace's GitHub does not reach is
-  // not started on, because the service would refuse it.
-  const pick =
-    chosen != null && workspace !== undefined && !workspaceReaches(workspace, chosen)
+  const isListed = (name: string) =>
+    listed === undefined || listed.some((each) => each.toLowerCase() === name.toLowerCase());
+  // A pick or the recent default a read does not list is let go, so a later read listing it does
+  // not bring it back; a read made before the workspace resolved, or for the
+  // one before a switch still under way, judges none.
+  const judged = repositories.scope !== undefined && repositories.scope === scope;
+  const candidate = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
+  if (candidate !== null && !isListed(candidate) && judged) setChosen(null);
+  // Note that a repository is not started on before the read lands unless
+  // the workspace's GitHub reaches it, because the service would refuse it.
+  const repository =
+    candidate !== null &&
+    (!isListed(candidate) ||
+      (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, candidate)))
       ? null
-      : chosen;
-  const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
+      : candidate;
   // A change of repository lets go the GitHub issues of the one before, in the render that brings it.
   const [linkedFor, setLinkedFor] = useState(repository);
   if (linkedFor !== repository) {
@@ -434,7 +446,8 @@ export function NewTaskComposer({
       value={repository}
       chooser={repositories}
       onChoose={setChosen}
-      onUnreached={() => setChosen(null)}
+      onUnreached={judged ? () => setChosen(null) : undefined}
+      onListed={setListed}
     />
   );
   const full = links.length >= TASK_BOUNDS.MAX_ISSUES;

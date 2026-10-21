@@ -16,8 +16,6 @@ import {
   BUTTON_VARIANT,
   Button,
   ErrorState,
-  IconButton,
-  PlusIcon,
   SUBMIT_STATE,
   TEXT_TONE,
   Text,
@@ -40,6 +38,7 @@ import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contra
 import { Shortcut } from "../shortcut.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
+import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
@@ -200,9 +199,6 @@ const ITEM_CHANGED = "The agent changed this item while your files were read. At
 /** What the press after an archived agent's note says. */
 const UNARCHIVE = "Unarchive";
 
-/** What the box's + is called, which is its tooltip too. */
-const ATTACH = "Attach files";
-
 /** Whether a drag carries files, which is all the card takes from one. */
 function carriesFiles(event: React.DragEvent): boolean {
   return event.dataTransfer.types.includes("Files");
@@ -348,7 +344,6 @@ function AnswerCard({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const picker = useRef<HTMLInputElement>(null);
   const [dropping, setDropping] = useState(false);
   // What the last send found the answer lacking, which the quiet line says until it is filled.
   const [wanting, setWanting] = useState<string | undefined>(undefined);
@@ -550,25 +545,7 @@ function AnswerCard({
             ) : (
               <>
                 <PromptInputTools className="inbox-answer-tools">
-                  <Tooltip label={ATTACH}>
-                    <IconButton
-                      icon={<PlusIcon />}
-                      label={ATTACH}
-                      onClick={() => picker.current?.click()}
-                    />
-                  </Tooltip>
-                  <input
-                    ref={picker}
-                    type="file"
-                    multiple
-                    hidden
-                    onChange={(event) => {
-                      const picked = Array.from(event.currentTarget.files ?? []);
-                      // Cleared so the same file can be picked again after it was taken off.
-                      event.currentTarget.value = "";
-                      attach(picked);
-                    }}
-                  />
+                  <AttachFilesButton onFiles={attach} />
                   <span className="inbox-answer-quiet">
                     {quiet === undefined ? null : (
                       <span

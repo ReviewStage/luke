@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAutomationClient,
   HostedCodingAgentClient,
@@ -163,9 +164,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
     });
+    /** The account signed in now, by its id, which every live read names. */
+    const accountId = () => {
+      const signedIn = account.session.snapshot();
+      return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
+    };
     const tasks = yield* composeTasks({
       kernel,
       account,
+      accountId,
       endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
         new HostedTaskClient({
@@ -186,6 +193,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
+      accountId,
       client: codingAgentClient,
     });
     const automations = yield* composeAutomations({

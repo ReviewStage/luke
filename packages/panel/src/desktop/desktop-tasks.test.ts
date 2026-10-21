@@ -596,7 +596,7 @@ test("while a task's Inbox is first read, its list stands placeholder rows under
   inbox.unmount();
 });
 
-test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, though it leaves the list, which then says there is nothing to do", async () => {
+test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
   window.localStorage.clear();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
@@ -604,8 +604,9 @@ test("on To do, the item a task's Inbox chose for itself stays shown once it is 
   await inbox.pressScope("To do");
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
-  assert.deepEqual(inbox.rows(), []);
-  assert.equal(inbox.filteredOut()?.[1], "Nothing to do");
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "the answered row stays while chosen");
+  assert.equal(inbox.row("Expire after 7 days?")?.closest("li")?.dataset["muted"], "true");
+  assert.equal(inbox.filteredOut(), null);
   assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
   window.localStorage.clear();
   inbox.unmount();

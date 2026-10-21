@@ -31,6 +31,7 @@ import {
 } from "../voice/orphan-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
+import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
@@ -71,9 +72,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     deploymentEveOrigin(),
     EVE_MOUNT.CODER,
   );
+  const httpClient = yield* HttpClient.HttpClient;
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,
-    Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient),
+    Layer.succeed(HttpClient.HttpClient, httpClient),
   );
   const voiceUpstream = environment.openAiKey
     ? createLiveUpstream({
@@ -96,6 +98,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepTerminalLeases: (now) =>
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
+    sweepNativeSandboxes: (now) =>
+      sweepNativeSandboxes(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
