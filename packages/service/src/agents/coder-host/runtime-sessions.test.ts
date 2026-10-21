@@ -419,13 +419,13 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "who may write to an agent its starter's plan pays for: its starter, not a teammate, under the starter-only switch; anyone on eve; anyone where the switch says the workspace",
+      "who may write to an agent its starter's plan pays for: any member, as today, its words reaching the harness acting for the starter, whose plan pays; under the starter-only switch, its starter alone",
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
           const onEve = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, native } = runtimes();
+          const { eve, claudeCode, actingFor, native } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           for (const agent of [onEve, onClaudeCode]) {
             yield* claimRuntimeSession(
@@ -443,21 +443,25 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             sender: { kind: MESSAGE_SENDER.MEMBER, userId: teammate } as const,
           };
 
-          const toPlan = yield* Effect.result(
-            steerCodingAgent(sessions, writer, teammate, onClaudeCode, line),
+          // A teammate's words reach the harness, acting for the starter whose plan pays.
+          assert.equal(
+            yield* steerCodingAgent(sessions, writer, teammate, onClaudeCode, line),
+            STEER_OUTCOME.SENT,
           );
-          assert.ok(Result.isFailure(toPlan));
-          assert.equal(toPlan.failure.error, HOSTED_REFUSAL.NOT_PERMITTED.error);
-          assert.deepEqual(claudeCode.calls, []);
+          assert.deepEqual(heard(claudeCode), ["send"]);
+          assert.deepEqual(actingFor, [owner]);
           const reach: EveReach = {
             eveOrigin: () => "https://luke.test",
             eveAs: () => eve.sessions,
           };
-          const stop = yield* Effect.result(
-            stoppedTurn(reach, writer, new Request("https://luke.test/"), teammate, onClaudeCode),
-          );
-          assert.ok(Result.isFailure(stop));
-          assert.equal(stop.failure.error, HOSTED_REFUSAL.NOT_PERMITTED.error);
+          // And a teammate's Stop is admitted: the agent runs no turn, so it stops nothing.
+          yield* stoppedTurn(
+            reach,
+            writer,
+            new Request("https://luke.test/"),
+            teammate,
+            onClaudeCode,
+          ).pipe(Effect.provide(native));
 
           assert.equal(
             yield* steerCodingAgent(sessions, writer, teammate, onEve, {
@@ -474,10 +478,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             [
               writesToAgent(owner, onClaudeCode, payer),
               writesToAgent(teammate, onClaudeCode, payer),
-              writesToAgent(teammate, onClaudeCode, payer, PLAN_AGENT_WRITERS.WORKSPACE),
-              writesToAgent(teammate, onEve, null),
+              writesToAgent(owner, onClaudeCode, payer, PLAN_AGENT_WRITERS.STARTER),
+              writesToAgent(teammate, onClaudeCode, payer, PLAN_AGENT_WRITERS.STARTER),
+              writesToAgent(teammate, onEve, null, PLAN_AGENT_WRITERS.STARTER),
             ],
-            [true, false, true, true],
+            [true, true, true, false, true],
           );
         }),
     );

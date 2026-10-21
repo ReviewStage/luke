@@ -160,11 +160,12 @@ export const PLAN_AGENT_WRITERS = {
 export type PlanAgentWriters = (typeof PLAN_AGENT_WRITERS)[keyof typeof PLAN_AGENT_WRITERS];
 
 /**
- * The switch: who writes to a plan-funded agent. Starter only is assumed
- * until the developer decides (the plan's open question on who may write to
- * a plan-funded agent); changing it is this one line.
+ * The switch: who writes to a plan-funded agent. The developer decided "same
+ * as today": any member who reaches it messages, steers, continues, or stops
+ * it, billed to its starter's plan, as with an agent on any other payer.
+ * Changing it is this one line.
  */
-export const PLAN_AGENT_WRITER_POLICY: PlanAgentWriters = PLAN_AGENT_WRITERS.STARTER;
+export const PLAN_AGENT_WRITER_POLICY: PlanAgentWriters = PLAN_AGENT_WRITERS.WORKSPACE;
 
 /** The payers that are a member's own plan, which the policy above holds writers to. */
 const PLAN_PAYERS: ReadonlySet<CodingAgentPayer> = new Set([
