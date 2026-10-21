@@ -37,7 +37,7 @@ import {
 } from "@luke/features/tasks-view";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Option, Schema } from "effect";
+import { Duration, Effect, Fiber, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
@@ -46,6 +46,7 @@ import { BRAIN_HOST_TURN, RELAY_TURN } from "../agents/brain-host/bounds.js";
 import { BRAIN_DELEGATE_TOOL } from "../agents/brain-host/brain.js";
 import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
+import { CODER } from "../agents/coder-host/bounds.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
 import { ASK_ORIGIN, MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_STATUS } from "../core.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
@@ -57,6 +58,7 @@ import {
   brainPageNow,
   brainPagePast,
   brainTitleAwaited,
+  brainTitleEdge,
   brainTurnsPage,
   brainWorkerSession,
   taskConversationLiveStatements,
@@ -940,6 +942,27 @@ test("a planning worker's title is awaited while it is untitled and its turn set
   assert.equal(await database.run(brainTitleAwaited(target, child)), true);
   await database.run(fillChildTitle(target, child, "Queue libraries"));
   assert.equal(await database.run(brainTitleAwaited(target, child)), false);
+});
+
+test("a planning worker's title wait ends by the clock at its turn's settling past the title call's bound, so an at-once reader reads again then, and at no edge once it is titled", async () => {
+  const target = await taskConversation();
+  const child = childConversationId(target.conversationId, "call-0-0");
+  await database.run(openChildConversation(target, child, "worker"));
+  const settledAt = new Date();
+  await insertTurn(database.run, {
+    userId: target.userId,
+    conversationId: child,
+    origin: TURN_ORIGIN.CHILD,
+    status: TURN_STATUS.SETTLED,
+    settledAt,
+  });
+
+  assert.equal(
+    await database.run(brainTitleEdge(target, child)),
+    settledAt.getTime() + Duration.toMillis(CODER.TITLE_TIMEOUT) + 1,
+  );
+  await database.run(fillChildTitle(target, child, "Queue libraries"));
+  assert.equal(await database.run(brainTitleEdge(target, child)), undefined);
 });
 
 test("a page no journal moved says where a worker under a turn older than a page of them stands, so its end is heard", async () => {

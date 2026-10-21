@@ -20,7 +20,6 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
-  CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
@@ -144,6 +143,7 @@ import {
   FiberMap,
   Option,
   Queue,
+  RcMap,
   Result,
   Schedule,
   Schema,
@@ -162,6 +162,11 @@ import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-fol
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt } from "./task-code.js";
 import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
+import {
+  followTranscript,
+  type TranscriptFollows,
+  transcriptFollows,
+} from "./transcript-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
@@ -466,23 +471,14 @@ export type TasksClient = Pick<
   github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
 };
 
-/** The service's side of a task's planning conversation, read as an agent's transcript is, and its mark sealed for following over Neon Realtime. */
+/** The service's side of a task's planning conversation, read as an agent's transcript is and its mark sealed for following, and of a planning worker's transcript, read at once and sealed for following. */
 export type TasksConversationClient = Pick<
   HostedCodingAgentClient,
-  "taskMessages" | "taskConversationLive"
+  "taskMessages" | "taskConversationLive" | "taskWorkerMessagesNow" | "taskWorkerTranscriptLive"
 >;
 
 /** Which planning worker's transcript: the task's, by the call that started the worker. */
 class TaskWorkerKey extends Data.Class<{ readonly taskId: string; readonly callId: string }> {}
-
-/** How soon a planning worker's page the service did not answer, or one with nothing on it, is asked again. */
-const WORKER_RETRY = Duration.seconds(1);
-
-/** The statuses a planning worker may still write under, while its follow asks on. */
-const WORKER_WRITING: ReadonlySet<string> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
-]);
 
 export interface TasksDependencies {
   kernel: Pick<HostKernel, "emit" | "report" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
@@ -702,6 +698,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The planning workers' transcripts main follows for its windows, one fiber each. */
   const followedWorkers = yield* FiberMap.make<TaskWorkerKey>();
+
+  /** The planning workers' statements the follows share, each followed while read and a while after. */
+  const workerTranscripts: TranscriptFollows<TaskWorkerKey> = yield* transcriptFollows({
+    seal: ({ taskId, callId }: TaskWorkerKey, poll: boolean, userId: string, after?: string) =>
+      gate()
+        ? served(conversations.taskWorkerTranscriptLive(taskId, callId, userId, poll, after))
+        : Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    accountId: dependencies.accountId,
+    openLive: dependencies.openLive ?? openRealtimeClient,
+    now: kernel.now,
+  });
 
   /**
    * The task whose call is telling its turns' work as they run, and the
@@ -1581,27 +1588,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * with nothing more on its page or the account no longer reaches it. A
    * page the service did not answer is told and asked again a second later.
    */
+  /**
+   * Follows a planning worker's transcript for main, each page told as it
+   * is read, on the worker's live statements (`transcript-follow.ts`), as an
+   * agent's worker's is: the next page asked at once while the last said
+   * something, and otherwise once the statements move.
+   */
   function followWorker(
     taskId: string,
     callId: string,
     tell: (page: CodingAgentMessagesAnswerView) => Effect.Effect<void>,
   ): Effect.Effect<void> {
-    return Effect.gen(function* () {
-      let after = CODING_AGENT_CURSOR_START;
-      while (true) {
-        const page = yield* served(conversations.taskMessages(taskId, { after }, callId));
-        yield* tell(page);
-        if ("failure" in page) {
-          if (page.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
-          yield* Effect.sleep(WORKER_RETRY);
-          continue;
-        }
-        after = page.cursor;
-        if (page.messages.length === 0 && !WORKER_WRITING.has(page.status)) return;
-        // Note that an empty page is followed by a pause, since a worker not yet recorded answers one at once.
-        if (page.messages.length === 0) yield* Effect.sleep(WORKER_RETRY);
-      }
-    });
+    return followTranscript(
+      workerTranscripts,
+      new TaskWorkerKey({ taskId, callId }),
+      (after) => served(conversations.taskWorkerMessagesNow(taskId, callId, after)),
+      tell,
+    );
   }
 
   const methods: GatewayMethodTable = {
@@ -2655,6 +2658,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(conversationRead);
       yield* FiberHandle.clear(boardFollow);
       yield* FiberMap.clear(followedWorkers);
+      // A follow outlives its last reader a while, sealed for the account it opened under, so a sign-out lets every one go.
+      for (const key of yield* RcMap.keys(workerTranscripts)) {
+        yield* RcMap.invalidate(workerTranscripts, key);
+      }
       yield* FiberHandle.clear(recordFollow);
       yield* serial(
         Effect.sync(() => {
