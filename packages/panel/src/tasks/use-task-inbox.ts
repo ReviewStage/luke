@@ -211,10 +211,12 @@ interface Held {
   readonly items: readonly InboxItem[];
   readonly read: boolean;
   readonly failed: boolean;
+  /** The task's items as last pushed while it was followed before, held as it was taken up: older than its follow, so never its read. */
+  readonly before: readonly InboxItem[] | undefined;
 }
 
-function fresh(taskId: string | undefined): Held {
-  return { taskId, items: [], read: false, failed: false };
+function fresh(taskId: string | undefined, before: readonly InboxItem[] | undefined): Held {
+  return { taskId, items: [], read: false, failed: false, before };
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -327,8 +329,32 @@ export function useTaskInbox(input: {
 }): TaskInboxControl {
   const { taskId, shown, waiting, agents } = input;
   const kind = input.kind ?? INBOX_SCOPE_KIND.PLAN;
-  const [held, setHeld] = useState<Held>(() => fresh(taskId));
-  if (held.taskId !== taskId) setHeld(fresh(taskId));
+  // A task with no agent, standing or archived, has no Inbox tab and nothing
+  // to follow, unless an item waits on it, which an agent this window has not
+  // listed, one started on another Mac, posted.
+  const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
+  const active = shown && taskId !== undefined && readable;
+  const followed = useFollowedInboxes(
+    kind,
+    useMemo(() => (active && taskId !== undefined ? [taskId] : []), [active, taskId]),
+    agents.inboxFollower,
+  );
+  const pushed = taskId === undefined ? undefined : followed.items.get(taskId);
+  const notRead = taskId !== undefined && followed.failed.has(taskId);
+  // Note that the follower keeps an inbox's last push once it is let go, so a task taken up again
+  // starts from nothing until its follow pushes anew: the push it kept predates every item posted
+  // since, and read as current it would stand in for the Inbox list's read and lose the item chosen.
+  const [held, setHeld] = useState<Held>(() => fresh(taskId, pushed));
+  if (held.taskId !== taskId) setHeld(fresh(taskId, pushed));
+  // Each push is the inbox whole, which replaces what was held, an answer's own patch among it.
+  useEffect(() => {
+    if (pushed === undefined) return;
+    setHeld((was) =>
+      was.taskId !== taskId || pushed === was.before
+        ? was
+        : { ...was, items: pushed, read: true, before: undefined },
+    );
+  }, [pushed, taskId]);
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   // The reads out now, by attachment, so an item drawn again while its read is out asks once.
   const reading = useRef(new Set<string>());
@@ -362,22 +388,6 @@ export function useTaskInbox(input: {
   const latest = useRef({ ...agents, taskId });
   latest.current = { ...agents, taskId };
 
-  // A task with no agent, standing or archived, has no Inbox tab and nothing
-  // to follow, unless an item waits on it, which an agent this window has not
-  // listed, one started on another Mac, posted.
-  const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
-  const active = shown && taskId !== undefined && readable;
-  const followed = useFollowedInboxes(
-    kind,
-    useMemo(() => (active && taskId !== undefined ? [taskId] : []), [active, taskId]),
-    agents.inboxFollower,
-  );
-  const pushed = taskId === undefined ? undefined : followed.items.get(taskId);
-  const notRead = taskId !== undefined && followed.failed.has(taskId);
-  // Each push is the inbox whole, which replaces what was held, an answer's own patch among it.
-  useEffect(() => {
-    if (pushed !== undefined) setHeld((was) => ({ ...was, items: pushed, read: true }));
-  }, [pushed]);
   useEffect(() => {
     setHeld((was) => (was.failed === notRead ? was : { ...was, failed: notRead }));
   }, [notRead]);
