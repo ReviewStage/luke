@@ -59,6 +59,7 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
+import { AUTOMATION_RUNS_READ } from "./automation-live.js";
 import { executeAutomationRun } from "./automation-runs.js";
 
 /**
@@ -84,9 +85,6 @@ import { executeAutomationRun } from "./automation-runs.js";
  * the request's own bearer; the same key again answers the run it made. A
  * run's agent is summarized with its status as the agent's tab reads it.
  */
-
-/** How many runs a history read answers. */
-const RUNS_READ = 50;
 
 /** The bytes of randomness in a webhook trigger's secret. */
 const WEBHOOK_SECRET_BYTES = 32;
@@ -578,7 +576,9 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       const id = yield* idOf(input.id);
       const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const runs = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, id, RUNS_READ));
+      const runs = yield* hostedStoreOrUnavailable(
+        listAutomationRuns(userId, id, AUTOMATION_RUNS_READ),
+      );
       return { runs: yield* runSummaries(userId, runs) };
     }),
   };

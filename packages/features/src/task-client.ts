@@ -59,6 +59,7 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
@@ -911,18 +912,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** The repositories the account pinned in the sidebar, newest pinned first; nothing where the service did not answer. */
-  repositoryPins(): Effect.Effect<
-    readonly RepositoryPin[] | undefined,
-    never,
-    HttpClient.HttpClient
-  > {
-    return Effect.map(
-      orNothing(askHosted(this.#hosted.repositoryPins.list, undefined)),
-      (answer) => answer?.pins,
-    );
-  }
-
   /**
    * Pins one repository or unpins it, answering the account's pins as they
    * then stand; nothing where the service refused or did not answer. A
@@ -942,9 +931,24 @@ export class HostedTaskClient {
     );
   }
 
-  /** The sections the account made in its sidebars and the tasks in them; nothing where the service did not answer. */
-  taskSections(): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.taskSections.list, undefined));
+  /**
+   * The account's sidebar sealed for following over Neon Realtime, for the
+   * account named, or with each part's rows inline where `poll` asks for
+   * them; signed out where the session is another account's.
+   */
+  sidebarLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<SidebarLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.sidebar, { [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
   }
 
   /**

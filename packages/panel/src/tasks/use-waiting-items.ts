@@ -1,7 +1,4 @@
-import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { useCallback, useMemo } from "react";
-import { useAct } from "../act.js";
+import { useMemo } from "react";
 import { type InboxListed, openItems, taskHolder, tasklessGroups } from "./inbox-model.js";
 import { useSettledReads } from "./inbox-settling.js";
 import { useInboxItems } from "./use-inbox-items.js";
@@ -12,9 +9,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * use-waiting-items.ts -- every open Inbox item of the listed workspace, a teammate's agent's among them, as Home and Factory list what waits on the developer.
  *
  * Main's read of the account counts only what waits on its own agents, so
- * a place that lists what waits as the window's Inbox does reads each plan
+ * a place that lists what waits as the window's Inbox does follows each plan
  * holding an item whole, and each agent with no plan main says something
- * waits on, through the Inbox's own reads. Every open item is listed, whoever
+ * waits on, as the Inbox follows them. Every open item is listed, whoever
  * it waits on, since Factory counts what holds a teammate's task up and a
  * person's page what waits on them; Home keeps only the reader's own
  * (`needsReader`).
@@ -41,11 +38,6 @@ export interface WaitingItems {
  * something waits on.
  */
 export function useWaitingItems(tasks: TasksControl): WaitingItems {
-  const { act } = useAct();
-  const readInbox = useCallback(
-    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
   const { inboxTasks, tasks: listed } = tasks.listed;
   // Note that every plan holding an item is read, not only those main counts as waiting on the
   // account, because those are its own agents' alone, and the Inbox lists every member's.
@@ -53,9 +45,9 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
     () => inboxTasks.filter((holding) => listed.some((task) => task.id === holding.taskId)),
     [inboxTasks, listed],
   );
-  const read = useInboxItems({ holdings, readInbox });
+  const read = useInboxItems({ holdings });
   const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
-  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
+  // Note that the window's own answers and messages stand over the agents' pushes until they hold them, so a stale push never brings an answered item back.
   const tasklessItems = useSettledReads(tasklessReads.items);
   const taskless = { ...tasklessReads, items: tasklessItems };
   const entries = [
@@ -69,7 +61,7 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
   ];
   // Note that every open item is kept as one that waits, whoever started its agent.
   const items = openItems(entries);
-  // Note that a plan read before it last changed is still being read, because a retry's newer read may yet answer what the older one did not hold.
+  // Note that a listed plan not pushed yet is still being read.
   const reading =
     read.pending || tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId));
   const onRetry = () => {

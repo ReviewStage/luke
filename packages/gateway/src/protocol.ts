@@ -122,6 +122,24 @@ export const GATEWAY_METHOD = {
   WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
+  /**
+   * A workspace's people, followed from now until let go, over Neon
+   * Realtime. What they hold is heard as `WORKSPACE_PEOPLE_CHANGED` events,
+   * never answered; following again starts over, so its first word is told
+   * again.
+   */
+  WORKSPACES_PEOPLE_FOLLOW: "workspaces.peopleFollow",
+  /** A followed workspace's people let go: no more `WORKSPACE_PEOPLE_CHANGED` events of it until it is followed again. */
+  WORKSPACES_PEOPLE_UNFOLLOW: "workspaces.peopleUnfollow",
+  /**
+   * A workspace's pending invitations, followed by an owner or an admin from
+   * now until let go, over Neon Realtime: heard as
+   * `WORKSPACE_INVITATIONS_CHANGED` events, never answered; following again
+   * starts over.
+   */
+  WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
+  /** A followed workspace's invitations let go: no more `WORKSPACE_INVITATIONS_CHANGED` events of it until it is followed again. */
+  WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   WORKSPACES_PHOTO: "workspaces.photo",
   /** The repositories members added to one workspace on their own GitHub tokens, read from the service now; answered to the caller, never held in the view. */
@@ -195,6 +213,15 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /**
+   * A workspace's automations, or an automation's runs, followed from now
+   * until let go or signed out, on the service's live read. What it holds
+   * is heard as `AUTOMATIONS_CHANGED` events, never answered; following
+   * again starts over, from the list or history as it stands.
+   */
+  AUTOMATIONS_FOLLOW: "automations.follow",
+  /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
+  AUTOMATIONS_UNFOLLOW: "automations.unfollow",
   /** A workspace's Factory world, read whole as it stands now. */
   FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
@@ -251,9 +278,14 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
-  /** One task's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * One plan's inbox, or one agent's, followed from now until it is let go
+   * or the account signs out, over Neon Realtime. What it holds is heard as
+   * `INBOX_CHANGED` events, never answered; following again starts over.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  /** One plan's or agent's inbox let go: no more `INBOX_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_INBOX_UNFOLLOW: "codingAgents.inboxUnfollow",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
@@ -647,6 +679,14 @@ export const GATEWAY_EVENT = {
   TASKS_PAGES_CHANGED: "tasks.pagesChanged",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
+  /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
+  AUTOMATIONS_CHANGED: "automations.changed",
+  /** A followed workspace's people as they now stand, each time they move while followed. */
+  WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
+  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
+  WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
+  /** One followed plan's or agent's inbox, its items whole or why there are none, each time it changes while it is followed. */
+  INBOX_CHANGED: "inbox.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

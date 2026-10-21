@@ -20,11 +20,7 @@ import {
   type CodingAgentTranscriptKey,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -62,22 +58,6 @@ const STARTED = {
 } satisfies CodingAgentAgentAnswer;
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
-
-/** What an agent published, as the service answers it: its branch and an open pull request. */
-const PUBLISHED = {
-  repository: "acme/relay",
-  branch: "luke/invites",
-  pullRequest: {
-    number: 41,
-    title: "Teammate invitations",
-    url: "https://github.com/acme/relay/pull/41",
-    state: PULL_REQUEST_STATE.OPEN,
-    checks: CHECK_SUMMARY.PASSING,
-    additions: 12,
-    deletions: 3,
-    changedFiles: 2,
-  },
-};
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -296,9 +276,6 @@ function windowPort(
     observeModels: (models) => {
       noted.push(`models:${models.length}`);
     },
-    observePublished: (agentId, pullRequest) => {
-      noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
-    },
     observeTaskGone: (taskId) => {
       noted.push(`gone:${taskId}`);
     },
@@ -492,22 +469,6 @@ it("a panel's word on what it shows is noted whole, the Chat as none where it na
     "chat:null",
   ]);
   assert.deepEqual(asked, []);
-});
-
-it("a panel's read of an agent's own pull request is noted as what it published, and a read of another by its number is not", async () => {
-  const { call, noted } = windowPort(PANEL, {
-    answers: { codingAgentPullRequest: () => Effect.succeed(PUBLISHED) },
-  });
-
-  const own = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID });
-  const other = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, {
-    agentId: AGENT_ID,
-    number: 52,
-  });
-
-  assert.deepEqual(own, { answer: PUBLISHED });
-  assert.deepEqual(other, { answer: PUBLISHED });
-  assert.deepEqual(noted, [`published:${AGENT_ID}=41`]);
 });
 
 it("a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and its read of which files it viewed hears each file's mark", async () => {

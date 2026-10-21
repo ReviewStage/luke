@@ -10,8 +10,8 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxChanged,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateView,
@@ -27,7 +27,6 @@ import {
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   codingAgentAccountInboxParamsSchema,
-  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
@@ -39,8 +38,8 @@ import {
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxCloseParamsSchema,
   codingAgentInboxMessageParamsSchema,
-  codingAgentInboxParamsSchema,
   codingAgentInboxReadStateParamsSchema,
+  codingAgentInboxScopeSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
@@ -99,7 +98,12 @@ import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
-import { InboxScopeKey, inboxPast, type ScopeInboxes, scopeInboxes } from "./scope-inbox-follow.js";
+import {
+  followInbox,
+  InboxScopeKey,
+  type ScopeInboxes,
+  scopeInboxes,
+} from "./scope-inbox-follow.js";
 import {
   followTranscript,
   type TranscriptFollows,
@@ -111,21 +115,17 @@ import {
 /**
  * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
  *
- * Nothing is held here but the transcripts' subscriptions and each followed
- * workspace chat's (`chat-follow.ts`), whose changes are heard as
- * `CHAT_CHANGED` events. The window holds
- * the agents it draws and the cursor it reads from, asks when a task opens,
- * when it starts or stops an agent, and while an agent's tab shows its
- * running transcript, and every ask is one call of the service answered
- * whole. The transcript read is held open here while the agent runs and
- * nothing new stands, on a Neon Realtime subscription to what its pages are
- * read from (`transcript-follow.ts`), which a sign-out lets go; the inbox
- * read is one the service holds open, held while nothing in it changed, and the
- * chat read a third, held while nothing in the workspace's chat moved, so each of
- * the window's loops is one held read after another rather than a clock of
- * its own, and a loop ends when the window stops asking. What waits across
- * the account is held the same way, and asked by main's own loop rather
- * than a window's (`agent-notices.ts`). Behind a
+ * Nothing is held here but the transcripts' subscriptions, the followed
+ * inboxes' (`scope-inbox-follow.ts`), heard as `INBOX_CHANGED` events, and
+ * each followed workspace chat's (`chat-follow.ts`), heard as `CHAT_CHANGED`
+ * events. The window holds the agents it draws and the cursor it reads
+ * from, asks when a task opens, when it starts or stops an agent, and while
+ * an agent's tab shows its running transcript, and every ask is one call of
+ * the service answered whole. The transcript read is held open here while
+ * the agent runs and nothing new stands, on a Neon Realtime subscription to
+ * what its pages are read from (`transcript-follow.ts`), which a sign-out
+ * lets go. What waits across the account is held the same way, and asked by
+ * main's own loop rather than a window's (`agent-notices.ts`). Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -267,8 +267,22 @@ export function composeCodingAgents(
       now: dependencies.kernel.now,
     });
     const chats = yield* FiberMap.make<string>();
-    return composed(dependencies, http, transcripts, followed, inboxes, chats);
+    const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
+    return composed(
+      dependencies,
+      http,
+      transcripts,
+      followed,
+      { inboxes, followed: inboxFollows },
+      chats,
+    );
   });
+}
+
+/** The scopes' subscriptions the windows share, and the follows main asked for, one fiber per scope. */
+interface ScopeFollows {
+  readonly inboxes: ScopeInboxes;
+  readonly followed: FiberMap.FiberMap<InboxScopeKey>;
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
@@ -278,7 +292,7 @@ function composed(
   transcripts: TranscriptFollows,
   /** The transcripts main follows for its windows, one fiber each. */
   followed: FiberMap.FiberMap<TranscriptKey>,
-  inboxes: ScopeInboxes,
+  { inboxes, followed: inboxFollows }: ScopeFollows,
   /** Each workspace's chat main follows for its windows, one fiber each. */
   chats: FiberMap.FiberMap<string>,
 ): CodingAgentsComposer {
@@ -749,37 +763,29 @@ function composed(
         const answer = yield* asked(client.githubImage(agentId, src));
         return carried<CodingAgentGitHubImageView>(answer);
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const { taskId, after } = yield* read(
-          codingAgentInboxParamsSchema,
+        const scope = yield* read(
+          codingAgentInboxScopeSchema,
           params,
-          "reading a task's inbox names the task and a cursor",
+          "following an inbox names a plan or an agent",
         );
-        const answer = gate()
-          ? yield* inboxPast(
-              inboxes,
-              new InboxScopeKey({ kind: INBOX_SCOPE_KIND.PLAN, id: taskId }),
-              after,
-            )
-          : UNANSWERED;
-        return carried<CodingAgentInboxAnswerView>(answer);
+        const tell = (inbox: CodingAgentInboxChanged["inbox"]) =>
+          Effect.sync(() => kernel.emit(GATEWAY_EVENT.INBOX_CHANGED, carried({ scope, inbox })));
+        const key = new InboxScopeKey(scope);
+        const follow = gate() ? followInbox(inboxes, key, tell) : tell(UNANSWERED);
+        yield* FiberMap.run(inboxFollows, key, follow);
+        return {};
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const { agentId, after } = yield* read(
-          codingAgentAgentInboxParamsSchema,
+        const scope = yield* read(
+          codingAgentInboxScopeSchema,
           params,
-          "reading an agent's inbox names the agent and a cursor",
+          "letting an inbox go names a plan or an agent",
         );
-        const answer = gate()
-          ? yield* inboxPast(
-              inboxes,
-              new InboxScopeKey({ kind: INBOX_SCOPE_KIND.AGENT, id: agentId }),
-              after,
-            )
-          : UNANSWERED;
-        return carried<CodingAgentInboxAnswerView>(answer);
+        yield* FiberMap.remove(inboxFollows, new InboxScopeKey(scope));
+        return {};
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
       Effect.gen(function* () {
@@ -921,6 +927,7 @@ function composed(
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     yield* FiberMap.clear(chats);
+    yield* FiberMap.clear(inboxFollows);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
   });

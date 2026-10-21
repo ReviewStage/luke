@@ -2,7 +2,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_REPLY, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import {
@@ -61,8 +61,9 @@ interface Wanted {
 
 /**
  * The Inbox's read marks, sent through `act`; every item marked read in
- * `workspaceId` where the Inbox lists one, and `onMarkedAll` heard once the
- * service took it, so the reads are asked again.
+ * `workspaceId` where the Inbox lists one. Nothing reads the Inbox again
+ * once the service took a mark: the followed inboxes are pushed each item's
+ * read state as it moves.
  *
  * A mark stands over every read the window draws (`inbox-settling.ts`)
  * until a read holds the item changed since, or a held read holds a later
@@ -74,20 +75,14 @@ interface Wanted {
 export function useInboxReadMarks({
   act,
   workspaceId,
-  onMarkedAll,
 }: {
   act: ActHandle["act"];
   workspaceId: string | undefined;
-  onMarkedAll: () => void;
 }): InboxReadMarks {
   const settler = useInboxSettler();
   // The writes, one after another, and each item's latest mark still to go, which its queued write sends.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const wanted = useRef(new Map<string, Wanted>());
-  const heard = useRef(onMarkedAll);
-  useLayoutEffect(() => {
-    heard.current = onMarkedAll;
-  });
   const send = useCallback((write: () => Promise<void>) => {
     queue.current = queue.current.then(write);
   }, []);
@@ -131,7 +126,6 @@ export function useInboxReadMarks({
               return;
             }
             settler.marked(made);
-            heard.current();
           }),
       );
     },

@@ -80,6 +80,8 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** A workspace's automations, or one's runs, pushed to the window while it holds the stream open. */
+  AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
 /**
@@ -160,8 +162,12 @@ export const AGENT_ACT_KIND = {
  * window holds what it draws; nothing here does.
  */
 export const AGENT_INBOX_ACT_KIND = {
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * A task's inbox, or one agent's, followed while the window holds the
+   * stream open: what it holds, whole, each time it changes, or why there
+   * is none.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
@@ -469,6 +475,18 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
+  /**
+   * A workspace's people, followed while the window holds the stream open:
+   * its members and who its work names but left as they first stand, then
+   * each time they move, or why there are none.
+   */
+  WORKSPACE_PEOPLE: "workspace.people",
+  /**
+   * A workspace's pending invitations, followed for an owner or an admin
+   * while the window holds the stream open: as they first stand, then each
+   * time they move, or why there are none.
+   */
+  WORKSPACE_INVITATIONS: "workspace.invitations",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",

@@ -5,10 +5,15 @@ import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-sto
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
+import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
+import { workspacesLiveStatements } from "@luke/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
+import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
+import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
@@ -88,6 +93,26 @@ function liveStatements() {
     ...Object.fromEntries(Object.entries(chat).map(([part, query]) => [`chat.${part}`, query])),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(workspacesLiveStatements(USER_ID))).map(([part, query]) => [
+        `workspaces.${part}`,
+        query,
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(workspaceMembersLiveStatements(USER_ID, randomUUID()))).map(
+        ([part, query]) => [`workspace-members.${part}`, query],
+      ),
+    ),
+    "workspace-invitations.invitations": Option.getOrThrow(
+      workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
+    ),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(
+        ([part, query]) => [`sidebar.${part}`, query],
+      ),
+    ),
+    "sidebar.pins": Option.getOrThrow(repositoryPinsLiveStatement(USER_ID)),
   };
 }
 

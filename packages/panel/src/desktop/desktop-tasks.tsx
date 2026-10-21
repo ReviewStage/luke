@@ -270,7 +270,6 @@ function TaskInboxTab({
     act,
     workspaceId: task.workspaceId,
     // Note that a task's own Inbox offers no Mark all as read.
-    onMarkedAll: () => undefined,
   });
   const closeItem = useInboxCloser({ act, onHeard: tasks.agents.onRetryList });
   // Note that the task's read draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).

@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import type { BrowserFocus, BrowserKey } from "@luke/features/browser-acts";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -34,10 +33,18 @@ import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
-import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeActs,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -145,6 +152,9 @@ afterEach(() => {
 /** Every read mark the Inbox sent, in order. */
 let readMarks: string[] = [];
 
+/** The host's inbox streams for the window, the task's inbox pushed as holding the one item. */
+const follows = followedInboxes(() => ({ items: [ITEM] }));
+
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
@@ -153,14 +163,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
-    case ACT_KIND.CODING_AGENTS_INBOX:
-      // A read past the cursor is held open while nothing changes, as the service holds it.
-      return request.payload.after === "0"
-        ? Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { items: [ITEM], cursor: "1" } satisfies CodingAgentInboxAnswerView,
-          })
-        : new Promise(() => undefined);
     case ACT_KIND.CODING_AGENTS_LIST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
@@ -228,6 +230,7 @@ async function inbox(
     onBrowserOpened: () => () => undefined,
     onBrowserClosed: () => () => undefined,
   });
+  fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
   handState(experiments);
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);

@@ -78,12 +78,8 @@ import {
   type TranscriptReader,
   windowTranscriptFollower,
 } from "./use-agent-transcript.js";
-import type {
-  InboxAnswerer,
-  InboxImageReader,
-  InboxMessenger,
-  InboxReader,
-} from "./use-task-inbox.js";
+import { type InboxFollower, windowInboxFollower } from "./use-followed-inboxes.js";
+import type { InboxAnswerer, InboxImageReader, InboxMessenger } from "./use-task-inbox.js";
 
 /** A pull request's chapters the port refused to answer, as the tab hears any answer that never came. */
 const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
@@ -379,8 +375,8 @@ export interface CodingAgentsControl {
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
-  /** One read of a task's inbox past a cursor, as the Inbox tab's loop asks it. */
-  readInbox: InboxReader;
+  /** How a task's or an agent's inbox is followed, and heard pushed, as the Inbox tab draws it. */
+  inboxFollower: InboxFollower;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
   /** One message on an inbox item's thread, as its box sends it. */
@@ -1402,10 +1398,7 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readInbox = useCallback<InboxReader>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
+  const inboxFollower = windowInboxFollower;
 
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
@@ -1507,7 +1500,7 @@ export function useCodingAgents(input: {
     readPullRequestViewed,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
-    readInbox,
+    inboxFollower,
     answerInbox,
     messageInbox,
     readInboxImage,

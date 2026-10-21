@@ -31,7 +31,13 @@ import {
   workspaceChatLiveAnswerSchema,
 } from "@luke/features/live-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { sidebarLiveAnswerSchema } from "@luke/features/sidebar-live";
 import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
+import {
+  workspaceInvitationsLiveAnswerSchema,
+  workspaceMembersLiveAnswerSchema,
+  workspacesLiveAnswerSchema,
+} from "@luke/features/workspace-live";
 import { EXPERIMENT } from "@luke/settings";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
@@ -1073,3 +1079,131 @@ it.layer(getTestDB())("the workspace chat's live read", (it) => {
       }),
   );
 });
+
+it.effect(
+  "the account's workspaces are sealed as its workspaces and their installations for the bearer's own account",
+  () =>
+    Effect.gen(function* () {
+      const path = "/api/live/workspaces";
+      const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+      assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(sealed.body);
+      assert.equal(answer.url, REALTIME_URL);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["installations", "workspaces"]);
+      for (const query of Object.values(answer.queries)) {
+        assert.ok(query.capability.includes('"user-dana"'), "read for the bearer");
+      }
+      assert.deepEqual(yield* ask({ path, sealing: Option.some(SCRIPTED) }), {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      });
+      // A read started for another account, as a page left open under a changed session asks, is signed out.
+      assert.deepEqual(
+        yield* ask({
+          bearer: "user-dana",
+          forUser: "user-erin",
+          path,
+          sealing: Option.some(SCRIPTED),
+        }),
+        {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        },
+      );
+    }),
+);
+
+it.layer(getTestDB())("a workspace's people's live read", (it) => {
+  it.effect(
+    "a workspace's people are sealed as its members and former members for a member, and not found for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, outsider] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
+        for (const id of [owner, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        const path = `/api/live/workspace-members?workspaceId=${workspaceId}`;
+
+        const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(workspaceMembersLiveAnswerSchema)(sealed.body);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["former", "members"]);
+        for (const query of Object.values(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
+          assert.ok(query.capability.includes(`"${workspaceId}"`), "read of the workspace");
+        }
+        assert.deepEqual(yield* ask({ bearer: outsider, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        // A read started for another account is signed out, before the workspace is looked at.
+        assert.equal(
+          (yield* ask({ bearer: owner, forUser: outsider, path, sealing: Option.some(SCRIPTED) }))
+            .status,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's invitations are sealed with the service's origin for its owner, refused to a member, and not found for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = `user-${randomUUID()}`;
+        const teammate = `user-${randomUUID()}`;
+        const outsider = `user-${randomUUID()}`;
+        for (const id of [owner, teammate, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, teammate);
+        const path = `/api/live/workspace-invitations?workspaceId=${workspaceId}`;
+
+        const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(workspaceInvitationsLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.origin, ORIGIN);
+        assert.ok(answer.queries.invitations.capability.includes(`"${owner}"`));
+        assert.deepEqual(yield* ask({ bearer: teammate, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        });
+        assert.deepEqual(yield* ask({ bearer: outsider, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        assert.equal(
+          (yield* ask({ bearer: owner, forUser: outsider, path, sealing: Option.some(SCRIPTED) }))
+            .status,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+});
+
+it.effect(
+  "the account's sidebar is sealed as its sections, the tasks in them, and its pins, for the bearer's own account",
+  () =>
+    Effect.gen(function* () {
+      const path = "/api/live/sidebar";
+      const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+      assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(sidebarLiveAnswerSchema)(sealed.body);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["entries", "pins", "sections"]);
+      for (const query of Object.values(answer.queries)) {
+        assert.ok(query.capability.includes('"user-dana"'), "read for the bearer");
+      }
+      assert.equal(
+        (yield* ask({
+          bearer: "user-dana",
+          forUser: "user-erin",
+          path,
+          sealing: Option.some(SCRIPTED),
+        })).status,
+        HOSTED_HTTP_STATUS.UNAUTHORIZED,
+      );
+    }),
+);

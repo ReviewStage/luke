@@ -2,7 +2,11 @@ import { Schema as EffectSchema } from "effect";
 import { agentBrowserTabsAnswerSchema } from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import { CODING_AGENT_ATTACHMENT_TYPE, tasklessAgentSchema } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  codingAgentSummarySchema,
+  tasklessAgentSchema,
+} from "./coding-agent-wire.js";
 import {
   GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
@@ -238,6 +242,13 @@ export const tasksViewSchema = EffectSchema.Struct({
   tasks: EffectSchema.Array(taskSummarySchema),
   /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
+  /**
+   * Every agent on a plan, the archived ones left out, each as its plan's
+   * own list names it, the first started first: present only while the list
+   * is followed live over Neon Realtime, when it is what the notices' ledger
+   * reads in place of listing each plan's agents again on a clock.
+   */
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
   listStatus: tasksReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
@@ -956,6 +967,23 @@ export const tasksWorkspaceMembersAnswerSchema = EffectSchema.Union([
 
 export type TasksWorkspaceMembersAnswer = typeof tasksWorkspaceMembersAnswerSchema.Type;
 
+/** A workspace's people, followed by a window while it draws them. */
+export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
+
+/**
+ * A followed workspace's people as they now stand, told by the host each
+ * time they move: its members and who its work names but left, or why there
+ * are none.
+ */
+export const workspacePeopleFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: tasksWorkspaceMembersAnswerSchema,
+});
+
+export type WorkspacePeopleFollowed = typeof workspacePeopleFollowedSchema.Type;
+
 /** A workspace's photo, as a window's tile asks for it: the workspace. */
 export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
 
@@ -1035,6 +1063,19 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
+
+/**
+ * A followed workspace's pending invitations as they now stand, told by the
+ * host to an owner's or an admin's windows each time they move, or why
+ * there are none. A follow names the workspace as a people's follow does
+ * (`workspacePeopleFollowSchema`).
+ */
+export const workspaceInvitationsFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: tasksWorkspaceInvitationsAnswerSchema,
+});
+
+export type WorkspaceInvitationsFollowed = typeof workspaceInvitationsFollowedSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
 export const tasksGitHubPageAnswerSchema = EffectSchema.Union([

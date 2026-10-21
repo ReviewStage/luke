@@ -2,10 +2,12 @@
  * app-bridge.ts -- the bridge and act port a test's window reaches main through: fakes answering only the calls its test gives them.
  */
 
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@luke/features/automation-view";
 import type { AppBridge } from "@luke/host/bridge";
 import {
   ACT_ERROR,
   type ActPortClient,
+  AUTOMATION_ACT_KIND,
   actContract,
   type PortActKind,
   type PortActPayload,
@@ -31,14 +33,87 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
+/** What a follow of the automations pushes: a workspace's list, or an automation's runs. */
+type FollowedView =
+  PortActResult<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW> extends AsyncIteratorObject<
+    infer View,
+    unknown,
+    unknown
+  >
+    ? View
+    : never;
+
+/** A stream that hands what `first` answers and then stands open, as the host's follow does while nothing moves, until the window closes it. */
+function heldOpen(
+  first: Promise<FollowedView>,
+): AsyncIteratorObject<FollowedView, undefined, unknown> {
+  let handed = false;
+  const ended = Promise.withResolvers<IteratorReturnResult<undefined>>();
+  const closed = ended.promise;
+  const close = () => ended.resolve({ done: true, value: undefined });
+  const stream: AsyncIteratorObject<FollowedView, undefined, unknown> = {
+    next: async () => {
+      if (handed) return closed;
+      handed = true;
+      return { done: false, value: await first };
+    },
+    return: async () => {
+      close();
+      return { done: true, value: undefined };
+    },
+    [Symbol.asyncIterator]: () => stream,
+    [Symbol.asyncDispose]: async () => {
+      close();
+    },
+  };
+  return stream;
+}
+
+/**
+ * A follow of the automations a test does not answer itself, answered from
+ * the one-shot read it does answer: a workspace's list, or an automation's
+ * runs, pushed once and held open.
+ */
+function followedFromReads(
+  read: (scope: AutomationFollow) => Promise<FollowedView>,
+): (
+  scope: AutomationFollow,
+) => Promise<PortActResult<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW>> {
+  // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
+  return (scope) =>
+    Promise.resolve(
+      heldOpen(read(scope)) as unknown as PortActResult<
+        typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
+      >,
+    );
+}
+
 /**
  * Installs an act port answering only the procedures given, each by its
- * kind, as a test's window calls them.
+ * kind, as a test's window calls them. A follow of the automations it does
+ * not answer is answered from the list's or the runs' read where it answers
+ * that.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
-  answeringPort = procedures;
+  const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
+  const runs = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS];
+  const answered: Partial<FakeActPort> =
+    procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW] !== undefined ||
+    (list === undefined && runs === undefined)
+      ? procedures
+      : {
+          ...procedures,
+          [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: followedFromReads((scope) => {
+            const read =
+              scope.kind === AUTOMATION_FOLLOW.WORKSPACE
+                ? list?.({ workspaceId: scope.id })
+                : runs?.({ automationId: scope.id });
+            return read ?? Promise.reject(new Error("Not in this test."));
+          }),
+        };
+  answeringPort = answered;
   // SAFETY: a test's window calls only the procedures its test answers, and any other is undefined and throws where it is called.
-  installActPortClient(procedures as ActPortClient);
+  installActPortClient(answered as ActPortClient);
 }
 
 /** The procedures the fake act port answers now, for a test that answers one more beside them or puts them back. */
@@ -151,6 +226,24 @@ export function fakeActs(
   answeringActs = answer;
   fakeAppBridge(bridge);
   const procedures: Partial<FakeActPort> = {};
+  /** One act answered by the switch: the kind's value, or the port's refusal or rejection. */
+  const settled = (kind: PortActKind, outcome: FakeActAnswer): PortActResult<PortActKind> => {
+    if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
+    if (outcome.status === FAKE_ANSWER.REFUSED) throw refusedOnPort(outcome.reason);
+    throw new Error(`Luke does not know the act ${kind}.`);
+  };
+  const answered = async (request: PortAct): Promise<PortActResult<PortActKind>> =>
+    settled(request.kind, await answer(request));
+  // A follow of the automations the switch does not answer, or refuses as one not in its test, is answered from its list's or runs' read.
+  const followed = followedFromReads(
+    (scope) =>
+      // SAFETY: a list's read answers a workspace's list, and a runs' read an automation's runs.
+      answered(
+        scope.kind === AUTOMATION_FOLLOW.WORKSPACE
+          ? { kind: AUTOMATION_ACT_KIND.AUTOMATIONS_LIST, payload: { workspaceId: scope.id } }
+          : { kind: AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS, payload: { automationId: scope.id } },
+      ) as Promise<FollowedView>,
+  );
   // SAFETY: the contract's keys are exactly its kinds.
   for (const kind of Object.keys(actContract) as PortActKind[]) {
     // Note that each kind is answered alike, whatever its own answer is, so it is assigned rather than typed by the kind.
@@ -158,10 +251,10 @@ export function fakeActs(
       [kind]: async (payload: WireBoundaryInput) => {
         // SAFETY: the window paired this payload with this kind, as its own procedure takes it.
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
+        if (request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW) return answered(request);
         const outcome = await answer(request);
         if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
-        if (outcome.status === FAKE_ANSWER.REFUSED) throw refusedOnPort(outcome.reason);
-        throw new Error(`Luke does not know the act ${kind}.`);
+        return followed(request.payload);
       },
     });
   }

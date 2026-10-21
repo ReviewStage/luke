@@ -6,6 +6,8 @@ import {
   type AutomationChangeParams,
   type AutomationCreateParams,
   type AutomationDeletedView,
+  type AutomationFollow,
+  type AutomationFollowed,
   type AutomationIdParams,
   type AutomationListParams,
   type AutomationListView,
@@ -14,6 +16,7 @@ import {
   type AutomationRunView,
   type AutomationView,
   automationDeletedViewSchema,
+  automationFollowedSchema,
   automationListViewSchema,
   automationRunsViewSchema,
   automationRunViewSchema,
@@ -31,7 +34,6 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
-  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
@@ -45,16 +47,16 @@ import {
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxChanged,
   type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
-  type CodingAgentInboxParams,
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
+  type CodingAgentInboxScope,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -92,8 +94,8 @@ import {
   codingAgentDefaultAnswerViewSchema,
   codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxChangedSchema,
   codingAgentInboxMessagedViewSchema,
   codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateViewSchema,
@@ -293,6 +295,11 @@ import {
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
+  type WorkspaceInvitationsFollowed,
+  type WorkspacePeopleFollow,
+  type WorkspacePeopleFollowed,
+  workspaceInvitationsFollowedSchema,
+  workspacePeopleFollowedSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -558,6 +565,20 @@ export interface HostOperator {
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
+  /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
+  workspacePeopleFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's people let go: nothing more is heard of them until they are followed again. */
+  workspacePeopleUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's people as they now stand, each time they move while followed. */
+  onWorkspacePeopleChanged(listener: (followed: WorkspacePeopleFollowed) => void): () => void;
+  /** A workspace's pending invitations followed from now until let go, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
+  workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's invitations let go. */
+  workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
+  onWorkspaceInvitationsChanged(
+    listener: (followed: WorkspaceInvitationsFollowed) => void,
+  ): () => void;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
   /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
@@ -642,6 +663,12 @@ export interface HostOperator {
   automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
   automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
+  /** A workspace's automations, or an automation's runs, followed from now until let go or signed out, heard through `onAutomationsChanged`; following again starts over. */
+  automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
+  /** A followed list or history let go: nothing more is heard of it until it is followed again. */
+  automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
+  /** A followed list or history as it now stands, each time it moves while followed. */
+  onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** One workspace's Factory world as it stands now, null where it has no repository to draw; or why there is none. */
   factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
@@ -728,12 +755,12 @@ export interface HostOperator {
   dictationTranscribe(
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
-  /** One task's inbox past a cursor, held by the service while nothing changed; or why there is none. */
-  codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-  /** One agent's inbox past a cursor, an agent with no task as much as one on a task, held as a task's is; or why there is none. */
-  codingAgentAgentInbox(
-    params: CodingAgentAgentInboxParams,
-  ): Effect.Effect<CodingAgentInboxAnswerView>;
+  /** One task's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
+  codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** One task's or agent's inbox let go: nothing more is heard of it until it is followed again. */
+  codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** A followed inbox, its items whole or why there are none, each time it changes. */
+  onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
   /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
@@ -1591,6 +1618,32 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
         workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
       ),
+    workspacePeopleFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, scope)),
+    workspacePeopleUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW, scope)),
+    onWorkspacePeopleChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(workspacePeopleFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    workspaceInvitationsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, scope)),
+    workspaceInvitationsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, scope)),
+    onWorkspaceInvitationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(workspaceInvitationsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
     workspacePhoto: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
@@ -1899,6 +1952,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
         automationAnswer(automationViewSchema),
       ),
+    automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
+    automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
+    onAutomationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.AUTOMATIONS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(automationFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
     factoryWorld: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.FACTORY_WORLD, { workspaceId: params.workspaceId }),
@@ -2069,21 +2133,25 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         codingAgentAnswer(dictationTranscribeAnswerViewSchema),
       ),
-    codingAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-          taskId: params.taskId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
+    codingAgentInboxFollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id }),
       ),
-    codingAgentAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-          agentId: params.agentId,
-          after: params.after,
+    codingAgentInboxUnfollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, {
+          kind: scope.kind,
+          id: scope.id,
         }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
+      ),
+    onInboxChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INBOX_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     codingAgentInboxAnswer: (params) =>
       Effect.map(

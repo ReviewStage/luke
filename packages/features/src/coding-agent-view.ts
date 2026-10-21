@@ -30,6 +30,7 @@ import {
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxCloseRequestSchema,
+  inboxItemSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllSchema,
@@ -527,27 +528,30 @@ export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
 
 export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;
 
-/** One task's inbox past a cursor, as the window asks it: the task, and where the window stands. */
-export const codingAgentInboxParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
-
-/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a task's inbox is. */
-export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
-  agentId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
-
 /** Whose inbox is followed: a plan's, or one agent's. */
 export const INBOX_SCOPE_KIND = {
   PLAN: "plan",
   AGENT: "agent",
 } as const;
+
+/** One plan's inbox, or one agent's, as the window follows it: which kind, and the plan's or agent's id. */
+export const codingAgentInboxScopeSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(INBOX_SCOPE_KIND)),
+  id: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentInboxScope = typeof codingAgentInboxScopeSchema.Type;
+
+/** A followed inbox as it now stands, as the window hears it pushed: its items whole, or why there are none. */
+export const codingAgentInboxChangedSchema = EffectSchema.Struct({
+  scope: codingAgentInboxScopeSchema,
+  inbox: EffectSchema.Union([
+    EffectSchema.Struct({ items: EffectSchema.Array(inboxItemSchema) }),
+    failed,
+  ]),
+});
+
+export type CodingAgentInboxChanged = typeof codingAgentInboxChangedSchema.Type;
 
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);

@@ -18,6 +18,9 @@ import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChatChanged,
+  type CodingAgentInboxChanged,
+  type CodingAgentInboxScope,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   INBOX_IMAGE_TYPE,
@@ -81,9 +84,6 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX]: "Could not read the task's inbox on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_AGENT_INBOX]:
-    "Could not read the agent's inbox on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]:
     "Could not answer the inbox item on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE]:
@@ -111,16 +111,6 @@ const ACTS: readonly {
   payload: WireBoundaryInput;
   ask: keyof HostAsk;
 }[] = [
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX,
-    payload: { taskId: TASK_ID, after: "0" },
-    ask: "codingAgentInbox",
-  },
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_AGENT_INBOX,
-    payload: { agentId: AGENT_ID, after: "0" },
-    ask: "codingAgentAgentInbox",
-  },
   {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER,
     payload: { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.APPROVED, clientKey: "answer-1" },
@@ -239,10 +229,9 @@ it("a panel's ask reaches the host once with its payload, and the host's answer 
   );
 });
 
-it("a panel reads a task's inbox, answers, closes, and messages on an item, and hears the item as it then stands", async () => {
+it("a panel answers, closes, and messages on an item, and hears the item as it then stands", async () => {
   const { call, asked } = windowPort(PANEL, {
     answers: {
-      codingAgentInbox: () => Effect.succeed({ items: [ITEM], cursor: "7" }),
       codingAgentInboxAnswer: () =>
         Effect.succeed({ item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true }),
       codingAgentInboxClose: () =>
@@ -259,10 +248,6 @@ it("a panel reads a task's inbox, answers, closes, and messages on an item, and 
   const answer = { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.APPROVED, clientKey: "a-1" };
   const close = { itemId: ITEM.id, revision: 2, clientKey: "close-1" };
 
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: "0" }),
-    { answer: { items: [ITEM], cursor: "7" } },
-  );
   assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER, answer), {
     answer: { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true },
   });
@@ -273,7 +258,6 @@ it("a panel reads a task's inbox, answers, closes, and messages on an item, and 
     answer: { item: ITEM },
   });
   assert.deepEqual(asked, [
-    ["codingAgentInbox", { taskId: TASK_ID, after: "0" }],
     ["codingAgentInboxAnswer", answer],
     ["codingAgentInboxClose", close],
     ["codingAgentInboxMessage", message],
@@ -407,8 +391,8 @@ it("an answer's key its kind's view schema does not name is left out of what the
   const { call } = windowPort(PANEL, {
     answers: {
       codingAgentInboxReadAll: () => Effect.succeed({ marked: 3, stray: true }),
-      codingAgentInbox: () =>
-        Effect.succeed({ items: [{ ...ITEM, stray: true }], cursor: "7", stray: true }),
+      codingAgentInboxMessage: () =>
+        Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
     },
   });
 
@@ -416,8 +400,12 @@ it("an answer's key its kind's view schema does not name is left out of what the
     answer: { marked: 3 },
   });
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: "0" }),
-    { answer: { items: [ITEM], cursor: "7" } },
+    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: ITEM.id,
+      text: "Also page on-call.",
+      clientKey: "message-2",
+    }),
+    { answer: { item: ITEM } },
   );
 });
 
@@ -441,10 +429,6 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
 it("a payload its kind's schema refuses, or none where the kind takes one, is refused in the kind's own words, and the host is not asked", async () => {
   const { call, asked } = windowPort(PANEL);
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: "", after: "0" }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX] },
-  );
-  assert.deepEqual(
     await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
       itemId: ITEM.id,
       unread: "yes",
@@ -464,12 +448,16 @@ it("an item carrying a block and a response type this build does not know reache
     response: { type: "signature" },
   };
   const { call } = windowPort(PANEL, {
-    answers: { codingAgentInbox: () => Effect.succeed({ items: [newer], cursor: "7" }) },
+    answers: { codingAgentInboxMessage: () => Effect.succeed({ item: newer }) },
   });
 
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: "0" }),
-    { answer: { items: [newer], cursor: "7" } },
+    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: ITEM.id,
+      text: "Ship it.",
+      clientKey: "message-3",
+    }),
+    { answer: { item: newer } },
   );
 });
 
@@ -624,4 +612,64 @@ it("one workspace's unfollow on its way holds no other workspace's follow", asyn
   unfollowed.resolve();
   await closed;
   await elsewhere.return(undefined);
+});
+
+it("a panel's inbox stream follows the inbox at the host, hears each change told of it alone, and lets it go once its last stream closes", async () => {
+  const asked: string[] = [];
+  const listeners = new Set<(changed: CodingAgentInboxChanged) => void>();
+  const follows: Pick<
+    HostAsk,
+    "codingAgentInboxFollow" | "codingAgentInboxUnfollow" | "onInboxChanged"
+  > = {
+    codingAgentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
+    codingAgentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+    onInboxChanged: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  // SAFETY: the stream reaches the follow asks alone.
+  const host = follows as HostAsk;
+  const port = testActPort(agentInboxProcedures({ host }));
+  ports.push(port);
+  const client = port.as(PANEL);
+  const scope: CodingAgentInboxScope = { kind: INBOX_SCOPE_KIND.PLAN, id: TASK_ID };
+
+  const one = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
+  const two = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
+  const first = one.next();
+  const second = two.next();
+  await until(() => asked.length === 1);
+  for (const listener of [...listeners]) {
+    listener({ scope: { kind: INBOX_SCOPE_KIND.AGENT, id: AGENT_ID }, inbox: UNANSWERED });
+    listener({ scope, inbox: { items: [ITEM] } });
+  }
+  assert.deepEqual((await first).value, { items: [ITEM] });
+  assert.deepEqual((await second).value, { items: [ITEM] });
+
+  await one.return(undefined);
+  await until(() => listeners.size === 1);
+  assert.deepEqual(asked, ["follow"], "the host follows the inbox once for both streams");
+  await two.return(undefined);
+  await until(() => asked.length === 2);
+  assert.deepEqual(asked, ["follow", "unfollow"]);
+});
+
+it("the voice window is refused an inbox stream, and the host follows nothing", async () => {
+  const asked: string[] = [];
+  // SAFETY: the stream reaches the follow asks alone.
+  const host = {
+    codingAgentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
+    codingAgentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+    onInboxChanged: () => () => undefined,
+  } as unknown as HostAsk;
+  const port = testActPort(agentInboxProcedures({ host }));
+  ports.push(port);
+  await assert.rejects(
+    port.as(VOICE)[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]({
+      kind: INBOX_SCOPE_KIND.PLAN,
+      id: TASK_ID,
+    }),
+  );
+  assert.deepEqual(asked, []);
 });

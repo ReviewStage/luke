@@ -30,6 +30,20 @@
  * no Mac of the account has claimed, as one statement, for the Mac to claim
  * each by its id (`../agents/mac-commands-procedures.ts`).
  *
+ * `GET /api/live/sidebar` answers the account's sidebar sections, the tasks
+ * in them, and its pinned repositories as three.
+ *
+ * `GET /api/live/workspaces` answers the account's workspaces the same way,
+ * as two statements: the workspaces, and the GitHub installations connected
+ * to them. `GET /api/live/workspace-members?workspaceId=` answers one
+ * workspace's people as two, its members and who its work names but left,
+ * after the account is read as a member of it, so a workspace it is not in
+ * is not found, as its held read answers.
+ * `GET /api/live/workspace-invitations?workspaceId=` answers its pending
+ * invitations as one, to an owner or an admin of it alone, with the origin
+ * each accept link is built on, which the desktop needs since it builds the
+ * links itself.
+ *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
  * delegation call (`transcript-live.ts`), after the agent is read as the
@@ -52,13 +66,20 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
+import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
 import { readTask } from "@luke/database/models/task-store";
+import {
+  isWorkspaceMember,
+  workspaceOf as workspaceOfAccount,
+  workspacesLiveStatements,
+} from "@luke/database/models/workspace-store";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -67,13 +88,20 @@ import {
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
+import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { joinedMember } from "../agents/coder-host/chat-page.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { chatAccount, workspaceOf } from "../agents/workspace-chat.js";
+import {
+  automationRunsLiveStatements,
+  automationsLiveStatements,
+} from "../automations/automation-live.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -203,6 +231,9 @@ const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string }, userId: string
   input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
 
 /** The live reads, each to a signed-in caller who is the account it names. */
+/** The roles that read and manage a workspace's invitations, as its held read admits them. */
+const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
+
 export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
   return {
@@ -219,6 +250,24 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const statements = taskListLiveStatements(context.userId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    automations: signedIn.automations.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      const statements = automationsLiveStatements(context.userId, input.workspaceId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    automationRuns: signedIn.automationRuns.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const automationId = yield* rowIdOf(input.id);
+      const automation = yield* hostedStoreOrUnavailable(
+        readAutomation(context.userId, automationId),
+      );
+      if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = automationRunsLiveStatements(context.userId, automationId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),
@@ -310,6 +359,46 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statements = workspaceChatLiveStatements(reader, self.value);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
+    }),
+    sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const statements = Option.zipWith(
+        taskSectionsLiveStatements(context.userId),
+        repositoryPinsLiveStatement(context.userId),
+        (sections, pins) => ({ ...sections, pins }),
+      );
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const statements = workspacesLiveStatements(context.userId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    workspaceMembers: signedIn.workspaceMembers.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = workspaceMembersLiveStatements(context.userId, input.workspaceId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    workspaceInvitations: signedIn.workspaceInvitations.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const workspace = yield* hostedStoreOrUnavailable(
+        workspaceOfAccount(context.userId, input.workspaceId),
+      );
+      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (!MANAGING_ROLES.has(workspace.value.role)) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+      }
+      const statement = workspaceInvitationsLiveStatement(context.userId, input.workspaceId);
+      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      const sealed = yield* sealedParts({ invitations: statement.value }, input);
+      return { ...sealed, origin: new URL(context.request.url).origin };
     }),
   };
 }

@@ -49,7 +49,8 @@ function ended(failed: { readonly failure: string; readonly gone?: boolean }): b
 }
 
 /** Why a read stopped for good: it names nothing the account reaches any more, or its session signed out. */
-const GONE = "the read is gone";
+export const LIVE_GONE = "the read is gone";
+const GONE = LIVE_GONE;
 /** What a go at Realtime leaves to do: subscribe again later, or stay polled, the service answering polled. */
 const AGAIN = "again";
 const STAY = "stay";

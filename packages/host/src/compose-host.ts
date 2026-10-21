@@ -194,6 +194,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const automations = yield* composeAutomations({
       kernel,
       account,
+      accountId,
       client: new HostedAutomationClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
@@ -295,6 +296,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* account.forgetAccess;
       yield* tasks.reset;
       yield* codingAgents.reset;
+      yield* automations.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;
