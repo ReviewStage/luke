@@ -93,6 +93,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -1826,9 +1827,7 @@ test("a teammate's answer names them by their disc and name, their pick checked 
   );
 
   const answerer = reply.querySelector("[data-actor-ref]") ?? assert.fail("the answerer is named");
-  act(() => {
-    answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(answerer);
   const card = document.querySelector(".luke-tooltip-card [data-actor-card='person']");
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
@@ -2295,7 +2294,7 @@ function standingCard(): readonly [string | null | undefined, string | null | un
 /** Rests on a control as the keyboard reaches it, which hangs its card as a resting pointer does. */
 function reach(control: HTMLElement): void {
   document.documentElement.dataset.keyboard = "true";
-  act(() => control.focus());
+  focusRestOn(control);
 }
 
 /** The agent's references in the pane's thread, each its tile and its name as one button. */
@@ -2464,9 +2463,7 @@ test("an item's card names its task as the window names a task everywhere: the k
     chip.querySelector('.luke-inline-ref-glyph .luke-task-status-mark[data-status="in-progress"]'),
     "the pill wears the task's status's mark",
   );
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   const cards = [...document.querySelectorAll(".luke-tooltip-card")];
   assert.ok(
     cards.some(
@@ -2575,11 +2572,7 @@ test("an archived task's items stand under Archived alone, which the view's menu
   assert.equal(headTitle(page), "Inbox · Archived");
   assert.deepEqual(listed(page), ["# Invites", "▸ Expire after 7 days?"]);
   assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
-  act(() => {
-    rowNamed(page, "Expire after 7 days?").dispatchEvent(
-      new MouseEvent("pointerover", { bubbles: true }),
-    );
-  });
+  restOn(rowNamed(page, "Expire after 7 days?"));
   const rowCard = wordsOf(document.querySelector(".luke-tooltip-card [data-inbox-row-card]")) ?? "";
   assert.match(rowCard, /Archived with its task/u, "the row's card says it waits on nobody");
   assert.doesNotMatch(rowCard, /Waiting/u);
@@ -4213,9 +4206,7 @@ function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
 
 /** Hovers a control as a resting pointer does, and answers the words of the card it hangs, its discs left out. */
 function hoveredCard(control: Element, card: string): string | null {
-  act(() => {
-    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(control);
   return wordsOf(document.querySelector(`.luke-tooltip-card ${card}`));
 }
 

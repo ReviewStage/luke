@@ -23,6 +23,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { MentionedAgents } from "./mentioned-agent-card.js";
@@ -276,9 +277,7 @@ function agentReads(): readonly AnyAct[] {
 /** What the card a chip hangs says, once its read has landed: the agent's tab's card, or the chip's own. */
 async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the agent is drawn as its chip");
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   await settle();
   const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
@@ -479,9 +478,7 @@ test("two chips of one task's agents hung one after the other share the task's r
   );
   const [first, second] = container.querySelectorAll("[data-mention-ref]");
 
-  act(() => {
-    first?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(first ?? assert.fail("the first chip is drawn"));
   await settle();
   const card = await cardOf(second);
 

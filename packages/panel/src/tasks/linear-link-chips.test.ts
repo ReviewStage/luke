@@ -14,6 +14,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -203,9 +204,7 @@ test("once the workspace disconnects Linear, the chip says what the address says
 /** The notes of the card a chip hangs: its key and state, who it is with, and its address where Linear answered nothing. */
 function cardNotes(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(
     (note) => note.textContent,

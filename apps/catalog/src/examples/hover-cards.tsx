@@ -90,7 +90,6 @@ function Carded({ label, card }: { label: string; card: ReactNode }): React.JSX.
         <TooltipCard
           id={id}
           anchor={anchor}
-          instant={false}
           ref={(element) => {
             hung.current = element;
           }}

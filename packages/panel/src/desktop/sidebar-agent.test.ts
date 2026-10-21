@@ -17,6 +17,7 @@ import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js"
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 
@@ -220,9 +221,7 @@ test("Rename on the row's right-click turns the row into its name's field, and t
 test("rested on, the row hangs the agent's card beside it, naming it as its tab's card does", () => {
   const row = mount(RUN);
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
-  act(() => {
-    press.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(press);
 
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Remove the stale copy");
@@ -296,9 +295,7 @@ test("the row's card says the agent last moved when its row does, the end of its
   };
   const row = mount(ran);
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
-  act(() => {
-    press.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(press);
 
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   const corner = card?.querySelector(".luke-hover-card-corner")?.textContent ?? "";
@@ -322,9 +319,7 @@ test("the row's card shows a pull request read since the list was, before the li
   };
   const row = mount(RUN, new Map([[AGENT_ID, read]]));
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
-  act(() => {
-    press.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(press);
 
   const corner = document.querySelector(".luke-tooltip-card .luke-hover-card-corner");
   assert.match(corner?.textContent ?? "", /^#43/u);

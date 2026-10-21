@@ -42,7 +42,7 @@ function PillOver({
         {children}
       </span>
       {anchor === undefined || !clipped ? null : (
-        <TooltipPill id={id} anchor={anchor} instant={false} label={words} />
+        <TooltipPill id={id} anchor={anchor} label={words} />
       )}
     </>
   );

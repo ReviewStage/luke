@@ -33,6 +33,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -240,9 +241,7 @@ function agentTab(
 /** What a server's card says, once its reads have landed under the resting pointer. */
 async function cardOf(chip: Element | null | undefined) {
   assert.ok(chip, "the mention is drawn as its chip");
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   await settle();
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
   assert.ok(card, "the chip hangs the server's card");

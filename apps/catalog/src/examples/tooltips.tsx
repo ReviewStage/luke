@@ -26,7 +26,7 @@ function Hinted({
   hint,
 }: {
   label: string;
-  hint: (props: { id: string; anchor: HTMLElement; instant: boolean }) => ReactNode;
+  hint: (props: { id: string; anchor: HTMLElement }) => ReactNode;
 }): React.JSX.Element {
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | undefined>(undefined);
@@ -52,7 +52,7 @@ function Hinted({
           {label}
         </Button>
       </span>
-      {anchor === undefined ? null : hint({ id, anchor, instant: false })}
+      {anchor === undefined ? null : hint({ id, anchor })}
     </>
   );
 }

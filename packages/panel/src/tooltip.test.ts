@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useRef } from "react";
+import { act, createElement, Fragment, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { Message, MessageContent } from "./ai-elements/message.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { restOn } from "./testing/hint-rest.js";
 import { Tooltip } from "./tooltip.js";
 
 /**
@@ -20,6 +22,11 @@ import { Tooltip } from "./tooltip.js";
  * control whose long press opens its menu keeps it for the menu. A tap on a
  * control inside hinted words is the control's alone, and its hold opens the hint, a finger's scroll
  * opens nothing, and a tap spent on a hint shows no message's actions.
+ *
+ * The window waits out the pointer's rest before it draws a hint: a pointer
+ * only crossing a control mounts nothing for it, a card's row moved on from
+ * lets the next row wait its own wait, so a pointer sweeping down a list
+ * hangs no card, and a pill seen still lets the next control's show at once.
  */
 
 const roots: Root[] = [];
@@ -69,9 +76,7 @@ test("a card hung from a row hangs past the row's end, not its press's, which th
   boxed(row, 8, 260);
   boxed(press, 8, 200);
 
-  act(() => {
-    press.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(press);
 
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card");
   assert.ok(card, "the card hangs");
@@ -175,9 +180,9 @@ const WORKED = createElement(Tooltip, {
 test("under a finger, a tap on words that are no control opens their card at once, and another tap closes it", () => {
   const line = mount(WORKED).querySelector("[data-worked]") ?? assert.fail("the line");
 
+  // Note that no time passes, so the card standing says it skipped the hover's wait.
   tap(line);
   assert.equal(card()?.textContent, "Began at 9:14 AM");
-  assert.equal(card()?.getAttribute("data-instant"), "true", "it skips the hover's wait");
 
   tap(line);
   assert.equal(cardStands(), false, "it goes");
@@ -336,4 +341,204 @@ test("on a screen with no hover, a tap spent opening a hint in a message shows n
 
   tap(page.querySelector(".message-content") ?? assert.fail("the words"));
   assert.equal(message.getAttribute("data-actions-shown"), "true", "a tap on its words still does");
+});
+
+/** The cards mounted so far, by the row each was hung from. */
+let mounted: string[] = [];
+
+/** The faked clock a hint waits on, and no card mounted yet. */
+function waiting(): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  mounted = [];
+}
+
+/** A card that notes it was mounted, which only a card drawn is. */
+function Card({ row }: { row: string }): React.JSX.Element {
+  const noted = useRef(false);
+  if (!noted.current) {
+    noted.current = true;
+    mounted.push(row);
+  }
+  return createElement("p", null, `${row}'s card`);
+}
+
+/** A row's press hanging its card beside it, its row counting as its control, as a sidebar row's does. */
+function CardedRow({ row }: { row: string }): React.JSX.Element {
+  const item = useRef<HTMLElement | null>(null);
+  return createElement(
+    "li",
+    { ref: item, "data-row": row },
+    createElement(Tooltip, {
+      label: row,
+      card: createElement(Card, { row }),
+      cardBeside: true,
+      cardRegion: item,
+      children: createElement("button", { type: "button", "aria-describedby": undefined }, row),
+    }),
+  );
+}
+
+/** Rows that each hang a card, drawn under a registry of their own. */
+function drawRows(rows: readonly string[]): (row: string) => HTMLElement {
+  const container = document.body.appendChild(document.createElement("ul"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          rows.map((row) => createElement(CardedRow, { key: row, row })),
+        ),
+      ),
+    ),
+  );
+  return (row) =>
+    container.querySelector<HTMLElement>(`[data-row="${row}"] button`) ??
+    assert.fail(`${row} is drawn`);
+}
+
+/**
+ * The pointer moving from `from`, where it stood, onto `to`: out of `from`,
+ * leaving each element holding it that does not hold `to`, as a browser
+ * tells them, and over `to`. Note that React draws its own enter and leave
+ * from the out and the over, while a row's own listener hears the leave.
+ */
+function move(from: Element | undefined, to: Element): void {
+  act(() => {
+    from?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
+    for (let left = from ?? null; left !== null && !left.contains(to); left = left.parentElement) {
+      left.dispatchEvent(new MouseEvent("pointerleave", { relatedTarget: to }));
+    }
+    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from ?? null }));
+  });
+}
+
+function pass(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+const cards = () =>
+  [...document.querySelectorAll(".luke-tooltip-card")].map((card) => card.textContent);
+
+test("a pointer crossing a row in less than the wait mounts no card for it, and one resting the wait out mounts its own", () => {
+  waiting();
+  const press = drawRows(["Alpha", "Beta", "Gamma"]);
+  const outside = document.body.appendChild(document.createElement("div"));
+  move(outside, press("Alpha"));
+  pass(MOTION_DELAY_MS.HINT / 2);
+  move(press("Alpha"), press("Beta"));
+  pass(MOTION_DELAY_MS.HINT / 2);
+  move(press("Beta"), press("Gamma"));
+  pass(MOTION_DELAY_MS.HINT - 1);
+  assert.deepEqual(mounted, [], "no row crossed or still waited on mounts its card");
+  assert.deepEqual(cards(), []);
+
+  pass(1);
+  assert.deepEqual(mounted, ["Gamma"]);
+  assert.deepEqual(cards(), ["Gamma's card"]);
+});
+
+test("a pointer leaving a row before the wait is out mounts nothing once it would have run out", () => {
+  waiting();
+  const press = drawRows(["Alpha"]);
+  const outside = document.body.appendChild(document.createElement("div"));
+  move(outside, press("Alpha"));
+  pass(MOTION_DELAY_MS.HINT / 2);
+  move(press("Alpha"), outside);
+  pass(2 * MOTION_DELAY_MS.HINT);
+  assert.deepEqual(mounted, []);
+});
+
+test("a pointer sweeping on from a row whose card stands lets each next row wait its own wait, so the rows it crosses hang no card", () => {
+  waiting();
+  const press = drawRows(["Alpha", "Beta", "Gamma", "Delta"]);
+  const outside = document.body.appendChild(document.createElement("div"));
+  move(outside, press("Alpha"));
+  pass(MOTION_DELAY_MS.HINT);
+  assert.deepEqual(cards(), ["Alpha's card"]);
+
+  // Note that each row is crossed in less than the wait, the card left behind lingering and going meanwhile.
+  move(press("Alpha"), press("Beta"));
+  pass(MOTION_DELAY_MS.HINT / 4);
+  move(press("Beta"), press("Gamma"));
+  pass(MOTION_DELAY_MS.HINT / 2);
+  move(press("Gamma"), press("Delta"));
+  pass(MOTION_DELAY_MS.HINT / 2);
+  assert.deepEqual(mounted, ["Alpha"], "no row swept across mounts its card");
+  assert.deepEqual(cards(), []);
+
+  pass(MOTION_DELAY_MS.HINT / 2);
+  assert.deepEqual(
+    cards(),
+    ["Delta's card"],
+    "the row rested on hangs its own once its wait is out",
+  );
+});
+
+test("a key, a scroll, or the window losing the keyboard while the pointer rests calls the waiting hint off", () => {
+  const leaves: readonly (() => void)[] = [
+    () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    () => document.body.dispatchEvent(new Event("scroll")),
+    () => window.dispatchEvent(new Event("blur")),
+  ];
+  for (const leave of leaves) {
+    waiting();
+    const press = drawRows(["Alpha"]);
+    move(undefined, press("Alpha"));
+    pass(MOTION_DELAY_MS.HINT / 2);
+    act(leave);
+    pass(2 * MOTION_DELAY_MS.HINT);
+    assert.deepEqual(mounted, [], "the hint waiting is called off");
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    vi.useRealTimers();
+  }
+});
+
+// Note that this stands last, because the warm spell it leaves is the window's own.
+test("a pill seen warms the window, so the next control's shows at once", () => {
+  waiting();
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(Tooltip, {
+            label: "Back",
+            children: createElement("button", {
+              type: "button",
+              "aria-label": "Go back",
+              "aria-describedby": undefined,
+            }),
+          }),
+          createElement(Tooltip, {
+            label: "Forward",
+            children: createElement("button", {
+              type: "button",
+              "aria-label": "Go forward",
+              "aria-describedby": undefined,
+            }),
+          }),
+        ),
+      ),
+    ),
+  );
+  const [back, forward] = container.querySelectorAll("button");
+  assert.ok(back && forward);
+  const pill = () => document.querySelector('[role="tooltip"]')?.textContent;
+  move(undefined, back);
+  assert.equal(pill(), undefined, "the first waits");
+  pass(MOTION_DELAY_MS.HINT);
+  assert.equal(pill(), "Back");
+  move(back, forward);
+  assert.equal(pill(), "Forward", "the next shows at once");
 });

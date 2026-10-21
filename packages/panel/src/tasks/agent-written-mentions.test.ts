@@ -13,6 +13,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -138,9 +139,7 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   });
   const page = container.querySelector<HTMLElement>('[data-mention-ref][data-kind="page"]');
   assert.ok(page, "the page's chip");
-  act(() => {
-    page.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(page);
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's tab's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Invite funnel");

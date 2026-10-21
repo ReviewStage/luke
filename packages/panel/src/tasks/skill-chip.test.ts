@@ -9,6 +9,7 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
+import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -129,9 +130,7 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
   const chip = container.querySelector(".agent-composer-input .skill-chip");
   assert.ok(chip, "the chosen skill is drawn as a chip");
 
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
 
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
@@ -146,7 +145,7 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   assert.ok(chip, "the skill is a chip");
   // The card hangs as the keyboard reaches the chip, as it does under a resting pointer.
   document.documentElement.dataset.keyboard = "true";
-  act(() => chip.focus());
+  focusRestOn(chip);
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.ok(card, "the card is the window's plan card");
   assert.ok(
@@ -226,7 +225,7 @@ function agentTurn(message: CodingAgentMessage): ReactNode {
 /** The skill's card the control hangs as the keyboard reaches it, the newest hung where an earlier one is still on its way out. */
 function cardOf(control: HTMLElement): string | undefined {
   document.documentElement.dataset.keyboard = "true";
-  act(() => control.focus());
+  focusRestOn(control);
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(-1);
   act(() => control.blur());
   return card?.outerHTML;

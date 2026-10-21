@@ -10,13 +10,13 @@ import { visibleViewport } from "../../visible-viewport.js";
  * control's start the same way, or beside it, past its end or before its
  * start where the window ends, as a list row's card hangs so it covers none
  * of the rows under it. Either is measured before it is painted, so it is
- * drawn once and where it fits, and placed again whenever it resizes.
+ * drawn once and where it fits, and placed again only when it resizes.
  *
  * What is drawn here is the hint alone. When it shows and when it goes, the
  * wait before it, the warm spell after it, and the linger that lets the
- * pointer cross onto a card, are the app's: it hands the hint the control
- * it stands for, whether it skipped the wait (`instant`), and how it is on
- * its way out (`leaving`), and is told when the pointer arrives on a card,
+ * pointer cross onto a card, are the app's: it mounts the hint once the
+ * wait is over, hands it the control it stands for and how it is on its
+ * way out (`leaving`), and is told when the pointer arrives on a card,
  * presses it, or chooses one of its buttons or links.
  *
  * A pill takes no presses, so it never stands between the pointer and the
@@ -72,8 +72,6 @@ interface TooltipBase {
   id: string;
   /** The control it hangs from. */
   anchor: HTMLElement;
-  /** Whether it shows at once rather than after the wait. */
-  instant: boolean;
   /** How it is on its way out, while it is: inert, and fading or already hidden. */
   leaving?: TooltipLeaving | undefined;
   /** Its element, for the hold that draws it through its exit. */
@@ -84,6 +82,11 @@ interface TooltipPlace {
   left: number;
   top: number;
   side: TooltipSide;
+}
+
+/** Whether two places draw the hint alike, so a measure that moves nothing renders nothing. */
+function samePlace(a: TooltipPlace | undefined, b: TooltipPlace): boolean {
+  return a !== undefined && a.left === b.left && a.top === b.top && a.side === b.side;
 }
 
 /** `value` held a margin inside the edges `low` and `high`, for a hint `size` long. */
@@ -124,7 +127,11 @@ function placeHint(anchor: HTMLElement, hint: HTMLElement, hang: TooltipHang): T
   };
 }
 
-/** The hint's element, placed for its control once measured and again whenever it resizes. */
+/**
+ * The hint's element, placed for its control once measured before it is
+ * painted, and again only when its size changes from the one it was placed
+ * at, never for the observer's first report of the size already measured.
+ */
 function useHintPlace(
   anchor: HTMLElement,
   hang: TooltipHang,
@@ -142,11 +149,18 @@ function useHintPlace(
   useLayoutEffect(() => {
     const hint = element.current;
     if (hint === null) return;
-    const measure = () => setAt(placeHint(anchor, hint, hang));
-    measure();
-    // Note that it is placed again whenever it resizes, because a card grows
-    // as a read it made lands, and must stay inside the window as it does.
-    const observer = new ResizeObserver(measure);
+    let size = { width: hint.offsetWidth, height: hint.offsetHeight };
+    const place = placeHint(anchor, hint, hang);
+    setAt((was) => (samePlace(was, place) ? was : place));
+    // Note that it is placed again as it resizes, because a card grows as a
+    // read it made lands, and must stay inside the window as it does.
+    const observer = new ResizeObserver(() => {
+      const now = { width: hint.offsetWidth, height: hint.offsetHeight };
+      if (now.width === size.width && now.height === size.height) return;
+      size = now;
+      const moved = placeHint(anchor, hint, hang);
+      setAt((was) => (samePlace(was, moved) ? was : moved));
+    });
     observer.observe(hint);
     return () => observer.disconnect();
   }, [anchor, hang]);
@@ -159,7 +173,6 @@ function hintMarks(base: TooltipBase, at: TooltipPlace | undefined) {
     id: base.id,
     "data-placed": String(at !== undefined),
     "data-side": at?.side ?? TOOLTIP_SIDE.BELOW,
-    "data-instant": String(base.instant),
     "data-leaving": base.leaving,
     inert: base.leaving !== undefined,
     style: at === undefined ? undefined : { left: at.left, top: at.top },

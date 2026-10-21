@@ -61,6 +61,7 @@ import {
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -723,7 +724,7 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
   document.body.append(lastDrawn().renderHeader("a.ts"));
   const letter = () =>
     header("a.ts").querySelector(".file-view-status") ?? assert.fail("the letter stands");
-  act(() => letter().dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  restOn(letter());
   await flush();
   const hint = letter().getAttribute("aria-describedby");
   assert.ok(hint !== null, "the letter is described by its hint");
@@ -2266,14 +2267,14 @@ test("a gap's control under the pointer or the keyboard's focus hangs its hint, 
   arrow.tabIndex = 0;
   const hint = () => document.querySelector('[role="tooltip"]')?.textContent;
 
-  act(() => words.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  restOn(words);
   assert.equal(hint(), "Show all 51 lines");
-  act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  restOn(arrow);
   assert.equal(hint(), "Show 20 more lines");
   act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
   assert.equal(hint(), undefined);
 
-  act(() => words.focus());
+  focusRestOn(words);
   assert.equal(hint(), "Show all 51 lines");
   act(() => words.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   assert.equal(hint(), undefined);

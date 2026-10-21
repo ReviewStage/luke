@@ -17,6 +17,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import type { HeldTranscripts } from "./strip-tabs.js";
@@ -153,9 +154,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
 
 /** Rests the pointer on a control, which hangs its card. */
 function hover(control: Element): void {
-  act(() => {
-    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(control);
 }
 
 /** The agent named in the Changes card the pull request's row hangs. */

@@ -55,6 +55,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { onSideBundles } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -1759,10 +1760,8 @@ function menuItem(items: readonly HTMLButtonElement[], label: string): HTMLButto
 }
 
 /** The card hung once the pointer rests on a row. */
-function restOn(row: HTMLElement): Element | null {
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+function cardOn(row: HTMLElement): Element | null {
+  restOn(row);
   return document.querySelector(".luke-tooltip-card");
 }
 
@@ -1792,10 +1791,10 @@ test("the rail heads the tasks' channels as the sidebar heads their tasks, Pinne
 
 test("rested on, a task's row hangs its task's card, an agent's direct message its tab's card, a person's their card, and a channel's its name alone", () => {
   const page = mountRail();
-  assert.ok(restOn(railRow(page, "teammate-invitations"))?.querySelector("[data-task-card]"));
-  assert.ok(restOn(railRow(page, "Invite emails"))?.querySelector("[data-tab-card]"));
-  assert.ok(restOn(railRow(page, "Maria Chen"))?.querySelector('[data-actor-card="person"]'));
-  const general = restOn(railRow(page, "general"));
+  assert.ok(cardOn(railRow(page, "teammate-invitations"))?.querySelector("[data-task-card]"));
+  assert.ok(cardOn(railRow(page, "Invite emails"))?.querySelector("[data-tab-card]"));
+  assert.ok(cardOn(railRow(page, "Maria Chen"))?.querySelector('[data-actor-card="person"]'));
+  const general = cardOn(railRow(page, "general"));
   assert.equal(general, null, "a channel hangs no card");
 });
 

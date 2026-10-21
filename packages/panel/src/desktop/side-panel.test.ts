@@ -17,6 +17,7 @@ import { ChangesCard } from "../tasks/changes-card.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { changesOffers, changesTabOf, showPullRequest } from "./side-panel.js";
 
@@ -180,8 +181,8 @@ test("a Changes card names the coding agent whose pull request it is by its tile
   assert.equal(named.textContent, "Expiry job");
   assert.ok(named.querySelector('.actor-mark[data-kind="agent"]'), "the agent wears its tile");
 
+  restOn(named);
   await act(async () => {
-    named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     await Promise.resolve();
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card] .luke-hover-card-name");

@@ -30,11 +30,12 @@ export function RelativeTime({
   hint?: boolean;
   ago?: boolean;
 }): React.JSX.Element {
-  return (
-    <Tooltip label={hint ? momentText(at) : undefined}>
-      <time className={className} dateTime={new Date(at).toISOString()}>
-        {ago ? agoText(at, now) : sinceText(at, now)}
-      </time>
-    </Tooltip>
+  const time = (
+    <time className={className} dateTime={new Date(at).toISOString()}>
+      {ago ? agoText(at, now) : sinceText(at, now)}
+    </time>
   );
+  // Note that a time raising no pill is drawn bare, because a sidebar row
+  // draws several, and a tooltip saying nothing still costs each its own.
+  return hint ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
 }

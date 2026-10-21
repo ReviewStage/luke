@@ -31,6 +31,7 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
+import { useHintRest } from "../tooltip.js";
 
 /**
  * diff-list.tsx -- a pull request's files as Files changed draws them: one list, every file under a header of its own, drawn by Pierre's list (`../diff-view/`'s `mountList`), only the files near the view drawn at all.
@@ -266,10 +267,26 @@ export function PierreDiffList({
   // The hint over the gap control under the pointer or the focus, which Pierre draws in a shadow root no hint of the window's own reaches.
   const [hint, setHint] = useState<GapHint | undefined>(undefined);
   const hintId = useId();
-  const hang = useCallback((event: Event) => {
-    const next = gapHintOf(event.composedPath());
-    setHint((was) => (was?.anchor === next?.anchor ? was : next));
-  }, []);
+  // Note that the hint waits the window's rest before it is drawn, as every
+  // other hint does, so the pointer crossing the gaps mounts nothing.
+  const { rest, stop } = useHintRest();
+  const aimed = useRef<HTMLElement | undefined>(undefined);
+  const hang = useCallback(
+    (event: Event) => {
+      const next = gapHintOf(event.composedPath());
+      if (next?.anchor === aimed.current) return;
+      aimed.current = next?.anchor;
+      setHint(undefined);
+      if (next === undefined) stop();
+      else rest(() => setHint(next));
+    },
+    [rest, stop],
+  );
+  const letGoHint = useCallback(() => {
+    aimed.current = undefined;
+    stop();
+    setHint(undefined);
+  }, [stop]);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement | null>(null);
@@ -383,16 +400,15 @@ export function PierreDiffList({
   useEffect(() => {
     const element = box.current;
     if (element === null) return undefined;
-    const letGo = () => setHint(undefined);
     element.addEventListener("focusin", hang);
-    element.addEventListener("focusout", letGo);
-    element.addEventListener("keydown", letGo);
+    element.addEventListener("focusout", letGoHint);
+    element.addEventListener("keydown", letGoHint);
     return () => {
       element.removeEventListener("focusin", hang);
-      element.removeEventListener("focusout", letGo);
-      element.removeEventListener("keydown", letGo);
+      element.removeEventListener("focusout", letGoHint);
+      element.removeEventListener("keydown", letGoHint);
     };
-  }, [hang]);
+  }, [hang, letGoHint]);
 
   // Note that lines are lit as a reveal waits, for their file drawn open; a file drawn as its notes alone has no lines to light, so its header is scrolled to.
   const flashed = useRef<number | undefined>(undefined);
@@ -431,8 +447,8 @@ export function PierreDiffList({
       className="diff-view diff-list"
       data-diff-layout={look.layout}
       onPointerOver={(event) => hang(event.nativeEvent)}
-      onPointerLeave={() => setHint(undefined)}
-      onPointerDown={() => setHint(undefined)}
+      onPointerLeave={letGoHint}
+      onPointerDown={letGoHint}
     >
       <ScrollArea ref={host}>{null}</ScrollArea>
       {offer === undefined || onComment === undefined ? null : (
@@ -460,7 +476,7 @@ export function PierreDiffList({
         </div>
       )}
       {hint === undefined ? null : (
-        <TooltipPill id={hintId} anchor={hint.anchor} instant={false} label={hint.label} />
+        <TooltipPill id={hintId} anchor={hint.anchor} label={hint.label} />
       )}
       {entries.map((entry) => (
         <Fragment key={entry.path}>

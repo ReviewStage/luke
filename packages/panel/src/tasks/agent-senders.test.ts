@@ -32,6 +32,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -321,8 +322,8 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   ]?.querySelector<HTMLElement>(".message-sender [data-actor-ref]");
   assert.ok(sender instanceof HTMLButtonElement, "the sender is a door");
 
+  restOn(sender);
   await act(async () => {
-    sender.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const card = document.querySelector(".luke-tooltip-card")?.textContent ?? "";

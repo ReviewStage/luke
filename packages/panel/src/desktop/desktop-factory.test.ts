@@ -27,6 +27,7 @@ import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bri
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopFactory } from "./desktop-factory.js";
 
@@ -546,9 +547,7 @@ test("a question's hover says it whole, which its one line cuts short", () => {
       },
     ],
   });
-  act(() => {
-    row(page, QUESTION).dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row(page, QUESTION));
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, QUESTION);
 });
 

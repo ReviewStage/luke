@@ -43,7 +43,7 @@ import {
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, AssigneeHeard, CreatorHeard } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
@@ -597,6 +597,23 @@ function rowFaceOf(
 }
 
 /**
+ * A task's card as its sidebar row hangs it (`taskCardOf`). Note that it is
+ * a component of its own, so what the card reads is worked out only once
+ * the card is drawn, never on a render of the row.
+ */
+function SidebarTaskCard({
+  tasks,
+  task,
+  now,
+}: {
+  tasks: TasksControl;
+  task: TaskSummary;
+  now: number;
+}): React.JSX.Element {
+  return taskCardOf(tasks, task, now);
+}
+
+/**
  * A task in the sidebar, pinned, listed, or archived alike: led by its
  * status's mark (`task-marks.tsx`), where its service gives it one; its name, in the
  * body's weight unless the task is unread, and at the row's end how long ago
@@ -673,9 +690,13 @@ export function SidebarTask({
   // Note that the row is what the menu rings and hands focus back to, even
   // when the right-click lands on Pin or Mark done over its end.
   const showMenu = actions.contextMenu(row);
+  const card = useMemo(
+    () => <SidebarTaskCard tasks={tasks} task={task} now={now} />,
+    [tasks, task, now],
+  );
   return (
     <>
-      <RowHintOptions card={taskCardOf(tasks, task, now)} cardBeside cardRegion={item}>
+      <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
           density={LIST_DENSITY.DENSE}

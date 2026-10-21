@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { RetryButton } from "./retry-button.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { restOn } from "./testing/hint-rest.js";
 
 /**
  * retry-button.test.ts -- a failure's Retry is named by its words and
@@ -71,9 +72,7 @@ function hover() {
     ),
   );
   const button = container.querySelector("button") ?? assert.fail("no button");
-  act(() => {
-    button.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(button);
   return { button, presses: () => presses };
 }
 

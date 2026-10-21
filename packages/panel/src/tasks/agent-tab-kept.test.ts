@@ -19,6 +19,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { focusRestOn } from "../testing/hint-rest.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
@@ -158,7 +159,7 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   act(() => row.blur());
-  act(() => row.focus());
+  focusRestOn(row);
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [
@@ -354,7 +355,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
   const cardOf = (ref: HTMLElement) => {
     document.documentElement.dataset.keyboard = "true";
     act(() => ref.blur());
-    act(() => ref.focus());
+    focusRestOn(ref);
     return document.querySelector(".luke-tooltip-card [data-task-card-probe]")?.textContent;
   };
   assert.match(sender().textContent ?? "", /First draft/u);

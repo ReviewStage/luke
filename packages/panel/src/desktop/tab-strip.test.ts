@@ -6,6 +6,7 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { MenuTab, Tab, TabStrip } from "./tab-strip.js";
 
@@ -185,11 +186,7 @@ test("the chosen tab, pinned at the strip's start after a scroll, dragged along 
 
 test("a tab other than the chosen one names itself in its hint, though its label may stand as its glyph alone", async () => {
   const container = await drawn(3);
-  act(() => {
-    pill(container, "Tab 2")
-      .querySelector('[role="tab"]')
-      ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(pill(container, "Tab 2").querySelector('[role="tab"]') ?? assert.fail("the tab stands"));
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Tab 2");
 });
 

@@ -21,6 +21,7 @@ import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -282,9 +283,7 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   assert.ok(tab, "the strip has a Terminal tab");
   assert.equal(tab.querySelector(".tab-detail")?.textContent, WORKING.title);
   assert.match(tab.querySelector(".tab-icon")?.innerHTML ?? "", /data-state="working"/u);
-  act(() => {
-    tab.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(tab);
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, WORKING.title);
@@ -302,9 +301,7 @@ test("a page's tab hangs the page's card: its title and version over its newest 
     (each) => each.querySelector(".tab-label")?.textContent === FUNNEL.title,
   );
   assert.ok(tab, "the strip has the page's tab");
-  act(() => {
-    tab.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(tab);
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);

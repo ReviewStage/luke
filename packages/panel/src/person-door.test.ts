@@ -13,6 +13,7 @@ import { githubPageOf, OpenPersonProvider } from "./person-door.js";
 import { fakeActPort } from "./testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { restOn } from "./testing/hint-rest.js";
 
 /**
  * A press on a person goes where the window can take it: a member's page,
@@ -89,9 +90,7 @@ function draw(element: ReactElement, inWindow = true): HTMLElement {
 /** The actor's card, hung by resting on its name. */
 function cardOf(view: HTMLElement): Element {
   const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");
-  act(() => {
-    named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(named);
   return (
     document.querySelector(".luke-tooltip-card .luke-hover-card") ?? assert.fail("a card hangs")
   );

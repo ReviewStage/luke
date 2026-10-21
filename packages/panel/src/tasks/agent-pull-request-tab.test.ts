@@ -71,6 +71,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -5175,7 +5176,7 @@ function viewedBoxOf(path: string): HTMLInputElement {
 /** What the Files changed tab's hint says, once the pointer rests on it. */
 async function filesHint(tab: HTMLElement): Promise<string | undefined> {
   const files = option(tab, "Files changed");
-  act(() => files.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  restOn(files);
   await settle();
   const hint = files.getAttribute("aria-describedby");
   return hint === null ? undefined : (document.getElementById(hint)?.textContent ?? undefined);
