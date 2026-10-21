@@ -493,7 +493,6 @@ function mount(
           toldSingle.push(single);
         },
         pages: undefined,
-        onRereadPages: () => undefined,
         onTaskAgents: () => undefined,
       },
       onShowTask: (taskId) => asked.shownTasks.push(taskId),

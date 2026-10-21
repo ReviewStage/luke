@@ -7,9 +7,9 @@
  * Luke's face as a still frame where no video track is handed, which is what
  * a fixture run draws, since it reaches no avatar; once it has ended it
  * offers Restart video. Video off puts the avatar away and leaves the call
- * going as voice, in every state, and the tile collapses to a compact strip
- * whose Video on puts a fresh avatar up again; ending the call is the call
- * bar's, which the tile does not repeat. No word of the conversation is drawn
+ * going as voice, in every state, and the tile goes; Video on, which puts a
+ * fresh avatar up again, is the call's own controls', as ending the call is,
+ * which the tile does not repeat. No word of the conversation is drawn
  * here. The avatar's lip-synced voice is played apart
  * from the tile (`AvatarVoice`), because the tile is drawn only while the
  * Call tab is, and the voice is what the developer hears whatever is shown.
@@ -21,6 +21,7 @@
 import {
   BUTTON_SHAPE,
   Button,
+  cssCustomProperties,
   IconButton,
   ResetIcon,
   VideoIcon,
@@ -38,7 +39,6 @@ export const CALL_VIDEO_LABEL = {
   ENDED: "Video ended",
   VIDEO_OFF: "Turn video off",
   VIDEO_ON: "Turn video on",
-  TURNED_OFF: "Video off",
   RESTART: "Restart video",
 } as const;
 
@@ -185,35 +185,50 @@ export function VideoToggle({
 }
 
 /**
- * The top of the Call tab: the tile at the tab's width while the avatar
- * stands or has just ended, the compact strip once the developer turned
- * video off, and nothing where the status is `undefined`.
+ * Luke's avatar while it stands or has just ended: the tile, and nothing
+ * where the status is `undefined` or video is off, since the call's own
+ * controls carry Video on wherever the tile stands (the call card's head,
+ * an agent's composer). Where `toggles`, as on the call card, its own Video
+ * off stands in its corner; an agent's tab offers it from the composer
+ * instead. Where a `width` is handed it is the tile's size, and `edge` is
+ * what resizes it (`AgentCallVideo`).
  */
 export function CallVideoTile({
   video,
   status,
   onSetVideo,
+  toggles = true,
+  width,
+  edge,
 }: {
   video: MediaStreamTrack | undefined;
   status: AvatarStatus | undefined;
   /** Asks main to put the avatar up, a fresh session, or take it down with the developer's own reason. */
   onSetVideo: (on: boolean) => void;
+  /** Whether the tile offers its own Video off; the call card's does, an agent's tab's does not. */
+  toggles?: boolean;
+  /** The tile's width in CSS pixels, where its owner keeps one. */
+  width?: number | undefined;
+  /** What resizes the tile, drawn on its edge. */
+  edge?: React.ReactNode;
 }): React.JSX.Element | null {
-  if (status === undefined) return null;
-  if (status === AVATAR_STATUS.OFF) {
-    return (
-      <section className="call-video-strip" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
-        <span className="call-video-note">{CALL_VIDEO_LABEL.TURNED_OFF}</span>
-        <VideoToggle on={false} onSetVideo={onSetVideo} />
-      </section>
-    );
-  }
+  if (status === undefined || status === AVATAR_STATUS.OFF) return null;
   return (
-    <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
+    <section
+      className="call-video-tile"
+      aria-label={CALL_VIDEO_LABEL.TILE}
+      data-status={status}
+      style={
+        width === undefined ? undefined : cssCustomProperties({ "--call-tile-width": `${width}px` })
+      }
+    >
       <TileGround status={status} video={video} onRestart={() => onSetVideo(true)} />
-      <div className="call-video-controls">
-        <VideoToggle on onSetVideo={onSetVideo} />
-      </div>
+      {toggles ? (
+        <div className="call-video-controls">
+          <VideoToggle on onSetVideo={onSetVideo} />
+        </div>
+      ) : null}
+      {edge}
     </section>
   );
 }

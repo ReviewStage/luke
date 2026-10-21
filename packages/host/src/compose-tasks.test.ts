@@ -25,8 +25,13 @@ import {
   type RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import type { TaskBoardLiveAnswer, TaskRecordLiveAnswer } from "@luke/features/live-wire";
-import type { PageLine, PageVersion } from "@luke/features/page-wire";
+import type {
+  TaskBoardLiveAnswer,
+  TaskHistoryLiveAnswer,
+  TaskPagesLiveAnswer,
+  TaskRecordLiveAnswer,
+} from "@luke/features/live-wire";
+import { PAGE_SHOWER, type PageLine, type PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import {
   PLAN_COMMENT_ACTOR,
@@ -86,6 +91,7 @@ import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
+  type GatewayEventKind,
   type GatewayMethod,
 } from "@luke/gateway";
 import type { WireRecord, WireValue } from "@luke/wire";
@@ -157,6 +163,10 @@ interface FakeService extends TasksClient {
   boardSeals: Record<string, TaskBoardLiveAnswer>;
   /** Each task's pages and calls sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
   recordSeals: Record<string, TaskRecordLiveAnswer>;
+  /** What the service seals for following each task's pages; none answers unanswered. */
+  pageSeals: Record<string, TaskPagesLiveAnswer>;
+  /** What the service seals for following each task's newest page of history; none answers unanswered. */
+  historySeals: Record<string, TaskHistoryLiveAnswer>;
   /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
   readonly recordReads: string[];
   /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
@@ -339,6 +349,8 @@ function fakeService(tasks: Task[]): FakeService {
     boards: {},
     boardSeals: {},
     recordSeals: {},
+    pageSeals: {},
+    historySeals: {},
     recordReads: [],
     images: {},
     codes: {},
@@ -756,6 +768,20 @@ function fakeService(tasks: Task[]): FakeService {
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
           : { ok: true, answer: sealed };
       }),
+    historyLive: (taskId) =>
+      Effect.sync(() => {
+        const sealed = service.historySeals[taskId];
+        return sealed === undefined
+          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
+          : { ok: true, answer: sealed };
+      }),
+    pagesLive: (taskId) =>
+      Effect.sync(() => {
+        const sealed = service.pageSeals[taskId];
+        return sealed === undefined
+          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
+          : { ok: true, answer: sealed };
+      }),
     recordLive: (taskId) =>
       Effect.sync(() => {
         const sealed = service.recordSeals[taskId];
@@ -960,6 +986,8 @@ function subject(
   } = {},
 ) {
   return Effect.gen(function* () {
+    /** Every event the composer emitted besides the view, by its kind. */
+    const pushed: [GatewayEventKind, WireValue][] = [];
     const told: TasksView[] = [];
     const reported: string[] = [];
     let broken = false;
@@ -977,7 +1005,10 @@ function subject(
         now: () => 0,
         emit: (kind, payload) => {
           if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
-          if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
+          if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
+            pushed.push([kind, payload]);
+            return;
+          }
           const read = readEither(tasksViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
           if (!broken && options.breaksOn?.(read.success) === true) {
@@ -1030,6 +1061,7 @@ function subject(
       call,
       told,
       pages,
+      pushed,
       reported,
       last,
       viewWhere,
@@ -3004,6 +3036,125 @@ it.effect(
       yield* TestClock.adjust(Duration.hours(1));
       assert.deepEqual(realtime.subscribed(), []);
       yield* TestClock.adjust(Duration.hours(1));
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+/** A task's pages sealed for following, named by the round it was sealed in. */
+function sealedPages(round: number): TaskPagesLiveAnswer {
+  return {
+    url: "wss://realtime.example/v1",
+    queries: {
+      pages: { capability: `pages-${round}`, queryFingerprint: "pages", expiresAt: 3_600_000 },
+    },
+  };
+}
+
+const FUNNEL = {
+  id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  title: "Invite funnel",
+  version: 1,
+  at: 1_500,
+};
+
+it.effect(
+  "a plan's pages followed for the Inbox are told as they move, never in the view, a seal the service did not answer is told as unanswered and sealed again, and let go they stop",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeBoardRealtime();
+      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const changed = (view: WireValue) => [
+        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
+        { taskId: INVITES, view },
+      ];
+
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
+
+      service.pageSeals[INVITES] = sealedPages(1);
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* boardSettled;
+      realtime.deliver("pages-1", [{ ...FUNNEL, shownBy: null }]);
+      const shown = { ...FUNNEL, version: 2, at: 2_500, shownBy: { kind: PAGE_SHOWER.LUKE } };
+      realtime.deliver("pages-1", [shown]);
+      yield* boardSettled;
+      assert.deepEqual(pushed.slice(1), [
+        changed({ pages: [FUNNEL] }),
+        changed({ pages: [shown] }),
+      ]);
+      assert.equal(
+        told.length,
+        0,
+        "a plan's pages followed for the Inbox are never told in the view",
+      );
+
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a plan's newest page of history followed for its version history is told as saves land, never in the view",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.historySeals[INVITES] = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          revisions: { capability: "history-1", queryFingerprint: "history", expiresAt: 3_600_000 },
+        },
+      };
+      const realtime = fakeBoardRealtime();
+      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const row = (seq: number, at: number) => ({
+        seq,
+        actor: PLAN_ACTOR.DEVELOPER,
+        editorId: "user-dean",
+        editorName: "Dean",
+        liveSessionId: null,
+        agentId: null,
+        agentModel: null,
+        agentTitle: null,
+        callId: null,
+        changes: 1,
+        restoredFrom: null,
+        at,
+        startedAt: at,
+        restoredAt: null,
+      });
+      const line = (seq: number, at: number) => ({
+        seq,
+        lastEdit: {
+          actor: PLAN_ACTOR.DEVELOPER,
+          by: { userId: "user-dean", name: "Dean" },
+          at,
+          duringCall: false,
+        },
+        startedAt: at,
+        changes: 1,
+      });
+
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      realtime.deliver("history-1", [row(1, 1_000)]);
+      realtime.deliver("history-1", [row(2, 2_000), row(1, 1_000)]);
+      yield* boardSettled;
+      assert.deepEqual(pushed, [
+        [
+          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+          { taskId: INVITES, view: { revisions: [line(1, 1_000)] } },
+        ],
+        [
+          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+          { taskId: INVITES, view: { revisions: [line(2, 2_000), line(1, 1_000)] } },
+        ],
+      ]);
+      assert.equal(told.length, 0, "a plan's history is never told in the view");
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
+      yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), []);
     }),
 );

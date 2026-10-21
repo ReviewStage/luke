@@ -335,6 +335,18 @@ export const TASKS_ACT_KIND = {
   TASKS_PAGE_SOURCE: "tasks.pageSource",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
   TASKS_PAGES: "tasks.pages",
+  /**
+   * One plan's pages, followed while the window holds the stream open for
+   * the Inbox's panel beside an item of that plan: each time they move, over
+   * Neon Realtime, never on the document.
+   */
+  TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /**
+   * One plan's newest page of history, followed while the window holds the
+   * stream open for its version history: each time a save lands, over Neon
+   * Realtime, never on the document.
+   */
+  TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */

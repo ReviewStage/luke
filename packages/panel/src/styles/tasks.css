@@ -5691,6 +5691,22 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   display: none;
 }
 
+/* A call's controls in the composer's row, in Call's place beside Send
+   (`agent-call.tsx`): the mutes and Video as the row's own presses, End
+   call on its red disc. They never fold into the ⋯, because they are the
+   call, and a narrow card folds the presses around them first. */
+.agent-call-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-4);
+  min-inline-size: 0;
+  /* End call stands a step off Send, so the two discs never read as a pair. */
+  margin: 0 var(--luke-space-4) 0 0;
+  padding: 0;
+  border: 0;
+}
+
 /* Too narrow for every press: the ⋯ takes in the MCP servers, the
    context ring, and the microphone. The servers' and the
    ring's boxes stay, out of the row at its right end, so a popover the ⋯
@@ -5743,6 +5759,24 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   align-items: center;
   gap: var(--luke-control-gap);
   color: var(--luke-color-text-muted);
+}
+
+/* A clip still being read as a call begins shares the foot with the call's
+   controls (`agent-composer.tsx`): side by side where the card has room for
+   the strip's words, and the controls on a line of their own under it where
+   it has not, so Cancel and End call both stay within the card. */
+.prompt-input-footer:has(> .dictation-strip + .agent-call-controls) {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-4);
+}
+
+.prompt-input-footer > .dictation-strip:has(+ .agent-call-controls) {
+  /* Room for the strip's spinner, its word, and Cancel. */
+  flex-basis: 160px;
+}
+
+.prompt-input-footer > .dictation-strip + .agent-call-controls {
+  margin-inline-start: auto;
 }
 
 .dictation-wave {

@@ -212,7 +212,7 @@ async function inbox(
   const main: MainBrowserEvents = {};
   const links: ReadLink[] = [];
   const tasks: string[] = [];
-  const left = { links, tasks, rereads: 0 };
+  const left = { links, tasks };
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   fakeActs({
     act: answer,
@@ -267,9 +267,6 @@ async function inbox(
             listed,
             onListed: setListed,
             pages,
-            onRereadPages: () => {
-              left.rereads += 1;
-            },
             onTaskAgents: taskAgents.onRead,
           },
           sidePanel,
@@ -336,10 +333,9 @@ test("a pull request, a page, and a file the item names open as tabs of the pane
   assert.equal(panelTabs(container)?.length, 3, "nothing of another plan opens in the panel");
 });
 
-test("a page the item names whose plan's pages did not answer asks for them again, so its tab stands once they do", async () => {
+test("a page the item names before its plan's pages are read is still the panel's to open, its tab standing once they land", async () => {
   const { container, left } = await inbox({ pages: undefined });
   await pressChip(container, "Invite funnel");
-  assert.equal(left.rereads, 1);
   assert.equal(left.links.length, 0, "the page is still the panel's to open");
 });
 

@@ -9,9 +9,11 @@ import { revisionOfSave } from "./plan-history-model.js";
  *
  * The history is read through the service while the plan's version history
  * stands, the newest page first and each older page as the list asks, and
- * read again whenever the plan is edited while it stands, so a save Luke
- * makes on a call lands at the head of the list as it lands in the
- * document. The newest revision, the plan as it stands, is chosen until the
+ * the newest page is followed while it stands: main streams it each time a
+ * save lands (over Neon Realtime), so a save Luke makes on a call lands at
+ * the head of the list as it lands in the document, and nothing is read
+ * again here. A history its source does not follow, the plan template's,
+ * reads its newest page once. The newest revision, the plan as it stands, is chosen until the
  * developer chooses another, and a save landing meanwhile moves the view on
  * to the new newest; choosing one reads its content and the content before
  * it, and the version history draws what that revision changed until it is
@@ -64,6 +66,8 @@ export interface ViewedVersion {
 /** Where the history is read from and written to: main's acts, or a test's own. */
 export interface PlanHistorySource {
   readPage: (taskId: string, before: number | undefined) => Promise<TasksRevisionsAnswer>;
+  /** Follows the newest page, each change handed to `take`, until the answer is called to let it go. */
+  followNewest?: (taskId: string, take: (answer: TasksRevisionsAnswer) => void) => () => void;
   readRevision: (taskId: string, seq: number) => Promise<TasksRevisionAnswer>;
   restore: (taskId: string, seq: number) => Promise<boolean>;
 }
@@ -231,7 +235,8 @@ function versionOf(answer: TasksRevisionAnswer): VersionRead {
 
 /**
  * The open plan's history. `planId` is the open task, none while no task is
- * drawn; `editedAt` its last edit, which reads what is read again; `name`
+ * drawn; `editedAt` its last edit, which reads the version drawn again and
+ * which a list must be as new as to be sought in; `name`
  * its name, under which a version is formatted, so a rename reads the
  * version drawn again; `shown` whether the plan's version history is on
  * screen, which is what reads it and what a version chosen stands on; and
@@ -315,20 +320,23 @@ export function usePlanHistory(input: {
     setList((held) =>
       held?.taskId === taskId ? held : { taskId, list: { kind: HISTORY_READ.READING } },
     );
+    /** A newest page taken over the list held; one that failed keeps a list already drawn. */
+    const take = (answer: TasksRevisionsAnswer) =>
+      setList((held) => {
+        const was = held?.taskId === taskId ? held.list : undefined;
+        const page = listOf(answer);
+        if (page.kind === HISTORY_READ.FAILED && was?.kind === HISTORY_READ.READY) return held;
+        return { taskId, list: withNewestPage(was, page) };
+      });
+    // Note that a change heard is the newest word of the page, so the read still out is let go once one is.
+    let followed = false;
     latest.current.readPage(taskId, undefined).then(
       (answer) => {
-        if (read !== listReads.current) return;
-        setList((held) => {
-          const was = held?.taskId === taskId ? held.list : undefined;
-          const page = listOf(answer);
-          // A read that failed keeps the list already drawn.
-          if (page.kind === HISTORY_READ.FAILED && was?.kind === HISTORY_READ.READY) return held;
-          return { taskId, list: withNewestPage(was, page) };
-        });
+        if (read === listReads.current && !followed) take(answer);
       },
       // A read main refused is one that failed, which keeps a list already drawn too.
       () => {
-        if (read !== listReads.current) return;
+        if (read !== listReads.current || followed) return;
         setList((held) =>
           held?.taskId === taskId && held.list.kind === HISTORY_READ.READY
             ? held
@@ -336,7 +344,12 @@ export function usePlanHistory(input: {
         );
       },
     );
-  }, [reading, taskId, editedAt, retries]);
+    return latest.current.followNewest?.(taskId, (answer) => {
+      if (read !== listReads.current) return;
+      followed = true;
+      take(answer);
+    });
+  }, [reading, taskId, retries]);
 
   const seq =
     chosen === undefined

@@ -72,6 +72,22 @@ export const GATEWAY_METHOD = {
   TASKS_PAGE: "tasks.page",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the caller, never held in the view. */
   TASKS_PAGES: "tasks.pages",
+  /**
+   * One plan's pages, followed from now until let go, over Neon Realtime.
+   * What they hold is heard as `TASKS_PAGES_CHANGED` events, never answered;
+   * following what is already followed does nothing.
+   */
+  TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /** A followed plan's pages let go: no more `TASKS_PAGES_CHANGED` events of it until it is followed again. */
+  TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
+  /**
+   * One plan's newest page of history, followed from now until let go, over
+   * Neon Realtime. What it holds is heard as `TASKS_HISTORY_CHANGED` events,
+   * never answered; following what is already followed does nothing.
+   */
+  TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
+  /** A followed plan's history let go: no more `TASKS_HISTORY_CHANGED` events of it until it is followed again. */
+  TASKS_HISTORY_UNFOLLOW: "tasks.historyUnfollow",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
@@ -627,6 +643,10 @@ export const GATEWAY_EVENT = {
   TRANSCRIPT_CHANGED: "transcript.changed",
   /** One followed workspace's chat, whole or why there is none, each time it changes while it is followed. */
   CHAT_CHANGED: "chat.changed",
+  /** A followed plan's pages as they now stand, each time they move while followed. */
+  TASKS_PAGES_CHANGED: "tasks.pagesChanged",
+  /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
+  TASKS_HISTORY_CHANGED: "tasks.historyChanged",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

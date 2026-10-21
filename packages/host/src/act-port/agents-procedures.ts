@@ -55,6 +55,7 @@ import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effe
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
+import { streamed } from "./followed-stream.js";
 
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
@@ -155,32 +156,6 @@ function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStream
     owner: transcript.agentId,
     callId: transcript.callId,
   });
-}
-
-/**
- * An async iterable as the iterator oRPC streams. Note that its end is
- * handed straight to the iterable's own, rather than through an async
- * generator, which would queue the end behind a read still waiting for the
- * next page and so never close the stream.
- */
-function streamed<A>(iterable: AsyncIterable<A>): AsyncIteratorObject<A, undefined, unknown> {
-  const iterator = iterable[Symbol.asyncIterator]();
-  const ended = async (): Promise<IteratorReturnResult<undefined>> => {
-    await iterator.return?.();
-    return { done: true, value: undefined };
-  };
-  const self: AsyncIteratorObject<A, undefined, unknown> = {
-    next: async () => {
-      const read = await iterator.next();
-      return read.done === true ? { done: true, value: undefined } : read;
-    },
-    return: ended,
-    [Symbol.asyncIterator]: () => self,
-    [Symbol.asyncDispose]: async () => {
-      await ended();
-    },
-  };
-  return self;
 }
 
 /**

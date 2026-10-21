@@ -27,6 +27,8 @@ import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskHistoryFollowed,
+  type TaskPagesFollowed,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksPageSourceAnswer,
@@ -35,6 +37,7 @@ import {
 import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
+import { vi } from "vitest";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import {
   ACT_ERROR,
@@ -259,6 +262,8 @@ function windowPort(
   const asked: string[] = [];
   const browsed: string[] = [];
   const talked: VoiceCallAbout[] = [];
+  const pagesListeners = new Set<(followed: TaskPagesFollowed) => void>();
+  const historyListeners = new Set<(followed: TaskHistoryFollowed) => void>();
   const script: Script = {
     start: { failure: TASK_CALL_FAILURE.UNANSWERED },
     activeTaskId: TASK_ID,
@@ -383,6 +388,18 @@ function windowPort(
       ask(`pages:${params.taskId}`, () => ({
         pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }],
       })),
+    tasksPagesFollow: (scope) => ask(`pages-follow:${scope.taskId}`, () => undefined),
+    tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${scope.taskId}`, () => undefined),
+    onTaskPagesChanged: (listener) => {
+      pagesListeners.add(listener);
+      return () => pagesListeners.delete(listener);
+    },
+    tasksHistoryFollow: (scope) => ask(`history-follow:${scope.taskId}`, () => undefined),
+    tasksHistoryUnfollow: (scope) => ask(`history-unfollow:${scope.taskId}`, () => undefined),
+    onTaskHistoryChanged: (listener) => {
+      historyListeners.add(listener);
+      return () => historyListeners.delete(listener);
+    },
   };
   const port = testActPort(
     tasksProcedures({
@@ -401,7 +418,15 @@ function windowPort(
   );
   ports.push(port);
   const client = port.as(actor, options);
-  return { client, asked, browsed, talked, script };
+  /** A plan's pages as the host tells them moved. */
+  const pagesMoved = (followed: TaskPagesFollowed) => {
+    for (const listener of pagesListeners) listener(followed);
+  };
+  /** A plan's newest page of history as the host tells it moved. */
+  const historyMoved = (followed: TaskHistoryFollowed) => {
+    for (const listener of historyListeners) listener(followed);
+  };
+  return { client, asked, browsed, talked, script, pagesMoved, historyMoved };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -873,4 +898,52 @@ it("a content act's payload carrying a key its schema does not name, or past its
     refused: REFUSAL[TASKS_ACT_KIND.TASKS_SET_STANDING],
   });
   assert.deepEqual(asked, []);
+});
+
+it("a plan's pages are followed at the host once for every stream a panel holds open, each change reaches the streams of that plan, a late stream hears the last at once, and the last one closed lets them go", async () => {
+  const { client, asked, pagesMoved } = windowPort(PANEL);
+  const funnel = { id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 };
+
+  const one = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
+  const other = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
+  const heardOne = one.next();
+  const heardOther = other.next();
+  await vi.waitFor(() => assert.deepEqual(asked, [`pages-follow:${TASK_ID}`]));
+
+  pagesMoved({ taskId: "another-task", view: { pages: [] } });
+  pagesMoved({ taskId: TASK_ID, view: { pages: [funnel] } });
+  assert.deepEqual(await heardOne, { done: false, value: { pages: [funnel] } });
+  assert.deepEqual(await heardOther, { done: false, value: { pages: [funnel] } });
+  // A stream opened on pages already followed is told them as they last stood, and follows nothing more.
+  const late = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
+  assert.deepEqual(await late.next(), { done: false, value: { pages: [funnel] } });
+  await late.return?.(undefined);
+
+  await one.return?.(undefined);
+  await vi.waitFor(() => assert.equal(asked.length, 1, "the other stream still holds it"));
+  await other.return?.(undefined);
+  await vi.waitFor(() =>
+    assert.deepEqual(asked, [`pages-follow:${TASK_ID}`, `pages-unfollow:${TASK_ID}`]),
+  );
+});
+
+it("the voice window is refused a plan's pages, and the host follows nothing", async () => {
+  const { client, asked } = windowPort(VOICE);
+  await assert.rejects(client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK));
+  assert.deepEqual(asked, []);
+});
+
+it("a plan's newest page of history is streamed to a panel as the host tells it, and let go as the stream closes", async () => {
+  const { client, asked, historyMoved } = windowPort(PANEL);
+  const stream = await client[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW](TASK);
+  const heard = stream.next();
+  await vi.waitFor(() => assert.deepEqual(asked, [`history-follow:${TASK_ID}`]));
+
+  historyMoved({ taskId: "another-task", view: { revisions: [] } });
+  historyMoved({ taskId: TASK_ID, view: { revisions: [], earlier: 3 } });
+  assert.deepEqual(await heard, { done: false, value: { revisions: [], earlier: 3 } });
+  await stream.return?.(undefined);
+  await vi.waitFor(() =>
+    assert.deepEqual(asked, [`history-follow:${TASK_ID}`, `history-unfollow:${TASK_ID}`]),
+  );
 });

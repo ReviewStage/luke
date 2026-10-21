@@ -732,6 +732,22 @@ export const tasksRevisionsAnswerSchema = EffectSchema.Union([
 
 export type TasksRevisionsAnswer = typeof tasksRevisionsAnswerSchema.Type;
 
+/** One plan's newest page of history, followed by a window while its version history stands. */
+export const taskHistoryFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
+
+export type TaskHistoryFollow = typeof taskHistoryFollowSchema.Type;
+
+/**
+ * A followed plan's newest page of history as it now stands, told each time
+ * a save lands while followed, or why there is none.
+ */
+export const taskHistoryFollowedSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  view: tasksRevisionsAnswerSchema,
+});
+
+export type TaskHistoryFollowed = typeof taskHistoryFollowedSchema.Type;
+
 /** One revision of a plan, as the version history names it to read it or to restore it: the task and the revision's number. */
 export const tasksRevisionParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -830,6 +846,22 @@ export const tasksPagesAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
+
+/** One plan's pages, followed by a window while its Inbox draws an item of that plan. */
+export const taskPagesFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
+
+export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
+
+/**
+ * A followed plan's pages as they now stand, each by its newest version,
+ * told each time they move while followed, or why there are none.
+ */
+export const taskPagesFollowedSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  view: tasksPagesAnswerSchema,
+});
+
+export type TaskPagesFollowed = typeof taskPagesFollowedSchema.Type;
 
 /** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([

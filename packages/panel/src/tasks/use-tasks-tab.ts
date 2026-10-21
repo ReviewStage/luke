@@ -35,6 +35,7 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
+  type TasksRevisionsAnswer,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -273,10 +274,8 @@ interface InboxViewControl {
   readonly single?: boolean;
   /** Says whether the Inbox shows one column. */
   readonly onSingle?: (single: boolean) => void;
-  /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
+  /** The pages of the chosen item's task as they move, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
-  /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
-  readonly onRereadPages: () => void;
   /** Tells the agents the Inbox read of the chosen item's task, whose Pull request tabs the panel beside it draws (`use-inbox-task-agents.ts`). */
   readonly onTaskAgents: (taskId: string, agentIds: readonly string[]) => void;
 }
@@ -2456,6 +2455,24 @@ export function useTasksTab(input: {
           taskId,
           ...(before === undefined ? undefined : { before }),
         }),
+      followNewest: (taskId, take) => {
+        let live = true;
+        let stream: AsyncIteratorObject<TasksRevisionsAnswer> | undefined;
+        act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId })
+          .then(async (opened) => {
+            stream = opened;
+            if (!live) {
+              await opened.return?.(undefined);
+              return;
+            }
+            for await (const answer of opened) if (live) take(answer);
+          })
+          .catch(() => undefined);
+        return () => {
+          live = false;
+          void stream?.return?.(undefined);
+        };
+      },
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
@@ -3120,7 +3137,6 @@ export function useTasksTab(input: {
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
       pages: inboxPages.pages,
-      onRereadPages: inboxPages.onReread,
       onTaskAgents: inboxTaskAgents.onRead,
     },
     // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.

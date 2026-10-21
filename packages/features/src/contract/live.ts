@@ -32,6 +32,8 @@ import {
   macCommandsLiveAnswerSchema,
   scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
+  taskHistoryLiveAnswerSchema,
+  taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
   workspaceChatLiveAnswerSchema,
 } from "../live-wire.js";
@@ -108,6 +110,14 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskRecordLiveAnswerSchema)),
+  taskPages: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_PAGES }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
+  taskHistory: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskHistoryLiveAnswerSchema)),
   agentTranscript: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)
