@@ -7083,7 +7083,9 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         );
         const wordsOf = (page: { readonly messages: readonly CodingAgentMessage[] }) =>
           page.messages.map((message) =>
-            message.parts.map((part) => ("text" in part ? part.text : "")).join(""),
+            message.parts
+              .map((part) => (isRecord(part) && isWireString(part.text) ? part.text : ""))
+              .join(""),
           );
 
         const newest = readAnswer(
