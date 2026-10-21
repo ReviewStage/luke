@@ -541,7 +541,11 @@ function ClaudeTokenPanel({
             type={TEXT_FIELD_TYPE.PASSWORD}
             autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
             label="Claude setup-token"
-            placeholder="Paste your Claude setup-token"
+            placeholder={
+              plan === undefined
+                ? "Paste the token from claude setup-token"
+                : "Paste your Claude setup-token"
+            }
             spellCheck={false}
             disabled={saving}
             value={pasted}
