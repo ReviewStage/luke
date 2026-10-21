@@ -4,6 +4,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
+  type TasksWorkspaceMembersAnswer,
   tasksGitHubIssuesParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
@@ -21,6 +22,7 @@ import {
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  workspacePeopleFollowSchema,
 } from "@luke/features/tasks-view";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import {
@@ -28,6 +30,7 @@ import {
   workspaceMemberSchema,
   workspaceSchema,
 } from "@luke/features/workspace-wire";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WORKSPACE_ACT_KIND } from "./kinds.js";
@@ -108,6 +111,11 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceMembersParamsSchema))
     .output(answersMembers),
+  [WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE]: actProcedure(
+    "Could not follow that workspace's members on this system.",
+  )
+    .input(exactInput(workspacePeopleFollowSchema))
+    .output(eventIterator(type<TasksWorkspaceMembersAnswer>())),
   [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: actProcedure(
     "Could not read who left that workspace on this system.",
   )

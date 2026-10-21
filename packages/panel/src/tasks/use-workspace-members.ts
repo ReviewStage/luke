@@ -1,25 +1,27 @@
+import type { TasksWorkspaceMembersAnswer } from "@luke/features/tasks-view";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { actPort } from "../app-bridge.js";
 
 /**
  * use-workspace-members.ts -- a workspace's members, and who left it, as a place that draws them holds them: the task's member directory, the command palette, and a plan's version history.
  *
- * The members are read once per workspace the place stands in, and again
- * whenever the workspace's own count changes, as a member joining or leaving
- * changes it. Until they answer, or if they never do, the place has none, and
- * draws what it can without them: a count alone, or a teammate's letter where
- * their picture would stand. A read taken before the count last changed is
- * no longer handed on, so nobody who joined since is taken for gone. Who
- * left is read the same way, on a read of its own. Each place reads for itself.
+ * The members, and who left, are read once as the place opens and followed
+ * while it stands: the host streams them each time they move (over Neon
+ * Realtime), so someone joining, leaving, or given another role elsewhere
+ * shows without another read. Until they answer, or if they never do, the
+ * place has none, and draws what it can without them: a count alone, or a
+ * teammate's letter where their picture would stand. Each place follows for
+ * itself; the host follows each workspace once however many places do.
  */
 
 /** A workspace's members as a place that says why it has none holds them: the members, whether the last read was refused, and a way to read them again. */
 export interface WorkspaceMembersRead {
   /** The members, none while unread, refused, or for no workspace. */
   readonly members: readonly WorkspaceMember[] | undefined;
-  /** Whether the read for the workspace at its count was refused, until another is asked for. */
+  /** Whether the workspace's people were refused, until another read is asked for. */
   readonly refused: boolean;
   /** Reads the members again, standing unread until the read answers. */
   readonly retry: () => void;
@@ -29,63 +31,94 @@ export interface WorkspaceMembersRead {
 export interface FormerMembersRead {
   /** Who left, none while unread, refused, or for no workspace. */
   readonly former: readonly FormerMember[] | undefined;
-  /** Whether the read for the workspace at its count was refused, until another is asked for. */
+  /** Whether the workspace's people were refused, until another read is asked for. */
   readonly refused: boolean;
   /** Reads who left again, standing unread until the read answers. */
   readonly retry: () => void;
 }
 
-/** One read's answer, kept under the workspace and the count it was taken at. */
-interface HeldRead<Row> {
+/** A list as one place holds it, under the workspace and the retry it answers. */
+interface HeldList<Row> {
   readonly workspaceId: string;
-  readonly memberCount: number | undefined;
   /** Which retry it answers, so a refusal stands only until the next is asked for. */
   readonly asked: number;
   readonly rows: readonly Row[];
   readonly refused: boolean;
 }
 
-/** A list a workspace's count reads again, as one place holds it: the rows, none until they answer; whether the read was refused; and Retry. */
-interface CountedRead<Row> {
+/** A list of a workspace's people as one place holds it: the rows, none until they answer; whether they were refused; and Retry. */
+interface FollowedList<Row> {
   readonly rows: readonly Row[] | undefined;
   readonly refused: boolean;
   readonly retry: () => void;
 }
 
 /**
- * Reads a workspace's list with `read`, which must be stable, again whenever
- * its count changes or a retry asks, keeping whether the read was refused.
+ * The workspace's people streamed from the host (`workspace.people`) until
+ * the returned stop, each word handed to `take`. Note that a stream the
+ * window could not open, or that broke, hands nothing more: the place keeps
+ * what it last held.
  */
-function useCountedRead<Row>(
-  workspace: Pick<Workspace, "id" | "memberCount"> | undefined,
+function streamPeople(
+  workspaceId: string,
+  take: (view: TasksWorkspaceMembersAnswer) => void,
+): () => void {
+  let stopped = false;
+  let stream: AsyncIteratorObject<TasksWorkspaceMembersAnswer, unknown, unknown> | undefined;
+  const read = async () => {
+    stream = await actPort()[ACT_KIND.WORKSPACE_PEOPLE]({ workspaceId });
+    if (stopped) return;
+    for await (const view of stream) take(view);
+  };
+  read().catch(() => undefined);
+  return () => {
+    stopped = true;
+    stream?.return?.(undefined).catch(() => undefined);
+  };
+}
+
+/**
+ * One list of the workspace's people, read once with `read`, which must be
+ * stable, and then followed for as long as the place stands: the host
+ * streams the workspace's people, and each word is picked by `pick` and
+ * taken over whatever the read answered, since it is the newer word. Retry
+ * reads and follows again.
+ */
+function useFollowedList<Row>(
+  workspaceId: string | undefined,
   read: (workspaceId: string) => Promise<readonly Row[]>,
-): CountedRead<Row> {
-  const [held, setHeld] = useState<HeldRead<Row>>();
+  pick: (view: TasksWorkspaceMembersAnswer) => readonly Row[] | undefined,
+): FollowedList<Row> {
+  const [held, setHeld] = useState<HeldList<Row>>();
   const [asked, setAsked] = useState(0);
-  const workspaceId = workspace?.id;
-  const memberCount = workspace?.memberCount;
-  // A changed count, or a retry, reads the list again by standing among the effect's dependencies.
   useEffect(() => {
     if (workspaceId === undefined) return;
     let live = true;
+    let pushed = false;
     const keep = (rows: readonly Row[], refused: boolean) => {
-      if (live) setHeld({ workspaceId, memberCount, asked, rows, refused });
+      if (live) setHeld({ workspaceId, asked, rows, refused });
     };
+    const stop = streamPeople(workspaceId, (view) => {
+      pushed = true;
+      const rows = pick(view);
+      keep(rows ?? [], rows === undefined);
+    });
     read(workspaceId).then(
-      (rows) => keep(rows, false),
-      () => keep([], true),
+      (rows) => {
+        if (!pushed) keep(rows, false);
+      },
+      () => {
+        if (!pushed) keep([], true);
+      },
     );
     return () => {
       live = false;
+      stop();
     };
-  }, [read, workspaceId, memberCount, asked]);
+  }, [read, pick, workspaceId, asked]);
   const retry = useCallback(() => setAsked((count) => count + 1), []);
-  // Note that a read taken at another count, or before a retry, is not handed on, because a member it misses would be drawn as having left while a newer read is out, or after one failed.
-  const current =
-    held !== undefined &&
-    held.workspaceId === workspaceId &&
-    held.memberCount === memberCount &&
-    held.asked === asked;
+  // Note that a list held of another workspace, or before a retry, is not handed on.
+  const current = held !== undefined && held.workspaceId === workspaceId && held.asked === asked;
   return {
     rows: current && !held.refused ? held.rows : undefined,
     refused: current && held.refused,
@@ -93,42 +126,51 @@ function useCountedRead<Row>(
   };
 }
 
-/** A workspace's members, read again whenever its count changes or a retry asks, with whether the read was refused. */
+/** The members a word carries; none where it says why there are none. */
+function pushedMembers(view: TasksWorkspaceMembersAnswer): readonly WorkspaceMember[] | undefined {
+  return "members" in view ? view.members : undefined;
+}
+
+/** Who left as a word carries them, none named where nobody did; none where it says why there are none. */
+function pushedFormer(view: TasksWorkspaceMembersAnswer): readonly FormerMember[] | undefined {
+  return "members" in view ? (view.former ?? []) : undefined;
+}
+
+/** A workspace's members, read once and followed while the place stands, with whether they were refused. */
 export function useWorkspaceMembersRead(
-  workspace: Pick<Workspace, "id" | "memberCount"> | undefined,
+  workspace: Pick<Workspace, "id"> | undefined,
 ): WorkspaceMembersRead {
   const { act } = useAct();
   const read = useCallback(
     (workspaceId: string) => act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }),
     [act],
   );
-  const { rows, refused, retry } = useCountedRead(workspace, read);
+  const { rows, refused, retry } = useFollowedList(workspace?.id, read, pushedMembers);
   return { members: rows, refused, retry };
 }
 
-/** A workspace's members, read again whenever its count changes; none while unread, refused, or for no workspace. */
+/** A workspace's members, read once and followed while the place stands; none while unread, refused, or for no workspace. */
 export function useWorkspaceMembers(
-  workspace: Pick<Workspace, "id" | "memberCount"> | undefined,
+  workspace: Pick<Workspace, "id"> | undefined,
 ): readonly WorkspaceMember[] | undefined {
   // Note that a refused read leaves the place as it stands, because it draws what it can without the members.
   return useWorkspaceMembersRead(workspace).members;
 }
 
 /**
- * Who a workspace's work names but who left it, read as its members are, and
- * again whenever its count changes or a retry asks, with whether the read was
- * refused; none while unread, refused, or for no workspace, and none from a
- * service that names nobody.
+ * Who a workspace's work names but who left it, read and followed as its
+ * members are, with whether they were refused; none while unread, refused,
+ * or for no workspace, and none from a service that names nobody.
  */
 export function useFormerMembersRead(
-  workspace: Pick<Workspace, "id" | "memberCount"> | undefined,
+  workspace: Pick<Workspace, "id"> | undefined,
 ): FormerMembersRead {
   const { act } = useAct();
   const read = useCallback(
     (workspaceId: string) => act(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, { workspaceId }),
     [act],
   );
-  const { rows, refused, retry } = useCountedRead(workspace, read);
+  const { rows, refused, retry } = useFollowedList(workspace?.id, read, pushedFormer);
   return { former: rows, refused, retry };
 }
 
@@ -138,7 +180,7 @@ export function useFormerMembersRead(
  * who left still stands grayed by their letter without their picture.
  */
 export function useFormerMembers(
-  workspace: Pick<Workspace, "id" | "memberCount"> | undefined,
+  workspace: Pick<Workspace, "id"> | undefined,
 ): readonly FormerMember[] | undefined {
   return useFormerMembersRead(workspace).former;
 }

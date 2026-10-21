@@ -129,6 +129,7 @@ import {
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
   tasksWriteSectionParamsSchema,
+  workspacePeopleFollowSchema,
 } from "@luke/features/tasks-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -180,7 +181,7 @@ import {
   type TranscriptFollows,
   transcriptFollows,
 } from "./transcript-follow.js";
-import { workspacesMoves } from "./workspaces-follow.js";
+import { peopleMoves, workspacesMoves } from "./workspaces-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
@@ -479,6 +480,7 @@ export type TasksClient = Pick<
     | "linearDisconnect"
     | "linearIssues"
     | "people"
+    | "peopleLive"
     | "photo"
     | "removeMember"
     | "tokenRepositories"
@@ -932,6 +934,66 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
     yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: true });
   });
+
+  /** The workspaces whose people a window follows, each followed while any window does. */
+  const peopleFollows = yield* FiberMap.make<string, void>();
+
+  /**
+   * One workspace's people followed over Realtime (`workspaces-follow.ts`),
+   * polled while Realtime fails them, each change and each refusal told as
+   * `WORKSPACE_PEOPLE_CHANGED`. A seal the service did not answer, or a
+   * follow that stopped, is sealed again on the board's backoff; a workspace
+   * the account is not in is told not found once, and not asked again.
+   */
+  function followPeople(workspaceId: string): Effect.Effect<void> {
+    const told = (view: TasksWorkspaceMembersAnswer) =>
+      Effect.sync(() =>
+        kernel.emit(GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED, carried({ workspaceId, view })),
+      );
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    const seal = (poll: boolean, after?: string) =>
+      userId === undefined
+        ? Effect.succeed(LIVE_SIGNED_OUT)
+        : Effect.map(
+            served(client.workspaces.peopleLive(workspaceId, userId, poll, after)),
+            (sealed) => {
+              if (!("ok" in sealed)) return sealed;
+              if (sealed.ok) return sealed.answer;
+              return {
+                failure: sealed.failure,
+                gone: sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND,
+              };
+            },
+          );
+    /** One seal followed until it stops, which fails it so the backoff seals it again. */
+    const attempt = Effect.gen(function* () {
+      const sealed = yield* seal(false);
+      if ("failure" in sealed) {
+        if (sealed.failure !== LIVE_SIGNED_OUT.failure) yield* told({ failure: sealed.failure });
+        return yield* Effect.fail(sealed.failure);
+      }
+      const moves = peopleMoves(
+        {
+          seal: () => seal(false),
+          poll: (after) => seal(true, after),
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+        },
+        sealed,
+      );
+      yield* Stream.runForEach(moves, told).pipe(Effect.ignore);
+      return yield* Effect.fail(WORKSPACE_CALL_FAILURE.UNANSWERED);
+    });
+    return attempt.pipe(
+      Effect.retry({
+        schedule: BOARD_BACKOFF,
+        while: (why) =>
+          why !== WORKSPACE_CALL_FAILURE.NOT_FOUND && why !== LIVE_SIGNED_OUT.failure && gate(),
+      }),
+      Effect.ignore,
+    );
+  }
 
   /**
    * When whether GitHub is connected was last asked, none since a sign-out;
@@ -2619,6 +2681,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // The members, and who the workspace's work names but left, are answered to the window that asked and held nowhere:
     // it keeps what it read, and reads again as it opens. A read moves
     // nothing, so nothing else is read with it.
+    // A window follows a workspace's people while it draws them; following
+    // again starts over, so a window that follows later hears where they
+    // stand, and letting them go ends it.
+    [GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
+        if (!gate()) return {};
+        const { workspaceId } = read.success;
+        yield* FiberMap.run(peopleFollows, workspaceId, followPeople(workspaceId));
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
+        yield* FiberMap.remove(peopleFollows, read.success.workspaceId);
+        return {};
+      }),
     [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceMembersParamsSchema)(unparsedWire(params));
@@ -2853,6 +2934,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);
       yield* FiberHandle.clear(workspacesFollow);
+      yield* FiberMap.clear(peopleFollows);
       yield* serial(
         Effect.sync(() => {
           githubAskedAt = undefined;

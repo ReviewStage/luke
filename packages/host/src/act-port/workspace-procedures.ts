@@ -26,8 +26,10 @@ import type {
   TasksWorkspaceTokenRepositoriesParams,
   TasksWorkspaceTokenRepositorySetParams,
   TasksWorkspaceTransferParams,
+  WorkspacePeopleFollow,
+  WorkspacePeopleFollowed,
 } from "@luke/features/tasks-view";
-import { Effect } from "effect";
+import { Effect, MutableHashMap, Option, Queue, Stream } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
@@ -65,6 +67,10 @@ export interface WorkspaceProceduresDependencies {
     workspaceMembers(
       params: TasksWorkspaceMembersParams,
     ): Effect.Effect<TasksWorkspaceMembersAnswer>;
+    /** A workspace's people followed at the host, heard through `onWorkspacePeopleChanged`; following again starts over. */
+    workspacePeopleFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+    workspacePeopleUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+    onWorkspacePeopleChanged(listener: (followed: WorkspacePeopleFollowed) => void): () => void;
     workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
     workspaceMemberRemove(
       params: TasksWorkspaceMemberRemoveParams,
@@ -127,8 +133,84 @@ function isBrowserAddress(url: string): boolean {
   return URL.canParse(url) && new URL(url).protocol === "https:";
 }
 
+/**
+ * An async iterable as the iterator oRPC streams. Note that its end is
+ * handed straight to the iterable's own, rather than through an async
+ * generator, which would queue the end behind a read still waiting for the
+ * next word and so never close the stream.
+ */
+function streamed<A>(iterable: AsyncIterable<A>): AsyncIteratorObject<A, undefined, unknown> {
+  const iterator = iterable[Symbol.asyncIterator]();
+  const ended = async (): Promise<IteratorReturnResult<undefined>> => {
+    await iterator.return?.();
+    return { done: true, value: undefined };
+  };
+  const self: AsyncIteratorObject<A, undefined, unknown> = {
+    next: async () => {
+      const read = await iterator.next();
+      return read.done === true ? { done: true, value: undefined } : read;
+    },
+    return: ended,
+    [Symbol.asyncIterator]: () => self,
+    [Symbol.asyncDispose]: async () => {
+      await ended();
+    },
+  };
+  return self;
+}
+
+/**
+ * A workspace's people for one stream a window holds open: the host follows
+ * them afresh as the stream opens, so the window hears where they stand,
+ * and lets them go once the last stream of them closes. Every word the host
+ * tells of them reaches every stream of them.
+ */
+function workspacePeople(
+  host: WorkspaceProceduresDependencies["host"],
+  open: MutableHashMap.MutableHashMap<string, number>,
+  scope: WorkspacePeopleFollow,
+): Stream.Stream<TasksWorkspaceMembersAnswer> {
+  const { workspaceId } = scope;
+  return Stream.callback<TasksWorkspaceMembersAnswer>((queue) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          host.onWorkspacePeopleChanged((changed) => {
+            if (changed.workspaceId === workspaceId) Queue.offerUnsafe(queue, changed.view);
+          }),
+        ),
+        (stop) => Effect.sync(stop),
+      );
+      yield* Effect.acquireRelease(
+        Effect.andThen(
+          Effect.sync(() =>
+            MutableHashMap.set(
+              open,
+              workspaceId,
+              Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 0) + 1,
+            ),
+          ),
+          host.workspacePeopleFollow(scope),
+        ),
+        () =>
+          Effect.suspend(() => {
+            const left = Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 1) - 1;
+            if (left > 0) {
+              MutableHashMap.set(open, workspaceId, left);
+              return Effect.void;
+            }
+            MutableHashMap.remove(open, workspaceId);
+            return host.workspacePeopleUnfollow(scope);
+          }),
+      );
+    }),
+  );
+}
+
 export function workspaceProcedures(dependencies: WorkspaceProceduresDependencies) {
   const { host, openExternal } = dependencies;
+  /** How many streams stand open of each workspace's people, so the host lets them go only with the last. */
+  const openPeople = MutableHashMap.empty<string, number>();
   return {
     [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_CREATE].effect(
       function* ({ input, context, errors }) {
@@ -239,6 +321,15 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       if ("members" in answer) return answer.members;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
+    // A workspace's people, pushed to the stream while the window holds it open.
+    [WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return streamed(
+          yield* Stream.toAsyncIterableEffect(workspacePeople(host, openPeople, input)),
+        );
+      },
+    ),
     // Who left is read on the same read as the members, so a service that names nobody answers none.
     [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ

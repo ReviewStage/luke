@@ -5,6 +5,7 @@ import { GITHUB_AUTHOR_ASSOCIATION, ISSUE_STATE } from "@luke/features/github-re
 import {
   TASK_CALL_FAILURE,
   type TasksWorkspaceGitHubConnectAnswer,
+  type WorkspacePeopleFollowed,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ORPCError } from "@orpc/client";
@@ -198,6 +199,8 @@ afterEach(() => {
 function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const asked: string[] = [];
   const browsed: string[] = [];
+  /** Whoever hears the host tell a workspace's people, as the gateway's event reaches them. */
+  const peopleListeners = new Set<(changed: WorkspacePeopleFollowed) => void>();
   const script: Script = {
     notPermitted: false,
     alreadyInvited: false,
@@ -308,6 +311,12 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ),
     workspaceInvitationCancel: (params) =>
       ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
+    workspacePeopleFollow: (scope) => ask(`peopleFollow:${scope.workspaceId}`, () => undefined),
+    workspacePeopleUnfollow: (scope) => ask(`peopleUnfollow:${scope.workspaceId}`, () => undefined),
+    onWorkspacePeopleChanged: (listener) => {
+      peopleListeners.add(listener);
+      return () => peopleListeners.delete(listener);
+    },
   };
   const port = testActPort(
     workspaceProcedures({
@@ -320,7 +329,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   );
   ports.push(port);
   const client = port.as(actor, { trusted: options.trusted ?? true });
-  return { client, asked, browsed, script };
+  /** The host telling a workspace's people, as the gateway's event does. */
+  const tellPeople = (changed: WorkspacePeopleFollowed) => {
+    for (const listener of [...peopleListeners]) listener(changed);
+  };
+  return { client, asked, browsed, script, tellPeople, peopleListeners };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -590,5 +603,46 @@ it("a payload carrying a key its kind's schema does not name is refused, and the
     } as AnyPayload),
     { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_LEAVE] },
   );
+  assert.deepEqual(asked, []);
+});
+
+/** The event loop turned until `ready` holds, or two hundred turns pass. */
+async function until(ready: () => boolean) {
+  for (let turn = 0; turn < 200 && !ready(); turn += 1) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
+it("a workspace's people stream to every window following them, each workspace's to its own, and the host lets them go only with the last stream", async () => {
+  const { client, asked, tellPeople, peopleListeners } = windowPort(PANEL);
+  const one = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  const two = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  const first = one.next();
+  const second = two.next();
+  await until(() => asked.length === 2);
+
+  const people = { members: [GRACE] };
+  tellPeople({ workspaceId: "workspace-other", view: { members: [] } });
+  tellPeople({ ...WORKSPACE, view: people });
+
+  assert.deepEqual((await first).value, people);
+  assert.deepEqual((await second).value, people);
+  await one.return(undefined);
+  await until(() => peopleListeners.size === 1);
+  assert.deepEqual(asked, [`peopleFollow:${ACME.id}`, `peopleFollow:${ACME.id}`]);
+  await two.return(undefined);
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked.at(-1), `peopleUnfollow:${ACME.id}`);
+});
+
+it("the voice window is refused a workspace's people, and the host is not asked", async () => {
+  const { client, asked } = windowPort(VOICE);
+  try {
+    await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+    assert.fail("the voice window's stream was opened");
+  } catch (error) {
+    assert.ok(error instanceof ORPCError);
+    assert.equal(error.code, ACT_ERROR.REFUSED);
+  }
   assert.deepEqual(asked, []);
 });
