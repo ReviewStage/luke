@@ -14,21 +14,26 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
+import { installPanelSpanRecorder } from "@luke/panel/panel-spans";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
-import { BLANK_WINDOW, startDesktopSentry } from "./desktop-sentry";
+import { BLANK_WINDOW, type DesktopSentryOptions, startDesktopSentry } from "./desktop-sentry";
 import { createReportingRoot } from "./desktop-sentry-root";
 
 /**
  * Installs the window's bridge and platform, draws `surface` into its root
  * once the window's document has been read, and then starts its tracing. A
  * window whose document cannot be read mounts nothing: a fallback would
- * protect nothing.
+ * protect nothing. What its SDK watches beyond every window's is `sentry`'s
+ * to say: the panel's entry asks for its freezes to be reported.
  */
-export function mountWindow(surface: ReactNode): void {
+export function mountWindow(
+  surface: ReactNode,
+  sentryOptions: DesktopSentryOptions = { reportsFreezes: false },
+): void {
   // The desktop's bridge is the one the preload exposed as `window.luke`, and
   // this is the one place that global is read: everything else reaches main
   // through `appBridge()`, which reads what is installed here before anything
@@ -51,7 +56,9 @@ export function mountWindow(surface: ReactNode): void {
   // Every window's tracing and error reports, from Sentry's SDK loaded once
   // the window has drawn (`desktop-sentry.ts`), so no window parses it on
   // its way to its first paint.
-  const sentry = startDesktopSentry();
+  const sentry = startDesktopSentry(sentryOptions);
+  // What the panel times, recorded through the same SDK once it stands.
+  installPanelSpanRecorder(sentry.recordSpan);
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");

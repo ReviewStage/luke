@@ -39,11 +39,13 @@ import { askForNotifications } from "../window/notice-doors";
 import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
 import { reportRendererErrors } from "../window/renderer-errors";
+import { followResponsiveness } from "../window/renderer-health";
 import { VoiceWindow } from "../window/voice-window";
 import { windowPushes } from "../window/window-pushes";
 import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
+import { reportUnresponsivePanel } from "./telemetry-service";
 
 /** How long a display change is let settle before the panels are laid out over it. */
 const DISPLAY_SETTLE_MS = 100;
@@ -184,6 +186,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     // The title bar's buttons move into the traffic lights' place while
     // macOS hides them, so the window is told as its frame changes.
     onFullScreenChanged: () => publishAppState(),
+    // Begun rather than waited on: the following ends as the window closes.
+    followResponsiveness: (window) => {
+      void run(followResponsiveness(window, reportUnresponsivePanel));
+    },
   });
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({

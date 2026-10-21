@@ -136,6 +136,7 @@ import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
@@ -1784,6 +1785,24 @@ export function useTasksTab(input: {
       lastOpenIn.current.set(openWorkspaceId, openTaskId);
     }
   }, [openTaskId, openWorkspaceId]);
+  // The task last asked to open, until its document is drawn ready: a later
+  // ask replaces it, and one refused, or left for another, ends untimed.
+  const opening = useRef<{ readonly taskId: string; readonly startedAt: number } | undefined>(
+    undefined,
+  );
+  const readyTask = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
+  useEffect(() => {
+    const timed = opening.current;
+    if (timed === undefined || readyTask?.id !== timed.taskId) return;
+    opening.current = undefined;
+    const planChars = readyTask.document.body.length;
+    recordPanelSpan({
+      name: PANEL_SPAN.TASK_OPEN,
+      startedAt: timed.startedAt,
+      endedAt: Date.now(),
+      attributes: () => ({ [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: planChars }),
+    });
+  }, [readyTask]);
   // Opening a task, or leaving one, is leaving the window's Inbox for it.
   // Note that `onOpened` runs only once the task opened, because a task that
   // would not open must not leave the sidebar on another workspace, this
@@ -1792,8 +1811,13 @@ export function useTasksTab(input: {
     (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
       setStandIn(undefined);
       const ask = { taskId, over: openTaskId };
+      // Another task asked for is timed to its document drawn ready; the one
+      // open already has nothing to wait on.
+      const timed = { taskId, startedAt: Date.now() };
+      opening.current = taskId === openTaskId ? undefined : timed;
       const withdraw = () => {
         setAsked((held) => (held === ask ? undefined : held));
+        if (opening.current === timed) opening.current = undefined;
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
@@ -1810,6 +1834,7 @@ export function useTasksTab(input: {
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {
     setStandIn(undefined);
+    opening.current = undefined;
     if (fixture !== undefined) return;
     const ask = { taskId: undefined, over: openTaskId };
     setAsked(ask);
