@@ -134,12 +134,10 @@ function noticeOf(view: CloudBrowserView): string | undefined {
   return view.painted ? undefined : "Waiting for the page";
 }
 
-/** Draws one frame over the canvas, scaled to it whole. */
-function drawFrame(canvas: HTMLCanvasElement | null, frame: CloudBrowserFrame): void {
-  if (canvas === null) return;
-  const image = new Image();
-  image.onload = () => canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-  image.src = `data:image/jpeg;base64,${frame.data}`;
+/** Paints a decoded frame over the canvas, scaled to it whole. */
+function paint(canvas: HTMLCanvasElement | null, image: HTMLImageElement | undefined): void {
+  if (canvas === null || image === undefined) return;
+  canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
 }
 
 /**
@@ -171,9 +169,16 @@ export function CloudBrowserPane({
   const viewport = useRef<CloudBrowserViewport | undefined>(undefined);
   viewport.current = size.width > 0 && size.height > 0 ? size : undefined;
 
+  // The last frame drawn, kept only to paint it again once the canvas changes size, which clears it.
+  const shownFrame = useRef<HTMLImageElement | undefined>(undefined);
   const onFrame = useCallback((frame: CloudBrowserFrame) => {
     if (frame.pageWidth > 0 && frame.pageHeight > 0) setAspect(frame.pageWidth / frame.pageHeight);
-    drawFrame(canvas.current, frame);
+    const image = new Image();
+    image.onload = () => {
+      shownFrame.current = image;
+      paint(canvas.current, image);
+    };
+    image.src = `data:image/jpeg;base64,${frame.data}`;
   }, []);
   const live = useMemo(
     () =>
@@ -203,9 +208,11 @@ export function CloudBrowserPane({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  // The viewport goes again each time the canvas changes size.
-  useEffect(() => {
-    if (size.width > 0 && size.height > 0) live.resized();
+  // The viewport goes again each time the canvas changes size, and the page is painted again on it.
+  useLayoutEffect(() => {
+    if (size.width < 1 || size.height < 1) return;
+    paint(canvas.current, shownFrame.current);
+    live.resized();
   }, [live, size.width, size.height]);
 
   const yours = view.driver?.yours === true;

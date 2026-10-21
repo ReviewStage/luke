@@ -1746,6 +1746,11 @@
   gap: var(--luke-space-6);
 }
 
+/* Whose browser it is stays whole; the address gives way first. */
+.cloud-browser-where > :first-child {
+  flex: none;
+}
+
 .cloud-browser-body {
   align-items: center;
   justify-content: center;
