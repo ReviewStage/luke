@@ -2861,3 +2861,32 @@ test("on a narrow stage a link to a run opens on its runs, with the run marked a
   assert.ok(runsScreen?.querySelector("[aria-current]"), "the run the link named is marked");
   assert.ok(document.activeElement === button(SWEEP.name), "the focus on the way back");
 });
+
+test("on a narrow stage each row says when it runs next before what fires it, under its name, a far run with its year, and a lone owner's card is headed in place of each row's owner", async () => {
+  standing = [
+    { ...SWEEP, nextRunAt: Date.UTC(2026, 9, 22, 9) },
+    { ...FAILING, enabled: false },
+    {
+      ...automation(4, { name: "Yearly audit", scope: AUTOMATION_SCOPE.WORKSPACE }),
+      nextRunAt: Date.UTC(2099, 1, 1, 9),
+    },
+  ];
+  const page = mountNarrow({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  assert.deepEqual(
+    [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
+    ["Acme"],
+  );
+  assert.equal(page.querySelector(".automation-owner"), null, "no row names its owner");
+  const line = (name: string) =>
+    rowOf(page, name).querySelector(".luke-list-row-description")?.textContent ?? "";
+  assert.match(line("Nightly flaky-test sweep"), /^Next .+ · Weekdays at 9:00 · UTC$/u);
+  assert.equal(line("Dependency bumps"), "Weekdays at 9:00 · UTC");
+  assert.match(
+    line("Yearly audit"),
+    /^Next .*2099.* · Weekdays at 9:00 · UTC$/u,
+    "a far run names its year",
+  );
+  assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
+});

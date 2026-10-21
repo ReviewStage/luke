@@ -65,6 +65,7 @@ import { AutomationEditor } from "./automation-editor.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel.js";
 import {
+  automationNarrowLine,
   automationNextText,
   automationOwnerName,
   READING_AUTOMATIONS,
@@ -177,18 +178,22 @@ function OwnerCell({
  * it is pressed and the switch beside the press only switches. Its
  * right-click offers Copy link, and hands focus back to its press as the
  * menu closes; a right-click on the switch is the switch's own and opens
- * nothing.
+ * nothing. A narrow room, a phone's, has no width for the two columns beside
+ * the name, so the row keeps its name whole and says when it runs next in
+ * the line under it, its owner said by its card's heading instead.
  */
 function AutomationRow({
   automation,
   workspace,
   now,
+  narrow,
   onOpen,
   onToggle,
 }: {
   automation: AutomationSummary;
   workspace: Workspace | undefined;
   now: number;
+  narrow: boolean;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
@@ -197,8 +202,11 @@ function AutomationRow({
   const menu = useMenu(true);
   const press = useRef<HTMLElement | null>(null);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
-  // Note that the glyph is the row's decoration, so its working word is said beside the owner instead.
+  // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
+  const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
+  const hiddenWorking =
+    working === undefined ? null : <span className="luke-visually-hidden">{working}</span>;
   return (
     <>
       <ListRow
@@ -215,22 +223,34 @@ function AutomationRow({
             {automation.name}
           </span>
         }
-        description={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-        meta={
-          <span className="automation-row-meta">
-            {working === undefined ? null : <span className="luke-visually-hidden">{working}</span>}
-            <OwnerCell
-              owner={automationOwner(automation)}
-              mine={automation.mine === true}
-              workspace={workspace}
-            />
-            <span className="automation-row-next">
+        description={
+          narrow ? (
+            <>
+              {hiddenWorking}
               {stateEndMark(state, true)}
-              <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
-                <span className="automation-row-when">{automationNextText(automation, now)}</span>
-              </Tooltip>
+              {automationNarrowLine(automation, trigger, now)}
+            </>
+          ) : (
+            trigger
+          )
+        }
+        meta={
+          narrow ? undefined : (
+            <span className="automation-row-meta">
+              {hiddenWorking}
+              <OwnerCell
+                owner={automationOwner(automation)}
+                mine={automation.mine === true}
+                workspace={workspace}
+              />
+              <span className="automation-row-next">
+                {stateEndMark(state, true)}
+                <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
+                  <span className="automation-row-when">{automationNextText(automation, now)}</span>
+                </Tooltip>
+              </span>
             </span>
-          </span>
+          )
         }
         actions={
           <Switch
@@ -259,20 +279,24 @@ function AutomationRow({
 
 /**
  * The list, each owner's automations in a card, under its own heading where
- * both stand. Note that a lone owner's card is still a region named by its
- * owner, as a headed one is by its heading, so a reader moving by landmark
- * hears whose automations they are either way.
+ * both stand, or in a narrow room, whose rows name no owner. Note that a
+ * lone owner's card is still a region named by its owner, as a headed one is
+ * by its heading, so a reader moving by landmark hears whose automations
+ * they are either way.
  */
 function AutomationList({
   groups,
   workspace,
   now,
+  narrow,
   onOpen,
   onToggle,
 }: {
   groups: readonly AutomationGroup[];
   workspace: Workspace | undefined;
   now: number;
+  /** Whether the room is a phone's, where a lone owner's card is headed too, since its rows name no owner. */
+  narrow: boolean;
   onOpen: (automation: AutomationSummary) => void;
   onToggle: (automation: AutomationSummary, enabled: boolean) => void;
 }): React.JSX.Element {
@@ -280,11 +304,9 @@ function AutomationList({
     <>
       {groups.map((group) => {
         const name = automationOwnerName(group.owner, workspace?.name);
+        const headed = groups.length > 1 || narrow;
         const card = (
-          <SettingsSection
-            title={groups.length > 1 ? name : undefined}
-            frame={SETTINGS_SECTION_FRAME.NONE}
-          >
+          <SettingsSection title={headed ? name : undefined} frame={SETTINGS_SECTION_FRAME.NONE}>
             <List label={name} variant={LIST_VARIANT.CARD}>
               {group.automations.map((automation) => (
                 <AutomationRow
@@ -292,6 +314,7 @@ function AutomationList({
                   automation={automation}
                   workspace={workspace}
                   now={now}
+                  narrow={narrow}
                   onOpen={() => onOpen(automation)}
                   onToggle={(enabled) => onToggle(automation, enabled)}
                 />
@@ -299,7 +322,7 @@ function AutomationList({
             </List>
           </SettingsSection>
         );
-        return groups.length > 1 ? (
+        return headed ? (
           <div key={group.owner} className="automation-group">
             {card}
           </div>
@@ -375,9 +398,11 @@ function listState(
 function ListPage({
   tasks,
   automations,
+  room,
 }: {
   tasks: TasksControl;
   automations: ReturnType<typeof useAutomations>;
+  room: ShellRoom;
 }): React.JSX.Element {
   const view = tasks.automationsView;
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
@@ -446,6 +471,7 @@ function ListPage({
             groups={groups}
             workspace={workspace}
             now={now}
+            narrow={room === SHELL_ROOM.NARROW}
             onOpen={(automation) =>
               view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
             }
@@ -650,7 +676,7 @@ function AutomationsPages({
     if (fromPreset && !codeReviewOn) open.current({ kind: AUTOMATIONS_PAGE.LIST });
   }, [fromPreset, codeReviewOn]);
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
-    return <ListPage tasks={tasks} automations={automations} />;
+    return <ListPage tasks={tasks} automations={automations} room={room} />;
   }
   const { read, reload } = automations;
   if (workspace === undefined && tasks.workspacesFailed) {
