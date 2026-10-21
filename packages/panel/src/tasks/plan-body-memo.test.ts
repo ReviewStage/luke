@@ -36,6 +36,22 @@ vi.mock("react-markdown", async (importOriginal) => {
   };
 });
 
+/** How many times a section of the plan was drawn, each section drawing its words through `MarkdownMessage`. */
+const sectionDraws = vi.hoisted(() => ({ count: 0 }));
+
+// Note that the wrapper draws the real words beneath it and only counts the sections' draws.
+vi.mock("../markdown-message.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../markdown-message.js")>();
+  const { createElement: draw } = await import("react");
+  return {
+    ...actual,
+    MarkdownMessage: (props: Parameters<typeof actual.MarkdownMessage>[0]) => {
+      if (props.className?.includes("plan-unit") === true) sectionDraws.count += 1;
+      return draw(actual.MarkdownMessage, props);
+    },
+  };
+});
+
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const GOAL = "## Goal\nInvite a teammate by email.";
@@ -146,4 +162,35 @@ test("while a teammate's save types in, only the section being typed is parsed f
   assert.match(document.body.textContent ?? "", /nobody is left half invited\./u);
   assert.equal(parsed.length > 2, true, "the typing drew several frames");
   assert.equal(parsedSaying("Invite a teammate"), false);
+});
+
+test("a minute passing moves each section's edit time and draws no section again", async () => {
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  vi.setSystemTime(1_800_000_000_000);
+  const at = Date.now() - 5 * 60_000;
+  const task: Task = {
+    ...taskWith(`${GOAL}\n\n${APPROACH}`, DEAN, at),
+    sectionEdits: [
+      { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at, duringCall: false },
+      { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at, duringCall: false },
+    ],
+  };
+  draw(task);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  const bylines = () =>
+    [...document.querySelectorAll(".plan-unit-byline")].map((line) => line.textContent);
+  assert.match(bylines()[0] ?? "", /5m/u);
+  sectionDraws.count = 0;
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(60_000);
+  });
+
+  assert.match(bylines()[0] ?? "", /6m/u, "the section's time moved on with the minute");
+  assert.match(bylines()[1] ?? "", /6m/u);
+  assert.equal(sectionDraws.count, 0, "no section is drawn again");
 });

@@ -6,6 +6,7 @@ import {
   callInProgress,
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
+  type VoiceCallAbout,
   type VoiceCallTranscript,
   type VoiceSpeakers,
   type VoiceView,
@@ -14,7 +15,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { useCallback } from "react";
 import { useAct } from "./act.js";
 import { useCallCommands } from "./call-commands.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { APP_SLICE, appStateNow, useAppSlice } from "./use-app-state.js";
 
 /**
  * The conversation a capture run stages, since no voice window stands in one:
@@ -156,6 +157,21 @@ export function useVoiceView(): VoiceViewState {
 /** The voice as the voice window last reported it, read alone: a surface that draws the call and offers none of its chords. */
 export function useStandingVoiceView(): VoiceView {
   return useAppSlice(voiceViewAtom);
+}
+
+/** The voice as the document holds it now, for a press that cannot wait a render. */
+export function voiceViewNow(): VoiceView {
+  return appStateNow()?.voice?.view ?? IDLE_VOICE_VIEW;
+}
+
+/** The call in progress, which redraws its reader only as the call itself moves, not as who is heard on it does; none while no call stands. */
+const standingCallAtom: Atom.Atom<VoiceCallAbout | undefined> = Atom.map(voiceViewAtom, (view) =>
+  callInProgress(view) ? view.call : undefined,
+);
+
+/** The call in progress, its agent and task, read apart from who is heard on it; none while no call stands. */
+export function useStandingCall(): VoiceCallAbout | undefined {
+  return useAppSlice(standingCallAtom);
 }
 
 /** The agent a call is in progress into, which redraws its reader only as it moves; none while no call stands. */

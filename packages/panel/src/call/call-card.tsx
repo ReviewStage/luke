@@ -18,12 +18,20 @@ import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-mode
 import { useClipped } from "@luke/ui/use-clipped";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
-import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
+import {
+  type AnimationEvent,
+  createContext,
+  type MouseEvent,
+  type ReactNode,
+  useContext,
+  useRef,
+  useState,
+} from "react";
 import type { ActHandle } from "../act.js";
 import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts.js";
 import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
-import { useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
+import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
 import { CallVideoTile, VideoToggle } from "./call-video-tile.js";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
@@ -75,7 +83,7 @@ export interface CallCardInput {
 
 /** What a card draws of the avatar on this window's document (`callCardVideoStatus`). */
 export function useCardVideoStatus(): AvatarStatus | undefined {
-  const { view } = useVoiceView();
+  const view = useStandingVoiceView();
   const avatar = useVoiceAvatar();
   const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
   return callCardVideoStatus({ view, avatar, videoCalls });
@@ -236,6 +244,26 @@ export function CallCardDock({
 }
 
 /**
+ * The card this window draws, while it draws one, handed down from the
+ * window's root (`StandingCallCard`, `panel-avatar.tsx`) past every page
+ * between, so the card's every change of status draws its docks alone and
+ * not the pages they stand in.
+ */
+export const CallCardContext = createContext<CallCardInput | undefined>(undefined);
+
+/** The window's card, docked here while `docked`, and slid out once it is not (`CallCardDock`). */
+export function StandingCallCardDock({
+  docked,
+  surface,
+}: {
+  docked: boolean;
+  surface: CallCardSurface;
+}): React.JSX.Element | null {
+  const call = useContext(CallCardContext);
+  return <CallCardDock call={docked ? call : undefined} surface={surface} />;
+}
+
+/**
  * The foot of the column standing at a Luke window's left, wherever the
  * window stands: the tasks' sidebar, Settings' page list, or a version
  * history's versions, a plan's or the plan template's. Every one of them
@@ -245,15 +273,16 @@ export function CallCardDock({
  * card to the window's corner (`desktop-shell.tsx`).
  */
 export function ColumnFoot({
-  call,
+  docked = true,
   children,
 }: {
-  call: CallCardInput | undefined;
+  /** Whether the window's card docks here; the tasks' sidebar hands it to the window's corner while folded. */
+  docked?: boolean;
   children?: ReactNode;
 }): React.JSX.Element {
   return (
     <div className="sidebar-foot">
-      <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
+      <StandingCallCardDock docked={docked} surface={CALL_CARD_SURFACE.SIDEBAR} />
       {children}
     </div>
   );

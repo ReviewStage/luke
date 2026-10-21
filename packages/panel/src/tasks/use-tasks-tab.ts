@@ -51,7 +51,7 @@ import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
-import { callCard } from "@luke/ui/call-card-model";
+import { callTaskName } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
@@ -136,7 +136,7 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import { callInProgress, type VoiceCallTranscript, type VoiceView } from "@luke/voice/voice-view";
+import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -146,8 +146,10 @@ import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import { useStandingCall, voiceViewNow } from "../use-voice-view.js";
 import type { AgentCallDoors } from "./agent-call.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
@@ -1134,13 +1136,6 @@ export function useTasksTab(input: {
   inboxTaskless: readonly AppInboxTasklessItem[];
   /** The newest run of each of the account's own automations main says failed to start lately. */
   failedRuns: readonly AccountFailedRun[];
-  voice: {
-    view: VoiceView;
-    /** What was said on the standing call so far (`voice.callTranscript`), which the live transcript draws. */
-    callTranscript: VoiceCallTranscript | undefined;
-    listening: boolean;
-    requestMicrophoneAccess: () => void;
-  };
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page, where the developer's API keys are. */
@@ -1152,7 +1147,7 @@ export function useTasksTab(input: {
   /** The room the panel's stage gives, which holds the side panel only full screen while it is narrow (`shell-room.ts`). */
   room: ShellRoom;
 }): TasksControl {
-  const { shown, voice, leaveGuard } = input;
+  const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
   const { act, tell } = input.acts;
   const copyWithToast = useCopyToast();
@@ -2311,7 +2306,9 @@ export function useTasksTab(input: {
   // A platform with no voice, the web's, takes no calls.
   const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
   // A call into one of the open task's agents is in progress, so the plan may still be written.
-  const live = callInProgress(voice.view) && voice.view.call?.taskId === tasks.activeTaskId;
+  // Note that the call is read apart from who is heard on it, so the tab is not drawn again with every breath of a call.
+  const standingCall = useStandingCall();
+  const live = standingCall !== undefined && standingCall.taskId === tasks.activeTaskId;
   // A Call press that would open a call into one agent while another's call
   // stands ends that call, so it asks first; the answer is the same press,
   // and Cancel leaves the call standing as it was. The question is the
@@ -2320,7 +2317,7 @@ export function useTasksTab(input: {
   // covers.
   const [askedFor, setAskedFor] = useState<{ taskId: string; agentId: string }>();
   const otherCall = (agentId: string) =>
-    callInProgress(voice.view) && voice.view.call?.agentId !== agentId;
+    standingCall !== undefined && standingCall.agentId !== agentId;
   const secondCallFor =
     askedFor !== undefined && otherCall(askedFor.agentId) ? askedFor : undefined;
   const secondCall = useConfirmDialog(
@@ -2341,17 +2338,19 @@ export function useTasksTab(input: {
   // or toggles it. It is read off the document as the press lands, so a door
   // handed down once answers for the voice as it stands.
   const pressCall = (agentId: string) => {
-    const now = voiceNow.current;
+    const now = voiceViewNow();
     const button = microphoneButton({
       voiceAvailable: input.voiceAvailable,
       microphoneStatus: input.microphoneStatus,
       agentId,
       archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
       listening: now.listening,
-      call: now.view.call,
-      voiceStatus: now.view.voiceStatus,
+      call: now.call,
+      voiceStatus: now.voiceStatus,
     });
-    if (button.press === MICROPHONE_PRESS.ASK_ACCESS) now.requestMicrophoneAccess();
+    if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
+      tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
+    }
     if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
     if (button.press !== MICROPHONE_PRESS.TALK || tasks.activeTaskId === undefined) return;
     if (!otherCall(agentId)) tell(ACT_KIND.TASKS_TALK, { agentId });
@@ -2360,8 +2359,6 @@ export function useTasksTab(input: {
       secondCall.ask();
     }
   };
-  const voiceNow = useRef(voice);
-  voiceNow.current = voice;
   const pressCallNow = useRef(pressCall);
   pressCallNow.current = pressCall;
   // The doors an agent's tab takes calls through, the same from draw to draw; none where the window has no voice.
@@ -2394,7 +2391,7 @@ export function useTasksTab(input: {
   // task's, else the one New task starts in.
   const repositoriesOf =
     region.kind === DOCUMENT_REGION.READY ? region.task.workspaceId : listedWorkspace?.id;
-  const openGitHub = (url: string) => appPlatform().openGitHub(url);
+  const openGitHub = useCallback((url: string) => appPlatform().openGitHub(url), []);
   /**
    * The repository chip's list for one workspace: the repositories its tasks
    * were about lately that its GitHub reaches, newest first, so a task never
@@ -2406,38 +2403,46 @@ export function useTasksTab(input: {
    * chip still points somewhere, and its recent repositories are left to the
    * service's read to judge.
    */
-  const repositoriesIn = (workspaceId: string | undefined): RepositoryChooser => {
-    const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
-    const own =
-      workspaceId === undefined
-        ? tasks.tasks
-        : tasks.tasks.filter((task) => task.workspaceId === workspaceId);
-    // Note that the tasks are filtered before the recent ones are counted,
-    // because a few newer stranded tasks would otherwise crowd out an older
-    // repository the workspace does reach.
-    const offered =
-      workspace === undefined
-        ? own
-        : own.filter(
-            (task) => task.repository !== null && workspaceReaches(workspace, task.repository),
-          );
-    return {
-      recent: recentRepositories(offered),
-      read: () =>
-        tasksFixture !== undefined && fixture !== undefined
-          ? Promise.resolve(tasksFixture.fixtureRepositories(workspaceId))
-          : act(
-              ACT_KIND.TASKS_REPOSITORIES,
-              workspaceId === undefined ? {} : { workspaceId },
-            ).catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
-      openGitHub,
-      pictures: fixture === undefined,
-      scope: workspaceId,
-      manages: workspace === undefined || managesWorkspace(workspace),
-      ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
-      ...(workspace?.github == null ? undefined : { connected: true }),
-    };
-  };
+  const repositoriesIn = useCallback(
+    (workspaceId: string | undefined): RepositoryChooser => {
+      const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
+      const own =
+        workspaceId === undefined
+          ? tasks.tasks
+          : tasks.tasks.filter((task) => task.workspaceId === workspaceId);
+      // Note that the tasks are filtered before the recent ones are counted,
+      // because a few newer stranded tasks would otherwise crowd out an older
+      // repository the workspace does reach.
+      const offered =
+        workspace === undefined
+          ? own
+          : own.filter(
+              (task) => task.repository !== null && workspaceReaches(workspace, task.repository),
+            );
+      return {
+        recent: recentRepositories(offered),
+        read: () =>
+          tasksFixture !== undefined && fixture !== undefined
+            ? Promise.resolve(tasksFixture.fixtureRepositories(workspaceId))
+            : act(
+                ACT_KIND.TASKS_REPOSITORIES,
+                workspaceId === undefined ? {} : { workspaceId },
+              ).catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
+        openGitHub,
+        pictures: fixture === undefined,
+        scope: workspaceId,
+        manages: workspace === undefined || managesWorkspace(workspace),
+        ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
+        ...(workspace?.github == null ? undefined : { connected: true }),
+      };
+    },
+    [viewed.workspaces, tasks.tasks, tasksFixture, fixture, act, openGitHub],
+  );
+  // The open task's chip, or New task's, made again only as what it lists from moves.
+  const repositories = useMemo(
+    () => repositoriesIn(repositoriesOf),
+    [repositoriesIn, repositoriesOf],
+  );
   // A fixture's GitHub is connected nowhere. Connecting opens the service's
   // page, and the connection arrives on the view once the panel comes forward
   // again; disconnecting asks the service under the Mac's session, and the
@@ -2525,10 +2530,15 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
-  const edit = (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
-    if (fixture !== undefined) return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-    return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
-  };
+  const edit = useCallback(
+    (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
+      if (fixture !== undefined) {
+        return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+      }
+      return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
+    },
+    [fixture, act],
+  );
 
   // The chip's menu stands on the open task's toolbar, so another task's is
   // opened first; the ask is counted so each press opens it again.
@@ -2669,20 +2679,29 @@ export function useTasksTab(input: {
     mainTabs.onShow(planId, { draft: id });
   };
 
+  // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
+  const steadyStartTask = useSteadyDoor(startTask);
+
   // The dialog matches its name against the Linear issues of the workspace
   // it starts in, and searches them, where that workspace has Linear connected.
-  const linearIssuesIn: TasksControl["newTask"]["linearIssuesIn"] = (workspaceId) => {
-    const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-    if (linked?.linear?.active !== true) return undefined;
-    return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
-  };
+  const linearIssuesIn = useCallback<TasksControl["newTask"]["linearIssuesIn"]>(
+    (workspaceId) => {
+      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
+      if (linked?.linear?.active !== true) return undefined;
+      return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
+    },
+    [viewed.workspaces, act],
+  );
   // The dialog lists the chosen repository's GitHub issues, where the workspace has GitHub connected.
-  const githubIssuesIn: TasksControl["newTask"]["githubIssuesIn"] = (workspaceId) => {
-    const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-    if (linked?.github == null || !linked.github.active) return undefined;
-    return (repository, ask) =>
-      act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
-  };
+  const githubIssuesIn = useCallback<TasksControl["newTask"]["githubIssuesIn"]>(
+    (workspaceId) => {
+      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
+      if (linked?.github == null || !linked.github.active) return undefined;
+      return (repository, ask) =>
+        act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
+    },
+    [viewed.workspaces, act],
+  );
 
   // New task opens the dialog over whatever stands, an open task and its
   // call included, which stay until a task is started. Note that a press
@@ -3101,7 +3120,8 @@ export function useTasksTab(input: {
     return true;
   }, [leaveTask, page, sidePanel.fullScreen, sidePanel.onToggleFullScreen]);
 
-  return {
+  // Note that the tab is handed back steady, so a part that holds while its share of the tab does (`memo`) holds for every draw that moved nothing it reads.
+  return useSteadyDoors({
     page,
     restoring,
     shown,
@@ -3351,7 +3371,7 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    talkingTaskId: callInProgress(voice.view) ? voice.view.call?.taskId : undefined,
+    talkingTaskId: standingCall?.taskId,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the task's Call tab, asked to
@@ -3360,7 +3380,7 @@ export function useTasksTab(input: {
     // The call card's way back lands where the task's call bar is in sight.
     secondCall: {
       confirm: secondCall,
-      question: secondCallQuestion(callCard({ view: voice.view, tasks }).taskName),
+      question: secondCallQuestion(callTaskName(tasks, standingCall?.taskId)),
     },
     onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
@@ -3395,7 +3415,7 @@ export function useTasksTab(input: {
     }),
     chosenPin: chosen !== undefined && chosen.pin.task === boundFor ? chosen.pin : undefined,
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
-    repositories: repositoriesIn(repositoriesOf),
+    repositories,
     repositoryMenu,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
@@ -3430,7 +3450,7 @@ export function useTasksTab(input: {
       workspaces: viewed.workspaces,
       workspaceId: listedWorkspace?.id,
       repositoriesIn,
-      start: startTask,
+      start: steadyStartTask,
       models: agents.models,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
@@ -3457,5 +3477,5 @@ export function useTasksTab(input: {
     onDeleteTask: deleteTask,
     back,
     leaveGuard,
-  };
+  });
 }

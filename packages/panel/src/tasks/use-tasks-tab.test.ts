@@ -33,7 +33,12 @@ import {
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
+import {
+  type AppInboxTask,
+  type AppInboxTaskHolding,
+  type AppStateSnapshot,
+  RUN_PROFILE,
+} from "@luke/host/app-state";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -49,10 +54,10 @@ import {
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF } from "@luke/voice/avatar";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
-  type VoiceCallTranscript,
   type VoiceCommand,
   type VoiceView,
 } from "@luke/voice/voice-view";
@@ -78,7 +83,13 @@ import {
 } from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
+import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -135,9 +146,6 @@ interface Standing {
   tasks: TasksView;
   profile: string;
   fixtureMode: boolean;
-  voice: VoiceView;
-  /** The document's `voice.callTranscript`, held whole beside the view. */
-  callTranscript: VoiceCallTranscript | undefined;
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxTask[];
   inboxTasks: readonly AppInboxTaskHolding[];
@@ -182,8 +190,6 @@ function mount(
     tasks: IDLE_TASKS_VIEW,
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
-    voice: IDLE_VOICE_VIEW,
-    callTranscript: undefined,
     unseenAgents: [],
     inboxWaiting: [],
     inboxTasks: [],
@@ -260,12 +266,6 @@ function mount(
       inboxTasks: held.inboxTasks,
       inboxTaskless: [],
       failedRuns: [],
-      voice: {
-        view: held.voice,
-        callTranscript: held.callTranscript,
-        listening: false,
-        requestMicrophoneAccess: () => undefined,
-      },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
@@ -3097,7 +3097,16 @@ test("a platform with no voice takes no calls", async () => {
 });
 
 test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
-  handCapabilities(DESKTOP_CAPABILITIES);
+  // The voice arrives as main delivers it, a call into another agent landing after the first press.
+  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(stateWith({}, {})),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
   const otherCall: VoiceView = {
     ...IDLE_VOICE_VIEW,
     voiceStatus: LIVE_STATUS.LISTENING,
@@ -3118,7 +3127,12 @@ test("an agent's Call press opens a call into it at once, and over another agent
   act(() => tab.control().calls?.onPress(AGENT_ID));
   assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
 
-  tab.stand({ voice: otherCall });
+  act(() => {
+    for (const listener of listeners) {
+      listener(stateWith({}, { version: 2, voice: { avatar: AVATAR_OFF, view: otherCall } }));
+    }
+  });
+  await settle();
   act(() => tab.control().calls?.onPress(AGENT_ID));
   assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
   assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");

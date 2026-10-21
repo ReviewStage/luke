@@ -1,5 +1,5 @@
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 /**
  * What a line's dangerous control is currently asking.
@@ -125,35 +125,45 @@ export function useConfirm(
     if (!confirmWithdrawable(standing.current)) return;
     setHeld(CONFIRM_STAGE.RESTING);
   }, []);
+  // Whatever the last answer was refused for is cleared on the way in: a
+  // fresh question is a fresh decision, not one carrying the last one's
+  // answer under it.
+  const ask = useCallback(() => {
+    setRejection(undefined);
+    setHeld(CONFIRM_STAGE.ASKING);
+  }, []);
+  const clear = useCallback(() => setRejection(undefined), []);
+  // The act is read as the press lands, so the confirm handed down stands across draws and still runs the newest.
+  const newestAction = useRef(action);
+  newestAction.current = action;
+  const run = useCallback(() => {
+    setHeld(CONFIRM_STAGE.ACTING);
+    void newestAction
+      .current()
+      .then((result) => {
+        setRejection(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
+      })
+      // Settled in `finally` rather than after the answer, because a carrier
+      // that rejects rather than answering is still a line that has to be
+      // handed back: one left `ACTING` would draw a confirm nobody can take
+      // back. Answered either way — a refusal is an answer too,
+      // and asking again is a fresh decision rather than a confirm left
+      // standing over a subject that turned out to still be there.
+      .finally(() => {
+        setHeld(CONFIRM_STAGE.RESTING);
+      });
+  }, []);
 
-  return {
-    stage,
-    rejection,
-    busy: stage === CONFIRM_STAGE.ACTING,
-    // Whatever the last answer was refused for is cleared on the way in: a
-    // fresh question is a fresh decision, not one carrying the last one's
-    // answer under it.
-    ask: () => {
-      setRejection(undefined);
-      setHeld(CONFIRM_STAGE.ASKING);
-    },
-    keep,
-    clear: () => setRejection(undefined),
-    run: () => {
-      setHeld(CONFIRM_STAGE.ACTING);
-      void action()
-        .then((result) => {
-          setRejection(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
-        })
-        // Settled in `finally` rather than after the answer, because a carrier
-        // that rejects rather than answering is still a line that has to be
-        // handed back: one left `ACTING` would draw a confirm nobody can take
-        // back. Answered either way — a refusal is an answer too,
-        // and asking again is a fresh decision rather than a confirm left
-        // standing over a subject that turned out to still be there.
-        .finally(() => {
-          setHeld(CONFIRM_STAGE.RESTING);
-        });
-    },
-  };
+  return useMemo(
+    () => ({
+      stage,
+      rejection,
+      busy: stage === CONFIRM_STAGE.ACTING,
+      ask,
+      keep,
+      clear,
+      run,
+    }),
+    [stage, rejection, ask, keep, clear, run],
+  );
 }
