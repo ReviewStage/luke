@@ -7130,7 +7130,7 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-test("a replaced ask draws no card, only a quiet marker ending the agent's message saying a newer question replaced it, or a newer message where none asks; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
+test("a replaced ask draws no card: its controls as it offered them, dimmed, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
   const shown = threadItem(
     [
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -7164,6 +7164,32 @@ test("a replaced ask draws no card, only a quiet marker ending the agent's messa
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ??
     assert.fail("the replaced ask's message");
   assert.equal(replaced.querySelector(".inbox-ask"), null, "the replaced ask draws no card");
+  const offered =
+    replaced.querySelector<HTMLElement>("[data-inbox-replaced] .inbox-ask-replaced-controls") ??
+    assert.fail("the replaced ask keeps its controls");
+  const options = [...offered.querySelectorAll<HTMLElement>("[role='radio']")];
+  assert.deepEqual(
+    options.map((option) =>
+      ["1 day", "7 days", "30 days"].some((label) => wordsOf(option)?.includes(label)),
+    ),
+    [true, true, true],
+    "every option it offered still reads",
+  );
+  assert.ok(wordsOf(offered)?.includes("What most teams use."), "with its detail");
+  assert.deepEqual(
+    options.map((option) => option.getAttribute("aria-checked")),
+    ["false", "false", "false"],
+    "none of them picked",
+  );
+  act(() => options[1]?.click());
+  assert.equal(options[1]?.getAttribute("aria-checked"), "false", "and a press picks nothing");
+  assert.equal(
+    replaced
+      .querySelector("[data-inbox-replaced] > :last-child")
+      ?.getAttribute("data-inbox-settled"),
+    "replaced",
+    "the marker stands under them",
+  );
   assert.deepEqual(
     [...replaced.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
       marker.dataset.inboxSettled,
@@ -7190,6 +7216,57 @@ test("a replaced ask draws no card, only a quiet marker ending the agent's messa
     wordsOf(noticed.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-settled]`)),
     "Replaced by a newer message",
     "an ask replaced by a message that asks nothing names no newer question",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const toDo = await mountThread(
+    threadItem([
+      askingMessage(
+        { type: INBOX_ASK.DO, steps: ["Open the repository's settings", "Add the secret"] },
+        { status: INBOX_ASK_STATUS.REPLACED },
+      ),
+    ]),
+  );
+  const steps = [
+    ...toDo.querySelectorAll<HTMLInputElement>(
+      `[data-message-id="${ASKING_ID}"] [data-inbox-replaced] [data-inbox-step] input`,
+    ),
+  ];
+  assert.deepEqual(
+    steps.map((step) => step.checked),
+    [false, false],
+    "a replaced to-do keeps its steps, none ticked",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const titled = await mountThread(
+    threadItem([
+      askingMessage({ type: INBOX_ASK.DO, steps: [] }, { status: INBOX_ASK_STATUS.REPLACED }),
+    ]),
+  );
+  assert.equal(
+    titled.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-replaced]`),
+    null,
+    "a replaced to-do naming no steps keeps no controls, since the title it drew as its step may have been renamed since",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const words = await mountThread(
+    threadItem([askingMessage({ type: INBOX_ASK.ANSWER }, { status: INBOX_ASK_STATUS.REPLACED })]),
+  );
+  const asked = words.querySelector(`[data-message-id="${ASKING_ID}"]`);
+  assert.equal(
+    asked?.querySelector("[data-inbox-replaced]"),
+    null,
+    "an ask of words alone has no controls to keep",
+  );
+  assert.equal(
+    wordsOf(asked?.querySelector("[data-inbox-settled]") ?? null),
+    "Replaced by a newer message",
+    "and ends with the marker alone",
   );
 });
 

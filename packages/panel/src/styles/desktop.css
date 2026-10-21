@@ -3862,6 +3862,25 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-4);
 }
 
+/* A replaced ask keeps its controls in the agent's message as it offered
+   them, nothing picked and taking nothing, dimmed so they read as what it
+   used to ask rather than something to answer, over the pill saying what
+   replaced it. */
+.inbox-ask-replaced {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.inbox-ask-replaced-controls {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  opacity: 0.55;
+}
+
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
    complete ink; a replaced ask with the same pill saying so, in the muted
