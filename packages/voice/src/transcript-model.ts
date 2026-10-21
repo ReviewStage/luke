@@ -330,9 +330,10 @@ const HELD_WORDS = 4;
  * The lines heard on a call that its rows do not hold yet. Lines and rows
  * are matched in the order said, each row holding one line at most, so a
  * phrase said twice is held twice only where two rows hold it. A caption
- * line may be one row or two, and a row grows in place, so a row holds a
- * line where it holds the line's first words, alone or run on into the
- * next row, or holds the start of it still growing.
+ * line may be one row or several, a call that reconnected splitting it, and
+ * a row grows in place, so a run of rows holds a line where it holds the
+ * line's first words, or holds the start of it still growing; the rows the
+ * run took are used up.
  */
 function unheldLines(rows: readonly string[], lines: readonly UIMessage[]): UIMessage[] {
   let next = 0;
@@ -341,11 +342,24 @@ function unheldLines(rows: readonly string[], lines: readonly UIMessage[]): UIMe
     const opening = said.split(" ").slice(0, HELD_WORDS).join(" ");
     if (opening === "") return false;
     for (let at = next; at < rows.length; at += 1) {
-      const row = rows[at] ?? "";
-      const runOn = `${row} ${rows[at + 1] ?? ""}`;
-      if (runOn.includes(opening) || (row !== "" && said.startsWith(row))) {
-        next = at + 1;
-        return false;
+      const first = rows[at] ?? "";
+      const holds = (run: string) => run.includes(opening) || (run !== "" && said.startsWith(run));
+      let run = "";
+      for (let end = at; end < rows.length; end += 1) {
+        const row = rows[end] ?? "";
+        run = run === "" ? row : `${run} ${row}`;
+        if (holds(run)) {
+          // The line takes every row after that its words run on into.
+          let last = end;
+          while (last + 1 < rows.length && said.startsWith(`${run} ${rows[last + 1] ?? ""}`)) {
+            last += 1;
+            run = `${run} ${rows[last] ?? ""}`;
+          }
+          next = last + 1;
+          return false;
+        }
+        // A run longer than the opening past its first row needs that row no more.
+        if (run.length > opening.length + first.length) break;
       }
     }
     return true;

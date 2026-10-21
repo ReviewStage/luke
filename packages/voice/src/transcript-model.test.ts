@@ -588,3 +588,20 @@ test("two calls whose lines reached one running turn both begin and end at that 
     [EARLIER_CALL, NEXT_CALL],
   );
 });
+
+test("a heard line a reconnected call wrote over three rows counts as held, its rows used up, and the next line no row holds stands at the foot", () => {
+  const heard = heardCalls({
+    held: [],
+    voice: standing(LIVE_CALL, ["Walk me through this now.", "Me through the rest, please."]),
+    agentId: AGENT,
+    now: 9_000,
+  });
+  const rows = [
+    spokenRow("said-1", LIVE_CALL, "Walk"),
+    spokenRow("said-2", LIVE_CALL, "me through"),
+    spokenRow("said-3", LIVE_CALL, "this now."),
+  ];
+  const places = callPlaces(rows, heardOnly(heard));
+
+  assert.deepEqual(places.heard[0]?.lines.map(messageText), ["Me through the rest, please."]);
+});
