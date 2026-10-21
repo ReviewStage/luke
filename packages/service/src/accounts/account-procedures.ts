@@ -35,12 +35,9 @@
  * as a revision of its own, all under the caller's account alone.
  *
  * The access is whether the caller is an admin, read off its own role, so a
- * client can offer the admin dashboard to the account that may open it, and
- * whether it is in the native-agents cohort (`LUKE_NATIVE_AGENT_ACCOUNTS`),
- * so a client can offer a plan's sign-in. It says nothing of any other
- * account and authorizes nothing: the dashboard's own gate (`admin/gate.ts`)
- * decides every admin read on its own, and the cohort is read again wherever
- * an agent's runtime is chosen.
+ * client can offer the admin dashboard to the account that may open it. It
+ * says nothing of any other account and authorizes nothing: the dashboard's
+ * own gate (`admin/gate.ts`) decides every admin read on its own.
  *
  * The provider keys are `provider-keys-procedures.ts`'s.
  */
@@ -255,14 +252,10 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       return snapshotAnswer(row);
     }),
 
-    /** Whether the caller's own account is an admin, any role but the admin role not, and whether it is in the native-agents cohort. */
+    /** Whether the caller's own account is an admin, any role but the admin role not. */
     access: signedIn.access.effect(function* ({ context }) {
       const role = yield* hostedStoreOrUnavailable(seams.readRole(context.userId));
-      const { nativeAgentAccounts } = yield* HostedEnvironment;
-      return {
-        admin: isAdminRole(role),
-        nativeAgents: nativeAgentAccounts.includes(context.userId),
-      };
+      return { admin: isAdminRole(role) };
     }),
 
     /**

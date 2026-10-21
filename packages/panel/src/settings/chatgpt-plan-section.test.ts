@@ -25,7 +25,7 @@ import { CodingAgentsPage } from "./coding-agents-page.js";
 
 /**
  * Settings › Coding agents › Codex over a bridge answering as the host would:
- * drawn on the desktop for an account in the native-agents cohort alone;
+ * drawn on the desktop for every account, and nowhere else;
  * Continue with ChatGPT sends the press and nothing else, and the row draws
  * the service's hint and status of the sign-in that comes back; the first
  * sign-in on this Mac is met with OpenAI's notice once; Disconnect asks first,
@@ -119,15 +119,15 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The Coding agents page for an account in the cohort or not, on a platform offering `capabilities`. */
+/** The Coding agents page for an ordinary account, on a platform offering `capabilities`. */
 async function mount(
-  options: { cohort?: boolean; capabilities?: readonly HostCapability[] } = {},
+  options: { capabilities?: readonly HostCapability[] } = {},
 ): Promise<HTMLElement> {
   const base = stateWith({}, {});
   handState(
     {},
     {
-      access: { admin: false, nativeAgents: options.cohort ?? true },
+      access: { admin: false },
       run: { ...base.run, capabilities: options.capabilities ?? DESKTOP_CAPABILITIES },
     },
   );
@@ -165,14 +165,8 @@ const notice = () =>
     dialog.textContent?.includes("You're using your ChatGPT plan"),
   );
 
-test("the Codex group stands on the desktop for an account in the cohort alone", async () => {
-  assert.ok(codexGroup(await mount()), "a cohort account on the desktop sees it");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  assert.equal(
-    codexGroup(await mount({ cohort: false })),
-    undefined,
-    "outside the cohort it is not drawn",
-  );
+test("the Codex group stands on the desktop for every account, and nowhere without the loopback", async () => {
+  assert.ok(codexGroup(await mount()), "an ordinary account on the desktop sees it");
   for (const root of roots.splice(0)) act(() => root.unmount());
   const browser = DESKTOP_CAPABILITIES.filter(
     (capability) => capability !== HOST_CAPABILITY.CHATGPT_SIGN_IN,

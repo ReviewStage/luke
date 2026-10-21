@@ -635,23 +635,18 @@ function plannedKeys(forAgents: boolean): ProviderKeysAnswer {
   };
 }
 
-/** A draft on a Claude model for an account in the cohort or not, the keys read as given; each Start's payer written down. */
+/** A draft on a Claude model, the account's keys read as given; each Start's payer written down. */
 async function payerTab(options: {
-  cohort: boolean;
   keys: ProviderKeysAnswer;
   payer?: CodingAgentPayer;
   model?: string;
   onDraftChange?: CodingAgentsControl["onDraftChange"];
 }) {
-  let keysRead = 0;
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.PROVIDER_KEYS_READ]: () => {
-      keysRead += 1;
-      return Promise.resolve(options.keys);
-    },
+    [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(options.keys),
   });
-  handState({}, { access: { admin: false, nativeAgents: options.cohort } });
+  handState({}, { access: { admin: false } });
   const payers: (CodingAgentPayer | undefined)[] = [];
   const tab = mount(
     [],
@@ -675,11 +670,11 @@ async function payerTab(options: {
     [...document.querySelectorAll("button")].find(
       (each) => each.getAttribute("aria-label")?.startsWith("Who pays: ") === true,
     );
-  return { ...tab, payers, field, keysRead: () => keysRead };
+  return { ...tab, payers, field };
 }
 
-test("a cohort account with a Claude plan sees who pays beside the chip, standing on its default, and a Start names the payer it shows", async () => {
-  const tab = await payerTab({ cohort: true, keys: plannedKeys(true) });
+test("an account with a Claude plan sees who pays beside the chip, standing on its default, and a Start names the payer it shows", async () => {
+  const tab = await payerTab({ keys: plannedKeys(true) });
   assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: Claude plan");
   await tab.send();
   assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]);
@@ -688,7 +683,6 @@ test("a cohort account with a Claude plan sees who pays beside the chip, standin
 test("picking another payer in the field hands it to the draft as its own", async () => {
   const picks: unknown[] = [];
   const tab = await payerTab({
-    cohort: true,
     keys: plannedKeys(true),
     onDraftChange: (change) => picks.push(change),
   });
@@ -708,7 +702,6 @@ test("picking another payer in the field hands it to the draft as its own", asyn
 
 test("a payer picked for the one agent is the one its Start names, and with the default off the field stands on the API key", async () => {
   const picked = await payerTab({
-    cohort: true,
     keys: plannedKeys(true),
     payer: CODING_AGENT_PAYER.API_KEY,
   });
@@ -719,31 +712,28 @@ test("a payer picked for the one agent is the one its Start names, and with the 
     for (const root of roots.splice(0)) root.unmount();
   });
 
-  const off = await payerTab({ cohort: true, keys: plannedKeys(false) });
+  const off = await payerTab({ keys: plannedKeys(false) });
   assert.equal(off.field()?.getAttribute("aria-label"), "Who pays: API key");
 });
 
-test("outside the cohort, or on a GPT model, the draft is as it was: no payer drawn or sent, and outside the cohort no key is read", async () => {
-  const outside = await payerTab({
-    cohort: false,
-    keys: plannedKeys(true),
+test("with no plan connected, or on a GPT model with a Claude plan alone, the draft is as it was: no payer drawn or sent", async () => {
+  const none = await payerTab({
+    keys: { ...plannedKeys(true), subscriptions: [] },
     payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
   });
-  assert.equal(outside.field(), undefined);
-  assert.equal(outside.keysRead(), 0);
-  await outside.send();
-  assert.deepEqual(outside.payers, [undefined]);
+  assert.equal(none.field(), undefined);
+  await none.send();
+  assert.deepEqual(none.payers, [undefined]);
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
 
-  const gpt = await payerTab({ cohort: true, keys: plannedKeys(true), model: "openai/gpt-5.5" });
+  const gpt = await payerTab({ keys: plannedKeys(true), model: "openai/gpt-5.5" });
   assert.equal(gpt.field(), undefined);
 });
 
-test("a cohort account with ChatGPT connected sees ChatGPT plan beside a GPT model's chip, and a Start names it", async () => {
+test("an account with ChatGPT connected sees ChatGPT plan beside a GPT model's chip, and a Start names it", async () => {
   const tab = await payerTab({
-    cohort: true,
     model: "openai/gpt-5.5",
     keys: {
       keys: [],

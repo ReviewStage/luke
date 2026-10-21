@@ -2293,9 +2293,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED,
         (payload): AppAccessSlice | undefined =>
-          isRecord(payload) && isWireBoolean(payload.admin)
-            ? { admin: payload.admin, nativeAgents: payload.nativeAgents === true }
-            : undefined,
+          isRecord(payload) && isWireBoolean(payload.admin) ? { admin: payload.admin } : undefined,
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>

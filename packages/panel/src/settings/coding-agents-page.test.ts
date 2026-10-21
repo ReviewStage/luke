@@ -179,6 +179,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
     ["Loading your default", 3],
     ["Loading your chapters model", 1],
     ["Loading your keys", 2],
+    ["Loading your Claude plan", 1],
   ]);
   await settle();
   assert.deepEqual(placeholders(page), []);

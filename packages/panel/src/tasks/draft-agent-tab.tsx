@@ -3,7 +3,6 @@ import type { Failure } from "@luke/features/failure-remedy";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
-import { useNativeAgentsAccess } from "../use-app-state.js";
 import { type AgentCallDoors, CallButton } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { TranscriptCards } from "./agent-tab.js";
@@ -55,8 +54,8 @@ import { useWorkingNow, WorkingLine } from "./working-time.js";
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
  *
- * For an account in the native-agents cohort with a Claude plan connected,
- * a draft on a Claude model shows beside its chip who pays for the agent
+ * For an account with a Claude plan connected, a draft on a Claude model
+ * shows beside its chip who pays for the agent
  * (`payer-field.tsx`): the plan, or the API key or Luke's key, standing on
  * the account's default until the developer picks one for this agent, and
  * the Start names the payer the field shows, so a default changed in
@@ -142,7 +141,6 @@ export function DraftAgentTab({
     };
   }, []);
 
-  const inCohort = useNativeAgentsAccess();
   const payerKeys = useStartPayerKeys();
   const { fork } = draft;
   const source =
@@ -153,7 +151,7 @@ export function DraftAgentTab({
         );
   // A fork runs on its source's model and effort until the developer picks another.
   const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
-  const offer = payerOffer(inCohort, payerKeys, choice?.model);
+  const offer = payerOffer(payerKeys, choice?.model);
   const shownPayer = startPayer(offer, draft.payer) ?? offer?.fallback;
   const send = () => {
     const prompt = draft.prompt.trim();

@@ -142,7 +142,6 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     eveDeploymentSecret: undefined,
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
     providerKeyEncryptionKeys: undefined,
-    nativeAgentAccounts: [],
   };
 }
 

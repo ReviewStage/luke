@@ -4,7 +4,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SELECT_ALIGN, Select } from "@luke/ui";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
-import { useNativeAgentsAccess } from "../use-app-state.js";
 import { PAYER_WORDS, type PayerOffer } from "./payer-model.js";
 
 /**
@@ -12,18 +11,16 @@ import { PAYER_WORDS, type PayerOffer } from "./payer-model.js";
  *
  * Drawn only where `payerOffer` offers one (`payer-model.ts`): a pop-up
  * naming the payer the Start will name, the account's default until the
- * developer picks another for this one agent. Outside the native-agents
- * cohort the keys are never read and nothing is drawn, so the draft stands
- * as it always did.
+ * developer picks another for this one agent. Where the account connected
+ * no plan for the model's provider nothing is drawn, so the draft stands as
+ * it always did.
  */
 
-/** The account's provider keys as the service holds them, read once as the draft opens, for an account in the cohort alone; none before the read, outside it, or where it failed. */
+/** The account's provider keys as the service holds them, read once as the draft opens; none before the read, or where it failed. */
 export function useStartPayerKeys(): ProviderKeysAnswer | undefined {
   const { act } = useAct();
-  const inCohort = useNativeAgentsAccess();
   const [keys, setKeys] = useState<ProviderKeysAnswer | undefined>(undefined);
   useEffect(() => {
-    if (!inCohort) return;
     let live = true;
     act(ACT_KIND.PROVIDER_KEYS_READ).then(
       (read) => {
@@ -34,8 +31,8 @@ export function useStartPayerKeys(): ProviderKeysAnswer | undefined {
     return () => {
       live = false;
     };
-  }, [act, inCohort]);
-  return inCohort ? keys : undefined;
+  }, [act]);
+  return keys;
 }
 
 /** The payer pop-up over the offer, standing on `value`. */

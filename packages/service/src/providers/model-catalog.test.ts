@@ -103,7 +103,6 @@ function environment(anthropicKey?: string): Layer.Layer<HostedEnvironment> {
     eveDeploymentSecret: undefined,
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
-    nativeAgentAccounts: [],
   });
 }
 

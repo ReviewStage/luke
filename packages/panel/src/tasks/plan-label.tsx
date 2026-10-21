@@ -4,7 +4,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { TEXT_LINK_LOOK, TEXT_TONE, TEXT_VARIANT, Text, TextLink } from "@luke/ui";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
-import { useNativeAgentsAccess } from "../use-app-state.js";
 import {
   CHATGPT_USAGE_URL,
   chatGptPlanLabel,
@@ -24,26 +23,24 @@ import { useOpenLink } from "./use-open-link.js";
  * does from a reconnect in Settings. Manage usage opens ChatGPT's usage settings.
  */
 
-/** The starter's keys, read again each time the agent's status moves; none for anyone else, outside the cohort, or before the read. */
+/** The starter's keys, read again each time the agent's status moves; none for anyone else, or before the read. */
 function useStarterKeys(
   starter: boolean,
   status: CodingAgentStatus,
 ): ProviderKeysAnswer | undefined {
   const { act } = useAct();
-  const inCohort = useNativeAgentsAccess();
-  const reads = starter && inCohort;
   const [keys, setKeys] = useState<ProviderKeysAnswer | undefined>(undefined);
   const [returns, setReturns] = useState(0);
   // A reconnect in Settings moves no agent's status, so the window coming back to the front reads the plan again too.
   useEffect(() => {
-    if (!reads) return;
+    if (!starter) return;
     const back = () => setReturns((count) => count + 1);
     window.addEventListener("focus", back);
     return () => window.removeEventListener("focus", back);
-  }, [reads]);
+  }, [starter]);
   // Note that the status and the returns are dependencies for their change alone: each may follow a new status.
   useEffect(() => {
-    if (!reads) return;
+    if (!starter) return;
     let live = true;
     act(ACT_KIND.PROVIDER_KEYS_READ).then(
       (read) => {
@@ -54,8 +51,8 @@ function useStarterKeys(
     return () => {
       live = false;
     };
-  }, [act, reads, status, returns]);
-  return reads ? keys : undefined;
+  }, [act, starter, status, returns]);
+  return starter ? keys : undefined;
 }
 
 /** A label's words, in the attention colour, and said aloud as a status, where they ask for attention. */

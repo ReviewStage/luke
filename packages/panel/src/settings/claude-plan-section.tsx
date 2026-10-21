@@ -34,8 +34,8 @@ import { SwitchRow } from "./switch-row.js";
 /**
  * claude-plan-section.tsx -- Settings › Coding agents › Claude Code: the account's Claude plan, connected by pasting a `claude setup-token` and disconnected.
  *
- * A group of the Coding agents page, drawn only for an account in the
- * native-agents cohort; the page decides that. One row: the plan,
+ * A group of the Coding agents page, drawn for every account on every
+ * client. One row: the plan,
  * how to get its token, and Add token, which grows the row a password field,
  * Cancel, and Save, as an API key's row does. Save sends the token once,
  * with its kind, and clears the field as soon as the service keeps it; a

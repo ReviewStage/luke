@@ -109,8 +109,6 @@ export const CODER = {
 export const CODER_ENVIRONMENT = {
   /** Selects the scripted fixture model in place of the providers; set only by the fixture eval. */
   MODEL_FIXTURE: "LUKE_CODER_MODEL_FIXTURE",
-  /** The accounts, by user id, comma- or whitespace-separated, whose plan-paid agents may run on a provider's own harness; unset admits none. */
-  NATIVE_AGENT_ACCOUNTS: "LUKE_NATIVE_AGENT_ACCOUNTS",
 } as const;
 
 /** The one fixture the model environment may name, and the model id its turns are recorded under. */

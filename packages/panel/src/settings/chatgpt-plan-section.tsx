@@ -36,8 +36,7 @@ import { SwitchRow } from "./switch-row.js";
  * chatgpt-plan-section.tsx -- Settings › Coding agents › Codex: the account's ChatGPT plan, connected with Continue with ChatGPT and disconnected.
  *
  * A group of the Coding agents page, drawn only on a client that can take a
- * sign-in's loopback (the desktop) and only for an account in the
- * native-agents cohort; the page decides both. One row: the plan, what
+ * sign-in's loopback (the desktop); the page decides that. One row: the plan, what
  * connecting it does, and Continue with ChatGPT, which the host runs through
  * the developer's browser (`compose-chatgpt-sign-in.ts`) while the row waits
  * with a Cancel beside it. Connected, the row says so and offers Disconnect,

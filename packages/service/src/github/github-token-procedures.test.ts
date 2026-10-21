@@ -63,7 +63,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
-  nativeAgentAccounts: [],
 };
 
 /** What the fake GitHub answers `GET /user` with, per token; a token it does not know is refused. */

@@ -11,6 +11,7 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  anyPlanConnected,
   ensureChatGptHostId,
   listEveryProviderKeyRow,
   listProviderKeyRows,
@@ -355,6 +356,56 @@ it.layer(getTestDB())("the provider key store", (it) => {
           [PROVIDER_KEY_STATUS.INVALID, null],
           [PROVIDER_KEY_STATUS.UNREADABLE, null],
         ]);
+      }),
+  );
+});
+
+// A database of its own, so no other test's rows stand in it.
+it.layer(getTestDB())("whether any account connected a plan", (it) => {
+  it.effect(
+    "no account, or only an API key, connects none; a Claude setup-token or a ChatGPT sign-in of any account does, until it is removed",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const { ANTHROPIC, OPENAI } = PROVIDER_KEY_PROVIDER;
+        const { API_KEY, CLAUDE_SETUP_TOKEN, CHATGPT_OAUTH } = PROVIDER_KEY_KIND;
+        assert.equal(yield* anyPlanConnected(), false, "nothing stored");
+
+        yield* saveProviderKey(
+          owner,
+          ANTHROPIC,
+          API_KEY,
+          sealed("key-1"),
+          "sk-…a",
+          null,
+          new Date(1),
+        );
+        assert.equal(yield* anyPlanConnected(), false, "an API key is no plan");
+
+        yield* saveProviderKey(
+          other,
+          ANTHROPIC,
+          CLAUDE_SETUP_TOKEN,
+          sealed("token-1"),
+          "sk-ant-…a",
+          null,
+          new Date(1),
+        );
+        assert.equal(yield* anyPlanConnected(), true, "a setup-token");
+        yield* removeProviderKey(other, ANTHROPIC, CLAUDE_SETUP_TOKEN);
+        assert.equal(yield* anyPlanConnected(), false, "the setup-token removed");
+
+        yield* saveProviderKey(
+          other,
+          OPENAI,
+          CHATGPT_OAUTH,
+          sealed("signin-1"),
+          "ChatGPT",
+          null,
+          new Date(1),
+          new Date(3_600_000),
+        );
+        assert.equal(yield* anyPlanConnected(), true, "a ChatGPT sign-in");
       }),
   );
 });

@@ -408,7 +408,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                     efforts: ["low", "medium", "high", "max"],
                   },
                 ]),
-                relayEnvironment(NATIVE_RELAY_FAKE.SECRET, [starter]),
+                relayEnvironment(NATIVE_RELAY_FAKE.SECRET),
                 relay.layer,
               ),
             ),

@@ -117,7 +117,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
-  nativeAgentAccounts: [],
 };
 
 /** Everything but the store: Vercel and OpenAI behind one client, the image and the bundle. */

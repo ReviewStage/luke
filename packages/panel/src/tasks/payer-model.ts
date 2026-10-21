@@ -11,7 +11,7 @@ import { isFastModelId, providerOf } from "./coding-agent-model.js";
  * payer-model.ts -- who may pay for one agent a Start is about to make, as the draft's payer field offers it.
  *
  * Start shows the payer only where the account could run the agent on its
- * plan: in the native-agents cohort, on a model with no fast version, with
+ * plan: on a model with no fast version, with
  * that model's provider's plan connected: a Claude plan for a Claude model,
  * which Claude Code runs, and a ChatGPT plan OpenAI has not signed out for a
  * GPT model, which Codex runs. Then it offers the plan, and eve's payer,
@@ -64,11 +64,10 @@ const UNUSABLE: ReadonlySet<string> = new Set([
 
 /** The payers offered for an agent on `model`, or none where the field is not drawn, as above. */
 export function payerOffer(
-  inCohort: boolean,
   keys: ProviderKeysAnswer | undefined,
   model: string | undefined,
 ): PayerOffer | undefined {
-  if (!inCohort || keys === undefined || model === undefined) return undefined;
+  if (keys === undefined || model === undefined) return undefined;
   if (isFastModelId(model)) return undefined;
   const provider = providerOf(model);
   if (provider === undefined) return undefined;

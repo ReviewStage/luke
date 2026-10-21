@@ -188,7 +188,7 @@ const BOOT: HostBootstrap = {
   settings: SETTINGS,
   account: inert(),
   sessionReplay: { permitted: true, accountId: "person" },
-  access: { admin: true, nativeAgents: true },
+  access: { admin: true },
   voiceAvailable: true,
   agentTraceEnabled: true,
 };
@@ -199,7 +199,7 @@ it("a host bootstrap lands in the document as the host answered it", () => {
   const held = app.snapshot();
   assert.equal(held.run.agentTraceEnabled, true);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
-  assert.deepEqual(held.access, { admin: true, nativeAgents: true });
+  assert.deepEqual(held.access, { admin: true });
 });
 
 it("a halt outlives every host read until the host's own event stands it down", () => {

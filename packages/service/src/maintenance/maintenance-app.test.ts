@@ -63,7 +63,6 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     eveDeploymentSecret: Redacted.make(EVE_DEPLOYMENT_SECRET),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
-    nativeAgentAccounts: [],
   };
 }
 

@@ -102,7 +102,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
-  nativeAgentAccounts: [],
 };
 
 /** Everything but the store, around the fake Vercel given. */
