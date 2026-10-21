@@ -842,7 +842,10 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
   assert.ok(card, "the notice draws as a card");
   assert.equal(card.dataset.messageId, "notice", "a link to the line finds its card");
   assert.equal(container.querySelector(".is-user"), null);
-  assert.equal(card.querySelector(".chat-notice-from")?.textContent, "Invite emails");
+  assert.match(
+    card.querySelector(".chat-notice-head [data-actor-ref]")?.textContent ?? "",
+    /Invite emails/u,
+  );
   assert.match(
     card.querySelector(".chat-notice-place")?.textContent ?? "",
     /^in #teammate-invitations · m 43 · /u,
@@ -856,6 +859,18 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
   );
   act(() => open?.click());
   assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: channelOf(43) }]);
+});
+
+test("a notice a person posted names them by their own chip, which hangs their card, as an agent's names it by its own", () => {
+  const { container } = noticeDrawn(true, true, {
+    ...NOTICE,
+    parts: [{ type: "text", text: "Chat · Maria Chen in #general (m 37):\n\nMorning." }],
+    metadata: { author: "human", channel: "chat", chat_seq: 37, from: "Maria Chen" },
+  });
+  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.ok(card, "the notice draws as a card");
+  const person = card.querySelector('.chat-notice-head [data-actor-ref][data-kind="person"]');
+  assert.match(person?.textContent ?? "", /Maria Chen/u);
 });
 
 test("where the window holds no chat, a notice's card says its sender and place from the notice alone, its own words under them, with nothing to open", () => {

@@ -13,7 +13,6 @@ import {
   SKELETON_SHAPE,
   Skeleton,
 } from "@luke/ui";
-import { chatNames } from "@luke/ui/chat-model";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -32,6 +31,7 @@ import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
+import { useChatNames } from "../tasks/chat-actors.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
@@ -744,16 +744,13 @@ function PlanDocument({
   // the window holds, and opens the window's Chat on its channel.
   const chatRead = tasks.chatView.chat;
   const { onShow: showChat } = tasks.chatView;
+  const chatNamed = useChatNames(tasks.tasks, chatRead, undefined);
   const chat = useMemo(
     () =>
       chatRead === undefined
         ? undefined
-        : {
-            chat: chatRead.answer,
-            names: chatNames(tasks.tasks, chatRead.agents, undefined),
-            onOpen: showChat,
-          },
-    [chatRead, tasks.tasks, showChat],
+        : { chat: chatRead.answer, names: chatNamed, onOpen: showChat },
+    [chatRead, chatNamed, showChat],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.

@@ -372,6 +372,32 @@ test("an agent given a human name is named by it ahead of its title", () => {
   assert.equal(chatWho(chatOf(0, []), names, AGENT).name, "Maya Chen");
 });
 
+test("an agent with no name or title is named by its model's name, as its tab is, whether the window holds its line or only the id the read gives it", () => {
+  const line = NAMES.agents.get(AGENT_ID);
+  assert.ok(line);
+  const untitled: ChatNames = {
+    ...NAMES,
+    agents: new Map([[AGENT_ID, { ...line, title: null, model: "anthropic/claude-opus-5.5" }]]),
+  };
+  assert.equal(chatWho(chatOf(0, []), untitled, AGENT).name, "Opus 5.5");
+  const chat = {
+    ...chatOf(0, []),
+    members: [
+      ...chatOf(0, []).members,
+      { id: HELPER, kind: MEMBER_KIND.AGENT, name: "openai/gpt-6-astra", left: false },
+    ],
+  };
+  assert.equal(chatWho(chat, NAMES, HELPER).name, "GPT 6 Astra");
+  // A title holding a slash is no model's id, and is named as it was written.
+  const titled = {
+    ...chat,
+    members: chat.members.map((member) =>
+      member.id === HELPER ? { ...member, name: "UI/API" } : member,
+    ),
+  };
+  assert.equal(chatWho(titled, NAMES, HELPER).name, "UI/API");
+});
+
 test("the reader posts in a standing channel and in a direct message of their own, never in an archived channel or a direct message between two others, which is named by both", () => {
   const between: ChatChannel = {
     id: "dm-others",

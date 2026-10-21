@@ -20,6 +20,8 @@ import {
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 
@@ -94,9 +96,12 @@ const CHANNEL_ORDER = {
   [CHANNEL_KIND.DM]: 3,
 } as const satisfies Record<ChatChannel["kind"], number>;
 
+/** An agent's line as chat names it by: a plan's summary's, and the automation whose run started it where a read of the agent says. */
+export type ChatAgentLine = TaskAgentLine & { readonly automationName?: string };
+
 /** What the window knows beside the chat that names its members: each agent's line, each plan's name, and the reader's own name. */
 export interface ChatNames {
-  readonly agents: ReadonlyMap<string, TaskAgentLine>;
+  readonly agents: ReadonlyMap<string, ChatAgentLine>;
   readonly tasks: ReadonlyMap<string, string>;
   /** The task each agent a plan's summary names works on, by the agent's id. */
   readonly agentTasks: ReadonlyMap<string, string>;
@@ -106,7 +111,7 @@ export interface ChatNames {
 /** The names a window knows: each agent's line from the plans' summaries and the lines a chat read carries, each plan's name, and the reader's own. */
 export function chatNames(
   tasks: readonly TaskSummary[],
-  agents: readonly TaskAgentLine[],
+  agents: readonly ChatAgentLine[],
   selfName: string | undefined,
 ): ChatNames {
   const lines = [...tasks.flatMap((task) => task.agents?.agents ?? []), ...agents];
@@ -126,7 +131,7 @@ export function chatNames(
 export interface ChatWho {
   readonly member: ChatMember | undefined;
   readonly name: string;
-  readonly agent: TaskAgentLine | undefined;
+  readonly agent: ChatAgentLine | undefined;
   readonly taskName: string | undefined;
 }
 
@@ -136,6 +141,8 @@ export interface ChatRailRow {
   readonly label: string;
   /** The other member of a direct message, for its mark. */
   readonly other: ChatWho | undefined;
+  /** Both members of a direct message between two others, by id, whose two faces its mark draws; empty for the reader's own and for a channel. */
+  readonly between: readonly string[];
   readonly unread: number;
   /** How many open asks someone else posted in it wait on the reader, as For you lists them. */
   readonly asks: number;
@@ -222,14 +229,46 @@ function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
 
-/** A member by its id, the way every line names it: an agent by its human name, else its title, a person by their account's name, the reader by their own. */
+/** A catalog id's own name past its provider: lower-case words, digits, and dots, joined by dashes. */
+const CATALOG_MODEL_NAME = /^[a-z0-9.]+(?:-[a-z0-9.]+)*$/u;
+
+/** Whether a name is a model's catalog id: a provider the catalog lists, its separator, and a model's own name. */
+function isCatalogId(name: string): boolean {
+  const [provider, model, ...rest] = name.split(CATALOG_ID_SEPARATOR);
+  return (
+    rest.length === 0 &&
+    model !== undefined &&
+    Object.values<string>(MODEL_PROVIDER).includes(provider ?? "") &&
+    CATALOG_MODEL_NAME.test(model)
+  );
+}
+
+/**
+ * What an agent member is called where the window holds no line of it: the
+ * name the chat read carries, which is its model's catalog id until it has a
+ * title, so an id is named as a tab names its model (`modelLabel`), and any
+ * other name, a title holding a slash among them, as it was written.
+ */
+function agentMemberName(name: string | undefined): string {
+  if (name === undefined) return CHAT_MEMBER_LABEL.FORMER_AGENT;
+  return isCatalogId(name) ? modelLabel(name) : name;
+}
+
+/**
+ * A member by its id, the way every line names it: an agent as every place
+ * of the window names it (`agentTabLabel`), its human name, else its title,
+ * else its model's name, a person by their account's name, the reader by
+ * their own.
+ */
 export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): ChatWho {
   const member = chat.members.find((each) => each.id === memberId);
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
   const taskName = member?.planId === undefined ? undefined : names.tasks.get(member.planId);
   const name =
     member?.kind === MEMBER_KIND.AGENT
-      ? (agent?.personaName ?? agent?.title ?? member.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT)
+      ? agent === undefined
+        ? agentMemberName(member.name)
+        : agentTabLabel(agent)
       : memberId === chat.self && names.selfName !== undefined
         ? names.selfName
         : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
@@ -338,6 +377,8 @@ export function chatRail(
       channel,
       label: channelLabel(chat, names, channel),
       other: who,
+      between:
+        channel.kind === CHANNEL_KIND.DM && !inDm(chat, channel) ? (channel.members ?? []) : [],
       unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
       asks: waiting.filter(
         (entry) => entry.reason === FOR_YOU_REASON.ASK && entry.channel.id === channel.id,

@@ -34,7 +34,6 @@ import {
   type ChatPlace,
   type ChatRailRow,
   type ChatTaskGrouping,
-  chatNames,
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
@@ -43,7 +42,7 @@ import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model"
 import { AtSignIcon, HashIcon, MailOpenIcon, MessagesSquareIcon } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorStack, actorCard } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useColumnSplit } from "../column-split.js";
@@ -52,14 +51,14 @@ import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
-import { useChatActor } from "../tasks/chat-actors.js";
+import { useChatActor, useChatNames } from "../tasks/chat-actors.js";
 import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { keptSkills } from "../tasks/repository-skills.js";
 import type { SkillSource } from "../tasks/skill-picker.js";
-import { PlanGlyph } from "../tasks/tab-look.js";
+import { agentEndMark, PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
@@ -95,9 +94,12 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * task's mark, and a right-click, a hover button, or a swipe marks it read;
  * each task group is headed as the sidebar heads the same tasks, and a
  * group's ⋯ marks every place in it read. A press on a row shows its place in
- * the pane beside the rail (`chat-pane.tsx`). The agents are named from
- * the plans' summaries, the way the sidebar names them, and from the lines
- * the chat read carries where those name more. With nothing read, it says
+ * the pane beside the rail (`chat-pane.tsx`). A direct message between two
+ * others draws both of its two, and an agent's wears its failed mark at the
+ * row's end as its sidebar row does. The agents are named from the plans'
+ * summaries, the way the sidebar names them, from the lines the chat read
+ * carries where those name more, and from a read of each agent drawn past
+ * both (`useChatNames`). With nothing read, it says
  * so under Chat's glyph. Any row of the sidebar leaves it for the plan it
  * stood over; Escape does not, as it does not leave the Inbox, so a stray
  * press never loses the place being read. Chat narrower than the Inbox's
@@ -455,8 +457,11 @@ function RailRow({
   const title = row.label;
   const taskStatus = useTaskStatus(channel.planId);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.CHAT, channelId: channel.id });
+  // A direct message between two others draws both of its two, as its name names both.
   const mark =
-    other !== undefined ? (
+    row.between.length > 0 ? (
+      <ActorStack actors={row.between.map(actorOf)} drawn={row.between.length} counted={false} />
+    ) : other !== undefined ? (
       <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />
     ) : channel.kind === CHANNEL_KIND.TASK ? (
       <PlanGlyph status={taskStatus} />
@@ -491,8 +496,11 @@ function RailRow({
       current={current}
       card={placeCard(tasks, row, actorOf, now)}
       end={
-        task === undefined ? undefined : (
+        task !== undefined ? (
           <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
+        ) : row.between.length > 0 || row.other?.agent === undefined ? undefined : (
+          // An agent the reader writes with wears where it stands at the row's end, as its sidebar row does.
+          agentEndMark(row.other.agent, false)
         )
       }
       groups={groups}
@@ -540,7 +548,7 @@ function PlaceRow({
   current: boolean;
   /** The card it hangs while the pointer rests on it; none hangs its name alone. */
   card: React.ReactNode;
-  /** Said at the line's end before its time: a task's agent at work or its pull request. */
+  /** Said at the line's end before its time: a task's agent at work or its pull request, or a direct message's agent's failed mark. */
   end: React.ReactNode;
   /** Its menu's groups of actions, a right-click away; none opens no menu. */
   groups: readonly MenuAction[][];
@@ -832,10 +840,7 @@ function ChatView({
   const openLink = useOpenLink();
   const read = view.chat;
   const listed = tasks.tasks;
-  const names = useMemo(
-    () => chatNames(listed, read?.agents ?? [], accountName),
-    [listed, read, accountName],
-  );
+  const names = useChatNames(listed, read, accountName);
   const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
   const actorOf = useChatActor(read?.answer, names);
   const folds = useRailFolds();
@@ -1062,7 +1067,7 @@ export function TaskChatTab({
   const openLink = useOpenLink();
   const read = view.chat;
   const listed = tasks.tasks;
-  const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
+  const names = useChatNames(listed, read, undefined);
   const taskDoors = useTaskDoors(tasks, false);
   const channel = read?.answer.channels.find(
     (each) => each.kind === CHANNEL_KIND.TASK && each.planId === taskId,
