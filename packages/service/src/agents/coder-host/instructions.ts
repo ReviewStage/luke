@@ -51,8 +51,7 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * the same text as before Chat, naming no tool the agent is not offered.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
- * result the agent reads whole, in the spirit of the brain's worker's
- * (`brain-host/brain.ts`).
+ * result the agent reads whole.
  * An agent on a task keeps that task's status with `update_task`, since
  * nothing but a Start (`task-store.ts`'s `beginTask`) moves it; a helper on
  * its starter's task leaves it to the starter.

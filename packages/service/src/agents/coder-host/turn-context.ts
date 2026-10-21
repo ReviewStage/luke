@@ -12,8 +12,7 @@
  * turn to the next, a call that starts on an agent mid-PR among them.
  *
  * A spoken turn is the developer speaking on a call, through Luke's voice:
- * the first of a run of them opens with the words for a call, adapted from
- * the brain's (`../brain-host/brain.ts`'s `BRAIN_INSTRUCTIONS`): that every
+ * the first of a run of them opens with the words for a call: that every
  * word is heard, how to speak, the question queue, summarising rather than
  * reading out, and never waiting; an agent on a task is told too how to
  * talk its plan through, since on a call the agent is who the developer
@@ -67,8 +66,7 @@ When the developer asks you to end the call, or has clearly said they are done w
 
 /**
  * What a spoken turn of an agent on a task is told of talking its plan
- * through, adapted from the brain's "The plan document" and "How to plan"
- * (`../brain-host/brain.ts`), which carry their sources: the plan as a spec,
+ * through, which carries its sources: the plan as a spec,
  * the template's sections and their bars, the interfaces, hard parts, and
  * tests a teammate draws out, the developer still working out what they
  * want, what a note holds, and when the plan is done.

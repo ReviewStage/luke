@@ -57,11 +57,6 @@ import { CURSOR_START } from "./transcript.js";
  * is filled on its child conversation (`child-titles.ts`). Nothing of the
  * conversation leaves here but to the model.
  *
- * A task its member left untitled is named by the same call over its
- * conversation with Luke too, under the brain's tools
- * (`brain-host/task-title.ts`), a note the brain wrote down for itself
- * being no word of the developer's.
- *
  * A task still standing untitled, as one started from a prompt alone does,
  * takes the title its first agent to be titled is given, and keeps it: a
  * name a member or Luke gave the task, before or meanwhile, is never
@@ -286,8 +281,7 @@ function generateAgentTitle(
 
 /**
  * The title generated from a conversation's first exchange, as one of its
- * first `CODER.TITLE_TURNS` turns asks for it: an agent's under the coder's
- * tools, or a task's under the brain's (`brain-host/task-title.ts`), its
+ * first `CODER.TITLE_TURNS` turns asks for it, under the tools given, its
  * automation's origin in its opening's place where one started it. Nothing
  * for a conversation past those turns, one with no words in it yet, and a
  * call that answered nothing, so the next turn asks again.

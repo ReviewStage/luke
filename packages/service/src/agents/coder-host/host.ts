@@ -145,10 +145,9 @@ import {
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
  *
- * The same shape as the brain's host (`brain-host/host.ts`): eve is
- * the runtime and the event emitter, and the host is everything eve leaves
- * to its author. Who a session is for is the conversation admission the two
- * share; what differs is that every admitted conversation is a coding
+ * eve is the runtime and the event emitter, and the host is everything eve
+ * leaves to its author. Who a session is for is the conversation admission
+ * every host shares (`agent-runtime/host-core.ts`); what differs is that every admitted conversation is a coding
  * agent's, whose row names the model each step runs on, the repository its
  * sandbox checks out, and the plan its first message carried. The model is
  * read from the row at every step, so a later change to the row is the next
@@ -759,8 +758,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     );
 
   /**
-   * The ask record every turn binds the voice's asks to, as the brain's
-   * relay does (`../brain-host/host.ts`): each ask eve delivered into the
+   * The ask record every turn binds the voice's asks to: each ask eve delivered into the
    * turn learns the turn it ran in, which is what ties the transcript's line
    * to it and what the voice follows the answer by, and a Stop the ask took
    * while it waited is carried the moment its turn starts, by the deployment

@@ -69,16 +69,14 @@ import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
- * deployment's seams, on the same terms as the brain's
- * (`apps/luke/host.ts`): the seams are composed here, once, over the same
+ * deployment's seams: the seams are composed here, once, over the same
  * `HostedEnvironment` layer the web runtime builds, and run synchronously
  * because eve loads the authored files as modules and the environment read
  * is a `Config` over `process.env`, which suspends on nothing. The edge's
  * own runner is handed down too: eve's door holds a promise, and it runs on
  * it, so nothing under `server/hosted/` keeps a runner of its own. The
  * worker's authored files and the delegation tool run what they need
- * through the doors below rather than at edges of their own, as the
- * planning worker's do through `apps/luke/host.ts`.
+ * through the doors below rather than at edges of their own.
  */
 export const seams: CoderHostSeams = Effect.runSync(
   Effect.provide(productionCoderHostSeams(runAgent), hostedEnvironment),
