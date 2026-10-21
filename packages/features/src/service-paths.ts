@@ -113,6 +113,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
   /** The account's workspaces, sealed for following over Neon Realtime (GET): the workspaces and their installations, or their rows inline where polled. */
   LIVE_WORKSPACES: "/api/live/workspaces",
+  /** The account's sidebar sections, the tasks in them, and its pinned repositories, sealed for following over Neon Realtime (GET), or their rows inline where polled. */
+  LIVE_SIDEBAR: "/api/live/sidebar",
   /** One workspace's people under `?workspaceId=`, sealed for following over Neon Realtime (GET): its members and who its work names but left, or `not-found`, or their rows inline where polled. */
   LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
   /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */

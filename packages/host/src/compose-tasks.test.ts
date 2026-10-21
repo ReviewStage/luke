@@ -330,6 +330,32 @@ const PEOPLE_SEALED = {
   },
 };
 
+/** The account's sidebar sealed for following, each part named by its capability, as `fakeRealtime` addresses it. */
+const SIDEBAR_SEALED = {
+  url: WORKSPACES_URL,
+  queries: {
+    sections: { capability: "capability-sections", queryFingerprint: "s", expiresAt: 1e15 },
+    entries: { capability: "capability-entries", queryFingerprint: "e", expiresAt: 1e15 },
+    pins: { capability: "capability-pins", queryFingerprint: "p", expiresAt: 1e15 },
+  },
+};
+
+/** The sidebar as its live statements' rows carry it: what the wire leaves out is null. */
+function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly RepositoryPin[]) {
+  return {
+    sections: (sections?.sections ?? []).map((section) => ({
+      ...section,
+      icon: section.icon ?? null,
+      position: section.position ?? null,
+    })),
+    entries: (sections?.entries ?? []).map((entry) => ({
+      ...entry,
+      position: entry.position ?? null,
+    })),
+    pins,
+  };
+}
+
 /** A workspace's invitations sealed for following, with the origin each accept link is built on. */
 const INVITATIONS_SEALED = {
   url: WORKSPACES_URL,
@@ -393,8 +419,12 @@ function fakeService(tasks: Task[]): FakeService {
   /** Each part's rows as the workspaces stand, as Realtime would deliver them. */
   const rowsOf = (part: string) => {
     const rows = workspacesLiveRows(memberships);
+    const sidebar = sidebarLiveRows(service.sections, service.pins);
     if (part === "capability-workspaces") return rows.workspaces;
-    return part === "capability-installations" ? rows.installations : undefined;
+    if (part === "capability-installations") return rows.installations;
+    if (part === "capability-sections") return sidebar.sections;
+    if (part === "capability-entries") return sidebar.entries;
+    return part === "capability-pins" ? sidebar.pins : undefined;
   };
   /** The workspaces told to every subscription that stands, as Realtime tells a change. */
   let realtimeMisses = false;
@@ -824,7 +854,11 @@ function fakeService(tasks: Task[]): FakeService {
           return { ok: true, answer: workspaceId } as const;
         }),
     },
-    repositoryPins: () => Effect.sync(() => (service.pinsFail ? undefined : service.pins)),
+    sidebarLive: (_userId) =>
+      Effect.sync(() => {
+        service.reads.push("sidebar-live");
+        return { ok: true, answer: SIDEBAR_SEALED } as const;
+      }),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
       Effect.sync(() => {
@@ -836,7 +870,6 @@ function fakeService(tasks: Task[]): FakeService {
           : others;
         return service.pins;
       }),
-    taskSections: () => Effect.sync(() => service.sections),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
       Effect.sync(() => {
@@ -1945,11 +1978,11 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
 );
 
 it.effect(
-  "the window's refresh reads the account's sections, a change takes the service's answer, and one refused leaves them as read",
+  "the sidebar's sections and pins are followed from the first refresh and never read again, a change takes the service's answer, one refused leaves them, and another Mac's change is pushed",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
       const launch: TaskSection = {
         id: SECTION_ID,
         workspaceId: PERSONAL.id,
@@ -1957,9 +1990,14 @@ it.effect(
         createdAt: 5,
       };
       service.sections = { sections: [launch], entries: [] };
+      service.pins = [{ repository: "acme/relay", pinnedAt: 3 }];
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
       assert.deepEqual(last()?.taskSections, service.sections);
+      assert.deepEqual(last()?.repositoryPins, service.pins);
+      assert.equal(service.reads.filter((read) => read === "sidebar-live").length, 1);
 
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
       service.sections = { sections: [launch], entries: [placed] };
@@ -1974,6 +2012,30 @@ it.effect(
       });
       assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
       assert.deepEqual(service.sectionWrites, [place, removal]);
+
+      const later = {
+        ...launch,
+        id: "8c2e1f3a-4b5d-4e6f-9a7b-0c1d2e3f4a5b",
+        title: "Later",
+        createdAt: 7,
+      };
+      service.realtime.deliver(
+        "sections",
+        sidebarLiveRows({ sections: [later, launch], entries: [] }, []).sections,
+      );
+      service.realtime.deliver("pins", [
+        { repository: "acme/relay", pinnedAt: 3 },
+        { repository: "acme/web", pinnedAt: 9 },
+      ]);
+      yield* settled;
+      assert.deepEqual(
+        last()?.taskSections?.sections.map((section) => section.title),
+        ["Launch", "Later"],
+      );
+      assert.deepEqual(
+        last()?.repositoryPins?.map((pin) => pin.repository),
+        ["acme/web", "acme/relay"],
+      );
     }),
 );
 

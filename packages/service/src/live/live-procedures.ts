@@ -30,6 +30,9 @@
  * no Mac of the account has claimed, as one statement, for the Mac to claim
  * each by its id (`../agents/mac-commands-procedures.ts`).
  *
+ * `GET /api/live/sidebar` answers the account's sidebar sections, the tasks
+ * in them, and its pinned repositories as three.
+ *
  * `GET /api/live/workspaces` answers the account's workspaces the same way,
  * as two statements: the workspaces, and the GitHub installations connected
  * to them. `GET /api/live/workspace-members?workspaceId=` answers one
@@ -69,6 +72,8 @@ import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
+import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
 import { readTask } from "@luke/database/models/task-store";
 import {
   isWorkspaceMember,
@@ -401,6 +406,16 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const self = yield* hostedStoreOrUnavailable(joinedMember(reader, workspace));
       if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = workspaceChatLiveStatements(reader, self.value);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const statements = Option.zipWith(
+        taskSectionsLiveStatements(context.userId),
+        repositoryPinsLiveStatement(context.userId),
+        (sections, pins) => ({ ...sections, pins }),
+      );
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),

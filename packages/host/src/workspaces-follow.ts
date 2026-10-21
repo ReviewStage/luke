@@ -1,3 +1,8 @@
+import {
+  type SidebarRead,
+  sidebarLiveRowsSchema,
+  sidebarOfLiveRows,
+} from "@luke/features/sidebar-live";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
@@ -18,7 +23,7 @@ import { Effect, Option, Schema, Stream } from "effect";
 import { LiveBroken, type LiveClient, liveRows, type SealedRead } from "./live-follow.js";
 
 /**
- * workspaces-follow.ts -- the account's workspaces, and one workspace's people and pending invitations, followed by the host over Neon Realtime subscriptions.
+ * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's people and pending invitations, followed by the host over Neon Realtime subscriptions.
  *
  * The service seals each read's statements (`workspacesLiveStatements` in
  * the database's workspace store, `workspaceMembersLiveStatements` in the
@@ -102,4 +107,12 @@ export function invitationsMoves(
   return liveMoves(dependencies, first, workspaceInvitationsLiveRowsSchema, (rows) => ({
     invitations: workspaceInvitationsOfLiveRows(rows, first.origin, dependencies.now()),
   }));
+}
+
+/** The account's sidebar sections, the tasks in them, and its pins each time their rows change, as the held reads would answer them. */
+export function sidebarMoves(
+  dependencies: LiveReadDependencies<SealedRead<"sections" | "entries" | "pins">>,
+  first: SealedRead<"sections" | "entries" | "pins">,
+): Stream.Stream<SidebarRead, LiveBroken> {
+  return liveMoves(dependencies, first, sidebarLiveRowsSchema, sidebarOfLiveRows);
 }

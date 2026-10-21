@@ -10,7 +10,8 @@ import {
 import { and, asc, count, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { task } from "../schemas/task.js";
 import { taskSection, taskSectionEntry } from "../schemas/task-section.js";
@@ -326,6 +327,60 @@ export function listTaskSections(userId: string): TaskStoreEffect<TaskSections> 
     const entries = yield* findEntries(userId);
     return { sections: sections.map(sectionOf), entries: entries.map(entryOf) };
   });
+}
+
+/** The statements the account's sections are followed by live: the sections, and the tasks it keeps in them. */
+export type TaskSectionsLiveStatements = Readonly<Record<"sections" | "entries", LiveStatement>>;
+
+/**
+ * The account's sections written for Neon Realtime: the same rows and rule
+ * of who may read them as `listTaskSections`, each column under the key
+ * `live-wire.ts` reads it by and each instant in epoch milliseconds. The
+ * order is the reader's to keep, since Realtime keeps none. None where a
+ * statement names a value Realtime cannot carry.
+ */
+export function taskSectionsLiveStatements(
+  userId: string,
+): Option.Option<TaskSectionsLiveStatements> {
+  const sections = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: taskSection.id,
+          workspaceId: taskSection.organizationId,
+          title: taskSection.title,
+          icon: taskSection.icon,
+          position: taskSection.position,
+        },
+        { createdAt: taskSection.createdAt },
+      ),
+    )
+    .from(taskSection)
+    .where(
+      and(eq(taskSection.userId, userId), workspaceReachableBy(userId, taskSection.organizationId)),
+    );
+  const entries = queryBuilder
+    .select(
+      liveSelection(
+        {
+          taskId: taskSectionEntry.taskId,
+          sectionId: taskSectionEntry.sectionId,
+          position: taskSectionEntry.position,
+        },
+        { addedAt: taskSectionEntry.addedAt },
+      ),
+    )
+    .from(taskSectionEntry)
+    .innerJoin(taskSection, eq(taskSection.id, taskSectionEntry.sectionId))
+    .innerJoin(task, eq(task.id, taskSectionEntry.taskId))
+    .where(
+      and(
+        eq(taskSectionEntry.userId, userId),
+        eq(task.organizationId, taskSection.organizationId),
+        taskReachableBy(userId),
+      ),
+    );
+  return Option.all({ sections: liveStatementOf(sections), entries: liveStatementOf(entries) });
 }
 
 /** Makes a section, in a workspace the account is a member of and under the bound; one made under this id already is made again as nothing. */
