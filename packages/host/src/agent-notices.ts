@@ -351,6 +351,8 @@ export interface AgentNotices {
   observeFollowed(agents: readonly CodingAgentSummary[], taskIds: readonly string[]): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
+  /** The developer marked the agent as read by hand: its unseen dot goes, whichever page shows. */
+  seen(agentId: string): void;
   /** The panel said which task's Inbox tab it shows, or none. */
   shownInbox(taskId: string | null): void;
   /** The panel said which Chat it has on screen, or none. */
@@ -1106,6 +1108,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         shownAgent = agentId;
         seen(agentId);
       },
+      seen,
       shownChat: (shown) => {
         shownChat = shown;
       },

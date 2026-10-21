@@ -132,6 +132,8 @@ export const AGENT_ACT_KIND = {
    * is held back by, and what clears an agent's tab's unseen dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
+  /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
+  CODING_AGENTS_SEEN: "codingAgents.seen",
   CODING_AGENTS_PAGE: "codingAgents.page",
   /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
   CODING_AGENTS_CALLS: "codingAgents.calls",

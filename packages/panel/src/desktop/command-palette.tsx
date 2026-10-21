@@ -149,6 +149,7 @@ import {
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
 import { Tooltip } from "../tooltip.js";
+import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
@@ -948,6 +949,35 @@ function readMarkRows(
 }
 
 /**
+ * Mark as unread for the agent whose page stands, or Mark as read once it is
+ * unread, as its sidebar row's menu offers it, through the plans' marks;
+ * none while no agent's page stands. Note that the open page is unread only
+ * by a mark by hand, since its unseen dot goes as the page is shown.
+ */
+function agentReadMarkRows(
+  tasks: TasksControl,
+  reads: AgentReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const { agentId } = tasks.agentView;
+  const { standing, archived } = tasks.listedAgents;
+  const agent = [...standing, ...archived].find((each) => each.id === agentId);
+  if (agent === undefined) return [];
+  const item = markReadItem({
+    unread: reads.markedUnread(agent.id),
+    onMark: (unread) => reads.mark(agent, unread),
+  });
+  return [
+    {
+      icon: item.icon,
+      label: item.label,
+      terms: [item.label],
+      onChoose: () => choose(item.onSelect),
+    },
+  ];
+}
+
+/**
  * Pin task, or Unpin task once it is pinned, for the plan on screen, as its
  * sidebar row's menu offers it: the reader's own pin, through the same mark.
  * None while no plan is looked at, nor for an archived plan, which offers
@@ -1327,6 +1357,7 @@ export function CommandPalette({
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const { members } = membersRead;
   const reads = useReadMarks();
+  const agentReads = useAgentReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const taskId = tasks.activeTaskId;
   const repository =
@@ -1411,6 +1442,7 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(tasks, onTasks),
         ...readMarkRows(tasks, reads, choose),
+        ...agentReadMarkRows(tasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(tasks, choose),
       ],

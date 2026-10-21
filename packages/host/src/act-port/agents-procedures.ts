@@ -134,6 +134,7 @@ export interface AgentProceduresDependencies {
     | "observeModels"
     | "observeTaskGone"
     | "shown"
+    | "seen"
     | "shownInbox"
     | "shownChat"
   >;
@@ -366,6 +367,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         notices.shown(input.agentId);
         notices.shownInbox(input.inboxTaskId);
         notices.shownChat(input.chatShown ?? null);
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SEEN].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        notices.seen(input.agentId);
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PAGE].effect(
