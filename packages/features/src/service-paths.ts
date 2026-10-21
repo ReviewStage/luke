@@ -105,6 +105,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AGENT_INBOX: "/api/live/agent-inbox",
   /** A workspace's chat under `?workspaceId=`, sealed for following over Neon Realtime (GET) as the account's person reads it, once they have joined it; or `not-found` or `unavailable`. */
   LIVE_WORKSPACE_CHAT: "/api/live/workspace-chat",
+  /** The task list sealed for following over Neon Realtime (GET): its tasks and every agent of them and with no task, or `unavailable`. `task-list-live.ts` declares the answer. */
+  LIVE_TASKS: "/api/live/tasks",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
