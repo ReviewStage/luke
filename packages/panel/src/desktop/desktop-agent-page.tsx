@@ -4,6 +4,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -40,7 +41,12 @@ import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents.js";
 import { WordsWorkspace } from "../tasks/use-link-standing.js";
-import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
+import {
+  OpenHereProvider,
+  OpenLinkProvider,
+  openPullRequestsHere,
+  useReadLinkOpener,
+} from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
@@ -272,6 +278,7 @@ export function DesktopAgentPage({
   // brought back by its own Unarchive, there being no task to bring back with it.
   const { onArchive } = agents;
   const toast = useToast();
+  const openLink = useReadLinkOpener();
   // An Unarchive refused says why, as any other refusal of the agent's does.
   const unarchive = () => {
     onArchive(agentId, false).then((result) => {
@@ -332,6 +339,8 @@ export function DesktopAgentPage({
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
     if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
+    // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
+    if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
   };
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
@@ -348,6 +357,18 @@ export function DesktopAgentPage({
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task,
   // and one to any other pull request of its repository a Pull request tab by its number.
   const openHere = openPullRequestsHere(control, openPullRequest, agentRepository);
+  // A link to the page's own agent, as a fork's chip opens its source, leaves the page's draft for the agent.
+  const openLinkHere =
+    openLink === undefined
+      ? undefined
+      : (link: ReadLink) => {
+          const { place } = link;
+          const own =
+            (place.kind === LINK_PLACE.AGENT || place.kind === LINK_PLACE.MESSAGE) &&
+            place.agentId === agentId;
+          if (own) setDrafting(undefined);
+          openLink(link);
+        };
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,
@@ -420,73 +441,75 @@ export function DesktopAgentPage({
           >
             <SkillFiles source={control.readSkills} onOpen={openSkill}>
               <AgentMentions value={mentions}>
-                <OpenHereProvider value={openHere}>
-                  {/* An archived agent's sandbox takes no shell, so ⌘J and New terminal stand only while it does not. */}
-                  {terminalDoors.terminals && agent.archivedAt === undefined ? (
-                    <TerminalCommands
-                      here={agentId}
-                      agents={control}
-                      sidePanel={sidePanel}
-                      onShown={() => setFocus(COLUMN.SIDE)}
-                    />
-                  ) : null}
-                  <div
-                    ref={onArea}
-                    className="desktop-task"
-                    data-panel-open={String(sidePanel.open)}
-                  >
-                    {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-                    <section
-                      className="agent-page"
-                      aria-label="Agent"
-                      hidden={sidePanel.fullScreen}
-                    >
-                      {toolbar}
-                      <FindScope
-                        className="desktop-task-column"
-                        active={tasks.shown && !sideFocused}
-                        subject={tab}
-                      >
-                        <AgentPane
-                          label={agentTabLabel(agent, control.models)}
-                          tabbed={false}
-                          tab={paneTab}
-                          agents={control}
-                          shown={shown}
-                          views={views}
-                          onOpenDelegation={openDelegation}
-                          onOpenPullRequest={openPullRequest}
-                          onOpenTarget={openTarget}
-                          cards={cards}
-                          onFork={draftDoors.onFork}
-                          onContinue={draftDoors.onContinue}
-                        />
-                      </FindScope>
-                    </section>
-                    {drawing.panel ? (
-                      <SidePanel
-                        {...drawing}
-                        panel={drawing.panel}
-                        unread={NO_UNREAD}
-                        holder={SIDE_PANEL_HOLDER.AGENT}
-                        taskId={agentId}
-                        repository={agentRepository ?? null}
-                        board={undefined}
-                        shownCode={undefined}
-                        codeFailed={undefined}
-                        pages={undefined}
-                        work={work}
+                <OpenLinkProvider value={openLinkHere}>
+                  <OpenHereProvider value={openHere}>
+                    {/* An archived agent's sandbox takes no shell, so ⌘J and New terminal stand only while it does not. */}
+                    {terminalDoors.terminals && agent.archivedAt === undefined ? (
+                      <TerminalCommands
+                        here={agentId}
                         agents={control}
-                        openAgents={openAgents}
-                        shownAgent={shown ? agentId : undefined}
-                        views={views}
-                        shown={tasks.shown}
-                        focused={sideFocused}
-                        onOpenTarget={openTarget}
+                        sidePanel={sidePanel}
+                        onShown={() => setFocus(COLUMN.SIDE)}
                       />
                     ) : null}
-                  </div>
-                </OpenHereProvider>
+                    <div
+                      ref={onArea}
+                      className="desktop-task"
+                      data-panel-open={String(sidePanel.open)}
+                    >
+                      {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
+                      <section
+                        className="agent-page"
+                        aria-label="Agent"
+                        hidden={sidePanel.fullScreen}
+                      >
+                        {toolbar}
+                        <FindScope
+                          className="desktop-task-column"
+                          active={tasks.shown && !sideFocused}
+                          subject={tab}
+                        >
+                          <AgentPane
+                            label={agentTabLabel(agent, control.models)}
+                            tabbed={false}
+                            tab={paneTab}
+                            agents={control}
+                            shown={shown}
+                            views={views}
+                            onOpenDelegation={openDelegation}
+                            onOpenPullRequest={openPullRequest}
+                            onOpenTarget={openTarget}
+                            cards={cards}
+                            onFork={draftDoors.onFork}
+                            onContinue={draftDoors.onContinue}
+                          />
+                        </FindScope>
+                      </section>
+                      {drawing.panel ? (
+                        <SidePanel
+                          {...drawing}
+                          panel={drawing.panel}
+                          unread={NO_UNREAD}
+                          holder={SIDE_PANEL_HOLDER.AGENT}
+                          taskId={agentId}
+                          repository={agentRepository ?? null}
+                          board={undefined}
+                          shownCode={undefined}
+                          codeFailed={undefined}
+                          pages={undefined}
+                          work={work}
+                          agents={control}
+                          openAgents={openAgents}
+                          shownAgent={shown ? agentId : undefined}
+                          views={views}
+                          shown={tasks.shown}
+                          focused={sideFocused}
+                          onOpenTarget={openTarget}
+                        />
+                      ) : null}
+                    </div>
+                  </OpenHereProvider>
+                </OpenLinkProvider>
               </AgentMentions>
             </SkillFiles>
           </AutomationDirectory>

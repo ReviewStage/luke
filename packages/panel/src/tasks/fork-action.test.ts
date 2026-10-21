@@ -200,6 +200,21 @@ test("under a message, Forked to names the agents of the task forked at it in th
   assert.deepEqual(view.opened, [{ kind: TOOL_TARGET.AGENT, agent: "fork-b" }]);
 });
 
+test("an agent with no task names under a message the agents its own summary says were forked at it, by their titles, each opening its page, since its page lists that agent alone", () => {
+  const continuedBy = [
+    { agentId: "fork-a", title: "Try the queue", forked: true, messageId: TURN },
+    { agentId: "continued", title: "Carry on", forked: false },
+  ];
+  const view = drawn({ agent: summary(SOURCE, { planId: null, continuedBy }) });
+
+  const line = view.container.querySelector("[data-forked-to]");
+  assert.equal(line?.textContent, "Forked toTry the queue", "a continue names no message");
+  const chip = line?.querySelector<HTMLElement>("[data-actor-ref]");
+  assert.equal(chip?.tagName, "BUTTON", "the fork opens though the page does not list it");
+  act(() => chip?.click());
+  assert.deepEqual(view.opened, [{ kind: TOOL_TARGET.AGENT, agent: "fork-a" }]);
+});
+
 test("a message no agent was forked at names none", () => {
   const view = drawn({ listed: [summary(SOURCE), summary("other", { createdAt: 2 })] });
   assert.equal(view.container.querySelector("[data-forked-to]"), null);

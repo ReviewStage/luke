@@ -25,6 +25,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
@@ -73,6 +74,7 @@ import { ToastHost } from "../toast.js";
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks.
 import "../tasks/agent-pull-request-tab.js";
+import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
 /**
@@ -319,10 +321,14 @@ afterEach(() => {
 });
 
 /** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
-function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
+function mount(
+  tasks: TasksControl = tasksControl({}),
+  openLink?: (link: ReadLink) => void,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID });
   act(() =>
     root?.render(
       onRegistry(
@@ -330,7 +336,9 @@ function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
         createElement(
           Fragment,
           null,
-          createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID }),
+          openLink === undefined
+            ? page
+            : createElement(OpenLinkProvider, { value: openLink, children: page }),
           createElement(ToastHost),
         ),
       ),
@@ -422,6 +430,86 @@ test("Fork to new agent on the page's agent opens the page's draft in its place,
   const payload = starts[0]?.payload;
   assert.ok(payload !== undefined && !("taskId" in payload), "the Start names no task");
   assert.deepEqual(payload.from, { agentId: AGENT_ID, messageId: "answer" });
+  assert.deepEqual(opened, [STARTED_ID]);
+});
+
+test("a fork's draft on the page names its source's message, whose press opens it and leaves the draft for the agent's transcript", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const links: ReadLink[] = [];
+  const page = mount(tasksControl({}), (link) => links.push(link));
+  await settle();
+  const fork =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Fork to new agent"]') ??
+    assert.fail("the agent's message offers Fork to new agent");
+  act(() => fork.click());
+  await settle();
+
+  const quote =
+    page.querySelector<HTMLButtonElement>(".draft-fork-quote button") ??
+    assert.fail("the draft names the message it forks, which opens");
+  act(() => quote.click());
+  await settle();
+
+  assert.deepEqual(
+    links.map((link) => link.place),
+    [{ kind: LINK_PLACE.MESSAGE, agentId: AGENT_ID, messageId: "answer" }],
+  );
+  assert.equal(
+    page.querySelector(`.desktop-agent section[aria-label="${TAB_WORDS.NEW_AGENT}"]`),
+    null,
+    "the draft gives way to the agent",
+  );
+});
+
+test("an agent forked at one of its messages names the fork under it, which opens the fork's own page", async () => {
+  pages = [
+    {
+      agent: {
+        ...PAGE,
+        continuedBy: [
+          { agentId: STARTED_ID, title: "Try the cron", forked: true, messageId: "answer" },
+        ],
+      },
+    },
+  ];
+  transcript = {
+    messages: [
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const opened: string[] = [];
+  const agentView = {
+    agentId: AGENT_ID,
+    onOpen: (id: string) => opened.push(id),
+    onClose: () => undefined,
+  };
+  const page = mount(tasksControl({ agentView }));
+  await settle();
+
+  const chip =
+    page.querySelector<HTMLElement>("[data-forked-to] [data-actor-ref]") ??
+    assert.fail("the message names its fork");
+  assert.match(chip.textContent ?? "", /Try the cron/u);
+  act(() => chip.click());
   assert.deepEqual(opened, [STARTED_ID]);
 });
 
