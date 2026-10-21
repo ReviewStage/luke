@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxChanged,
   type INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
@@ -43,6 +44,8 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 const HOLD = Duration.seconds(20);
 /** How long a subscription no read holds is kept, so the window's next read finds it standing. */
 const IDLE = Duration.seconds(30);
+/** How long after a seal went unanswered, or a subscription stopped, a followed scope is sealed again. */
+const LIVE_RESTART = Duration.seconds(5);
 
 /** Which inbox: one plan's, or one agent's, by its id. */
 export class InboxScopeKey extends Data.Class<{
@@ -193,4 +196,45 @@ export function inboxPast(
       return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
     }),
   );
+}
+
+/** A followed inbox as the window is told it: its items whole, or why there are none. */
+type Told = CodingAgentInboxChanged["inbox"];
+
+/**
+ * The scope's inbox followed until interrupted, each change told whole from
+ * its subscription once its first rows land, the same subscription the
+ * reads share. One the account does not reach is told not found, which ends
+ * the follow. A seal the service did not answer is told unanswered, and it,
+ * or a subscription that stopped, is let go and sealed again after
+ * `LIVE_RESTART`.
+ */
+export function followInbox(
+  inboxes: ScopeInboxes,
+  scope: InboxScopeKey,
+  tell: (inbox: Told) => Effect.Effect<void>,
+): Effect.Effect<void> {
+  const attempt: Effect.Effect<boolean> = Effect.scoped(
+    Effect.gen(function* () {
+      const standing = yield* RcMap.get(inboxes, scope);
+      if (standing.kind === "refused") {
+        yield* tell({ failure: standing.failure });
+        return standing.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+      }
+      // Note that a delivery that moved nothing is told nobody, since the digest is where every item stands.
+      yield* SubscriptionRef.changes(standing.inbox).pipe(
+        Stream.takeWhile((state) => state.kind !== "broken"),
+        Stream.filter((state) => state.kind === "standing"),
+        Stream.map((state) => state.inbox),
+        Stream.changesWith((one, other) => one.cursor === other.cursor),
+        Stream.runForEach((inbox) => tell({ items: inbox.items })),
+      );
+      return false;
+    }),
+  );
+  const again = Effect.andThen(RcMap.invalidate(inboxes, scope), Effect.sleep(LIVE_RESTART));
+  const loop: Effect.Effect<void> = Effect.flatMap(attempt, (ended) =>
+    ended ? Effect.void : Effect.andThen(again, loop),
+  );
+  return loop;
 }

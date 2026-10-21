@@ -725,6 +725,11 @@ function subject(
       pageNow: service.pageNow,
       sealScope: service.sealScope,
       realtime,
+      /** Every followed plan's or agent's inbox the host told, in order. */
+      told: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.INBOX_CHANGED ? [event.payload] : [],
+        ),
       reset: composer.reset,
     };
   });
@@ -1719,4 +1724,131 @@ it.effect(
         { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
       ]);
     }),
+);
+
+const PLAN_SCOPE = { kind: "plan", id: TASK_ID } as const;
+
+/** Steps taken until the host has told `times` inboxes, since a row's digest is the platform's own promise. */
+const toldTimes = (told: () => readonly unknown[], times: number) =>
+  Effect.repeat(Effect.yieldNow, { until: () => told().length >= times, times: 10_000 });
+const AGENT_SCOPE = { kind: "agent", id: AGENT_ID } as const;
+
+it.effect(
+  "a followed plan's inbox is told from its Realtime subscription once its rows land, again each time they move and never when a delivery moved nothing; letting it go ends the telling",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealScope, realtime, told } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE), {});
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
+      assert.deepEqual(told(), []);
+
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      const closed = {
+        ...ITEM_ROW,
+        revision: 3,
+        status: INBOX_STATUS.CLOSED,
+        closedReason: "Done",
+      };
+      realtime.deliver("items", [closed]);
+      yield* settled;
+      assert.deepEqual(told(), [
+        { scope: PLAN_SCOPE, inbox: { items: [LIVE_ITEM] } },
+        {
+          scope: PLAN_SCOPE,
+          inbox: {
+            items: [
+              { ...LIVE_ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" },
+            ],
+          },
+        },
+      ]);
+      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.ok(!JSON.stringify(told()).includes("capability"));
+
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* settled;
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      assert.equal(told().length, 2);
+    }),
+);
+
+it.effect(
+  "a message landing after its item's row is told as soon as it lands, its item's thread whole",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealScope, realtime, told } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* toldTimes(told, 1);
+      const message = {
+        id: "6f1d2a10-7b0f-4e3b-9a55-5e3b2c1d4c7a",
+        itemId: ITEM.id,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        userId: null,
+        name: null,
+        text: "Also the staging branch?",
+        ask: null,
+        answers: null,
+        createdAt: ITEM.updatedAt,
+      };
+      realtime.deliver("messages", [message]);
+      yield* toldTimes(told, 2);
+      assert.equal(told().length, 2);
+      assert.ok(JSON.stringify(told()[1]).includes("Also the staging branch?"));
+    }),
+);
+
+it.effect(
+  "an agent's inbox the account does not reach is told not found, one the service seals nothing for is told unanswered, and behind a closed gate every follow is told unanswered",
+  () =>
+    Effect.gen(function* () {
+      const refused = yield* subject();
+      refused.sealScope({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* settled;
+      assert.deepEqual(refused.told(), [
+        { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
+
+      const unsealed = yield* subject();
+      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* settled;
+      assert.deepEqual(unsealed.told(), [
+        { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(unsealed.realtime.opened, []);
+
+      const signedOut = yield* subject({ signedIn: false });
+      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      assert.deepEqual(signedOut.told(), [
+        { scope: PLAN_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(signedOut.asked, []);
+    }),
+);
+
+it.effect("a sign-out lets every followed inbox go", () =>
+  Effect.gen(function* () {
+    const { call, sealScope, realtime, told, reset } = yield* subject();
+    sealScope(SEALED_SCOPE);
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+    yield* settled;
+    yield* reset;
+    yield* settled;
+    assert.deepEqual(realtime.closed, [SEALED_SCOPE.url]);
+    assert.deepEqual(told(), []);
+  }),
 );

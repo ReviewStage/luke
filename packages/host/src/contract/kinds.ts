@@ -164,6 +164,12 @@ export const AGENT_ACT_KIND = {
 export const AGENT_INBOX_ACT_KIND = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * A task's inbox, or one agent's, followed while the window holds the
+   * stream open: what it holds, whole, each time it changes, or why there
+   * is none.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
