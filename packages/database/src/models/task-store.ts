@@ -774,24 +774,6 @@ const removeEndedCalls = SqlSchema.void({
     ),
 });
 
-/**
- * The conversation a task's own Luke kept, which the row names while the
- * column stands (`schemas/task.ts`), read under the delete's lock so the
- * delete can stamp it with the agents'; none for a task started after
- * tasks lost him, or one whose conversation was already removed.
- */
-const findFormerLukeConversation = SqlSchema.findOneOption({
-  Request: TaskKeySchema,
-  Result: Schema.Struct({ conversationId: Schema.NullOr(Schema.String) }),
-  execute: ({ userId, taskId }) =>
-    Database.use((db) =>
-      db
-        .select({ conversationId: task.conversationId })
-        .from(task)
-        .where(reachableTask(userId, taskId)),
-    ),
-});
-
 /** The conversations of the task's coding agents, read before the delete cascades the rows that name them. */
 const findAgentConversations = SqlSchema.findAll({
   Request: TaskKeySchema,
@@ -1460,12 +1442,9 @@ export function beginTaskWork(userId: string, taskId: string): TaskStoreEffect<b
 
 /**
  * Deletes the task, its document, and its ended calls with what was said on
- * them, and stamps its coding agents' conversations cleared, and the
- * conversation its own Luke kept where the row still names one; false where
- * the account reached no such task. The conversations are read before the
- * delete, because the delete cascades the agent rows that name them and
- * clears the task's own. Note that only the agents' are handed
- * `beforeDelete`, since its Luke's session ran on a service that is gone.
+ * them, and stamps its coding agents' conversations cleared; false where the account reached no such task. The agents'
+ * conversations are read before the delete, because the delete cascades
+ * the agent rows that name them.
  *
  * A caller that stopped the task's agents first names the ones it stopped,
  * and the delete fails with `TaskAgentUnstopped` where any other stands. The
@@ -1490,13 +1469,8 @@ export function deleteTask<R = never>(
         if (guard !== undefined && agents.some(({ id }) => !guard.stoppedAgentIds.has(id))) {
           return yield* new TaskAgentUnstopped();
         }
-        const agentConversationIds = agents.map((agent) => agent.conversationId);
-        const former = Option.flatMapNullishOr(
-          yield* findFormerLukeConversation({ userId, taskId }),
-          (row) => row.conversationId,
-        );
-        const conversationIds = [...Option.toArray(former), ...agentConversationIds];
-        if (guard !== undefined) yield* guard.beforeDelete(agentConversationIds);
+        const conversationIds = agents.map((agent) => agent.conversationId);
+        if (guard !== undefined) yield* guard.beforeDelete(conversationIds);
         const removed = yield* removeTask({ userId, taskId });
         if (Option.isNone(removed)) return false;
         yield* removeEndedCalls({ userId, taskId });

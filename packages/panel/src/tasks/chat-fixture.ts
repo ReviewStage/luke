@@ -29,7 +29,7 @@ import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
  * Slack, since an agent talks in its own task's channel alone: one says
  * what it is picking up, the two settle who owns the `memberships` table
  * in a thread, each asks something, one asks the developer by name, and
- * Luke mentions the developer, so For you, the rail's unread counts, and a
+ * one mentions the developer, so For you, the rail's unread counts, and a
  * folded thread all draw. The topic channel and the direct messages are
  * the people's, which no agent opens. Every
  * name here is invented; nothing is read from an account. Each message is
@@ -63,7 +63,6 @@ const AGENT_TWO: TaskAgentLine = {
 const MEMBER = {
   DEAN: "0c1d2e3f-4a5b-4c6d-8e7f-a0b1c2d3e4f5",
   MARIA: "1d2e3f4a-5b6c-4d7e-9f80-b1c2d3e4f5a6",
-  LUKE: "2e3f4a5b-6c7d-4e8f-a091-c2d3e4f5a6b7",
   AGENT_ONE: "3f4a5b6c-7d8e-4f90-b1a2-d3e4f5a6b7c8",
   AGENT_TWO: "4a5b6c7d-8e9f-4a01-82b3-e4f5a6b7c8d9",
 } as const;
@@ -93,7 +92,6 @@ const CHANNEL = {
   BILLING: "9d0e1f2a-3b4c-4d5e-9f6a-7b8c9d0e1f2a",
   SCHEMA: "0e1f2a3b-4c5d-4e6f-8a7b-8c9d0e1f2a3b",
   WITH_AGENT_TWO: "1f2a3b4c-5d6e-4f7a-9b8c-9d0e1f2a3b4c",
-  WITH_LUKE: "2a3b4c5d-6e7f-4a8b-8c9d-0e1f2a3b4c5d",
   WITH_AGENT_ONE: "3b4c5d6e-7f8a-4b9c-9d0e-1f2a3b4c5d6e",
   WITH_MARIA: "4c5d6e7f-8a9b-4c0d-8e1f-2a3b4c5d6e7f",
 } as const;
@@ -164,18 +162,18 @@ function messages(at: number): readonly ChatMessage[] {
     said(at, 38, {
       id: "a0000000-0000-4000-8000-000000000041",
       seq: 41,
-      channelId: CHANNEL.WITH_LUKE,
+      channelId: CHANNEL.WITH_AGENT_ONE,
       authorId: MEMBER.DEAN,
-      blocks: words("Which agent is touching the members table right now?"),
+      blocks: words("Are you touching the members table right now?"),
     }),
     said(at, 37, {
       id: "a0000000-0000-4000-8000-000000000042",
       seq: 42,
-      channelId: CHANNEL.WITH_LUKE,
-      authorId: MEMBER.LUKE,
-      mentions: [MEMBER.AGENT_ONE, MEMBER.AGENT_TWO],
+      channelId: CHANNEL.WITH_AGENT_ONE,
+      authorId: MEMBER.AGENT_ONE,
+      mentions: [MEMBER.AGENT_TWO],
       blocks: words(
-        `${CHIP.AGENT_ONE} is adding \`invite_token\` to \`memberships\` on \`luke/teammate-invitations\`, ` +
+        "Yes, I'm adding `invite_token` to `memberships` on `luke/teammate-invitations`, " +
           `migration pushed. ${CHIP.AGENT_TWO} only reads it and based its branch on that migration.`,
       ),
     }),
@@ -268,11 +266,11 @@ function messages(at: number): readonly ChatMessage[] {
       id: "a0000000-0000-4000-8000-000000000048",
       seq: 48,
       channelId: CHANNEL.INVITES,
-      authorId: MEMBER.LUKE,
+      authorId: MEMBER.AGENT_ONE,
       mentions: [MEMBER.DEAN, MEMBER.AGENT_TWO],
       blocks: words(
-        `${CHIP.DEAN} two agents are both changing the \`memberships\` table. I told ${CHIP.AGENT_TWO} to wait for ` +
-          "#214; say if you'd rather they split it another way.",
+        `${CHIP.DEAN} ${CHIP.AGENT_TWO} and I are both changing the \`memberships\` table. I asked it to wait for ` +
+          "#214; say if you'd rather we split it another way.",
       ),
     }),
     said(at, 8, {
@@ -359,7 +357,6 @@ export function fixtureChat(
         userId: "maria",
         left: false,
       },
-      { id: MEMBER.LUKE, kind: MEMBER_KIND.LUKE, planId: FIXTURE_TASK_ID, left: false },
       {
         id: MEMBER.AGENT_ONE,
         kind: MEMBER_KIND.AGENT,
@@ -395,7 +392,6 @@ export function fixtureChat(
       },
       { id: CHANNEL.SCHEMA, kind: CHANNEL_KIND.TOPIC, name: "members-schema", archived: false },
       dm(CHANNEL.WITH_AGENT_TWO, MEMBER.AGENT_TWO),
-      dm(CHANNEL.WITH_LUKE, MEMBER.LUKE),
       dm(CHANNEL.WITH_AGENT_ONE, MEMBER.AGENT_ONE),
       dm(CHANNEL.WITH_MARIA, MEMBER.MARIA),
     ],

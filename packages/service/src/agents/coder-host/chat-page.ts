@@ -56,14 +56,14 @@ function chatCursorOf(seq: number): string {
   return String(seq + 1);
 }
 
-/** A member as the window reads one: a person by their account's name where `people` holds it, an agent by the name its tab shows and on the plan it works on where `agents` names them, and a Luke on his plan. */
+/** A member as the window reads one: a person by their account's name where `people` holds it, an agent by the name its tab shows and on the plan it works on where `agents` names them. */
 function memberOnWire(
   row: ChatMemberRow,
   agents: ReadonlyMap<string, ChatAgentMember>,
   people: ReadonlyMap<string, string>,
 ): ChatMember {
   const agent = row.agentId === null ? undefined : agents.get(row.agentId);
-  const planId = row.taskId ?? agent?.taskId;
+  const planId = agent?.taskId;
   const name = row.userId === null ? agent?.name : people.get(row.userId);
   return {
     id: row.id,

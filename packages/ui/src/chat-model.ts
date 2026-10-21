@@ -220,19 +220,17 @@ function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
 
-/** A member by its id, the way every line names it: an agent by its title, a task's Luke as Luke, a person by their account's name, the reader by their own. */
+/** A member by its id, the way every line names it: an agent by its title, a person by their account's name, the reader by their own. */
 export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): ChatWho {
   const member = chat.members.find((each) => each.id === memberId);
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
   const taskName = member?.planId === undefined ? undefined : names.tasks.get(member.planId);
   const name =
-    member?.kind === MEMBER_KIND.LUKE
-      ? CHAT_MEMBER_LABEL.LUKE
-      : member?.kind === MEMBER_KIND.AGENT
-        ? (agent?.title ?? member.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT)
-        : memberId === chat.self && names.selfName !== undefined
-          ? names.selfName
-          : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
+    member?.kind === MEMBER_KIND.AGENT
+      ? (agent?.title ?? member.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT)
+      : memberId === chat.self && names.selfName !== undefined
+        ? names.selfName
+        : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
   return { member, name, agent, taskName };
 }
 

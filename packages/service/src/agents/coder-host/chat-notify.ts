@@ -81,8 +81,7 @@ import { steerCodingAgent } from "./steer.js";
  * is told again: the notice's key and the one outstanding notice keep that
  * from steering anyone twice, and it finishes a telling the first send did
  * not. A person is handed to a door of their own, told through their
- * window's account-wide read (`tellPerson`); a task's Luke, a member minted
- * while a task had one, has left, and is told nothing. A notice names who said it by their mention link, and
+ * window's account-wide read (`tellPerson`). A notice names who said it by their mention link, and
  * hands the words as they were written, every link in them whole
  * (`chat-names.ts`). What each member came to is the
  * receipt the poster reads, each member by its mention link: told, held,
@@ -232,7 +231,6 @@ function senderOf(userId: string, from: ChatMemberRow, name: string) {
 /** The message author each kind of member speaks as, on the notice's row. */
 const AUTHOR_OF_KIND = {
   [MEMBER_KIND.AGENT]: MESSAGE_AUTHOR.AGENT,
-  [MEMBER_KIND.LUKE]: MESSAGE_AUTHOR.LUKE,
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
@@ -265,7 +263,6 @@ const PARAGRAPH_BREAK = "\n\n";
 
 /** What a sender is called where their name holds nothing to call them by, by their kind. */
 const BLANK_NAME = {
-  [MEMBER_KIND.LUKE]: CHAT_MEMBER_LABEL.LUKE,
   [MEMBER_KIND.AGENT]: CHAT_MEMBER_LABEL.FORMER_AGENT,
   [MEMBER_KIND.HUMAN]: CHAT_MEMBER_LABEL.FORMER_PERSON,
 } as const satisfies Record<MemberKind, string>;
@@ -450,9 +447,6 @@ export function tellMessage(
       switch (member.kind) {
         case MEMBER_KIND.AGENT:
           return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
-        case MEMBER_KIND.LUKE:
-          // A task's Luke, minted while a task had one, is gone: an old thread's earlier reply may still name him.
-          return Effect.succeed({ member, outcome: NOTICE_OUTCOME.LEFT });
         case MEMBER_KIND.HUMAN:
           return Effect.map(telling.doors.human(member, notice), (outcome) => ({
             member,

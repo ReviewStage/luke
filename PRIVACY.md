@@ -153,9 +153,10 @@ changed since.
 
 Deleting a task removes it at once with its history, its inbox, and the
 record of each coding agent started on it with the plan copy or prompt that
-agent was handed, and marks each agent's transcript deleted, with the
-conversation the task's own Luke kept before tasks lost him where it had
-one, removed thirty days later. Before it deletes anything, it
+agent was handed, and marks each agent's transcript deleted, removed thirty
+days later. The conversation a task held with its own Luke, before tasks
+lost him, is already marked deleted, whether or not the task is, and is
+removed thirty days after it was marked. Before it deletes anything, it
 stops every coding agent of the task still at work, as Stop does; if one
 cannot be stopped just then, or is still starting, the task is not deleted
 and you can try again in a moment. It also deletes the record of each of the
@@ -290,8 +291,8 @@ read every channel and every direct message, one between two other people
 included; a coding agent reads the channels and only its own direct
 messages, and only a direct message's two members post in it. A coding
 agent's turn may open with what was said in its chat since it last read,
-sent to its model provider with the rest of the turn. What a plan's Luke
-posted before tasks lost him stays as it was.
+sent to its model provider with the rest of the turn. The member a plan's
+Luke was in its chat, before tasks lost him, is deleted.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages (others' replies to them stay), and deleting the
 workspace deletes its chat. While you are signed in, the same read that keeps
@@ -435,7 +436,8 @@ each of its sessions, with the snapshots no other sandbox uses, shortly
 after; deleting your account does the same for every session of yours,
 shortly after the deletion. A session an agent's conversation was moved off
 earlier in its life is not tracked, and its snapshot stays until Vercel lets
-it expire.
+it expire. The sandbox of each session a task's own Luke ran, before tasks
+lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A coding agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, a coding agent your Claude plan pays for runs on
@@ -742,11 +744,14 @@ words you heard beside the turns the agent ran. Each call also keeps a
 record of its own: its task and its agent, OpenAI's id for the session, when
 it started and ended and why, its voice model, its billed seconds (or our
 own count where OpenAI gave none), and each line said on it, by whom and
-when; the agent's tab shows it. These rows are not sealed: they are stored
+when; the agent's tab shows it. A call made before calls were made into an
+agent, when a task had its own Luke, keeps its record without the lines said
+on it, which are deleted. These rows are not sealed: they are stored
 as written, and our own operators can read them. They stand until you delete
 your account, which removes them at once. A deleted task's agents'
-transcripts, and the conversation its own Luke kept where it had one, are
-marked deleted and removed thirty days later; its call records, with the lines said on them, are deleted with
+transcripts are marked deleted and removed thirty days later, as is every
+conversation a task held with its own Luke before tasks lost him (see
+"Tasks"); its call records, with the lines said on them, are deleted with
 the task, or within a minute or so of the call ending for a call still open.
 
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
