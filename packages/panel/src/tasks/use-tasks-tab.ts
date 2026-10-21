@@ -3046,6 +3046,9 @@ export function useTasksTab(input: {
     () => [...new Set([...workingAgents, ...waitingAgents])],
     [workingAgents, waitingAgents],
   );
+  // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
+  const taskOnScreen =
+    shown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
   const pinnedHere = (tab: StripTab) =>
     isPinnable(tab) &&
     sidePanel.pins.some((pin) => pin.task === viewed.activeTaskId && sameTab(pin.tab, tab));
@@ -3056,7 +3059,7 @@ export function useTasksTab(input: {
         ? undefined
         : {
             tabs: mainTabs.tabs,
-            shown: mainTabs.tab,
+            shown: taskOnScreen && !sidePanel.fullScreen ? mainTabs.tab : undefined,
             viewedAt: mainTabs.viewedAt,
             onViewedAt: mainTabs.onViewedAt,
             onIdle: dozeColumnTab,
@@ -3071,7 +3074,7 @@ export function useTasksTab(input: {
         ? undefined
         : {
             tabs: sidePanel.strip,
-            shown: sidePanel.open ? sidePanel.tab : undefined,
+            shown: taskOnScreen && sidePanel.open ? sidePanel.tab : undefined,
             viewedAt: sidePanel.viewedAt,
             onViewedAt: sidePanel.onViewedAt,
             onIdle: closeSidePanelTab,

@@ -3,9 +3,10 @@
  *
  * Each strip, the task's column (`use-main-tabs.ts`) and the side panel
  * (`use-side-panel.ts`), keeps per task when each of its tabs was last
- * viewed. A tab is viewed while it is the one its strip shows: it is stamped
- * as it stops being shown, whether another tab takes its place or the
- * task is left, and while it stays shown, again each hour, so a window
+ * viewed. A tab is viewed while it is the one its strip shows and the
+ * task's page is on screen, nothing standing over it: it is stamped as it
+ * stops being shown, whether another tab takes its place, the task is left,
+ * or a page covers it, and while it stays shown, again each hour, so a window
  * quit on it still says when it was last on screen. A tab no stamp names
  * yet, whether just opened or kept by a version from before the stamps,
  * counts as viewed the first time it is seen here, so nothing closes the
@@ -95,30 +96,47 @@ function useTidyNow(): number | undefined {
   return Option.getOrUndefined(AsyncResult.value(useAtomValue(tidyNowAtom)));
 }
 
+/** A tab a strip showed, with the strip's own stamp, which still writes to its task once the strip is gone or another task's. */
+interface ShownTab<T extends StripTab> {
+  readonly tab: T;
+  readonly onViewedAt: IdleStrip<T>["onViewedAt"];
+}
+
 /** The tabs the strips showed on a task, as the stamps last saw them. */
 interface Shown<Column extends StripTab, Panel extends StripTab> {
   readonly taskId: string;
-  readonly column: Column | undefined;
-  readonly panel: Panel | undefined;
+  readonly column: ShownTab<Column> | undefined;
+  readonly panel: ShownTab<Panel> | undefined;
+}
+
+/** The strip's shown tab with its stamp, none where it shows none. */
+function shownOf<T extends StripTab>(strip: IdleStrip<T> | undefined): ShownTab<T> | undefined {
+  return strip?.shown === undefined
+    ? undefined
+    : { tab: strip.shown, onViewedAt: strip.onViewedAt };
 }
 
 /**
  * Stamps the tab `was` showed on `wasOn` viewed at `now` where it is no
- * longer the one shown, the task left or another tab shown in its place.
- * Note that one gone from the open task's strip is not, because a close
- * lets its stamp go so the tab opened again counts as viewed anew.
+ * longer the one shown: the task left, the strip gone or covered, or
+ * another tab shown in its place. It is stamped through the stamp it was
+ * shown with, so a task left for one whose strip is not read yet still
+ * hears when it was last on screen. Note that a tab gone from the open
+ * task's strip is not, because a close lets its stamp go so the tab opened
+ * again counts as viewed anew.
  */
 function stampLeft<T extends StripTab>(
   strip: IdleStrip<T> | undefined,
   wasOn: string,
-  was: T | undefined,
+  was: ShownTab<T> | undefined,
   taskId: string | undefined,
   now: number,
 ): void {
-  if (strip === undefined || was === undefined) return;
-  const here = wasOn === taskId;
-  if (here && (sameTab(was, strip.shown) || !strip.tabs.some((tab) => sameTab(tab, was)))) return;
-  strip.onViewedAt(wasOn, [was], [], now);
+  if (was === undefined) return;
+  const here = wasOn === taskId && strip !== undefined;
+  if (here && sameTab(was.tab, strip.shown)) return;
+  if (here && !strip.tabs.some((tab) => sameTab(tab, was.tab))) return;
+  was.onViewedAt(wasOn, [was.tab], here ? strip.tabs : [], now);
 }
 
 /** Stamps the strip's tabs on the task not stamped yet viewed at `now`, and its shown tab where its stamp is an hour old. */
@@ -163,7 +181,7 @@ export function useIdleTabs<Column extends StripTab, Panel extends StripTab>(
     const { column: strip, panel: side } = latest.current;
     const was = shownBefore.current;
     shownBefore.current =
-      taskId === undefined ? undefined : { taskId, column: strip?.shown, panel: side?.shown };
+      taskId === undefined ? undefined : { taskId, column: shownOf(strip), panel: shownOf(side) };
     if (was !== undefined) {
       stampLeft(strip, was.taskId, was.column, taskId, now);
       stampLeft(side, was.taskId, was.panel, taskId, now);

@@ -417,7 +417,9 @@ export function viewedAtOf<T extends StripTab>(
  * The stamps with each of `viewed` viewed at `at`, and each of `standing`
  * that holds no stamp yet stamped at `at` too, as a tab never seen or kept
  * before stamps were counts as viewed now, the stamps newest last and the
- * oldest let go past `kept`; nothing where every one already stood so.
+ * oldest of tabs not standing let go past `kept`; nothing where every one
+ * already stood so. Note that a standing tab's stamp is never let go,
+ * because one stamped anew would never grow old enough to close.
  */
 export function stampedViewed<T extends StripTab>(
   before: readonly ViewedAt<T>[],
@@ -433,7 +435,11 @@ export function stampedViewed<T extends StripTab>(
   );
   if (fresh.length === 0) return undefined;
   const others = before.filter((each) => !fresh.some((tab) => sameTab(tab, each.tab)));
-  return [...others, ...fresh.map((tab) => ({ tab, at }))].slice(-kept);
+  const all = [...others, ...fresh.map((tab) => ({ tab, at }))];
+  const loose = all
+    .filter((each) => !standing.some((tab) => sameTab(tab, each.tab)))
+    .slice(0, Math.max(0, all.length - kept));
+  return all.filter((each) => !loose.includes(each));
 }
 
 /** The stamps without the tab's, as a close leaves them, so a tab opened again counts as viewed anew; the stamps as they are where none was its. */

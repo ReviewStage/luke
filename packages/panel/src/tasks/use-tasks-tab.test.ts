@@ -3382,3 +3382,66 @@ it.effect(
       assert.deepEqual(column().tabs, [running, unseen], "a day unviewed after it closes it");
     }),
 );
+
+it.effect(
+  "an agent's tab left chosen under the side panel filling the window is no longer viewed, so a day of it closes the tab",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      act(() => column().onChoose({ agent: FINISHED_ID }));
+      act(() => tab.control().sidePanel.onToggleFullScreen());
+      yield* landed;
+      assert.equal(tab.control().sidePanel.fullScreen, true);
+
+      yield* passing(Duration.days(1));
+      assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
+    }),
+);
+
+it.effect(
+  "a tab shown as its task is left for one whose agents are still unread is stamped as it was left, not when it was last stamped",
+  () =>
+    Effect.gen(function* () {
+      const unread = Promise.withResolvers<never>();
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        {
+          [ACT_KIND.CODING_AGENTS_LIST]: (params) =>
+            Option.getOrUndefined(readListed(params))?.taskId === TASK.id
+              ? Promise.resolve({ agents: IDLE_AGENTS })
+              : unread.promise,
+          [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+        },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      act(() => column().onChoose({ agent: FINISHED_ID }));
+      yield* passing(Duration.minutes(50));
+      tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+      yield* landed;
+      // The panel filling the window over the column keeps the tab from being viewed again on return.
+      act(() => tab.control().sidePanel.onToggleFullScreen());
+
+      yield* passing(Duration.hours(23));
+      tab.stand({ tasks: OPEN });
+      yield* passing(Duration.minutes(30));
+      assert.deepEqual(
+        column().tabs,
+        [{ agent: AGENT_ID }, { agent: FINISHED_ID }, { agent: UNSEEN_ID }],
+        "a day has not passed since it was left",
+      );
+
+      yield* passing(Duration.hours(1));
+      assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
+    }),
+);
+
+/** A list's payload, read back as the act's own schema admits it. */
+const readListed = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
