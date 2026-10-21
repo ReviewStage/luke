@@ -1230,7 +1230,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           const settledAt = turn?.settledAt?.getTime();
           runs.push({
             runId: ask.id,
-            delegationId: ask.clientId,
+            // A line typed into the call asked it under its own row's id, which names no delegation.
+            delegationId: ask.typed ? null : ask.clientId,
             revision: ask.revision,
             stopped: ask.cancelRequestedAt !== undefined || Boolean(turn?.cancelRequestedAt),
             // A reply that settled longer ago than a detached session is kept for its device is no longer news.

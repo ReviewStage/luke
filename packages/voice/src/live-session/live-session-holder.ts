@@ -218,6 +218,8 @@ interface HeldSession {
   peerReason: LivePeerEndReason | undefined;
   /** The task the call is about, which the session is bound to for its life. */
   readonly taskId: string;
+  /** The agent the call speaks into, which the host checked belongs to that task before the call was created. */
+  readonly agentId: string;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
@@ -449,6 +451,7 @@ export class LiveSessionHolder {
         endCause: undefined,
         peerReason: undefined,
         taskId: about.taskId,
+        agentId: about.agentId,
         sideband,
         opened,
         scope,
@@ -676,6 +679,25 @@ export class LiveSessionHolder {
     const stop = session.opened.stopSpeaking;
     if (stop === undefined) return false;
     stop();
+    return true;
+  }
+
+  /**
+   * A line typed into an agent's composer, handed to the call where the
+   * standing call speaks into that agent: the service is asked, through the
+   * source's door, to write it down, hand it to the agent, and speak the
+   * reply, so nothing here appends it, under the composer's key for the send,
+   * so a Retry is the same line to the service. Answers whether the call took it; a
+   * call on another agent, a session not yet started, or one with no door
+   * takes nothing, and the line is the composer's to send as it would with
+   * no call up.
+   */
+  typeLine(agentId: string, text: string, clientKey: string): boolean {
+    const session = this.#held;
+    if (!session?.started || session.ended || session.agentId !== agentId) return false;
+    const type = session.opened.typeLine;
+    if (type === undefined) return false;
+    type(text, clientKey);
     return true;
   }
 

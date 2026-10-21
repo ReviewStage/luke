@@ -1178,7 +1178,13 @@ only when you press Send.
   described under "Your account"; logs status and close codes, event names,
   the kind of any failure, and counts, never what was said or an error's own
   words, apart from the reports to Sentry described under "Error, performance,
-  and agent reports from our service"; and counts each session's billed seconds once. Luke's judgment is a
+  and agent reports from our service"; and counts each session's billed seconds once. A line
+  you type into an agent's composer while a call is up on that agent goes to the
+  call rather than straight to the agent: your Mac hands it to our voice
+  service, which keeps it as a typed line in the agent's transcript, hands it to
+  the agent, and tells OpenAI's voice session the line, with each mention as its
+  name, so the voice speaks the agent's reply; files you attach to it are not
+  sent. Luke's judgment is a
   separate run of calls to OpenAI's Responses API, one for each step of a
   turn, made from our service on our key when you ask him something on a call,
   carrying the task conversation's working memory: the saved plan, the

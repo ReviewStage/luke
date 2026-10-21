@@ -116,6 +116,13 @@ export function hostedLiveRecord({
 
     return {
       observe: (event) => enqueue(writer.consume(target, event)),
+      // Behind every segment and row already handed over, so the typed line lands after what was said before it.
+      writeTypedRow: (row) =>
+        taken(
+          enqueue(
+            writer.writeTypedRow(target, { rowId: row.rowId, text: row.text, atMs: row.atMs }),
+          ),
+        ),
       upsertSpokenRow: (row) => taken(enqueue(upsert(row))),
       attachSpokenAsk: (attach) =>
         // The rows are written as the service holds them and then given the

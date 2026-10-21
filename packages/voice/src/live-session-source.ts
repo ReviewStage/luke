@@ -23,6 +23,7 @@ import {
   type SessionCreateFrame,
   type SessionHangUpFrame,
   type SessionStopFrame,
+  type SessionTypedFrame,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
@@ -150,6 +151,14 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * it or appends it. Optional on the same terms as `reportActivity`.
    */
   stopSpeaking?(): void;
+  /**
+   * Hands the service standing between this peer and the session a line the
+   * developer typed into the call, in the service's own vocabulary: the
+   * service writes it down, hands it to the agent, and speaks the reply, so
+   * nothing on this side appends it. Optional on the same terms as
+   * `reportActivity`.
+   */
+  typeLine?(text: string, clientKey: string): void;
   /**
    * Asks the service standing between this peer and the session for the
    * session's close, in the service's own vocabulary: the service owns the
@@ -982,6 +991,16 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         // when the connection comes back.
         stopSpeaking: () => {
           const frame: SessionStopFrame = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
+          socket.send(JSON.stringify(frame));
+        },
+        // A typed line rides the same socket, held through a gap like the stop:
+        // the call it was typed into outlives the service's own recycle.
+        typeLine: (text, clientKey) => {
+          const frame: SessionTypedFrame = {
+            type: VOICE_SERVICE_FRAME.SESSION_TYPED,
+            text,
+            clientKey,
+          };
           socket.send(JSON.stringify(frame));
         },
         // The hang-up rides the same socket, held through a gap like any send,
