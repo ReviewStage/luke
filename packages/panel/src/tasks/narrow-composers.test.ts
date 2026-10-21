@@ -311,8 +311,8 @@ test("a page that says no room of its own is answered by its dimmed window's wid
   assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
 });
 
-/** The Inbox's answer box's foot as the box lays it (`inbox-answer-box.tsx`): its +, its note line, its microphone, and its Send. */
-function inboxFoot(): Record<"foot" | "attach" | "line" | "mic" | "send", HTMLElement> {
+/** The Inbox's answer box as the box lays it (`inbox-answer-box.tsx`): its note line, and under it its foot of +, microphone, and Send. */
+function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "send", HTMLElement> {
   const part = (parent: Element, tag: string, className: string) => {
     const element = parent.appendChild(document.createElement(tag));
     element.className = className;
@@ -320,21 +320,22 @@ function inboxFoot(): Record<"foot" | "attach" | "line" | "mic" | "send", HTMLEl
   };
   const card = part(document.body, "div", "agent-composer");
   const form = part(card, "form", "prompt-input inbox-answer");
-  const foot = part(form, "div", "prompt-input-footer inbox-answer-foot");
-  const attach = part(part(foot, "div", "prompt-input-tools inbox-answer-tools"), "button", "");
-  const line = part(foot, "div", "agent-composer-field");
+  const line = part(form, "div", "agent-composer-field");
   part(line, "div", "agent-composer-input");
+  const foot = part(form, "div", "prompt-input-footer inbox-answer-foot");
+  const attach = part(part(foot, "div", "prompt-input-tools"), "button", "");
   const actions = part(foot, "div", "inbox-answer-actions");
   const mic = part(actions, "button", "dictate-button");
   const send = part(actions, "button", "prompt-input-submit");
-  return { foot, attach, line, mic, send };
+  return { foot, attach, line, actions, mic, send };
 }
 
-test("in a 360px window, the Inbox box's foot keeps its +, its note line, its microphone, and Send in one row, the line taking the room between them", () => {
+test("in a 360px window, the Inbox box keeps its +, its microphone, and Send in one row under its note line, the presses never giving way", () => {
   layContainersAt({ composer: INBOX_CARD_AT_360 }, { touch: true });
-  const { foot, attach, line, mic, send } = inboxFoot();
-  assert.deepEqual([attach, line, mic, send].map(shown), [true, true, true, true]);
+  const { foot, attach, line, actions, mic, send } = inboxBox();
+  assert.deepEqual([line, attach, mic, send].map(shown), [true, true, true, true]);
   assert.equal(getComputedStyle(foot).flexWrap, "nowrap", "one row");
-  assert.equal(getComputedStyle(line).flexGrow, "1", "the line grows into the row");
-  assert.equal(getComputedStyle(line).minWidth, "0px", "and gives way before a press does");
+  assert.equal(getComputedStyle(actions).flexShrink, "0", "the microphone and Send never give way");
+  const input = line.querySelector(".agent-composer-input") ?? assert.fail("the line's input");
+  assert.equal(getComputedStyle(input).width, "100%", "the note line spans the card");
 });
