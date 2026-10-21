@@ -376,6 +376,21 @@ export function channelThreads(chat: ChatAnswer, channelId: string): readonly Ch
     }));
 }
 
+/** How long after a message its author's next one still reads as the same run, drawn under one name as Slack draws it. */
+export const CHAT_RUN_SPAN = 5 * 60 * 1000;
+
+/**
+ * Whether a root continues the run the one before it began: the same
+ * author, within `CHAT_RUN_SPAN` of it, and the one before holding no
+ * replies, since its thread stands between them. A continued root draws
+ * without its author's face and name, as Slack's grouped messages do.
+ */
+export function continuesRun(before: ChatThread | undefined, thread: ChatThread): boolean {
+  if (before === undefined || before.replies.length > 0) return false;
+  const gap = thread.message.postedAt - before.message.postedAt;
+  return before.message.authorId === thread.message.authorId && gap >= 0 && gap <= CHAT_RUN_SPAN;
+}
+
 /** Why a message waits on the reader, or nothing where it does not. */
 function waitingReason(chat: ChatAnswer, message: ChatMessage, channel: ChatChannel) {
   if (message.authorId === chat.self) return undefined;

@@ -23,7 +23,7 @@ import {
   Text,
   TextButton,
 } from "@luke/ui";
-import { ACTOR_KIND, type Actor, distinctActors } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -37,6 +37,7 @@ import {
   chatKeywords,
   chatTargets,
   chatWho,
+  continuesRun,
   type ForYouEntry,
   forYou,
   placeChannel,
@@ -49,6 +50,7 @@ import { useCallback, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
 import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
+import { Tooltip } from "../tooltip.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
@@ -56,7 +58,7 @@ import { AskCard } from "./chat-ask.js";
 import { ChatComposer } from "./chat-composer.js";
 import { FileRef } from "./file-ref.js";
 import { LinkBlock } from "./inbox-pane.js";
-import { RelativeTime } from "./relative-time.js";
+import { clockText, momentText } from "./task-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -271,13 +273,25 @@ function Body({
   );
 }
 
-/** The line over a message's words, as an Inbox comment's head is: its author by name, their card on it, where it was said, and when. */
+/** When a message was posted, on the clock as Slack says it ("10:42 AM"), the full moment on hover. */
+function ClockTime({ at, now }: { at: number; now: number }): React.JSX.Element {
+  return (
+    <Tooltip label={momentText(at)}>
+      <time className="chat-time" dateTime={new Date(at).toISOString()}>
+        {clockText(at, now)}
+      </time>
+    </Tooltip>
+  );
+}
+
+/** The line over a message's words, as Slack's is: its author by name in bold, their card on it, where it was said, and when on the clock. */
 function Byline({
   actor,
   at,
   where,
   now,
   action,
+  continued = false,
 }: {
   actor: Actor;
   at: number;
@@ -285,7 +299,18 @@ function Byline({
   now: number;
   /** A press at the line's end, shown while the message is hovered or the press has the keyboard. */
   action?: React.ReactNode;
+  /** Whether the message continues its author's run, so the line names no one and holds its press alone. */
+  continued?: boolean;
 }): React.JSX.Element {
+  if (continued) {
+    // The author stays named for a screen reader, which may land on this message alone.
+    return (
+      <div className="chat-byline" data-continued="true">
+        <span className="visually-hidden">{actorName(actor)}</span>
+        {action}
+      </div>
+    );
+  }
   return (
     <div className="chat-byline">
       <span className="chat-byline-name">
@@ -296,17 +321,39 @@ function Byline({
         )}
       </span>
       {where === undefined ? null : <FadingWords className="chat-byline-where" words={where} />}
-      <RelativeTime at={at} now={now} />
+      <ClockTime at={at} now={now} />
       {action}
     </div>
   );
 }
 
-/** The face a message leads with, in a column of its own: the author's photo, Luke, or the agent's harness, as a list row draws them. */
-function Face({ actor }: { actor: Actor }): React.JSX.Element {
+/**
+ * The face a message leads with, in a column of its own at a card's size: the
+ * author's photo, Luke, or the agent's harness. A message continuing its
+ * author's run leads with its time instead, shown while it is hovered, as
+ * Slack's grouped messages do.
+ */
+function Face({
+  actor,
+  continued = false,
+  at,
+  now,
+}: {
+  actor: Actor;
+  continued?: boolean;
+  at: number;
+  now: number;
+}): React.JSX.Element {
+  if (continued) {
+    return (
+      <span className="chat-face" data-continued="true">
+        <ClockTime at={at} now={now} />
+      </span>
+    );
+  }
   return (
     <span className="chat-face">
-      <ActorMark actor={actor} size={ACTOR_SIZE.ROW} />
+      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} tiled />
     </span>
   );
 }
@@ -316,7 +363,7 @@ function Reply({ message, context }: { message: ChatMessage; context: MessageCon
   const actor = context.actorOf(message.authorId);
   return (
     <li className="chat-reply" data-seq={message.seq}>
-      <Face actor={actor} />
+      <Face actor={actor} at={message.postedAt} now={context.now} />
       <div className="chat-message-body">
         <Byline actor={actor} at={message.postedAt} where={undefined} now={context.now} />
         <Body message={message} context={context} />
@@ -330,10 +377,13 @@ function ThreadRow({
   thread,
   where,
   context,
+  continued = false,
 }: {
   thread: ChatThread;
   where: string | undefined;
   context: MessageContext;
+  /** Whether the root continues its author's run, drawn under the name the run began with (`continuesRun`). */
+  continued?: boolean;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const { message, replies } = thread;
@@ -357,24 +407,31 @@ function ThreadRow({
   const quiet = replies.length === 0 && !open;
   if (quiet && !canReply) {
     return (
-      <li className="chat-message" data-seq={message.seq}>
-        <Face actor={actor} />
+      <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
+        <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
         <div className="chat-message-body">
-          <Byline actor={actor} at={message.postedAt} where={where} now={context.now} />
+          <Byline
+            actor={actor}
+            at={message.postedAt}
+            where={where}
+            now={context.now}
+            continued={continued}
+          />
           <Body message={message} context={context} />
         </div>
       </li>
     );
   }
   return (
-    <li className="chat-message" data-seq={message.seq}>
-      <Face actor={actor} />
+    <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
+      <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
       <div className="chat-message-body">
         <Byline
           actor={actor}
           at={message.postedAt}
           where={where}
           now={context.now}
+          continued={continued}
           action={quiet ? <span className="chat-byline-action">{toggle}</span> : undefined}
         />
         <Body message={message} context={context} />
@@ -591,12 +648,13 @@ export function ChatPane({
         <ScrollArea>
           <div className="chat-stream-body">
             <ol className="chat-messages">
-              {threads.map((thread) => (
+              {threads.map((thread, index) => (
                 <ThreadRow
                   key={thread.message.id}
                   thread={thread}
                   where={undefined}
                   context={context}
+                  continued={continuesRun(threads[index - 1], thread)}
                 />
               ))}
             </ol>
