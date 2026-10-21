@@ -522,6 +522,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                 browser: {
                   browserSession: browserSessionOf(context.session),
                   conversationId: standing.success.target.conversationId,
+                  openSandbox: () => context.getSandbox(),
                 },
                 // The repository as the row holds it now, so a task given one mid-conversation reads it on its next call.
                 repository: {

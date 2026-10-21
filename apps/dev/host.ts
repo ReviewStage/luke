@@ -581,6 +581,8 @@ export function browserFor(admit: CoderHost["admit"]) {
           const call = {
             browserSession: browserSessionOf(ctx.session),
             conversationId: admitted.success.target.conversationId,
+            // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
+            openSandbox: () => ctx.getSandbox(),
           };
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
           return yield* runBrowserTool(call, unparsedWire(input as WireBoundaryInput));

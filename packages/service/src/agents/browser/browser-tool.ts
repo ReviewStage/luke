@@ -105,6 +105,7 @@ export type BrowserToolResult =
 export const BROWSER_TOOL_REFUSAL = {
   UNREACHABLE: "Not run: your browser could not be reached:",
   UNAVAILABLE: "Not run: the browser could not be reached just now. The call may be made again.",
+  NO_SANDBOX: "Not run: your sandbox could not be opened. The call may be made again.",
 } as const;
 
 /** What a call runs under: the session whose sandbox its browser is in, and the conversation its tabs belong to. */
@@ -113,6 +114,8 @@ export interface BrowserCall {
   readonly browserSession: string;
   /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for Luke, a worker's parent's. */
   readonly conversationId: string;
+  /** Opens the sandbox the browser runs in, as eve opens it for any tool that needs it, a worker's its parent's; one already open is answered as it stands. */
+  readonly openSandbox: () => PromiseLike<unknown>;
 }
 
 /** A call that ran nothing, and why. */
@@ -278,6 +281,12 @@ export function runBrowserTool(
   }
   const { actions } = read.success;
   return Effect.gen(function* () {
+    // Note that the sandbox is opened first, as eve opens it for a shell call, because the browser
+    // is found by the sandbox its session is tagged with, and an agent's first call may be this one.
+    const opened = yield* Effect.result(
+      Effect.tryPromise({ try: async () => call.openSandbox(), catch: () => "not opened" }),
+    );
+    if (Result.isFailure(opened)) return browserNotRun(BROWSER_TOOL_REFUSAL.NO_SANDBOX);
     // Note that the browser is reached before the takeovers are read, because a browser that
     // started afresh reopens the kept tabs on new targets, which the takeovers then name.
     const ran = yield* Effect.result(

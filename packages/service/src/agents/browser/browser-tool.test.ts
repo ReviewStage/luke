@@ -14,18 +14,21 @@ import { getTestDB } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_AGENT_ACTION, BROWSER_STEP_STATUS } from "@luke/features/browser-agent-actions";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Clock, Effect, type Layer } from "effect";
+import { Clock, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import {
   agentBrowserTestLayer,
   type FakeCdpAnswer,
   type FakeCdpCommand,
   type FakeCdpPeer,
+  fakeBridgePty,
   fakeCdpPeer,
+  fakeSandboxApi,
   noSandboxBrowserLayer,
 } from "../../testing/agent-browser-fake.js";
-import { AgentBrowser, type PageTarget } from "./agent-browser.js";
+import { AgentBrowser, agentBrowserOver, type PageTarget } from "./agent-browser.js";
 import {
+  BROWSER_TOOL_REFUSAL,
   BROWSER_TOOL_STATUS,
   type BrowserToolResult,
   browserModelOutput,
@@ -148,7 +151,7 @@ const openConversation = Effect.gen(function* () {
 /** One call of the tool, as an agent's root makes it, on the browser given. */
 function call(conversationId: string, input: unknown, browserLayer: Layer.Layer<AgentBrowser>) {
   return runBrowserTool(
-    { browserSession: SESSION, conversationId },
+    { browserSession: SESSION, conversationId, openSandbox: async () => undefined },
     unparsedWire(input as WireBoundaryInput),
   ).pipe(Effect.provide(browserLayer));
 }
@@ -402,6 +405,58 @@ it.layer(getTestDB())("the browser tool", (it) => {
         assert.ok(!JSON.stringify(shown.value.slice(0, -1)).includes(JPEG));
         assert.ok(!stored.includes(JPEG));
         assert.ok(stored.includes('"action":"screenshot"'));
+      }),
+  );
+
+  it.effect(
+    "an agent's first call opens its sandbox before it looks for its browser there, and a sandbox that would not open answers why",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        const { peer } = yield* browser();
+        // No sandbox stands under the session until its door is opened, as before an agent's first sandbox call.
+        let opened = false;
+        const { api } = fakeSandboxApi({ status: "running", sessionId: SESSION });
+        const unopened = Layer.succeed(
+          AgentBrowser,
+          agentBrowserOver(
+            {
+              ...api,
+              listTagged: (session) => (opened ? api.listTagged(session) : Effect.succeed([])),
+            },
+            fakeBridgePty(peer),
+          ),
+        );
+        const input = unparsedWire({
+          actions: [{ action: BROWSER_AGENT_ACTION.OPEN, url: "http://localhost:3000/" }],
+        });
+
+        const first = yield* runBrowserTool(
+          {
+            browserSession: SESSION,
+            conversationId,
+            openSandbox: async () => {
+              opened = true;
+            },
+          },
+          input,
+        ).pipe(Effect.provide(unopened));
+        const refused = yield* runBrowserTool(
+          {
+            browserSession: SESSION,
+            conversationId,
+            openSandbox: async () => Promise.reject(new Error("Vercel refused")),
+          },
+          input,
+        ).pipe(Effect.provide(unopened));
+
+        assert.deepEqual(ran(first).tabs, [
+          { tab: "tab-1", url: "http://localhost:3000/", title: "New tab" },
+        ]);
+        assert.deepEqual(refused, {
+          status: BROWSER_TOOL_STATUS.NOT_RUN,
+          reason: BROWSER_TOOL_REFUSAL.NO_SANDBOX,
+        });
       }),
   );
 

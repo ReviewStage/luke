@@ -206,6 +206,7 @@ function toolContext(
   auth: SessionAuth,
   name: string,
   callId = "call-1",
+  getSandbox: EveToolContext["getSandbox"] = unreached("getSandbox"),
 ): EveToolContext {
   return {
     session: { id, auth, turn: { id: "turn_0", sequence: 0 } },
@@ -215,7 +216,7 @@ function toolContext(
     messages: [],
     getToken: unreached("getToken"),
     requireAuth: unreached("requireAuth"),
-    getSandbox: unreached("getSandbox"),
+    getSandbox,
   };
 }
 
@@ -226,8 +227,10 @@ async function callerOn(
   services: Layer.Layer<GitHubApp | HttpClient.HttpClient> = NO_GITHUB,
   catalog: readonly OfferedModel[] = [],
   speaker?: string,
-  browser: Layer.Layer<AgentBrowser> = noSandboxBrowserLayer,
+  browser?: Layer.Layer<AgentBrowser>,
 ): Promise<(name: string, input: WireRecord, callId?: string) => Promise<WireRecord>> {
+  // SAFETY: the browser's double stands for the sandbox, so the session's sandbox is opened and never read.
+  const sandboxOpened = (async () => ({})) as unknown as EveToolContext["getSandbox"];
   const id = sessionId();
   const opened = seat(target);
   // A teammate speaks into the session the conversation's opener started, under its own principal.
@@ -249,10 +252,20 @@ async function callerOn(
   return (name, input, callId) =>
     database.run(
       host
-        .runTool(name, binding, input, toolContext(id, auth, name, callId))
+        .runTool(
+          name,
+          binding,
+          input,
+          toolContext(id, auth, name, callId, browser === undefined ? undefined : sandboxOpened),
+        )
         .pipe(
           Effect.provide(
-            Layer.mergeAll(services, modelCatalogOf(catalog), NO_WORKSPACE_LINEAR, browser),
+            Layer.mergeAll(
+              services,
+              modelCatalogOf(catalog),
+              NO_WORKSPACE_LINEAR,
+              browser ?? noSandboxBrowserLayer,
+            ),
           ),
         ),
     );
