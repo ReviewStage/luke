@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ac447dd3-ae5b-4b3b-9cca-979ccf086c56",
-  "prevIds": ["3f465281-a6ab-4b03-b861-985dddaed1b3"],
+  "id": "481679b4-4f90-4c70-8848-505dadfd9283",
+  "prevIds": ["34e807af-2114-4845-ba10-ad474fca0781"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -235,12 +235,6 @@
     {
       "isRlsEnabled": false,
       "name": "integration_connection",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "issue",
       "entityType": "tables",
       "schema": "public"
     },
@@ -626,6 +620,19 @@
       "generated": null,
       "identity": null,
       "name": "access_expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "for_agents",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -5848,149 +5855,6 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "number",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "''",
-      "generated": null,
-      "identity": null,
-      "name": "description",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'backlog'",
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'none'",
-      "generated": null,
-      "identity": null,
-      "name": "priority",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "creator_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "archived_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
@@ -8517,32 +8381,6 @@
       "generated": null,
       "identity": null,
       "name": "github_access",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "linear_issue",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "issue_id",
       "entityType": "columns",
       "schema": "public",
       "table": "task"
@@ -11712,62 +11550,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "number",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "issue_org_number",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "issue_org_updated",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "user_id",
           "isExpression": false,
           "asc": true,
@@ -12439,27 +12221,6 @@
       "method": "btree",
       "concurrently": false,
       "name": "task_organization_created",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "issue_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "task_workspace_issue",
       "entityType": "indexes",
       "schema": "public",
       "table": "task"
@@ -13935,32 +13696,6 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "issue_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["creator_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "issue_creator_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -14397,19 +14132,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "task_assignee_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["issue_id"],
-      "schemaTo": "public",
-      "tableTo": "issue",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "task_issue_id_issue_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "task"
@@ -15095,14 +14817,6 @@
       "name": "integration_connection_pkey",
       "schema": "public",
       "table": "integration_connection",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "issue_pkey",
-      "schema": "public",
-      "table": "issue",
       "entityType": "pks"
     },
     {

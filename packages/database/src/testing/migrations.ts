@@ -41,7 +41,7 @@ const DROPPED_TABLES = [
   "conversation_attachment",
 ] as const;
 
-/** The columns and indexes a later migration dropped, as an earlier statement names them: a planner member's task and its index (`20261021042526_per_task_luke_data_drop`). */
+/** The columns and indexes a later migration dropped, as an earlier statement names them: a planner member's task and its index (`20261021105816_per_task_luke_data_drop`). */
 const DROPPED_NAMES = [`"chat_member" RENAME COLUMN "plan_id"`, `"chat_member_plan"`] as const;
 
 /** An earlier migration's statements as a replay over today's schema can run them: every one naming a table since dropped, or an index or constraint named after one, or a column or index since dropped, left out. */

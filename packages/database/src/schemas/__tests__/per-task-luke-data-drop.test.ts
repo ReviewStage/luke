@@ -7,6 +7,10 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import { createCodingAgent } from "../../models/coding-agent-store.js";
 import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "../../models/recorded-session.js";
+import {
   CLEARED_CONVERSATION_RETENTION_MS,
   purgeClearedConversations,
 } from "../../models/soft-delete.js";
@@ -26,7 +30,7 @@ import { conversations } from "../storage.js";
  * migration's own statements. Synthetic accounts and rows throughout.
  */
 
-const MIGRATION = "20261021042526_per_task_luke_data_drop";
+const MIGRATION = "20261021105816_per_task_luke_data_drop";
 
 /** The migration undone, so the database stands as one from before it. */
 const UNDO = [
@@ -205,6 +209,31 @@ it.layer(getTestDB())("the per-task Luke's conversations", (it) => {
 
         assert.ok(Exit.isSuccess(yield* migrate), "the migration runs a second time");
         assert.deepEqual(yield* stampsOf([luke, worker, nested, gone, ...others]), first);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the per-task Luke's conversations, once stamped", (it) => {
+  it.effect(
+    "are reached by no one, their opener included, with every worker's under them, while the opener's own conversation and its worker's stay theirs",
+    () =>
+      Effect.gen(function* () {
+        yield* undo;
+        const { userId } = yield* openTask;
+        const sessionId = `wrun_${randomUUID()}`;
+        const luke = yield* openConversation(userId, OLD_KIND.CONVERSATION, { sessionId });
+        const worker = yield* openConversation(userId, "child", { parent: luke });
+        const own = yield* openConversation(userId, "main");
+        const ownWorker = yield* openConversation(userId, "child", { parent: own });
+
+        assert.ok(Exit.isSuccess(yield* migrate));
+        assert.deepEqual(
+          yield* Effect.forEach([luke, worker, own, ownWorker], (id) =>
+            conversationReachableBy(userId, id),
+          ),
+          [false, false, true, true],
+        );
+        assert.equal(yield* runtimeSessionReachableBy(userId, sessionId), false);
       }),
   );
 });
