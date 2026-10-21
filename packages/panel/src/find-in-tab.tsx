@@ -75,7 +75,6 @@ export interface FindTally {
 
 /** The pages that stand in the plan's place, each finding in its words as one scope (`PageFind`). */
 export const FIND_PAGE = {
-  HOME: "home",
   INBOX: "inbox",
   CHAT: "chat",
   FACTORY: "factory",
@@ -431,7 +430,7 @@ export function FindScope({
 }
 
 /**
- * A page standing in the plan's place, found in as one scope: Home, the
+ * A page standing in the plan's place, found in as one scope: the
  * window's Inbox, Factory, the Automations page, and a version history. It
  * fills the place as the page did, its bar under the page's toolbar
  * (`.page-find`), and finds in the page's words, never in what a field

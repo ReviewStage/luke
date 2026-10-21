@@ -44,6 +44,7 @@ interface Recorded {
   terminals: number[];
   native: number[];
   eve: number[];
+  wakeups: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
@@ -60,6 +61,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     terminals: [],
     native: [],
     eve: [],
+    wakeups: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
@@ -109,6 +111,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.eve.push(now);
         return EVE;
       }),
+    sweepNativeWakeups: (now) =>
+      Effect.sync(() => {
+        recorded.wakeups.push(now);
+        return { delivered: 1, failed: 0 };
+      }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
         recorded.automated.push(now);
@@ -157,6 +164,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       terminals: [],
       native: [],
       eve: [],
+      wakeups: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -184,6 +192,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       terminals: [],
       native: [],
       eve: [],
+      wakeups: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -198,6 +207,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       terminals: [],
       native: [],
       eve: [],
+      wakeups: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -217,6 +227,7 @@ it.effect(
       assert.deepEqual(answer.body.terminals, TERMINALS);
       assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
       assert.deepEqual(answer.body.eveSandboxes, EVE);
+      assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
@@ -232,6 +243,7 @@ it.effect(
         terminals: [instant],
         native: [instant],
         eve: [instant],
+        wakeups: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],

@@ -31,6 +31,7 @@ export const BROWSER_AGENT_ACTION = {
   FORWARD: "forward",
   CLICK: "click",
   TYPE: "type",
+  SELECT: "select",
   KEY: "key",
   SCROLL: "scroll",
   WAIT: "wait",
@@ -53,6 +54,8 @@ export const BROWSER_AGENT_LIMITS = {
   SHOWN_MAX_CHARS: BROWSER_SHOWN_MAX_CHARS,
   /** The longest text one `type` inserts. */
   TYPE_MAX_CHARS: 10_000,
+  /** The longest option label or value one `select` names or answers. */
+  OPTION_MAX_CHARS: 1_000,
   /** The longest snapshot text, its note that it was cut included. */
   SNAPSHOT_MAX_CHARS: 24_000,
   /** The longest name or value one element of a snapshot is printed with. */
@@ -268,6 +271,19 @@ const typeAction = Schema.Struct({
   ),
 });
 
+const selectAction = Schema.Struct({
+  action: Schema.Literal(BROWSER_AGENT_ACTION.SELECT),
+  tab,
+  ref: describeWire(
+    Schema.String.check(Schema.isPattern(REF_PATTERN)),
+    "The dropdown, a native select, by the ref a snapshot printed beside its combobox or listbox.",
+  ),
+  option: describeWire(
+    Schema.String.check(Schema.isMaxLength(BROWSER_AGENT_LIMITS.OPTION_MAX_CHARS)),
+    "The option to choose: its label as the snapshot shows it, or else its value.",
+  ),
+});
+
 const keyAction = Schema.Struct({
   action: Schema.Literal(BROWSER_AGENT_ACTION.KEY),
   tab,
@@ -330,6 +346,7 @@ export const browserAgentActionSchema = Schema.Union([
   tabAction,
   clickAction,
   typeAction,
+  selectAction,
   keyAction,
   scrollAction,
   waitAction,
@@ -344,6 +361,8 @@ export const browserAgentActionsSchema = Schema.Array(browserAgentActionSchema).
 );
 
 const shown = Schema.String.check(Schema.isMaxLength(BROWSER_AGENT_LIMITS.SHOWN_MAX_CHARS));
+
+const optionText = Schema.String.check(Schema.isMaxLength(BROWSER_AGENT_LIMITS.OPTION_MAX_CHARS));
 
 const done = Schema.Literal(BROWSER_STEP_STATUS.DONE);
 
@@ -374,6 +393,15 @@ const acted = Schema.Struct({
   ]),
   status: done,
   tab: tabId,
+});
+
+/** A choice made in a dropdown: the option now selected, by its label and its value. */
+const selected = Schema.Struct({
+  action: Schema.Literal(BROWSER_AGENT_ACTION.SELECT),
+  status: done,
+  tab: tabId,
+  label: optionText,
+  value: optionText,
 });
 
 /** A screenshot's picture: the JPEG's base64 and its size in pixels. */
@@ -442,6 +470,7 @@ const failed = Schema.Struct({
 export const browserAgentStepSchema = Schema.Union([
   listed,
   acted,
+  selected,
   screenshotted,
   snapshotted,
   consoled,

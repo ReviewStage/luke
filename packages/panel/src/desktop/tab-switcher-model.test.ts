@@ -44,7 +44,7 @@ const screen = (
   fullScreen,
 });
 const inbox: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.INBOX };
-const home: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.HOME };
+const factoryPage: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.FACTORY };
 
 /** The stops visited in order, the last the most recent. */
 function walked(...stops: Stop[]): readonly Stop[] {
@@ -137,7 +137,7 @@ describe("a move of the window", () => {
 
 describe("⌃Tab", () => {
   const here = screen("a", undefined, SIDE_PANEL_TAB.PLAN);
-  const stops = walked(home, screen("b", { agent: "y" }), inbox, here);
+  const stops = walked(factoryPage, screen("b", { agent: "y" }), inbox, here);
 
   test("tapped, goes to the screen before this one and shows nothing", () => {
     const state = pressed(stops, here, SWITCH_STEP.ON);
@@ -176,7 +176,7 @@ describe("⌃Tab", () => {
   });
 
   test("with ⇧ steps back, starting from the last card", () => {
-    assert.deepEqual(switcherTarget(pressed(stops, here, SWITCH_STEP.BACK)), home);
+    assert.deepEqual(switcherTarget(pressed(stops, here, SWITCH_STEP.BACK)), factoryPage);
     assert.deepEqual(
       switcherTarget(pressed(stops, here, SWITCH_STEP.BACK, SWITCH_STEP.BACK)),
       screen("b", { agent: "y" }),
@@ -195,7 +195,7 @@ describe("⌃Tab", () => {
 
   test("a card pointed at is the one chosen", () => {
     const state = switcherChose(pressed(stops, here, SWITCH_STEP.ON), 3);
-    assert.deepEqual(switcherTarget(state), home);
+    assert.deepEqual(switcherTarget(state), factoryPage);
   });
 
   test("with nothing else to go to, holds nothing", () => {
@@ -242,9 +242,9 @@ describe("what is on screen", () => {
     );
   });
 
-  test("is the place standing in the task's place, and Home with no task", () => {
+  test("is the place standing in the task's place, and none with no task and nothing in its place", () => {
     assert.deepEqual(shownStop({ ...standing, inbox: true }), inbox);
-    assert.deepEqual(shownStop({ ...standing, boundFor: undefined }), home);
+    assert.equal(shownStop({ ...standing, boundFor: undefined }), undefined);
     assert.deepEqual(shownStop({ ...standing, agentId: "z" }), {
       kind: STOP_KIND.AGENT,
       agentId: "z",

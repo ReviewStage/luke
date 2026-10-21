@@ -87,10 +87,12 @@ export const BROWSER_TOOL = {
     "and take over in the Browser tab beside the plan. Your own dev server is at localhost " +
     "there, such as http://localhost:3000/. Each call takes up to " +
     `${BROWSER_AGENT_LIMITS.MAX_ACTIONS} actions, run in order: list the tabs, open one at an ` +
-    "address, navigate, go back or forward, click, type, press a key, scroll, wait, take a " +
-    "screenshot to see the page, take a snapshot to read it as text with a ref beside each " +
-    "element, read its console, or close it. Take a snapshot for the refs before you click or " +
-    "type on an element. An action that leaves out its tab acts on the tab the action before " +
+    "address, navigate, go back or forward, click, type, choose an option in a dropdown, press " +
+    "a key, scroll, wait, take a screenshot to see the page, take a snapshot to read it as " +
+    "text with a ref beside each element, read its console, or close it. Take a snapshot for " +
+    "the refs before you click or type on an element. Choose in a native dropdown, a select " +
+    "the snapshot shows as a combobox or listbox, with select on its ref and the option's " +
+    "label, rather than clicking it or its options, whose popup no click reaches. An action that leaves out its tab acts on the tab the action before " +
     "it acted on in the same call only, so open and go on in one call; a new call names its " +
     "tab. While the developer drives a tab, actions on " +
     "it are refused until they hand it back: wait, or ask them. Answers each step that ran and " +
@@ -125,6 +127,7 @@ const MOVING_ACTIONS: ReadonlySet<string> = new Set([
   BROWSER_AGENT_ACTION.BACK,
   BROWSER_AGENT_ACTION.FORWARD,
   BROWSER_AGENT_ACTION.CLICK,
+  BROWSER_AGENT_ACTION.SELECT,
   BROWSER_AGENT_ACTION.KEY,
 ]);
 

@@ -501,7 +501,7 @@ async function newTaskDrafted(tasks: TasksControl): Promise<boolean> {
   return drafted;
 }
 
-test("words left in New task's card mark its sidebar row with the Draft pencil while neither the card nor Home shows them", async () => {
+test("words left in New task's card mark its sidebar row with the Draft pencil while neither the card nor a new account's welcome shows them", async () => {
   const inWorkspace = (overrides: Partial<TasksControl["newTask"]> = {}) =>
     tasksControl({
       page: TASKS_PAGE.DOCUMENT,
@@ -518,19 +518,20 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
     false,
     "the open card shows them",
   );
+  const welcomed = { ...inWorkspace(), page: TASKS_PAGE.HOME, tasks: [], activeTaskId: undefined };
+  assert.equal(await newTaskDrafted(welcomed), false, "the welcome's composer shows them");
   assert.equal(
-    await newTaskDrafted({ ...inWorkspace(), page: TASKS_PAGE.HOME }),
-    false,
-    "Home's composer shows them",
+    await newTaskDrafted({ ...inWorkspace(), page: TASKS_PAGE.HOME, activeTaskId: undefined }),
+    true,
+    "an account with tasks is not welcomed, so no composer shows them",
   );
   assert.equal(
     await newTaskDrafted({
-      ...inWorkspace(),
-      page: TASKS_PAGE.HOME,
+      ...welcomed,
       personView: { ...tasksControl().personView, userId: "user-sam", name: "Sam" },
     }),
     true,
-    "a person's page opened from Home stands in its composer's place",
+    "a person's page opened over the welcome stands in its composer's place",
   );
   assert.equal(
     await newTaskDrafted(inWorkspace({ workspaceId: "workspace-team" })),

@@ -587,7 +587,7 @@ function MentionCommentText({
       input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
       maxLength={PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS}
       skills={NO_SKILLS}
-      aria={{ "aria-placeholder": label }}
+      aria={{ ...picker.aria, "aria-placeholder": label }}
       onKey={(event) => {
         if (dictation?.onFieldKey(event) === true || picker.onKey(event)) return true;
         if (event.key !== "Escape") return false;

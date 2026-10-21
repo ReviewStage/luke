@@ -102,8 +102,8 @@ function resizeStage(width: number): void {
   act(() => relayout());
 }
 
-/** The window's shell on the home page, on a stage of a width, its sidebar the real fold kept in storage. */
-function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
+/** The window's shell resting on the Inbox, on a stage of a width, its sidebar the real fold kept in storage. */
+function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
   stageWidth = width;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -125,7 +125,10 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
       },
       tab,
       onTabChange: setTab,
-      tasks: tasksControl({ page: TASKS_PAGE.HOME, onGoHome }),
+      tasks: tasksControl({
+        page: TASKS_PAGE.HOME,
+        inboxView: { ...tasksControl().inboxView, open: true, onOpen: onOpenInbox },
+      }),
       history: {
         canGoBack: false,
         canGoForward: false,
@@ -241,7 +244,7 @@ test("in a narrow window the toggle and its chord float the sidebar over the wor
   assert.equal(button.getAttribute("aria-label"), "Hide sidebar");
   assert.equal(sidebarOf(page).querySelector('[role="separator"]'), null);
   assert.ok(
-    document.activeElement === rowNamed(sidebarOf(page), "Home"),
+    document.activeElement === rowNamed(sidebarOf(page), "Inbox"),
     "the keyboard lands on the place shown",
   );
 
@@ -267,15 +270,15 @@ test("a sidebar its toggle floats in a narrow window holds the keyboard: Tab wal
   assert.ok(work, "the work offers a press to hold the keyboard");
   button.focus();
   act(() => button.click());
-  const home = rowNamed(sidebarOf(page), "Home");
-  assert.ok(document.activeElement === home, "the keyboard lands on the place shown");
+  const inbox = rowNamed(sidebarOf(page), "Inbox");
+  assert.ok(document.activeElement === inbox, "the keyboard lands on the place shown");
 
   // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
   act(() => {
-    home?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    inbox?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     work.focus();
   });
-  assert.ok(document.activeElement === home, "the keyboard is brought back into the sidebar");
+  assert.ok(document.activeElement === inbox, "the keyboard is brought back into the sidebar");
 
   act(() => {
     document.activeElement?.dispatchEvent(
@@ -287,8 +290,8 @@ test("a sidebar its toggle floats in a narrow window holds the keyboard: Tab wal
 });
 
 test("the floating sidebar stays for a press inside it and goes at a press outside it, or once a choice in it is made", () => {
-  let home = 0;
-  const page = mount(1000, () => (home += 1));
+  let inbox = 0;
+  const page = mount(1000, () => (inbox += 1));
   act(() => toggle(page).click());
   pressDown(sidebarOf(page).querySelector(".sidebar-rule") ?? sidebarOf(page));
   assert.equal(standing(page), "floating");
@@ -298,10 +301,10 @@ test("the floating sidebar stays for a press inside it and goes at a press outsi
   assert.equal(standing(page), "away");
 
   act(() => toggle(page).click());
-  const homeRow = rowNamed(sidebarOf(page), "Home");
-  assert.ok(homeRow);
-  act(() => homeRow.click());
-  assert.deepEqual([home, standing(page)], [1, "away"]);
+  const inboxRow = rowNamed(sidebarOf(page), "Inbox");
+  assert.ok(inboxRow);
+  act(() => inboxRow.click());
+  assert.deepEqual([inbox, standing(page)], [1, "away"]);
 });
 
 test("the pointer at the window's left edge peeks the folded sidebar out, which goes once the pointer leaves it, a press in it or not, as Linear's does; a wide window's toggle pins it from a peek", () => {

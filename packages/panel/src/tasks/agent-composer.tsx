@@ -422,7 +422,7 @@ export function AgentComposer({
   onLeave?: (() => void) | undefined;
   /** Whether the owner hands the field focus where it stands as the box first draws, as a dialog's card does, so the field takes it itself only where its editor lands later. */
   focusedByOwner?: boolean;
-  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on Home, whose card stands at the top of its page. */
+  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on a new account's welcome. */
   listSide?: MentionMenuSide;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
