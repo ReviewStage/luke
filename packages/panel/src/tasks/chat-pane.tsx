@@ -23,7 +23,7 @@ import {
   Text,
   TextButton,
 } from "@luke/ui";
-import { ACTOR_KIND, type Actor, distinctActors } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -301,10 +301,12 @@ function Byline({
   action?: React.ReactNode;
   /** Whether the message continues its author's run, so the line names no one and holds its press alone. */
   continued?: boolean;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   if (continued) {
-    return action === undefined ? null : (
+    // The author stays named for a screen reader, which may land on this message alone.
+    return (
       <div className="chat-byline" data-continued="true">
+        <span className="visually-hidden">{actorName(actor)}</span>
         {action}
       </div>
     );

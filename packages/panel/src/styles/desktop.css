@@ -5337,11 +5337,20 @@ polygon.factory-campus-edge[data-edge="selected"] {
   font-size: var(--luke-type-caption-size);
 }
 
-/* A continued message's line holds its press alone, at the row's top end. */
+/* A continued message's line holds its press alone, at the row's top end,
+   over the row while a pointer hovers it; on a touch screen, where the press
+   always shows, it takes a line of its own so it never covers the words. */
 .chat-byline[data-continued="true"] {
   position: absolute;
   top: var(--luke-space-2);
   right: var(--luke-space-8);
+}
+
+@media (hover: none) {
+  .chat-byline[data-continued="true"] {
+    position: static;
+    justify-content: flex-end;
+  }
 }
 
 /* The author is named in bold in the stream's own ink, as Slack names them. */

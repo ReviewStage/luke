@@ -335,6 +335,13 @@ test("a channel's composer offers its members by name as an @ is typed, writes t
   // The post continues the reader's own run, so it draws under the name the run began with.
   assert.equal(stream(page).at(-1), "");
   assert.equal(stream(page).filter(Boolean).at(-1), "Dean Stratakos");
+  // A screen reader landing on the continued message alone still hears who wrote it.
+  assert.equal(
+    [...page.querySelectorAll(".chat-message")]
+      .at(-1)
+      ?.querySelector(".chat-byline .visually-hidden")?.textContent,
+    "Dean Stratakos",
+  );
   const last = [...page.querySelectorAll(".chat-message")].at(-1);
   assert.ok(
     last?.querySelector(".chat-words [data-mention-ref]"),
