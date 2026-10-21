@@ -1920,3 +1920,55 @@ test("a task's skills are read once while the listed tasks change around it, rat
   assert.ok(messageWords(page, seq).querySelector("[data-skill-ref]"), "the chip stands");
   assert.equal(reads, 1, "the skills are not read again");
 });
+
+test("a task whose repository is let go and chosen again reads its skills afresh", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () => {
+      reads += 1;
+      return Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+        },
+      });
+    },
+  });
+  let repository: string | null = INVITES_TASK.repository;
+  const listing: Partial<TasksControl> = {
+    get tasks() {
+      return [{ ...INVITES_TASK, repository }];
+    },
+  };
+  const page = mount(
+    (chat) =>
+      withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]),
+    ACME,
+    undefined,
+    undefined,
+    listing,
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  const post = async (words: string) => {
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, words);
+    pressInComposer(box, "Enter");
+    await settle();
+  };
+  repository = null;
+  await post("dropping the repository");
+  repository = INVITES_TASK.repository;
+  await post("and choosing it again");
+  assert.equal(reads, 2);
+});
