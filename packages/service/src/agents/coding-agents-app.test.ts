@@ -6603,15 +6603,22 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [[id, true]],
         );
 
-        assert.deepEqual(
-          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("PUT")),
-          { id, unread: false },
+        // Each mark answers the transaction it was written in, which a window following the inbox waits for.
+        const { txid: readIn, ...markedRead } = readAnswer(
+          inboxReadStateSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* mark("PUT"),
         );
+        assert.deepEqual(markedRead, { id, unread: false });
+        assert.match(readIn ?? "", /^\d+$/u);
         assert.equal(yield* unread(), false);
-        assert.deepEqual(
-          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("DELETE")),
-          { id, unread: true },
+        const { txid: unreadIn, ...markedUnread } = readAnswer(
+          inboxReadStateSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* mark("DELETE"),
         );
+        assert.deepEqual(markedUnread, { id, unread: true });
+        assert.match(unreadIn ?? "", /^\d+$/u);
         assert.equal(yield* unread(), true);
 
         assert.deepEqual(
@@ -6635,14 +6642,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* all({ workspaceId: "" }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(
-          readAnswer(
-            inboxReadAllSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* all({ workspaceId: task.workspaceId }),
-          ),
-          { marked: 1 },
+        const marked = readAnswer(
+          inboxReadAllSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* all({ workspaceId: task.workspaceId }),
         );
+        assert.equal(marked.marked, 1);
+        assert.match(marked.txid ?? "", /^\d+$/u);
         assert.equal(yield* unread(), false);
         assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
           marked: 0,
