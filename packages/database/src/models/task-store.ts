@@ -1508,14 +1508,14 @@ export function nameUntitledTask(
 
 const assignUnassigned = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: TaskIdRowSchema,
+  Result: TxidRowSchema,
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .update(task)
         .set({ assigneeId: userId })
         .where(and(reachableTask(userId, taskId), isNull(task.assigneeId)))
-        .returning({ id: task.id }),
+        .returning({ txid: TXID }),
     ),
 });
 
@@ -1527,19 +1527,27 @@ const assignUnassigned = SqlSchema.findOneOption({
  * and the write are one statement, and like any change it is not a save.
  */
 export function assignUnassignedTask(userId: string, taskId: string): TaskStoreEffect<boolean> {
-  return Effect.map(assignUnassigned({ userId, taskId }), Option.isSome);
+  return Effect.map(assignUnassignedTaskCommitted(userId, taskId), Option.isSome);
+}
+
+/** The task assigned, as `assignUnassignedTask` assigns it, and the transaction it committed in; none where it stood as it was. */
+export function assignUnassignedTaskCommitted(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<{ readonly txid: string }>> {
+  return assignUnassigned({ userId, taskId });
 }
 
 const beginTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: TaskIdRowSchema,
+  Result: TxidRowSchema,
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .update(task)
         .set({ status: TASK_STATUS.IN_PROGRESS, completedAt: null })
         .where(and(reachableTask(userId, taskId), ne(task.status, TASK_STATUS.IN_PROGRESS)))
-        .returning({ id: task.id }),
+        .returning({ txid: TXID }),
     ),
 });
 
@@ -1553,7 +1561,15 @@ const beginTask = SqlSchema.findOneOption({
  * the write are one statement.
  */
 export function beginTaskWork(userId: string, taskId: string): TaskStoreEffect<boolean> {
-  return Effect.map(beginTask({ userId, taskId }), Option.isSome);
+  return Effect.map(beginTaskWorkCommitted(userId, taskId), Option.isSome);
+}
+
+/** The task moved to in progress, as `beginTaskWork` moves it, and the transaction it committed in; none where it stood as it was. */
+export function beginTaskWorkCommitted(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<{ readonly txid: string }>> {
+  return beginTask({ userId, taskId });
 }
 
 /** The statuses a task's work is settled in, which a finish leaves as they are and a start or a turn reopens. */

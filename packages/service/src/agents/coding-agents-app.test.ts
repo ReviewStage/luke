@@ -62,6 +62,7 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -1144,7 +1145,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           }),
         );
 
-        const { plan, agent, agentRefusal } = readAnswer(
+        const { plan, agent, agentRefusal, txid } = readAnswer(
           taskStartAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           started,
@@ -1152,6 +1153,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agentRefusal, undefined);
         assert.ok(agent !== undefined);
         assert.notEqual(plan.id, task.id);
+        const db = yield* Database;
+        const [written] = yield* db
+          .select({ xmin: sql<string>`xmin::text` })
+          .from(taskTable)
+          .where(eq(taskTable.id, plan.id));
+        assert.equal(txid, written?.xmin, "the start answers its last write, the task's standing");
         assert.equal(plan.repository, RELAY_FULL_NAME);
         assert.equal(plan.document.body, "");
         assert.equal(
