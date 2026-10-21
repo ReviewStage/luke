@@ -10,6 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort } from "../testing/app-bridge.js";
@@ -20,12 +21,15 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { TabSwitcher } from "./tab-switcher.js";
 
 /**
- * tab-switcher.test.ts -- ⌃Tab as the window answers it: a quick tap going
- * to the tab before through the task's own door and drawing nothing, a hold
- * drawing the cards with the stop here first and dimmed, ⇧ stepping back,
- * Escape going nowhere, a card pressed gone to, and a still of the stop
- * left kept for its card, out of the session recording. A browser keeps
- * ⌃Tab for its own tabs, so a window that is no desktop app leaves it.
+ * tab-switcher.test.ts -- ⌃Tab as the window answers it: a stop is a whole
+ * screen, so arriving on a task with both panes is one stop and a tab the
+ * window chose by itself takes it in place; a quick tap goes to the screen
+ * before through the task's own doors, both panes restored, and draws
+ * nothing; a hold draws the cards, the screen here first and dimmed, each
+ * named as Back's list names it; ⇧ steps back, Escape goes nowhere, a card
+ * pressed is gone to, and a still of the work area left is kept for its
+ * card, out of the session recording. A browser keeps ⌃Tab for its own
+ * tabs, so a window that is no desktop app leaves it.
  */
 
 declare global {
@@ -52,22 +56,42 @@ afterEach(() => {
 
 /** What the switcher asked the window to show, in order. */
 interface Asked {
-  readonly panelTabs: [string, SidePanelTab][];
+  readonly shown: string[];
   readonly places: string[];
 }
 
-/** The window on the task, its panel on `tab`, every door the switcher may use recorded in `asked`. */
+const asked = (): Asked => ({ shown: [], places: [] });
+
+/** The window on the task, its panel on `tab` and its column on `column`, every door the switcher may use recorded in `told`. */
 function onTask(
   tab: SidePanelTab,
-  asked: Asked,
+  told: Asked,
   overrides: Partial<TasksControl> = {},
+  column?: MainTab,
 ): TasksControl {
   const base = tasksControl({ activeTaskId: TASK, tasks: [{ ...DOCUMENT_TASK }] });
+  const named = (shown: MainTab | SidePanelTab) =>
+    typeof shown === "string" ? shown : JSON.stringify(shown);
   return {
     ...base,
-    sidePanel: { ...base.sidePanel, open: true, tab },
-    onShowPanelTab: (taskId, shown) => asked.panelTabs.push([taskId, shown]),
-    inboxView: { ...base.inboxView, onOpen: () => asked.places.push("inbox") },
+    mainTabs: {
+      ...base.mainTabs,
+      tab: column,
+      tabs: column === undefined ? [] : [column],
+      openAgents: column !== undefined && "agent" in column ? [column.agent] : [],
+    },
+    sidePanel: {
+      ...base.sidePanel,
+      open: true,
+      tab,
+      onShow: (taskId, shown) =>
+        told.shown.push(`panel beside ${taskId === TASK ? "the task" : taskId}: ${named(shown)}`),
+    },
+    onShowPanelTab: (taskId, shown) =>
+      told.shown.push(`panel ${taskId === TASK ? "the task" : taskId}: ${named(shown)}`),
+    onShowColumnTab: (taskId, shown) =>
+      told.shown.push(`column ${taskId === TASK ? "the task" : taskId}: ${named(shown)}`),
+    inboxView: { ...base.inboxView, onOpen: () => told.places.push("inbox") },
     ...overrides,
   };
 }
@@ -112,39 +136,73 @@ const tab = (shift = false) =>
   key("keydown", { key: "Tab", code: "Tab", ctrlKey: true, shiftKey: shift });
 const letGo = () => key("keyup", { key: "Control", code: "ControlLeft" });
 
+/** A press of the pointer, as a tab chosen by hand is led by. */
+function press(): void {
+  act(() => {
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+}
+
 function cards(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>(".tab-switcher-card")];
 }
 
-const asked = (): Asked => ({ panelTabs: [], places: [] });
+const inboxOpen = () => ({ ...tasksControl().inboxView, open: true });
 
-test("a quick tap goes to the tab before through the task's own door, and draws nothing", async () => {
+test("a tab chosen by hand is a screen of its own, and a quick tap goes back to the one before without drawing anything", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
 
-  const press = tab();
+  const pressed = tab();
   assert.equal(
-    press.defaultPrevented,
+    pressed.defaultPrevented,
     true,
     "⌃Tab is the switcher's, not the field's or the terminal's under it",
   );
   letGo();
 
-  assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.PLAN]]);
+  assert.deepEqual(told.shown, ["panel the task: plan"]);
   assert.equal(document.querySelector(".tab-switcher"), null);
 });
 
-test("held, the cards show with the stop here first and dimmed; ⇧ steps back around, and Escape goes nowhere", async () => {
+test("arriving on a task is one screen, the tabs that arrive with it taking it in place, so ⌃Tab goes back where you came from", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  await window.draw(
-    onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: { ...tasksControl().inboxView, open: true } }),
-  );
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, {}, { agent: "x" }));
+
+  tab();
+  letGo();
+  assert.deepEqual(told, { shown: [], places: ["inbox"] });
+});
+
+test("a screen picked restores both its panes, the task opened once", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, {}, { agent: "x" }));
+  press();
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen() }));
+
+  tab();
+  letGo();
+  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: code"]);
+});
+
+test("held, the cards show with the screen here first and dimmed; ⇧ steps back around, and Escape goes nowhere", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
 
   tab();
@@ -172,13 +230,31 @@ test("held, the cards show with the stop here first and dimmed; ⇧ steps back a
   assert.deepEqual(told, asked());
 });
 
+test("a task's card is named as Back's list names the screen: the task, then its panes' tabs", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+
+  tab();
+  tab();
+  const words = cards().map((card) => [
+    card.querySelector(".tab-switcher-name")?.textContent,
+    card.querySelector(".tab-switcher-detail")?.textContent,
+  ]);
+  assert.deepEqual(words, [
+    [DOCUMENT_TASK.name, "Code"],
+    [DOCUMENT_TASK.name, "Plan"],
+  ]);
+});
+
 test("a card pressed while the cards show is gone to, a place through its own door", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  await window.draw(
-    onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: { ...tasksControl().inboxView, open: true } }),
-  );
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
 
   tab();
@@ -195,7 +271,7 @@ test("a card pressed while the cards show is gone to, a place through its own do
   assert.equal(document.querySelector(".tab-switcher"), null);
 });
 
-test("the stop left is taken as a still for its card, drawn as it lands while the cards show, and the session recording leaves it out", async () => {
+test("the screen left is taken as a still of the work area for its card, drawn as it lands while the cards show, and the session recording leaves it out", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const taken: unknown[] = [];
   let answer: (still: string) => void = () => undefined;
@@ -207,13 +283,14 @@ test("the stop left is taken as a still for its card, drawn as it lands while th
       });
     },
   });
-  const panel = document.createElement("div");
-  panel.className = "side-panel";
-  panel.getBoundingClientRect = () => new DOMRect(880, 0, 400, 800);
-  document.body.append(panel);
+  const work = document.createElement("main");
+  work.className = "desktop-main";
+  work.getBoundingClientRect = () => new DOMRect(240, 0, 1040, 800);
+  document.body.append(work);
   const told = asked();
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
 
   tab();
@@ -224,7 +301,7 @@ test("the stop left is taken as a still for its card, drawn as it lands while th
     for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   });
 
-  assert.deepEqual(taken, [{ x: 880, y: 0, width: 400, height: 800 }]);
+  assert.deepEqual(taken, [{ x: 240, y: 0, width: 1040, height: 800 }]);
   const preview = cards()[0]?.querySelector(".tab-switcher-preview");
   assert.ok(preview?.classList.contains("ph-no-capture"));
   assert.equal(preview?.querySelector("img")?.getAttribute("src"), STILL);
@@ -236,6 +313,7 @@ test("a window that is no desktop app leaves ⌃Tab to the browser", async () =>
   const told = asked();
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
 
   assert.equal(tab().defaultPrevented, false);
@@ -249,12 +327,13 @@ test("the menu bar's Next recent tab goes at once, as a tap does", async () => {
   const told = asked();
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
 
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.NEXT_RECENT_TAB));
   });
-  assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.PLAN]]);
+  assert.deepEqual(told.shown, ["panel the task: plan"]);
 });
 
 test("a dialog over the window keeps ⌃Tab, so nothing moves behind it", async () => {
@@ -262,6 +341,7 @@ test("a dialog over the window keeps ⌃Tab, so nothing moves behind it", async 
   const told = asked();
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
   const dialog = document.createElement("div");
   dialog.setAttribute("aria-modal", "true");
@@ -273,91 +353,61 @@ test("a dialog over the window keeps ⌃Tab, so nothing moves behind it", async 
   assert.deepEqual(told, asked());
 });
 
-test("a tab closed since it was left is no stop, whether or not its strip drew the close", async () => {
+test("a screen whose tab closed since it was left is no stop", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  const strip = (tabs: readonly SidePanelTab[]) => ({
-    ...tasksControl().sidePanel,
-    open: true,
-    strip: tabs,
-  });
-  await window.draw(
-    onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: { ...tasksControl().inboxView, open: true } }),
-  );
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
-  await window.draw(
-    onTask(SIDE_PANEL_TAB.CODE, told, {
-      sidePanel: { ...strip([SIDE_PANEL_TAB.CODE]), tab: SIDE_PANEL_TAB.CODE },
-    }),
-  );
-
-  tab();
-  letGo();
-  assert.deepEqual(told, { panelTabs: [], places: ["inbox"] });
-});
-
-test("the task's own tab is named for the task once, its card saying only the strip under it", async () => {
-  handCapabilities(DESKTOP_CAPABILITIES);
-  const told = asked();
-  const window = await mounted();
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
-
-  tab();
-  tab();
-  const plan = cards()[1];
-  assert.equal(plan?.querySelector(".tab-switcher-name")?.textContent, DOCUMENT_TASK.name);
-  assert.equal(plan?.querySelector(".tab-switcher-detail")?.textContent, "Panel");
-  assert.equal(
-    cards()[0]?.querySelector(".tab-switcher-detail")?.textContent,
-    `${DOCUMENT_TASK.name} · Panel`,
-  );
-});
-
-test("a task's tabs stay stops while the Inbox stands in its place with a panel strip of its own", async () => {
-  handCapabilities(DESKTOP_CAPABILITIES);
-  const told = asked();
-  const window = await mounted();
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
-  const inboxOver = onTask(SIDE_PANEL_TAB.CODE, told);
+  press();
+  const closed = onTask(SIDE_PANEL_TAB.CODE, told);
   await window.draw({
-    ...inboxOver,
-    inboxView: { ...inboxOver.inboxView, open: true },
-    sidePanel: { ...inboxOver.sidePanel, strip: [] },
+    ...closed,
+    sidePanel: { ...closed.sidePanel, strip: [SIDE_PANEL_TAB.CODE] },
   });
 
   tab();
   letGo();
-  assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.CODE]]);
+  assert.deepEqual(told, { shown: [], places: ["inbox"] });
+});
+
+test("a task's screens stay stops while the Inbox stands in its place with a panel strip of its own", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  press();
+  const over = onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen() });
+  await window.draw({ ...over, sidePanel: { ...over.sidePanel, strip: [] } });
+
+  tab();
+  letGo();
+  assert.deepEqual(told.shown, ["panel the task: code"]);
 });
 
 test("a tab closed on its task's page stays let go once the Inbox stands in the task's place", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  const home = { ...tasksControl().inboxView, open: false };
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { boundFor: undefined, inboxView: home }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { boundFor: undefined }));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   const closed = onTask(SIDE_PANEL_TAB.PLAN, told);
   await window.draw({
     ...closed,
     sidePanel: { ...closed.sidePanel, strip: [SIDE_PANEL_TAB.PLAN] },
   });
-  const inboxOver = onTask(SIDE_PANEL_TAB.PLAN, told);
-  await window.draw({
-    ...inboxOver,
-    inboxView: { ...inboxOver.inboxView, open: true },
-    sidePanel: { ...inboxOver.sidePanel, strip: [] },
-  });
+  press();
+  const over = onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() });
+  await window.draw({ ...over, sidePanel: { ...over.sidePanel, strip: [] } });
 
   tab();
   tab();
   assert.deepEqual(
-    cards().map((card) => card.querySelector(".tab-switcher-name")?.textContent),
-    ["Inbox", DOCUMENT_TASK.name, "Home"],
+    cards().map((card) => card.querySelector(".tab-switcher-detail")?.textContent),
+    ["", "Plan", ""],
   );
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
   letGo();
@@ -367,37 +417,39 @@ test("a task opened before its row reaches the list stays a stop, and one gone f
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  const inbox = { ...tasksControl().inboxView, open: true };
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { tasks: [] }));
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox }));
+  press();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
 
   tab();
   letGo();
-  assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.PLAN]]);
+  assert.deepEqual(told.shown, ["panel the task: plan"]);
 
   await window.draw(
-    onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox, activeTaskId: undefined, tasks: [] }),
+    onTask(SIDE_PANEL_TAB.PLAN, told, {
+      inboxView: inboxOpen(),
+      activeTaskId: undefined,
+      tasks: [],
+    }),
   );
   tab();
   letGo();
-  assert.deepEqual(
-    told.panelTabs,
-    [[TASK, SIDE_PANEL_TAB.PLAN]],
-    "a task deleted since is no stop",
-  );
+  assert.deepEqual(told.shown, ["panel the task: plan"], "a task deleted since is no stop");
 });
 
 test("the open task gone from the list after it was listed, as one deleted by a teammate, is no stop", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  const inbox = { ...tasksControl().inboxView, open: true };
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
+  press();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { tasks: [] }));
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { tasks: [], inboxView: inbox }));
+  press();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { tasks: [], inboxView: inboxOpen() }));
 
   tab();
   letGo();

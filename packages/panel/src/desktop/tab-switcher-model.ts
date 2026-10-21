@@ -1,14 +1,19 @@
 /**
  * tab-switcher-model.ts -- what ⌃Tab steps through: the window's tabs and places in the order they were last used, across every task, and how a press, a hold, and a let-go move through them.
  *
- * A stop is somewhere the window stood: one tab of a task's column or of its
- * side panel, a task with neither on screen, or a place the window shows in
- * the task's place, Home, the Inbox, Chat, the Board, Automations, Factory,
- * an agent's own page, or a person's. Settings and a version history are no
- * stop, since each is a layer over the window rather than a place in it. The
- * stops are kept most recent first (`visited`), one list for both strips and
- * every task, so ⌃Tab and a let-go is the stop before this one wherever it
- * was, as ⌘Tab is the app before this one.
+ * A stop is a whole screen the window stood on, the same unit as a step of
+ * Back's (`navigation-history.ts`): a task with the tab its column showed
+ * and the tab its side panel showed, either of them none, or a place the
+ * window shows in the task's place, Home, the Inbox, Chat, the Board,
+ * Automations, Factory, an agent's own page, or a person's. Settings and a
+ * version history are no stop, since each is a layer over the window rather
+ * than a place in it. Arriving on a task is one stop; a tab chosen there by
+ * a press or a key, in either pane, makes the new pair another stop, and a
+ * tab the window chose by itself, as the tabs arriving as a task opens or
+ * the one chosen in place of a tab closed, takes the stop in place
+ * (`moved`), as Back's steps do. The stops are kept most recent first
+ * (`visited`), one list for every task, so ⌃Tab and a let-go is the screen
+ * before this one wherever it was, as ⌘Tab is the app before this one.
  *
  * The switcher (`tab-switcher.tsx`) shows the first few as cards. A press of
  * ⌃Tab chooses the card after the one the window stands on, and ⌃⇧Tab the
@@ -18,7 +23,7 @@
  * cards show. Escape lets go of nothing.
  */
 
-import { sameTab } from "@luke/ui/tab-strip-model";
+import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 
@@ -42,11 +47,7 @@ export type SwitcherPlace = (typeof SWITCHER_PLACE)[keyof typeof SWITCHER_PLACE]
 
 /** The kinds of stop. */
 export const STOP_KIND = {
-  /** One tab of a task's column: an agent's, or the draft agent's. */
-  COLUMN: "column",
-  /** One tab of a task's side panel. */
-  PANEL: "panel",
-  /** A task showing neither: no agent's tab, and its panel shut. */
+  /** A task with its column's tab and its side panel's, either of them none. */
   TASK: "task",
   PLACE: "place",
   /** An agent's own page, which stands in the task's place. */
@@ -57,12 +58,13 @@ export const STOP_KIND = {
 
 export type Stop =
   | {
-      readonly kind: typeof STOP_KIND.COLUMN;
+      readonly kind: typeof STOP_KIND.TASK;
       readonly taskId: string;
-      readonly tab: MainTab;
+      /** The column's tab: an agent's, or the draft agent's; none where it showed none, or the panel filled the window over it. */
+      readonly column: MainTab | undefined;
+      /** The side panel's tab; none while it was shut. */
+      readonly panel: SidePanelTab | undefined;
     }
-  | { readonly kind: typeof STOP_KIND.PANEL; readonly taskId: string; readonly tab: SidePanelTab }
-  | { readonly kind: typeof STOP_KIND.TASK; readonly taskId: string }
   | { readonly kind: typeof STOP_KIND.PLACE; readonly place: SwitcherPlace }
   | { readonly kind: typeof STOP_KIND.AGENT; readonly agentId: string }
   | {
@@ -72,14 +74,21 @@ export type Stop =
       readonly workspaceId: string | undefined;
     };
 
-/** Whether two stops are the same place: a tab by the tab it is, on the same task. */
+/** Whether two tabs are the same, or both none. */
+function sameTabOrNone(a: StripTab | undefined, b: StripTab | undefined): boolean {
+  return a === undefined ? b === undefined : sameTab(a, b);
+}
+
+/** Whether two stops are the same screen: a task's by the two tabs it showed. */
 export function sameStop(a: Stop, b: Stop): boolean {
   switch (a.kind) {
-    case STOP_KIND.COLUMN:
-    case STOP_KIND.PANEL:
-      return b.kind === a.kind && b.taskId === a.taskId && sameTab(b.tab, a.tab);
     case STOP_KIND.TASK:
-      return b.kind === a.kind && b.taskId === a.taskId;
+      return (
+        b.kind === a.kind &&
+        b.taskId === a.taskId &&
+        sameTabOrNone(a.column, b.column) &&
+        sameTabOrNone(a.panel, b.panel)
+      );
     case STOP_KIND.PLACE:
       return b.kind === a.kind && b.place === a.place;
     case STOP_KIND.AGENT:
@@ -91,11 +100,13 @@ export function sameStop(a: Stop, b: Stop): boolean {
 
 /** The task a stop is on, none for a place. */
 export function stopTask(stop: Stop): string | undefined {
-  return stop.kind === STOP_KIND.COLUMN ||
-    stop.kind === STOP_KIND.PANEL ||
-    stop.kind === STOP_KIND.TASK
-    ? stop.taskId
-    : undefined;
+  return stop.kind === STOP_KIND.TASK ? stop.taskId : undefined;
+}
+
+/** Whether two stops are of the same page: the same task whatever its tabs, or the same place. */
+function samePage(a: Stop, b: Stop): boolean {
+  if (a.kind === STOP_KIND.TASK) return b.kind === STOP_KIND.TASK && b.taskId === a.taskId;
+  return sameStop(a, b);
 }
 
 /** The stops with `stop` the most recent, taken out of wherever it stood before. */
@@ -215,47 +226,43 @@ export interface WindowStanding {
 }
 
 /**
- * The stops on screen now: the place standing in the task's place, or the
- * open task's column tab and panel tab, or the task itself where it shows
- * neither. None under Settings or a version history, and none while a task
- * is on its way, so a half-open task is never a stop.
+ * The stop on screen now: the place standing in the task's place, or the
+ * open task with the tabs its two panes show. None under Settings or a
+ * version history, and none while a task is on its way, so a half-open
+ * task is never a stop.
  */
-export function shownStops(standing: WindowStanding): readonly Stop[] {
-  if (standing.over) return [];
-  const place = (place: SwitcherPlace): readonly Stop[] => [{ kind: STOP_KIND.PLACE, place }];
+export function shownStop(standing: WindowStanding): Stop | undefined {
+  if (standing.over) return undefined;
+  const place = (place: SwitcherPlace): Stop => ({ kind: STOP_KIND.PLACE, place });
   if (standing.chat) return place(SWITCHER_PLACE.CHAT);
   if (standing.inbox) return place(SWITCHER_PLACE.INBOX);
-  if (standing.agentId !== undefined) return [{ kind: STOP_KIND.AGENT, agentId: standing.agentId }];
-  if (standing.person !== undefined) return [{ kind: STOP_KIND.PERSON, ...standing.person }];
+  if (standing.agentId !== undefined) return { kind: STOP_KIND.AGENT, agentId: standing.agentId };
+  if (standing.person !== undefined) return { kind: STOP_KIND.PERSON, ...standing.person };
   if (standing.factory) return place(SWITCHER_PLACE.FACTORY);
   if (standing.board) return place(SWITCHER_PLACE.BOARD);
   if (standing.automations) return place(SWITCHER_PLACE.AUTOMATIONS);
   const taskId = standing.boundFor;
   if (taskId === undefined) return place(SWITCHER_PLACE.HOME);
-  if (taskId !== standing.openTaskId) return [];
-  const tabs: Stop[] = [];
-  if (standing.column !== undefined)
-    tabs.push({ kind: STOP_KIND.COLUMN, taskId, tab: standing.column });
-  if (standing.panel !== undefined)
-    tabs.push({ kind: STOP_KIND.PANEL, taskId, tab: standing.panel });
-  return tabs.length > 0 ? tabs : [{ kind: STOP_KIND.TASK, taskId }];
+  if (taskId !== standing.openTaskId) return undefined;
+  return { kind: STOP_KIND.TASK, taskId, column: standing.column, panel: standing.panel };
 }
 
 /**
- * The stops after the window moved from showing `before` to showing
- * `after`: each stop newly on screen visited, the one in the strip that
- * holds the keyboard (`front`) last, so it is the most recent.
+ * The stops after the window moved from standing on `before` to `after`.
+ * Another page, or a tab chosen by a press or a key (`pressed`), is a stop
+ * visited; a tab the window chose by itself on the page standing takes the
+ * stop standing in place.
  */
-export function arrived(
+export function moved(
   stops: readonly Stop[],
-  before: readonly Stop[],
-  after: readonly Stop[],
-  front: typeof STOP_KIND.COLUMN | typeof STOP_KIND.PANEL,
+  before: Stop | undefined,
+  after: Stop | undefined,
+  pressed: boolean,
 ): readonly Stop[] {
-  const fresh = after.filter((stop) => !before.some((each) => sameStop(each, stop)));
-  const ordered = [
-    ...fresh.filter((stop) => stop.kind !== front),
-    ...fresh.filter((stop) => stop.kind === front),
-  ];
-  return ordered.reduce(visited, stops);
+  if (after === undefined) return stops;
+  if (before === undefined || pressed || !samePage(before, after) || sameStop(before, after)) {
+    return visited(stops, after);
+  }
+  const rest = stops.filter((stop) => !sameStop(stop, before) && !sameStop(stop, after));
+  return [after, ...rest].slice(0, STOPS_KEPT);
 }

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "vitest";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import {
-  arrived,
   forgotten,
+  moved,
   STOP_KIND,
   type Stop,
   SWITCH_STEP,
@@ -12,7 +13,7 @@ import {
   SWITCHER_PLACE,
   type SwitcherState,
   sameStop,
-  shownStops,
+  shownStop,
   switcherChose,
   switcherPressed,
   switcherShown,
@@ -22,21 +23,19 @@ import {
 } from "./tab-switcher-model.js";
 
 /**
- * tab-switcher-model.test.ts -- ⌃Tab's order and its keys: the stops most
- * recent first across both strips and every task, a tap flipping to the one
+ * tab-switcher-model.test.ts -- ⌃Tab's order and its keys: whole screens
+ * most recent first across every task, a task's screen named by both its
+ * panes' tabs, a tab chosen by a press a stop of its own and one the window
+ * chose by itself taking the stop in place, a tap flipping to the screen
  * before, a hold stepping on and back around the cards, and a let-go on the
- * stop the window stands on going nowhere.
+ * screen here going nowhere.
  */
 
-const agentTab = (taskId: string, agent: string): Stop => ({
-  kind: STOP_KIND.COLUMN,
+const screen = (taskId: string, column?: MainTab, panel?: SidePanelTab): Stop => ({
+  kind: STOP_KIND.TASK,
   taskId,
-  tab: { agent },
-});
-const panelTab = (taskId: string, tab: SidePanelTab): Stop => ({
-  kind: STOP_KIND.PANEL,
-  taskId,
-  tab,
+  column,
+  panel,
 });
 const inbox: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.INBOX };
 const home: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.HOME };
@@ -59,42 +58,95 @@ function pressed(
 }
 
 describe("the stops", () => {
-  test("are most recent first, both strips and every task in one list, each once", () => {
-    const plan = panelTab("a", SIDE_PANEL_TAB.PLAN);
-    const stops = walked(agentTab("a", "x"), plan, agentTab("b", "y"), inbox, plan);
-    assert.deepEqual(stops, [plan, inbox, agentTab("b", "y"), agentTab("a", "x")]);
+  test("are whole screens, most recent first, every task in one list, each once", () => {
+    const work = screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN);
+    const stops = walked(work, screen("b", { agent: "y" }), inbox, work);
+    assert.deepEqual(stops, [work, inbox, screen("b", { agent: "y" })]);
   });
 
-  test("tell one task's tab from the same tab on another", () => {
-    const stops = walked(panelTab("a", { file: "f.ts" }), panelTab("b", { file: "f.ts" }));
-    assert.equal(stops.length, 2);
+  test("tell a screen apart by either pane's tab, and a pane showing none from one showing a tab", () => {
+    assert.equal(
+      sameStop(
+        screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN),
+        screen("a", { agent: "x" }, SIDE_PANEL_TAB.CODE),
+      ),
+      false,
+    );
+    assert.equal(
+      sameStop(screen("a", { agent: "x" }), screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN)),
+      false,
+    );
+    assert.equal(
+      sameStop(screen("a", undefined, { file: "f.ts" }), screen("a", undefined, { file: "f.ts" })),
+      true,
+    );
+    assert.equal(
+      sameStop(screen("a", undefined, { file: "f.ts" }), screen("b", undefined, { file: "f.ts" })),
+      false,
+    );
   });
 
-  test("let a closed tab go and keep the rest in order", () => {
-    const stops = walked(agentTab("a", "x"), agentTab("a", "y"), inbox);
-    const kept = forgotten(stops, (stop) => sameStop(stop, agentTab("a", "y")));
-    assert.deepEqual(kept, [inbox, agentTab("a", "x")]);
+  test("let a closed tab's screen go and keep the rest in order", () => {
+    const stops = walked(screen("a", { agent: "x" }), screen("a", { agent: "y" }), inbox);
+    const kept = forgotten(stops, (stop) => sameStop(stop, screen("a", { agent: "y" })));
+    assert.deepEqual(kept, [inbox, screen("a", { agent: "x" })]);
+  });
+});
+
+describe("a move of the window", () => {
+  const work = screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN);
+
+  test("onto a task records one stop for the screen, whatever both its panes show", () => {
+    const stops = moved([inbox], inbox, work, false);
+    assert.deepEqual(stops, [work, inbox]);
+  });
+
+  test("a tab the window chose by itself takes the screen standing in place, so ⌃Tab goes back where you came from", () => {
+    const opening = moved([inbox], inbox, screen("a"), true);
+    const loaded = moved(opening, screen("a"), work, false);
+    assert.deepEqual(loaded, [work, inbox]);
+    assert.deepEqual(switcherTarget(pressed(loaded, work, SWITCH_STEP.ON)), inbox);
+  });
+
+  test("a tab chosen by a press or a key, in either pane, is a stop of its own", () => {
+    const coded = moved(
+      [work, inbox],
+      work,
+      screen("a", { agent: "x" }, SIDE_PANEL_TAB.CODE),
+      true,
+    );
+    assert.deepEqual(coded, [screen("a", { agent: "x" }, SIDE_PANEL_TAB.CODE), work, inbox]);
+    const other = moved(coded, coded[0], screen("a", { agent: "z" }, SIDE_PANEL_TAB.CODE), true);
+    assert.equal(other.length, 4);
+  });
+
+  test("to another page is a stop, pressed or not", () => {
+    assert.deepEqual(moved([work], work, inbox, false), [inbox, work]);
+  });
+
+  test("onto nothing, as Settings, keeps the stops as they are", () => {
+    assert.deepEqual(moved([work, inbox], work, undefined, true), [work, inbox]);
   });
 });
 
 describe("⌃Tab", () => {
-  const stops = walked(home, agentTab("b", "y"), inbox, panelTab("a", SIDE_PANEL_TAB.PLAN));
-  const here = stops[0];
+  const here = screen("a", undefined, SIDE_PANEL_TAB.PLAN);
+  const stops = walked(home, screen("b", { agent: "y" }), inbox, here);
 
-  test("tapped, goes to the stop before this one and shows nothing", () => {
+  test("tapped, goes to the screen before this one and shows nothing", () => {
     const state = pressed(stops, here, SWITCH_STEP.ON);
     assert.equal(state.held && state.shown, false);
     assert.deepEqual(switcherTarget(state), inbox);
   });
 
-  test("tapped twice flips back, since the stop left is now the one before", () => {
+  test("tapped twice flips back, since the screen left is now the one before", () => {
     const first = switcherTarget(pressed(stops, here, SWITCH_STEP.ON));
     assert.ok(first !== undefined);
     const after = visited(stops, first);
     assert.deepEqual(switcherTarget(pressed(after, first, SWITCH_STEP.ON)), here);
   });
 
-  test("held, shows the cards once the hold is long enough, the stop here first", () => {
+  test("held, shows the cards once the hold is long enough, the screen here first", () => {
     const state = switcherShown(pressed(stops, here, SWITCH_STEP.ON));
     assert.ok(state.held);
     assert.equal(state.shown, true);
@@ -105,7 +157,7 @@ describe("⌃Tab", () => {
   test("pressed again while held steps on and shows the cards at once, wrapping past the last", () => {
     const twice = pressed(stops, here, SWITCH_STEP.ON, SWITCH_STEP.ON);
     assert.ok(twice.held && twice.shown);
-    assert.deepEqual(switcherTarget(twice), agentTab("b", "y"));
+    assert.deepEqual(switcherTarget(twice), screen("b", { agent: "y" }));
     const around = pressed(
       stops,
       here,
@@ -114,23 +166,25 @@ describe("⌃Tab", () => {
       SWITCH_STEP.ON,
       SWITCH_STEP.ON,
     );
-    assert.equal(switcherTarget(around), undefined, "back on the stop here, so nothing moves");
+    assert.equal(switcherTarget(around), undefined, "back on the screen here, so nothing moves");
   });
 
   test("with ⇧ steps back, starting from the last card", () => {
     assert.deepEqual(switcherTarget(pressed(stops, here, SWITCH_STEP.BACK)), home);
     assert.deepEqual(
       switcherTarget(pressed(stops, here, SWITCH_STEP.BACK, SWITCH_STEP.BACK)),
-      agentTab("b", "y"),
+      screen("b", { agent: "y" }),
     );
   });
 
   test("shows no more than five cards", () => {
-    const many = walked(...Array.from({ length: 9 }, (_, at) => agentTab("a", String(at))));
+    const many = walked(
+      ...Array.from({ length: 9 }, (_, at) => screen("a", { agent: String(at) })),
+    );
     const state = pressed(many, many[0], SWITCH_STEP.BACK);
     assert.ok(state.held);
     assert.equal(state.cards.length, SWITCHER_CARDS);
-    assert.deepEqual(switcherTarget(state), agentTab("a", "4"));
+    assert.deepEqual(switcherTarget(state), screen("a", { agent: "4" }));
   });
 
   test("a card pointed at is the one chosen", () => {
@@ -163,51 +217,26 @@ describe("what is on screen", () => {
     panel: SIDE_PANEL_TAB.PLAN,
   };
 
-  test("is the open task's two tabs, or the task where it shows neither", () => {
-    assert.deepEqual(shownStops(standing), [
-      agentTab("a", "x"),
-      panelTab("a", SIDE_PANEL_TAB.PLAN),
-    ]);
-    assert.deepEqual(shownStops({ ...standing, column: undefined, panel: undefined }), [
-      { kind: STOP_KIND.TASK, taskId: "a" },
-    ]);
+  test("is the open task with both its panes' tabs, either of them none", () => {
+    assert.deepEqual(shownStop(standing), screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN));
+    assert.deepEqual(
+      shownStop({ ...standing, column: { draft: "d" }, panel: undefined }),
+      screen("a", { draft: "d" }),
+    );
+    assert.deepEqual(shownStop({ ...standing, column: undefined, panel: undefined }), screen("a"));
   });
 
   test("is the place standing in the task's place, and Home with no task", () => {
-    assert.deepEqual(shownStops({ ...standing, inbox: true }), [inbox]);
-    assert.deepEqual(shownStops({ ...standing, boundFor: undefined }), [home]);
-    assert.deepEqual(shownStops({ ...standing, agentId: "z" }), [
-      { kind: STOP_KIND.AGENT, agentId: "z" },
-    ]);
-  });
-
-  test("counts the draft agent's tab in the column as a tab of its own", () => {
-    assert.deepEqual(shownStops({ ...standing, column: { draft: "d" }, panel: undefined }), [
-      { kind: STOP_KIND.COLUMN, taskId: "a", tab: { draft: "d" } },
-    ]);
+    assert.deepEqual(shownStop({ ...standing, inbox: true }), inbox);
+    assert.deepEqual(shownStop({ ...standing, boundFor: undefined }), home);
+    assert.deepEqual(shownStop({ ...standing, agentId: "z" }), {
+      kind: STOP_KIND.AGENT,
+      agentId: "z",
+    });
   });
 
   test("is nothing under Settings or a version history, or while a task is on its way", () => {
-    assert.deepEqual(shownStops({ ...standing, over: true }), []);
-    assert.deepEqual(shownStops({ ...standing, boundFor: "b" }), []);
-  });
-
-  test("puts the strip holding the keyboard first when a task opens on both", () => {
-    const after = shownStops(standing);
-    const panelFirst = arrived([inbox], [inbox], after, STOP_KIND.PANEL);
-    assert.deepEqual(panelFirst[0], panelTab("a", SIDE_PANEL_TAB.PLAN));
-    const columnFirst = arrived([inbox], [inbox], after, STOP_KIND.COLUMN);
-    assert.deepEqual(columnFirst[0], agentTab("a", "x"));
-  });
-
-  test("moves only the tab that changed when the other strip keeps its tab", () => {
-    const before = shownStops(standing);
-    const stops = arrived([], [], before, STOP_KIND.COLUMN);
-    const after = shownStops({ ...standing, panel: { file: "f.ts" } });
-    assert.deepEqual(arrived(stops, before, after, STOP_KIND.COLUMN), [
-      panelTab("a", { file: "f.ts" }),
-      agentTab("a", "x"),
-      panelTab("a", SIDE_PANEL_TAB.PLAN),
-    ]);
+    assert.equal(shownStop({ ...standing, over: true }), undefined);
+    assert.equal(shownStop({ ...standing, boundFor: "b" }), undefined);
   });
 });
