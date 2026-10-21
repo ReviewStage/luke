@@ -159,6 +159,11 @@ export const agentActsContract = {
   )
     .input(exactInput(shownParamsSchema))
     .output(EffectSchema.Void),
+  [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actProcedure(
+    "Could not mark the agent as read on this system.",
+  )
+    .input(exactInput(EffectSchema.Struct({ agentId: exactId })))
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
     .input(exactInput(codingAgentPageParamsSchema))
     .output(EffectSchema.flip(codingAgentPageAnswerViewSchema)),

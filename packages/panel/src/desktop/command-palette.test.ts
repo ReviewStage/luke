@@ -1620,6 +1620,52 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
 });
 
+test("on a one-off agent's page, ⌘K marks the agent unread and then read, and offers no mark while no agent's page stands", () => {
+  const agent = {
+    id: "agent-8",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Triage overnight issues",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: "acme/relay",
+    activityAt: 2,
+  };
+  const seen: string[] = [];
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_SEEN]: ({ agentId }) => {
+      seen.push(agentId);
+      return Promise.resolve(undefined);
+    },
+  });
+  const draw = (agentId: string | undefined) => {
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    document.body.innerHTML = "";
+    openPalette(
+      tasksControl({
+        agentView: { agentId, onOpen: () => undefined, onClose: () => undefined },
+        listedAgents: { standing: [agent], archived: [] },
+      }),
+    );
+    type("mark");
+    return rows().filter((row) => row.startsWith("Mark as"));
+  };
+
+  assert.deepEqual(draw(undefined), []);
+  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
+  press("Mark as unread");
+  assert.deepEqual(draw(agent.id), ["Mark as read"]);
+  press("Mark as read");
+  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
+  assert.deepEqual(seen, [agent.id]);
+});
+
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
 function PinnableTask(): React.JSX.Element {
   const [listed, setListed] = useState<Task>(DOCUMENT_TASK);

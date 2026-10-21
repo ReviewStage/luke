@@ -275,6 +275,28 @@ it.effect(
 );
 
 it.effect(
+  "an agent marked as read by hand loses its unseen dot while another page is shown, and a mark on an agent with no dot publishes nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      notices.shown(null);
+
+      notices.observeFollowed([agent(CODING_AGENT_STATUS.RUNNING)], [TASK_ID]);
+      notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
+      yield* settled;
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+
+      notices.seen(AGENT_ID);
+      assert.deepEqual(f.unseen.at(-1), []);
+      const published = f.unseen.length;
+      notices.seen(AGENT_ID);
+      assert.equal(f.unseen.length, published);
+    }),
+);
+
+it.effect(
   "an agent the followed list no longer names on a plan it still holds, as one archived, takes its dot with it",
   () =>
     Effect.gen(function* () {
