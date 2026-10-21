@@ -332,7 +332,9 @@ test("a channel's composer offers its members by name as an @ is typed, writes t
   await settle();
   assert.equal(boxWords(box), "");
   assert.equal(words(page).at(-1), "Invite emails hold the template until #214 lands");
-  assert.equal(stream(page).at(-1), "Dean Stratakos");
+  // The post continues the reader's own run, so it draws under the name the run began with.
+  assert.equal(stream(page).at(-1), "");
+  assert.equal(stream(page).filter(Boolean).at(-1), "Dean Stratakos");
   const last = [...page.querySelectorAll(".chat-message")].at(-1);
   assert.ok(
     last?.querySelector(".chat-words [data-mention-ref]"),

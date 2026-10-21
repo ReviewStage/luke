@@ -12,6 +12,7 @@ import {
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import {
+  CHAT_RUN_SPAN,
   type ChatNames,
   channelLabel,
   channelThreads,
@@ -19,6 +20,7 @@ import {
   chatRail,
   chatTargets,
   chatWho,
+  continuesRun,
   FOR_YOU_REASON,
   forYou,
   postsIn,
@@ -254,6 +256,25 @@ test("a channel reads as its roots in the order posted, each with its thread's r
       [4, []],
     ],
   );
+});
+
+test("a root continues its author's run within five minutes of their last one, and a different author, a longer gap, or a thread between breaks it", () => {
+  const root = (
+    seq: number,
+    authorId: string,
+    postedAt: number,
+    replies: readonly ChatMessage[] = [],
+  ) => ({
+    message: message(seq, authorId, TASK_CHANNEL.id, { postedAt }),
+    replies,
+  });
+  const first = root(1, AGENT, 0);
+  assert.equal(continuesRun(undefined, first), false);
+  assert.equal(continuesRun(first, root(2, AGENT, CHAT_RUN_SPAN)), true);
+  assert.equal(continuesRun(first, root(2, AGENT, CHAT_RUN_SPAN + 1)), false);
+  assert.equal(continuesRun(first, root(2, MARIA, 1)), false);
+  const threaded = root(1, AGENT, 0, [message(3, MARIA, TASK_CHANNEL.id, { parentId: "m1" })]);
+  assert.equal(continuesRun(threaded, root(2, AGENT, 1)), false);
 });
 
 test("a line names an agent by its title, or by the name the read gave it, with its task, the reader by their own name, a person by theirs, and one whose agent or account is gone as former", () => {

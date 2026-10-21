@@ -5251,64 +5251,110 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-16) var(--column-inset);
 }
 
-/* The stream and its composer keep to the page's measure, as the Inbox's
-   thread and an agent's transcript do. */
+/* The stream runs the pane's whole width, left-aligned, as Slack's does. */
 .chat-messages,
 .chat-replies {
-  max-width: var(--luke-page-measure);
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* A message is laid out as a comment thread is: its
-   author's face in a column of its own at a list row's 20px, then their
-   name and when on one line in the caption's muted ink, and the words under
-   it at the reading measure's leading. */
+/* A message is laid out as Slack's is: its author's face in a column of its
+   own at a card's 32px, a rounded square for everyone, then their name in
+   bold and the clock time in the caption's muted ink on one line, and the
+   words under it. Rows sit tight and light up while hovered. */
 .chat-message,
 .chat-reply {
-  --chat-face: 20px;
+  --chat-face: 32px;
 
+  position: relative;
   display: grid;
   grid-template-columns: var(--chat-face) minmax(0, 1fr);
-  column-gap: var(--luke-space-12);
-  padding: var(--luke-space-12) 0;
+  column-gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-8);
+  margin: 0 calc(-1 * var(--luke-space-8));
+  border-radius: var(--luke-menu-row-radius);
+  transition: background-color var(--duration-hover) ease;
 }
 
-.chat-reply {
-  padding: var(--luke-space-8) 0;
+/* A message continuing its author's run sits right under the one before. */
+.chat-message[data-continued="true"] {
+  padding-top: var(--luke-space-2);
+  padding-bottom: var(--luke-space-2);
+}
+
+@media (hover: hover) {
+  .chat-message:hover,
+  .chat-reply:hover {
+    background: var(--luke-color-fill-hover);
+  }
 }
 
 .chat-face {
   display: flex;
-  height: var(--chat-face);
+  padding-top: var(--luke-space-2);
+}
+
+.chat-face :is(.actor-mark, .luke-avatar) {
+  border-radius: 22%;
+}
+
+/* A continued message's time stands in its face's column, shown only while
+   the row is hovered. */
+.chat-face[data-continued="true"] {
+  justify-content: flex-end;
+  padding-top: 0;
+  color: var(--luke-color-text-muted);
+  font-size: 10px;
+  line-height: var(--luke-type-body-leading);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.chat-message:focus-within .chat-face[data-continued="true"] {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .chat-message:hover .chat-face[data-continued="true"] {
+    opacity: 1;
+  }
 }
 
 .chat-message-body {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-space-2);
 }
 
 .chat-byline {
   display: flex;
   min-width: 0;
-  min-height: var(--chat-face);
-  align-items: center;
-  column-gap: var(--luke-space-6);
+  align-items: baseline;
+  column-gap: var(--luke-space-8);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
-/* The author is named by name alone in the stream's own ink, their face
-   already standing beside it. */
+/* A continued message's line holds its press alone, at the row's top end. */
+.chat-byline[data-continued="true"] {
+  position: absolute;
+  top: var(--luke-space-2);
+  right: var(--luke-space-8);
+}
+
+/* The author is named in bold in the stream's own ink, as Slack names them. */
 .chat-byline-name {
   display: flex;
   min-width: 0;
   color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-bold);
+}
+
+.chat-byline-name :is(.luke-inline-ref, .luke-inline-ref-label) {
+  font-weight: inherit;
 }
 
 .chat-byline-where {
@@ -5399,7 +5445,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .chat-composer {
   position: relative;
   width: calc(100% - 2 * var(--column-inset));
-  max-width: var(--luke-page-measure);
   margin: var(--luke-space-12) auto var(--luke-space-16);
 }
 
@@ -5407,7 +5452,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
    between two others), its foot says why, where the box would stand. */
 .chat-closed-foot {
   width: calc(100% - 2 * var(--column-inset));
-  max-width: var(--luke-page-measure);
   margin: var(--luke-space-12) auto var(--luke-space-16);
   text-align: center;
 }
