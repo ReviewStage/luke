@@ -295,6 +295,24 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an agent a Start answered is kept through a push that does not name it yet, so its quick end is still announced",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeFollowed([], [TASK_ID]);
+      notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
+      yield* settled;
+
+      assert.deepEqual(f.said(), [{ title: TASK_NAME, body: "Opus 5.5 finished" }]);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+    }),
+);
+
 /**
  * Every step the inbox read has to take, taken: the accounts' stream hands
  * the account on, the read it switched to asks, and the look writes what

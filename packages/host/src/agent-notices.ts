@@ -617,6 +617,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
     const tasklessSubjects = new Map<string, string>();
     const unseen = new Set<string>();
+    /** The agents on plans the followed list last named, so one it stops naming is known to have left it rather than not reached it yet. */
+    let followedAgents = new Set<string>();
     const ends = yield* Queue.unbounded<TurnEnd>();
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
@@ -1088,12 +1090,16 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeTaskGone: (taskId) => forget((agent) => agent.taskId !== taskId),
       observeFollowed: (agents, taskIds) => {
         const held = new Set(taskIds);
-        // The list names every agent on its plans but the archived, so one it no longer names takes its dot with it.
+        // The list names every agent on its plans but the archived, so one it named and no longer
+        // does takes its dot with it. One only a Start answered is kept until the list names it, since
+        // a push of the plans may carry agents from before that Start.
         const named = new Set(agents.map((agent) => agent.id));
         forget(
           (agent, agentId) =>
-            agent.taskId === null || (held.has(agent.taskId) && named.has(agentId)),
+            agent.taskId === null ||
+            (held.has(agent.taskId) && (named.has(agentId) || !followedAgents.has(agentId))),
         );
+        followedAgents = named;
         notices.observeAgents(agents);
       },
       shown: (agentId) => {
