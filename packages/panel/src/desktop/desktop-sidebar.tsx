@@ -146,6 +146,7 @@ import {
   useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view.js";
+import { NO_SIDEBAR_WALK, usePublishSidebarWalk } from "./sidebar-walk.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useArchivedView, useTaskListView } from "./task-list-view.js";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
@@ -1780,11 +1781,12 @@ function SidebarColumn({
   const sectionsDrawn = shownSections.flatMap(({ section, rows: held }) =>
     folds.sectionFolded(section.id) ? held.filter(currentRow) : held,
   );
-  const drawn = [
-    ...(archive.shown ? [] : folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn),
-    ...sectionsDrawn,
-    ...drawnTasks(sections, folds, currentRow),
-  ];
+  const pinnedShownDrawn = archive.shown
+    ? []
+    : folds.pinnedFolded
+      ? pinnedDrawn.filter(currentRow)
+      : pinnedDrawn;
+  const drawn = [...pinnedShownDrawn, ...sectionsDrawn, ...drawnTasks(sections, folds, currentRow)];
   // Moving up and down the list as it reads: down from the home page, where
   // no row is open, is the first row. The ends go no further.
   const at = drawn.findIndex((row) =>
@@ -1801,6 +1803,15 @@ function SidebarColumn({
   const listed = tasks.signedIn && drawn.length > 0;
   useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
+  // The same rows' tasks, for an archive of the open task to open the next
+  // of; only the pinned while the Inbox's items stand where the rest would.
+  usePublishSidebarWalk(
+    listed
+      ? (listsInbox ? pinnedShownDrawn : drawn).flatMap((row) =>
+          row.kind === TASK_ROW.TASK ? [row.task.id] : [],
+        )
+      : NO_SIDEBAR_WALK,
+  );
 
   // The pages' rows, then the rule under them. Beside the work they stand
   // put over the tasks' scroller; in a phone's drawer they scroll away with
