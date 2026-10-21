@@ -4,7 +4,7 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import { taskSeenBy } from "@luke/database/models/workspace-store";
+import { agentSeenBy, taskSeenBy } from "@luke/database/models/workspace-store";
 import { member } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { planPageVersion } from "@luke/database/schemas/plan-page";
@@ -144,6 +144,7 @@ function codeStatement(userId: string, taskId: string) {
       and(
         eq(codingAgent.taskId, taskId),
         taskSeenBy(userId),
+        agentSeenBy(userId),
         sql`${messages.parts} @> ${JSON.stringify([ANSWERED_SHOW_CODE])}::jsonb`,
       ),
     );

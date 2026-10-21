@@ -5,23 +5,25 @@ import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { listPages, writePage } from "@luke/database/models/plan-pages";
-import { openTaskConversation } from "@luke/database/models/task-store";
+import { createTask, openTaskConversation } from "@luke/database/models/task-store";
 import { readTranscript } from "@luke/database/models/transcript-store";
 import { user } from "@luke/database/schemas/auth";
 import { messages } from "@luke/database/schemas/storage";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
-import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
 } from "@luke/database/voice-vocabulary";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@luke/features/live-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
+import { openGithubUser } from "../testing/github-app-fake.js";
 import { SHOW_CODE_TOOL } from "./show-code.js";
 import { taskRecordLiveStatements } from "./task-record-live.js";
 import { readTaskCode } from "./task-work-store.js";
@@ -49,6 +51,27 @@ const openUser = Effect.gen(function* () {
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
+
+/** An accepted `show_code` part of a journal, as the relay writes one. */
+function answeredShowCode(callId: string, line: string) {
+  return {
+    type: `tool-${SHOW_CODE_TOOL.name}`,
+    toolCallId: callId,
+    state: "output-available",
+    input: { path: "src/invite.ts", startLine: 1, endLine: 1, note: "Invitations last a week." },
+    output: {
+      status: "accepted",
+      code: {
+        ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
+        repository: "acme/api",
+        firstLine: 1,
+        lineCount: 1,
+        lines: [line],
+        note: "Invitations last a week.",
+      },
+    },
+  };
+}
 
 /** One part's statement run as Realtime runs it. */
 const runLive = (statement: LiveStatement) =>
@@ -268,28 +291,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             held = nextHeld;
           });
 
-        const code = (callId: string, line: string) => ({
-          type: `tool-${SHOW_CODE_TOOL.name}`,
-          toolCallId: callId,
-          state: "output-available",
-          input: {
-            path: "src/invite.ts",
-            startLine: 1,
-            endLine: 1,
-            note: "Invitations last a week.",
-          },
-          output: {
-            status: "accepted",
-            code: {
-              ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
-              repository: "acme/api",
-              firstLine: 1,
-              lineCount: 1,
-              lines: [line],
-              note: "Invitations last a week.",
-            },
-          },
-        });
+        const code = answeredShowCode;
         const turnId = `turn-${randomUUID()}`;
         // The agent's typed turn journals its first step: a show_code call, answered.
         const journalId = randomUUID();
@@ -336,6 +338,48 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           code: [],
         });
         assert.ok(Option.isNone(yield* readTaskCode(stranger, task.id)));
+      }),
+  );
+
+  it.effect(
+    "an agent on its starter's own token shows its code to no member who cannot see it, live or held, though the task is theirs to read",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const tokenless = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, tokenless);
+        const task = yield* createTask(owner, { organizationId: workspace });
+        const started = yield* createCodingAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: null,
+          prompt: "Walk me through invitations.",
+          repository: "octo-owner/private",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const agent = Option.getOrThrow(started).agent;
+        yield* Database.use((db) =>
+          db.insert(messages).values({
+            userId: owner,
+            conversationId: agent.conversationId,
+            seq: 1,
+            clientId: `turn-${randomUUID()}`,
+            role: MESSAGE_ROLE.ASSISTANT,
+            parts: [answeredShowCode("call-1", "export const TTL = 7;")],
+            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            placedAt: CLOSED_AT,
+          }),
+        );
+
+        // The starter sees it, live and held.
+        assert.equal((yield* liveRecordOf(owner, task.id)).code.length, 1);
+        assert.equal(Option.getOrThrow(yield* readTaskCode(owner, task.id)).code.length, 1);
+        // A teammate who keeps no token reads the task, and none of the agent's code.
+        assert.deepEqual((yield* liveRecordOf(tokenless, task.id)).code, []);
+        assert.deepEqual(Option.getOrThrow(yield* readTaskCode(tokenless, task.id)).code, []);
       }),
   );
 });
