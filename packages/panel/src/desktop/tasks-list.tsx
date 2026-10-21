@@ -802,7 +802,8 @@ export function TasksList({
         data-row-drop-scope=""
         style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
       >
-        {groups.length === 0 ? (
+        {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
+        {groups.every((group) => group.tasks.length === 0) ? (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             {NONE_STANDING}
           </Text>

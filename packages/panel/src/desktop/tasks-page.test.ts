@@ -691,3 +691,25 @@ test("a section holding no task stands in the List, empty, and a row dragged int
 
   assert.deepEqual(writesSent(), [[["place", "t-40", LATER]]]);
 });
+
+test("a view that leaves no task standing says so, though an empty section still stands", async () => {
+  sections = {
+    sections: [
+      {
+        id: "a1b2c3d4-0000-4000-8000-000000000004",
+        workspaceId: ACME.id,
+        title: "Later",
+        createdAt: 1,
+      },
+    ],
+    entries: [],
+  };
+  window.localStorage.setItem(
+    "luke.tasksFilter",
+    JSON.stringify({ [ACME.id]: { status: [TASK_STATUS.CANCELED] } }),
+  );
+  const page = await mountPage();
+
+  assert.deepEqual(groups(page), [["Later", []]]);
+  assert.match(page.textContent ?? "", /No tasks match this view/);
+});
