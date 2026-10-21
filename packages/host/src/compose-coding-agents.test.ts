@@ -70,6 +70,7 @@ import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 import { fakeRealtime } from "./testing/fake-realtime.js";
+import { HELD_TRANSCRIPTS } from "./transcript-held.js";
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -262,7 +263,7 @@ function fakeService() {
   let written: CodingAgentChatWriteAnswerView = { readSeq: 4 };
   let accountLive: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
-  let pagesNow: readonly TranscriptNowAnswer[] = [];
+  let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
   // The newest page, as the follow opens with it; none answers one with something on it.
   let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
@@ -661,8 +662,8 @@ function fakeService() {
     sealChat: (next: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       chatLive = next;
     },
-    /** The pages the service answers read at once, in turn. */
-    pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
+    /** The pages the service answers read at once, in turn, or that it did not answer one. */
+    pageNow: (...pages: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[]) => {
       pagesNow = pages;
     },
     /** The newest page the service answers. */
@@ -711,11 +712,12 @@ function subject(
   return Effect.gen(function* () {
     const service = fakeService();
     const realtime = fakeRealtime();
-    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    // Each event with how many reads the service had been asked as it was told.
+    const events: { kind: GatewayEventKind; payload: WireValue; asked: number }[] = [];
     const composer = yield* composeCodingAgents({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
-        emit: (kind, payload) => void events.push({ kind, payload }),
+        emit: (kind, payload) => void events.push({ kind, payload, asked: service.asked.length }),
         now: () => NOW,
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
@@ -735,9 +737,15 @@ function subject(
       events.flatMap((event) =>
         event.kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED ? [event.payload] : [],
       );
+    /** How many reads the service had been asked as each followed transcript's page was told, in order. */
+    const askedAsTold = () =>
+      events.flatMap((event) =>
+        event.kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED ? [event.asked] : [],
+      );
     return {
       call,
       pages,
+      askedAsTold,
       asked: service.asked,
       pinCommits: service.pinCommits,
       sealTranscript: service.sealTranscript,
@@ -1519,7 +1527,8 @@ it.effect(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
-      assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length, 2);
+      // Note that the newest page told before stands held, so following again opens on it rather than reading it anew.
+      assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length, 1);
     }),
 );
 
@@ -1603,6 +1612,203 @@ it.effect(
       yield* settled;
       assert.deepEqual(followed.realtime.closed, [SEALED_TRANSCRIPT.url]);
       assert.equal(followed.pages().length, 1);
+    }),
+);
+
+/** A followed transcript opened on its newest page and caught up past it, as a window that followed it last saw it: its window, as the host holds it. */
+function followedOnce(
+  harness: Effect.Success<ReturnType<typeof subject>>,
+  transcript: { readonly kind: "agent"; readonly agentId: string } = FOLLOWED,
+) {
+  return Effect.gen(function* () {
+    const newest = newestPage("1:0", "Reading the invites.", "40");
+    const past = pageNow("2:0", { holds: false, text: "Writing the expiry." });
+    harness.sealTranscript(SEALED_TRANSCRIPT);
+    harness.pageNewest(newest);
+    harness.pageNow(past);
+    yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcript);
+    yield* settled;
+    transcriptRows(harness.realtime, 2);
+    yield* settled;
+    yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcript);
+    const { holds: _holds, ...read } = past;
+    return {
+      ...read,
+      messages: [...newest.messages, ...past.messages],
+      before: "40",
+      newest: true,
+      held: true,
+      caughtUp: false,
+    };
+  });
+}
+
+it.effect(
+  "a transcript followed again is told the window held of it before the service is asked anything, then read on once from the held cursor, so a message written while away arrives",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const window = yield* followedOnce(harness);
+      const { asked, pages, askedAsTold, realtime } = harness;
+
+      // Written while no window followed it.
+      const away = pageNow("3:0", { holds: false, text: "Written while away." });
+      harness.pageNow(away);
+      yield* TestClock.adjust("5 seconds");
+      transcriptRows(realtime, 3);
+      yield* settled;
+
+      const toldBefore = pages().length;
+      const askedBefore = asked.length;
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(pages().slice(toldBefore), [
+        { transcript: FOLLOWED, page: window },
+        { transcript: FOLLOWED, page: windowPage(away) },
+      ]);
+      assert.equal(askedAsTold()[toldBefore], askedBefore);
+      assert.deepEqual(asked.slice(askedBefore), [`messages-now:${AGENT_ID}:2:0`]);
+    }),
+);
+
+it.effect(
+  "a held message rewritten while away arrives on the read past the held cursor, and the window held after it carries the rewrite in place",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const window = yield* followedOnce(harness);
+      const { pages, realtime } = harness;
+      // The service answers a message older than the cursor again once its revision passed it.
+      const rewrite = {
+        ...pageNow("2:1", { holds: false }),
+        messages: [
+          {
+            id: "m-1:0",
+            role: "assistant" as const,
+            parts: [{ type: "text" as const, text: "Read them all." }],
+          },
+        ],
+      };
+      harness.pageNow(rewrite);
+      transcriptRows(realtime, 2);
+      yield* settled;
+
+      const toldBefore = pages().length;
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(pages().slice(toldBefore), [
+        { transcript: FOLLOWED, page: window },
+        { transcript: FOLLOWED, page: windowPage(rewrite) },
+      ]);
+
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      const again = pages().length;
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      const told = pages()[again];
+      assert.ok(isRecord(told) && isRecord(told.page));
+      assert.equal(told.page.cursor, "2:1");
+      assert.deepEqual(told.page.messages, [rewrite.messages[0], window.messages[1]]);
+    }),
+);
+
+it.effect(
+  "a held cursor the service refuses is let go for the newest page, as a follow holding nothing opens, and the refusal is never told",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const window = yield* followedOnce(harness);
+      const { asked, pages } = harness;
+      const fresh = newestPage("5:0", "Read afresh.", "41");
+      harness.pageNewest(fresh);
+      harness.pageNow(
+        { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        pageNow("6:0", { holds: false }),
+      );
+
+      const toldBefore = pages().length;
+      const askedBefore = asked.length;
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(
+        pages()
+          .slice(toldBefore)
+          .map((told) => (isRecord(told) ? told.page : undefined)),
+        [
+          window,
+          { ...fresh, newest: true, caughtUp: false },
+          windowPage(pageNow("6:0", { holds: false })),
+        ],
+      );
+      assert.deepEqual(asked.slice(askedBefore), [
+        `messages-now:${AGENT_ID}:2:0`,
+        `messages-newest:${AGENT_ID}:cut`,
+        `messages-now:${AGENT_ID}:5:0`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a sign-out, a switch of account, and an agent archived each let go of what was held, so the next follow reads the newest page",
+  () =>
+    Effect.gen(function* () {
+      const newestReads = (asked: readonly string[]) =>
+        asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length;
+      const heldTold = (pages: readonly WireValue[]) =>
+        pages.filter((told) => isRecord(told) && isRecord(told.page) && told.page.held === true)
+          .length;
+
+      const signedOut = yield* subject();
+      yield* followedOnce(signedOut);
+      yield* signedOut.reset;
+      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.equal(newestReads(signedOut.asked), 2);
+      assert.equal(heldTold(signedOut.pages()), 0);
+
+      let account = "user-dana";
+      const switched = yield* subject({ accountId: () => account });
+      yield* followedOnce(switched);
+      account = "user-eli";
+      yield* switched.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.equal(newestReads(switched.asked), 2);
+      assert.equal(heldTold(switched.pages()), 0);
+
+      const archived = yield* subject();
+      yield* followedOnce(archived);
+      yield* archived.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
+        agentId: AGENT_ID,
+        archived: true,
+      });
+      yield* archived.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.equal(newestReads(archived.asked), 2);
+      assert.equal(heldTold(archived.pages()), 0);
+    }),
+);
+
+it.effect(
+  "only the transcripts told most recently are held, the least recent let go past the bound",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const transcripts = Array.from({ length: HELD_TRANSCRIPTS + 1 }, (_, index) => ({
+        kind: TRANSCRIPT_KIND.AGENT,
+        agentId: `agent-${index}`,
+      }));
+      for (const transcript of transcripts) yield* followedOnce(harness, transcript);
+      const newestReads = (agentId: string) =>
+        harness.asked.filter((ask) => ask === `messages-newest:${agentId}:cut`).length;
+
+      const last = transcripts.at(-1) ?? FOLLOWED;
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, last);
+      yield* settled;
+      assert.equal(newestReads(last.agentId), 1);
+      const first = transcripts[0] ?? FOLLOWED;
+      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, first);
+      yield* settled;
+      assert.equal(newestReads(first.agentId), 2);
     }),
 );
 

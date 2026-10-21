@@ -4,6 +4,7 @@ import {
   type CodingAgentTranscriptPage,
 } from "@luke/features/coding-agent-view";
 import {
+  applyMessagesPage,
   CODING_AGENT_BOUNDS,
   type CodingAgentMessage,
   type CodingAgentNewestAnswer,
@@ -33,9 +34,12 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
  *
- * A follow opens with the transcript's newest page, read beside the seal
- * rather than after it, so the window draws the end of the transcript after
- * one request; the older pages are the window's to ask for. Once the
+ * A follow opens with the window this host last told of the transcript,
+ * where it holds one (`transcript-held.ts`), before it asks the service
+ * anything, and reads on from its cursor; otherwise with the transcript's
+ * newest page, read beside the seal rather than after it, so the window
+ * draws the end of the transcript after one request. The older pages are
+ * the window's to ask for. Once the
  * statements the pages are read from (`transcript-live.ts` on the service)
  * are subscribed to, the follow reads past the newest page's cursor, which
  * misses nothing written meanwhile, then the next page at once while the
@@ -288,58 +292,102 @@ export interface TranscriptReads {
   ) => Effect.Effect<TranscriptNowAnswer | CodingAgentMessagesAnswerView>;
 }
 
+/** What this host holds of one followed transcript (`transcript-held.ts`): its window as last told, recalled as a follow opens, kept as each page is told, and forgotten where the transcript is gone. */
+export interface TranscriptMemory {
+  readonly recall: Effect.Effect<Option.Option<CodingAgentNewestAnswer>>;
+  readonly keep: (window: CodingAgentNewestAnswer) => Effect.Effect<void>;
+  readonly forget: Effect.Effect<void>;
+}
+
+/** The window held, with a page past its cursor joined on by id: the page's word on the agent, its cursor, and the held window's `before`. */
+function joinedWindow(
+  window: CodingAgentNewestAnswer,
+  answer: TranscriptNowAnswer | CodingAgentMessagesAnswerView,
+): CodingAgentNewestAnswer {
+  const page = windowsPage(answer);
+  if ("failure" in page) return window;
+  const { wakeIn: _wakeIn, ...read } = page as typeof page & { readonly wakeIn?: number };
+  return {
+    ...read,
+    messages: applyMessagesPage(window.messages, read.messages),
+    ...(window.before === undefined ? undefined : { before: window.before }),
+  };
+}
+
 /**
  * The transcript followed until interrupted, each page told as it is read:
- * the newest first, read while the transcript is sealed, then the page past
- * its cursor once the subscription stands, the next at once while the last
- * came back full, and otherwise once the turns, titles, or workers move,
- * their subscription stops or opens again, or the clock reaches the edge
- * the service named; meanwhile each message the window's rows draw anew is
- * told at once, beside what the last page said of the agent, as caught up. One the account does not reach is told not found, which
- * ends the follow, as does a seal the service stopped answering, told as a
- * page that could not be read and let go, so a follow after it seals anew;
- * a page the service did not answer is told as such and read again after
- * `RESEAL`.
+ * the window this host held of it at once where it holds one, and
+ * otherwise the newest page, read while the transcript is sealed; then the
+ * page past that one's cursor once the subscription stands, the next at
+ * once while the last came back full, and otherwise once the turns,
+ * titles, or workers move, their subscription stops or opens again, or the
+ * clock reaches the edge the service named; meanwhile each message the
+ * window's rows draw anew is told at once, beside what the last page said
+ * of the agent, as caught up. A held cursor the service refuses is let go
+ * for the newest page, as a follow holding nothing opens with. One the
+ * account does not reach is told not found, which ends the follow and lets
+ * go of what was held of it, as does a seal the service stopped answering,
+ * told as a page that could not be read and let go, so a follow after it
+ * seals anew; a page the service did not answer is told as such and read
+ * again after `RESEAL`. Every page told is kept in `memory`.
  */
 export function followTranscript<Key>(
   follows: TranscriptFollows<Key>,
   key: Key,
   reads: TranscriptReads,
+  memory: TranscriptMemory,
   tell: (page: CodingAgentTranscriptPage) => Effect.Effect<void>,
 ): Effect.Effect<void> {
   return Effect.scoped(
     Effect.gen(function* () {
-      // Note that the newest page is read beside the seal, not after it, so the window draws the end while the subscription opens; its cursor is what makes following on from it safe.
       let toldNotFound = false;
-      const opening = yield* Effect.forkScoped(
-        reads.newest().pipe(
-          Effect.tap((answer) => {
-            if (!("failure" in answer)) return tell({ ...answer, newest: true, caughtUp: false });
-            toldNotFound = answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
-            return tell(answer);
-          }),
-          // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as a seal is, and then ends the follow on the failure told, so the window offers Try again.
-          Effect.repeat({
-            schedule: Schedule.spaced(RESEAL),
-            times: RESEALS,
-            until: (answer) => !unanswered(answer),
-          }),
-        ),
+      const readNewest = reads.newest().pipe(
+        Effect.tap((answer) => {
+          if (!("failure" in answer)) {
+            return Effect.andThen(
+              memory.keep(answer),
+              tell({ ...answer, newest: true, caughtUp: false }),
+            );
+          }
+          toldNotFound = answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+          return Effect.andThen(toldNotFound ? memory.forget : Effect.void, tell(answer));
+        }),
+        // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as a seal is, and then ends the follow on the failure told, so the window offers Try again.
+        Effect.repeat({
+          schedule: Schedule.spaced(RESEAL),
+          times: RESEALS,
+          until: (answer) => !unanswered(answer),
+        }),
       );
+      // Note that a window held is told before the service is asked anything, so the window draws it with no round trip; one holding nothing reads the newest page beside the seal, not after it, its cursor what makes following on from it safe.
+      const held = yield* memory.recall;
+      if (Option.isSome(held)) {
+        yield* tell({ ...held.value, newest: true, held: true, caughtUp: false });
+      }
+      const opening = Option.isSome(held) ? undefined : yield* Effect.forkScoped(readNewest);
       const sealed = yield* Effect.result(RcMap.get(follows, key));
       if (sealed._tag === "Failure" || sealed.success.kind === "refused") {
-        yield* Fiber.interrupt(opening);
+        if (opening !== undefined) yield* Fiber.interrupt(opening);
         if (sealed._tag === "Failure") {
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }
+        yield* memory.forget;
         if (toldNotFound) return;
         return yield* tell({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
       }
       const { state } = sealed.success;
-      const newest = yield* Fiber.join(opening);
-      if ("failure" in newest) return;
-      let after = newest.cursor;
+      const opened =
+        opening === undefined
+          ? held
+          : yield* Effect.map(Fiber.join(opening), (newest) =>
+              "failure" in newest ? Option.none() : Option.some(newest),
+            );
+      if (Option.isNone(opened)) return;
+      /** What the window was told, as one newest page: its cursor is where the next read follows on from. */
+      let window = opened.value;
+      // Whether the next read is the first past a held cursor, which falls back to the newest page where it is refused.
+      let fromHeld = Option.isSome(held);
       /** Each message told, as it was told, so a row drawn again alike is not told again. */
       const told = new Map<string, string>();
       const heard = (messages: readonly CodingAgentMessage[]) =>
@@ -349,19 +397,22 @@ export function followTranscript<Key>(
           told.set(message.id, said);
           return true;
         });
-      heard(newest.messages);
+      heard(window.messages);
       /** The rows' messages not yet told, beside what the last page said of the agent; the cursor moves past them where they follow on from it. */
       const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState) =>
         Effect.gen(function* () {
           if (state.kind !== "standing" || "failure" in page) return;
           const fresh = heard(state.drawn.messages);
           if (fresh.length === 0) return;
-          const { seq, revision } = cursorParts(after);
+          const { seq, revision } = cursorParts(window.cursor);
           // Note that the cursor moves only where the window holds every message past it, so a read past it misses none.
-          if (state.drawn.lowest <= seq + 1 && state.drawn.highest > seq) {
-            after = `${state.drawn.highest}:${revision}`;
-          }
+          const cursor =
+            state.drawn.lowest <= seq + 1 && state.drawn.highest > seq
+              ? `${state.drawn.highest}:${revision}`
+              : window.cursor;
           yield* tell({ ...page, messages: fresh, caughtUp: true });
+          window = { ...window, messages: applyMessagesPage(window.messages, fresh), cursor };
+          yield* memory.keep(window);
         });
       // Note that the newest page may have been read before the subscription stood, so the page past it is read once its first rows land.
       let wake: Effect.Effect<unknown> = SubscriptionRef.changes(state).pipe(
@@ -375,16 +426,29 @@ export function followTranscript<Key>(
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }
-        const answer = yield* reads.after(after);
+        const answer = yield* reads.after(window.cursor);
+        // Note that a held cursor the service refuses, gone or stale, is let go untold, and the follow opens on the newest page as one holding nothing does; the window joins it or takes it in place of what it drew.
+        if (fromHeld && unanswered(answer)) {
+          fromHeld = false;
+          yield* memory.forget;
+          const newest = yield* readNewest;
+          if ("failure" in newest) return;
+          window = newest;
+          heard(newest.messages);
+          wake = Effect.void;
+          continue;
+        }
+        fromHeld = false;
         const page = toldPage(answer);
         if (!("failure" in page)) heard(page.messages);
         yield* tell(page);
         if ("failure" in answer) {
-          if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+          if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
           wake = Effect.sleep(RESEAL);
           continue;
         }
-        after = answer.cursor;
+        window = joinedWindow(window, answer);
+        yield* memory.keep(window);
         // Note that a full page is followed by the next at once, and a short one is caught up, with no empty page read to say so.
         if (answer.messages.length >= CODING_AGENT_BOUNDS.MESSAGES_PAGE) {
           wake = Effect.void;
