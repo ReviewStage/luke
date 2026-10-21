@@ -1236,7 +1236,6 @@ const SEALED_TRANSCRIPT: AgentTranscriptLiveAnswer = {
 
 /** The transcript's statements as they stand: `seq` its newest message, `turns` how many it has opened. */
 function transcriptRows(realtime: ReturnType<typeof fakeRealtime>, seq: number, turns = 1) {
-  realtime.deliver("messages", [{ rows: seq, seq }]);
   realtime.deliver("turns", [
     { status: "running", rows: turns, stopped: 0, changedAt: NOW - 1_000 },
   ]);
@@ -1390,6 +1389,8 @@ it.effect(
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
       assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`));
       assert.ok(!JSON.stringify(pages()).includes("capability"));
+      // The count of messages released desktops wake on is not followed: the window's rows carry them.
+      assert.ok(!realtime.subscribed().includes("capability-messages"));
 
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       const toldBefore = pages().length;

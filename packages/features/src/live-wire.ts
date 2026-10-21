@@ -414,6 +414,7 @@ export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
 export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
+    /** How many messages the transcript holds and its newest: still sealed for released desktops, which read a page again as it moves; the host follows the window's rows instead. */
     messages: sealedLiveQuerySchema,
     turns: sealedLiveQuerySchema,
     conversation: sealedLiveQuerySchema,
@@ -428,7 +429,6 @@ export type AgentTranscriptLiveAnswer = typeof agentTranscriptLiveAnswerSchema.T
 
 /** A transcript's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
-  messages: EffectSchema.Array(EffectSchema.Struct({ rows: countedNumber, seq: countedNumber })),
   turns: EffectSchema.Array(
     EffectSchema.Struct({
       status: EffectSchema.String,
