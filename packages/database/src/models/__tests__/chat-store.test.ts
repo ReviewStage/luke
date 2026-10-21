@@ -136,7 +136,7 @@ const openAgent = (userId: string, taskId: string) =>
 
 it.layer(getTestDB())("the chat store's members and channels", (it) => {
   it.effect(
-    "a member is minted once and keeps its handle: a person by their name, a clash or a spoken-for handle stepped past, an agent as agent-N, every task's Luke as luke, and concurrent mints of one subject one member",
+    "a member is minted once per subject, numbered among its kind: concurrent mints of one agent are one member, each person and each task's Luke one of their own, and asked again a member answers as minted",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount("Ada Lovelace");
@@ -164,31 +164,29 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
           { concurrency: "unbounded" },
         );
         assert.equal(new Set(racing.slice(0, 5).map((row) => row.id)).size, 1);
-        assert.deepEqual(
-          racing.map((row) => row.handle).toSorted(),
-          ["agent-1", "agent-1", "agent-1", "agent-1", "agent-1", "agent-2"].toSorted(),
-        );
+        assert.deepEqual(racing.map((row) => row.ordinal).toSorted(), [1, 1, 1, 1, 1, 2]);
 
         const people = yield* Effect.forEach(
           [owner, namesake, luke, numbered, nameless],
           (userId) => mint({ kind: MEMBER_KIND.HUMAN, userId }),
         );
+        // Note that people of one name stand side by side, since nothing names a member but what it stands for.
         assert.deepEqual(
-          people.map((row) => row.handle),
-          ["ada-lovelace", "ada-lovelace-2", "luke-2", "agent-1-2", "member"],
+          people.map((row) => row.ordinal),
+          [1, 2, 3, 4, 5],
         );
         const lukes = yield* Effect.forEach([task, otherTask], (taskId) =>
           mint({ kind: MEMBER_KIND.LUKE, taskId }),
         );
         assert.deepEqual(
-          lukes.map((row) => row.handle),
-          ["luke", "luke"],
+          lukes.map((row) => row.taskId),
+          [task, otherTask],
         );
         assert.notEqual(lukes[0]?.id, lukes[1]?.id);
 
         // Asked again, every member answers as it was minted.
         const again = yield* mint({ kind: MEMBER_KIND.HUMAN, userId: namesake });
-        assert.deepEqual([again.id, again.handle], [people[1]?.id, "ada-lovelace-2"]);
+        assert.deepEqual([again.id, again.ordinal], [people[1]?.id, 2]);
         assert.equal((yield* roster(namesake, workspace)).length, 9);
       }),
   );
@@ -2235,7 +2233,7 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         );
         const notice = (channelId: string, seq: number) =>
           markNoticed(room.owner, room.workspace, elsewhere.id, channelId, seq);
-        const told = yield* room.posted(room.first, `@${elsewhere.handle} a look?`);
+        const told = yield* room.posted(room.first, "A look?");
         assert.equal(yield* notice(room.channel.id, told.seq), true);
 
         yield* updateTask(room.owner, room.plan, {
@@ -2243,7 +2241,7 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         });
 
         const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
-        const after = yield* room.posted(room.ada, `@${elsewhere.handle} still there?`, {
+        const after = yield* room.posted(room.ada, "Still there?", {
           channelId: general.id,
         });
         assert.equal(yield* notice(general.id, after.seq), true);

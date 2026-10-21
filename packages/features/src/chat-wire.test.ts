@@ -11,7 +11,6 @@ import {
   CHAT_NOTICE_LEAD,
   CHAT_REPLY,
   chatChannelNameSchema,
-  chatHandleSchema,
   chatNoticeAsksLine,
   chatNoticeReplyLine,
   chatNoticeWords,
@@ -29,25 +28,6 @@ const AGENT_LINK =
 function takes(schema: Schema.Codec<unknown, unknown>, value: WireBoundaryInput): boolean {
   return Result.isSuccess(readEither(schema)(unparsedWire(value)));
 }
-
-test("a handle is a slug opening on a letter, bounded; anything else is refused", () => {
-  for (const handle of ["luke", "agent-12", "charles-2", "a"]) {
-    assert.equal(takes(chatHandleSchema, handle), true, handle);
-  }
-  for (const handle of [
-    "",
-    "2fast",
-    "-agent",
-    "Agent",
-    "agent_1",
-    "agent.1",
-    "@luke",
-    "a b",
-    "a".repeat(CHAT_BOUNDS.MAX_HANDLE_CHARS + 1),
-  ]) {
-    assert.equal(takes(chatHandleSchema, handle), false, handle);
-  }
-});
 
 test("a channel's name is the inbox key's slug, bounded; a sigil, a capital, or a space is refused", () => {
   for (const name of ["general", "billing-export", "v2.api", "2026-plan", "a_b"]) {
