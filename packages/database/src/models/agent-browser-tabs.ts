@@ -233,16 +233,22 @@ const retargetTab = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,
     tabId: Schema.String,
-    targetId: Schema.String,
+    from: Schema.String,
+    to: Schema.String,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ conversationId, tabId, targetId }) =>
+  execute: ({ conversationId, tabId, from, to }) =>
     Database.use((db) =>
       db
         .update(agentBrowserTab)
-        .set({ targetId })
+        .set({ targetId: to })
         .where(
-          and(eq(agentBrowserTab.id, tabId), eq(agentBrowserTab.conversationId, conversationId)),
+          and(
+            eq(agentBrowserTab.id, tabId),
+            eq(agentBrowserTab.conversationId, conversationId),
+            // Only from the target the caller read, so of two reopening the tab at once one moves it.
+            eq(agentBrowserTab.targetId, from),
+          ),
         )
         .returning({ id: agentBrowserTab.id }),
     ),
@@ -396,17 +402,20 @@ export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<Age
 }
 
 /**
- * Moves a tab of the agent's onto the target its browser reopened it as,
- * once a resumed sandbox's browser started without its pages: the same tab,
- * by its id, with its page, opener, takeover, and instants as they stood.
- * Answers whether the agent's browser held it.
+ * Moves a tab of the agent's from the target it was read on onto the one
+ * its browser reopened it as, once a browser started without its pages: the
+ * same tab, by its id, with its page, opener, takeover, and instants as they
+ * stood. Answers whether it moved: not for a tab of another agent's browser,
+ * nor for one another caller moved off `from` first, so of two reopening a
+ * tab at once exactly one keeps its new page.
  */
 export function retargetBrowserTab(
   conversationId: string,
   tabId: string,
-  targetId: string,
+  from: string,
+  to: string,
 ): BrowserTabEffect<boolean> {
-  return Effect.map(retargetTab({ conversationId, tabId, targetId }), (rows) => rows.length > 0);
+  return Effect.map(retargetTab({ conversationId, tabId, from, to }), (rows) => rows.length > 0);
 }
 
 /** Deletes a tab its agent closed, answering whether the agent's browser held it. */
