@@ -57,7 +57,7 @@ import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RecentRow } from "./recent-row.js";
-import { useArchivedView, useTaskListView } from "./task-list-view.js";
+import { useTaskListView } from "./task-list-view.js";
 import { useAutomations } from "./use-automations.js";
 
 /**
@@ -433,14 +433,9 @@ function PersonColumn({
   const person = personActor(ref, members, readerId, former);
   // The sidebar's own view, so their tasks are listed there as its Created by lists them, whoever they are assigned to.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
-  const archive = useArchivedView(tasks.workspace?.id, staged);
   const memberCount = tasks.workspace?.memberCount;
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
-  // Note that the list is turned back from the archived tasks, because the page lists their open ones.
-  const showTasks = () => {
-    archive.onShown(false);
-    taskView.onCreatedByAlone(userId);
-  };
+  const showTasks = () => taskView.onCreatedByAlone(userId);
   const page = personPage(userId, listed);
   const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);

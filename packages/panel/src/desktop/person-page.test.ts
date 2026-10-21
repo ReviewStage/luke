@@ -517,14 +517,12 @@ test("More offers their page's link and a member's email to copy and, to an owne
   ]);
 });
 
-test("Their tasks in sidebar turns the sidebar back from its archived tasks to the tasks it lists", async () => {
-  window.sessionStorage.setItem("luke.sidebarArchivedIn", ACME.id);
+test("Their tasks in sidebar turns the sidebar's list to the tasks they created", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
 
   button(page, "Their tasks in sidebar").click();
 
-  assert.equal(window.sessionStorage.getItem("luke.sidebarArchivedIn"), null);
   assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
 });
 

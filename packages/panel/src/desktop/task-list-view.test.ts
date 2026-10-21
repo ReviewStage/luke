@@ -48,8 +48,8 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
 ];
 
-/** The Tasks section, named for the tasks or for the archived ones it stands turned to. */
-const TASK_LIST = 'nav:is([aria-label="Tasks"], [aria-label="Archived tasks"])';
+/** The Tasks section. */
+const TASK_LIST = 'nav[aria-label="Tasks"]';
 
 const roots: Root[] = [];
 
@@ -473,159 +473,35 @@ test("an empty workspace under a filter says only that it holds no tasks", async
   assert.deepEqual(notes, ["No tasks yet."]);
 });
 
-/** The Tasks section's head, as it names the section. */
-function headName(sidebar: HTMLElement): string | undefined {
-  const head = sidebar.querySelector(`${TASK_LIST} .sidebar-section-head > :first-child`);
-  if (head?.matches("button") !== true) return head?.textContent ?? undefined;
-  return heardName(head);
-}
-
-/** Turns the Tasks section to the archived tasks, or back, from View options. */
-function toggleArchived(sidebar: HTMLElement): void {
-  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-  assert.ok(button, "the Tasks head offers View options");
-  act(() => button.click());
-  act(() => menuItem("Archived tasks").click());
-}
-
-test("the archived tasks stand in no group at the list's foot, and View options turns the section to them, the pins aside, a chip leading back", async () => {
+test("a task archived by an older build stands nowhere in the list, and View options offers no archived view", async () => {
   const sidebar = await mountRead(ACME);
   assert.ok(
     !taskRows(sidebar).some((row) => row.name === "Spike: edge caching"),
     "an archived task stands nowhere in the list",
   );
   assert.equal(groupNames(sidebar).includes("Archived"), false);
-
-  toggleArchived(sidebar);
-  assert.equal(headName(sidebar), "Archived tasks");
-  assert.deepEqual(
-    taskRows(sidebar).map((row) => row.name),
-    ["Old dashboard charts", "Spike: edge caching"],
+  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(button, "the Tasks head offers View options");
+  act(() => button.click());
+  const menu = document.querySelector('[role="menu"][aria-label="View options"]');
+  const labels = [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].map(
+    itemLabel,
   );
-  assert.equal(sidebar.querySelector('nav[aria-label="Pinned"]'), null, "the pins stand aside");
-  assert.equal(chipWords(sidebar), "Archived");
-  const options = sidebar.querySelector('button[aria-label="View options"]');
-  assert.equal(options?.getAttribute("aria-description"), "Filtered");
-
-  const back = chip(sidebar)?.querySelector("button");
-  assert.ok(back, "the chip offers its ×");
-  act(() => back.click());
-  assert.equal(headName(sidebar), "Tasks");
-  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"]'), "the pins are back");
+  assert.ok(labels.length > 0, "the menu is drawn");
+  assert.ok(!labels.includes("Archived tasks"), labels.join(" | "));
 });
 
-test("the archived view filters by creator as the list does, and is not kept for the next launch", async () => {
-  const sidebar = await mountRead(ACME);
-  choose(sidebar, "Created by", "Me");
-  toggleArchived(sidebar);
-  assert.deepEqual(
-    taskRows(sidebar).map((row) => row.name),
-    ["Old dashboard charts"],
-  );
-  unmountAll();
-  // A launch opens a window with nothing held for its session.
-  window.sessionStorage.clear();
-
-  const relaunched = await mountRead(ACME);
-  assert.equal(headName(relaunched), "Tasks");
-  assert.equal(
-    chipWords(relaunched),
-    "Created by me",
-    "the creator filter is kept, the archive not",
-  );
-});
-
-test("with nothing archived, the archived view says so", async () => {
-  const sidebar = await mountRead(ACME, TASKS, []);
-  toggleArchived(sidebar);
-  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
-  assert.ok(notes.includes("No archived tasks."), "the empty archive says so");
-});
-
-test("choosing another workspace lets go of the archived view, so coming back opens on the tasks", async () => {
-  const other = { ...ACME, id: "workspace-other", name: "Other" };
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const listed = (workspace: Workspace) =>
-    onRegistry(
-      AtomRegistry.make(),
-      createElement(
-        DesktopSidebar,
-        sidebarProps(
-          tasksControl({
-            tasks: [...TASKS],
-            archived: [...ARCHIVED],
-            workspace,
-            workspaces: [ACME, other],
-            me: DEAN,
-          }),
-        ),
-      ),
-    );
-  const registry = AtomRegistry.make();
-  const draw = (workspace: Workspace) =>
-    act(() => root.render(onRegistry(registry, listed(workspace))));
-  draw(ACME);
-  await act(async () => undefined);
-  toggleArchived(container);
-  assert.equal(headName(container), "Archived tasks");
-
-  draw(other);
-  assert.equal(headName(container), "Tasks");
-  draw(ACME);
-  assert.equal(headName(container), "Tasks");
-});
-
-test("a repository's menu among the archived tasks offers no Archive", async () => {
-  const sidebar = await mountRead(ACME);
-  toggleArchived(sidebar);
-  const ellipsis = sidebar.querySelector<HTMLButtonElement>(
-    'button[aria-label="Actions for relay"]',
-  );
-  assert.ok(ellipsis, "the group offers its actions");
-  act(() => ellipsis.click());
-  const menu = document.querySelector('[role="menu"][aria-label="relay actions"]');
-  assert.deepEqual(
-    [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].map(itemLabel),
-    ["Pin", "Open on GitHub"],
-  );
-});
-
-test("before the list is first read, the archived view says nothing of being empty", () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const control = tasksControl({ workspace: ACME, workspaces: [ACME], me: DEAN, listRead: false });
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(control))),
-    ),
-  );
-  toggleArchived(container);
-  const notes = [...container.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
-  assert.ok(!notes.includes("No archived tasks."), "nothing is said before the read");
-  assert.ok(!notes.includes("No tasks yet."), "nor that no task stands");
-});
-
-test("with every task archived, the list says so and offers the archived tasks", async () => {
+test("with every task archived by an older build, the list says only that no task stands", async () => {
   const sidebar = await mountRead(ACME, [], ARCHIVED);
-  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
-    each.textContent?.startsWith("Every task is archived."),
-  );
-  const show = note?.querySelector("button");
-  assert.ok(show, "the note offers Show archived");
-  act(() => show.click());
-  assert.equal(headName(sidebar), "Archived tasks");
+  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.ok(notes.includes("No tasks yet."), notes.join(" | "));
+  assert.ok(!notes.some((note) => note?.startsWith("Every task is archived")), notes.join(" | "));
 });
 
 test("⌘K offers each view choice only while it would change the list, and running one changes it as the menu would", async () => {
   const sidebar = await mountRead(ACME);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), false);
   assert.equal(appCommandOffered(APP_COMMAND.SHOW_EVERYONES_TASKS), false);
-  assert.equal(appCommandOffered(APP_COMMAND.HIDE_ARCHIVED_TASKS), false);
 
   act(() => {
     runAppCommand(APP_COMMAND.GROUP_TASKS_BY_CREATOR);
@@ -639,12 +515,6 @@ test("⌘K offers each view choice only while it would change the list, and runn
   });
   assert.equal(chipWords(sidebar), "Assigned to me");
   assert.equal(appCommandOffered(APP_COMMAND.SHOW_EVERYONES_TASKS), true);
-
-  act(() => {
-    runAppCommand(APP_COMMAND.SHOW_ARCHIVED_TASKS);
-  });
-  assert.equal(headName(sidebar), "Archived tasks");
-  assert.equal(appCommandOffered(APP_COMMAND.HIDE_ARCHIVED_TASKS), true);
 });
 
 test("a workspace nobody shares offers ⌘K no grouping or filtering by creator", async () => {
@@ -663,18 +533,6 @@ test("a creator grouping kept for a workspace nobody shares now reads as by repo
   assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), false);
   assert.equal(appCommandOffered(APP_COMMAND.LIST_TASKS_UNGROUPED), true);
-});
-
-test("the sidebar stepping aside for Settings and coming back finds the archived view as it was, named so to a screen reader", async () => {
-  toggleArchived(await mountRead(ACME));
-  unmountAll();
-
-  const back = await mountRead(ACME);
-  assert.equal(headName(back), "Archived tasks");
-  assert.ok(
-    back.querySelector('nav[aria-label="Archived tasks"]'),
-    "the list is named for the archive",
-  );
 });
 
 const TRIAGE = oneOff("a-1", "Triage overnight issues", "acme/relay", DEAN, 550);
@@ -728,16 +586,10 @@ test("grouped by creator a one-off agent stands under whoever started it, and Cr
   );
 });
 
-test("an archived one-off agent stands only in the archived view, among the archived tasks", async () => {
+test("an archived one-off agent stands nowhere in the list", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead(ACME, TASKS, ARCHIVED, [TRIAGE, shelved]);
   assert.ok(!taskRows(sidebar).some((row) => row.name === "Digest of open pull requests"));
-
-  toggleArchived(sidebar);
-  assert.deepEqual(
-    taskRows(sidebar).map((row) => row.name),
-    ["Digest of open pull requests", "Spike: edge caching", "Old dashboard charts"],
-  );
 });
 
 test("the agent whose page stands is the row the sidebar marks", () => {
@@ -851,12 +703,10 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, Archive agent, Move to section, and Permanently delete last, and an archived one offers no pin, Rename, nor section but Unarchive", async () => {
-  const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
+test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, Archive agent, Move to section, and Permanently delete last", async () => {
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
     TRIAGE,
     { ...SWEEP, pinnedAt: 950 },
-    shelved,
   ]);
 
   assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), [
@@ -880,14 +730,6 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
   ]);
   await act(async () => menuItem("Unpin").click());
   assert.deepEqual(pinsAsked, ["a-1:true", "a-2:false"]);
-
-  toggleArchived(sidebar);
-  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), [
-    "Copy link",
-    "Mark as unread",
-    "Unarchive",
-    "Permanently delete",
-  ]);
 });
 
 /** The buttons a sidebar row named `title` draws at its end, by their names. */
@@ -901,9 +743,8 @@ function rowMarks(sidebar: HTMLElement, title: string): string[] {
   );
 }
 
-test("a one-off agent's row draws Pin and Archive at its end where a task's row draws Pin and Mark done, Unpin once pinned and Unarchive once archived, and its Pin pins it", async () => {
-  const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
-  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE, shelved]);
+test("a one-off agent's row draws Pin and Archive at its end where a task's row draws Pin and Mark done, and its Pin pins it", async () => {
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE]);
   const task = TASKS[0] ?? assert.fail("a task stands");
 
   assert.deepEqual(rowMarks(sidebar, task.name), ["Pin", "Mark done"]);
@@ -916,9 +757,6 @@ test("a one-off agent's row draws Pin and Archive at its end where a task's row 
   assert.ok(pin);
   await act(async () => pin.click());
   assert.deepEqual(pinsAsked, ["a-1:true"]);
-
-  toggleArchived(sidebar);
-  assert.deepEqual(rowMarks(sidebar, "Digest of open pull requests"), ["Unarchive"]);
 });
 
 /** A task of the workspace's standing in `status`. */
@@ -991,19 +829,9 @@ test("the status filter is on the Tasks head, and listing everyone's tasks again
   );
 });
 
-test("a task from a service before statuses, and the archived tasks, stand whatever the filter", () => {
-  const sidebar = mountSidebar(
-    ACME,
-    [...BY_STATUS, task("t-0", "No status", null, DEAN)],
-    [{ ...standing("s-9", "Old spike", TASK_STATUS.CANCELED, 5), archivedAt: 6 }],
-  );
+test("a task from a service before statuses stands whatever the filter", () => {
+  const sidebar = mountSidebar(ACME, [...BY_STATUS, task("t-0", "No status", null, DEAN)], []);
   assert.ok(taskRows(sidebar).some((row) => row.name === "No status"));
-  toggleArchived(sidebar);
-  assert.deepEqual(
-    taskRows(sidebar).map((row) => row.name),
-    ["Old spike"],
-  );
-  assert.equal(hiddenLine(sidebar), null);
 });
 
 /** The tasks with Charles's Fix flaky deploy assigned to Dean, and Retry webhooks to Charles. */

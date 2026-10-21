@@ -97,8 +97,6 @@ export const APP_COMMAND = {
   ORDER_TASKS_BY_NAME: "order-tasks-by-name",
   SHOW_MY_TASKS: "show-my-tasks",
   SHOW_EVERYONES_TASKS: "show-everyones-tasks",
-  SHOW_ARCHIVED_TASKS: "show-archived-tasks",
-  HIDE_ARCHIVED_TASKS: "hide-archived-tasks",
   INSERT_PICTURE: "insert-picture",
   NEXT_RECENT_TAB: "next-recent-tab",
   PREVIOUS_RECENT_TAB: "previous-recent-tab",
@@ -138,8 +136,6 @@ const PALETTE_COMMAND_LABELS = {
   [APP_COMMAND.ORDER_TASKS_BY_NAME]: "Order tasks by name",
   [APP_COMMAND.SHOW_MY_TASKS]: "Show my tasks",
   [APP_COMMAND.SHOW_EVERYONES_TASKS]: "Show everyone's tasks",
-  [APP_COMMAND.SHOW_ARCHIVED_TASKS]: "Show archived tasks",
-  [APP_COMMAND.HIDE_ARCHIVED_TASKS]: "Hide archived tasks",
 } as const;
 
 export type PaletteCommand = keyof typeof PALETTE_COMMAND_LABELS;
