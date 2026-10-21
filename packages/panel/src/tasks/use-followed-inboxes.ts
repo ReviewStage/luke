@@ -16,7 +16,9 @@ import { actPort } from "../app-bridge.js";
  * follows each inbox while any stream of it stands and sends every change
  * down each, so nothing here asks again, holds a cursor, or keeps a loop.
  * Each inbox's items are held as they were last pushed, and kept once it is
- * let go, since nothing newer is on its way. One whose last word was that
+ * let go, since nothing newer is on its way, unless the surface asks to
+ * forget them: one followed again then starts from nothing until it is
+ * pushed anew, rather than from a push older than its follow. One whose last word was that
  * it could not be read is let go, and followed again on Try again; its
  * items as last pushed stand meanwhile.
  */
@@ -91,7 +93,10 @@ export function useFollowedInboxes(
   kind: ScopeKind,
   ids: readonly string[],
   follower: InboxFollower,
+  /** Whether an inbox's items are let go with it, so one followed again holds nothing until its follow pushes. */
+  options: { readonly forget?: boolean } = {},
 ): FollowedInboxes {
+  const forget = options.forget === true;
   // Note that the follower is read through a ref, so a surface handing a fresh one each render follows nothing anew.
   const latest = useRef(follower);
   latest.current = follower;
@@ -117,12 +122,21 @@ export function useFollowedInboxes(
       );
       following.current.set(id, stop);
     }
+    const letGo: string[] = [];
     for (const [id, stop] of following.current) {
       if (now.has(id)) continue;
       following.current.delete(id);
       stop();
+      letGo.push(id);
     }
-  }, [kind, wanted]);
+    if (!forget || letGo.length === 0) return;
+    setHeld((was) => {
+      if (!letGo.some((id) => was.items.has(id))) return was;
+      const items = new Map(was.items);
+      for (const id of letGo) items.delete(id);
+      return { ...was, items };
+    });
+  }, [kind, wanted, forget]);
   // Every inbox still followed is let go as the surface goes.
   useEffect(
     () => () => {
