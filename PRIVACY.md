@@ -1133,11 +1133,11 @@ them the things he remembered about you in `USER.md`) with their embeddings,
 and the device rows and push tokens an earlier Mac, iOS, or Apple Watch app
 registered. What stays in our database, unread, is the conversations Luke kept
 for the sessions he followed and for the helpers he delegated to, deleted
-with your account. A key or a calendar
-grant an earlier version kept encrypted on this Mac stays in its settings
-file as that version left it, still encrypted: this version neither reads nor
-sends it. A key of your own an earlier version stored for voice is removed
-from your Mac the next time Luke opens, without being read.
+with your account. A calendar grant an earlier version kept encrypted on
+this Mac stays in its settings file as that version left it, still encrypted:
+this version neither reads nor sends it. Every provider key an earlier version
+stored on this Mac, a key of your own for voice among them, is removed from
+your Mac the next time Luke opens, without being read.
 
 **Feedback.** If you use the feedback form, we receive what you typed, any
 screenshots you attached, and — unless you untick "Include my name and email"

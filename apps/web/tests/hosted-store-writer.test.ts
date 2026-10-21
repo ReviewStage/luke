@@ -111,7 +111,7 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const TRANSCRIPT_INPUT = { providerId: "conductor", providerSessionId: "s-1" };
+const TRANSCRIPT_INPUT = { providerId: "example", providerSessionId: "s-1" };
 const TRANSCRIPT_OUTPUT = { lines: ["user: fixture ask", "assistant: fixture reply"] };
 
 const TYPED_ASK: UserMessageMetadata = {
