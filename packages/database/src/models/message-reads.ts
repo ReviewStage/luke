@@ -40,7 +40,14 @@ import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
-import { asks, conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
+import {
+  asks,
+  conversations,
+  messages,
+  type StoredTurnUsage,
+  turnlessUserLine,
+  turns,
+} from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import {
   EpochMillisColumnSchema,
@@ -957,8 +964,7 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
       and(
         eq(messages.conversationId, conversationId),
         eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
-        eq(messages.role, MESSAGE_ROLE.USER),
-        isNull(messages.turnId),
+        turnlessUserLine(messages),
         lineOfTheAgents(),
         noReceiptOfLine(),
       ),
@@ -997,8 +1003,7 @@ const newestAwaitingLines = SqlSchema.findAll({
             userId === null ? undefined : eq(messages.userId, userId),
             inArray(messages.conversationId, [...conversationIds]),
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
-            eq(messages.role, MESSAGE_ROLE.USER),
-            isNull(messages.turnId),
+            turnlessUserLine(messages),
             lineOfTheAgents(),
             noReceiptOfLine(),
           ),
