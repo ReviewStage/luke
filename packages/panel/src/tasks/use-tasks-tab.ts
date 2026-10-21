@@ -1590,14 +1590,15 @@ export function useTasksTab(input: {
     () => (cloudTaskId === undefined ? NO_IDS : cloudListed?.map((each) => each.id)),
     [cloudTaskId, cloudListed],
   );
-  // The task's Chat stands in the side panel once Chat is on and its read holds the task's channel.
+  // The task's Chat stands in the side panel once Chat is on and its read holds the task's channel, and
+  // opened where it holds none yet, which the tab says; it stands nowhere while Chat is off (`drawnFixed`).
   const taskChatHeld = !(liveRun ? input.signedIn && chatOn : chat !== undefined)
     ? false
-    : shownChat === undefined
-      ? undefined
-      : shownChat.answer.channels.some(
+    : shownChat?.answer.channels.some(
           (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
-        );
+        ) === true
+      ? true
+      : undefined;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined

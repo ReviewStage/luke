@@ -75,9 +75,9 @@ function launch(stood: Stood) {
   };
 }
 
-test("the Chat stands in the strip only while the task holds its channel, as Chat on draws it, and stands again as it was left once it does", () => {
+test("the Chat stands opened on a task with no channel yet and once its channel is held, never while Chat is off, and again as it was left once Chat is back on", () => {
   let control: SidePanelControl | undefined;
-  function Probe({ chat }: { chat: boolean }) {
+  function Probe({ chat }: { chat: boolean | undefined }) {
     control = useSidePanel(
       undefined,
       { id: TASK, holds: { ...usedTask(TASK).holds, [SIDE_PANEL_TAB.CHAT]: chat } },
@@ -92,14 +92,19 @@ test("the Chat stands in the strip only while the task holds its channel, as Cha
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const render = (chat: boolean) => act(() => root.render(createElement(Probe, { chat })));
+  const render = (chat: boolean | undefined) =>
+    act(() => root.render(createElement(Probe, { chat })));
   const panel = () => {
     assert.ok(control);
     return control;
   };
 
-  render(true);
+  // Chat on and no channel yet: the Chat stands only once opened, on its empty state.
+  render(undefined);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "no channel opens no Chat by itself");
   act(() => panel().onChoose(SIDE_PANEL_TAB.CHAT));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
   assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
   render(false);
   assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat off draws no Chat tab");

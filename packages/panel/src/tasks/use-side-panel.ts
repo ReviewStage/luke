@@ -725,8 +725,9 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
  * The task's fixed tabs in the strip's order: each it holds something of and
  * was not closed on, and each opened on it. The Inbox stands only opened, and
  * only on a task that may draw one; the Chat stands opened, or once its
- * channel is held, and never where the task is known to hold none, so a
- * Chat opened while Chat was on stands nowhere once it is off, and stands
+ * channel is held, and never where it is held false, which is Chat off: a
+ * Chat opened on a task with no channel yet stands on its empty state, and
+ * one opened while Chat was on stands nowhere once it is off, and stands
  * again, as it was left, once it is back on.
  */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
