@@ -36,7 +36,8 @@
  * the sandbox, sets the repository's credential at its firewall again, and
  * launches the runner anew with the harness's session to resume and the
  * next event number, whose session files the sandbox's persisted disk kept.
- * `cancel` writes `stop` to a runner that runs. `reset` retires the runner's
+ * `cancel` writes `stop` to a runner that runs, scoped to the launch running
+ * the turn the Stop names, and nothing once that turn is no longer under way. `reset` retires the runner's
  * bearer and deletes the sandbox. Nothing here streams: the runner posts its
  * events to Luke itself.
  *
@@ -64,6 +65,8 @@ import {
 import {
   type CodingAgent,
   hasRepository,
+  latestTurnsOfReached,
+  RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentOfConversation,
   readCodingAgentRouting,
@@ -72,7 +75,7 @@ import {
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { UserContent } from "ai";
-import { Data, DateTime, Duration, Effect, Option, Stream } from "effect";
+import { Clock, Data, DateTime, Duration, Effect, Option, Stream } from "effect";
 import type { HostedEnvironment } from "../../environment.js";
 import {
   AgentSandboxImage,
@@ -81,7 +84,6 @@ import {
 } from "../agent-sandbox-image.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
-  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
@@ -114,6 +116,7 @@ import {
   openWorkingFolder,
 } from "./checkout.js";
 import { RunnerBundle } from "./runner-bundle.js";
+import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -123,7 +126,7 @@ export type RunnerServices =
   | HostedEnvironment;
 
 /** Runs one effect on the edge's runtime; the checkout reaches the sandbox through promises (`repository-shell.ts`). */
-type SandboxRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
+export type SandboxRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
 
 /** What every harness's sessions are composed with. */
 export interface RunnerSessionsOptions {
@@ -136,7 +139,9 @@ export interface RunnerSessionsOptions {
   /** Luke's coder instructions for the agent, which the harness's config carries. */
   readonly instructions: (agent: CodingAgent) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
-  readonly nextSequence: (conversationId: string) => Effect.Effect<number>;
+  readonly nextSequence: (
+    conversationId: string,
+  ) => Effect.Effect<number, { readonly _tag: string }>;
   readonly run: SandboxRunner;
 }
 
@@ -261,6 +266,20 @@ const IMAGE_TYPES: ReadonlySet<string> = new Set([
   "image/gif",
   "image/webp",
 ]);
+
+/** How many hex digits a session id spells the instant it was minted in: enough for every millisecond until the year 10889. */
+const MINTED_AT_DIGITS = 12;
+
+/**
+ * A session id the harness's prefix begins, minted at the instant given: the
+ * instant in fixed-width hex, then a fresh UUID. The instant first is what
+ * lets a session opened later claim the conversation's record over one that
+ * ended (`claimRuntimeSession`, forward only, by the ids' order), as eve's
+ * own ids do.
+ */
+function sessionIdOf(prefix: string, mintedAt: number): string {
+  return `${prefix}${mintedAt.toString(16).padStart(MINTED_AT_DIGITS, "0")}-${randomUUID()}`;
+}
 
 /** The bearer's bytes before it is spelled, as many as a session key. */
 const BEARER_BYTES = 32;
@@ -457,7 +476,7 @@ export const runnerSessions = <
 >(
   harness: RunnerHarness<E>,
   options: RunnerSessionsOptions,
-): Effect.Effect<AgentSessions<Turn>, never, RunnerServices> =>
+): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   Effect.gen(function* () {
     const context = yield* Effect.context<RunnerServices>();
     const api = yield* vercelSandboxApi(deploymentOidcToken);
@@ -585,14 +604,14 @@ export const runnerSessions = <
         status: failedStatus(failure),
       });
 
-    const sessions: AgentSessions<Turn> = {
+    const sessions: NativeSessions<Turn> = {
       open: (message) =>
         Effect.gen(function* () {
           const agent = yield* agentOf(message.conversationId);
           const snapshot = yield* (yield* AgentSandboxImage).snapshotId;
           if (Option.isNone(snapshot))
             return yield* Effect.fail(new LaunchRefused({ reason: "no snapshot" }));
-          const sessionId = `${harness.sessionPrefix}${randomUUID()}`;
+          const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
           const target: ConversationTarget = { userId, conversationId: agent.conversationId };
           const opened = yield* api.create({
             name: `${SANDBOX_NAME}${randomUUID()}`,
@@ -654,7 +673,10 @@ export const runnerSessions = <
             // harness's lines (the agent's model and effort as they stand, a renewed credential)
             // go ahead of the message, which a change since the launch takes effect from.
             yield* renewCredential(target, agent, live.sandboxSessionId);
-            const ahead = yield* harness.ahead(agent, live.stamp);
+            // Note that the choice is read again just before it is written, because a change
+            // handed to the runner since the read above (`retune`) must not be undone by this
+            // message's stale line; what is left is the moment between this read and the write.
+            const ahead = yield* harness.ahead(yield* agentOf(message.conversationId), live.stamp);
             yield* api.writeStdin(
               live.sandboxSessionId,
               live.commandId,
@@ -682,17 +704,31 @@ export const runnerSessions = <
           return accepted;
         }).pipe(Effect.catch(failed("send")), Effect.provideContext(context)),
 
-      cancel: (sessionId) =>
+      // The Stop is scoped to the turn it names: written only while that turn is the
+      // conversation's turn under way, to the command of the launch running it, and naming that
+      // launch, so a Stop delayed past its turn never interrupts the next launch's.
+      cancel: (sessionId, turnId) =>
         Effect.gen(function* () {
           const found = yield* sandboxOf(api, sessionId);
-          const owned = Option.isSome(found) && (yield* ownsSandbox(found.value));
+          const agentId = Option.isSome(found) ? found.value.tags?.[RUNNER_TAG.AGENT] : undefined;
+          const agent =
+            agentId === undefined ? Option.none() : yield* readCodingAgent(userId, agentId);
           const live =
-            Option.isSome(found) && owned ? yield* liveRunner(api, found.value) : undefined;
-          if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+            Option.isSome(found) && Option.isSome(agent)
+              ? yield* liveRunner(api, found.value)
+              : undefined;
+          if (live === undefined || Option.isNone(agent)) {
+            return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          }
+          const { conversationId } = agent.value;
+          const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
+          if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
+            return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          }
           yield* api.writeStdin(
             live.sandboxSessionId,
             live.commandId,
-            line({ type: INPUT_LINE.STOP }),
+            line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
           );
           return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
         }).pipe(Effect.catch(unavailable("cancel")), Effect.provideContext(context)),
@@ -719,6 +755,31 @@ export const runnerSessions = <
 
       // The runner posts its events to Luke itself, so there is no stream of a session's to follow here.
       stream: () => Stream.empty,
+
+      // A change of model or effort goes to a runner that runs as the harness's `model` lines alone,
+      // which it takes at its next model call; a runner not up takes it at the next message's launch.
+      retune: (sessionId, conversationId) =>
+        Effect.gen(function* () {
+          const found = yield* sandboxOf(api, sessionId);
+          if (Option.isNone(found)) return RUNNER_CHOICE.NOT_LIVE;
+          const agent = yield* agentOf(conversationId);
+          if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) return RUNNER_CHOICE.NOT_LIVE;
+          const live = yield* liveRunner(api, found.value);
+          if (live === undefined) return RUNNER_CHOICE.NOT_LIVE;
+          const ahead = yield* harness.ahead(agent, live.stamp);
+          const model = ahead.lines.filter((each) => each.type === INPUT_LINE.MODEL);
+          if (model.length === 0) return RUNNER_CHOICE.NOT_LIVE;
+          yield* api.writeStdin(live.sandboxSessionId, live.commandId, model.map(line).join(""));
+          return RUNNER_CHOICE.WRITTEN;
+        }).pipe(
+          Effect.catch((failure) =>
+            Effect.as(
+              Effect.logWarning(`A ${harness.name} model change failed: ${failure._tag}`),
+              RUNNER_CHOICE.FAILED,
+            ),
+          ),
+          Effect.provideContext(context),
+        ),
     };
     return sessions;
   });

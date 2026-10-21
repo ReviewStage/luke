@@ -3,8 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
+import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
@@ -32,6 +34,22 @@ const SEALING_ENVIRONMENT = {
   [REALTIME_ENVIRONMENT.SECRET]: `nrt_live_1${Buffer.alloc(32).toString("base64url")}`,
 };
 
+/** The reader a workspace's chat is sealed for: a person's member, as the store keeps one. */
+const READER = {
+  id: randomUUID(),
+  organizationId: "workspace-live-statements",
+  kind: MEMBER_KIND.HUMAN,
+  userId: USER_ID,
+  agentId: null,
+  taskId: null,
+  handle: "ada",
+  ordinal: 1,
+  readSeq: 0,
+  noticeSeq: null,
+  joinedAt: new Date(0),
+  leftAt: null,
+} as const;
+
 /** Every live statement the endpoints seal, by the part it answers. */
 function liveStatements() {
   const parent = randomUUID();
@@ -43,6 +61,7 @@ function liveStatements() {
     ),
   );
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
+  const chat = Option.getOrThrow(workspaceChatLiveStatements(USER_ID, READER));
   const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
   const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
   return {
@@ -62,6 +81,7 @@ function liveStatements() {
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
     ),
+    ...Object.fromEntries(Object.entries(chat).map(([part, query]) => [`chat.${part}`, query])),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
   };

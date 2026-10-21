@@ -399,7 +399,18 @@ const SHARED_FAILURE_NOTE = {
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
   [CODING_AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
+  // Said once the panel stopped asking again (`image-preparing.ts`).
+  [CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
+    "The agent's image is taking too long to prepare. Try again in a few minutes.",
+  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent can't be reached from here yet.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+    "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
+    "The plan's provider didn't answer. Try again in a moment.",
 } as const;
+
+/** What a Start, or a message, says while the agent's image is still being prepared and the panel asks again. */
+export const PREPARING_IMAGE = "Preparing the agent's image…";
 
 /** What a Start from an agent whose session has ended says. */
 const START_RETIRED = "This agent has ended. Start a new one.";
@@ -505,6 +516,10 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -665,6 +680,10 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -699,6 +718,10 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }

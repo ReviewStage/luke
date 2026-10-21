@@ -30,7 +30,7 @@ import {
 } from "./channel.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { coderInstructions } from "./instructions.js";
+import { CODER_HARNESS, coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
@@ -237,6 +237,158 @@ test("the deployment's retire of a session, which a delete a browser asked for e
       { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
       `${method} ${route}`,
     );
+  }
+});
+
+test("a Claude Code agent is told of Claude Code's own tools and never of Luke's it is not offered, and an eve agent of Luke's as before", () => {
+  // The tools Claude Code owns in place of Luke's, as eve's instructions name Luke's.
+  const LUKES = [
+    "`bash`",
+    "`read_file`",
+    "`write_file`",
+    "`apply_patch`",
+    "`glob`",
+    "`grep`",
+    `\`${CODER_TOOL.SLEEP}\``,
+    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
+    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    "`write_todos`",
+    "`delegate`",
+    "task_wait",
+  ];
+  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool"];
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const repository of ["Acme/Relay", null]) {
+      for (const memberToken of [false, true]) {
+        const args = [
+          repository,
+          brief,
+          true,
+          TASK_ADDRESS,
+          undefined,
+          true,
+          null,
+          memberToken,
+        ] as const;
+        const eve = coderInstructions(...args);
+        const claudeCode = coderInstructions(...args, CODER_HARNESS.CLAUDE_CODE);
+        const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
+        assert.deepEqual(
+          LUKES.filter((tool) => claudeCode.includes(tool)),
+          [],
+          label,
+        );
+        assert.ok(
+          LUKES.some((tool) => eve.includes(tool)),
+          label,
+        );
+        assert.deepEqual(
+          // An agent with no repository is offered no skills.
+          CLAUDE_CODES.filter(
+            (tool) => !claudeCode.includes(tool) && (repository !== null || tool !== "Skill tool"),
+          ),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CLAUDE_CODES.filter((tool) => eve.includes(tool)),
+          [],
+          label,
+        );
+        // The tools that touch Luke stay Luke's, under their own names.
+        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+          assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
+        }
+      }
+    }
+    const watching = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.CLAUDE_CODE,
+    );
+    assert.ok(watching.includes("run_in_background") && watching.includes("Monitor"), brief);
+  }
+});
+
+test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
+  // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
+  const LUKES = [
+    "`bash`",
+    "`read_file`",
+    "`write_file`",
+    "`glob`",
+    "`grep`",
+    `\`${CODER_TOOL.SLEEP}\``,
+    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
+    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    "`write_todos`",
+    "`delegate`",
+    "task_wait",
+  ];
+  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool", "Bash"];
+  const CODEXES = [
+    "`apply_patch`",
+    "`update_plan`",
+    "Codex's own web search",
+    "Codex's own subagents",
+  ];
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const repository of ["Acme/Relay", null]) {
+      for (const memberToken of [false, true]) {
+        const codex = coderInstructions(
+          repository,
+          brief,
+          true,
+          TASK_ADDRESS,
+          undefined,
+          true,
+          null,
+          memberToken,
+          CODER_HARNESS.CODEX,
+        );
+        const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
+        assert.deepEqual(
+          LUKES.filter((tool) => codex.includes(tool)),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CLAUDE_CODES.filter((tool) => codex.includes(tool)),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CODEXES.filter((tool) => !codex.includes(tool)),
+          [],
+          label,
+        );
+        // An agent with a repository is pointed at its skills where Codex keeps them.
+        assert.equal(codex.includes("`.agents/skills`"), repository !== null, label);
+        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+          assert.ok(codex.includes(`\`${kept}\``), `${label}: ${kept}`);
+        }
+      }
+    }
+    const watching = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.CODEX,
+    );
+    assert.ok(watching.includes("gh pr checks <number> --watch --fail-fast"), brief);
   }
 });
 
@@ -534,7 +686,28 @@ const BEFORE_CHAT = Schema.decodeUnknownSync(
   Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
 )(JSON.parse(readFileSync(BEFORE_CHAT_PATH, "utf8")));
 
-test("with Chat off the instructions are main's own, byte for byte, and with it on they add the chat section alone", () => {
+/** What the instructions' opening adds with Chat on: that the agent is one of a team talking in its task's chat. */
+const TEAM_WORDS = / You are not working alone: [^\n]*?as its section below says\./u;
+
+/** How the instructions say an agent the agent starts reports back, with Chat on and with it off. */
+/** How an agent another started is told to send its starter what it would have posted in the inbox, with Chat on and with it off. */
+const STARTER_REACH_WORDS = {
+  on: "in your task's chat with that agent's mention link where you share a task, or with `message_agent` where you do not",
+  off: "with `message_agent`",
+} as const;
+
+const STARTED_REPORT_WORDS = {
+  on: "reports back in your task's chat, mentioning you, where it is on your task, and with a message where it is not",
+  off: "reports back with a message",
+} as const;
+
+/** What the instructions say of messaging another agent with Chat on, and with it off. */
+const MESSAGE_AGENT_WORDS = {
+  on: / Talk to the agents on your task in your task's chat, never with `message_agent`[^\n]*?keep each message short and complete\./u,
+  off: " Message another agent when its work meets yours, such as a change of yours it depends on or something only it knows, and keep each message short and complete.",
+} as const;
+
+test("with Chat off the instructions are main's own, byte for byte, and with it on they open on the team, add the chat section, and send the task's agents to it rather than message_agent", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const before = BEFORE_CHAT[brief];
     assert.ok(before, brief);
@@ -545,12 +718,23 @@ test("with Chat off the instructions are main's own, byte for byte, and with it 
     assert.equal(off.onTask, before.onTask, brief);
     assert.equal(off.taskless, before.taskless, brief);
     const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
-    assert.ok(on.includes("## Chat with other agents"), brief);
+    assert.ok(on.includes("## Your team's chat"), brief);
     // Chat's word on the inbox keeps the exception for an agent another coding agent started.
     assert.ok(on.includes("or, where another coding agent started you, to that agent"), brief);
-    const section = on.slice(on.indexOf("\n\n## Chat with other agents"));
+    const section = on.slice(on.indexOf("\n\n## Your team's chat"));
     const end = section.indexOf("\n\n## ", 2);
-    assert.equal(on.replace(section.slice(0, end), ""), before.onTask, brief);
+    assert.match(on, MESSAGE_AGENT_WORDS.on, brief);
+    assert.match(on.split("\n")[0] ?? "", TEAM_WORDS, brief);
+    assert.equal(
+      on
+        .replace(section.slice(0, end), "")
+        .replace(MESSAGE_AGENT_WORDS.on, MESSAGE_AGENT_WORDS.off)
+        .replace(TEAM_WORDS, "")
+        .replace(STARTED_REPORT_WORDS.on, STARTED_REPORT_WORDS.off)
+        .replace(STARTER_REACH_WORDS.on, STARTER_REACH_WORDS.off),
+      before.onTask,
+      brief,
+    );
     for (const tool of Object.values(CHAT_TOOLS)) {
       assert.ok(!off.onTask.includes(tool.name), `${brief} with Chat off names ${tool.name}`);
     }
@@ -561,7 +745,7 @@ test("with Chat on the session keeps the developer's inbox for what it needs of 
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const instructions = coderInstructions("Acme/Relay", brief, false, null, undefined, true);
     assert.ok(instructions.includes("## The developer's inbox"), brief);
-    assert.ok(instructions.includes("## Chat with other agents"), brief);
+    assert.ok(instructions.includes("## Your team's chat"), brief);
     for (const tool of [...Object.values(CHAT_TOOLS), ...Object.values(INBOX_TOOLS)]) {
       assert.ok(instructions.includes(tool.name), `${brief} names ${tool.name}`);
     }

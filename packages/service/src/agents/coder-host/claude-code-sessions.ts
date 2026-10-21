@@ -25,13 +25,14 @@ import {
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
-import type { AgentSessions } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
+import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
   LaunchRefused,
   type RunnerHarness,
@@ -39,6 +40,7 @@ import {
   type RunnerSessionsOptions,
   runnerSessions,
 } from "./runner-sessions.js";
+import type { NativeSessions } from "./runtime-sessions.js";
 
 export { RUNNER_ENDED, runnerBearerDigest, runnerEnded } from "./runner-sessions.js";
 
@@ -49,9 +51,6 @@ export interface ClaudeCodeSessionsOptions extends RunnerSessionsOptions {
   /** An Anthropic API key the CLI runs on in place of the account's plan: test mode alone. */
   readonly testApiKey?: Redacted.Redacted | undefined;
 }
-
-/** What a session id Luke mints for Claude Code begins with. */
-const SESSION_PREFIX = "luke-claude-code-";
 
 /** The image's `claude`, the binary the bundled SDK cannot find on its own (`agent-runtime/sandbox.ts`). */
 const CLAUDE_EXECUTABLE =
@@ -144,7 +143,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
 
   return {
     name: "Claude Code",
-    sessionPrefix: SESSION_PREFIX,
+    sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CLAUDE_CODE],
     launch: () => credential,
     config,
     ahead,
@@ -154,5 +153,5 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
 /** The sessions for one account, over the calling fiber's services. */
 export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: ClaudeCodeSessionsOptions,
-): Effect.Effect<AgentSessions<Turn>, never, ClaudeCodeServices> =>
+): Effect.Effect<NativeSessions<Turn>, never, ClaudeCodeServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);

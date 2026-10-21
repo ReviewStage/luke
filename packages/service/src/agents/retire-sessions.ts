@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@luke/database/core/query";
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option, Ref } from "effect";
@@ -57,7 +58,11 @@ const RETIRE_SESSIONS = {
 /** How a caller reaches eve under one mount: the delete's own caller's client, typed to retire a session and nothing else, or the refusal that there is none. */
 export type EveAt = (
   mount: EveMount,
-) => Effect.Effect<Pick<AgentSessions, "reset">, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<
+  Pick<AgentSessions, "reset">,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+>;
 
 /**
  * How a delete's caller reaches eve to retire what it deletes, settled
@@ -73,7 +78,7 @@ export const retiringReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   request: Request,
   account: string,
-): Effect.fn.Return<EveAt, HostedRefusal, HttpClient.HttpClient> {
+): Effect.fn.Return<EveAt, HostedRefusal, HttpClient.HttpClient | DatabaseServices> {
   if (hostedCarriesBearer(request)) return (mount) => eveFor(reach, request, account, mount);
   const composed = {
     [EVE_MOUNT.CODER]: yield* eveFor(reach, request, account, EVE_MOUNT.CODER),
@@ -85,7 +90,7 @@ export const retiringReach = /* @__PURE__ */ Effect.fnUntraced(function* (
 const retireOne = (
   eveAt: EveAt,
   session: StandingSession,
-): Effect.Effect<void, never, HttpClient.HttpClient> =>
+): Effect.Effect<void, never, HttpClient.HttpClient | DatabaseServices> =>
   eveAt(EVE_MOUNT.CODER).pipe(
     Effect.flatMap((eve) => eve.reset(session.sessionId)),
     Effect.timeoutOption(RETIRE_SESSIONS.TIMEOUT),
@@ -115,7 +120,7 @@ const retireOne = (
 export function retireSessions(
   eveAt: EveAt,
   sessions: readonly StandingSession[],
-): Effect.Effect<void, never, HttpClient.HttpClient> {
+): Effect.Effect<void, never, HttpClient.HttpClient | DatabaseServices> {
   return Effect.gen(function* () {
     const settled = yield* Ref.make(0);
     const agents = sessions.filter((session) => session.kind === CONVERSATION_KIND.CODING_AGENT);

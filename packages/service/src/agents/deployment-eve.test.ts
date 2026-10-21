@@ -1,6 +1,7 @@
 // deployment-eve.test.ts -- eve as the deployment reaches it for an account: under its own secret, never the cron's.
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { getTestDB } from "@luke/database/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
@@ -67,67 +68,73 @@ const askedBy = (received: ReturnType<typeof eveOverHttp>["received"]) =>
     account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
   }));
 
-it.effect(
-  "eve is asked under the deployment's own secret with the account beside it, never the cron's secret the environment holds too",
-  () =>
-    Effect.gen(function* () {
-      const eve = eveOverHttp();
-      yield* Effect.gen(function* () {
-        const eveAs = yield* deploymentEve<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
-        yield* eveAs("user-a").open(MESSAGE);
-        const each = yield* deploymentEveForAccounts<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
-        yield* Effect.flatMap(each("user-b"), (sessions) => sessions.open(MESSAGE));
-      }).pipe(
-        Effect.provide(
-          Layer.merge(eve.layer, environment({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET })),
-        ),
-      );
-      assert.deepEqual(askedBy(eve.received), [
-        {
-          url: `${ORIGIN}/eve/coder/v1/session`,
-          authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
-          account: "user-a",
-        },
-        {
-          url: `${ORIGIN}/eve/coder/v1/session`,
-          authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
-          account: "user-b",
-        },
-      ]);
-    }),
-);
+// A coding agent's session is answered by the runtime its conversation runs on, read from the store
+// (`runtime-sessions.ts`); these conversations are no native agent's, so every call reaches eve.
+it.layer(getTestDB())("eve reached as the deployment", (it) => {
+  it.effect(
+    "eve is asked under the deployment's own secret with the account beside it, never the cron's secret the environment holds too",
+    () =>
+      Effect.gen(function* () {
+        const eve = eveOverHttp();
+        yield* Effect.gen(function* () {
+          const eveAs = yield* deploymentEve<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
+          yield* eveAs("user-a").open(MESSAGE);
+          const each = yield* deploymentEveForAccounts<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
+          yield* Effect.flatMap(each("user-b"), (sessions) => sessions.open(MESSAGE));
+        }).pipe(
+          Effect.provide(
+            Layer.merge(eve.layer, environment({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET })),
+          ),
+        );
+        assert.deepEqual(askedBy(eve.received), [
+          {
+            url: `${ORIGIN}/eve/coder/v1/session`,
+            authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
+            account: "user-a",
+          },
+          {
+            url: `${ORIGIN}/eve/coder/v1/session`,
+            authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
+            account: "user-b",
+          },
+        ]);
+      }),
+  );
 
-it.effect(
-  "a deployment holding the cron's secret alone, no environment, or no origin for eve reaches eve for nobody: refused up front, or account by account for a pass over many, and eve is asked nothing",
-  () =>
-    Effect.gen(function* () {
-      const eve = eveOverHttp();
-      const refusals = (origin: string | undefined) =>
-        Effect.gen(function* () {
-          const upFront = yield* Effect.result(deploymentEve(origin, EVE_MOUNT.CODER));
-          const each = yield* deploymentEveForAccounts(origin, EVE_MOUNT.CODER);
-          const perAccount = yield* Effect.result(each("user-a"));
-          return [
-            Result.isFailure(upFront) ? upFront.failure : "reached",
-            Result.isFailure(perAccount) ? perAccount.failure : "reached",
-          ];
-        });
+  it.effect(
+    "a deployment holding the cron's secret alone, no environment, or no origin for eve reaches eve for nobody: refused up front, or account by account for a pass over many, and eve is asked nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = eveOverHttp();
+        const refusals = (origin: string | undefined) =>
+          Effect.gen(function* () {
+            const upFront = yield* Effect.result(deploymentEve(origin, EVE_MOUNT.CODER));
+            const each = yield* deploymentEveForAccounts(origin, EVE_MOUNT.CODER);
+            const perAccount = yield* Effect.result(each("user-a"));
+            return [
+              Result.isFailure(upFront) ? upFront.failure : "reached",
+              Result.isFailure(perAccount) ? perAccount.failure : "reached",
+            ];
+          });
 
-      const cronAlone = yield* refusals(ORIGIN).pipe(
-        Effect.provide(Layer.merge(eve.layer, environment({ cron: CRON_SECRET, eve: undefined }))),
-      );
-      const noEnvironment = yield* refusals(ORIGIN).pipe(Effect.provide(eve.layer));
-      const noOrigin = yield* refusals(undefined).pipe(
-        Effect.provide(
-          Layer.merge(eve.layer, environment({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET })),
-        ),
-      );
+        const cronAlone = yield* refusals(ORIGIN).pipe(
+          Effect.provide(
+            Layer.merge(eve.layer, environment({ cron: CRON_SECRET, eve: undefined })),
+          ),
+        );
+        const noEnvironment = yield* refusals(ORIGIN).pipe(Effect.provide(eve.layer));
+        const noOrigin = yield* refusals(undefined).pipe(
+          Effect.provide(
+            Layer.merge(eve.layer, environment({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET })),
+          ),
+        );
 
-      const unavailable = [HOSTED_REFUSAL.UNAVAILABLE, HOSTED_REFUSAL.UNAVAILABLE];
-      assert.deepEqual(
-        [cronAlone, noEnvironment, noOrigin],
-        [unavailable, unavailable, unavailable],
-      );
-      assert.deepEqual(eve.received, []);
-    }),
-);
+        const unavailable = [HOSTED_REFUSAL.UNAVAILABLE, HOSTED_REFUSAL.UNAVAILABLE];
+        assert.deepEqual(
+          [cronAlone, noEnvironment, noOrigin],
+          [unavailable, unavailable, unavailable],
+        );
+        assert.deepEqual(eve.received, []);
+      }),
+  );
+});

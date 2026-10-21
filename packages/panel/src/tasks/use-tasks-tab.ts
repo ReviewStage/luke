@@ -149,6 +149,7 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "./closed-tabs.js";
+import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentTabLabel,
@@ -164,7 +165,7 @@ import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.j
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
-import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs.js";
+import { type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs.js";
 import { usePanelArrivals } from "./use-panel-arrivals.js";
 import {
   type HistorySpot,
@@ -1075,14 +1076,20 @@ function secondCallQuestion(taskName: string): DialogQuestion {
 
 /**
  * What the open task holds of each fixed tab's kind, each unknown until its
- * read lands: its plan always, and of its Inbox whether it may draw one, an
- * agent held, an archived one among them, or an item waiting (`inbox`).
+ * read lands: its plan always, of its Inbox whether it may draw one, an
+ * agent held, an archived one among them, or an item waiting (`inbox`), and
+ * of its Chat whether the chat read holds its channel (`chat`).
  */
-function taskHolds(view: Pick<TasksView, "board" | "shownCode">, inbox: boolean): TaskHolds {
+function taskHolds(
+  view: Pick<TasksView, "board" | "shownCode">,
+  inbox: boolean,
+  chat: boolean | undefined,
+): TaskHolds {
   const { board, shownCode } = view;
   return {
     [SIDE_PANEL_TAB.PLAN]: true,
     [SIDE_PANEL_TAB.INBOX]: inbox,
+    [SIDE_PANEL_TAB.CHAT]: chat,
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
         ? undefined
@@ -1528,12 +1535,30 @@ export function useTasksTab(input: {
     [inboxAgent],
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
+  // The task's agents' cloud Browser tabs, while the Browser tab experiment is on, which the panel draws on its own task alone.
+  const cloudTaskId =
+    inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
+  const cloudListed = useCloudBrowserTabs(cloudTaskId, useExperiment(EXPERIMENT.BROWSER));
+  // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
+  const cloudBrowsers = useMemo(
+    () => (cloudTaskId === undefined ? NO_IDS : cloudListed?.map((each) => each.id)),
+    [cloudTaskId, cloudListed],
+  );
+  // The task's Chat stands in the side panel once Chat is on and its read holds the task's channel, and
+  // opened where it holds none yet, which the tab says; it stands nowhere while Chat is off (`drawnFixed`).
+  const taskChatHeld = !(liveRun ? input.signedIn && chatOn : chat !== undefined)
+    ? false
+    : shownChat?.answer.channels.some(
+          (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
+        ) === true
+      ? true
+      : undefined;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
       ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
+        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld, taskChatHeld) }
         : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
@@ -1546,6 +1571,7 @@ export function useTasksTab(input: {
         : inboxAgents
       : (pageAgents ?? agents.agentIds),
     input.room,
+    cloudBrowsers,
   );
   // A Browser tab an agent opens or closes in main is held here, whether or not the side panel is drawn now.
   const browserOn = useExperiment(EXPERIMENT.BROWSER);
@@ -1615,13 +1641,19 @@ export function useTasksTab(input: {
     standIn === undefined &&
     fixture === undefined &&
     !sidePanel.fullScreen;
-  // The task's Chat tab on screen is its plan channel read, as the window's Chat on a channel is.
-  const tabChannel =
-    columnShown && mainTabs.tab === MAIN_TAB.CHAT
-      ? liveChat.chat?.channels.find(
-          (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
-        )?.id
-      : undefined;
+  // The task's Chat on screen in the side panel is its plan channel read, as the window's Chat on a channel is.
+  const taskChatShown =
+    shown &&
+    historyFor === undefined &&
+    standIn === undefined &&
+    fixture === undefined &&
+    sidePanel.open &&
+    sidePanel.tab === SIDE_PANEL_TAB.CHAT;
+  const tabChannel = taskChatShown
+    ? liveChat.chat?.channels.find(
+        (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
+      )?.id
+    : undefined;
   if (tabChannel !== tabReading) setTabReading(tabChannel);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   const shownAgent =
@@ -1652,7 +1684,7 @@ export function useTasksTab(input: {
       ? null
       : standIn?.kind === STAND_IN.CHAT
         ? { workspaceId: listedWorkspace.id, taskId: null }
-        : columnShown && mainTabs.tab === MAIN_TAB.CHAT && viewed.activeTaskId !== undefined
+        : taskChatShown && viewed.activeTaskId !== undefined
           ? { workspaceId: listedWorkspace.id, taskId: viewed.activeTaskId }
           : null;
   const chatShownWorkspace = chatShown?.workspaceId ?? null;
@@ -3229,7 +3261,7 @@ export function useTasksTab(input: {
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
     onShowInbox: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
-    onShowChat: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.CHAT)),
+    onShowChat: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.CHAT)),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: PinnedTab) => {
       const { tab } = pin;

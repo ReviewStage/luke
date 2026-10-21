@@ -11,6 +11,7 @@ import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
 import { browserActsContract } from "./browser.js";
+import { browserLiveActsContract } from "./browser-live.js";
 import { chaptersActsContract } from "./chapters.js";
 import { factoryActsContract } from "./factory.js";
 import { integrationActsContract } from "./integrations.js";
@@ -46,6 +47,7 @@ export {
   AUTOMATION_ACT_KIND,
   AVATAR_ACT_KIND,
   BROWSER_ACT_KIND,
+  BROWSER_LIVE_ACT_KIND,
   CHAPTERS_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
@@ -84,6 +86,7 @@ export const actContract = {
   ...automationActsContract,
   ...avatarActsContract,
   ...browserActsContract,
+  ...browserLiveActsContract,
   ...chaptersActsContract,
   ...factoryActsContract,
   ...integrationActsContract,

@@ -43,14 +43,16 @@ import {
 } from "@luke/agent-runner/protocol";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { Duration, Effect, Redacted, Result } from "effect";
 import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-credentials.js";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
-import { type AgentSessions, PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
+import { PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
+import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
   AGENT_USER,
   LaunchRefused,
@@ -59,6 +61,7 @@ import {
   type RunnerSessionsOptions,
   runnerSessions,
 } from "./runner-sessions.js";
+import type { NativeSessions } from "./runtime-sessions.js";
 
 /** What the sessions reach: the shared launch's services, OpenAI's token endpoint among them. */
 export type CodexServices = RunnerServices;
@@ -67,9 +70,6 @@ export interface CodexSessionsOptions extends RunnerSessionsOptions {
   /** An OpenAI API key Codex runs on in place of the account's plan: test mode alone. */
   readonly testApiKey?: Redacted.Redacted | undefined;
 }
-
-/** What a session id Luke mints for Codex begins with. */
-const SESSION_PREFIX = "luke-codex-";
 
 /** Where the image keeps Codex (`agent-runtime/sandbox.ts`'s `INSTALL_CODEX`): the binary, and the `CODEX_HOME` it made for `agent`. */
 const CODEX_PATH = {
@@ -186,11 +186,17 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
       return { lines: [...renewed, choice], stamp: held.stamp };
     });
 
-  return { name: "Codex", sessionPrefix: SESSION_PREFIX, launch, config, ahead };
+  return {
+    name: "Codex",
+    sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CODEX],
+    launch,
+    config,
+    ahead,
+  };
 }
 
 /** The sessions for one account, over the calling fiber's services. */
 export const codexSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: CodexSessionsOptions,
-): Effect.Effect<AgentSessions<Turn>, never, CodexServices> =>
+): Effect.Effect<NativeSessions<Turn>, never, CodexServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(codex(options), options);

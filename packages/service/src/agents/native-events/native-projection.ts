@@ -83,6 +83,8 @@ const TurnSchema = Schema.Struct({
   usage: Schema.optionalKey(UsageSchema),
   /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
+  /** The MCP servers mentioned to the agent that this turn took as it started, which its calls are handed whatever the switches say. */
+  servers: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 type Turn = typeof TurnSchema.Type;
 
@@ -105,6 +107,22 @@ const readProjection = Schema.decodeUnknownOption(NativeProjectionSchema);
 /** The projection a conversation kept, or the empty one before its first save or for state no longer read. */
 export function heldProjection(saved: WireValue | null): NativeProjection {
   return Option.getOrElse(readProjection(saved), () => EMPTY_PROJECTION);
+}
+
+/** The projection with the servers the turn under way took as it started, where that turn is the one named. */
+export function withTurnServers(
+  state: NativeProjection,
+  turnId: string,
+  servers: readonly string[],
+): NativeProjection {
+  const turn = state.turn;
+  if (turn === undefined || turn.id !== turnId || servers.length === 0) return state;
+  return { ...state, turn: { ...turn, servers: [...servers] } };
+}
+
+/** The servers the turn under way took as it started; none where no turn is under way. */
+export function turnServersOf(state: NativeProjection): readonly string[] {
+  return state.turn?.servers ?? [];
 }
 
 /** A write the projection asks of the store, in the order it must land. */

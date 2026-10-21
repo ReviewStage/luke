@@ -217,6 +217,23 @@ it.effect(
     }),
 );
 
+it.effect("skips a stop meant for another launch's turn, and takes the one naming its own", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke([], STOPPED_COMMAND);
+    const { cli, write, run } = yield* launch(STOPPED_TURN, luke);
+    yield* write(CONFIG);
+    yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Run sleep 600." }] });
+    yield* luke.seen;
+
+    // A Stop of the launch before this one, delayed past it: its turn is not this launch's.
+    yield* write({ type: INPUT_LINE.STOP, launch: FIRST_SEQUENCE - 7 });
+    yield* write({ type: INPUT_LINE.STOP, launch: FIRST_SEQUENCE });
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+    assert.equal(cli.interrupts, 1);
+  }),
+);
+
 it.effect("keeps the CLI up for a message sent during a turn until a turn answers it", () =>
   Effect.gen(function* () {
     const luke = fakeLuke([], "Working on the first message.");

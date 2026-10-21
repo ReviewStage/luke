@@ -97,6 +97,7 @@ import {
   type TaskCallFailure,
   type TaskCodeAnswer,
   type TaskIssueCallFailure,
+  type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
   type TasksIssueLinkAnswer,
@@ -578,6 +579,16 @@ export class HostedTaskClient {
     taskId: string,
   ): Effect.Effect<TasksIssueLinksAnswer, never, HttpClient.HttpClient> {
     return issueView(askHosted(this.#hosted.plans.issues, { id: taskId }));
+  }
+
+  /** The Browser tabs open in one task's agents' browsers, the oldest first; or that the service did not answer. */
+  readBrowserTabs(
+    taskId: string,
+  ): Effect.Effect<TasksBrowserTabsAnswer, never, HttpClient.HttpClient> {
+    return Effect.match(askHosted(this.#hosted.agentBrowserTabs.list, { id: taskId }), {
+      onSuccess: (answer): TasksBrowserTabsAnswer => answer,
+      onFailure: (): TasksBrowserTabsAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    });
   }
 
   /** An issue linked to one task, which the service reads from its provider first; or why none was linked. */

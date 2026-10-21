@@ -56,6 +56,8 @@ export const GATEWAY_METHOD = {
   TASKS_GITHUB_ISSUES: "tasks.githubIssues",
   /** The issues one task links, each with where it stands now, read live through the service; answered to the caller, never held in the view. */
   TASKS_ISSUE_LINKS: "tasks.issueLinks",
+  /** The Browser tabs open in a task's agents' browsers, read from the service and answered to the panel that asked, held nowhere. */
+  TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
   TASKS_ISSUE_LINK: "tasks.issueLink",
   /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
@@ -287,6 +289,16 @@ export const GATEWAY_METHOD = {
   TERMINALS_ACK: "terminals.ack",
   TERMINALS_DISCONNECT: "terminals.disconnect",
   TERMINALS_WAKE: "terminals.wake",
+  /**
+   * A cloud Browser tab's live view (`@luke/features/browser-live-wire`),
+   * opened for one panel under a connection id the desktop minted, sent on,
+   * and closed. The host only carries the socket's text frames each way;
+   * what the service sends is heard as `BROWSER_LIVE_MESSAGE` events, and
+   * its close as `BROWSER_LIVE_CLOSED`, never answered.
+   */
+  BROWSER_LIVE_CONNECT: "browserLive.connect",
+  BROWSER_LIVE_SEND: "browserLive.send",
+  BROWSER_LIVE_DISCONNECT: "browserLive.disconnect",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
@@ -598,6 +610,10 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
+  /** One text frame a cloud Browser tab's live view sent, named by its connection, for the one panel that connection's port reaches. */
+  BROWSER_LIVE_MESSAGE: "browserLive.message",
+  /** A cloud Browser tab's live view closed, with its close code, named by its connection. */
+  BROWSER_LIVE_CLOSED: "browserLive.closed",
   /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
   TRANSCRIPT_CHANGED: "transcript.changed",
 } as const;

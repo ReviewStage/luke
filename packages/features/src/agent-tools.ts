@@ -50,6 +50,8 @@ export const AGENT_TOOL = {
   READ_WEB_PAGE: "read_web_page",
   // A command on the developer's own Mac, every role's.
   RUN_ON_MAC: "run_on_mac",
+  // A real browser in the agent's own sandbox, which the developer can watch and take over, every role's.
+  BROWSER: "browser",
   // eve's shell and file tools and the code extension's, started in a coding agent's checkout.
   BASH: "bash",
   READ_FILE: "read_file",

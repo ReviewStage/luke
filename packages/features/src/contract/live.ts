@@ -10,7 +10,9 @@
  * commands of the kinds `?kinds=` names that no Mac of the account has
  * claimed, as one statement; and
  * one plan's inbox, or one agent's, named by `?id=`, as its items, their
- * threads, and their files. Each
+ * threads, and their files; and one workspace's chat, named by
+ * `?workspaceId=`, as the statements the window's chat read is built from,
+ * once the account has joined it. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -31,6 +33,7 @@ import {
   scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
+  workspaceChatLiveAnswerSchema,
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { hostedProcedure } from "./base.js";
@@ -84,6 +87,14 @@ const liveMacCommandsSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
+/** The workspace whose chat is followed, read as text, a workspace of no shape answered as invalid. */
+const liveChatSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.String,
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
 export const liveContract = {
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
@@ -113,4 +124,8 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX }))
     .input(liveScopeSchema)
     .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
+  workspaceChat: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_CHAT }))
+    .input(liveChatSchema)
+    .output(EffectSchema.flip(workspaceChatLiveAnswerSchema)),
 };

@@ -91,6 +91,7 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_SKILLS]: "Could not read this repository's skills on this system.",
   [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: "Could not read that pull request on this system.",
   [TASKS_ACT_KIND.TASKS_ISSUE]: "Could not read that issue on this system.",
+  [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: "Could not read the task's Browser tabs.",
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: "Could not colour that code on this system.",
   [TASKS_ACT_KIND.TASKS_REVISIONS]: "Could not read that plan's history on this system.",
   [TASKS_ACT_KIND.TASKS_REVISION]: "Could not read that version on this system.",
@@ -156,6 +157,21 @@ const ISSUE = {
 };
 const ISSUE_NONE = 8;
 
+/** A task whose service answers no Browser tabs list. */
+const TASK_UNANSWERED = "0c9e2f4a-5b6d-4e7f-8a9b-1c2d3e4f5a6b";
+
+/** One Browser tab in the task's Luke's browser. */
+const BROWSER_TAB = {
+  id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
+  agentId: null,
+  address: "https://example.com/sign-in",
+  title: "Sign in",
+  openedBy: { kind: "agent" },
+  driver: null,
+  createdAt: 1_000,
+  lastActedAt: 2_000,
+} as const;
+
 /** One ask of every task kind, with a payload its schema admits. */
 const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_REFRESH, payload: undefined },
@@ -194,6 +210,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_SKILLS, payload: PLAN },
   { kind: TASKS_ACT_KIND.TASKS_PULL_REQUEST, payload: { ...PLACE, number: PULL_REQUEST.number } },
   { kind: TASKS_ACT_KIND.TASKS_ISSUE, payload: { ...PLACE, number: ISSUE.number } },
+  { kind: TASKS_ACT_KIND.TASKS_BROWSER_TABS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_COLOUR_CODE, payload: { language: "ts", code: "const a = 1;" } },
   { kind: TASKS_ACT_KIND.TASKS_REVISIONS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_REVISION, payload: { ...TASK, seq: 3 } },
@@ -333,6 +350,12 @@ function windowPort(
         if (params.number === ISSUE_NONE) return { issue: null };
         return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
       }),
+    tasksBrowserTabs: (params) =>
+      ask(`browserTabs:${params.taskId}`, () =>
+        params.taskId === TASK_UNANSWERED
+          ? ({ failure: TASK_CALL_FAILURE.UNANSWERED } as const)
+          : { tabs: [BROWSER_TAB] },
+      ),
     tasksRevisions: (params) =>
       ask(`revisions:${params.taskId}:${params.before}`, () => ({ revisions: [] })),
     tasksRevision: (params) =>
@@ -808,6 +831,17 @@ it("an issue is answered to a panel as the host read it, or as none, and a servi
     `issue:acme/relay:${ISSUE_NONE}`,
     "issue:acme/relay:9",
   ]);
+});
+
+it("a task's Browser tabs are answered to a panel as the host read them, and a service that did not answer is refused in the kind's own words", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const ask = (taskId: string) => settled(client, TASKS_ACT_KIND.TASKS_BROWSER_TABS, { taskId });
+
+  assert.deepEqual(await ask(TASK_ID), { answer: { tabs: [BROWSER_TAB] } });
+  assert.deepEqual(await ask(TASK_UNANSWERED), {
+    refused: REFUSAL[TASKS_ACT_KIND.TASKS_BROWSER_TABS],
+  });
+  assert.deepEqual(asked, [`browserTabs:${TASK_ID}`, `browserTabs:${TASK_UNANSWERED}`]);
 });
 
 it("a content act's payload carrying a key its schema does not name, or past its bound, is refused in the kind's own words, and the host is not asked", async () => {

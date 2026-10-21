@@ -9,6 +9,8 @@ import { expect, test } from "vitest";
 import { bundleAuthoredModuleCode } from "../../../node_modules/eve/dist/src/internal/authored-module-loader.js";
 import { CODER_TOOL } from "../coder-host/tool-set.js";
 import { AGENT_EXTERNAL_DEPENDENCIES } from "./build.js";
+import { AGENT_ROLE } from "./role.js";
+import { toolsOf } from "./tools.js";
 
 const CODER_ROOT = fileURLToPath(new URL("../../../../../apps/dev/", import.meta.url));
 
@@ -49,6 +51,15 @@ test("the coding agent's tool files offer each of its tools once, and nothing el
     .sort();
 
   expect(offered).toEqual(Object.values(CODER_TOOL).sort());
+});
+
+/** The worker's files are its tools on the same terms: a tool the registry gives the worker that no file offers is never offered to it. */
+test("the coding agent's worker's tool files offer each of the worker's tools once, and nothing else", () => {
+  const offered = toolFiles("subagents/worker/tools")
+    .map((file) => basename(file, ".ts"))
+    .sort();
+
+  expect(offered).toEqual([...toolsOf(AGENT_ROLE.CODER_WORKER)].sort());
 });
 
 /**

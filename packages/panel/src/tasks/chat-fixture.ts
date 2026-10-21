@@ -25,10 +25,13 @@ import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
  *
  * A fixture run reads no chat, so its Chat would stand empty. It draws this
  * one instead: the reference journey's plan, Teammate invitations, with two
- * coding agents on it settling who owns the `memberships` table between
- * them in the plan's channel, a thread on it, an ask of each's, a direct
- * message from one to the developer, and Luke mentioning the developer, so
- * For you, the rail's unread counts, and a folded thread all draw. Every
+ * coding agents on it talking in the plan's channel as a team does in its
+ * Slack, since an agent talks in its own task's channel alone: one says
+ * what it is picking up, the two settle who owns the `memberships` table
+ * in a thread, each asks something, one asks the developer by name, and
+ * Luke mentions the developer, so For you, the rail's unread counts, and a
+ * folded thread all draw. The topic channel and the direct messages are
+ * the people's, which no agent opens. Every
  * name here is invented; nothing is read from an account. Each message is
  * stamped some minutes before the moment the run asks for it, so the times
  * read as a morning's talk whenever the capture is taken.
@@ -137,8 +140,15 @@ function messages(at: number): readonly ChatMessage[] {
       id: "a0000000-0000-4000-8000-000000000038",
       seq: 38,
       channelId: CHANNEL.SCHEMA,
-      authorId: MEMBER.AGENT_ONE,
-      blocks: words("`memberships` gains `invite_token`, nullable until the backfill."),
+      authorId: MEMBER.MARIA,
+      blocks: words("Heads up: `memberships` gains `invite_token`, nullable until the backfill."),
+    }),
+    said(at, 44, {
+      id: "a0000000-0000-4000-8000-000000000039",
+      seq: 39,
+      channelId: CHANNEL.INVITES,
+      authorId: MEMBER.AGENT_TWO,
+      blocks: words("Hey all, picking up the invite emails: the template and the resend endpoint."),
     }),
     said(at, 42, {
       id: "a0000000-0000-4000-8000-000000000040",
@@ -146,7 +156,7 @@ function messages(at: number): readonly ChatMessage[] {
       channelId: CHANNEL.INVITES,
       authorId: MEMBER.AGENT_ONE,
       blocks: words(
-        "On `luke/teammate-invitations`. An invite is a `memberships` row with `state = pending`; " +
+        "Morning! I'm on `luke/teammate-invitations`. An invite is a `memberships` row with `state = pending`; " +
           "`POST /invites` creates it and mails a one-time link. I'm adding `invite_token` to the " +
           "table, so anyone touching `memberships` should know.",
       ),
@@ -246,12 +256,12 @@ function messages(at: number): readonly ChatMessage[] {
     said(at, 16, {
       id: "a0000000-0000-4000-8000-000000000047",
       seq: 47,
-      channelId: CHANNEL.WITH_AGENT_TWO,
+      channelId: CHANNEL.INVITES,
       authorId: MEMBER.AGENT_TWO,
-      mentions: [MEMBER.AGENT_ONE],
+      mentions: [MEMBER.DEAN, MEMBER.AGENT_ONE],
       blocks: words(
-        "Can I take `src/members/invite.ts` too? The email template needs the token format, and " +
-          `${CHIP.AGENT_ONE} is still on it. If you'd rather, I'll wait for #214 and base on it.`,
+        `${CHIP.DEAN} can I take \`src/members/invite.ts\` too? The email template needs the token format, and ` +
+          `${CHIP.AGENT_ONE} is still on it. Happy to wait for #214 and base on it instead.`,
       ),
     }),
     said(at, 9, {

@@ -83,7 +83,7 @@ test("a coding agent with Chat on is shown no link of a task's Luke, on a task o
       undefined,
       true,
     );
-    const from = words.indexOf("## Chat with other agents");
+    const from = words.indexOf("## Your team's chat");
     return words.slice(from, words.indexOf("\n## ", from + 1));
   };
   assert.deepEqual(drawnAs(chatOf(TASK_ADDRESS)), []);

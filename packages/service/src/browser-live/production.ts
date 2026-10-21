@@ -19,6 +19,7 @@ import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { Effect, Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { AgentBrowser, agentBrowserLayer } from "../agents/browser/agent-browser.js";
+import { connectRestoring } from "../agents/browser/restore-tabs.js";
 import { sandboxPtyLayer } from "../agents/sandbox-pty.js";
 import { hostedUserInfo, requestUserId, userIdForAuthorization } from "../auth/bearer.js";
 import { resolveBrowserSessionUserId } from "../auth/browser-session.js";
@@ -64,7 +65,14 @@ export const browserLiveDependencies: Effect.Effect<
           Option.fromUndefinedOr(session?.sessionId),
         ),
       ),
-    browser,
+    // Note that a connection reopens the agent's kept tabs where its browser started afresh.
+    browser: {
+      connect: (sessionId, conversationId) =>
+        connectRestoring(sessionId, conversationId).pipe(
+          Effect.provideService(AgentBrowser, browser),
+          Effect.provide(context),
+        ),
+    },
     takeOver: (tabId, userId, heldUntil, now) =>
       run(takeOverBrowserTab(tabId, userId, heldUntil, now)),
     renew: (tabId, userId, heldUntil, now) =>

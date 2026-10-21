@@ -67,6 +67,7 @@ import {
   readsOf,
   workspaceChatPast,
 } from "./coder-host/chat-page.js";
+import { sessionsRouter } from "./coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { deploymentEve } from "./deployment-eve.js";
 
@@ -177,9 +178,14 @@ const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   (starterUserId: string) => AgentSessions,
   HostedRefusal,
-  HttpClient.HttpClient | HostedEnvironment
+  HttpClient.HttpClient | HostedEnvironment | DatabaseServices
 > {
-  if (seams.eveAs !== undefined) return seams.eveAs;
+  const { eveAs } = seams;
+  if (eveAs !== undefined) {
+    // A test's own eve is answered by the runtime its conversation runs on, as the deployment's is.
+    const route = yield* sessionsRouter;
+    return (starter) => route(eveAs(starter), starter);
+  }
   return yield* deploymentEve<BrainHostTurn>(seams.eveOrigin(), EVE_MOUNT.CODER);
 });
 
@@ -187,7 +193,11 @@ const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
 const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatSeams,
   writer: Writer,
-): Effect.fn.Return<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment> {
+): Effect.fn.Return<
+  ChatTelling,
+  HostedRefusal,
+  HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+> {
   return {
     eveFor: yield* eveAsStarter(seams),
     writer: storeWriter({ tools: CODER_TOOL_SET }),
@@ -273,7 +283,11 @@ function picturesOf(
 
 /** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
+  telling: Effect.Effect<
+    ChatTelling,
+    HostedRefusal,
+    HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+  >,
   writer: Writer,
   post: PostPlace & {
     readonly text?: string;
@@ -320,7 +334,11 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
  * ask no longer open, is answered with the ask as it stands, not taken.
  */
 const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
+  telling: Effect.Effect<
+    ChatTelling,
+    HostedRefusal,
+    HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+  >,
   writer: Writer,
   asked: {
     readonly answer: { readonly seq: number; readonly revision: number; readonly reply: ChatReply };

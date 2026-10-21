@@ -9,11 +9,13 @@
  * answers `void`.
  */
 
+import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
 import { codingAgentMessagesAnswerViewSchema } from "@luke/features/coding-agent-view";
 import {
   codeLinesSchema,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
+  tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentAnswerSchema,
   tasksCommentStartParamsSchema,
@@ -183,6 +185,9 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_ISSUE]: actProcedure("Could not read that issue on this system.")
     .input(exactInput(tasksIssueParamsSchema))
     .output(EffectSchema.flip(tasksIssueSchema)),
+  [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actProcedure("Could not read the task's Browser tabs.")
+    .input(exactInput(tasksBrowserTabsParamsSchema))
+    .output(EffectSchema.flip(agentBrowserTabsAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actProcedure("Could not colour that code on this system.")
     .input(exactInput(colourCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),

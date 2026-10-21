@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { agentBrowserTabsAnswerSchema } from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
@@ -782,6 +783,21 @@ export const tasksIssueLinksAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksIssueLinksAnswer = typeof tasksIssueLinksAnswerSchema.Type;
+
+/** A task's agents' Browser tabs, as its side panel asks the host for them: the task. */
+export const tasksBrowserTabsParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+});
+
+export type TasksBrowserTabsParams = typeof tasksBrowserTabsParamsSchema.Type;
+
+/** A task's agents' Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
+export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
+  agentBrowserTabsAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type TasksBrowserTabsAnswer = typeof tasksBrowserTabsAnswerSchema.Type;
 
 /** An issue to link to a task, as its page names it: by what its provider finds it by, with its relation. */
 export const tasksIssueLinkParamsSchema = EffectSchema.Struct({

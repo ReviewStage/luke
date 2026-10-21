@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
+import { HOSTED_API_ERROR, VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
 import { LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@luke/live";
 import type { ParsedJsonObject } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { type HostedLiveSessionOptions, HostedLiveSessionSource } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
+import { hostedVoiceUnavailableNote } from "./microphone-access.js";
 import { type ScriptedOpening, type ScriptedSocketSeam, scriptedOpenSocket } from "./testing.js";
 
 const NOW = 1_800_000_000_000;
@@ -126,4 +127,24 @@ it.live("the hosted source does not carry a renewed bearer for another account",
     assert.equal(script.opens.length, 1);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
   }),
+);
+
+it.live(
+  "a call into an agent that runs natively is refused with a reason the developer reads, not as a plain HTTP error",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        answering({ error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE }),
+      ]);
+      const source = hosted(script);
+
+      assert.equal(
+        yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID, agentId: AGENT_ID }),
+        undefined,
+      );
+      assert.equal(
+        hostedVoiceUnavailableNote(source.diagnostics()),
+        "This agent runs in Claude Code or Codex and can't take calls yet.",
+      );
+    }),
 );

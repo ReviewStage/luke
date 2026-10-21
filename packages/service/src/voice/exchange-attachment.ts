@@ -1,6 +1,7 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
-import type { StoreWriter } from "@luke/database/models/writer";
+import { readCodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import type { AgentSessions, EveMount } from "../agents/brain-host/eve-sessions.js";
@@ -52,20 +53,43 @@ const EXCHANGE_CANNOT_STAND_MESSAGE = "the exchange could not stand on the sessi
 
 const AGENT_GONE_MESSAGE = "the agent the session is bound to no longer stands";
 
+const NATIVE_AGENT_MESSAGE = "the agent the session is bound to runs on a native harness, not eve";
+
+/** A conversation found, or the refusal that the session's binding names none. */
+function found(
+  conversation: Option.Option<ConversationTarget>,
+  gone: string,
+): Effect.Effect<ConversationTarget, ExchangeCannotStand> {
+  return Option.match(conversation, {
+    onNone: () => Effect.fail(new ExchangeCannotStand({ message: gone })),
+    onSome: (target) => Effect.succeed(target),
+  });
+}
+
 /**
  * The conversation a call lands in: the agent's, under the member who
  * started it, whoever is calling. An agent deleted since the session was
  * created, or one the account no longer reaches, has none to offer, and the
- * session is refused.
+ * session is refused. So is an agent whose conversation a native harness
+ * (Claude Code or Codex) answers, whenever the session was admitted: a
+ * call's asks reach eve alone, and eve must never answer a conversation
+ * beside its harness.
  */
 const sessionConversation = (session: AttachedSession) =>
-  Effect.flatMap(readCodingAgent(session.accountId, session.agentId), (agent) =>
-    Option.match(agent, {
-      onNone: () => Effect.fail(new ExchangeCannotStand({ message: AGENT_GONE_MESSAGE })),
-      onSome: (held) =>
-        Effect.succeed({ userId: held.userId, conversationId: held.conversationId }),
-    }),
-  );
+  Effect.gen(function* () {
+    const agent = yield* readCodingAgent(session.accountId, session.agentId);
+    const routing = yield* readCodingAgentRouting(session.accountId, session.agentId);
+    if (Option.isSome(routing) && routing.value.runtime !== CONVERSATION_RUNTIME.EVE) {
+      return yield* Effect.fail(new ExchangeCannotStand({ message: NATIVE_AGENT_MESSAGE }));
+    }
+    return yield* found(
+      Option.map(agent, (held) => ({
+        userId: held.userId,
+        conversationId: held.conversationId,
+      })),
+      AGENT_GONE_MESSAGE,
+    );
+  });
 
 export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttachment {
   return (

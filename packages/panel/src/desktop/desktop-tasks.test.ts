@@ -35,7 +35,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -896,10 +895,10 @@ async function chatTabMounted(ownChannel: boolean) {
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
             region: { kind: DOCUMENT_REGION.READY, task: TASK },
-            mainTabs: {
-              ...tasksControl().mainTabs,
-              tabs: [MAIN_TAB.CHAT],
-              tab: MAIN_TAB.CHAT,
+            sidePanel: {
+              ...tasksControl().sidePanel,
+              open: true,
+              tab: SIDE_PANEL_TAB.CHAT,
             },
             chatView: { ...tasksControl().chatView, available: true, chat },
           }),
@@ -913,7 +912,7 @@ async function chatTabMounted(ownChannel: boolean) {
   return { container, root };
 }
 
-test("a task's Chat tab shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
+test("a task's Chat tab in the side panel shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
@@ -924,7 +923,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
     /Message #teammate-invitations/u,
     "its composer asks for a message to the channel",
   );
-  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 6);
+  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 8);
   act(() => own.root.unmount());
   own.container.remove();
 
@@ -937,7 +936,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
   none.container.remove();
 });
 
-test("with Chat off for the account, a Chat tab kept on the task's strip draws nothing", async () => {
+test("with Chat off for the account, a Chat tab kept in the side panel draws nothing", async () => {
   handState({});
   const off = await chatTabMounted(true);
   assert.equal(off.container.querySelector("section.desktop-task-chat"), null);

@@ -1,4 +1,5 @@
 // deployment-eve.ts -- eve as the deployment reaches it acting for an account, under its own secret.
+import type { DatabaseServices } from "@luke/database/core/query";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
@@ -6,9 +7,11 @@ import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
 import type { BrainHostTurn } from "./brain-host/bounds.js";
 import {
   type AgentSessions,
+  EVE_MOUNT,
   type EveMount,
   eveSessionsComposer,
 } from "./brain-host/eve-sessions.js";
+import { sessionsRouter } from "./coder-host/runtime-sessions.js";
 
 /**
  * The web functions that reach eve, over the web runtime's own
@@ -42,7 +45,11 @@ import {
 export function deploymentEve<Turn extends BrainHostTurn = never>(
   origin: string | undefined,
   mount: EveMount,
-): Effect.Effect<(account: string) => AgentSessions<Turn>, HostedRefusal, HttpClient.HttpClient> {
+): Effect.Effect<
+  (account: string) => AgentSessions<Turn>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
   return Effect.gen(function* () {
     const environment = yield* Effect.serviceOption(HostedEnvironment);
     const secret = Option.getOrUndefined(environment)?.eveDeploymentSecret;
@@ -50,7 +57,12 @@ export function deploymentEve<Turn extends BrainHostTurn = never>(
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }
     const compose = yield* eveSessionsComposer;
-    return (account: string) => compose<Turn>({ origin, caller: { secret, account }, mount });
+    // A coding agent's session is answered by the runtime its conversation runs on (`coder-host/runtime-sessions.ts`).
+    const route = yield* sessionsRouter;
+    return (account: string) => {
+      const eve = compose<Turn>({ origin, caller: { secret, account }, mount });
+      return mount === EVE_MOUNT.CODER ? route(eve, account) : eve;
+    };
   });
 }
 
@@ -66,7 +78,7 @@ export function deploymentEveForAccounts<Turn extends BrainHostTurn = never>(
 ): Effect.Effect<
   (account: string) => Effect.Effect<AgentSessions<Turn>, HostedRefusal>,
   never,
-  HttpClient.HttpClient
+  HttpClient.HttpClient | DatabaseServices
 > {
   return Effect.map(
     Effect.result(deploymentEve<Turn>(origin, mount)),

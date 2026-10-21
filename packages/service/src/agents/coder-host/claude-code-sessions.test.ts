@@ -19,11 +19,14 @@ import {
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import { saveProviderKey } from "@luke/database/models/provider-key-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
+import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import {
   connectWorkspaceGitHub,
@@ -51,6 +54,8 @@ import {
   runnerEnded,
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
+import { RUNNER_CHOICE } from "./runtime-sessions.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * A coding agent's sessions on Claude Code, against a fake of Vercel
@@ -152,6 +157,18 @@ const message = (agent: CodingAgent, text: string, lineId?: string) => ({
   message: text,
   ...(lineId === undefined ? undefined : { lineId }),
 });
+
+/** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
+const turnUnderWay = (userId: string, agent: CodingAgent) =>
+  Effect.gen(function* () {
+    const turnId = randomUUID();
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    yield* writer.enqueueTurn(
+      { userId, conversationId: agent.conversationId },
+      { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+    );
+    return turnId;
+  });
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -320,7 +337,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         opened.sessionId,
         message(agent, "Also the emails.", lineId),
       );
-      const cancelled = yield* sessions.cancel(opened.sessionId, "turn_0");
+      const turnId = yield* turnUnderWay(userId, agent);
+      const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
 
       assert.deepEqual(sent, {
         outcome: EVE_SEND_OUTCOME.ACCEPTED,
@@ -337,8 +355,62 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           uuid: lineId,
           content: [{ type: "text", text: "Also the emails." }],
         },
-        { type: INPUT_LINE.STOP },
+        // The stop names the launch running the turn, by its first event number.
+        { type: INPUT_LINE.STOP, launch: 0 },
       ]);
+    }),
+  );
+
+  it.effect(
+    "a change of model and effort reaches the running runner as a model line alone, and a session with no runner takes nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "anthropic/claude-sonnet-5.5",
+          effort: "low",
+        });
+
+        const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
+        const elsewhere = yield* sessions.retune(
+          `${opened.sessionId.slice(0, -4)}0000`,
+          agent.conversationId,
+        );
+
+        assert.deepEqual([retuned, elsewhere], [RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE]);
+        assert.equal(api.commands.length, 1);
+        assert.deepEqual(linesOf(api.commands[0]).slice(2), [
+          { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
+        ]);
+      }),
+  );
+
+  it.effect("a Stop of a turn no longer under way writes nothing to the runner", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent } = yield* openAgent;
+      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
+      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      // The turn a Stop was pressed on, then a newer one the Stop arrives during.
+      const stopped = yield* turnUnderWay(userId, agent);
+      yield* TestClock.adjust("1 second");
+      yield* turnUnderWay(userId, agent);
+
+      const cancelled = yield* sessions.cancel(opened.sessionId, stopped);
+
+      assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+      assert.ok(
+        (linesOf(api.commands[0]) as InputLine[]).every((line) => line.type !== INPUT_LINE.STOP),
+      );
     }),
   );
 

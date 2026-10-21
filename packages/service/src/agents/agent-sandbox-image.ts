@@ -15,9 +15,14 @@
  * meanwhile, moved on by the next launch or the scheduled sweep.
  */
 
-import { Context, Data, Effect, Layer, Option } from "effect";
+import { Context, Data, type Duration, Effect, Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
-import { awaitTemplate, recordImageBuild, TEMPLATE_STATE } from "./native-sandbox-template.js";
+import {
+  awaitTemplate,
+  NATIVE_TEMPLATE,
+  recordImageBuild,
+  TEMPLATE_STATE,
+} from "./native-sandbox-template.js";
 import {
   deploymentOidcToken,
   type OidcTokenRead,
@@ -44,9 +49,15 @@ export class AgentSandboxImage extends Context.Service<
   AgentSandboxImageService
 >()("AgentSandboxImage") {}
 
-/** The seam over Luke's own template, asked of Vercel under the token the reader hands. */
+/**
+ * The seam over Luke's own template, asked of Vercel under the token the
+ * reader hands, waiting on a build for at most `wait`: a request whose
+ * client cannot hold a build's minutes names less, down to none, and its
+ * caller asks again instead.
+ */
 export const agentSandboxImageFromTemplate = (
   readToken: OidcTokenRead = deploymentOidcToken,
+  wait: Duration.Duration = NATIVE_TEMPLATE.WAIT,
 ): Layer.Layer<AgentSandboxImage, never, HttpClient.HttpClient> =>
   Layer.effect(
     AgentSandboxImage,
@@ -55,7 +66,7 @@ export const agentSandboxImageFromTemplate = (
       const build = yield* Effect.cached(Effect.orDie(recordImageBuild()));
       return {
         snapshotId: Effect.gen(function* () {
-          const template = yield* awaitTemplate(api, yield* build);
+          const template = yield* awaitTemplate(api, yield* build, wait);
           if (template.state === TEMPLATE_STATE.PREPARING) return yield* new ImagePreparing();
           return template.state === TEMPLATE_STATE.READY
             ? Option.some(template.snapshotId)

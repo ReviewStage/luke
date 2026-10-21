@@ -43,6 +43,7 @@ import {
   ensureTaskChannel,
   findOrMakeDm,
   history,
+  homeRoster,
   leave,
   markNoticed,
   memberOfSubject,
@@ -1035,15 +1036,123 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   it.effect("a handle typed as a word names no one, Luke's among them, and mints no Luke", () =>
     Effect.gen(function* () {
       const room = yield* openRoom;
-      const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
-      const sent = Result.getOrThrow(
-        yield* room.post(room.first, "@luke, anyone? @agent-2?", { channelId: general.id }),
-      );
+      const sent = Result.getOrThrow(yield* room.post(room.first, "@luke, anyone? @agent-2?"));
       assert.deepEqual([sent.message.mentions, sent.unresolved], [[], []]);
       assert.ok(
         (yield* roster(room.owner, room.workspace)).every((row) => row.kind !== MEMBER_KIND.LUKE),
       );
     }),
+  );
+
+  it.effect(
+    "an agent and a planner talk in their own task's channel alone: another task's, the general one, and a topic take no post of theirs and read as nothing, and naming one of another task names no one",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const other = yield* openTask(room.owner, room.workspace, "Other");
+        const otherChannel = Option.getOrThrow(yield* ensureTaskChannel(room.owner, other));
+        const outsider = Option.getOrThrow(
+          yield* ensureMember(room.owner, room.workspace, {
+            kind: MEMBER_KIND.AGENT,
+            agentId: yield* openAgent(room.owner, other),
+          }),
+        );
+        const luke = Option.getOrThrow(
+          yield* ensureMember(room.owner, room.workspace, {
+            kind: MEMBER_KIND.LUKE,
+            taskId: room.plan,
+          }),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+        const topic = Result.getOrThrow(
+          yield* openTopicChannel(room.owner, room.workspace, "release", room.ada.id),
+        );
+        const elsewhere = [otherChannel, general, topic];
+        for (const author of [room.first, luke]) {
+          for (const channel of elsewhere) {
+            assert.deepEqual(
+              yield* room.post(author, "Across.", { channelId: channel.id }),
+              Result.fail(CHAT_REFUSAL.NOT_FOUND),
+            );
+          }
+        }
+        const across = yield* room.posted(outsider, "Over here.", { channelId: otherChannel.id });
+        assert.deepEqual(
+          yield* room.post(room.first, "Replying across.", { replyTo: across.seq }),
+          Result.fail(CHAT_REFUSAL.NOT_FOUND),
+        );
+        yield* room.posted(room.ada, "For everyone.", { channelId: general.id });
+        const home = yield* room.posted(room.ada, "On the plan.");
+        const seen = (reader: ChatMemberRow) =>
+          Effect.map(chatPast(room.owner, room.workspace, reader.id, 0), (read) =>
+            Option.getOrThrow(read).messages.map((message) => message.id),
+          );
+        assert.deepEqual(yield* seen(room.second), [home.id]);
+        assert.deepEqual(yield* seen(luke), [home.id]);
+        assert.deepEqual(yield* seen(outsider), [across.id]);
+        assert.deepEqual(
+          yield* unreadFor(room.owner, room.workspace, room.second.id, { channelId: general.id }),
+          Option.none(),
+        );
+
+        const named = Result.getOrThrow(
+          yield* room.post(
+            room.first,
+            `${agentLink(room.second)} and [@Outsider](${encodeMention({ kind: MENTION_KIND.AGENT, agentId: outsider.agentId ?? "" }, PLACE)}): mine.`,
+          ),
+        );
+        assert.deepEqual(
+          [named.message.mentions, named.unresolved],
+          [[room.second.id], ["@Outsider"]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a channel's roster is its people and the members it is home to: its plan's Luke and agents, an archived one among them, or for the general channel the agents on no plan",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const db = yield* Database;
+        const mint = (subject: Parameters<typeof ensureMember>[2]) =>
+          Effect.map(ensureMember(room.owner, room.workspace, subject), Option.getOrThrow);
+        const luke = yield* mint({ kind: MEMBER_KIND.LUKE, taskId: room.plan });
+        const archived = yield* openAgent(room.owner, room.plan);
+        const gone = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: archived });
+        yield* db
+          .update(codingAgent)
+          .set({ archivedAt: new Date(0) })
+          .where(eq(codingAgent.id, archived));
+        const other = yield* openTask(room.owner, room.workspace, "Other");
+        const outsider = yield* mint({
+          kind: MEMBER_KIND.AGENT,
+          agentId: yield* openAgent(room.owner, other),
+        });
+        const taskless = yield* Effect.forEach([0, 1], () =>
+          Effect.gen(function* () {
+            const agentId = yield* openAgent(room.owner, room.plan);
+            const member = yield* mint({ kind: MEMBER_KIND.AGENT, agentId });
+            yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agentId));
+            return member;
+          }),
+        );
+        const ids = (rows: readonly ChatMemberRow[]) => rows.map((row) => row.id).toSorted();
+        const people = [room.ada.id, room.grace.id];
+
+        assert.deepEqual(
+          ids(yield* homeRoster(room.owner, room.channel)),
+          [...people, room.first.id, room.second.id, luke.id, gone.id].toSorted(),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+        assert.deepEqual(
+          ids(yield* homeRoster(room.owner, general)),
+          [...people, ...taskless.map((row) => row.id)].toSorted(),
+        );
+        assert.ok(
+          !(yield* homeRoster(room.owner, room.channel)).some((row) => row.id === outsider.id),
+        );
+        assert.deepEqual(yield* homeRoster(yield* openAccount(), room.channel), []);
+      }),
   );
 
   it.effect(
@@ -1400,11 +1509,13 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         assert.deepEqual([a.created, b.created].toSorted(), [false, true]);
         assert.deepEqual([a.message.askRevision, b.message.askRevision].toSorted(), [1, 2]);
 
-        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+        const elsewhere = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.ada.id),
+        );
         assert.deepEqual(
           yield* postAsk(room.owner, room.workspace, {
             authorMemberId: room.first.id,
-            to: { channelId: general.id },
+            to: { channelId: elsewhere.id },
             blocks: words("Moved?"),
             clientKey: randomUUID(),
             key: "invite-expiry",
@@ -1915,20 +2026,20 @@ it.layer(getTestDB())("a plan's chat moving with the plan", (it) => {
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
+        const agentId = yield* openAgent(room.owner, room.plan);
         const outsider = Option.getOrThrow(
-          yield* ensureMember(room.owner, room.workspace, {
-            kind: MEMBER_KIND.AGENT,
-            agentId: yield* openAgent(
-              room.owner,
-              yield* openTask(room.owner, room.workspace, "Other"),
-            ),
-          }),
+          yield* ensureMember(room.owner, room.workspace, { kind: MEMBER_KIND.AGENT, agentId }),
         );
         const visiting = yield* room.posted(outsider, "Dropping by from the other plan.");
+        const db = yield* Database;
+        // The agent moves on to another plan, leaving its message behind in this one.
+        yield* db
+          .update(codingAgent)
+          .set({ taskId: yield* openTask(room.owner, room.workspace, "Other") })
+          .where(eq(codingAgent.id, agentId));
         const destination = yield* openWorkspace(room.owner);
 
         yield* updateTask(room.owner, room.plan, { organizationId: destination });
-        const db = yield* Database;
         yield* db.delete(organization).where(eq(organization.id, room.workspace));
 
         const there = Option.getOrThrow(
@@ -1958,14 +2069,15 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         const room = yield* openRoom;
         const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
         const inTask = yield* room.posted(room.first, "On the plan.");
-        const inGeneral = yield* room.posted(room.first, "For everyone.", {
+        const inGeneral = yield* room.posted(room.ada, "For everyone.", {
           channelId: general.id,
         });
         const counts = () =>
-          Effect.map(unreadCounts(room.owner, room.workspace, room.second.id), Option.getOrThrow);
+          Effect.map(unreadCounts(room.teammate, room.workspace, room.grace.id), Option.getOrThrow);
         const unread = (channelId?: string) =>
-          Effect.map(unreadFor(room.owner, room.workspace, room.second.id, { channelId }), (read) =>
-            Option.getOrThrow(read).messages.map((message) => message.id),
+          Effect.map(
+            unreadFor(room.teammate, room.workspace, room.grace.id, { channelId }),
+            (read) => Option.getOrThrow(read).messages.map((message) => message.id),
           );
 
         assert.deepEqual(
@@ -1980,23 +2092,23 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         assert.deepEqual(yield* unread(), [inGeneral.id]);
         assert.deepEqual(yield* counts(), []);
 
-        const later = yield* room.posted(room.first, "Later, for everyone.", {
+        const later = yield* room.posted(room.ada, "Later, for everyone.", {
           channelId: general.id,
         });
-        const last = yield* room.posted(room.first, "Last, for everyone.", {
+        const last = yield* room.posted(room.ada, "Last, for everyone.", {
           channelId: general.id,
         });
         assert.equal(
-          yield* readTo(room.owner, room.workspace, room.second.id, general.id, later.seq),
+          yield* readTo(room.teammate, room.workspace, room.grace.id, general.id, later.seq),
           true,
         );
         assert.deepEqual(yield* counts(), [{ channelId: general.id, unread: 1 }]);
         // A place past the head reads to the head, so what is posted next is still unread.
         assert.equal(
-          yield* readTo(room.owner, room.workspace, room.second.id, general.id, last.seq + 50),
+          yield* readTo(room.teammate, room.workspace, room.grace.id, general.id, last.seq + 50),
           true,
         );
-        const next = yield* room.posted(room.first, "Next.", { channelId: general.id });
+        const next = yield* room.posted(room.ada, "Next.", { channelId: general.id });
         assert.deepEqual(yield* unread(general.id), [next.id]);
       }),
   );
@@ -2007,16 +2119,16 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
       Effect.gen(function* () {
         const room = yield* openRoom;
         const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
-        const posted = yield* room.posted(room.first, "For everyone.", { channelId: general.id });
-        assert.deepEqual(yield* channelReads(room.owner, room.workspace, room.second.id), []);
-        yield* readTo(room.owner, room.workspace, room.second.id, general.id, posted.seq);
-        assert.deepEqual(yield* channelReads(room.owner, room.workspace, room.second.id), [
+        const posted = yield* room.posted(room.ada, "For everyone.", { channelId: general.id });
+        assert.deepEqual(yield* channelReads(room.teammate, room.workspace, room.grace.id), []);
+        yield* readTo(room.teammate, room.workspace, room.grace.id, general.id, posted.seq);
+        assert.deepEqual(yield* channelReads(room.teammate, room.workspace, room.grace.id), [
           { channelId: general.id, readSeq: posted.seq },
         ]);
         // Another member's cursors are its own.
         assert.deepEqual(yield* channelReads(room.owner, room.workspace, room.ada.id), []);
         assert.deepEqual(
-          yield* channelReads(yield* openAccount(), room.workspace, room.second.id),
+          yield* channelReads(yield* openAccount(), room.workspace, room.grace.id),
           [],
         );
       }),
@@ -2063,27 +2175,27 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         const room = yield* openRoom;
         const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
         const notice = (channelId: string, seq: number) =>
-          markNoticed(room.owner, room.workspace, room.second.id, channelId, seq);
-        const told = yield* room.posted(room.first, `${agentLink(room.second)} ping.`);
+          markNoticed(room.teammate, room.workspace, room.grace.id, channelId, seq);
+        const read = (channelId?: string) =>
+          unreadFor(room.teammate, room.workspace, room.grace.id, { channelId });
+        const told = yield* room.posted(room.first, "Ping.");
         assert.equal(yield* notice(room.channel.id, told.seq), true);
-        yield* room.posted(room.first, "Elsewhere.", { channelId: general.id });
-        yield* unreadFor(room.owner, room.workspace, room.second.id, { channelId: general.id });
-        const held = yield* room.posted(room.first, `${agentLink(room.second)} again.`, {
+        yield* room.posted(room.ada, "Elsewhere.", { channelId: general.id });
+        yield* read(general.id);
+        const held = yield* room.posted(room.ada, "Again.", {
           channelId: general.id,
         });
         assert.equal(yield* notice(general.id, held.seq), false);
 
-        yield* unreadFor(room.owner, room.workspace, room.second.id, {
-          channelId: room.channel.id,
-        });
-        const freed = yield* room.posted(room.first, `${agentLink(room.second)} and now?`, {
+        yield* read(room.channel.id);
+        const freed = yield* room.posted(room.ada, "And now?", {
           channelId: general.id,
         });
         assert.equal(yield* notice(general.id, freed.seq), true);
         // A notice of a channel read past it already is no notice.
-        yield* unreadFor(room.owner, room.workspace, room.second.id);
+        yield* read();
         assert.equal(yield* notice(general.id, freed.seq), false);
-        const again = yield* room.posted(room.first, `${agentLink(room.second)} once more.`);
+        const again = yield* room.posted(room.first, "Once more.");
         assert.equal(yield* notice(room.channel.id, again.seq), true);
       }),
   );

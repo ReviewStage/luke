@@ -113,12 +113,18 @@ const scriptedSocket = Effect.gen(function* () {
 });
 
 /** The composer over the scripted service and a relay whose openings the test hands in, one per open, as it asks. */
-function subject(options: { signedIn?: boolean; bearers?: string[] } = {}) {
+function subject(
+  options: {
+    signedIn?: boolean;
+    bearers?: string[];
+    events?: { kind: GatewayEventKind; payload: WireValue }[];
+  } = {},
+) {
   return Effect.gen(function* () {
     const service = scriptedService();
     const openings = yield* Queue.unbounded<TerminalSocketOpening>();
     const opened: { url: string; authorization: string | undefined }[] = [];
-    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    const events = options.events ?? [];
     const bearers = [...(options.bearers ?? ["bearer-1"])];
     const composer = yield* composeTerminals({
       kernel: {
@@ -548,5 +554,72 @@ it.effect(
 
       assert.deepEqual(beforeAttach, [], "nothing is sent before the shell is attached");
       assert.deepEqual(relay.sent, [{ bytes: encode("git ") }, { bytes: encode("status\r") }]);
+    }),
+);
+
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TAB_ID = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
+const VIEW = { connectionId: "view-1", taskId: TASK_ID, tabId: TAB_ID };
+
+/** What a live view's connection was handed up, in order: each text frame, then its close. */
+function liveEvents(events: readonly { kind: GatewayEventKind; payload: WireValue }[]) {
+  return events.flatMap((event) =>
+    event.kind === GATEWAY_EVENT.BROWSER_LIVE_MESSAGE ||
+    event.kind === GATEWAY_EVENT.BROWSER_LIVE_CLOSED
+      ? [event.payload]
+      : [],
+  );
+}
+
+it.effect(
+  "a live view's socket opens under the bearer at the tab's path; what the panel sent while it opened reaches it first, the service's frames are handed up by connection, and its close comes last",
+  () =>
+    Effect.gen(function* () {
+      const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+      const { call, hand, opened } = yield* subject({ events });
+      const socket = yield* scriptedSocket;
+
+      yield* call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, VIEW);
+      yield* call(GATEWAY_METHOD.BROWSER_LIVE_SEND, { connectionId: "view-1", text: "viewport" });
+      yield* hand(socket.opening);
+      yield* settle;
+      yield* call(GATEWAY_METHOD.BROWSER_LIVE_SEND, { connectionId: "view-1", text: "take-over" });
+      yield* socket.push({ text: "frame" });
+      yield* socket.close(4000);
+      yield* settle;
+
+      assert.deepEqual(opened, [
+        {
+          url: `wss://tryluke.test/api/browser/live?task=${TASK_ID}&tab=${TAB_ID}`,
+          authorization: "Bearer bearer-1",
+        },
+      ]);
+      assert.deepEqual(socket.sent, [{ text: "viewport" }, { text: "take-over" }]);
+      assert.deepEqual(liveEvents(events), [
+        { connectionId: "view-1", text: "frame" },
+        { connectionId: "view-1", code: 4000 },
+      ]);
+    }),
+);
+
+it.effect(
+  "a live view whose socket is refused closes abnormally, and one the panel lets go says nothing more",
+  () =>
+    Effect.gen(function* () {
+      const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+      const { call, hand } = yield* subject({ events });
+      const socket = yield* scriptedSocket;
+
+      yield* call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, VIEW);
+      yield* hand({ refused: 403 });
+      yield* settle;
+      yield* call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, { ...VIEW, connectionId: "view-2" });
+      yield* hand(socket.opening);
+      yield* settle;
+      yield* call(GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT, { connectionId: "view-2" });
+      yield* socket.push({ text: "frame" });
+      yield* settle;
+
+      assert.deepEqual(liveEvents(events), [{ connectionId: "view-1", code: 1006 }]);
     }),
 );

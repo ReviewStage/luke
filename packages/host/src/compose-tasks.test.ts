@@ -718,6 +718,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.issueAsks.push(ask);
         return service.repositoryIssues[place.workspaceId]?.[place.repository];
       }),
+    readBrowserTabs: () => Effect.succeed({ tabs: [] }),
     readIssueLinks: (taskId) =>
       Effect.sync(() => {
         const issues = service.issueLinks[taskId];

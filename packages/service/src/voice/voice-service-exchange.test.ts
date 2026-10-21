@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
   insertMessage,
   joinWorkspace,
@@ -27,6 +30,7 @@ import {
   sessionInstructions,
 } from "@luke/live";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
+import { eq } from "drizzle-orm";
 import { Effect, Exit, Option, Redacted, Schema, Scope, Stream } from "effect";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
@@ -51,6 +55,7 @@ import {
 } from "../testing/live-events.js";
 import {
   connect,
+  type FakeAccounts,
   fakeAccounts,
   hangUpDevice,
   readSocket,
@@ -176,8 +181,8 @@ const TASK = {
   name: "Teammate invitations",
 } as const;
 
-/** An agent on the task, started blank under the account. */
-async function startAgent(userId: string, taskId: string) {
+/** An agent on the task, started blank under the account, on eve unless a runtime is named. */
+async function startAgent(userId: string, taskId: string, runtime?: ConversationRuntime) {
   const started = await database.run(
     createCodingAgent(userId, {
       taskId,
@@ -187,6 +192,7 @@ async function startAgent(userId: string, taskId: string) {
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: null,
+      runtime,
     }),
   );
   return Option.getOrThrow(started).agent;
@@ -265,6 +271,8 @@ interface Stand {
   readonly log: LogEntry[];
   readonly reports: string[];
   readonly openAi: Awaited<ReturnType<typeof startFakeOpenAi>>;
+  /** The accounts door, which records every session counted against the account. */
+  readonly accounts: FakeAccounts;
   /** Every session the attachment was offered, in order, as the route described it. */
   readonly offered: AttachedSession[];
   /** Lets a gated attachment proceed; a no-op for every other offer. */
@@ -293,7 +301,10 @@ async function stand(offer: Offer): Promise<Stand> {
   const eveMounts: EveMount[] = [];
   const log: LogEntry[] = [];
   const reports: string[] = [];
-  const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(target.userId) };
+  const accounts: FakeAccounts = {
+    ...fakeAccounts(),
+    resolveUserId: () => Effect.succeedSome(target.userId),
+  };
   let release = (): void => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -359,6 +370,7 @@ async function stand(offer: Offer): Promise<Stand> {
     log,
     reports,
     openAi,
+    accounts,
     offered,
     release: () => release(),
     url: (path) => `ws://127.0.0.1:${port}${path}`,
@@ -741,6 +753,7 @@ it.effect(
       );
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       assert.equal((await sessionRowOf(context.target.userId, sessionId))?.agentId, agent.id);
+      assert.deepEqual(context.accounts.spent, [context.target.userId]);
       assert.deepEqual(
         context.offered.map((offered) => offered.agentId),
         [agent.id],
@@ -795,6 +808,62 @@ it.effect(
       }
       assert.equal(context.openAi.creates.length, 0);
       assert.deepEqual(context.eve.opened, []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into an agent that runs on Claude Code or Codex is refused by name before anything is counted or created, and eve is never reached",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      for (const runtime of [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX]) {
+        const native = await startAgent(context.target.userId, context.taskId, runtime);
+        const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+          authorization: BEARER,
+        });
+        assert.ok("reader" in refused);
+        await send(refused.reader.socket, createFrame(context.taskId, [], undefined, native.id));
+        assert.equal(
+          record(await refused.reader.next()).error,
+          HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+        );
+      }
+      assert.deepEqual(context.accounts.spent, []);
+      assert.equal(context.openAi.creates.length, 0);
+      assert.deepEqual(context.offered, []);
+      assert.deepEqual(context.eve.opened, []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a session admitted into an eve agent whose conversation a native harness answers by the time the exchange stands is refused, and eve is never reached",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.GATED);
+      const agent = await startAgent(context.target.userId, context.taskId);
+      const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in opened);
+      await send(opened.reader.socket, createFrame(context.taskId, [], undefined, agent.id));
+      await until(
+        () => context.offered.length === 1,
+        () => "the attachment to be offered the session",
+      );
+      await database.run(
+        Database.use((db) =>
+          db
+            .update(conversations)
+            .set({ runtime: CONVERSATION_RUNTIME.CLAUDE_CODE })
+            .where(eq(conversations.id, agent.conversationId)),
+        ),
+      );
+      context.release();
+      assert.equal(record(await opened.reader.next()).error, HOSTED_API_ERROR.UNAVAILABLE);
+      assert.deepEqual(context.eve.opened, []);
+      assert.deepEqual(context.eveAccounts, []);
       await context.stop();
     }),
 );

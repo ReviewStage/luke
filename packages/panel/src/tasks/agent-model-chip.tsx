@@ -1,3 +1,4 @@
+import { runtimeModelRule, runtimeModels } from "@luke/features/agent-runtime-models";
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
@@ -42,7 +43,10 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * focus leaving it; Escape stops there, so it closes the menu and not the
  * panel behind it. A composer too narrow for the words has the chip draw
  * its harness's mark in their place (`iconOnly`), so the choice is named by
- * the chip's label and its tooltip rather than by its words.
+ * the chip's label and its tooltip rather than by its words. An agent on a
+ * provider's own harness is offered only what that harness runs, the rule
+ * `list_models` and `update_agent` read too (`agent-runtime-models.ts`): on
+ * Claude Code, Claude models alone, with no Fast switch and no Context row.
  */
 
 export function AgentModelChip({
@@ -91,6 +95,7 @@ export function AgentModelChip({
 
   const provider = providerOf(model.choice.model);
   const label = choiceLabel(model.choice, models ?? []).trim();
+  const offered = models === undefined ? undefined : runtimeModels(models, model.runtime);
 
   return (
     <div className="agent-model-chip" ref={root}>
@@ -120,8 +125,9 @@ export function AgentModelChip({
             ref={drawn.ref}
             id={menuId}
             className="agent-model-menu"
-            models={models}
-            chosen={settledChoice(models, model.choice)}
+            models={offered}
+            chosen={settledChoice(offered, model.choice)}
+            offersFast={runtimeModelRule(model.runtime).fast}
             onChoose={model.choose}
             footNote={agentUsageLine(usage)}
             onClose={close}

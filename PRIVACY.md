@@ -455,6 +455,30 @@ session a task's conversation was moved off earlier in its life is not
 tracked, and its snapshot stays until Vercel lets it expire. Nothing written
 in the sandbox reaches your repository.
 
+**A coding agent that runs on Claude Code.** For the accounts in the early
+test of Claude plans, a coding agent your Claude plan pays for runs on
+Anthropic's Claude Code, in that agent's own Vercel Sandbox, rather than on
+Luke's own agent. Its sandbox's disk holds the agent's checkout of the
+repository and Claude Code's own session files: its record of the session,
+which it picks up again from there when the agent is next messaged. Both stay
+on that disk between turns and in the snapshot Vercel keeps when the sandbox
+stops, and are deleted with the sandbox when the task is deleted, as above.
+Your plan's token is handed to Claude Code alone, in its process's
+environment: it is never written to that disk, a command Claude Code runs,
+or the conversation's record.
+
+**A coding agent that runs on Codex.** On the same terms, for the accounts in
+the early test of ChatGPT plans, a coding agent your ChatGPT plan pays for
+runs on OpenAI's Codex, in that agent's own Vercel Sandbox. Its sandbox's
+disk holds the agent's checkout and Codex's own thread files (under its
+`CODEX_HOME`): its record of the thread, which it resumes from there when the
+agent is next messaged. Both stay on that disk between turns and in the
+snapshot Vercel keeps when the sandbox stops, and are deleted with the
+sandbox when the task is deleted, as above. Only the plan's short-lived
+access token, never your sign-in's refresh token, is handed to Codex, in its
+process's environment and on its input: it is never written to that disk, a
+command Codex runs, or the conversation's record.
+
 **Code on screen during a call.** When Luke wants to
 show you code, it names a file and lines, and our service reads them from
 the same sandbox checkout. The path, the commit the checkout read it at, the
@@ -1002,7 +1026,8 @@ their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
-the still of its page drawn while something covers it; code drawn in a
+the still of its page drawn while something covers it, and a cloud Browser
+tab with the live view of its page; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
 webhook secret, the one time it is shown; and the cards
 that open over a row or a chip on hover, a page's preview among them. The
