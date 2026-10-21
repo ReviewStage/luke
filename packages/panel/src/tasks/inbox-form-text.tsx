@@ -40,8 +40,8 @@ export interface FormTextProps {
 
 /** What every text field of an item's form is written with: whom the words go to, what they may name, and the item's send. */
 export interface FormTextDoors {
-  /** The item's agent, which the `@` list does not offer. */
-  readonly self: string;
+  /** The item's agent, which the `@` list does not offer; none where the words go to no agent. */
+  readonly self: string | undefined;
   /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads. */
   readonly agent: CodingAgentSummary | undefined;
   /** Where the item's repository's skills are read from; nothing where none can be. */
