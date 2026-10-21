@@ -7670,9 +7670,19 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* The task and strip under the name, inset to the name's words; the line stands empty where a place has none, so every card is one height. */
 .tab-switcher-detail {
   display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
   min-height: calc(var(--luke-type-caption-size) * 1.4);
   padding-left: calc(var(--luke-space-2) + var(--luke-menu-glyph) + var(--luke-icon-gap));
   white-space: nowrap;
+}
+
+/* The column's agent wears its glyph before the tabs' names, a step smaller than the name's. */
+.tab-switcher-detail > :is(svg, img, .state-glyph) {
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+  flex: 0 0 auto;
+  --state-glyph-size: var(--luke-type-caption-size);
 }
 
 .tab-switcher-detail > .luke-text {
