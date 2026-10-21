@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
+  type TaskStanding,
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
@@ -12,8 +14,10 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
+import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
@@ -22,6 +26,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
+import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
 
 /**
@@ -31,7 +36,12 @@ import { TasksPage } from "./tasks-page.js";
  * press opens the task; the switch beside the title shows the Board; the
  * Filter narrows the tasks and its chips lift it; View options groups them,
  * shows the settled, and draws a row's properties; and the view, the
- * filter, and the display are kept on this Mac.
+ * filter, and the display are kept on this Mac. Every row draws a cell for
+ * each property the view draws, so the columns line up down the page; a
+ * row's chips send the priority and status picked, and a right-click drops
+ * the task's own menu; a group's head folds it, kept on this Mac; and a row
+ * dragged onto another group is sent its status, pinned, or kept in its
+ * section, leaving Pinned or its section where it came from one.
  */
 
 const DEAN = "user-dean";
@@ -58,9 +68,29 @@ let opened: string[] = [];
 /** How many times the page was closed. */
 let closed = 0;
 
+/** Each change of where a task stands the page sent, in order. */
+let sent: [string, TaskStanding][] = [];
+
+/** Each pin, unpin, or archive the page sent, in order. */
+let marked: [string, TaskMark][] = [];
+
+/** Each batch of section writes the page sent, in order. */
+let written: (readonly TaskSectionWrite[])[] = [];
+
+/** The account's sections the page is drawn over. */
+let sections: TaskSections = NO_TASK_SECTIONS;
+
+/** Whether the service keeps the changes of where a task stands sent. */
+let keeps = true;
+
 beforeEach(() => {
   opened = [];
   closed = 0;
+  sent = [];
+  marked = [];
+  written = [];
+  sections = NO_TASK_SECTIONS;
+  keeps = true;
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
@@ -123,8 +153,8 @@ const WAITING: readonly AppInboxTask[] = [
   },
 ];
 
-/** The Tasks page over Acme's tasks, read by Dean, once the members have answered. */
-async function mountPage(): Promise<HTMLElement> {
+/** The Tasks page over Acme's tasks, or `tasks`, read by Dean, once the members have answered. */
+async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -132,17 +162,32 @@ async function mountPage(): Promise<HTMLElement> {
   const registry = AtomRegistry.make();
   const draw = (workspace: Workspace) => {
     const control = tasksControl({
-      tasks: TASKS.map((each) => ({ ...each, workspaceId: workspace.id })),
+      tasks: tasks.map((each) => ({ ...each, workspaceId: workspace.id })),
       inbox: WAITING,
       workspace,
       workspaces: [ACME, BETA],
       me: DEAN,
       listRead: true,
+      taskSections: sections,
       onSelect: (taskId) => opened.push(taskId),
       boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
+      onSetTaskStanding: (taskId, standing) => {
+        sent.push([taskId, standing]);
+        return Promise.resolve(keeps);
+      },
+      onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
+      onWriteSections: (writes) => written.push(writes),
     });
     root.render(
-      onRegistry(registry, createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE })),
+      onRegistry(
+        registry,
+        createElement(
+          Fragment,
+          null,
+          createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE }),
+          createElement(ToastHost),
+        ),
+      ),
     );
   };
   listWorkspace = (workspace) => act(() => draw(workspace));
@@ -329,7 +374,7 @@ test("grouped by priority, the pins not leading, the List runs from the most pre
     ["Low", ["ACME-44"]],
     ["No priority", ["ACME-36"]],
   ]);
-  assert.doesNotMatch(page.querySelector(".tasks-list")?.textContent ?? "", /acme\/web/);
+  assert.equal(page.querySelector(".tasks-list [data-cell='repository']"), null);
 });
 
 test("the switch beside the title shows the Board, kept on this Mac", async () => {
@@ -375,4 +420,312 @@ test("a row's words said to a screen reader alone are left out of find, so a key
   const spoken = press?.querySelector(".visually-hidden");
   assert.ok(spoken, "the key and status are said");
   assert.ok(spoken.hasAttribute("data-find-skip"), "find passes over them");
+});
+
+test("every row draws a cell for each property the view draws, an empty one where its task has nothing to say, so the columns line up down the page", async () => {
+  const page = await mountPage();
+  const cells = (key: string) =>
+    [...rowOf(page, key).querySelectorAll("[data-cell]")].map((cell) =>
+      cell.getAttribute("data-cell"),
+    );
+
+  assert.deepEqual(cells("ACME-44"), cells("ACME-40"), "a row with Inbox threads and one without");
+  assert.ok(
+    rowOf(page, "ACME-40").querySelector("[data-cell='waiting']"),
+    "a row waits on nobody in a cell of its own",
+  );
+});
+
+/** The chip on a task's row that changes its `standing`, Priority or Status. */
+function rowChip(page: HTMLElement, key: string, standing: string): HTMLButtonElement {
+  const chip = rowOf(page, key).querySelector<HTMLButtonElement>(
+    `button[aria-label^="${standing}:"]`,
+  );
+  assert.ok(chip, `the row of ${key} wears its ${standing} chip`);
+  return chip;
+}
+
+test("a row's Priority chip sends the priority picked, and its Status chip the status, opening no task", async () => {
+  const page = await mountPage();
+
+  act(() => rowChip(page, "ACME-39", "Priority").click());
+  choose("Urgent");
+  act(() => rowChip(page, "ACME-36", "Status").click());
+  choose("In progress");
+
+  assert.deepEqual(sent, [
+    ["t-39", { priority: TASK_PRIORITY.URGENT }],
+    ["t-36", { status: TASK_STATUS.IN_PROGRESS }],
+  ]);
+  assert.deepEqual(opened, [], "a pick opens no task");
+});
+
+test("a right-click on a row drops the task's own menu, and its ⋯ the same", async () => {
+  const page = await mountPage();
+  act(() => {
+    rowOf(page, "ACME-40")
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const labels = () =>
+    [...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label')].map(
+      (label) => label.textContent,
+    );
+  assert.ok(labels().includes("Rename"), "the menu offers Rename");
+  closeMenus();
+
+  const more = rowOf(page, "ACME-40").querySelector<HTMLButtonElement>(
+    "button[aria-label='Actions for Billing after downgrade']",
+  );
+  assert.ok(more, "the row offers its ⋯");
+  act(() => more.click());
+  assert.ok(labels().includes("Rename"), "the ⋯ drops the same menu");
+  assert.deepEqual(opened, []);
+});
+
+test("a row draws the pull requests its agents opened, each its mark and its number", async () => {
+  const withPullRequest: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 4222,
+          title: "Rate limit search",
+          state: "open",
+          checks: "passing",
+          additions: 10,
+          deletions: 2,
+        },
+      ],
+    },
+  };
+  const page = await mountPage([withPullRequest, ...TASKS.slice(2)]);
+  const agents = rowOf(page, "ACME-39").querySelector("[data-cell='agents']");
+
+  assert.ok(
+    agents?.querySelector("[data-pull-request-mark]"),
+    "the row wears the pull request's mark",
+  );
+  assert.match(agents?.textContent ?? "", /#4222/);
+});
+
+test("a group's head folds it, its count still standing, and the fold is kept on this Mac", async () => {
+  const page = await mountPage();
+  const fold = () => {
+    const head = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
+      (group) => group.getAttribute("aria-label") === "Todo",
+    );
+    const button = head?.querySelector<HTMLButtonElement>(".tasks-list-fold");
+    assert.ok(button, "Todo's head folds it");
+    return button;
+  };
+
+  act(() => fold().click());
+  assert.deepEqual(groups(page)[2], ["Todo", []]);
+  assert.equal(fold().getAttribute("aria-expanded"), "false");
+  assert.match(fold().textContent ?? "", /2/);
+
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  const again = await mountPage();
+  assert.deepEqual(groups(again)[2], ["Todo", []], "the fold is kept");
+});
+
+/**
+ * The List laid out for a drag: each group 200px tall, one under another
+ * from the window's top, 1000px wide, each row 30px tall, 36px apart, from
+ * 40px down its group. jsdom lays nothing out and captures no pointer, so
+ * this answers the geometry and the capture the browser would.
+ */
+function layRowsOut(page: HTMLElement): void {
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const all = [...document.querySelectorAll(".tasks-list-group")];
+    const at = all.indexOf(this);
+    if (at >= 0) return new DOMRect(0, at * 200, 1000, 200);
+    const group = all.indexOf(this.closest(".tasks-list-group") ?? this);
+    if (group < 0) return new DOMRect();
+    if (this.matches(".tasks-list-rows")) return new DOMRect(0, group * 200 + 40, 1000, 160);
+    if (!this.matches("li[data-task-id]")) return new DOMRect();
+    const row = [...(this.parentElement?.children ?? [])].indexOf(this);
+    return new DOMRect(0, group * 200 + 40 + row * 36, 1000, 30);
+  });
+  for (const list of page.querySelectorAll(".tasks-list-rows")) {
+    Object.assign(list, { setPointerCapture: () => undefined });
+  }
+}
+
+/** A pointer event at a point in the window, as the primary button makes one. */
+function pointer(type: string, x: number, y: number): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
+}
+
+/** Presses a task's row, drags it into the group named `onto`, and lets it go at the top of its rows. */
+function dragRow(page: HTMLElement, key: string, onto: string): void {
+  const press = rowOf(page, key).querySelector("button") ?? assert.fail("the row stands");
+  const box = press.closest("li")?.getBoundingClientRect() ?? assert.fail("the row stands");
+  const target = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
+    (group) => group.getAttribute("aria-label") === onto,
+  );
+  const to = target?.getBoundingClientRect() ?? assert.fail(`${onto} stands`);
+  const from = { x: 500, y: box.y + 15 };
+  act(() => {
+    press.dispatchEvent(pointer("pointerdown", from.x, from.y));
+    window.dispatchEvent(pointer("pointermove", from.x + 10, from.y));
+    window.dispatchEvent(pointer("pointermove", 500, to.y + 20));
+    window.dispatchEvent(pointer("pointerup", 500, to.y + 20));
+  });
+}
+
+test("a Todo row dragged onto In progress's group is sent in progress, opening no task", async () => {
+  const page = await mountPage();
+  layRowsOut(page);
+
+  dragRow(page, "ACME-39", "In progress");
+
+  assert.deepEqual(sent, [["t-39", { status: TASK_STATUS.IN_PROGRESS }]]);
+  assert.deepEqual(marked, []);
+  assert.deepEqual(opened, [], "a drag opens no task");
+});
+
+test("a row dragged out of Pinned onto Todo is unpinned and sent todo, and one dragged onto Pinned is pinned", async () => {
+  const page = await mountPage();
+  layRowsOut(page);
+
+  dragRow(page, "ACME-44", "Todo");
+  dragRow(page, "ACME-36", "Pinned");
+  await act(async () => undefined);
+
+  // Note that the unpin waits on the status being kept, so it lands after the pin sent at once.
+  assert.deepEqual(marked, [
+    ["t-36", TASK_MARK.PIN],
+    ["t-44", TASK_MARK.UNPIN],
+  ]);
+  assert.deepEqual(sent, [["t-44", { status: TASK_STATUS.TODO }]]);
+});
+
+test("a row dragged into a section is kept there, and one dragged out of its section onto a status leaves it", async () => {
+  const LAUNCH = "a1b2c3d4-0000-4000-8000-000000000001";
+  sections = {
+    sections: [{ id: LAUNCH, workspaceId: ACME.id, title: "Launch week", createdAt: 1 }],
+    entries: [{ taskId: "t-42", sectionId: LAUNCH, addedAt: 1 }],
+  };
+  const page = await mountPage();
+  layRowsOut(page);
+  assert.deepEqual(groups(page)[1], ["Launch week", ["ACME-42"]]);
+
+  dragRow(page, "ACME-40", "Launch week");
+  dragRow(page, "ACME-42", "Backlog");
+  await act(async () => undefined);
+
+  assert.deepEqual(
+    written.map((writes) =>
+      writes.map((write) => [
+        write.kind,
+        "taskId" in write ? write.taskId : undefined,
+        "sectionId" in write ? write.sectionId : undefined,
+      ]),
+    ),
+    [[["place", "t-40", LAUNCH]], [["place", "t-42", null]]],
+  );
+  assert.deepEqual(sent, [["t-42", { status: TASK_STATUS.BACKLOG }]]);
+});
+
+test("a Board display kept before its cards offered Agents and Needs you draws them, the rest as kept", async () => {
+  window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
+  window.localStorage.setItem(
+    "luke.tasksBoardDisplay",
+    JSON.stringify({ properties: ["priority", "status"] }),
+  );
+  const page = await mountPage();
+  const card = page.querySelector<HTMLElement>('li[data-task-id="t-44"]');
+
+  assert.match(card?.textContent ?? "", /2 need you/, "the card says what waits on the reader");
+  assert.equal(card?.querySelector(".tasks-board-key"), null, "the key stays off, as kept");
+});
+
+/** The section writes sent, each as its kind, its task, and its section. */
+function writesSent(): unknown[] {
+  return written.map((writes) =>
+    writes.map((write) => [
+      write.kind,
+      "taskId" in write ? write.taskId : undefined,
+      "sectionId" in write ? write.sectionId : undefined,
+    ]),
+  );
+}
+
+test("a row dragged out of its section onto a status the service refuses stays in its section and pinned", async () => {
+  const LAUNCH = "a1b2c3d4-0000-4000-8000-000000000002";
+  sections = {
+    sections: [{ id: LAUNCH, workspaceId: ACME.id, title: "Launch week", createdAt: 1 }],
+    entries: [{ taskId: "t-42", sectionId: LAUNCH, addedAt: 1 }],
+  };
+  keeps = false;
+  const page = await mountPage();
+  layRowsOut(page);
+
+  dragRow(page, "ACME-42", "Backlog");
+  dragRow(page, "ACME-44", "Backlog");
+  await act(async () => undefined);
+
+  assert.deepEqual(sent, [
+    ["t-42", { status: TASK_STATUS.BACKLOG }],
+    ["t-44", { status: TASK_STATUS.BACKLOG }],
+  ]);
+  assert.deepEqual(written, [], "the row keeps its section");
+  assert.deepEqual(marked, [], "the row keeps its pin");
+  assert.match(document.body.textContent ?? "", /Couldn't change the task/);
+});
+
+test("a section holding no task stands in the List, empty, and a row dragged into it is kept there", async () => {
+  const LATER = "a1b2c3d4-0000-4000-8000-000000000003";
+  sections = {
+    sections: [{ id: LATER, workspaceId: ACME.id, title: "Later", createdAt: 1 }],
+    entries: [],
+  };
+  const page = await mountPage();
+  layRowsOut(page);
+  assert.deepEqual(groups(page)[1], ["Later", []]);
+  assert.match(page.textContent ?? "", /Drag tasks here/);
+
+  dragRow(page, "ACME-40", "Later");
+
+  assert.deepEqual(writesSent(), [[["place", "t-40", LATER]]]);
+});
+
+test("a view that leaves no task standing says so, though an empty section still stands", async () => {
+  sections = {
+    sections: [
+      {
+        id: "a1b2c3d4-0000-4000-8000-000000000004",
+        workspaceId: ACME.id,
+        title: "Later",
+        createdAt: 1,
+      },
+    ],
+    entries: [],
+  };
+  window.localStorage.setItem(
+    "luke.tasksFilter",
+    JSON.stringify({ [ACME.id]: { status: [TASK_STATUS.CANCELED] } }),
+  );
+  const page = await mountPage();
+
+  assert.deepEqual(groups(page), [["Later", []]]);
+  assert.match(page.textContent ?? "", /No tasks match this view/);
+});
+
+test("a row leads its repository with its owner's picture, one address for every row of that owner, so the window asks GitHub for it once", async () => {
+  const page = await mountPage();
+  const pictures = [
+    ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.repository-picture"),
+  ].map((picture) => picture.getAttribute("src"));
+
+  assert.equal(pictures.length, page.querySelectorAll(".tasks-list-row").length);
+  assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
 });

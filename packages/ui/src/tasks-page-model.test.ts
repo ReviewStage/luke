@@ -245,7 +245,7 @@ test("each order runs a group's tasks its own way, a tie falling to the latest a
   expect(run(TASKS_ORDER.NAME)).toEqual(["Alpha", "Beta", "Gamma"]);
 });
 
-test("the List leads with the pins, then each section, a task in one group alone, and every group holds only the tasks that stand", () => {
+test("the List leads with the pins, then each section, one holding no task among them, a task in one group alone, and every group holds only the tasks that stand", () => {
   const tasks = [
     task("Pinned", { status: TASK_STATUS.TODO }),
     task("Pinned and shipped", { status: TASK_STATUS.DONE }),
@@ -271,6 +271,7 @@ test("the List leads with the pins, then each section, a task in one group alone
   expect(groups(true)).toEqual([
     [[TASKS_GROUP.PINNED], ["Pinned"]],
     [["section", "launch"], ["Sectioned"]],
+    [["section", "empty"], []],
     [["status", "todo"], ["Loose"]],
   ]);
   expect(groups(false)).toEqual([
