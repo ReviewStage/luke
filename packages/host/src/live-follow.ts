@@ -7,6 +7,7 @@ import {
 import {
   Array as Arr,
   Cause,
+  Context,
   Data,
   Duration,
   Effect,
@@ -266,10 +267,15 @@ class Shown {
     this.settle();
   }
 
-  /** The caller asks for rows again, done with every emit it was handed before. */
-  taken(): void {
-    this.finished = this.delivered;
+  /** The caller is done with every emit up to the one numbered. */
+  takenUpTo(emit: number): void {
+    this.finished = Math.max(this.finished, emit);
     this.settle();
+  }
+
+  /** The last emit the caller was handed. */
+  get deliveredSoFar(): number {
+    return this.delivered;
   }
 
   /** The caller was handed the emits up to the one numbered. */
@@ -299,6 +305,43 @@ class Shown {
       waiter.settle();
     }
   }
+}
+
+/**
+ * The ledgers of the reads followed within a stream `liveShown` marks, which
+ * then says when the caller is done with their rows; none where no stream
+ * is marked, and each read says it on its own next pull.
+ */
+const LiveShownAt = Context.Reference<{ readonly ledgers: Set<Shown> } | undefined>(
+  "@luke/host/LiveShownAt",
+  { defaultValue: () => undefined },
+);
+
+/**
+ * Marks where a follow's rows are shown, for a follow that reshapes them
+ * through a stage that pulls ahead on its own (`Stream.switchMap`), so a
+ * write's wait settles only once what was made of its rows has been shown
+ * here, rather than once the stage took them. Note that each pull here is
+ * the caller done with the last element it was handed, and that element was
+ * made of no rows past those delivered before it was handed.
+ */
+export function liveShown<A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, E, R> {
+  return Stream.suspend(() => {
+    const at = { ledgers: new Set<Shown>() };
+    const madeOf = new Map<Shown, number>();
+    return Stream.transformPull(Stream.provideService(stream, LiveShownAt, at), (pull) =>
+      Effect.succeed(
+        Effect.suspend(() => {
+          for (const ledger of at.ledgers) ledger.takenUpTo(madeOf.get(ledger) ?? 0);
+          return Effect.tap(pull, () =>
+            Effect.sync(() => {
+              for (const ledger of at.ledgers) madeOf.set(ledger, ledger.deliveredSoFar);
+            }),
+          );
+        }),
+      ),
+    );
+  });
 }
 
 /**
@@ -480,134 +523,137 @@ export function liveRows<Part extends string>(
   first: SealedRead<Part>,
 ): Stream.Stream<Readonly<Record<Part, readonly unknown[]>>, LiveBroken> {
   const parts = Object.keys(first.queries).filter((part): part is Part => part in first.queries);
-  return Stream.suspend(() => {
-    const shown = new Shown();
-    const followed = Stream.callback<
-      { readonly emit: number; readonly rows: Readonly<Record<Part, readonly unknown[]>> },
-      LiveBroken
-    >((queue) =>
-      Effect.gen(function* () {
-        let last: string | undefined;
-        const emit = (rows: Readonly<Record<Part, readonly unknown[]>>) => {
-          const said = JSON.stringify(rows);
-          if (said === last) return;
-          last = said;
-          Queue.offerUnsafe(queue, { emit: shown.emit(), rows });
-        };
-        const gone = () =>
-          Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason: GONE })));
+  return Stream.unwrap(
+    Effect.map(Effect.service(LiveShownAt), (at) => {
+      const shown = new Shown();
+      const followed = Stream.callback<
+        { readonly emit: number; readonly rows: Readonly<Record<Part, readonly unknown[]>> },
+        LiveBroken
+      >((queue) =>
+        Effect.gen(function* () {
+          let last: string | undefined;
+          const emit = (rows: Readonly<Record<Part, readonly unknown[]>>) => {
+            const said = JSON.stringify(rows);
+            if (said === last) return;
+            last = said;
+            Queue.offerUnsafe(queue, { emit: shown.emit(), rows });
+          };
+          const gone = () =>
+            Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason: GONE })));
 
-        /** Where the rows stood at the last poll, which the next is held past. */
-        let seen: string | undefined;
-        const pollOnce = Effect.gen(function* () {
-          const read = yield* dependencies.poll(seen);
-          if ("failure" in read) {
-            if (ended(read)) {
-              gone();
-              return yield* Effect.never;
+          /** Where the rows stood at the last poll, which the next is held past. */
+          let seen: string | undefined;
+          const pollOnce = Effect.gen(function* () {
+            const read = yield* dependencies.poll(seen);
+            if ("failure" in read) {
+              if (ended(read)) {
+                gone();
+                return yield* Effect.never;
+              }
+              return yield* Effect.fail(read);
             }
-            return yield* Effect.fail(read);
-          }
-          seen = liveDigestOf(read.queries) ?? seen;
-          const rows = rowsOf(parts, read);
-          if (rows !== undefined) emit(rows);
-        });
-        let polling: Fiber.Fiber<never, unknown> | undefined;
-        /** Polls from now on, unless it already does; `why` is said in the log where Realtime failed rather than being off. */
-        const startPolling = (why: LiveBroken | undefined) =>
-          Effect.gen(function* () {
-            if (polling !== undefined) return;
-            if (why !== undefined) {
-              yield* Effect.logWarning(
-                `live-follow: Realtime failed (${why.reason}); polling`,
-              ).pipe(Effect.annotateLogs(why.code === undefined ? {} : { code: why.code }));
-            }
-            polling = yield* Effect.forkScoped(
-              pollOnce.pipe(
-                Effect.retry(POLL_BACKOFF),
-                Effect.repeat(Schedule.spaced(LIVE_POLL_FLOOR)),
-                Effect.andThen(Effect.never),
-              ),
-            );
-          });
-        const stopPolling = Effect.gen(function* () {
-          if (polling === undefined) return;
-          yield* Fiber.interrupt(polling);
-          polling = undefined;
-          yield* Effect.logInfo("live-follow: Realtime is back; polling stopped");
-        });
-
-        /** The read as last sealed, the first the caller handed, then each resubscribe's. */
-        let sealed: SealedRead<Part> | { readonly failure: string; readonly gone?: boolean } =
-          first;
-        /**
-         * One go at Realtime: followed until it breaks, polled from then on.
-         * Answers whether to subscribe again later: not where the read is gone,
-         * nor where the service answered it polled, Realtime being off.
-         */
-        const attempt = Effect.gen(function* () {
-          if ("failure" in sealed) return ended(sealed) ? GONE : AGAIN;
-          if (sealed.url === LIVE_POLL_URL) {
-            const rows = rowsOf(parts, sealed);
+            seen = liveDigestOf(read.queries) ?? seen;
+            const rows = rowsOf(parts, read);
             if (rows !== undefined) emit(rows);
-            seen = liveDigestOf(sealed.queries) ?? seen;
-            yield* startPolling(undefined);
-            return STAY;
-          }
-          const broken = yield* Stream.runForEach(
-            realtimeRows(dependencies, sealed, shown),
-            ({ change, rows }) =>
-              Effect.andThen(
-                stopPolling,
-                Effect.sync(() => {
-                  emit(rows);
-                  shown.handedOn(change);
-                }),
-              ),
-          ).pipe(
-            Effect.match({
-              onFailure: (why) => why,
-              onSuccess: () => new LiveBroken({ reason: "the subscription ended" }),
-            }),
-          );
-          if (broken.reason === GONE) return GONE;
-          yield* startPolling(broken);
-          return AGAIN;
-        });
-        const resubscribe = Effect.andThen(
-          Effect.flatMap(dependencies.reseal(), (next) =>
-            Effect.sync(() => {
-              sealed = next;
-            }),
-          ),
-          attempt,
-        );
-        const follow = Effect.gen(function* () {
-          let next = yield* attempt;
-          if (next === AGAIN) {
-            next = yield* Effect.repeat(resubscribe, {
-              schedule: Schedule.spaced(RESUBSCRIBE_EVERY),
-              while: (then) => then === AGAIN,
+          });
+          let polling: Fiber.Fiber<never, unknown> | undefined;
+          /** Polls from now on, unless it already does; `why` is said in the log where Realtime failed rather than being off. */
+          const startPolling = (why: LiveBroken | undefined) =>
+            Effect.gen(function* () {
+              if (polling !== undefined) return;
+              if (why !== undefined) {
+                yield* Effect.logWarning(
+                  `live-follow: Realtime failed (${why.reason}); polling`,
+                ).pipe(Effect.annotateLogs(why.code === undefined ? {} : { code: why.code }));
+              }
+              polling = yield* Effect.forkScoped(
+                pollOnce.pipe(
+                  Effect.retry(POLL_BACKOFF),
+                  Effect.repeat(Schedule.spaced(LIVE_POLL_FLOOR)),
+                  Effect.andThen(Effect.never),
+                ),
+              );
             });
-          }
-          if (next === GONE) gone();
-        });
-        yield* Effect.forkScoped(follow);
-      }),
-    );
-    // Note that the caller asks for rows again only once it is done with the last it was handed, which is what a write's wait holds for.
-    return Stream.transformPull(followed, (pull) =>
-      Effect.succeed(
-        Effect.suspend(() => {
-          shown.taken();
-          return pull.pipe(
-            Effect.map((handed) => {
-              for (const { emit } of handed) shown.deliver(emit);
-              return Arr.map(handed, ({ rows }) => rows);
-            }),
+          const stopPolling = Effect.gen(function* () {
+            if (polling === undefined) return;
+            yield* Fiber.interrupt(polling);
+            polling = undefined;
+            yield* Effect.logInfo("live-follow: Realtime is back; polling stopped");
+          });
+
+          /** The read as last sealed, the first the caller handed, then each resubscribe's. */
+          let sealed: SealedRead<Part> | { readonly failure: string; readonly gone?: boolean } =
+            first;
+          /**
+           * One go at Realtime: followed until it breaks, polled from then on.
+           * Answers whether to subscribe again later: not where the read is gone,
+           * nor where the service answered it polled, Realtime being off.
+           */
+          const attempt = Effect.gen(function* () {
+            if ("failure" in sealed) return ended(sealed) ? GONE : AGAIN;
+            if (sealed.url === LIVE_POLL_URL) {
+              const rows = rowsOf(parts, sealed);
+              if (rows !== undefined) emit(rows);
+              seen = liveDigestOf(sealed.queries) ?? seen;
+              yield* startPolling(undefined);
+              return STAY;
+            }
+            const broken = yield* Stream.runForEach(
+              realtimeRows(dependencies, sealed, shown),
+              ({ change, rows }) =>
+                Effect.andThen(
+                  stopPolling,
+                  Effect.sync(() => {
+                    emit(rows);
+                    shown.handedOn(change);
+                  }),
+                ),
+            ).pipe(
+              Effect.match({
+                onFailure: (why) => why,
+                onSuccess: () => new LiveBroken({ reason: "the subscription ended" }),
+              }),
+            );
+            if (broken.reason === GONE) return GONE;
+            yield* startPolling(broken);
+            return AGAIN;
+          });
+          const resubscribe = Effect.andThen(
+            Effect.flatMap(dependencies.reseal(), (next) =>
+              Effect.sync(() => {
+                sealed = next;
+              }),
+            ),
+            attempt,
           );
+          const follow = Effect.gen(function* () {
+            let next = yield* attempt;
+            if (next === AGAIN) {
+              next = yield* Effect.repeat(resubscribe, {
+                schedule: Schedule.spaced(RESUBSCRIBE_EVERY),
+                while: (then) => then === AGAIN,
+              });
+            }
+            if (next === GONE) gone();
+          });
+          yield* Effect.forkScoped(follow);
         }),
-      ),
-    );
-  });
+      );
+      // Note that the caller asks for rows again only once it is done with the last it was handed, which is what a write's wait holds for, unless a stream `liveShown` marks says it instead.
+      at?.ledgers.add(shown);
+      return Stream.transformPull(followed, (pull) =>
+        Effect.succeed(
+          Effect.suspend(() => {
+            if (at === undefined) shown.takenUpTo(shown.deliveredSoFar);
+            return pull.pipe(
+              Effect.map((handed) => {
+                for (const { emit } of handed) shown.deliver(emit);
+                return Arr.map(handed, ({ rows }) => rows);
+              }),
+            );
+          }),
+        ),
+      ).pipe(Stream.ensuring(Effect.sync(() => at?.ledgers.delete(shown))));
+    }),
+  );
 }
