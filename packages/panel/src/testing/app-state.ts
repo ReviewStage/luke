@@ -41,7 +41,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       name: "Dev",
       provider: "github",
     },
-    access: { admin: false },
+    access: { admin: false, nativeAgents: false },
     update: {
       status: UPDATE_STATUS.IDLE,
       currentVersion: "1.0.0",
@@ -49,7 +49,6 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       upToDate: false,
     },
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    hotkeys: { talkHeld: true },
     voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },

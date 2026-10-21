@@ -220,12 +220,12 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
       factoryBoard({
         tasks: listed,
         waiting,
-        callTaskId: tasks.callTaskId,
+        talkingTaskId: tasks.talkingTaskId,
         oneOff,
         oneOffWaiting,
         now,
       }),
-    [listed, waiting, tasks.callTaskId, oneOff, oneOffWaiting, now],
+    [listed, waiting, tasks.talkingTaskId, oneOff, oneOffWaiting, now],
   );
   return { board, questions };
 }

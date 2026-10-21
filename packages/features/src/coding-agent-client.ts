@@ -27,6 +27,7 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
@@ -87,6 +88,7 @@ import { dictationRequestSchema } from "./dictation-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
+  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
@@ -106,7 +108,9 @@ import {
 } from "./inbox-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
-  LIVE_POLL,
+  LIVE_SIGNED_OUT,
+  LIVE_USER_QUERY,
+  type TaskConversationLiveAnswer,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
@@ -116,7 +120,13 @@ import {
   modelChoiceSchema,
 } from "./models-wire.js";
 import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
-import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key-wire.js";
+import {
+  type ChatGptCredentialsSaveRequest,
+  type ChatGptHostAnswer,
+  chatGptCredentialsSaveRequestSchema,
+  PROVIDER_KEY_QUERY,
+  providerKeySaveRequestSchema,
+} from "./provider-key-wire.js";
 import {
   type ChaptersModelAnswerView,
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
@@ -501,6 +511,26 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
+  /** The account's `ext_agent_host_id` for Luke's hosted runtime, which a ChatGPT sign-in names as its host. */
+  chatGptHost(): Effect.Effect<ChatGptHostAnswer | Failed, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.account.chatGptHost, undefined), {});
+  }
+
+  /**
+   * A ChatGPT sign-in the desktop completed, handed to the service once,
+   * answering the keys as they then stand and, where the service kept
+   * nothing, why; a sign-in the service would refuse by shape never travels.
+   */
+  saveChatGptCredentials(
+    credentials: ChatGptCredentialsSaveRequest,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(chatGptCredentialsSaveRequestSchema)(credentials),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
+  }
+
   /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
   removeProviderKey(
     params: ProviderKeyRemoveParams,
@@ -618,6 +648,31 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * Starts an agent from the one named, continuing it or forking it at the
+   * message the request's `from` names, in that agent's own place: its task,
+   * or its workspace and repository where it has none. Keyed and refused as
+   * `start` is; a request whose `from` names no agent is refused here.
+   */
+  startFrom(
+    request: CodingAgentStartRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const sourceId = request.from?.agentId;
+    const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
+    if (sourceId === undefined || admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      Effect.map(
+        askHosted(
+          this.#hosted.agents.startFrom,
+          { params: { id: sourceId }, body: admitted },
+          HOSTED_DEADLINE.START,
+        ),
+        (started) => started.body,
+      ),
+      START_REFUSALS,
+    );
+  }
+
+  /**
    * One agent's transcript past the cursor, or a worker's, read at once
    * rather than held, with whether the held read would have held on it: for
    * a reader following the transcript's live statements, which reads again
@@ -645,16 +700,59 @@ export class HostedCodingAgentClient {
    * named, sealed for following over Neon Realtime, answered at once: not
    * found where the account reaches no such agent, unanswered for anything
    * else, which the caller answers by sealing it again; with `poll`, its
-   * rows inline, for a reader polling while Realtime fails it.
+   * rows inline, for a reader polling while Realtime fails it. Sealed for
+   * the account `userId` names, and signed out where the session is no
+   * longer that account's.
    */
+  /**
+   * One task's planning conversation, its mark and running workers sealed
+   * for following over Neon Realtime, or with `poll` their rows inline:
+   * not found where the account reaches no such task, signed out where
+   * `userId` is not the bearer's own, and unanswered for anything else,
+   * which the caller answers by sealing it again.
+   */
+  taskConversationLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskConversationLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.catchIf(
+      askLive(
+        this.#hosted.live.taskConversation,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
   agentTranscriptLive(
     agentId: string,
+    userId: string,
     callId?: string,
     poll = false,
-  ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
-    const named = callId === undefined ? { id: agentId } : { id: agentId, call: callId };
-    const asked = poll ? { ...named, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : named;
-    return hostedAnswer(askHosted(this.#hosted.live.agentTranscript, asked), ROW_REFUSALS);
+    after?: string,
+  ): Effect.Effect<
+    AgentTranscriptLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
+    const named = callId === undefined ? read : { ...read, call: callId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.agentTranscript, named, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
   /**
@@ -665,7 +763,7 @@ export class HostedCodingAgentClient {
    */
   taskMessages(
     taskId: string,
-    page: { after?: string; before?: string },
+    page: { after?: string; before?: string; unheld?: boolean },
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
     const asked =
@@ -676,6 +774,7 @@ export class HostedCodingAgentClient {
               id: taskId,
               ...(page.after === undefined ? undefined : { after: page.after }),
               ...(page.before === undefined ? undefined : { before: page.before }),
+              ...(page.unheld === true ? { hold: "none" } : undefined),
             },
             HOSTED_DEADLINE.HELD,
           )
@@ -777,6 +876,11 @@ export class HostedCodingAgentClient {
   /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);
+  }
+
+  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's boundaries from; not found for an agent the account does not reach. */
+  calls(agentId: string): Effect.Effect<CodingAgentCallsAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.agents.calls, { id: agentId }), ROW_REFUSALS);
   }
 
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
@@ -1040,12 +1144,16 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(this.#hosted.messages.chatWrite, {
-        query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
-        body: admitted,
-      }),
-      MESSAGE_REFUSALS,
+    return Effect.map(
+      hostedAnswer(
+        askHosted(this.#hosted.messages.chatWrite, {
+          query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
+          body: admitted,
+        }),
+        MESSAGE_REFUSALS,
+      ),
+      // A join answers the joiner's member, which no write is answered with.
+      (answer) => ("self" in answer ? UNANSWERED : answer),
     );
   }
   /**

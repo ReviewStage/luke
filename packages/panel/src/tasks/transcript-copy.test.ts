@@ -374,3 +374,23 @@ test("an agent's inbox posts and withdrawals from version 5 are copied as the ro
   assert.ok(full.includes("The plan says 7."), full);
   assert.ok(!full.includes('"body"'), "no input is copied as its JSON");
 });
+
+test("an agent started blank is copied with no brief, its first line, spoken on a call, copied as the developer's words", () => {
+  const spoken = { channel: "voice", voice_session_id: "call-1", from_ms: 0, to_ms: 900 };
+  const copied = agentTranscript({
+    title: "Export",
+    messages: [
+      { ...said("asked", MESSAGE_ROLE.USER, "What did you change?"), metadata: spoken },
+      { ...said("answered", MESSAGE_ROLE.ASSISTANT, "I moved the export."), metadata: spoken },
+    ],
+    brief: CODING_AGENT_BRIEF.BLANK,
+    chatOn: true,
+  });
+
+  assert.equal(
+    transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE),
+    ["# Export", "## Developer", "What did you change?", "## Agent", "I moved the export."].join(
+      "\n\n",
+    ) + "\n",
+  );
+});

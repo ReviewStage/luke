@@ -1584,7 +1584,12 @@ const tokenGitHub = (installationId: number, also: readonly InstallationFixture[
         return undefined;
       }
       const { pathname } = new URL(sent.url);
-      if (pathname === "/user/repos") return Response.json([]);
+      if (pathname === "/user/repos") {
+        return Response.json([
+          memberRepositoryJson({ owner: "octo-member", name: "side" }, true),
+          memberRepositoryJson({ owner: "octo-member", name: "fork" }, false),
+        ]);
+      }
       const named = MEMBER_REPOSITORY.exec(pathname)?.[1];
       if (named === undefined) return undefined;
       return Response.json(
@@ -1632,7 +1637,7 @@ const askTokenRepositories = (
 
 it.layer(getTestDB())("the token repositories route", (it) => {
   it.effect(
-    "a member adds a repository their own token may push to, every member lists it, and the picker offers it marked the token's to a member with no token; one the token cannot push to is refused",
+    "a member adds a repository their own token may push to, every member lists it, and the picker offers it marked the token's to that member but not to a member with no token; one the token cannot push to is refused",
     () =>
       Effect.gen(function* () {
         const github = tokenGitHub(7301);
@@ -1646,8 +1651,8 @@ it.layer(getTestDB())("the token repositories route", (it) => {
         );
         const refused = yield* ask(member, { repository: "octo-member/fork", added: true });
         const seenByOther = readOf(workspaceTokenRepositoriesAnswerSchema, yield* ask(other));
-        const picker = listed(
-          yield* answer(
+        const pickerOf = (userId: string) =>
+          answer(
             bearers,
             github,
             new Request(
@@ -1655,10 +1660,11 @@ it.layer(getTestDB())("the token repositories route", (it) => {
                 `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES}?workspaceId=${workspace}`,
                 ORIGIN,
               ),
-              { headers: { authorization: `Bearer ${other}` } },
+              { headers: { authorization: `Bearer ${userId}` } },
             ),
-          ),
-        );
+          ).pipe(Effect.map(listed));
+        const pickerOfOther = yield* pickerOf(other);
+        const pickerOfMember = yield* pickerOf(member);
 
         assert.deepEqual(
           added.repositories.map((one) => [one.fullName, one.addedBy, one.removable]),
@@ -1679,7 +1685,11 @@ it.layer(getTestDB())("the token repositories route", (it) => {
           [["octo-member/side", false]],
         );
         assert.deepEqual(
-          picker.repositories.map((one) => [one.fullName, one.access]),
+          pickerOfOther.repositories.map((one) => [one.fullName, one.access]),
+          [["acme/relay", GITHUB_ACCESS.APP]],
+        );
+        assert.deepEqual(
+          pickerOfMember.repositories.map((one) => [one.fullName, one.access]),
           [
             ["acme/relay", GITHUB_ACCESS.APP],
             ["octo-member/side", GITHUB_ACCESS.TOKEN],

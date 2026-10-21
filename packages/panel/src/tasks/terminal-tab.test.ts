@@ -35,7 +35,7 @@ import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.j
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
-import { TerminalCardFoot } from "./terminal-shells.js";
+import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
 
 /**
@@ -954,9 +954,19 @@ test("the tab's card counts the agent's shells as the tab last read them", async
   assert.equal(foot, "Terminal in this agent’s sandbox · 2 shells");
 });
 
-test("the list's foot names the agent and where it stands", async () => {
+test("a terminal's row in the panel's + says how the sandbox stands, leaving whether the agent works to its glyph", async () => {
   const tab = await mount();
-  assert.equal(tab.container.querySelector(".terminal-shells-foot")?.textContent, "Working…");
+  const standing = renderToStaticMarkup(
+    onRegistry(tab.registry, createElement(TerminalStanding, { agent: AGENT })),
+  );
+  assert.equal(standing, "2 shells");
+});
+
+test("the list's foot names the agent, its glyph saying it works with no word repeating it", async () => {
+  const tab = await mount();
+  const foot = tab.container.querySelector(".terminal-shells-foot");
+  assert.equal(foot?.textContent, "Invite flow");
+  assert.ok(foot?.querySelector('[role="img"][aria-label="Working"]'));
 });
 
 test("a sandbox that stops under a connected shell is read again, and the list says it holds no shells", async () => {
@@ -967,7 +977,10 @@ test("a sandbox that stops under a connected shell is read again, and the list s
   port.say({ type: "state", state: "stopped" });
   await settle();
   assert.equal(tab.container.querySelector(".terminal-shells-none")?.textContent, "No shells.");
-  assert.equal(tab.container.querySelector(".terminal-shells-foot")?.textContent, "Working…");
+  assert.equal(
+    tab.container.querySelector(".terminal-shells-foot")?.textContent,
+    "Sandbox stopped",
+  );
   assert.equal(
     tab.container.querySelector<HTMLButtonElement>('button[aria-label="New shell"]')?.disabled,
     true,

@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
@@ -63,11 +64,16 @@ import {
 } from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
 import type { SkillSource } from "./skill-picker.js";
+import type { CallsReader } from "./use-agent-calls.js";
 import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
 import type { ServersWriter } from "./use-agent-servers.js";
-import type { TranscriptReader } from "./use-agent-transcript.js";
+import {
+  type TranscriptFollower,
+  type TranscriptReader,
+  windowTranscriptFollower,
+} from "./use-agent-transcript.js";
 import type {
   InboxAnswerer,
   InboxImageReader,
@@ -273,6 +279,13 @@ export interface CodingAgentsControl {
     /** Starts an agent on the choice given, or on the account's default with none. */
     onPress: (choice?: ModelChoice) => void;
   };
+  /**
+   * A new voice chat: an agent started blank on the account's default, which
+   * needs no repository, its tab opened as a Start's is; answers the agent
+   * once it stands, or nothing where it did not start, which a toast says.
+   * Present exactly while the open task is not archived.
+   */
+  startVoiceChat: (() => Promise<string | undefined>) | undefined;
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
   /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
@@ -283,7 +296,7 @@ export interface CodingAgentsControl {
   onSwitchServers: ServersWriter;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Coding agents page, where the developer's API keys are. */
+  /** Opens Settings on its Agents page, where the developer's API keys are. */
   onOpenApiKeys: () => void;
   /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
@@ -300,8 +313,12 @@ export interface CodingAgentsControl {
   onStatus: (agentId: string, run: AgentRun) => void;
   /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
   onTitle: (agentId: string, title: string | null) => void;
-  /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
+  /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
+  /** One read of the calls into an agent, each with its lines and its record, which its tab places among its rows. */
+  readCalls: CallsReader;
+  /** How a shown tab follows its transcript and hears its pages pushed. */
+  transcripts: TranscriptFollower;
   /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
   readPullRequest: PullRequestReader;
   /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
@@ -495,6 +512,22 @@ function listRead(
   });
 }
 
+/**
+ * One agent read by its id as its own page reads it, wherever it stands,
+ * on a task or on none; nothing where it could not be read. A surface that
+ * holds no list of its own, such as the sidebar's row of an agent with no
+ * task, reads it so before it archives it unasked.
+ */
+export function readAgentById(
+  act: ActHandle["act"],
+  agentId: string,
+): Promise<CodingAgentSummary | undefined> {
+  return listRead(act, undefined, agentId).then(
+    (answer) => ("failure" in answer ? undefined : answer.agents[0]),
+    () => undefined,
+  );
+}
+
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return (
@@ -523,7 +556,7 @@ export function useCodingAgents(input: {
   onUnarchive: () => void;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Coding agents page. */
+  /** Opens Settings on its Agents page. */
   /** The signed-in account's id, whose own agents carry no "Started by". */
   me?: string | undefined;
   onOpenApiKeys: () => void;
@@ -717,6 +750,20 @@ export function useCodingAgents(input: {
       pending.current = undefined;
       landed(taskId, answer.agent);
     });
+  };
+
+  // Note that every press mints its own key: a voice chat is a new agent each
+  // time it is asked for, and one whose start did not answer is said in a
+  // toast rather than asked again.
+  const startVoiceChat = async (): Promise<string | undefined> => {
+    if (taskId === undefined || archived) return undefined;
+    const answer = await askStart(taskId, { idempotencyKey: mintKey(), blank: true });
+    if ("failure" in answer) {
+      failed(startFailureNote(answer, taskId).text);
+      return undefined;
+    }
+    landed(taskId, answer.agent);
+    return answer.agent.id;
   };
 
   // Note that a press carries the key its agent's last press minted while the
@@ -1121,8 +1168,19 @@ export function useCodingAgents(input: {
       if (taskId === undefined && agentId === undefined) return undefined;
       const answer = await listRead(act, taskId, agentId).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return undefined;
+      // Note that the page's workspace, repository, and run come with the read, as the list's own read takes them.
       setList((was) =>
-        ours(was) ? { taskId, agentId: listOf, agents: answer.agents, failed: false } : was,
+        ours(was)
+          ? {
+              taskId,
+              agentId: listOf,
+              agents: answer.agents,
+              failed: false,
+              workspaceId: answer.workspaceId,
+              repository: answer.repository,
+              origin: answer.origin,
+            }
+          : was,
       );
       return answer.agents.find((agent) => agent.id === named);
     },
@@ -1153,6 +1211,14 @@ export function useCodingAgents(input: {
 
   const readTranscript = useCallback<TranscriptReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_MESSAGES, params),
+    [act],
+  );
+
+  const readCalls = useCallback<CallsReader>(
+    (agentId) =>
+      act(ACT_KIND.CODING_AGENTS_CALLS, { agentId }).catch(
+        (): CodingAgentCallsAnswerView => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+      ),
     [act],
   );
 
@@ -1348,6 +1414,7 @@ export function useCodingAgents(input: {
       note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       onPress: pressStart,
     },
+    startVoiceChat: taskId !== undefined && !archived ? startVoiceChat : undefined,
     onStop,
     onMessage,
     onChoose,
@@ -1361,6 +1428,8 @@ export function useCodingAgents(input: {
     onStatus,
     onTitle,
     readTranscript,
+    readCalls,
+    transcripts: windowTranscriptFollower,
     readPullRequest: published.read,
     pullRequests: published.pullRequests,
     numberedPullRequests,

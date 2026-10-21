@@ -91,6 +91,10 @@ export const conversations = pgTable(
     nativeSession: text("native_session"),
     /** The digest of the bearer the conversation's runner presents at Luke's MCP server, never the bearer itself; null where no runner holds one. */
     runnerTokenHash: text("runner_token_hash"),
+    /** The number of the last runner event projected into the conversation, so a batch the runner posts again applies nothing twice; null before a runner's first event. */
+    nativeSequence: bigint("native_sequence", { mode: "number" }),
+    /** What the projection of a native harness's events holds between the runner's batches: the turn under way and its step's words so far; null before the first batch. */
+    nativeProjection: jsonb("native_projection"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one
@@ -113,6 +117,11 @@ export const conversations = pgTable(
     index("conversations_runtime_session")
       .on(table.runtimeSessionId)
       .where(sql`${table.runtimeSessionId} is not null`),
+    // Luke's MCP server finds the conversation a runner's bearer stands for by the bearer's digest,
+    // on every tool call; one digest names one conversation.
+    uniqueIndex("conversations_runner_token_hash")
+      .on(table.runnerTokenHash)
+      .where(sql`${table.runnerTokenHash} is not null`),
   ],
 );
 
@@ -329,6 +338,13 @@ export const asks = pgTable(
     toldSeq: integer("told_seq").notNull().default(0),
     /** When the run's end was told to the voice under this ask, written before it is told. */
     endToldAt: timestamptz("end_told_at"),
+    /**
+     * For a spoken ask bound to a typed turn, which it joined under way: how
+     * many of that turn's steps had begun before it, from which its answer
+     * is read and its line placed. Null for every other ask, which opened its
+     * turn or joined one of its own kind, and is the whole turn's.
+     */
+    joinedAfterStep: integer("joined_after_step"),
   },
   (table) => [
     uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),

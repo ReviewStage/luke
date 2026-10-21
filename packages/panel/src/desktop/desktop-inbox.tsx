@@ -5,7 +5,6 @@ import { EmptyState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import type { StripTab } from "@luke/ui/tab-strip-model";
 import { TASK_MARK } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
@@ -16,7 +15,7 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListNote, ItemMark } from "../tasks/inbox-list.js";
+import { INBOX_SCOPES, InboxList, InboxListNote, ItemMark } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -38,7 +37,7 @@ import { useMinute } from "../tasks/task-time.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
-import { useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -63,15 +62,15 @@ import { taskCardOf } from "./task-card.js";
  * workspace the sidebar lists that main says holds one (the switcher counts
  * what waits in the others), needing the developer or settled, each task read whole
  * as main says it changed (`use-inbox-items.ts`), under its task, its
- * person, its status, or in one run, the latest first or the longest
- * waiting first, what needs them, what is unread, every open item, or
+ * person, its status, or in one run, the latest first or the oldest
+ * first, To do, what needs them and what of theirs is unread, or All,
  * everything, of everyone's, theirs, or one teammate's, as the developer
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
  * same items. An archived task's items are put away with it rather than
- * dropped: no other tab lists or counts them, and the Archived tab beside
- * the others lists them, read only while it is shown and counted by main's
+ * dropped: no other scope lists or counts them, and Archived, offered beside
+ * the others in the view's menu, lists them, read only while it is shown and counted by main's
  * word of each task, each drawn as it stood but answered no longer, the
  * pane's box giving way to Unarchive, which brings the task back and its
  * items with it as they stood. A press on a row chooses it, and the pane beside the
@@ -86,8 +85,8 @@ import { taskCardOf } from "./task-card.js";
  * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@luke/ui`'s `EmptyState`); with its tab leaving out every item, the list
- * says so and offers the tab beside it, while the pane goes on showing the item
+ * glyph (`@luke/ui`'s `EmptyState`); with its scope leaving out every item, the list
+ * says so and offers the scope that holds something, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
@@ -114,16 +113,10 @@ const BACK_TO_INBOX = "Back to Inbox";
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
   Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
-const nothing = (): void => undefined;
+const _nothing = (): void => undefined;
 
 /** No tab of the Inbox's panel is drawn in semibold: what arrives on a task arrives on its page. */
 const NO_UNREAD: readonly StripTab[] = [];
-
-/** What the Inbox's panel says of calls: none, its task's calls being its page's. */
-const NO_CALLS = {
-  region: { kind: TRANSCRIPT_REGION.EMPTY },
-  onRetry: nothing,
-} as const;
 
 /** No agent's tab stands open beside the Inbox, so no worker's tab stands in its panel. */
 const NO_OPEN_AGENTS: readonly string[] = [];
@@ -219,7 +212,7 @@ function InboxShown({
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
-  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
   });
@@ -231,6 +224,7 @@ function InboxShown({
     ),
     open,
     folds.folded,
+    direction,
   );
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
   // item's; Back from it then stands on the list, the choice taken already.
@@ -273,15 +267,18 @@ function InboxShown({
   // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
+  const opened =
+    tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
+      ? chosen
+      : undefined;
   useReadOnOpen({
-    shown:
-      tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
-        ? chosen?.item
-        : undefined,
+    shown: opened?.item,
     chosen: chosen?.item,
     active: tasks.shown && !sideFocused,
     onMark: markItem,
   });
+  // A notice of the reader's own is acknowledged as it opens, on the same terms, once its holder's held read holds it.
+  useNodOnOpen({ shown: opened, readerId: tasks.me, control: live });
   // The panel stands for the item asked for, by its task, or its agent where it has none (`use-tasks-tab.ts`).
   const panelFor = taskId ?? chosenAgentId;
   const pullRequests = [...named.pullRequests].map(([agentId, opened]) => ({
@@ -361,7 +358,7 @@ function InboxShown({
                     head={{
                       shown: tasks.shown,
                       show: choices,
-                      counts,
+                      scopes: INBOX_SCOPES.WINDOW,
                       view: { choices, folds },
                       // Note that Mark all as read marks what the service's own mark reaches, which leaves the archived tasks' items be.
                       readAll: {
@@ -552,7 +549,6 @@ function InboxSidePanel({
   // The task's agents' workers are their delegations, read through their own transcripts, so the panel's work is none.
   const work = {
     conversation: undefined,
-    onLoadEarlier: () => Promise.resolve(),
     readWorker: agents.readTranscript,
   };
   return (
@@ -566,7 +562,6 @@ function InboxSidePanel({
       shownCode={undefined}
       codeFailed={undefined}
       pages={pages}
-      transcript={NO_CALLS}
       work={work}
       agents={agents}
       openAgents={NO_OPEN_AGENTS}

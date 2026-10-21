@@ -620,6 +620,33 @@ it.effect(
 );
 
 it.effect(
+  "a Start from an agent travels to that agent's own path with the body a task's Start carries, and one naming no agent travels nowhere",
+  () =>
+    Effect.gen(function* () {
+      const request = { idempotencyKey: "press-1", from: { agentId: AGENT_ID } };
+      const api = fakeCloudApi({
+        [`POST /api/agents/${AGENT_ID}/agents`]: {
+          answer: () => ({ agent: AGENT }),
+          status: 201,
+        },
+      });
+
+      const started = yield* Effect.provide(client().startFrom(request), api.layer);
+      const nowhere = yield* Effect.provide(
+        client().startFrom({ idempotencyKey: "press-2", prompt: "Go." }),
+        api.layer,
+      );
+
+      assert.deepEqual(started, { agent: AGENT });
+      assert.deepEqual(nowhere, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
+        [[`https://tryluke.dev/api/agents/${AGENT_ID}/agents`, request]],
+      );
+    }),
+);
+
+it.effect(
   "reads what waits across the account past a cursor, held, listing the archived tasks for the Archived tab, and a refusal or a body that is no answer is unanswered",
   () =>
     Effect.gen(function* () {

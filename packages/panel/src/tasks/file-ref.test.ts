@@ -47,7 +47,7 @@ const SHOWING: TaskCodeShowing = {
     commit: "0123456789abcdef",
     firstLine: 3,
     lineCount: 9,
-    lines: [[{ text: "const a = 1;" }], [{ text: "const b = 2;" }], [{ text: "const c = 3;" }]],
+    lines: ["const a = 1;", "const b = 2;", "const c = 3;"],
     note: NOTE,
   },
 };

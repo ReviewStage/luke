@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
@@ -87,11 +88,14 @@ import {
 } from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { AttachFilesButton } from "./attach-files-button.js";
+import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
+import { CommentFiles, carriesFiles, useCommentAttaching } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { RelativeTime } from "./relative-time.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
@@ -99,6 +103,13 @@ import { useMinute } from "./task-time.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useOpenLink } from "./use-open-link.js";
+import {
+  useWordsDatePicker,
+  WordsDatePickerRoom,
+  type WordsDates,
+  WordsDatesContext,
+  wordsDatesDoor,
+} from "./words-dates.js";
 
 /**
  * plan-comments.tsx -- comments on the open plan, beside its words: each open thread in the margin level with the words it is on, or behind a count at the line's end where the column has no room for a margin, a thread started from words selected or from a block's own button, and each thread answered, resolved, reopened, edited, and deleted where it stands.
@@ -374,6 +385,30 @@ function CommentEntry({
       : []),
   ];
   const settle = first && openThread(thread);
+  // The reader's own words take a date changed from its chip, as their editor would, saved as an edit of the comment.
+  const openDate = useWordsDatePicker();
+  const latestWords = useRef(entry.words);
+  latestWords.current = entry.words;
+  const { control } = doors;
+  const dates = useMemo<WordsDates | undefined>(
+    () =>
+      !mine || openDate === undefined
+        ? undefined
+        : wordsDatesDoor(
+            openDate,
+            () => latestWords.current,
+            (words) => {
+              // Note that a comment is never saved empty, so Clear on a comment of a date alone leaves it.
+              if (words.trim() === "") return;
+              void control.act(thread.id, {
+                action: PLAN_COMMENT_ACTION.EDIT,
+                entry: entry.id,
+                words: words.trim(),
+              });
+            },
+          ),
+    [mine, openDate, control, thread.id, entry.id],
+  );
   const save = () => {
     const words = editing?.trim() ?? "";
     if (words === "") return;
@@ -433,7 +468,15 @@ function CommentEntry({
       </div>
       {lead}
       {editing === undefined ? (
-        <CommentWords words={entry.words ?? ""} />
+        <>
+          {/* Note that a comment's files stand over its words, as the field held them and as every message's do. */}
+          {entry.files === undefined ? null : (
+            <CommentFiles planId={doors.control.planId} files={entry.files} />
+          )}
+          <WordsDatesContext.Provider value={dates}>
+            <CommentWords words={entry.words ?? ""} />
+          </WordsDatesContext.Provider>
+        </>
       ) : (
         <div className="comment-field comment-editing">
           <CommentText
@@ -499,6 +542,8 @@ interface CommentTextProps {
   readonly editor?: RefObject<ComposerEditorHandle | undefined> | undefined;
   /** The dictation the field's words come from while it records, which takes its keys first and holds the words still. */
   readonly dictation?: DictationControl | undefined;
+  /** Takes files pasted into the field, answering whether it took any; none where the field takes no files, as an edit's does not. */
+  readonly onPasteFiles?: ((files: readonly File[]) => boolean) | undefined;
 }
 
 /** The comment's field on the agent box's editor: mentions as chips, written as their links. */
@@ -513,6 +558,7 @@ function MentionCommentText({
   mentions,
   editor: handed,
   dictation,
+  onPasteFiles,
 }: CommentTextProps & {
   module: PlanEditorModule | undefined;
   mentions: TaskMentionsValue;
@@ -552,7 +598,7 @@ function MentionCommentText({
         return true;
       }}
       onEnter={onSubmit}
-      onPasteFiles={() => false}
+      onPasteFiles={onPasteFiles ?? (() => false)}
       onTrigger={() => undefined}
       chip={() => null}
       mentions={{
@@ -593,6 +639,7 @@ function PlainCommentText({
   onSubmit,
   onCancel,
   autoFocus = false,
+  onPasteFiles,
 }: CommentTextProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
@@ -612,6 +659,11 @@ function PlainCommentText({
       // biome-ignore lint/a11y/noAutofocus: the field is opened by the press that asked for it, as a reply field is.
       autoFocus={autoFocus}
       onChange={(event) => onChange(event.target.value)}
+      onPaste={(event) => {
+        // Note that only files the field takes stop the paste, so text pastes as it always does.
+        const files = Array.from(event.clipboardData.files);
+        if (files.length > 0 && onPasteFiles?.(files) === true) event.preventDefault();
+      }}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;
         if (event.key === "Enter" && !event.shiftKey) {
@@ -637,8 +689,12 @@ function ReplyField({
 }: {
   label: string;
   sending: boolean;
-  /** Sends the words under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
-  onSend: (words: string, clientKey: string) => Promise<boolean>;
+  /** Sends the words and the files under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
+  onSend: (
+    words: string,
+    clientKey: string,
+    attachments: readonly CodingAgentAttachment[],
+  ) => Promise<boolean>;
   onCancel: () => void;
   autoFocus: boolean;
   /** A thread's first comment, which is the card itself, or a reply under its comments, which stays a line until it is used. */
@@ -651,33 +707,69 @@ function ReplyField({
   // Note that only the agent box's editor takes a dictation, so the plain field offers none.
   const dictates = useCommentEditor() !== undefined;
   const [words, setWords] = useState("");
+  const files = useCommentAttaching();
+  const [dropping, setDropping] = useState(false);
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
-  const attempt = useRef<{ words: string; key: string } | undefined>(undefined);
+  const attempt = useRef<
+    { words: string; attachments: readonly CodingAgentAttachment[]; key: string } | undefined
+  >(undefined);
   const send = () => {
     const trimmed = words.trim();
-    if (trimmed === "" || sending) return;
-    const key = attempt.current?.words === trimmed ? attempt.current.key : crypto.randomUUID();
-    attempt.current = { words: trimmed, key };
+    if (trimmed === "" || sending || files.reading > 0) return;
+    const { attachments } = files;
+    const was = attempt.current;
+    const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
+    const key = same && was !== undefined ? was.key : crypto.randomUUID();
+    attempt.current = { words: trimmed, attachments, key };
     // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to, and takes them back where the send fails and nothing was typed since.
     setWords("");
+    files.set([]);
     setInFlight(trimmed);
-    void onSend(trimmed, key).then((sent) => {
+    void onSend(trimmed, key, attachments).then((sent) => {
       setInFlight("");
       if (sent) {
         attempt.current = undefined;
         return;
       }
       setWords((now) => (now === "" ? trimmed : now));
+      if (files.now().length === 0) files.set(attachments);
     });
   };
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the field is a drop target alone; the keys it hears come from its own field and buttons.
     <div
       className="comment-field"
       data-variant={variant}
-      // Note that the words in flight, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
-      data-held={(words === "" ? inFlight : words).trim() !== "" || dictating}
+      data-dropping={dropping ? "" : undefined}
+      // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
+      data-held={
+        (words === "" ? inFlight : words).trim() !== "" ||
+        files.attachments.length > 0 ||
+        files.reading > 0 ||
+        dictating
+      }
+      onDragOver={(event) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={(event) => {
+        // A drag moving onto one of the field's own children has not left it.
+        const into = event.relatedTarget;
+        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
+      }}
+      onDrop={(event) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        setDropping(false);
+        files.attach(Array.from(event.dataTransfer.files));
+      }}
     >
+      <AttachedFileChips
+        files={attachmentChips(files.attachments)}
+        onRemove={sending ? undefined : files.remove}
+      />
       <CommentText
         value={words}
         label={label}
@@ -687,30 +779,47 @@ function ReplyField({
         autoFocus={autoFocus}
         editor={editor}
         dictation={dictation}
+        onPasteFiles={files.paste}
       />
       {heard === undefined ? null : (
         <div className="comment-note" role="alert">
           {heard}
         </div>
       )}
+      {files.refusal === undefined ? null : (
+        <div className="comment-note" role="alert">
+          {files.refusal}
+        </div>
+      )}
       <div className="comment-field-foot">
         {dictating ? (
           <DictationStrip dictation={dictation} />
         ) : (
-          <span className="comment-field-tools">
-            {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
-            <IconButton
-              submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-              variant={BUTTON_VARIANT.INK}
-              label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
-              disabled={words.trim() === "" || sending}
-              onClick={send}
-            />
-          </span>
+          <>
+            <AttachFilesButton disabled={sending} onFiles={files.attach} />
+            <span className="comment-field-tools">
+              {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
+              <IconButton
+                submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+                variant={BUTTON_VARIANT.INK}
+                label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
+                disabled={words.trim() === "" || sending || files.reading > 0}
+                onClick={send}
+              />
+            </span>
+          </>
         )}
       </div>
     </div>
   );
+}
+
+/** Whether two sends carry the same files, each the very one read, in the same order. */
+function sameFiles(
+  was: readonly CodingAgentAttachment[],
+  now: readonly CodingAgentAttachment[],
+): boolean {
+  return was.length === now.length && was.every((file, at) => file === now[at]);
 }
 
 /** How a comment's field stands: as a thread's first comment, the card itself, or as a reply under its comments. */
@@ -912,12 +1021,14 @@ function ThreadCard({
           sending={sending}
           autoFocus={false}
           onCancel={() => onClose?.()}
-          onSend={async (words, clientKey) => {
+          onSend={async (words, clientKey, attachments) => {
             setSending(true);
             const sent = await doors.control.act(thread.id, {
               action: PLAN_COMMENT_ACTION.REPLY,
               clientKey,
               words,
+              // Note that a reply with no files sends no key for them, so a service from before files reads it as it always did.
+              ...(attachments.length === 0 ? undefined : { attachments }),
             });
             setSending(false);
             return sent;
@@ -958,7 +1069,7 @@ function PendingCard({
         autoFocus
         onCancel={onCancel}
         variant={REPLY_VARIANT.FIRST}
-        onSend={async (words, clientKey) => {
+        onSend={async (words, clientKey, attachments) => {
           setSending(true);
           const started = await doors.control.start({
             clientKey,
@@ -968,6 +1079,7 @@ function PendingCard({
             // Note that words started on in the editor are measured in its text, which the service lays over the saved one.
             text: pending.text ?? text,
             words,
+            ...(attachments.length === 0 ? undefined : { attachments }),
           });
           setSending(false);
           if ("note" in started) {
@@ -1793,59 +1905,61 @@ export function PlanCommentsTab({
   const full = { ...doors, control };
   return (
     <div className="comments-tab">
-      <div className="comments-head">
-        <span className="comments-head-title">
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {COMMENTS_FILTER_WORDS[filter]}
-          </Text>
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-            {listed.length}
-          </Text>
-        </span>
-        <ResolvedOnly
-          shown={filter === COMMENTS_FILTER.RESOLVED}
-          onShown={(shown) => {
-            setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
-            // Note that the other list starts at its top, not where the one it replaces was scrolled to.
-            if (list.current !== null) list.current.scrollTop = 0;
-          }}
-        />
-      </div>
-      <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-        <div className="comments-list">
-          {control.failed ? (
-            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
-              The comments could not be read.
-            </ErrorState>
-          ) : listed.length === 0 ? (
-            control.read ? (
-              <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
-                {NO_COMMENTS[filter].line}
-              </EmptyState>
-            ) : null
-          ) : (
-            listed.map((thread) => (
-              <div key={thread.id} className="comments-row">
-                {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
-                <ThreadCard
-                  thread={thread}
-                  open
-                  quote
-                  doors={full}
-                  onShowWords={
-                    openThread(thread)
-                      ? () => {
-                          onShowDocument();
-                          reveal(thread.id);
-                        }
-                      : undefined
-                  }
-                />
-              </div>
-            ))
-          )}
+      <WordsDatePickerRoom>
+        <div className="comments-head">
+          <span className="comments-head-title">
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {COMMENTS_FILTER_WORDS[filter]}
+            </Text>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {listed.length}
+            </Text>
+          </span>
+          <ResolvedOnly
+            shown={filter === COMMENTS_FILTER.RESOLVED}
+            onShown={(shown) => {
+              setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
+              // Note that the other list starts at its top, not where the one it replaces was scrolled to.
+              if (list.current !== null) list.current.scrollTop = 0;
+            }}
+          />
         </div>
-      </ScrollArea>
+        <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+          <div className="comments-list">
+            {control.failed ? (
+              <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
+                The comments could not be read.
+              </ErrorState>
+            ) : listed.length === 0 ? (
+              control.read ? (
+                <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
+                  {NO_COMMENTS[filter].line}
+                </EmptyState>
+              ) : null
+            ) : (
+              listed.map((thread) => (
+                <div key={thread.id} className="comments-row">
+                  {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
+                  <ThreadCard
+                    thread={thread}
+                    open
+                    quote
+                    doors={full}
+                    onShowWords={
+                      openThread(thread)
+                        ? () => {
+                            onShowDocument();
+                            reveal(thread.id);
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </WordsDatePickerRoom>
     </div>
   );
 }

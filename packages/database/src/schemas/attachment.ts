@@ -23,6 +23,7 @@ import { organization, user } from "./auth.js";
 import { chatMessage } from "./chat.js";
 import { inboxItem } from "./inbox.js";
 import { inboxMessage } from "./inbox-message.js";
+import { planComment } from "./plan-comment.js";
 import { conversations } from "./storage.js";
 import { task } from "./task.js";
 
@@ -35,7 +36,8 @@ const ownerColumns = (table: {
   readonly chatMessageId: AnyPgColumn;
   readonly inboxItemId: AnyPgColumn;
   readonly conversationId: AnyPgColumn;
-}) => [table.chatMessageId, table.inboxItemId, table.conversationId];
+  readonly planCommentId: AnyPgColumn;
+}) => [table.chatMessageId, table.inboxItemId, table.conversationId, table.planCommentId];
 
 /** Whether the row is owned by its task alone, a plan's picture: it names a task and no owner of another kind. */
 export const ownedByTaskAlone = (table: {
@@ -43,6 +45,7 @@ export const ownedByTaskAlone = (table: {
   readonly chatMessageId: AnyPgColumn;
   readonly inboxItemId: AnyPgColumn;
   readonly conversationId: AnyPgColumn;
+  readonly planCommentId: AnyPgColumn;
 }) =>
   sql`(${table.taskId} is not null and num_nonnulls(${sql.join(ownerColumns(table), sql`, `)}) = 0)`;
 
@@ -56,23 +59,12 @@ export const ownedByTaskAlone = (table: {
  * of its own, and a new kind of owner is one more nullable column, one more
  * term of the check, and one more partial index.
  *
- * The owners move here one at a time from the tables they kept their own
- * in (`chat_attachment`, `inbox_attachment`, `plan_attachment`,
- * `conversation_attachment`). Each move copies the old table's rows here
- * under their ids, drops the table or renames it out of the way (a drop
- * locks every table its foreign keys name, which a rename does not), and
- * leaves a view over this one under
- * its name and its columns' names, so a run still on a deployment from
- * before the move reads and writes the rows it always did; a later
- * migration drops the view once those runs have drained. A chat message's
- * pictures moved first, an inbox item's files second, and a plan's pictures
- * third: `chat_attachment`, `inbox_attachment`, and `plan_attachment` are
- * those views, as is `conversation_attachment`, for the pictures a
- * conversation's tools answered, which moved last. Their columns stood here
- * a deployment ahead of their move: adding their foreign key locks
- * `conversations`, which an agent's every turn writes, so it was done where
- * no copy waited on a conversation's row.
- *
+ * Every owner once kept a table of its own (`chat_attachment`,
+ * `inbox_attachment`, `plan_attachment`, `conversation_attachment`), and
+ * each moved here in turn: its rows copied under their ids, its name left
+ * as a view over this table for runs still on an older deployment, and the
+ * view dropped once those had drained.
+
  * A conversation's picture is keyed by the SHA-256 of its bytes within its
  * conversation, so the same picture answered twice is one row, and keeps
  * the size in pixels its header states, so a reader holds its place before
@@ -83,6 +75,12 @@ export const ownedByTaskAlone = (table: {
  * other owner (`ownedByTaskAlone`). Its uploader stays its account until the
  * account is gone, and `saved_at` is when a save of the plan's text first
  * named it, so the scheduled sweep can delete an upload no save ever did.
+ *
+ * A plan comment's file is owned by its comment, and goes with it, its
+ * thread, and its plan. It names its task and the task's workspace beside
+ * its comment, so it moves with the task as an inbox item's file does, and
+ * carries its name and its place among the comment's files, as an inbox
+ * message's file does.
  *
  * An inbox item's file is a picture of an image block's, a file the
  * developer's answer carried, or a file a message on the item's thread
@@ -123,6 +121,10 @@ export const attachment = pgTable(
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "cascade",
     }),
+    /** The plan comment that carried it; null for every other owner's. */
+    planCommentId: uuid("plan_comment_id").references(() => planComment.id, {
+      onDelete: "cascade",
+    }),
     /** How its inbox item holds it: an image block's picture, the answer's file, or a message's; null for every other owner's. */
     kind: text("kind").$type<InboxAttachmentKind>(),
     /** A file's own name, never a path, such as `trace.txt`; null for a picture, whose words are its block's alt. */
@@ -155,6 +157,10 @@ export const attachment = pgTable(
     index("attachment_inbox_message")
       .on(table.inboxMessageId)
       .where(sql`${table.inboxMessageId} is not null`),
+    // A comment's files are read and deleted by the comment.
+    index("attachment_plan_comment")
+      .on(table.planCommentId)
+      .where(sql`${table.planCommentId} is not null`),
     // A conversation's pictures are found by their hash and counted by the conversation. Not partial, so an old insert's conflict on the two columns finds it through the view; every other owner's null conversation conflicts with nothing.
     uniqueIndex("attachment_conversation_sha256").on(table.conversationId, table.sha256),
     // A task's attachments are moved with it, and a plan's pictures read, counted, and stamped by it.
@@ -172,6 +178,11 @@ export const attachment = pgTable(
     check(
       "attachment_bytes_bound",
       sql`(${table.chatMessageId} is null or octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_IMAGE_BYTES)}) and (${table.conversationId} is null or octet_length(${table.bytes}) <= ${bound(CONVERSATION_PICTURE_BOUNDS.MAX_BYTES)}) and (not ${ownedByTaskAlone(table)} or octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_BYTES)})`,
+    ),
+    // A plan comment's file names its task and workspace, has a name and a place among the comment's files, and is held to a file's bound.
+    check(
+      "attachment_plan_comment_file",
+      sql`${table.planCommentId} is null or (${table.taskId} is not null and ${table.organizationId} is not null and ${table.name} is not null and ${table.position} is not null and octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)})`,
     ),
     // A conversation's picture carries its hash and its size in pixels.
     check(

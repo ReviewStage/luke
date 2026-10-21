@@ -22,12 +22,10 @@ import {
   type TurnRow,
 } from "@luke/features/turn-rows";
 import {
-  BUTTON_SIZE,
   Disclosure,
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
-  IconButton,
   INLINE_REF_LOOK,
   InlineRef,
   ProviderMark,
@@ -35,9 +33,10 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { type Actor, actorName } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import {
   AppWindowIcon,
@@ -45,8 +44,6 @@ import {
   ArchiveRestoreIcon,
   BookOpenIcon,
   BotIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
   CircleCheckIcon,
   CircleDotIcon,
   CircleIcon,
@@ -85,10 +82,10 @@ import {
   type ComponentProps,
   createContext,
   Fragment,
+  type MouseEvent,
   type ReactNode,
   useContext,
   useMemo,
-  useState,
 } from "react";
 import remarkBreaks from "remark-breaks";
 import {
@@ -116,6 +113,7 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool.js";
+import { InlineRef as HintedInlineRef } from "../inline-ref.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
 import { Tooltip } from "../tooltip.js";
@@ -795,21 +793,55 @@ const CALL_ICON = {
 /**
  * The coding agent a call about one names, drawn on its row in the place of
  * "the coding agent" as its mention's chip is drawn in words: its tile and
- * its name on the chip's raised fill. It is no target of its own, because
- * the row it stands on is already the one that opens the agent and hangs
- * its card, and a second press or card inside it would be two targets for
- * one thing; so it takes the row's pointer and lifts with the row's hover
- * as a chip lifts with its own.
+ * its name on the chip's raised fill. On a row that is itself the press
+ * that opens the agent it is no target of its own, since a second press or
+ * card inside it would be two targets for one thing, so it takes the row's
+ * pointer and lifts with the row's hover. On a row that folds open what the
+ * call sent (`opens`), the chip is the way to the agent: its press opens
+ * the agent's tab and its hover hangs the agent's card, and the press stops
+ * at the chip, so it never folds the row it stands on.
  */
-function AgentCallChip({ agent }: { agent: Actor }): ReactNode {
+function AgentCallChip({
+  agent,
+  opens,
+}: {
+  agent: Actor;
+  opens?: AgentOpening | undefined;
+}): ReactNode {
+  if (opens === undefined) {
+    return (
+      <InlineRef
+        look={INLINE_REF_LOOK.PILL}
+        glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
+        label={actorName(agent)}
+        data-tool-agent-ref=""
+      />
+    );
+  }
+  const press = (event: MouseEvent<HTMLButtonElement>) => {
+    // The press is the chip's alone: the summary it stands in would fold.
+    event.preventDefault();
+    event.stopPropagation();
+    opens.onOpen();
+  };
   return (
-    <InlineRef
+    <HintedInlineRef
       look={INLINE_REF_LOOK.PILL}
       glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
       label={actorName(agent)}
+      onPress={press}
+      hintLabel={opens.hint}
+      card={opens.card}
       data-tool-agent-ref=""
     />
   );
+}
+
+/** How a chip on a row that folds open reaches its agent: what its hover says, the card it hangs, and its press. */
+interface AgentOpening {
+  readonly hint: string;
+  readonly card: ReactNode;
+  readonly onOpen: () => void;
 }
 
 /** A call's line, and the chip after its verb where it names its agent by one. */
@@ -818,17 +850,21 @@ interface ChippedLine {
   readonly chip: ReactNode | undefined;
 }
 
-/** A call's line and the chip it names its agent by: the agent's chip after the verb alone, for a call about one coding agent whose agent is known, and the call's own words otherwise. */
+/** A call's line and the chip it names its agent by: the agent's chip after the verb alone, for a call about one coding agent whose agent is known, opening the agent where `opens` says how, and the call's own words otherwise. */
 function chippedLine(
   kind: CallKind,
   subject: string | undefined,
   description: string | undefined,
   agent: Actor | undefined,
+  opens?: AgentOpening,
 ): ChippedLine {
   if (agent === undefined || !isAgentCallKind(kind)) {
     return { line: callLine(kind, subject, description), chip: undefined };
   }
-  return { line: agentCallLine(kind, subject), chip: <AgentCallChip agent={agent} /> };
+  return {
+    line: agentCallLine(kind, subject),
+    chip: <AgentCallChip agent={agent} opens={opens} />,
+  };
 }
 
 /** Whose Mac a transcript's Mac commands ran on, its agent's starter, the reader's own among them (`macOwnerOf`); none where the window cannot tell, whose ran on the reader's own as far as it knows. */
@@ -919,7 +955,9 @@ export function TranscriptTool({
  * input and answer open in place, its hover saying what it opens, or
  * hanging the card that tab hangs, an agent's, where it is given one. A
  * call about one coding agent names the agent by its chip, which the row's
- * press and card are for (`AgentCallChip`).
+ * press and card are for (`AgentCallChip`). A call that sent the agent
+ * words is a row that folds them open instead, and its chip opens the agent
+ * (`SentCall`).
  */
 export function TranscriptOpeningCall({
   callId,
@@ -942,16 +980,26 @@ export function TranscriptOpeningCall({
   hint: string;
   /** The card the hover hangs in the hint's place: the tab's own, where the tab it opens hangs one. */
   card?: ReactNode;
-  /** What the call sent another agent, whole, which a toggle at the line's end shows under it; none for a call that sent no words of its own. */
+  /** What the call sent another agent, whole, which a press on the row folds open under it; none for a call that sent no words of its own. */
   sent?: SentWords | undefined;
   onOpen: () => void;
 }): ReactNode {
   const Icon = CALL_ICON[kind];
+  if (sent !== undefined) {
+    return (
+      <SentCall
+        callId={callId}
+        kind={kind}
+        subject={subject}
+        agent={agent}
+        state={state}
+        sent={sent}
+        opens={{ hint, card, onOpen }}
+      />
+    );
+  }
   const { line, chip } = chippedLine(kind, subject, undefined, agent);
-  const [open, setOpen] = useState(false);
-  // Note that the line's preview of the words gives way while they are shown whole under it.
-  const preview = sent !== undefined && open ? undefined : line.subject;
-  const row = (
+  return (
     <Tooltip label={hint} card={card ?? undefined}>
       <button
         type="button"
@@ -964,53 +1012,84 @@ export function TranscriptOpeningCall({
           state={state}
           icon={<Icon aria-hidden="true" />}
           label={line.verb}
-          subject={preview}
+          subject={line.subject}
           chip={chip}
           subjectIsCode={line.code}
         />
       </button>
     </Tooltip>
   );
-  if (sent === undefined) return row;
-  return (
-    <div className="tool-opening-sent">
-      <div className="tool-opening-row">
-        {row}
-        <IconButton
-          label={open ? SENT_WORDS.HIDE : SENT_WORDS.SHOW}
-          icon={
-            open ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />
-          }
-          size={BUTTON_SIZE.COMPACT}
-          pressed={open}
-          onClick={() => setOpen((was) => !was)}
-        />
-      </div>
-      {open ? (
-        <div className="tool-body tool-sent-words">
-          {sent.words === undefined ? null : (
-            <div className="tool-sent-block">
-              <TranscriptWords text={sent.words} />
-            </div>
-          )}
-          {sent.note === undefined ? null : (
-            <div className="tool-sent-block">
-              <div className="tool-sent-note">{SENT_WORDS.NOTE}</div>
-              <TranscriptWords text={sent.note} />
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
-/** What the toggle of a call's sent words says, and the heading over a start's note. */
+/** The heading over a start's note. */
 const SENT_WORDS = {
-  SHOW: "Show what was sent",
-  HIDE: "Hide what was sent",
   NOTE: "Note",
 } as const;
+
+/** The agent a call that sent words names where the place knows it by no name yet, as a start the place has not listed: a coding agent, as its card names it. */
+const UNNAMED_AGENT: Actor = {
+  kind: ACTOR_KIND.AGENT,
+  name: TAB_WORDS.CODING_AGENT,
+  provider: undefined,
+  state: ACTOR_STATE.REST,
+};
+
+/**
+ * A call that sent another agent words, a message or a start: a call's row
+ * that folds the words open whole under it, as any call's row folds its
+ * input, its line's preview giving way while they are shown. The agent is
+ * reached from its chip (`AgentCallChip`), whose press opens its tab and
+ * whose hover hangs its card, so the row keeps one press, the fold, and
+ * wears no toggle of its own at its end. Note that an agent the place knows
+ * by no name yet still gets its chip, named as its card names it, because
+ * the chip is the row's one way to the agent.
+ */
+function SentCall({
+  callId,
+  kind,
+  subject,
+  agent,
+  state,
+  sent,
+  opens,
+}: {
+  callId: string;
+  kind: CallKind;
+  subject: string | undefined;
+  agent: Actor | undefined;
+  state: ToolState;
+  sent: SentWords;
+  opens: AgentOpening;
+}): ReactNode {
+  const Icon = CALL_ICON[kind];
+  const { line, chip } = chippedLine(kind, subject, undefined, agent ?? UNNAMED_AGENT, opens);
+  return (
+    <Tool data-call-id={callId}>
+      <ToolHeader
+        state={state}
+        icon={<Icon aria-hidden="true" />}
+        label={line.verb}
+        subject={line.subject}
+        chip={chip}
+        subjectIsCode={line.code}
+        subjectInBody
+      />
+      <FoldBody className="tool-body tool-sent-words">
+        {sent.words === undefined ? null : (
+          <div className="tool-sent-block">
+            <TranscriptWords text={sent.words} />
+          </div>
+        )}
+        {sent.note === undefined ? null : (
+          <div className="tool-sent-block">
+            <div className="tool-sent-note">{SENT_WORDS.NOTE}</div>
+            <TranscriptWords text={sent.note} />
+          </div>
+        )}
+      </FoldBody>
+    </Tool>
+  );
+}
 
 /**
  * How a to-do of each status is drawn: its glyph and what the glyph says

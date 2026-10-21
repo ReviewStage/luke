@@ -15,7 +15,6 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
-import { MAIN_TAB } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
@@ -80,7 +79,7 @@ async function mount(): Promise<{ readonly opened: () => number }> {
     tasks: [SUMMARY],
     activeTaskId: TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
-    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.CALL], tab: MAIN_TAB.CALL },
+    mainTabs: { ...base.mainTabs, tabs: [], tab: undefined },
     sidePanel: {
       ...base.sidePanel,
       open: true,

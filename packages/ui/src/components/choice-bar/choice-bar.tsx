@@ -209,16 +209,20 @@ function placeThumb(bar: HTMLElement, slide: boolean): void {
 /**
  * The ref the bar's own element takes and the one each option takes, which
  * keep its thumb under the chosen option: sliding to it after a render that
- * chose another, and placed at once when the bar or an option resizes (a
- * narrow bar dropping its names, a count growing, a hidden panel shown).
- * Note that each element is watched by an observer of its own, let go with
- * `disconnect`, the one way every observer has to stop.
+ * chose another, or that changed which options stand (`stands`), and placed
+ * at once when the bar or an option resizes (a narrow bar dropping its
+ * names, a count growing, a hidden panel shown). Note that each element is
+ * watched by an observer of its own, let go with `disconnect`, the one way
+ * every observer has to stop; and that a render changing neither is left
+ * alone, because reading where an option stands lays out the whole window,
+ * and a bar is drawn again with everything around it.
  */
-function useThumb() {
+function useThumb(chosen: string | undefined, stands: string) {
   const bar = useRef<HTMLDivElement | null>(null);
+  // Note that the thumb is placed again only when the choice or the options standing change; a resize is the observers'.
   useLayoutEffect(() => {
     if (bar.current !== null) placeThumb(bar.current, true);
-  });
+  }, [chosen, stands]);
   const optionRef = useCallback((element: HTMLElement | null) => {
     if (element === null || !("ResizeObserver" in globalThis)) return undefined;
     const resized = new ResizeObserver(() => {
@@ -409,6 +413,16 @@ function countOf(count: ChoiceItem<string>["count"]): ReactNode {
   return <CountParts parts={isParts(count) ? count : [{ text: count }]} />;
 }
 
+/** Which options stand, in order, and how the bar draws them: what moves the thumb without resizing what it watches. */
+function standing(
+  items: readonly ChoiceItem<string>[],
+  look: ChoiceBarLook,
+  size: ChoiceBarSize,
+  inset: ChoiceBarInset,
+): string {
+  return [look, size, inset, ...items.map((item) => item.value)].join("\n");
+}
+
 /** The bar over `items`, `value` chosen. */
 export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): React.JSX.Element {
   const {
@@ -427,7 +441,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     onChange: __,
     ...appAttributes
   } = props;
-  const thumb = useThumb();
+  const thumb = useThumb(value, standing(items, look, size, inset));
   const folded = useFoldTogether(fold === CHOICE_BAR_FOLD.TOGETHER, thumb.bar);
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;

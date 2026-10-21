@@ -36,24 +36,24 @@ it("three documents pushed before a slow reader reads are one delivery, the thir
   const pushes = new WindowPushes();
   const stream = pushes.stream(WINDOW, undefined);
   for (const version of [1, 2, 3]) pushes.push(WINDOW, PUSH.APP_STATE, documentAt(version));
-  pushes.push(WINDOW, PUSH.SHOW_TASK, { taskId: "task-1" });
+  pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
 
   assert.equal(heard(await stream.next()), 3);
   // Nothing else was held for it: the next read is the event pushed after.
-  assert.equal(heard(await stream.next()), PUSH.SHOW_TASK);
+  assert.equal(heard(await stream.next()), PUSH.SHOW_AGENT);
 });
 
 it("every event is sent in order, each after a document at least as new as the one pushed before it", async () => {
   const pushes = new WindowPushes();
   const stream = pushes.stream(WINDOW, undefined);
   pushes.push(WINDOW, PUSH.APP_STATE, documentAt(1));
-  pushes.push(WINDOW, PUSH.SHOW_TASK, { taskId: "task-1" });
+  pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   pushes.push(WINDOW, PUSH.APP_STATE, documentAt(2));
   pushes.push(WINDOW, PUSH.MENU_COMMAND, "settings");
   const reads = [await stream.next(), await stream.next(), await stream.next()].map(heard);
   pushes.push(WINDOW, PUSH.APP_STATE, documentAt(3));
 
-  assert.deepEqual(reads, [2, PUSH.SHOW_TASK, PUSH.MENU_COMMAND]);
+  assert.deepEqual(reads, [2, PUSH.SHOW_AGENT, PUSH.MENU_COMMAND]);
   // A document pushed once the last was sent is sent in its own turn.
   assert.equal(heard(await stream.next()), 3);
 });
@@ -95,11 +95,11 @@ it("a held window's reload stays held, and its release sends the newest document
 it("a document queued but unread as its window is held waits for the release, and goes out once", async () => {
   const pushes = new WindowPushes();
   const page = pushes.stream(WINDOW, undefined);
-  pushes.push(WINDOW, PUSH.SHOW_TASK, { taskId: "task-1" });
+  pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   pushes.push(WINDOW, PUSH.APP_STATE, documentAt(1));
   pushes.holdState(WINDOW, true);
   pushes.push(WINDOW, PUSH.APP_STATE, documentAt(2));
-  assert.equal(heard(await page.next()), PUSH.SHOW_TASK);
+  assert.equal(heard(await page.next()), PUSH.SHOW_AGENT);
   let read: number | string | undefined;
   const reading = page.next().then((result) => {
     read = heard(result);
@@ -122,9 +122,9 @@ it("an event pushed to a held window goes out behind the document held before it
   pushes.push(WINDOW, PUSH.APP_STATE, documentAt(1));
   pushes.holdState(WINDOW, true);
   pushes.push(WINDOW, PUSH.APP_STATE, documentAt(2));
-  pushes.push(WINDOW, PUSH.SHOW_TASK, { taskId: "task-1" });
+  pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
 
   const reads = [await page.next(), await page.next()].map(heard);
-  assert.deepEqual(reads, [2, PUSH.SHOW_TASK]);
+  assert.deepEqual(reads, [2, PUSH.SHOW_AGENT]);
   await page.return?.(undefined);
 });

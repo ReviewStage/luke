@@ -13,6 +13,7 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import { Effect } from "effect";
@@ -21,7 +22,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
-import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -140,6 +141,7 @@ function drawn(
   plan: Task = PLAN,
   reveal?: { readonly thread: string; readonly ask: number },
   mentions?: TaskMentionsValue,
+  me?: string,
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
@@ -175,6 +177,7 @@ function drawn(
           task: plan,
           live: false,
           ...(view === "page" ? { sectionLinks: PAGE_LINKS } : undefined),
+          ...(me === undefined ? undefined : { reader: { readerId: me } }),
         });
   // Note that a page with mentions draws on a registry of its own, so the editor bundle installed for it is read afresh.
   const registry = AtomRegistry.make();
@@ -1263,4 +1266,197 @@ test("words selected in a plan whose tab is then hidden take the bubble and ‚å•‚
     Reflect.deleteProperty(window, "matchMedia");
   }
   assert.ok(container.querySelector(".comment-bubble"), "the bubble stands again by the words");
+});
+
+/** Hands files to a field's picker, as a member picks them, and waits for them to be read. */
+async function pickFiles(field: Element, files: readonly File[]): Promise<void> {
+  const picker =
+    field.querySelector<HTMLInputElement>('input[type="file"]') ?? assert.fail("no file picker");
+  Object.defineProperty(picker, "files", { configurable: true, value: files });
+  await act(async () => {
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  // Note that a file is read off the disk before it lands in the field.
+  for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
+}
+
+test("a reply carries the files picked into its field, and a comment's files are drawn under its words, each read as the plan's", async () => {
+  const notes = Buffer.from("expiry: 7 days\n").toString("base64");
+  const read: string[] = [];
+  fakeActs({
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
+        return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
+      }
+      read.push(request.payload.attachmentId);
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: { contentType: "text/plain", base64: notes },
+      });
+    },
+  });
+  const fileId = "4d5e6f7a-8b9c-4d0e-9f1a-3b4c5d6e7f80";
+  const [open] = THREADS;
+  assert.ok(open);
+  const withFile: PlanCommentThread = {
+    ...open,
+    entries: open.entries.map((entry) => ({
+      ...entry,
+      files: [{ attachmentId: fileId, name: "expiry.txt", mediaType: "text/plain" }],
+    })),
+  };
+  const { container, asked } = drawn("page", [withFile, ...THREADS.slice(1)]);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  await act(() => Promise.resolve());
+  const card =
+    container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`) ?? assert.fail("no card");
+
+  const sent = [...card.querySelectorAll('.comment-files [aria-label="Attached files"] > li')];
+  assert.deepEqual(
+    sent.map((chip) => chip.getAttribute("title")),
+    ["expiry.txt"],
+  );
+  assert.deepEqual(read, [fileId]);
+  const words = card.querySelector(".comment-entry .comment-words");
+  assert.ok(sent[0] && words);
+  assert.ok(
+    sent[0].compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "a comment's files stand over its words",
+  );
+
+  const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
+  await pickFiles(field, [new File(["Steps to reproduce\n"], "steps.txt", { type: "text/plain" })]);
+  assert.deepEqual(
+    [...field.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
+      chip.getAttribute("title"),
+    ),
+    ["steps.txt"],
+  );
+  await post(field.querySelector("textarea") ?? assert.fail("no textarea"), "Repro attached.");
+
+  const [reply] = asked;
+  assert.equal(reply?.action.action, PLAN_COMMENT_ACTION.REPLY);
+  assert.deepEqual(
+    reply !== undefined && "attachments" in reply.action
+      ? reply.action.attachments?.map((file) => [file.name, file.mediaType, file.data])
+      : undefined,
+    [["steps.txt", "text/plain", Buffer.from("Steps to reproduce\n").toString("base64")]],
+  );
+  assert.equal(field.querySelectorAll('[aria-label="Attached files"] > li').length, 0);
+});
+
+test("a picture pasted into the plain field is attached to the reply, as the editor's paste attaches one", async () => {
+  const { container, asked } = drawn("page");
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card =
+    container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`) ?? assert.fail("no card");
+  const field = card.querySelector("textarea") ?? assert.fail("no textarea");
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+  const paste = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(paste, "clipboardData", {
+    value: { files: [new File([png], "screenshot.png", { type: "image/png" })] },
+  });
+  await act(async () => {
+    field.dispatchEvent(paste);
+  });
+  for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
+
+  assert.equal(paste.defaultPrevented, true);
+  await post(field, "Like this.");
+  const [reply] = asked;
+  assert.deepEqual(
+    reply !== undefined && "attachments" in reply.action
+      ? reply.action.attachments?.map((file) => [file.name, file.mediaType])
+      : undefined,
+    [["screenshot.png", "image/png"]],
+  );
+});
+
+/** A thread whose one comment, written by `by`, names a date. */
+function datedThread(by: { userId: string; name: string }): PlanCommentThread {
+  return threadOn(ID.OPEN, "**single-use link** that expires", "", {
+    entries: [
+      {
+        id: `${ID.OPEN.slice(0, -4)}aaaa`,
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by },
+        words: "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
+        at: 1,
+      },
+    ],
+  });
+}
+
+test("the date chip in the reader's own comment opens its picker with no field opened, and a day picked there saves the comment with the date named anew", async () => {
+  const { container, asked } = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })]);
+
+  act(() => container.querySelector<HTMLElement>('.comment-entry [data-kind="date"]')?.click());
+  await act(async () => undefined);
+  const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
+  assert.ok(dialog, "the picker is open");
+  assert.equal(container.querySelector(".comment-editing"), null);
+  act(() =>
+    dialog.querySelector<HTMLElement>('button[aria-label="Saturday, October 24, 2026"]')?.click(),
+  );
+  act(() =>
+    (dialog.contains(document.activeElement) ? document.activeElement : dialog)?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    ),
+  );
+  await act(async () => undefined);
+
+  assert.equal(container.querySelector('[role="dialog"]'), null);
+  assert.deepEqual(asked, [
+    {
+      thread: ID.OPEN,
+      action: {
+        action: PLAN_COMMENT_ACTION.EDIT,
+        entry: `${ID.OPEN.slice(0, -4)}aaaa`,
+        words: "Ship by [@Oct 24, 2026](luke://date/2026-10-24).",
+      },
+    },
+  ]);
+});
+
+test("the date chip in another's comment opens no picker, since only its writer changes it", () => {
+  const { container } = drawn("tab", [datedThread({ userId: "u-charles", name: "Charles Pan" })]);
+
+  const chip = container.querySelector<HTMLElement>('.comment-entry [data-kind="date"]');
+  assert.ok(chip);
+  act(() => chip.click());
+
+  assert.equal(chip.tagName, "SPAN");
+  assert.equal(container.querySelector('[role="dialog"]'), null);
+});
+
+test("on the plan's page the date chip in the reader's own comment, its thread open in the margin, opens its picker beside it", async () => {
+  const thread = datedThread({ userId: "u-dean", name: "Dean" });
+  const { container } = wide(() =>
+    drawn("page", [thread], () => true, PLAN, undefined, undefined, "u-dean"),
+  );
+  await act(async () => undefined);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .comment-head`)
+      ?.click(),
+  );
+
+  act(() =>
+    container
+      .querySelector<HTMLElement>(
+        '.comment-card[data-open="true"] .comment-entry [data-kind="date"]',
+      )
+      ?.click(),
+  );
+  await act(async () => undefined);
+
+  assert.ok(container.querySelector('[role="dialog"]'), "the picker is open");
 });

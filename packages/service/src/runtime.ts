@@ -63,10 +63,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * the agents that read its tokens alike; `WorkspaceLinearConnect` is the one
  * place the workspace Linear connector's UID is.
  *
- * `LiveSealing` is the one place Neon Realtime's address and secret are read,
- * so a live read is sealed under the same secret on every route
- * (`live/realtime.ts`); without both it stands as none, and every live read
- * answers unavailable.
+ * `LiveSealing` is the one place Neon Realtime's switch, address and secret
+ * are read, so a live read is sealed under the same secret on every route
+ * (`live/realtime.ts`); without `LUKE_REALTIME=on` and both of Neon's
+ * variables it stands as none, and every live read is answered polled.
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog

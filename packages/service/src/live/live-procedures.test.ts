@@ -14,16 +14,22 @@ import {
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_POLL_URL,
+  LIVE_USER_QUERY,
+  liveDigestOf,
+  macCommandsLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
+  taskConversationLiveAnswerSchema,
+  taskRecordLiveAnswerSchema,
 } from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
-import { type LiveSealer, LiveSealing, SealRefused } from "./realtime.js";
+import { type LiveSealer, LiveSealing, pollSealer, SealRefused } from "./realtime.js";
 
 /**
  * The reads the desktop follows over Neon Realtime, sealed by the
@@ -55,10 +61,21 @@ const SCRIPTED: LiveSealer = {
     }),
 };
 
+/** A live read's address, naming the account it is for where one is named (`LIVE_USER_QUERY`). */
+function readOf(path: string, forUser: string | undefined): URL {
+  const url = new URL(path, ORIGIN);
+  if (forUser !== undefined) url.searchParams.set(LIVE_USER_QUERY, forUser);
+  return url;
+}
+
 /** The procedures answering one request as `bearer`, over the deployment's Realtime where it has one. */
 const ask = (options: {
   readonly bearer?: string;
   readonly method?: string;
+  /** The live read asked; the account inbox where left out. */
+  readonly path?: string;
+  /** The account the read names; the bearer's own where left out. */
+  readonly forUser?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
@@ -73,7 +90,7 @@ const ask = (options: {
     const response = yield* hostedAnswer(
       { live: procedures },
       Layer.succeed(LiveSealing, options.sealing),
-      new Request(new URL(LIVE_INBOX, ORIGIN), {
+      new Request(readOf(options.path ?? LIVE_INBOX, options.forUser ?? options.bearer), {
         method: options.method ?? "GET",
         headers: options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` },
       }),
@@ -98,6 +115,38 @@ it.effect("a request without a bearer is refused, and one by another method is n
       },
     );
   }),
+);
+
+it.effect(
+  "the commands no Mac has claimed are sealed for the bearer's own account, of the kinds the read names, and a read naming another account is signed out",
+  () =>
+    Effect.gen(function* () {
+      const dana = yield* ask({
+        bearer: "user-dana",
+        path: "/api/live/mac-commands?kinds=shell,browser",
+        sealing: Option.some(SCRIPTED),
+      });
+
+      assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(macCommandsLiveAnswerSchema)(dana.body);
+      assert.equal(answer.url, REALTIME_URL);
+      const read = answer.queries.commands.capability;
+      assert.ok(read.includes('"user-dana"'), "read for the bearer");
+      assert.ok(read.includes('"browser"'), "of the kinds the read names");
+      assert.deepEqual(
+        yield* ask({
+          bearer: "user-dana",
+          forUser: "user-eli",
+          path: "/api/live/mac-commands",
+          sealing: Option.some(SCRIPTED),
+        }),
+        {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        },
+        "a read naming another account is signed out",
+      );
+    }),
 );
 
 it.effect(
@@ -142,11 +191,16 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** The procedures answering a task board's live read as `bearer`, over the store and the deployment's Realtime. */
+/** The procedures answering a task's live read as `bearer`, its board's unless `path` names another, over the store and the deployment's Realtime. */
 const askBoard = (options: {
   readonly bearer: string;
+  /** The account the read names; the bearer's own where left out. */
+  readonly forUser?: string;
   readonly taskId?: string;
+  readonly path?: string;
   readonly poll?: boolean;
+  /** The digest the reader last saw, which holds the poll until the rows move past it. */
+  readonly after?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
@@ -154,13 +208,19 @@ const askBoard = (options: {
       Layer.succeed(LiveSealing, options.sealing),
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
+      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
-    const url = new URL(options.taskId === undefined ? LIVE_INBOX : "/api/live/task-board", ORIGIN);
+    const url = readOf(
+      options.taskId === undefined ? LIVE_INBOX : (options.path ?? "/api/live/task-board"),
+      options.forUser ?? options.bearer,
+    );
     if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
     if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
+    if (options.after !== undefined) url.searchParams.set(LIVE_POLL.AFTER, options.after);
     const response = yield* hostedAnswer(
       { live: procedures },
       services,
@@ -246,6 +306,36 @@ it.layer(getTestDB())("the task board's live read", (it) => {
       }),
   );
 
+  it.effect(
+    "a task's pages and calls are sealed a part each for an account that reaches it, and not found for one that does not",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const ask = (bearer: string) =>
+          askBoard({
+            bearer,
+            taskId: started.id,
+            path: "/api/live/task-record",
+            sealing: Option.some(SCRIPTED),
+          });
+
+        const own = yield* ask(dana);
+        assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskRecordLiveAnswerSchema)(own.body);
+        assert.equal(answer.url, REALTIME_URL);
+        for (const query of [answer.queries.pages, answer.queries.calls]) {
+          assert.ok(query.capability.includes(`"${dana}"`), "read for the bearer");
+          assert.ok(query.capability.includes(`"${started.id}"`), "read for the task");
+        }
+        assert.deepEqual(yield* ask(eli), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+      }),
+  );
+
   it.effect("the account inbox Realtime is off for is answered with every part's rows inline", () =>
     Effect.gen(function* () {
       const dana = yield* openUser;
@@ -266,6 +356,10 @@ const askTranscript = (options: {
   readonly agentId: string;
   readonly call?: string;
   readonly sealing: Option.Option<LiveSealer>;
+  /** The read asked, an agent's transcript where none is named. */
+  readonly path?: string;
+  /** The account the read names, the bearer's own where none is named. */
+  readonly forUser?: string;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -276,7 +370,10 @@ const askTranscript = (options: {
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
-    const url = new URL("/api/live/agent-transcript", ORIGIN);
+    const url = readOf(
+      options.path ?? "/api/live/agent-transcript",
+      options.forUser ?? options.bearer,
+    );
     url.searchParams.set("id", options.agentId);
     if (options.call !== undefined) url.searchParams.set("call", options.call);
     const response = yield* hostedAnswer(
@@ -372,6 +469,149 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
             sealing: Option.some(SCRIPTED),
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
+  );
+
+  it.effect(
+    "a poll past the digest the reader saw is held: answered within a beat of a change, and unchanged, with no rows, at the hold's end",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const poll = (after: string) =>
+          askBoard({ bearer: dana, taskId: started.id, poll: true, after, sealing: Option.none() });
+        const first = yield* askBoard({ bearer: dana, taskId: started.id, sealing: Option.none() });
+        const seen = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(first.body);
+        const digest = liveDigestOf(seen.queries);
+        assert.ok(digest !== undefined);
+
+        const unchanged = yield* Effect.forkChild(poll(digest));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(
+          (yield* Fiber.join(unchanged)).body,
+        );
+        assert.equal(held.queries.board.rows, undefined, "unchanged carries no rows");
+        assert.equal(liveDigestOf(held.queries), digest);
+
+        const moved = yield* Effect.forkChild(poll(digest));
+        yield* TestClock.adjust(Duration.seconds(3));
+        yield* writeDrawing(dana, started.id, BOX);
+        yield* TestClock.adjust(Duration.seconds(1));
+        const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(
+          (yield* Fiber.join(moved)).body,
+        );
+        assert.deepEqual(
+          Schema.decodeUnknownSync(taskBoardLiveRowsSchema)({ board: answer.queries.board.rows }),
+          { board: [{ taskId: started.id, drawingNumber: 1, appliedDrawing: 0, imaged: false }] },
+        );
+        assert.notEqual(liveDigestOf(answer.queries), digest);
+      }),
+  );
+
+  it.effect("a polled statement's rows in another order digest alike", () =>
+    Effect.gen(function* () {
+      const sealer = pollSealer(yield* SqlClient.SqlClient);
+      const one = yield* sealer.seal({
+        sql: "select * from (values (1), (2)) as rows(n) order by n",
+        params: [],
+      });
+      const other = yield* sealer.seal({
+        sql: "select * from (values (1), (2)) as rows(n) order by n desc",
+        params: [],
+      });
+      assert.notDeepEqual(one.rows, other.rows);
+      assert.equal(one.digest, other.digest);
+    }),
+  );
+
+  it.effect(
+    "a read naming another account than the caller's, or none, is answered as signed out, as no session is",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const signedOut = {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        };
+        for (const forUser of ["user-eli", ""]) {
+          for (const poll of [false, true]) {
+            assert.deepEqual(
+              yield* askBoard({
+                bearer: dana,
+                forUser,
+                taskId: started.id,
+                poll,
+                sealing: Option.none(),
+              }),
+              signedOut,
+            );
+          }
+          assert.deepEqual(
+            yield* askBoard({ bearer: dana, forUser, sealing: Option.none() }),
+            signedOut,
+          );
+          assert.deepEqual(
+            yield* askBoard({
+              bearer: dana,
+              forUser,
+              taskId: started.id,
+              path: "/api/live/task-record",
+              sealing: Option.none(),
+            }),
+            signedOut,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "a task's planning conversation is sealed as its mark and its running workers for an account that reaches the task, not found for one that does not, and polled without Realtime",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const askConversation = (bearer: string, sealing = Option.some(SCRIPTED)) =>
+          askTranscript({
+            bearer,
+            agentId: task.id,
+            sealing,
+            path: "/api/live/task-conversation",
+          });
+
+        const sealed = yield* askConversation(owner);
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["mark", "workers"]);
+        for (const query of Object.values(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
+          assert.ok(query.capability.includes(`"${task.id}"`), "read of the task");
+        }
+        assert.deepEqual(yield* askConversation(stranger), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        // A read naming another account than the bearer's, as one started before a switch does, is signed out.
+        assert.deepEqual(
+          yield* askTranscript({
+            bearer: owner,
+            forUser: stranger,
+            agentId: task.id,
+            sealing: Option.some(SCRIPTED),
+            path: "/api/live/task-conversation",
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+        );
+        const polled = yield* askConversation(owner, Option.none());
+        assert.equal(
+          Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(polled.body).url,
+          LIVE_POLL_URL,
         );
       }),
   );

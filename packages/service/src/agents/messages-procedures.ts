@@ -61,6 +61,7 @@ import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import {
   BRAIN_POLL,
   type BrainPage,
+  brainPageNow,
   brainPagePast,
   brainStatusNow,
   brainTitleAwaited,
@@ -68,6 +69,7 @@ import {
   brainWorkerSession,
 } from "../tasks/brain-transcript.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
+import { startedBlank } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -87,7 +89,12 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
-import { readWorkspaceChat, workspaceOf, writeWorkspaceChat } from "./workspace-chat.js";
+import {
+  joinWorkspaceChatAsPerson,
+  readWorkspaceChat,
+  workspaceOf,
+  writeWorkspaceChat,
+} from "./workspace-chat.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -144,6 +151,18 @@ const turnNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readEither(wireUuidSchema)(unparsedWire(before));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
+});
+
+/** The one word a task's read takes for `hold`: past the cursor in one look, never held. */
+const HOLD_NONE = "none";
+
+/** Whether a read past the cursor asks for one look rather than a hold; refused where `hold` names anything else. */
+const unheldNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
+  hold: string | undefined,
+): Effect.fn.Return<boolean, HostedRefusal> {
+  if (hold === undefined) return false;
+  if (hold !== HOLD_NONE) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return true;
 });
 
 /**
@@ -266,13 +285,14 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const { agent, target } = yield* reachedAgent(context.userId, input.id);
       const titleAwaited = yield* titleAwaitedOf(target);
       const cursor = cursorOfWire(after);
+      const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
       const { page, holds, wakeIn } = readsNow(input.wait)
         ? yield* hostedStoreOrUnavailable(
             transcriptNow(
               target,
               CODER_TOOL_SET,
               cursor,
-              agent,
+              standing,
               agent,
               titleAwaited,
               yield* titleEdgeOf(target),
@@ -280,7 +300,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           )
         : {
             page: yield* hostedStoreOrUnavailable(
-              transcriptPast(target, CODER_TOOL_SET, cursor, agent, agent, titleAwaited),
+              transcriptPast(target, CODER_TOOL_SET, cursor, standing, agent, titleAwaited),
             ),
             holds: undefined,
             wakeIn: undefined,
@@ -360,7 +380,8 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const taskId = yield* uuidNamed(input.id);
       const after = yield* cursorNamed(input.after);
       const before = yield* turnNamed(input.before);
-      if (after !== undefined && before !== undefined) {
+      const unheld = yield* unheldNamed(input.hold);
+      if ((after !== undefined && before !== undefined) || (unheld && after === undefined)) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
@@ -376,7 +397,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const page = yield* hostedStoreOrUnavailable(
         after === undefined
           ? brainTurnsPage(target, before)
-          : brainPagePast(target, cursorOfWire(after)),
+          : (unheld ? brainPageNow : brainPagePast)(target, cursorOfWire(after)),
       );
       return taskAnswer(page, null);
     }),
@@ -427,6 +448,9 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(accountMiddleware(seams.resolveUserId))
       .chatWrite.effect(function* ({ input, context }) {
         const workspaceId = yield* workspaceOf(input.query.workspaceId);
+        if ("join" in input.body) {
+          return yield* joinWorkspaceChatAsPerson(context.userId, workspaceId);
+        }
         return yield* writeWorkspaceChat(seams, context.userId, workspaceId, input.body);
       }),
   };

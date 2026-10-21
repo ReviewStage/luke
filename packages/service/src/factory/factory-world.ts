@@ -64,7 +64,11 @@ import {
 import { AREA_PATH, areaPathOf } from "@luke/features/pull-request-area";
 import { Clock, Duration, Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { codingAgentActivityAt, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import {
+  codingAgentActivityAt,
+  codingAgentStatusOf,
+  startedBlank,
+} from "../agents/coder-host/status.js";
 import {
   GitHubApp,
   type GitHubUnavailable,
@@ -366,6 +370,7 @@ const readAgents = Effect.fnUntraced(function* (
       createdAt: agent.createdAt,
       now,
       awaitingLineAt: awaiting.get(agent.conversationId),
+      blank: startedBlank(agent),
     };
     const status = codingAgentStatusOf(turn, standing);
     const starter = names.get(agent.userId);

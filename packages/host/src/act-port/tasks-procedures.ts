@@ -62,6 +62,7 @@ import {
   type TasksTreeParams,
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect } from "effect";
 import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
@@ -115,12 +116,8 @@ export interface TasksProceduresDependencies {
   serviceBaseUrl: string;
   /** The task the panel has open, as the bridge's side holds the host's view of it. */
   activeTaskId: () => string | undefined;
-  /** Tells the voice window, which owns the call, that the task's microphone was pressed. */
-  talkAboutTask: (taskId: string) => void;
-  /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
-  voiceReady: () => boolean;
-  /** Whether a call is in progress, which a start leaves standing for the panel to ask about moving. */
-  callStanding: () => boolean;
+  /** Tells the voice window, which owns the call, that an agent's Call button was pressed. */
+  talkTo: (about: VoiceCallAbout) => void;
 }
 
 /** The refusal a window that draws no Tasks tab hears, or nothing for a panel. */
@@ -129,20 +126,12 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 }
 
 /**
- * The longest page whose source the procedure colours. Note that a longer
- * one is drawn plain rather than cut, as a transcript's long block is,
- * because colouring holds the host's thread for about a millisecond per
- * hundred characters.
+ * A page's HTML as its tab's source reads it: line by line, plain, since the
+ * panel draws it as every code is, through Pierre's diffs, which colours it
+ * (`@luke/panel`'s `whole-file.tsx`).
  */
-const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
-
-/** A page's HTML as its tab's source draws it: line by line, coloured as HTML where it is short enough to colour, plain past that. */
-function pageSourceLines(
-  html: string,
-  colourCode: TasksProceduresDependencies["colourCode"],
-): Effect.Effect<CodeLines> {
-  if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
-  return Effect.succeed(html.split("\n").map((text) => (text === "" ? [] : [{ text }])));
+function pageSourceLines(html: string): CodeLines {
+  return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
 }
 
 /** Whether an address the host answered parses and stands on the service's own origin. */
@@ -185,31 +174,15 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.tasksClose();
     }),
-    // Note that a started task opens its call at once, because pressing
-    // Start task is the developer's gesture and Luke opens a new task by
-    // greeting it; where the call would first have to ask for the
-    // microphone, the task's own microphone button asks instead, and where
-    // a call already stands the panel asks whether to end it first. A task
-    // started without planning opens no call, since skipping the call is
-    // what that start asked for, and nor does one started with an agent,
-    // which starts it without planning.
+    // Note that a started task opens no call: a call starts only from an
+    // agent's own Call button.
     [TASKS_ACT_KIND.TASKS_START]: actPort[TASKS_ACT_KIND.TASKS_START].effect(function* ({
       input,
       context,
       errors,
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const calls = input.planning !== false && input.agent === undefined;
-      const answer = yield* host.tasksStart(input);
-      if (
-        calls &&
-        "planId" in answer &&
-        dependencies.voiceReady() &&
-        !dependencies.callStanding()
-      ) {
-        dependencies.talkAboutTask(answer.planId);
-      }
-      return answer;
+      return yield* host.tasksStart(input);
     }),
     [TASKS_ACT_KIND.TASKS_DELETE]: actPort[TASKS_ACT_KIND.TASKS_DELETE].effect(function* ({
       input,
@@ -352,16 +325,19 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         );
       },
     ),
-    // The press names no task: the task is the one the host has open, read
-    // here, so the panel cannot open a call about a task it is not showing.
+    // The press names its agent and no task: the task is the one the host
+    // has open, read here, so the panel cannot open a call into an agent of
+    // a task it is not showing. That the agent is on it is checked as the
+    // call's session is created (`compose-live.ts`).
     [TASKS_ACT_KIND.TASKS_TALK]: actPort[TASKS_ACT_KIND.TASKS_TALK].effect(function* ({
+      input,
       context,
       errors,
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const taskId = dependencies.activeTaskId();
       if (taskId === undefined) return yield* Effect.fail(errors.REFUSED());
-      dependencies.talkAboutTask(taskId);
+      dependencies.talkTo({ taskId, agentId: input.agentId });
     }),
     [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: actPort[TASKS_ACT_KIND.TASKS_BOARD_SAVE].effect(function* ({
       input,
@@ -478,7 +454,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         const answer = yield* host.tasksPage(input);
         if (!("page" in answer)) return answer;
-        const lines = yield* pageSourceLines(answer.page.html, dependencies.colourCode);
+        const lines = pageSourceLines(answer.page.html);
         return { lines } satisfies TasksPageSourceAnswer;
       },
     ),

@@ -1,7 +1,8 @@
 /**
  * copy-feedback.tsx -- the window's one answer to a copy: a button's glyph turning to a check for a moment, or a toast for a copy made from a menu.
  *
- * Every copy goes to the shell's clipboard (`appPlatform().copyText`) and is
+ * Every copy goes to the shell's clipboard (`appPlatform().copyText`, or
+ * `copyImage` for a picture, drawn as a PNG where it is not one) and is
  * answered the way Linear, GitHub, and Vercel answer one. A copy button's
  * glyph crossfades to a check in the success colour for `BUTTON_HOLD`, then
  * back; its label and accessible name stay as they were, so nothing beside
@@ -57,6 +58,29 @@ const COPY_FAILED_NOTE = "Could not copy to the clipboard. Try again.";
  */
 let latestMenuCopy = 0;
 
+/** A PNG's `data:` address, its bytes in base64 up to any fragment. */
+const PNG_DATA_URL = /^data:image\/png;base64,([^#]+)/u;
+
+/**
+ * The picture at `url` as a PNG's bytes in base64, the one shape every
+ * clipboard takes a picture in: a PNG's own bytes as they are, and any
+ * other picture drawn again as one.
+ */
+async function pngBase64Of(url: string): Promise<string> {
+  const own = PNG_DATA_URL.exec(url)?.[1];
+  if (own !== undefined) return own;
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("No canvas to draw the picture on.");
+  context.drawImage(image, 0, 0);
+  return canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/u, "");
+}
+
 /** What the clipboard's answer to a copy comes to: the check, or the alert. */
 function copyAnswer(
   copying: Promise<void>,
@@ -70,34 +94,45 @@ function copyAnswer(
 /** A button's own hold, as an atom whose work is the wait: waiting exactly as long as the glyph stands. */
 const buttonHoldAtom = () => rendererRuntime.fn(() => Effect.sleep(BUTTON_HOLD));
 
-/** A copy button's state, and its press. */
+/** A copy button's state, the picture at whose address it was answered for where a picture's copy answered it, and its press: of words, or of a picture. */
 interface CopyFeedback {
   readonly state: CopyState;
+  readonly answeredImage: string | undefined;
   readonly copy: (words: string) => void;
+  readonly copyImage: (url: string) => void;
 }
 
 /**
- * One copy button's state and its press. The press hands the words to the
- * shell's clipboard and, once it answers, shows the check or the alert for the hold;
- * a press while one stands starts the hold again from its own answer.
+ * One copy button's state and its press. The press hands the words, or the
+ * picture, to the shell's clipboard and, once it answers, shows the check or
+ * the alert for the hold; a press while one stands starts the hold again
+ * from its own answer.
  */
 export function useCopyFeedback(): CopyFeedback {
   const [hold] = useState(buttonHoldAtom);
   const [held, restart] = useAtom(hold);
-  const [landed, setLanded] = useState<CopyState>(COPY_STATE.IDLE);
+  const [landed, setLanded] = useState<{
+    readonly state: CopyState;
+    readonly image: string | undefined;
+  }>({ state: COPY_STATE.IDLE, image: undefined });
   // Note that this is a ref, because an answer reads it as it lands, which
   // no render stands between.
   const latest = useRef(0);
-  const copy = (words: string) => {
+  const answer = (copying: () => Promise<void>, image: string | undefined) => {
     latest.current += 1;
     const press = latest.current;
-    copyAnswer(appPlatform().copyText(words)).then((answer) => {
+    copyAnswer(copying()).then((answered) => {
       if (press !== latest.current) return;
-      setLanded(answer);
+      setLanded({ state: answered, image });
       restart();
     });
   };
-  return { state: held.waiting ? landed : COPY_STATE.IDLE, copy };
+  return {
+    state: held.waiting ? landed.state : COPY_STATE.IDLE,
+    answeredImage: landed.image,
+    copy: (words) => answer(() => appPlatform().copyText(words), undefined),
+    copyImage: (url) => answer(() => appPlatform().copyImage(pngBase64Of(url)), url),
+  };
 }
 
 /** What a copy button's hint says in this state: its own label at rest. */

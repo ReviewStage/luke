@@ -628,37 +628,19 @@ export const inboxAskSchema = EffectSchema.Union([
 
 export type InboxAsk = typeof inboxAskSchema.Type;
 
-/** A form's field as an agent asks one: a field without a recommended value, which an ask's fields do not carry. */
-const { recommended: _recommended, ...AGENT_FIELD_FIELDS } = inboxFieldSchema.fields;
-
-/** What an agent's post may end with: an ask of the three, its fields recommending nothing. */
-const inboxAgentAskSchema = EffectSchema.Union([
-  EffectSchema.Struct(DECIDE_FIELDS),
-  EffectSchema.Struct(DO_FIELDS),
-  EffectSchema.Struct({
-    ...ANSWER_FIELDS,
-    fields: EffectSchema.optionalKey(
-      EffectSchema.Array(EffectSchema.Struct(AGENT_FIELD_FIELDS)).check(
-        EffectSchema.isMinLength(1),
-        EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
-      ),
-    ),
-  }),
-]);
-
 /**
  * What a post's tool part carries as its input from version 5: the
  * thread's key, its title, which a first post under the key names, the
  * agent's message as one Markdown body, its pictures by their paths in the
  * agent's sandbox, the ask it may end with, and whether the agent waits to
- * hear the answer. The model is shown this schema and eve holds the call
- * to it.
+ * hear a `do` done; an answer to any other ask is always heard. The model
+ * is shown this schema and eve holds the call to it.
  */
 export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
   body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
-  ask: EffectSchema.optionalKey(inboxAgentAskSchema),
+  ask: EffectSchema.optionalKey(inboxAskSchema),
   waits: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
@@ -1049,21 +1031,66 @@ export function inboxAnswerHeard(
   return item.needsReply || (reply.note ?? "").trim() !== "" || files.length > 0;
 }
 
+/** A `do` ask's steps and those an answer to it ticked, by place, as the agent hears them. */
+export interface InboxTodoTicks {
+  readonly steps: readonly string[];
+  readonly ticked: readonly number[];
+}
+
+/** What the developer did, as the header says it: a `do`'s steps ticked with neither press by how many, else the answer's own words. */
+function answerHeadWords(reply: InboxReply, todo: InboxTodoTicks | undefined): string {
+  if (reply.reply !== INBOX_REPLY.ANSWERED || todo === undefined || todo.ticked.length === 0) {
+    return replyWords(reply);
+  }
+  const total = todo.steps.length;
+  return `Ticked ${todo.ticked.length} of ${total} ${total === 1 ? "step" : "steps"}.`;
+}
+
+/** A `do`'s steps as a checklist, each ticked or not; nothing where it names none. */
+function checklistLines(todo: InboxTodoTicks | undefined): string {
+  if (todo === undefined) return "";
+  const ticked = new Set(todo.ticked);
+  return todo.steps
+    .map((step, at) => `- [${ticked.has(at) ? "x" : " "}] ${step.replace(/\s+/gu, " ").trim()}`)
+    .join("\n");
+}
+
+/**
+ * The steps of the `do` ask an answer answers, and those the answer
+ * ticked: the ask as given where the caller holds it, since a long
+ * thread's read may have left it out, else as the item's thread carries
+ * it; nothing where the answer is to another kind of ask, its ask names no
+ * steps, or neither carries it.
+ */
+export function inboxTodoTicks(
+  item: Pick<InboxItem, "thread">,
+  answers: InboxAnswers,
+  answered?: InboxAsk,
+): InboxTodoTicks | undefined {
+  const ask = answered ?? (item.thread ?? []).find((message) => message.id === answers.ask)?.ask;
+  if (ask?.type !== INBOX_ASK.DO) return undefined;
+  const steps = (ask as { readonly steps?: readonly string[] }).steps ?? [];
+  return steps.length === 0 ? undefined : { steps, ticked: answers.steps ?? [] };
+}
+
 /**
  * The message an answer reaches the agent as: a first line naming the item
- * by its key and title with what the developer did, then a form's values
- * one per line, then their note. Note that the title is put on one line,
- * because the line is read whole.
+ * by its key and title with what the developer did, then a `do`'s steps as
+ * a checklist where the answer's ask names them (`todo`), then a form's
+ * values one per line, then their note. Note that the title is put on one
+ * line, because the line is read whole.
  */
 export function inboxAnswerMessage(
   item: Pick<InboxItem, "key" | "title">,
   reply: InboxReply,
+  todo?: InboxTodoTicks,
 ): string {
   const title = item.title.replace(/\s+/gu, " ").trim();
-  const header = `${INBOX_ANSWER_LEAD} on "${title}" (key ${item.key}): ${replyWords(reply)}`;
+  const header = `${INBOX_ANSWER_LEAD} on "${title}" (key ${item.key}): ${answerHeadWords(reply, todo)}`;
+  const checklist = checklistLines(todo);
   const values = reply.values === undefined ? "" : valueLines(reply.values);
   const note = reply.note?.trim() ?? "";
-  return [header, values, note].filter((part) => part !== "").join("\n\n");
+  return [header, checklist, values, note].filter((part) => part !== "").join("\n\n");
 }
 
 /** Whether a field's value is of the field's type, and names one of a select's options. */
@@ -1195,7 +1222,8 @@ function stepsRefusal(
 /**
  * Why an answer does not fit the ask it answers, or nothing where it does:
  * a `decide` takes a pick of offered options, or words or files where none
- * fits; a `do` takes Mark done, with every step ticked, or Couldn't do it;
+ * fits; a `do` takes Mark done, with every step ticked, Couldn't do it,
+ * or the steps ticked with neither, at least one, as an answer;
  * an `answer` with fields takes their values, every required one filled
  * unless something is given, a value or words or files, and one without
  * takes words or files. The words and files are those of the answering
@@ -1214,6 +1242,10 @@ export function inboxAnswersRefusal(
       return NOT_TAKEN;
     case INBOX_ASK.DO:
       if (answers.reply === INBOX_REPLY.DONE || answers.reply === INBOX_REPLY.NOT_DONE) {
+        return stepsRefusal(ask, answers);
+      }
+      // Steps ticked with neither press go as an answer that decides nothing, so it must tick one.
+      if (answers.reply === INBOX_REPLY.ANSWERED && (answers.steps ?? []).length > 0) {
         return stepsRefusal(ask, answers);
       }
       return NOT_TAKEN;

@@ -59,7 +59,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
@@ -99,9 +99,13 @@ import { SidebarInbox } from "./sidebar-inbox.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** Where the window's Inbox keeps the tab it shows, and where its Needs you button kept its press before the tabs. */
+/** Where the window's Inbox keeps the scope it shows, and where its Needs you button kept its press before the tabs that stood before its scopes. */
 const SHOW_KEY = "luke.inboxShow";
 const EARLIER_SHOW_KEY = "luke.inboxWaitingOnly";
+
+/** Where the window's Inbox keeps how it sorts, and how it groups. */
+const SORT_KEY = "luke.inboxSort";
+const GROUPING_KEY = "luke.inboxGrouping";
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -215,6 +219,8 @@ let setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefi
 let setTasks: (tasks: readonly TaskSummary[]) => void = () => undefined;
 /** Lands the account's first read of its task list, where a test mounted the Inbox before it. */
 let setListRead: (read: boolean) => void = () => undefined;
+/** Leaves the Inbox for another place and comes back to it, as the window's sidebar does. */
+let setInboxOpen: (open: boolean) => void = () => undefined;
 /** Chooses an item from outside the list, as a notification's click does. */
 let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 /** Moves main's read of what waits on the agents with no task, as main does when an item opens or is answered. */
@@ -265,8 +271,8 @@ beforeEach(() => {
   installEditorLayout();
   installScrollIntoView();
   window.localStorage.clear();
-  // Note that the Inbox opens on Everything here, so the tests of what an item shows meet settled
-  // items too; the tests of the tabs clear it to meet the Inbox as a fresh profile opens it.
+  // Note that the Inbox opens on All here, so the tests of what an item shows meet settled
+  // items too; the tests of the scopes clear it to meet the Inbox as a fresh profile opens it.
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
   inboxes = new Map([
     [BILLING.id, [THRESHOLD, RETRY]],
@@ -404,6 +410,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** What the Inbox was asked to open, leaving it. */
@@ -447,6 +454,8 @@ function mount(
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listAsked, setListAsked] = useState(false);
+    const [inboxOpen, setOpen] = useState(true);
+    setInboxOpen = setOpen;
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
@@ -470,7 +479,7 @@ function mount(
       inboxTasks: holding,
       inboxTaskless: taskless,
       inboxView: {
-        open: true,
+        open: inboxOpen,
         chosen,
         onOpen: () => undefined,
         onClose: () => {
@@ -599,6 +608,11 @@ function wordsOf(element: Element | null | undefined): string | null {
   return copy.textContent;
 }
 
+/** Whether the row of the item so titled is drawn gray, its item done with. */
+function rowMuted(page: HTMLElement, title: string): boolean {
+  return rowNamed(page, title).closest("li")?.getAttribute("data-muted") === "true";
+}
+
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   const row = [
     ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
@@ -607,21 +621,43 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   return row;
 }
 
-/** The tab under the Inbox's title whose name starts with `name`. */
-function showTab(page: HTMLElement, name: string): HTMLButtonElement {
-  const found = [...page.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].find(
-    (each) => each.querySelector(".luke-choice-bar-label")?.textContent === name,
-  );
-  assert.ok(found, `the list offers the ${name} tab`);
-  return found;
+/** Opens the list's View options. */
+function openViewOptions(page: HTMLElement): void {
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(options, "the head offers the view's menu");
+  act(() => options.click());
 }
 
-/** The tabs under the Inbox's title as a reader sees them: each name and count, the one shown in brackets. */
-function showTabs(page: HTMLElement): string[] {
-  return [...page.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].map((each) => {
-    const words = `${each.querySelector(".luke-choice-bar-label")?.textContent} ${each.querySelector(".luke-choice-bar-count")?.textContent}`;
-    return each.getAttribute("aria-selected") === "true" ? `[${words}]` : words;
-  });
+/** The scopes the view's menu may offer, in their order. */
+const SCOPE_NAMES = ["To do", "All", "Archived"] as const;
+
+/** The Inbox's name as the list's head says it. */
+function headTitle(page: HTMLElement): string | null | undefined {
+  return page.querySelector(".inbox-tasks .desktop-toolbar-title")?.textContent;
+}
+
+/** Shows the scope `name` from the list's View options. */
+function showScope(page: HTMLElement, name: (typeof SCOPE_NAMES)[number]): void {
+  openViewOptions(page);
+  act(() => viewItem(name).click());
+}
+
+/**
+ * The list's head as a reader meets it: the Inbox's name, then each scope
+ * its View options offers, the one shown in brackets; the menu is closed
+ * again on the scope shown.
+ */
+function scopes(page: HTMLElement): string[] {
+  openViewOptions(page);
+  const offered = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].filter(
+    (each) => SCOPE_NAMES.some((name) => each.textContent === name),
+  );
+  const shown = offered.find((each) => each.getAttribute("aria-checked") === "true");
+  const words = offered.map((each) =>
+    each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
+  );
+  act(() => shown?.click());
+  return [headTitle(page) ?? "", ...words];
 }
 
 /** Chooses `choice` under `submenu` in the list's View options. */
@@ -692,6 +728,35 @@ function toggleMediaPreviews(page: HTMLElement): string | null {
   act(() => item.click());
   return checked;
 }
+
+test("Second line in the view's menu, checked at first, makes every row one line once unchecked, its title alone, and the choice outlives a relaunch", async () => {
+  let { page } = mount();
+  await settle();
+  const described = (title: string) =>
+    rowNamed(page, title).querySelector(".luke-list-row-description") !== null;
+  assert.ok(described("Alert at 80%?"), "a row has its second line at first");
+  const toggle = () => {
+    const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+    act(() => options?.click());
+    const item = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
+    ].find((each) => each.textContent?.includes("Second line"));
+    assert.ok(item, "the view's menu offers Second line");
+    const checked = item.getAttribute("aria-checked");
+    act(() => item.click());
+    return checked;
+  };
+  assert.equal(toggle(), "true");
+  await settle();
+  assert.equal(described("Alert at 80%?"), false, "unchecked, the row is one line");
+  assert.equal(described("Expire after 7 days?"), false);
+
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  assert.equal(described("Alert at 80%?"), false, "the choice outlives a relaunch");
+});
 
 test("rows show no media until Media previews is checked in the view's menu, then the pictures and pages each item carries under its preview, and the choice outlives a relaunch", async () => {
   const shot = {
@@ -907,8 +972,8 @@ test("a settled choice's answer is the developer's comment, under a line saying 
   assert.deepEqual(answeredPicks(page), ["Retry 3 times over an hour"], "a press changes nothing");
   assert.equal(
     pane.querySelector(".composer-editor")?.getAttribute("aria-label"),
-    "Message Alerts…",
-    "a settled item takes no answer, only a message on its thread",
+    "Reply",
+    "a settled item takes no answer, only a reply on its thread",
   );
   const reply = pane.querySelector<HTMLElement>('[data-inbox-comment="answered"]');
   assert.ok(reply, "the developer's answer is their own comment");
@@ -916,7 +981,8 @@ test("a settled choice's answer is the developer's comment, under a line saying 
   assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
   assert.match(answerHead(page) ?? "", /^You.+ · Sent to Alerts$/u);
   assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     "person",
     "the answerer's face leads their comment",
   );
@@ -1224,9 +1290,33 @@ function answerSend(pane: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** What the box's quiet line says, or nothing where it says nothing. */
-function quietWords(pane: HTMLElement): string | null {
-  return pane.querySelector("[data-inbox-quiet]")?.textContent ?? null;
+/**
+ * What the open item's box says in its foot around its note line, its
+ * presses' words among it: nothing but a notice's Got it, since the box
+ * carries no helper text, its Send held until it holds something to send.
+ */
+function footWords(pane: HTMLElement): string {
+  const foot =
+    pane.querySelector("form.inbox-answer .inbox-answer-foot") ?? assert.fail("the box's foot");
+  const copy = foot.cloneNode(true);
+  assert.ok(copy instanceof Element);
+  for (const field of copy.querySelectorAll(".agent-composer-field")) field.remove();
+  return copy.textContent ?? "";
+}
+
+/**
+ * The box's foot as a reader meets it, left to right: each press by its
+ * name, and the note line, which stands in the foot as its field, by what
+ * it asks for.
+ */
+function footParts(pane: HTMLElement): (string | null)[] {
+  const foot =
+    pane.querySelector("form.inbox-answer .inbox-answer-foot") ?? assert.fail("the box's foot");
+  return [...foot.querySelectorAll<HTMLElement>("button, .composer-editor")].map((part) =>
+    part.matches(".composer-editor")
+      ? `line: ${part.getAttribute("aria-label")}`
+      : (part.getAttribute("aria-label") ?? part.textContent),
+  );
 }
 
 /**
@@ -1285,7 +1375,7 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
   act(() => keys.unmount());
 });
 
-test("Enter on a focused option sends the answer and never presses the option; with nothing picked, Enter there or in the box sends nothing, takes the keyboard to the options, and says on the box's foot what is missing until an option is picked", async () => {
+test("Enter on a focused option sends the answer and never presses the option; with nothing picked, Send stands held, and Enter there or in the box sends nothing and takes the keyboard to the options, the box saying nothing of what is missing", async () => {
   const { page } = mount();
   await settle();
   const sent = heldAnswers();
@@ -1295,7 +1385,13 @@ test("Enter on a focused option sends the answer and never presses the option; w
   pressInComposer(pane, "Enter");
   await settle();
   assert.equal(document.activeElement, openOptions(pane)[0], "the keyboard goes to the options");
-  assert.equal(quietWords(pane), "Pick an option");
+  assert.equal(footWords(pane), "", "the box says nothing of what is missing");
+  assert.equal(answerSend(pane).disabled, true, "Send stands held");
+  assert.deepEqual(
+    footParts(pane),
+    ["Attach files", "line: Add a note", "Dictate", "Send"],
+    "its foot is one row, the note line in it, under the options",
+  );
   keyOn(openOptions(pane)[0] ?? assert.fail("no option"), "Enter");
   await settle();
   assert.deepEqual(sent, [], "an answer lacking its pick goes nowhere");
@@ -1303,7 +1399,7 @@ test("Enter on a focused option sends the answer and never presses the option; w
 
   const once = openOptions(pane)[1] ?? assert.fail("no second option");
   act(() => once.click());
-  assert.equal(quietWords(pane), null, "the line goes once the pick is made");
+  assert.equal(answerSend(pane).disabled, false, "the pick lights Send");
   keyOn(once, "Enter");
   await settle();
   assert.deepEqual(
@@ -1314,7 +1410,7 @@ test("Enter on a focused option sends the answer and never presses the option; w
   assert.deepEqual(answeredPicks(page), ["Retry once"], "Enter left the pick standing");
 });
 
-test("a waiting choice of several is a checkbox list whose box counts the picks on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
+test("a waiting choice of several is a checkbox list whose box counts nothing on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
   inboxes.set(BILLING.id, [
     {
       ...THRESHOLD,
@@ -1335,8 +1431,8 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
     boxes().map((box) => box.querySelector(".luke-choice-control")?.getAttribute("data-shape")),
     ["box", "box", "box"],
   );
-  assert.equal(quietWords(pane), "Pick any that apply");
-  assert.equal(pane.textContent?.includes("Pick any that apply."), false, "no line under the list");
+  assert.equal(footWords(pane), "", "the foot says nothing of how many may be picked");
+  assert.equal(pane.textContent?.includes("Pick any that apply"), false, "no line under the list");
 
   const email = boxes()[0] ?? assert.fail("no Email");
   act(() => email.focus());
@@ -1352,7 +1448,7 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
   pressKey("2", document.activeElement ?? document.body);
   pressKey("2", document.activeElement ?? document.body);
   assert.deepEqual(checkedOptions(pane), ["Email", "Pager"]);
-  assert.equal(quietWords(pane), "2 picked");
+  assert.equal(footWords(pane), "", "nor how many are");
 
   keyOn(email, "Enter");
   await settle();
@@ -1364,7 +1460,7 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled takes the keyboard to the first required one, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
+test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled takes the keyboard to the first required one, the box naming nothing; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
   inboxes.set(INVITES.id, [
     {
       ...EXPIRY,
@@ -1396,7 +1492,7 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   await settle();
   assert.deepEqual(sent, []);
   assert.equal(document.activeElement, segment(segmentedGroup(pane, "Severity"), "Low"));
-  assert.equal(quietWords(pane), "Fill in Severity");
+  assert.equal(footWords(pane), "");
 
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
@@ -1455,22 +1551,19 @@ test("an approval is decided in its question, Approve and Decline two cards pick
       ["Decline", "2", "danger"],
     ],
   );
-  assert.deepEqual(
-    footPresses(pane),
-    ["Dictate", "Send to agent"],
-    "Decline and Approve left the foot",
-  );
+  assert.deepEqual(footPresses(pane), ["Dictate", "Send"], "Decline and Approve left the foot");
 
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
   await settle();
   assert.deepEqual(sent, []);
   assert.equal(document.activeElement, openOptions(pane)[0]);
-  assert.equal(quietWords(pane), "Approve or decline");
+  assert.equal(footWords(pane), "");
+  assert.equal(answerSend(pane).disabled, true);
 
   pressKey("2", document.activeElement ?? document.body);
   assert.deepEqual(checkedOptions(pane), ["Decline"]);
-  assert.equal(quietWords(pane), null);
+  assert.equal(answerSend(pane).disabled, false);
   keyOn(openOptions(pane)[1] ?? assert.fail("no Decline"), "Enter");
   await settle();
   assert.deepEqual(
@@ -1492,7 +1585,7 @@ test("a to-do is a card of two picks in its question: its step, the item's title
   assert.equal(step.textContent, "Add POSTMARK_SERVER_TOKEN to Vercel1");
   assert.equal(pill.textContent, "Couldn't do it2");
   assert.deepEqual([step.tabIndex, pill.tabIndex], [0, -1], "Tab lands on the step");
-  assert.deepEqual(footPresses(pane), ["Dictate", "Send to agent"], "Done left the foot");
+  assert.deepEqual(footPresses(pane), ["Dictate", "Send"], "Done left the foot");
 
   act(() => step.click());
   assert.equal(step.getAttribute("aria-checked"), "true");
@@ -1506,7 +1599,7 @@ test("a to-do is a card of two picks in its question: its step, the item's title
   act(() => step.click());
   assert.equal(step.getAttribute("aria-checked"), "false", "a press on the pick takes it back");
   keyOn(step, "Enter");
-  assert.equal(quietWords(pane), "Tick it, or say you couldn't");
+  assert.equal(footWords(pane), "");
   assert.equal(step.getAttribute("aria-checked"), "false", "Enter ticks nothing");
 
   act(() => step.click());
@@ -1519,16 +1612,22 @@ test("a to-do is a card of two picks in its question: its step, the item's title
   );
 });
 
-test("a note's Send says Got it while its box is empty and Send once a word is written, and Enter in its box sends the nod, with no Got it at the foot beside it", async () => {
-  onlyAsking({ type: INBOX_RESPONSE.NONE });
+test("a note from before version 5 that asks to be heard back is left open as it is opened, since its nod would message the agent: its Send reads Got it while its box is empty and is the round Send once a word is written, and Enter in its box sends the nod, with no line at the foot beside it", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.NONE }, { needsReply: true });
+  const sent = heldAnswers();
   const { page } = mount();
   await settle();
-  const sent = heldAnswers();
+  assert.deepEqual(sent, [], "opening it answers nothing");
   const pane = itemPane(page);
   assert.deepEqual(footPresses(pane), ["Dictate", "Got it"]);
-  assert.equal(answerSend(pane).textContent, "Got it");
+  assert.equal(
+    footWords(pane),
+    "Got it",
+    "Got it is Send's own words, and no line stands beside it",
+  );
   typeInComposer(pane, "Looks right");
-  assert.equal(answerSend(pane).textContent, "Send");
+  assert.equal(answerSend(pane).getAttribute("aria-label"), "Send");
+  assert.equal(footWords(pane), "");
   act(() => composerEditor(pane).editor?.commands.clearContent(true));
   assert.equal(answerSend(pane).textContent, "Got it");
 
@@ -1539,6 +1638,35 @@ test("a note's Send says Got it while its box is empty and Send once a word is w
     sent.map(({ reply, note }) => ({ reply, note })),
     [{ reply: INBOX_REPLY.ACKNOWLEDGED, note: undefined }],
   );
+});
+
+test("a note from before version 5 that needs no reply is acknowledged as it is opened, and its box offers no Got it", async () => {
+  const note = onlyAsking({ type: INBOX_RESPONSE.NONE }, { needsReply: false });
+  // Unanswered, so the note stands open again with its box.
+  const answered: CodingAgentInboxAnswerParams[] = [];
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
+      answered.push(request.payload);
+      const value = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+    },
+  });
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(
+    answered.map(({ itemId, reply }) => ({ itemId, reply })),
+    [{ itemId: note.id, reply: INBOX_REPLY.ACKNOWLEDGED }],
+  );
+  const pane = itemPane(page);
+  assert.equal(answerSend(pane).getAttribute("aria-label"), "Send");
+  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.equal(answered.length, 1, "Enter in the empty box sends no second nod");
 });
 
 test("a settled approval or to-do draws its two cards as they were offered, read-only, the decision given checked in its tone, with no fold and no chip repeating it", async () => {
@@ -1631,7 +1759,8 @@ test("a teammate's answer names them by their disc and name, their pick checked 
     assert.fail("their answer");
   assert.match(answerHead(page) ?? "", /^Charles Pan.+ · /u);
   assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     "person",
   );
 
@@ -1670,8 +1799,8 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
     pane.querySelector<HTMLInputElement>('[data-inbox-field="boolean"] input[type="checkbox"]') ??
     assert.fail("no Page on-call checkbox");
   const unpicked = readSegmented(channel());
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
-  assert.equal(askMarker(pane), "Waiting on you");
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.equal(askMarker(pane), null);
 
   act(() => segment(channel(), "Slack").click());
   act(() => segment(severity(), "High").click());
@@ -1780,6 +1909,72 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   act(() => crumbs[1]?.click());
   assert.deepEqual(asked.shownTasks, [BILLING.id]);
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+/** What an intersection observer reports of the heading it watches: in the thread's view, or scrolled up past its top. */
+type HeadingSeen = (entries: readonly Partial<IntersectionObserverEntry>[]) => void;
+
+/** The headings the pane's intersection observers watch, each with its observer's callback. */
+const headingsWatched = new Map<Element, HeadingSeen>();
+
+/** An intersection observer that reports nothing until a test scrolls the heading it watches. */
+class HeadingObserver {
+  readonly #callback: HeadingSeen;
+  constructor(callback: HeadingSeen) {
+    this.#callback = callback;
+  }
+  observe(target: Element): void {
+    headingsWatched.set(target, this.#callback);
+  }
+  disconnect(): void {
+    for (const [target, callback] of headingsWatched)
+      if (callback === this.#callback) headingsWatched.delete(target);
+  }
+}
+
+/** Scrolls the shown item's heading up out of the thread's view, or back into it, as its scroller would report it. */
+function scrollHeading(page: HTMLElement, away: boolean): void {
+  const heading =
+    page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]") ??
+    assert.fail("the item's heading is drawn");
+  const seen = headingsWatched.get(heading) ?? assert.fail("the heading is watched");
+  const rootBounds = DOMRect.fromRect({ y: 100, width: 600, height: 500 });
+  const boundingClientRect = DOMRect.fromRect({ y: away ? 40 : 120, width: 600, height: 30 });
+  act(() => seen([{ isIntersecting: !away, rootBounds, boundingClientRect }]));
+}
+
+/** The words of the item's bar's path, crumb by crumb, as a reader meets them. */
+function pathWords(page: HTMLElement): (string | null)[] {
+  return [
+    ...page.querySelectorAll('.inbox-view-items:not([hidden]) nav[aria-label="Path"] li'),
+  ].map((crumb) => crumb.textContent);
+}
+
+test("once the item's heading scrolls out of the thread's view, its title joins the bar's path as its last words, the page the reader stands on, and leaves it again once the heading is back, so it never stands twice", async () => {
+  vi.stubGlobal("IntersectionObserver", HeadingObserver);
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts"], "the heading names it");
+
+  scrollHeading(page, true);
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts", "Alert at 80%?"]);
+  const title = page.querySelector(
+    '.inbox-view-items nav[aria-label="Path"] [aria-current="page"]',
+  );
+  assert.equal(title?.textContent, "Alert at 80%?", "the title is where the reader stands");
+  assert.equal(title?.closest("button"), null, "the title is words, not a press");
+
+  scrollHeading(page, false);
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts"]);
+
+  scrollHeading(page, true);
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  assert.deepEqual(
+    pathWords(page),
+    ["Billing usage alerts", "Alerts"],
+    "another item opens with its own heading in view",
+  );
 });
 
 test("an image an item shows is drawn, and a press opens it over the window", async () => {
@@ -1920,7 +2115,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
 });
 
-test("a thread draws no strip of files over a comment's words: an agent's pictures stand once, where its words draw them, one they do not draw after them, and a member's picture and file after their words, the viewer walking each picture once", async () => {
+test("a thread draws a comment's files over its words: an agent's pictures stand once, where its words draw them, one they do not draw over them, and a member's picture and file over their words, the viewer walking each picture once", async () => {
   const [before, after, unnamed, mine, spec] = [
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c80",
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c81",
@@ -1974,11 +2169,11 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   );
   const alts = (within: Element) =>
     [...within.querySelectorAll<HTMLImageElement>(".picture-block img")].map((image) => image.alt);
-  assert.deepEqual(alts(agent), ["Before", "After", "older.png"], "each picture stands once");
+  assert.deepEqual(alts(agent), ["older.png", "Before", "After"], "each picture stands once");
   assert.deepEqual(alts(member), ["mine.png"]);
   assert.deepEqual(attachedNames(agent), []);
   assert.deepEqual(attachedNames(member), ["spec.pdf"]);
-  // What the message carried stands after its words, never over them.
+  // What the message carried stands over its words, as every message's files do.
   for (const [comment, carried] of [
     [agent, agent.querySelector("[data-inbox-file-pictures]")],
     [member, member.querySelector("[data-inbox-file-pictures]")],
@@ -1986,7 +2181,7 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   ] as const) {
     const words = comment.querySelector("[data-inbox-message-text]");
     assert.ok(words && carried, "the words and the files are drawn");
-    assert.ok(words.compareDocumentPosition(carried) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(words.compareDocumentPosition(carried) & Node.DOCUMENT_POSITION_PRECEDING);
   }
 
   const press = pane.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
@@ -2008,16 +2203,16 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
           new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
         ),
     );
-  assert.deepEqual(viewer(), ["After.png", "2 of 4"]);
-  key("ArrowRight");
-  assert.deepEqual(viewer(), ["older.png", "3 of 4"]);
+  assert.deepEqual(viewer(), ["After.png", "3 of 4"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["mine.png", "4 of 4"]);
   key("ArrowRight");
-  assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
+  assert.deepEqual(viewer(), ["older.png", "1 of 4"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Before.png", "2 of 4"]);
 });
 
-/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
   const standing = document.querySelector(`.luke-tooltip-card ${card}`);
@@ -2066,11 +2261,11 @@ test("the thread names its agent as one button wherever it does, its question's 
   const asking =
     page.querySelector('[data-inbox-comment="asked"]') ?? assert.fail("the question is a comment");
   assert.ok(
-    asking.querySelector('.inbox-comment-face .actor-mark[data-kind="agent"]'),
+    asking.querySelector('.inbox-comment-head [data-actor-ref] .actor-mark[data-kind="agent"]'),
     "the agent's tile leads its comment",
   );
   reach(comment);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
@@ -2084,7 +2279,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.equal(sent.textContent, "Alerts");
   assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
   assert.deepEqual(asked.shownAgents, [
@@ -2122,29 +2317,31 @@ test("an archived agent is still named by its name, its card saying it was archi
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("an item's row hangs its agent's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
+test("an item's row hangs the thread's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own: its task, its title, where it stands, how it ended, and the agent that asked at its foot with the spinner while it works; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
   const { page, asked } = mount();
   await settle();
   const row = rowNamed(page, "How is a failed email retried?");
   assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
   assert.ok(wearsAgentTile(row), "the row wears the agent's tile");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
-  assert.match(
-    wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]")) ?? "",
-    /Billing usage alerts · Answered/u,
-    "the card's foot names the item's task and where the item stands",
+  const words = hoveredCard(row, "[data-inbox-row-card]") ?? "";
+  assert.match(words, /^Billing usage alerts/u, "the card leads with its task");
+  assert.match(words, /How is a failed email retried\?/u);
+  assert.match(words, /Answered/u);
+  assert.match(words, /Alerts$/u, "the agent that asked stands at its foot");
+  const card =
+    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+    assert.fail("the thread's card is hung");
+  assert.ok(
+    card.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
+    "the spinner stands beside the agent at the card's foot, no words",
   );
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card [data-tab-card]");
   act(() => {
-    card?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
-    card?.click();
+    card.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    card.click();
   });
   assert.equal(row.getAttribute("aria-current"), null);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.ok(document.querySelector(".luke-tooltip-card [data-inbox-row-card]"));
   act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
@@ -2152,34 +2349,22 @@ test("an item's row hangs its agent's card beside it, as a sidebar task's row ha
   assert.ok(wearsAgentTile(other), "a row whose plan names no agent still wears an agent's tile");
 });
 
-test("an item's row hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
+test("an item's card says whom an open item waits on, the reader as Needs you and a teammate by name", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-  /** The words of the card the row hangs, the task's row naming its agent as started by `starter`. */
-  const rowCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
-    const { page } = mount();
-    await settle();
-    const line = BILLING.agents?.agents[0];
-    assert.ok(line && BILLING.agents, "the plan's row names its agent");
-    const agents = { ...BILLING.agents, agents: [{ ...line, startedBy: starter }] };
-    act(() => setTasks([{ ...BILLING, agents }, INVITES]));
-    const row = rowNamed(page, "How is a failed email retried?");
-    act(() => {
-      row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-    });
-    const words = wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]"));
-    act(() => root?.unmount());
-    root = undefined;
-    document.body.innerHTML = "";
-    return words;
-  };
-
-  assert.match((await rowCard(CHARLES)) ?? "", /Started by Charles Pan/u);
-  const own = await rowCard(READER);
-  assert.match(own ?? "", /Alerts/u, "the reader's own agent's row still hangs its card");
-  assert.doesNotMatch(own ?? "", /Started by/u);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, startedBy: CHARLES }]);
+  const { page } = mount();
+  await settle();
+  assert.match(
+    hoveredCard(rowNamed(page, "Alert at 80%?"), "[data-inbox-row-card]") ?? "",
+    /Needs you/u,
+  );
+  assert.match(
+    hoveredCard(rowNamed(page, "Expire after 7 days?"), "[data-inbox-row-card]") ?? "",
+    /Waiting on Charles Pan/u,
+  );
 });
 
-test("a plan main says changed is read again, so an item answered on another Mac lists as settled; the Needs you tab then lists only what still needs you until another tab is pressed, and outlives a relaunch", async () => {
+test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the list is shown; To do then lists only what still needs you until All is chosen, which sorts it anew, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
   inboxes.set(INVITES.id, [
@@ -2197,6 +2382,18 @@ test("a plan main says changed is read again, so an item answered on another Mac
     ]),
   );
   await settle();
+  assert.deepEqual(
+    listed(page),
+    [
+      "# Billing usage alerts",
+      "How is a failed email retried?",
+      "▸ *Alert at 80%?",
+      "# Invites",
+      "Expire after 7 days?",
+    ],
+    "the answer moves no row while the list is shown",
+  );
+  assert.equal(rowMuted(page, "Expire after 7 days?"), true);
   const everything = [
     "# Invites",
     "Expire after 7 days?",
@@ -2204,82 +2401,66 @@ test("a plan main says changed is read again, so an item answered on another Mac
     "How is a failed email retried?",
     "▸ *Alert at 80%?",
   ];
-  assert.deepEqual(listed(page), everything);
 
-  const needsYou = () => showTab(page, "Needs you");
-  assert.equal(needsYou().getAttribute("aria-selected"), "false");
-  act(() => needsYou().click());
-  assert.equal(needsYou().getAttribute("aria-selected"), "true");
+  showScope(page, "To do");
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
 
   act(() => root?.unmount());
   root = undefined;
   ({ page } = mount());
   await settle();
-  assert.equal(needsYou().getAttribute("aria-selected"), "true");
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
 
-  act(() => showTab(page, "Everything").click());
-  assert.equal(needsYou().getAttribute("aria-selected"), "false");
+  showScope(page, "All");
+  assert.deepEqual(scopes(page), ["Inbox · All", "To do", "[All]", "Archived"]);
   assert.deepEqual(listed(page), everything);
 });
 
-test("each tab counts what it lists, filtered out or not: Needs you's count in the attention mark's orange while anything needs you and quiet while nothing does, and the counts move as an item is answered elsewhere", async () => {
-  const answered = { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] };
-  const settled = { ...EXPIRY, status: INBOX_STATUS.ANSWERED, answer: answered };
-  inboxes.set(INVITES.id, [settled]);
-  inboxes.set(BILLING.id, [RETRY]);
+test("To do lists what needs you and anything of yours unread: a thread you answered that its agent writes on again comes back to it, which waiting on you alone would leave out", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   const { page } = mount();
   await settle();
-  const tone = () =>
-    showTab(page, "Needs you").querySelector("[data-tone]")?.getAttribute("data-tone");
-  assert.deepEqual(showTabs(page), [
-    "Needs you 0",
-    "Unread 0",
-    "All open 0",
-    "[Everything 2]",
-    "Archived 0",
+  assert.deepEqual(listed(page), [
+    "# Invites",
+    "▸ *Expire after 7 days?",
+    "# Billing usage alerts",
+    "*Alert at 80%?",
   ]);
-  assert.equal(tone(), "quiet");
 
-  // Another task's agent asks again, unread, as main says that task changed.
-  inboxes.set(INVITES.id, [{ ...EXPIRY, updatedAt: 6_000, unread: true }]);
+  // The retry question's agent writes again on the thread you answered, as main says its task changed.
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, updatedAt: 6_000, unread: true }]);
   act(() =>
     setHolding([
-      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
-      { taskId: BILLING.id, items: 1, updatedAt: 5_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 6_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
     ]),
   );
   await settle();
-  assert.deepEqual(showTabs(page), [
-    "Needs you 1",
-    "Unread 1",
-    "All open 1",
-    "[Everything 2]",
-    "Archived 0",
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "*Alert at 80%?",
+    "# Invites",
+    "▸ *Expire after 7 days?",
   ]);
-  assert.equal(tone(), "attention");
 });
 
-test("an archived task's items stand on the Archived tab alone, counted there and nowhere else: each drawn as it stood, needing nobody, read but not answered, the box giving way to Unarchive, which brings the task back; the tab is never where a relaunch opens", async () => {
+test("an archived task's items stand under Archived alone, which the view's menu offers beside To do and All and the head then names: each drawn as it stood, needing nobody, read but not answered, the box giving way to Unarchive, which brings the task back; Archived is never where a relaunch opens", async () => {
   const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
   const { page, asked } = mount([], { standing: [BILLING], archived: [archivedInvites] });
   await settle();
-  assert.deepEqual(showTabs(page), [
-    "Needs you 1",
-    "Unread 0",
-    "All open 1",
-    "[Everything 2]",
-    "Archived 1",
-  ]);
+  assert.deepEqual(scopes(page), ["Inbox · All", "To do", "[All]", "Archived"]);
   assert.deepEqual(listed(page), [
     "# Billing usage alerts",
     "How is a failed email retried?",
     "▸ *Alert at 80%?",
   ]);
 
-  act(() => showTab(page, "Archived").click());
+  showScope(page, "Archived");
   await settle();
+  assert.equal(headTitle(page), "Inbox · Archived");
   assert.deepEqual(listed(page), ["# Invites", "▸ Expire after 7 days?"]);
   assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
   act(() => {
@@ -2315,44 +2496,39 @@ test("an archived task's items stand on the Archived tab alone, counted there an
   assert.equal(window.localStorage.getItem(SHOW_KEY), JSON.stringify("all"));
 });
 
-test("Everything holding only an archived task's items, Whose naming nobody, says nothing is here and offers Show archived, blaming no one", async () => {
+test("All holding only an archived task's items, Whose naming nobody, says nothing is here and offers Show archived, blaming no one", async () => {
   const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
   const { page } = mount([], { standing: [], archived: [archivedInvites] });
   await settle();
-  act(() => showTab(page, "Everything").click());
+  showScope(page, "All");
   await settle();
   assert.deepEqual(listed(page), []);
-  assert.deepEqual(needsYouEmpty(page), [undefined, "Nothing here", "Show archived"]);
+  assert.deepEqual(listEmpty(page), [undefined, "Nothing here", "Show archived"]);
 });
 
-test("a link to an archived task's item opens it on the Archived tab, which lists it, rather than saying it is not found", async () => {
+test("a link to an archived task's item opens it under Archived, which lists it, rather than saying it is not found", async () => {
   const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
   const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
   await settle();
   act(() => chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
   await settle();
-  assert.equal(showTab(page, "Archived").getAttribute("aria-selected"), "true");
+  assert.equal(headTitle(page), "Inbox · Archived");
   assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
 });
 
-test("a fresh profile opens the Inbox on All open, grouped by task, a settled item left out until Everything is pressed", async () => {
+test("a fresh profile opens the Inbox on To do, grouped by task, its head naming no scope, a settled item left out until All is chosen, which the head then names", async () => {
   window.localStorage.clear();
   const { page } = mount();
   await settle();
-  assert.deepEqual(showTabs(page), [
-    "Needs you 2",
-    "Unread 0",
-    "[All open 2]",
-    "Everything 3",
-    "Archived 0",
-  ]);
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
   assert.deepEqual(listed(page), [
     "# Invites",
     "▸ *Expire after 7 days?",
     "# Billing usage alerts",
     "*Alert at 80%?",
   ]);
-  act(() => showTab(page, "Everything").click());
+  showScope(page, "All");
+  assert.equal(headTitle(page), "Inbox · All");
   assert.deepEqual(listed(page), [
     "# Billing usage alerts",
     "How is a failed email retried?",
@@ -2362,43 +2538,74 @@ test("a fresh profile opens the Inbox on All open, grouped by task, a settled it
   ]);
 });
 
-test("a Needs you press kept before the tabs opens the Inbox on the Needs you tab, and one left off opens it on Everything, all that list then held; a tab pressed since is kept in its place", async () => {
-  window.localStorage.clear();
-  window.localStorage.setItem(EARLIER_SHOW_KEY, JSON.stringify(true));
+test("a tab kept before the scopes opens the Inbox on the scope that lists what it did, Needs you and Unread on To do and All open and Everything on All, and the Needs you press kept before the tabs on To do where pressed and All where not; a scope chosen since is kept in its place", async () => {
+  const kept = [
+    [SHOW_KEY, "needs-you", "[To do]"],
+    [SHOW_KEY, "unread", "[To do]"],
+    [SHOW_KEY, "open", "[All]"],
+    [SHOW_KEY, "all", "[All]"],
+    [EARLIER_SHOW_KEY, true, "[To do]"],
+    [EARLIER_SHOW_KEY, false, "[All]"],
+  ] as const;
+  const opened: (string | undefined)[] = [];
+  for (const [key, value] of kept) {
+    window.localStorage.clear();
+    window.localStorage.setItem(key, JSON.stringify(value));
+    const { page } = mount();
+    await settle();
+    opened.push(scopes(page).find((each) => each.startsWith("[")));
+    act(() => root?.unmount());
+    root = undefined;
+  }
+  assert.deepEqual(
+    opened,
+    kept.map(([, , scope]) => scope),
+  );
+
   let { page } = mount();
   await settle();
-  assert.deepEqual(showTabs(page), [
-    "[Needs you 2]",
-    "Unread 0",
-    "All open 2",
-    "Everything 3",
-    "Archived 0",
-  ]);
-  act(() => root?.unmount());
-
-  window.localStorage.setItem(EARLIER_SHOW_KEY, JSON.stringify(false));
-  ({ page } = mount());
-  await settle();
-  assert.deepEqual(showTabs(page), [
-    "Needs you 2",
-    "Unread 0",
-    "All open 2",
-    "[Everything 3]",
-    "Archived 0",
-  ]);
-  act(() => showTab(page, "Unread").click());
+  showScope(page, "To do");
   act(() => root?.unmount());
   root = undefined;
-
   ({ page } = mount());
   await settle();
-  assert.deepEqual(showTabs(page), [
-    "Needs you 2",
-    "[Unread 0]",
-    "All open 2",
-    "Everything 3",
-    "Archived 0",
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
+});
+
+test("Sort in the view's menu offers Latest first and Oldest first, which lists the item changed longest ago first; a Waiting longest kept before is read as Oldest first, and the sort chosen outlives a relaunch", async () => {
+  window.localStorage.setItem(SORT_KEY, JSON.stringify("waiting"));
+  let { page } = mount();
+  await settle();
+  openViewOptions(page);
+  act(() => viewItem("Sort").click());
+  assert.deepEqual(
+    ["Latest first", "Oldest first"].map((each) => viewItem(each).getAttribute("aria-checked")),
+    ["false", "true"],
+  );
+  act(() => viewItem("Oldest first").click());
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "▸ *Alert at 80%?",
+    "How is a failed email retried?",
+    "# Invites",
+    "*Expire after 7 days?",
   ]);
+
+  chooseView(page, "Sort", "Latest first");
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  openViewOptions(page);
+  act(() => viewItem("Sort").click());
+  assert.equal(viewItem("Latest first").getAttribute("aria-checked"), "true");
 });
 
 test("grouped by person or by nothing, each row names its task in a chip before its preview, never on its title's line, which the title keeps whole; grouped by task, the header names it and the rows wear no chip", async () => {
@@ -2445,22 +2652,28 @@ test("grouped by person or by nothing, each row names its task in a chip before 
   );
 });
 
-test("on the Unread tab, the first item chosen is the reader's unread one, which keeps its place among the steps once opening it reads it, and K and J step only among what is unread", async () => {
+test("on To do, your unread update leading the list is the first item chosen, and keeps its row, gray, once opening it reads it, so J steps on from it and K finds it gone once left", async () => {
   inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
-  inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
-  window.localStorage.setItem(SHOW_KEY, JSON.stringify("unread"));
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
   const { page } = mount();
   await settle();
   const keys = standKeymap();
-  assert.equal(readTitle(page), "Expire after 7 days?");
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "How is a failed email retried?"]);
-  pressKey("k");
   assert.equal(readTitle(page), "How is a failed email retried?");
+  assert.deepEqual(
+    listed(page),
+    ["▸ How is a failed email retried?", "*Expire after 7 days?", "*Alert at 80%?"],
+    "the row read stays where it stood while it is chosen",
+  );
+  assert.equal(rowMuted(page, "How is a failed email retried?"), true, "drawn gray");
   pressKey("j");
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  pressKey("k");
   assert.equal(
     readTitle(page),
-    "How is a failed email retried?",
-    "the read item left once it was left, and the read one in its task is no step",
+    "Expire after 7 days?",
+    "the read update left once it was left, and is no step",
   );
   act(() => keys.unmount());
 });
@@ -2482,11 +2695,12 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
     ),
   ];
   for (const header of headers()) act(() => header.click());
+  // Note that the plans keep the order they were drawn in, since the list is shown as the item closes.
   assert.deepEqual(
     headers().map((header) => [header.getAttribute("aria-expanded"), header.textContent]),
     [
-      ["false", "Invites"],
       ["false", "Billing usage alerts1 needs you"],
+      ["false", "Invites"],
     ],
   );
 });
@@ -2784,8 +2998,8 @@ function readTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]")?.textContent;
 }
 
-/** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
-function needsYouEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
+/** The list's empty state as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
+function listEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
   const empty = page.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
   if (empty === null) return null;
   return [
@@ -2795,13 +3009,12 @@ function needsYouEmpty(page: HTMLElement): readonly (string | null | undefined)[
   ];
 }
 
-test("with only settled items, the Needs you tab lists no row, the item read still shown beside the list, which says nothing needs you and offers Show everything, nothing being open; its press shows Everything", async () => {
+test("with only settled items, read, To do lists no row, the item read still shown beside the list, which says there is nothing to do and offers Show all; its press shows All", async () => {
   const answered = { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] };
   inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.ANSWERED, answer: answered }]);
   inboxes.set(BILLING.id, [RETRY]);
   const { page } = mount();
   await settle();
-  const button = () => showTab(page, "Needs you");
   const everything = [
     "# Billing usage alerts",
     "▸ How is a failed email retried?",
@@ -2810,10 +3023,10 @@ test("with only settled items, the Needs you tab lists no row, the item read sti
   ];
   assert.deepEqual(listed(page), everything);
 
-  act(() => button().click());
-  assert.equal(button().getAttribute("aria-selected"), "true");
+  showScope(page, "To do");
+  assert.equal(headTitle(page), "Inbox");
   assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(needsYouEmpty(page), [undefined, "Nothing needs you", "Show everything"]);
+  assert.deepEqual(listEmpty(page), [undefined, "Nothing to do", "Show all"]);
   assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
   assert.equal(readTitle(page), "How is a failed email retried?");
 
@@ -2823,12 +3036,12 @@ test("with only settled items, the Needs you tab lists no row, the item read sti
   assert.equal(pagerOf(page), null);
   act(() => backToList(page).click());
   assert.deepEqual(columnsShown(page), ["list"]);
-  assert.equal(needsYouEmpty(page)?.[1], "Nothing needs you");
+  assert.equal(listEmpty(page)?.[1], "Nothing to do");
 
   const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
-  assert.ok(showAll, "the empty state offers Show everything");
+  assert.ok(showAll, "the empty state offers Show all");
   act(() => showAll.click());
-  assert.equal(showTab(page, "Everything").getAttribute("aria-selected"), "true");
+  assert.equal(headTitle(page), "Inbox · All");
   assert.deepEqual(
     columnsShown(page),
     ["list"],
@@ -2839,14 +3052,14 @@ test("with only settled items, the Needs you tab lists no row, the item read sti
     "the keyboard lands on the row of the item read, not on the button Show all took away",
   );
   assert.deepEqual(listed(page), everything);
-  assert.equal(needsYouEmpty(page), null);
+  assert.equal(listEmpty(page), null);
 });
 
-test("one column wide, an answered item that the Needs you tab draws no row for shows no count in its pager, though its arrows still step to the rows either side, which count only the rows drawn", async () => {
+test("one column wide, an answered item that To do draws no row for shows no count in its pager, though its arrows still step to the rows either side, which count only the rows drawn", async () => {
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
-  act(() => showTab(page, "Needs you").click());
+  showScope(page, "To do");
   assert.deepEqual(listed(page), [
     "# Invites",
     "*Expire after 7 days?",
@@ -2861,11 +3074,10 @@ test("one column wide, an answered item that the Needs you tab draws no row for 
   assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 2"]);
 });
 
-test("on the Needs you tab, a focused row whose item is answered on another Mac leaves the keyboard on the tab rather than nowhere", async () => {
+test("on To do, a focused row whose item is answered on another Mac leaves the keyboard on View options rather than nowhere", async () => {
   const { page } = mount();
   await settle();
-  const needsYou = showTab(page, "Needs you");
-  act(() => needsYou.click());
+  showScope(page, "To do");
   rowNamed(page, "Expire after 7 days?").focus();
   inboxes.set(INVITES.id, [
     {
@@ -2883,7 +3095,10 @@ test("on the Needs you tab, a focused row whose item is answered on another Mac 
   );
   await settle();
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
-  assert.ok(document.activeElement === showTab(page, "Needs you"), "the keyboard is on the tab");
+  assert.ok(
+    document.activeElement === page.querySelector('button[aria-label="View options"]'),
+    "the keyboard is on View options",
+  );
 });
 
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
@@ -2974,16 +3189,50 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   assert.equal(offered(), null);
 });
 
-test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
+test("Next follows the way the keys last went: after K it offers the nearest item above that needs you, by an arrow up and K, a press opening it; after J the one below, by J", async () => {
+  inboxes.set(BILLING.id, [
+    { ...THRESHOLD, updatedAt: 4_500 },
+    { ...RETRY, updatedAt: 2_000, settledAt: 2_000 },
+  ]);
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  const offered = () =>
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "▸ *Alert at 80%?",
+    "How is a failed email retried?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+
+  pressKey("j");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  assert.equal(wordsOf(offered()), "NextExpire after 7 days?J");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
+
+  pressKey("j");
+  pressKey("k");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  const next = offered();
+  assert.ok(next, "the settled item offers the next");
+  assert.equal(wordsOf(next), "Next ↑Alert at 80%?K");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
+  act(() => next.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  act(() => keys.unmount());
+});
+
+test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's newest message, wherever the last was scrolled", async () => {
+  layOutBoards({ height: 1200 });
   const { page } = mount();
   await settle();
   const next = () =>
     page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   act(() => rowNamed(page, "How is a failed email retried?").click());
-  // Note that the thread's scroller is the area its board stands in.
-  const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board")?.parentElement;
-  assert.ok(board, "the item's thread");
-  board.scrollTop = 600;
+  const board = boardOf(itemPane(page));
+  scrollBoard(board, 200);
   next()?.focus();
   act(() => next()?.click());
   assert.equal(readTitle(page), "Alert at 80%?");
@@ -2991,7 +3240,8 @@ test("Next hands the keyboard to the item it opens, its way back one column wide
     document.activeElement === rowNamed(page, "Alert at 80%?"),
     "split, the keyboard is on its row",
   );
-  assert.equal(board.scrollTop, 0, "the next item opens at its top");
+  assert.equal(board.scrollTop, 800, "the next item opens at its newest message");
+  assert.equal(scrollButton(itemPane(page)), null, "at its end, no way back is offered");
 
   layOut(page, 800);
   act(() => backToList(page).click());
@@ -3247,16 +3497,20 @@ test("an answer file whose read failed says so under the files, and Retry reads 
   assert.ok(comment().querySelector('button[aria-label="Open spec.pdf"]'), "the file opens now");
 });
 
-test("an item that needs no reply says a file attached in its box will be sent to the agent", async () => {
+test("an item that needs no reply says nothing in its box of whether its answer will message the agent, bare, with a note, or with a file", async () => {
   inboxes = new Map([
     [BILLING.id, [{ ...THRESHOLD, response: { type: INBOX_RESPONSE.TODO }, needsReply: false }]],
   ]);
   const { page } = mount();
   await settle();
-  const quiet = () => itemPane(page).querySelector("[data-inbox-quiet]")?.textContent;
-  assert.equal(quiet(), "Without a note, this won't message the agent.");
+  const pane = itemPane(page);
+  assert.equal(footWords(pane), "");
+  typeInComposer(pane, "Done on preview too.");
+  assert.equal(footWords(pane), "");
   await handFiles(page, [new File(["ok\n"], "flag.txt", { type: "text/plain" })], "pick");
-  assert.equal(quiet(), "Your answer and its files will be sent to the agent.");
+  assert.equal(footWords(pane), "");
+  assert.equal(pane.textContent?.includes("message the agent"), false);
+  assert.equal(pane.textContent?.includes("sent to the agent"), false);
 });
 
 test("an answered item draws the files its answer carried after its words, never as a strip of thumbnails: a picture as a picture in its words is drawn, once read, and any other file as its chip; files alone stand under the answer's head with no pick and no empty note", async () => {
@@ -3612,26 +3866,6 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
 });
 
-test("an item that needs no reply says a bare answer won't message the agent, and that a note typed in its box will", async () => {
-  const todo: InboxItem = {
-    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
-    response: { type: INBOX_RESPONSE.TODO },
-    needsReply: false,
-  };
-  inboxes = new Map([
-    [BILLING.id, [todo]],
-    [INVITES.id, [EXPIRY]],
-  ]);
-  const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, "Turn on the flag").click());
-  const quiet = () => page.querySelector(".inbox-view-items [data-inbox-quiet]")?.textContent;
-  assert.equal(quiet(), "Without a note, this won't message the agent.");
-
-  typeInComposer(page.querySelector(".inbox-view-items") ?? page, "Done on preview too.");
-  assert.equal(quiet(), "Your note will be sent to the agent.");
-});
-
 test("an item that needs no reply, once settled, says a note or a file was sent to the agent and a bare press kept for it to read", async () => {
   const quietDone = (id: string, title: string, at: number, note?: string): InboxItem => ({
     ...item(id, title, at),
@@ -3980,8 +4214,8 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   const mark = rowNamed(page, "Quarantine the flaky test?");
   assert.ok(wearsAgentTile(mark), "the planless agent's row wears its tile");
   assert.match(
-    hoveredCard(mark, "[data-tab-card]") ?? "",
-    /Sweep the flaky tests.*Started by Nightly flake sweep/u,
+    hoveredCard(mark, "[data-inbox-row-card]") ?? "",
+    /^Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
@@ -4135,7 +4369,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   await settle();
 
   const row = rowNamed(page, "Quarantine the flaky test?");
-  assert.match(hoveredCard(row, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
+  assert.match(hoveredCard(row, "[data-inbox-row-card]") ?? "", /Nightly flake sweep$/u);
 });
 
 test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
@@ -4427,7 +4661,8 @@ function threadOf(page: HTMLElement): (string | null | undefined)[][] {
     ),
   ].map((entry) => [
     entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
-    entry.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    entry.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     wordsOf(entry.querySelector(".inbox-comment-name")),
     wordsOf(entry.querySelector("[data-inbox-message-text]")),
   ]);
@@ -4864,10 +5099,7 @@ test("an open item's box still answers it: its note goes as the answer and never
     ["asked", "agent", "Alerts", null],
     ["message", "person", "Charles Pan", "Is 80% too eager?"],
   ]);
-  assert.equal(
-    composerEditor(pane).getAttribute("aria-label"),
-    "Add a note, or answer in your own words",
-  );
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note");
 
   typeInComposer(pane, "Use 90%");
   composerEditor(pane).focus();
@@ -4936,7 +5168,7 @@ test("an answer left unsent on an item a teammate answers meanwhile is let go ra
     deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
   );
   await settle();
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Message Alerts…");
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply");
   assert.equal(composerEditor(pane).textContent, "", "the unsent answer is not a message");
 
   typeInComposer(pane, "Thanks, Charles.");
@@ -5046,7 +5278,7 @@ test("the attention mark stands before the time on the reader's own open item al
   ]);
 });
 
-test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; Needs you leaves it out, and Group by person lists it under the teammate", async () => {
+test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; To do leaves it out, and Group by person lists it under the teammate", async () => {
   agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
   await settle();
@@ -5061,14 +5293,14 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(meta?.querySelector(".visually-hidden")?.textContent, "Waiting on Charles Pan");
 
-  act(() => showTab(page, "Needs you").click());
+  showScope(page, "To do");
   assert.equal(
     listed(page).includes("Quarantine the flaky test?"),
     false,
     listed(page).join(" | "),
   );
 
-  act(() => showTab(page, "Everything").click());
+  showScope(page, "All");
   chooseView(page, "Group by", "Person");
   const byPerson = listed(page);
   assert.equal(
@@ -5137,7 +5369,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, the item standing chosen first among them", async () => {
+test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, the item standing chosen first among them, your unread answered thread leading the list among what it reaches", async () => {
   inboxes.set(BILLING.id, [
     { ...THRESHOLD, unread: true },
     { ...RETRY, unread: true },
@@ -5146,16 +5378,16 @@ test("an unread item wears the blue dot in its row's gutter, its title in the un
   const { page } = mount();
   await settle();
   // The item standing chosen is shown, and so opened, as the Inbox opens.
-  assert.deepEqual(readMarks, [`read:${THRESHOLD.id}`]);
-  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  assert.deepEqual(readMarks, [`read:${RETRY.id}`]);
+  assert.equal(unreadOf(page, "How is a failed email retried?"), false);
+  assert.equal(unreadOf(page, "Alert at 80%?"), true);
   assert.equal(unreadOf(page, "Expire after 7 days?"), true);
-  assert.equal(unreadOf(page, "How is a failed email retried?"), true);
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  assert.deepEqual(readMarks, [`read:${THRESHOLD.id}`, `read:${EXPIRY.id}`]);
+  assert.deepEqual(readMarks, [`read:${RETRY.id}`, `read:${EXPIRY.id}`]);
   assert.equal(unreadOf(page, "Expire after 7 days?"), false);
-  assert.equal(unreadOf(page, "How is a failed email retried?"), true);
+  assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });
 
 test("a row's mark over its time, the first item of its menu, and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and the menu names U above Copy link", async () => {
@@ -5224,7 +5456,8 @@ test("a mark the service refuses is let go, and the dot stands as the reads hold
 
 test("Mark all as read in the view's menu, under Group by, marks every unread item of the listed workspace read and clears the dots alone, the attention marks standing; with nothing unread it stands disabled", async () => {
   listedWorkspace = ACME;
-  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
+  // Note that the unread answered item is a teammate's, so the item standing chosen is the one that needs you, and nothing is read before the mark.
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
   inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
   const { page } = mount();
   await settle();
@@ -5235,11 +5468,16 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     return menuWords();
   };
   assert.deepEqual(openOptions(), [
+    "To do",
+    "All",
+    "Archived",
+    "—",
     "Group by",
     "Sort",
     "—",
     "Whose",
     "—",
+    "Second line",
     "Media previews",
     "—",
     "Mark all as read",
@@ -5287,7 +5525,8 @@ test("Mark all as read, once the service took it, reads every listed task and ev
 });
 
 test("a row swiped right marks its item: a long swipe marks an unread item read as it is let go, a short one leaves the row open on an Unread button for a read one, and neither opens the item", async () => {
-  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
+  // Note that the unread item is a teammate's, so it is not the item standing chosen, which would read it as it opens.
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
   const { page } = mount();
   await settle();
   readMarks = [];
@@ -5408,13 +5647,17 @@ test("an answer leaves Needs you the moment it is sent, its plan's count droppin
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
-    "▸ Alert at 80%?",
-    "How is a failed email retried?",
-    "# Invites",
-    "*Expire after 7 days?",
-  ]);
+  assert.deepEqual(
+    listed(page),
+    [
+      "# Billing usage alerts",
+      "How is a failed email retried?",
+      "▸ Alert at 80%?",
+      "# Invites",
+      "*Expire after 7 days?",
+    ],
+    "the answered row stays where it stood",
+  );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
 
@@ -5447,6 +5690,135 @@ test("an answer leaves Needs you the moment it is sent, its plan's count droppin
   await settle();
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
   assert.equal(readTitle(page), "Expire after 7 days?", "the choice never jumps back");
+});
+
+/** The list as drawn, each row by its title alone and each group by its name, what marks a row and what a group counts left out, so a row that moves or changes group is told from one that only changes its marks. */
+function placesOf(page: HTMLElement): string[] {
+  return listed(page).map((line) =>
+    line.startsWith("# ") ? line.replace(/\d+ needs? you$/u, "") : line.replace(/^(▸ )?\*?/u, ""),
+  );
+}
+
+test("on To do, answering the chosen item draws its row gray where it stood, and choosing another row clears it", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  const { page } = mount();
+  await settle();
+  const { answer } = gatedAnswers();
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.equal(rowMuted(page, "Expire after 7 days?"), false);
+
+  answerWithNote(page, "Keep 7 days");
+  await settle();
+  await act(async () =>
+    answer({
+      item: {
+        ...EXPIRY,
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.ANSWERED, note: "Keep 7 days" },
+        answeredBy: READER,
+        settledAt: 6_000,
+        updatedAt: 6_000,
+      },
+      taken: true,
+    }),
+  );
+  await settle();
+  assert.deepEqual(
+    listed(page),
+    ["▸ Expire after 7 days?", "*Alert at 80%?"],
+    "the answered row stays where it stood, needing nobody",
+  );
+  assert.equal(rowMuted(page, "Expire after 7 days?"), true, "drawn gray");
+  assert.equal(rowMuted(page, "Alert at 80%?"), false);
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.deepEqual(
+    listed(page),
+    ["▸ *Alert at 80%?"],
+    "the gray row clears once another is chosen",
+  );
+});
+
+test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
+  // The invites plan's held read is the test's to land, as an answer from another Mac would.
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = (taskId) =>
+    taskId === INVITES.id
+      ? new Promise((resolve) => {
+          deliver = resolve;
+        })
+      : new Promise(() => undefined);
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+
+  act(() => setInboxOpen(false));
+  await settle();
+  const answered = {
+    ...EXPIRY,
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.ANSWERED, note: "Keep 7 days" },
+    settledAt: 6_000,
+    updatedAt: 6_000,
+  };
+  act(() => deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered], cursor: "2" } }));
+  await settle();
+  act(() => setInboxOpen(true));
+  await settle();
+  assert.deepEqual(
+    listed(page),
+    ["*Alert at 80%?"],
+    "the item answered while the Inbox was hidden no longer needs you, so it has no row",
+  );
+});
+
+test("on All, every item settled and read is drawn gray, and what waits or is unread is not", async () => {
+  inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.CLOSED, unread: true }]);
+  const { page } = mount();
+  await settle();
+  showScope(page, "All");
+  assert.equal(rowMuted(page, "How is a failed email retried?"), true, "answered and read");
+  assert.equal(rowMuted(page, "Alert at 80%?"), false, "waiting on you");
+  assert.equal(rowMuted(page, "Expire after 7 days?"), false, "settled, but unread");
+});
+
+test("an answer moves no row while the list is shown, under either sort and every grouping, and the list sorts anew once the Inbox is left and come back to", async () => {
+  const groupings = ["plan", "person", "status", "newest"] as const;
+  const sorts = ["latest", "oldest"] as const;
+  for (const grouping of groupings) {
+    for (const sort of sorts) {
+      window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+      window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
+      window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+      const { page } = mount();
+      await settle();
+      const { answer } = gatedAnswers();
+      act(() => rowNamed(page, "Alert at 80%?").click());
+      await settle();
+      const before = placesOf(page);
+
+      answerWithNote(page, "Use 90%");
+      await settle();
+      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
+      await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
+      await settle();
+      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
+      assert.equal(rowMuted(page, "Alert at 80%?"), true);
+
+      act(() => setInboxOpen(false));
+      act(() => setInboxOpen(true));
+      await settle();
+      assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+
+      act(() => root?.unmount());
+      root = undefined;
+      document.body.innerHTML = "";
+    }
+  }
 });
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
@@ -5547,7 +5919,7 @@ function whoseChip(page: HTMLElement): readonly (string | null | undefined)[] | 
   ];
 }
 
-test("Whose in the view's menu lists one teammate's items, by their face and name, or the reader's own as Mine; a chip over the list says so, the tabs count only theirs, the choice outlives a relaunch, and the chip's × lists everyone's again", async () => {
+test("Whose in the view's menu lists one teammate's items, by their face and name, or the reader's own as Mine; a chip over the list says so, the choice outlives a relaunch, and the chip's × lists everyone's again", async () => {
   listedWorkspace = SHARED_WORKSPACE;
   members = SHARED_MEMBERS;
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
@@ -5569,13 +5941,6 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   await settle();
   assert.deepEqual(listed(page), ["# Billing usage alerts", "Alert at 80%?"]);
   assert.deepEqual(whoseChip(page), ["Charles Pan", "Show everyone's items"]);
-  assert.deepEqual(showTabs(page), [
-    "Needs you 0",
-    "Unread 0",
-    "All open 1",
-    "[Everything 1]",
-    "Archived 0",
-  ]);
 
   act(() => root?.unmount());
   root = undefined;
@@ -5596,23 +5961,17 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   assert.ok(clear, "the chip offers its ×");
   act(() => clear.click());
   assert.equal(whoseChip(page), null);
-  assert.deepEqual(showTabs(page), [
-    "Needs you 1",
-    "Unread 0",
-    "All open 2",
-    "[Everything 3]",
-    "Archived 0",
-  ]);
+  assert.equal(listed(page).length, 5);
 });
 
-test("a teammate chosen in Whose with nothing in the tab shown says so, and offers everyone's items again where no tab holds any of theirs", async () => {
+test("a teammate chosen in Whose with nothing in the scope shown says so, and offers everyone's items again where no scope holds any of theirs", async () => {
   listedWorkspace = SHARED_WORKSPACE;
   members = SHARED_MEMBERS;
   const { page } = mount();
   await settle();
   chooseView(page, "Whose", "Charles Pan");
   assert.deepEqual(listed(page), []);
-  assert.deepEqual(needsYouEmpty(page), [
+  assert.deepEqual(listEmpty(page), [
     undefined,
     "Nothing in the Inbox is theirs",
     "Show everyone's",
@@ -5659,34 +6018,6 @@ test("grouped by status, what needs you stands under the attention mark, then wh
   pressKey("j");
   assert.equal(readTitle(page), "How is a failed email retried?", "J passes over the folded rows");
   act(() => keys.unmount());
-});
-
-test("sorted by waiting longest from the view's menu, the open items stand first, the one posted longest ago first, the answered ones after them, and the choice outlives a relaunch", async () => {
-  inboxes.set(BILLING.id, [{ ...THRESHOLD, postedAt: 500 }, RETRY]);
-  inboxes.set(INVITES.id, [{ ...EXPIRY, postedAt: 900 }]);
-  let { page } = mount();
-  await settle();
-  chooseView(page, "Group by", "None");
-  assert.deepEqual(listed(page), [
-    "How is a failed email retried?",
-    "*Expire after 7 days?",
-    "▸ *Alert at 80%?",
-  ]);
-  chooseView(page, "Sort", "Waiting longest");
-  assert.deepEqual(listed(page), [
-    "▸ *Alert at 80%?",
-    "*Expire after 7 days?",
-    "How is a failed email retried?",
-  ]);
-  act(() => root?.unmount());
-  root = undefined;
-  ({ page } = mount());
-  await settle();
-  assert.deepEqual(listed(page), [
-    "▸ *Alert at 80%?",
-    "*Expire after 7 days?",
-    "How is a failed email retried?",
-  ]);
 });
 
 test("an item marked read as it opened stays read once another plan's item is chosen, though the list's read of its plan, which a mark never moves, still holds it unread", async () => {
@@ -5795,83 +6126,121 @@ async function mountThread(shown: InboxItem): Promise<HTMLElement> {
   return itemPane(page);
 }
 
-/** Where the thread's question stands under the board, 400px tall at the window's top, as the test lays it. */
-let questionAt = { y: 900, height: 300 };
+/** How tall the room is that a thread's board shows, as the tests below lay it out. */
+const BOARD_ROOM = 400;
 
-/** Opens `shown` in an Inbox standing in a shell of the room given, its thread taller than its board and its question at `questionAt`, answering the board. */
-async function openInRoom(room: string, shown: InboxItem, question: string): Promise<HTMLElement> {
-  inboxes = new Map([
-    [BILLING.id, [RETRY, shown]],
-    [INVITES.id, [EXPIRY]],
-  ]);
-  // The shell the Inbox stands in says its room, as the window's does.
-  document.body.className = "desktop-shell";
-  document.body.dataset.room = room;
-  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    if (this.querySelector(":scope > .inbox-board") !== null) {
-      return DOMRect.fromRect({ y: 0, height: 400 });
-    }
-    if (this.matches(question)) return DOMRect.fromRect(questionAt);
-    return DOMRect.fromRect();
-  });
-  const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, shown.title).click());
-  await settle();
-  return (
-    itemPane(page).querySelector<HTMLElement>(".inbox-board")?.parentElement ??
-    assert.fail("the thread")
+/** The scroll measures jsdom gives no element, which `layOutBoards` stands in for. */
+const SCROLL_MEASURES = ["scrollHeight", "clientHeight", "scrollTop"] as const;
+
+/**
+ * Lays out every thread's board (the pane's log) as the window would:
+ * `layout.height` tall, read anew each time, in a room `BOARD_ROOM` tall,
+ * its scroll held between its top and its end as a browser holds it. Any
+ * other element keeps jsdom's own measures. Taken down as the test ends.
+ */
+function layOutBoards(layout: { height: number }): void {
+  const tops = new WeakMap<Element, number>();
+  const board = (element: Element) =>
+    element.getAttribute("role") === "log" && element.closest(".inbox-view-items") !== null;
+  const jsdoms = SCROLL_MEASURES.map(
+    (name) => [name, Object.getOwnPropertyDescriptor(Element.prototype, name)] as const,
   );
+  const jsdom = (name: (typeof SCROLL_MEASURES)[number]) =>
+    jsdoms.find(([held]) => held === name)?.[1] ?? assert.fail(`jsdom's ${name}`);
+  Object.defineProperties(Element.prototype, {
+    scrollHeight: {
+      configurable: true,
+      get(this: Element) {
+        return board(this) ? layout.height : jsdom("scrollHeight").get?.call(this);
+      },
+    },
+    clientHeight: {
+      configurable: true,
+      get(this: Element) {
+        return board(this) ? BOARD_ROOM : jsdom("clientHeight").get?.call(this);
+      },
+    },
+    scrollTop: {
+      configurable: true,
+      get(this: Element) {
+        return board(this) ? (tops.get(this) ?? 0) : jsdom("scrollTop").get?.call(this);
+      },
+      set(this: Element, to: number) {
+        if (!board(this)) return jsdom("scrollTop").set?.call(this, to);
+        tops.set(this, Math.max(0, Math.min(to, layout.height - BOARD_ROOM)));
+      },
+    },
+  });
+  onTestFinished(() => {
+    for (const [name, descriptor] of jsdoms) {
+      if (descriptor !== undefined) Object.defineProperty(Element.prototype, name, descriptor);
+    }
+  });
 }
 
-/** Takes down the Inbox and the shell `openInRoom` stood it in. */
-function leaveRoom(): void {
-  vi.restoreAllMocks();
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-  document.body.removeAttribute("class");
-  delete document.body.dataset.room;
-  questionAt = { y: 900, height: 300 };
+/** The pane's thread, its board, which scrolls. */
+function boardOf(pane: HTMLElement): HTMLElement {
+  return pane.querySelector<HTMLElement>('[role="log"]') ?? assert.fail("the thread's board");
+}
+
+/** Scrolls `board` to `top` as the reader would, so the pane hears it. */
+function scrollBoard(board: HTMLElement, top: number): void {
+  board.scrollTop = top;
+  act(() => {
+    board.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+}
+
+/** The transcript's way back to the newest line, where the pane shows it. */
+function scrollButton(pane: HTMLElement): HTMLButtonElement | null {
+  return pane.querySelector<HTMLButtonElement>('button[aria-label="Scroll to the newest line"]');
 }
 
 /** The reader's draft reply at the thread's end, which holds the box and the open question's controls. */
 const DRAFT_REPLY = '[data-inbox-comment="draft"]';
 
-test("an item waiting on an answer opens at its thread's end, its draft reply holding the ask's controls standing just over the board's foot, in a narrow room and on the desktop's width alike", async () => {
-  for (const room of ["narrow", "wide"]) {
-    const board = await openInRoom(room, threadItem([askingMessage(EXPIRY_ASK)]), DRAFT_REPLY);
-    assert.equal(board.scrollTop, 800, room);
-    leaveRoom();
+test("a long thread opens at its newest message, its draft reply just over the board's foot, whether its question waits on an answer or nothing is asked", async () => {
+  layOutBoards({ height: 1200 });
+  for (const shown of [
+    threadItem([askingMessage(EXPIRY_ASK)]),
+    { ...THRESHOLD, title: "Alert at 90%?" },
+    threadItem([
+      threadMessage("e1b2c3d4-0000-4000-8000-000000000040", "agent", "Shipped the fix.", 1_000),
+    ]),
+  ]) {
+    const pane = await mountThread(shown);
+    assert.equal(boardOf(pane).scrollTop, 800, shown.title);
+    assert.equal(scrollButton(pane), null, "at its end, no way back is offered");
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
   }
 });
 
-test("an older item waiting on an answer opens at its thread's end too, on the draft reply holding its answer's controls, as a thread's ask does", async () => {
-  const board = await openInRoom("wide", { ...THRESHOLD, title: "Alert at 90%?" }, DRAFT_REPLY);
-  assert.equal(board.scrollTop, 800);
-  leaveRoom();
+test("a thread scrolled up offers the transcript's way back to its newest message, which takes it to its end and goes", async () => {
+  layOutBoards({ height: 1200 });
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+  const board = boardOf(pane);
+  scrollBoard(board, 300);
+  const back = scrollButton(pane) ?? assert.fail("scrolled up, the way back is offered");
+
+  act(() => back.click());
+  assert.equal(board.scrollTop, 800, "the thread is at its newest message again");
+  assert.equal(scrollButton(pane), null, "at its end, the way back goes");
 });
 
-test("a thread with no open ask opens at its top, its plain draft reply waiting at the end", async () => {
-  const shown = threadItem([
-    threadMessage("e1b2c3d4-0000-4000-8000-000000000040", "agent", "Shipped the fix.", 1_000),
-  ]);
-  const board = await openInRoom("wide", shown, DRAFT_REPLY);
-  assert.equal(board.scrollTop, 0);
-  leaveRoom();
-});
-
-test("a picture landing above the open ask stands the draft reply over the board's foot again, until the reader moves the thread", async () => {
-  const board = await openInRoom("narrow", threadItem([askingMessage(EXPIRY_ASK)]), DRAFT_REPLY);
-  assert.equal(board.scrollTop, 800);
-  // A picture read late pushes the ask 200px further down.
-  questionAt = { y: 300, height: 300 };
+test("a thread that grows while the reader is at its end, a message or a picture landing late, keeps to its end; scrolled up, the reader is left where they are", async () => {
+  const layout = { height: 1200 };
+  layOutBoards(layout);
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+  const board = boardOf(pane);
+  layout.height = 1400;
   act(() => relayout());
-  assert.equal(board.scrollTop, 1000, "the ask stands over the box again");
+  assert.equal(board.scrollTop, 1000, "at its end, it keeps to its end");
 
-  board.dispatchEvent(new Event("touchstart"));
+  scrollBoard(board, 300);
+  layout.height = 1600;
   act(() => relayout());
-  assert.equal(board.scrollTop, 1000, "once the reader moves the thread it is theirs");
-  leaveRoom();
+  assert.equal(board.scrollTop, 300, "scrolled up, the reader's place stands");
 });
 
 /** Everything the thread's subject draws, a part a child: its title alone. */
@@ -5880,7 +6249,7 @@ function subjectParts(pane: HTMLElement): (string | null)[] {
   return [...subject.children].map((part) => part.textContent);
 }
 
-/** Each ask's box on the thread: where it stands, then its head as a reader hears it, none for an answered card, whose controls say how it was answered. */
+/** Each ask's box on the thread: where it stands, then its head as a reader hears it; an answered ask's controls stand in its reply with no box, so they are none of these. */
 function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
     box.dataset.inboxAsk,
@@ -5888,23 +6257,22 @@ function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   ]);
 }
 
-/** The answered ask's card heading a reply, as a reader hears it: its controls' words alone, with no head over them saying the ask's kind or how it was answered; none where the reply carries no card. */
+/** The answered ask's controls heading a reply, as a reader hears it: their words alone, standing in the reply's body beside its words with no card around them and no head over them; none where the reply carries none. */
 function answeredCard(reply: Element): string | null | undefined {
-  const card = reply.querySelector('.inbox-ask[data-inbox-ask="answered"]');
+  const card = reply.querySelector("[data-inbox-answered]");
   if (card === null) return undefined;
-  assert.equal(card.querySelector(".inbox-ask-head"), null, "the card has no head");
+  assert.equal(card.closest(".inbox-ask"), null, "no card stands around the controls");
+  assert.ok(card.parentElement?.matches(".inbox-comment-body"), "they stand in the reply's body");
+  assert.equal(card.querySelector(".inbox-ask-head"), null, "they have no head");
   return wordsOf(card);
 }
 
-/** The thread's box's one button, by its words, its chord left out. */
+/** The thread's box's one button, by its words, or by its name where it is the round Send that shows none. */
 function sendWords(pane: HTMLElement): string | null {
   const button =
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
     assert.fail("the box has its button");
-  const copy = button.cloneNode(true);
-  assert.ok(copy instanceof Element);
-  for (const chord of copy.querySelectorAll("kbd")) chord.remove();
-  return copy.textContent;
+  return button.textContent === "" ? button.getAttribute("aria-label") : button.textContent;
 }
 
 /** The open ask's marker ending the agent's message, as a reader hears it; none where no ask waits. */
@@ -5968,6 +6336,50 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
+/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face its head draws, each as the chip naming them holds it, and the faces drawn anywhere but in its head or its body. */
+function commentHeads(pane: HTMLElement): (string | undefined | (string | undefined)[])[][] {
+  return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
+    (comment) => [
+      comment.dataset.inboxComment,
+      [
+        ...comment.querySelectorAll<HTMLElement>(
+          ".inbox-comment-head > .inbox-comment-name > [data-actor-ref] .actor-mark",
+        ),
+      ].map((mark) => mark.dataset.kind),
+      [...comment.querySelectorAll<HTMLElement>(".actor-mark")]
+        .filter((mark) => mark.closest(".inbox-comment-head, .inbox-comment-body") === null)
+        .map((mark) => mark.dataset.kind),
+    ],
+  );
+}
+
+test("each comment of a thread is headed by its writer's chip, their face and name as one target, its face the thread's gutter with no face drawn apart from it; the draft reply's head is the reader's chip, \"You\", with nothing after it", async () => {
+  const shown = threadItem([
+    askingMessage(EXPIRY_ASK),
+    threadMessage(
+      "e1b2c3d4-0000-4000-8000-000000000002",
+      { member: TEAMMATE },
+      "7 days, surely?",
+      2_000,
+    ),
+  ]);
+  const pane = await mountThread(shown);
+
+  assert.deepEqual(commentHeads(pane), [
+    ["message", ["agent"], []],
+    ["message", ["person"], []],
+    ["draft", ["person"], []],
+  ]);
+  const draft =
+    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .inbox-comment-head') ??
+    assert.fail("the draft reply has a head");
+  assert.equal(wordsOf(draft), "You", "the reader's chip alone, no draft and no time after it");
+  assert.ok(
+    draft.querySelector('.inbox-comment-name > [data-actor-ref][data-kind="person"] .actor-mark'),
+    "the reader is named by their chip, its face and name",
+  );
+});
+
 test("a thread draws every message, the agent's by its tile and name alone, no tag after its chip, and a member's by their face and name, under its title alone; its open ask is a marker ending the agent's message, its options standing in the reader's draft reply at the thread's end, over the note", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
@@ -6013,19 +6425,19 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
       ["inbox-comment-name", "inbox-comment-when"],
       ["inbox-comment-name", "inbox-comment-when"],
       ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name", "inbox-comment-when"],
+      ["inbox-comment-name"],
     ],
-    "an agent's message, as a member's and the draft, is headed by its name and when alone, with no tag after its chip",
+    "an agent's message, as a member's, is headed by its chip and when alone, with no tag after its chip, and the draft by the reader's chip alone",
   );
   assert.deepEqual(askBoxes(pane), [], "the open ask is no card in the agent's message");
   const [asked] = pane.querySelectorAll(".inbox-thread > li");
   assert.equal(
-    asked?.querySelector("[data-inbox-marker]")?.textContent,
-    "Waiting on you",
-    "the agent's message ends with the ask's marker",
+    asked?.querySelector("[data-inbox-marker]"),
+    null,
+    "the agent's message ends with its words, no marker saying the ask waits on the reader",
   );
   assert.equal(asked?.querySelector('[role="radio"]'), null, "and holds none of its options");
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.deepEqual(checkedOptions(pane), [], "nothing is picked for the reader");
   assert.deepEqual(
     openOptions(pane).map((option) => wordsOf(option)),
@@ -6035,24 +6447,32 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     pane.querySelector(
       '.inbox-thread > li:last-child form.inbox-answer > [data-inbox-draft-ask] [role="radio"]',
     ),
-    "the options stand in the draft's box, over its note",
+    "the options stand in the draft's box, as its body",
   );
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note…");
+  assert.deepEqual(
+    footParts(pane),
+    ["Attach files", "line: Add a note", "Dictate", "Send"],
+    "under them, one row: +, the note line, the microphone, and Send",
+  );
+  assert.equal(footWords(pane), "", "and no line of help");
   // What the thread draws stands inside the pane's masked region.
   assert.ok(pane.querySelector(".ph-no-capture [data-inbox-draft-ask]"));
   assert.ok(pane.querySelector(".ph-no-capture [data-inbox-message-text]"));
 });
 
-test("a plain reply sends no answer and leaves the ask open, the box's one button reading Reply and its foot saying replying keeps the ask open", async () => {
+test("a plain reply sends no answer and leaves the ask open, the box's Send held until it holds words and nothing saying the ask stays open", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
   const answers = heldAnswers();
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000010"));
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note…");
-  assert.equal(sendWords(pane), "Reply");
-  assert.equal(quietWords(pane), "Replying keeps the ask open");
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note");
+  assert.equal(sendWords(pane), "Send");
+  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(footWords(pane), "", "nothing says replying keeps the ask open");
 
   typeInComposer(pane, "Does it matter for SSO teams?");
+  assert.equal(answerSend(pane).disabled, false, "words light Send");
+  assert.equal(footWords(pane), "");
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
   await settle();
@@ -6062,8 +6482,8 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
     [{ itemId: shown.id, text: "Does it matter for SSO teams?", answers: undefined }],
   );
   assert.deepEqual(answers, [], "the old answer path is never taken");
-  assert.equal(askMarker(pane), "Waiting on you");
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.equal(askMarker(pane), null);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.deepEqual(threadOf(pane.ownerDocument.body).at(-1), [
     "message",
     "person",
@@ -6072,19 +6492,32 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
   ]);
 });
 
-test("a notice's box reads Got it while it holds nothing, which answers the notice at its revision and writes no message; with words it reads Reply, and the reply names the notice's revision", async () => {
+/** A notice posted on a thread, asking nothing and needing no reply, as the service writes one, at revision 4. */
+function noticeItem(extra: Partial<InboxItem> = {}): InboxItem {
   const said: InboxMessage = {
     id: "e1b2c3d4-0000-4000-8000-000000000020",
     author: INBOX_MESSAGE_AUTHOR.AGENT,
     text: "The preview is up.",
     createdAt: 1_000,
   };
-  const shown = threadItem([said], {
+  return threadItem([said], {
+    title: "The preview is up",
     response: { type: INBOX_RESPONSE.NONE },
     needsReply: false,
     revision: 4,
+    ...extra,
   });
-  const pane = await mountThread(shown);
+}
+
+/**
+ * Every answer and message the Inbox sends from now on, written down: each
+ * answer refused as unanswered while `refusing` says so, the box standing
+ * open again, and held unanswered otherwise; each message held unanswered.
+ */
+function noticeWrites(refusing: () => boolean = () => false): {
+  answered: CodingAgentInboxAnswerParams[];
+  messaged: CodingAgentInboxMessageParams[];
+} {
   const answered: CodingAgentInboxAnswerParams[] = [];
   const messaged: CodingAgentInboxMessageParams[] = [];
   const bridge = appBridge();
@@ -6094,7 +6527,7 @@ test("a notice's box reads Got it while it holds nothing, which answers the noti
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
         answered.push(request.payload);
-        // Unanswered, so the box stands open again for the reply below.
+        if (!refusing()) return new Promise(() => undefined);
         const value = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
@@ -6103,28 +6536,133 @@ test("a notice's box reads Got it while it holds nothing, which answers the noti
       return new Promise(() => undefined);
     },
   });
-  const submit = () =>
-    act(() =>
-      pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
-    );
+  return { answered, messaged };
+}
 
-  assert.equal(sendWords(pane), "Got it");
-  submit();
+/** What each answer sent says: its item, the revision it names, and the reply. */
+function answersOf(answered: readonly CodingAgentInboxAnswerParams[]) {
+  return answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
+}
+
+test("opening the reader's own notice acknowledges it at its revision, once while it is shown, writing no message; its box offers no Got it, and opening it again after the acknowledgement was refused tries again", async () => {
+  const notice = noticeItem();
+  const { answered, messaged } = noticeWrites(() => true);
+  const pane = await mountThread(notice);
+  const acknowledged = { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED };
+  assert.deepEqual(answersOf(answered), [acknowledged]);
+  assert.deepEqual(messaged, [], "the agent is not messaged");
+
+  // Refused, the notice stands open again, its box held until it holds words.
+  const send =
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
+    assert.fail("the box has its button");
+  assert.equal(sendWords(pane), "Send", "no Got it stands");
+  assert.equal(send.disabled, true);
+  assert.deepEqual(answersOf(answered), [acknowledged], "it is not tried again while it is shown");
+
+  const page = pane.ownerDocument.body;
+  act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  assert.deepEqual(
-    answered.map(({ revision, reply }) => ({ revision, reply })),
-    [{ revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED }],
-  );
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.deepEqual(answersOf(answered), [acknowledged, acknowledged]);
+});
 
+test("a notice shown while its plan's held read has failed reads Got it, since opening it acknowledges nothing then, and Got it answers it", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const notice = noticeItem();
+  const { answered: sent } = noticeWrites();
+  const pane = await mountThread(notice);
+  assert.deepEqual(sent, [], "opening it answers nothing");
+  assert.equal(sendWords(pane), "Got it");
+  act(() => answerSend(pane).click());
+  await settle();
+  assert.deepEqual(answersOf(sent), [
+    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
+  ]);
+});
+
+test("a notice whose box holds a draft is left open as it is opened, and its words go as a reply naming the notice's revision, no answer beside it", async () => {
+  const notice = noticeItem();
+  // The first acknowledgement is refused, so the box stands open to take the draft.
+  let refusals = 1;
+  const { answered, messaged } = noticeWrites(() => {
+    refusals -= 1;
+    return refusals >= 0;
+  });
+  const pane = await mountThread(notice);
+  assert.equal(answered.length, 1);
   typeInComposer(pane, "Looks right.");
-  assert.equal(sendWords(pane), "Reply");
-  submit();
+  const page = pane.ownerDocument.body;
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.equal(answered.length, 1, "opened with a draft, it is not acknowledged");
+  assert.equal(composerEditor(itemPane(page)).textContent, "Looks right.");
+  assert.equal(sendWords(itemPane(page)), "Send");
+
+  act(() =>
+    itemPane(page)
+      .querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')
+      ?.click(),
+  );
   await settle();
   assert.deepEqual(
     messaged.map(({ text, revision }) => ({ text, revision })),
     [{ text: "Looks right.", revision: 4 }],
   );
   assert.equal(answered.length, 1, "the reply is no second answer");
+});
+
+test("a teammate's notice is left open as it is opened, since acknowledging it settles it for them too, and its box's Send reads Got it, which answers it at its revision, with no line beside it", async () => {
+  const notice = noticeItem({ startedBy: TEAMMATE });
+  const { answered, messaged } = noticeWrites();
+  const pane = await mountThread(notice);
+  assert.deepEqual(answered, [], "opening it answers nothing");
+  assert.equal(sendWords(pane), "Got it");
+  assert.equal(
+    footWords(pane),
+    "Got it",
+    "Got it is Send's own words, the foot saying nothing else",
+  );
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(answersOf(answered), [
+    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
+  ]);
+  assert.deepEqual(messaged, []);
+});
+
+test("an archived task's notice is left open as it is opened, since nothing answers it until the task is back", async () => {
+  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
+  const notice = noticeItem({ id: EXPIRY.id, title: "Invites now expire after 7 days" });
+  inboxes.set(INVITES.id, [notice]);
+  const { answered } = noticeWrites();
+  const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
+  await settle();
+  showScope(page, "Archived");
+  await settle();
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.deepEqual(subjectOf(page), [notice.title]);
+  assert.deepEqual(answered, []);
+});
+
+test("with the inbox-first sidebar, opening the reader's own notice from the sidebar acknowledges it", async () => {
+  const notice = noticeItem({ id: EXPIRY.id });
+  inboxes.set(INVITES.id, [notice]);
+  const { answered } = noticeWrites();
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  assert.deepEqual(answered, [], "the item standing chosen is no notice");
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.deepEqual(answersOf(answered), [
+    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
+  ]);
 });
 
 test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
@@ -6260,10 +6798,10 @@ test("words written on a reply's settled box while the reply carrying the ask's 
   await act(async () => refuse[0]?.());
   await settle();
 
-  assert.equal(askMarker(pane), "Waiting on you");
+  assert.equal(askMarker(pane), null);
   assert.equal(composerEditor(pane).textContent, "One more detail");
   assert.deepEqual(checkedOptions(pane), ["7 days"]);
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
 });
 
 test("words another window writes in the open ask's box while this window's reply carrying the answer is out are kept beside this window's own once the reply is refused", async () => {
@@ -6317,26 +6855,27 @@ test("words another window writes in the open ask's box while this window's repl
   );
 });
 
-test("picking an option in the draft reply stands it picked, the foot no longer saying the ask stays open and the button still Reply, and pressing it again takes it off; sent, the reply drops into the thread as the reader's comment leading with the answered card, and the draft stands plain at the end again", async () => {
+test("picking an option in the draft reply stands it picked and lights Send, the box saying nothing, and pressing it again takes it off; sent, the reply drops into the thread as the reader's comment leading with the answered card, and the draft stands plain at the end again", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000011"));
 
   act(() => openOptions(pane)[1]?.click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   assert.equal(pane.querySelector("[data-inbox-attached]"), null, "no stamp stands over the note");
 
   act(() => openOptions(pane)[1]?.click());
   assert.deepEqual(checkedOptions(pane), [], "pressed again, the pick is let go");
-  assert.equal(quietWords(pane), "Replying keeps the ask open");
+  assert.equal(answerSend(pane).disabled, true, "and Send stands held again");
+  assert.equal(footWords(pane), "", "nothing says the ask stays open");
 
   // The number keys still pick, from wherever in the Inbox the reader stands.
   keyOn(document.body, "2");
   assert.deepEqual(checkedOptions(pane), ["7 days"]);
   typeInComposer(pane, "Most teams asked for it.");
   await settle();
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
   );
@@ -6364,11 +6903,11 @@ test("picking an option in the draft reply stands it picked, the foot no longer 
   assert.equal(reply.querySelector("[data-inbox-stamp]"), null, "the card marks the answer");
   assert.equal(asked?.querySelector(".inbox-ask"), null, "the ask's card left the agent's message");
   assert.equal(askMarker(pane), null, "and its marker");
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
-  assert.deepEqual(draftReply(pane), ["Youdraft"], "the draft stands at the end, plain");
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply…");
-  assert.equal(quietWords(pane), null);
+  assert.deepEqual(draftReply(pane), ["You"], "the draft stands at the end, plain");
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply");
+  assert.deepEqual(footParts(pane), ["Attach files", "line: Reply", "Dictate", "Send"]);
 });
 
 test("an approve-or-request-changes ask is two small buttons in the draft reply: the one pressed stands pressed, pressed again it is let go, and the reply sent with words carries it, stamped as requested changes", async () => {
@@ -6382,14 +6921,14 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000012"));
   assert.deepEqual(openOptions(pane), [], "no radio list stands for a yes or no");
 
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Approve").click());
   act(() => askPress(pane, "Approve").click());
   assert.equal(askPress(pane, "Approve").getAttribute("aria-pressed"), "false", "let go");
   act(() => askPress(pane, "Request changes").click());
   assert.equal(askPress(pane, "Request changes").getAttribute("aria-pressed"), "true");
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   typeInComposer(pane, "The banner overlaps the header.");
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
@@ -6413,7 +6952,40 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
     "Request changes",
     "the press given says how it was answered",
   );
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
+});
+
+test("an ask of words alone is a plain box with no controls, its line asking for a Reply and its Send held until words are in; the words sent answer it, and the agent's message then says it was answered", async () => {
+  const shown = threadItem([askingMessage({ type: INBOX_ASK.ANSWER })]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000015"));
+  assert.deepEqual(draftReply(pane), ["You"], "no controls stand in the box");
+  assert.equal(pane.querySelector("[data-inbox-draft-ask]"), null, "and no Answer press");
+  assert.deepEqual(footParts(pane), ["Attach files", "line: Reply", "Dictate", "Send"]);
+  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(footWords(pane), "");
+
+  typeInComposer(pane, "Nothing needs you right now.");
+  assert.equal(answerSend(pane).disabled, false, "words light Send");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text, answers }) => ({ text, answers })),
+    [
+      {
+        text: "Nothing needs you right now.",
+        answers: { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED },
+      },
+    ],
+  );
+  assert.equal(askMarker(pane), null, "the ask waits no more");
+  assert.equal(
+    wordsOf(pane.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-settled]`)),
+    "Answered",
+  );
+  assert.deepEqual(draftReply(pane), ["You"]);
 });
 
 test("a form's fields attach to the reply as they are filled, with no Submit, and a form filled in part sends what was filled, a required field left empty absent from it", async () => {
@@ -6433,8 +7005,8 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
     ["Low", "High"],
     "the draft's box holds the ask's fields and no Submit",
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
-  assert.equal(sendWords(pane), "Reply");
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.equal(sendWords(pane), "Send");
 
   const reason =
     [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
@@ -6442,9 +7014,9 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
     ) ?? assert.fail("no Reason field");
   typeInComposer(reason, "Spiked twice");
   await settle();
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
   );
@@ -6462,6 +7034,31 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
   );
 });
 
+test("a thread's form ask wears the Recommended badge on the option its select recommends and on no other, and picks nothing for the developer", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({
+        type: INBOX_ASK.ANSWER,
+        fields: [
+          {
+            type: INBOX_FIELD.SELECT,
+            label: "Channel",
+            options: ["Email", "Slack"],
+            recommended: "Slack",
+          },
+          { type: INBOX_FIELD.SELECT, label: "Severity", options: ["Low", "High"] },
+        ],
+      }),
+    ]),
+  );
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Channel")), {
+    options: ["Email", "SlackRecommended"],
+    checked: [],
+    tabStops: ["Email"],
+  });
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Severity")).options, ["Low", "High"]);
+});
+
 test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked and ticks every one, either press pressed again is let go, and Mark done sent carries every step; one naming no step stands its item's title as its one step", async () => {
   const shown = threadItem([
     askingMessage({
@@ -6473,18 +7070,19 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
   const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
   assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
-  assert.equal(askMarker(pane), "Waiting on you");
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.equal(askMarker(pane), null);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
 
   act(() => steps()[0]?.click());
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Mark done").click());
   assert.deepEqual(
     steps().map((step) => step.checked),
     [true, true],
     "Mark done ticks the step left unticked",
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Couldn't do it").click());
   assert.deepEqual(
     steps().map((step) => step.checked),
@@ -6492,10 +7090,15 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
     "Couldn't do it after Mark done keeps only the step ticked by hand",
   );
   act(() => askPress(pane, "Couldn't do it").click());
-  assert.equal(quietWords(pane), "Replying keeps the ask open", "pressed again, it is let go");
+  assert.equal(askPress(pane, "Couldn't do it").getAttribute("aria-pressed"), "false");
+  assert.equal(
+    answerSend(pane).disabled,
+    false,
+    "pressed again, it is let go, the step ticked still sent",
+  );
   act(() => askPress(pane, "Mark done").click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
-  assert.equal(sendWords(pane), "Reply");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+  assert.equal(sendWords(pane), "Send");
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
   );
@@ -6530,7 +7133,66 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   );
 });
 
-test("a replaced ask is struck through and says so, a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
+test("a to-do with every step ticked by hand stands marked done and Send sends it so, letting a step go takes that back off, and steps ticked with neither press go as they stand", async () => {
+  const toDo = { type: INBOX_ASK.DO, steps: ["Open the repository's settings", "Add the secret"] };
+  const shown = threadItem([askingMessage(toDo)]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
+  const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
+  const markDone = () => askPress(pane, "Mark done").getAttribute("aria-pressed");
+
+  act(() => steps()[0]?.click());
+  act(() => steps()[1]?.click());
+  assert.equal(markDone(), "true", "every step ticked stands as Mark done");
+  assert.equal(answerSend(pane).disabled, false, "the reply carries the answer");
+  act(() => steps()[1]?.click());
+  assert.equal(markDone(), "false", "letting a step go takes Mark done back off");
+  assert.equal(answerSend(pane).disabled, false, "the step still ticked goes with the reply");
+  act(() => steps()[0]?.click());
+  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
+  assert.equal(footWords(pane), "");
+  act(() => steps()[0]?.click());
+  act(() => steps()[1]?.click());
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent.map(({ answers }) => answers),
+    [{ ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [0, 1] }],
+    "Reply sends Mark done with every step, no press needed",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const partly = threadItem([askingMessage(toDo)]);
+  const second = await mountThread(partly);
+  const sentPartly = heldMessages(repliedOn(partly, "e1b2c3d4-0000-4000-8000-000000000013"));
+  act(() => second.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")[1]?.click());
+  assert.equal(askPress(second, "Couldn't do it").getAttribute("aria-pressed"), "false");
+  act(() =>
+    second.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sentPartly.map(({ answers }) => answers),
+    [{ ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED, steps: [1] }],
+    "the step ticked goes as it stands, never as Couldn't do it",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const titled = threadItem([askingMessage({ type: INBOX_ASK.DO, steps: [] })]);
+  const third = await mountThread(titled);
+  act(() => third.querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
+  assert.equal(
+    askPress(third, "Mark done").getAttribute("aria-pressed"),
+    "true",
+    "ticking a to-do's title, its one step, marks it done",
+  );
+});
+
+test("a replaced ask draws no card, only a quiet marker ending the agent's message saying a newer question replaced it, or a newer message where none asks; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
   const shown = threadItem(
     [
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -6551,7 +7213,6 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
   const pane = await mountThread(shown);
 
   assert.deepEqual(askBoxes(pane), [
-    ["replaced", "Pick oneReplaced"],
     ["withdrawn", "Pick oneWithdrawn: Product picked 14 days."],
     ["withdrawn", "Pick oneCharles Pan · Resolved without an answer"],
   ]);
@@ -6561,6 +7222,37 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
     "a settled ask offers nothing",
   );
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
+  const replaced =
+    pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ??
+    assert.fail("the replaced ask's message");
+  assert.equal(replaced.querySelector(".inbox-ask"), null, "the replaced ask draws no card");
+  assert.deepEqual(
+    [...replaced.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
+      marker.dataset.inboxSettled,
+      wordsOf(marker),
+    ]),
+    [["replaced", "Replaced by a newer question"]],
+    "the agent's message ends with the marker saying so",
+  );
+  assert.equal(
+    pane.querySelectorAll("[data-inbox-settled]").length,
+    1,
+    "no withdrawn ask wears the marker",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const noticed = await mountThread(
+    threadItem([
+      askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
+      threadMessage("e1b2c3d4-0000-4000-8000-000000000022", "agent", "Deploy finished.", 2_000),
+    ]),
+  );
+  assert.equal(
+    wordsOf(noticed.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-settled]`)),
+    "Replaced by a newer message",
+    "an ask replaced by a message that asks nothing names no newer question",
+  );
 });
 
 /** The reader's reply answering the ask the thread opens with, as the service keeps it. */
@@ -6590,8 +7282,8 @@ function answeredThread(
 function answeredBox(pane: HTMLElement): HTMLElement {
   return (
     pane.querySelector<HTMLElement>(
-      `[data-message-id="${ANSWER_ID}"] .inbox-ask[data-inbox-ask="answered"] [data-inbox-answered]`,
-    ) ?? assert.fail("the reply leads with the ask's card filled in")
+      `[data-message-id="${ANSWER_ID}"] .inbox-comment-body > [data-inbox-answered]`,
+    ) ?? assert.fail("the reply leads with the ask's controls filled in")
   );
 }
 
@@ -6615,8 +7307,8 @@ test("an answered decide's card leaves the agent's message for the head of the r
   ]);
   const pane = await mountThread({ ...shown, status: INBOX_STATUS.OPEN });
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
-  assert.equal(askMarker(pane), "Waiting on you", "the later ask still waits");
+  assert.deepEqual(askBoxes(pane), []);
+  assert.equal(askMarker(pane), null, "the later ask waits on the reader, which draws no marker");
   const asked =
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ?? assert.fail("the agent's message");
   assert.equal(asked.querySelector(".inbox-ask"), null, "the agent's message ends with its words");
@@ -6661,7 +7353,7 @@ test("an answered yes-or-no heads its reply with its two small buttons, the one 
     ),
   );
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(answeredPresses(answeredBox(pane)), [
     ["Approve", false, undefined],
     ["Request changes", true, "back"],
@@ -6688,7 +7380,7 @@ test("an answered do heads its reply with its steps ticked as they were sent, ov
       return [step.textContent, tick.checked];
     });
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(steps(), [
     ["Open the repository's settings", true],
     ["Add the secret", false],
@@ -6758,7 +7450,7 @@ test("an answered form heads its reply with its fields, each holding what it was
   assert.equal(box.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(box.querySelector(".inbox-ask-presses"), null, "no Submit stands");
   assert.equal(pane.querySelector("[data-inbox-values]"), null, "the reply lists no values");
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.equal(pane.querySelector("[data-inbox-stamp]"), null);
 });
 
@@ -6828,11 +7520,23 @@ test("an answered ask of words alone draws no card, its reply just its words and
   );
 });
 
-test("an ask of a type this build does not know reads as a line naming a newer Luke, saying who it waits on while open, and the box still replies", async () => {
+test("an ask of a type this build does not know reads as a line naming a newer Luke, saying which teammate it waits on while open and nothing more where it waits on the reader, and the box still replies", async () => {
   const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
-  const pane = await mountThread(threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }]));
-  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke.Waiting on you"]]);
-  assert.equal(sendWords(pane), "Reply");
+  const asking = { ...askingMessage(EXPIRY_ASK), ask: poll };
+  const pane = await mountThread(threadItem([asking]));
+  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke."]]);
+  assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
+  assert.equal(sendWords(pane), "Send");
+});
+
+test("an ask of a type this build does not know, open on a teammate's item, names the teammate it waits on", async () => {
+  const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
+  const pane = await mountThread(
+    threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }], { startedBy: TEAMMATE }),
+  );
+  assert.deepEqual(askBoxes(pane), [
+    ["newer", "Answer this in a newer Luke.Waiting on Charles Pan"],
+  ]);
 });
 
 test("an item from before version 5, its question in its blocks and its thread asking nothing, still draws its question and is answered as before", async () => {
@@ -6855,8 +7559,8 @@ test("an item from before version 5, its question in its blocks and its thread a
     ["message", "person", "Charles Pan", "Is 80% too eager?"],
   ]);
   assert.equal(pane.querySelector(".inbox-ask"), null);
-  assert.equal(askMarker(pane), "Waiting on you");
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.equal(askMarker(pane), null);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
 
   act(() => openOptions(pane)[1]?.click());
   act(() => answerSend(pane).click());
@@ -6882,7 +7586,7 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
     );
   act(() => pane.querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
   act(() => askPress(pane, "Couldn't do it").click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
@@ -6891,23 +7595,29 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
 
   assert.deepEqual(ticked(), [true, false]);
   assert.equal(askPress(pane, "Couldn't do it").getAttribute("aria-pressed"), "true");
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
+});
+
+test("the reader's own open ask draws no waiting marker anywhere in the thread, its draft reply holding the ask's controls", async () => {
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+  assert.equal(askMarker(pane), null);
+  assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
+  assert.doesNotMatch(
+    pane.querySelector(".inbox-thread")?.textContent ?? assert.fail("the thread"),
+    /Waiting on/u,
+  );
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
 });
 
 test("a teammate's open ask says on its marker that it waits on them, rather than on you, and still takes your answer in your draft reply", async () => {
   const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)], { startedBy: TEAMMATE }));
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.equal(askMarker(pane), "Waiting on Charles Pan");
-  assert.equal(
-    pane.querySelector<HTMLElement>("[data-inbox-marker]")?.dataset.inboxWaiting,
-    "teammate",
-    "its dot spends no attention ink",
-  );
   act(() => openOptions(pane)[0]?.click());
-  assert.equal(quietWords(pane), null, "the picked answer says what is sent");
+  assert.equal(footWords(pane), "", "the box says nothing of what is sent");
 });
 
-test("a thread's row leads with what its open ask asks, then its latest message: a pick, the steps the reader ticked in its box, fields, or words; a teammate's waits on them with no mark, and an answer reads as its stamp", async () => {
+test("a thread's row says the ask itself while one is open, led by its kind's glyph: the steps left and the next as the reader ticks them in its box, the fields, or an answer to write; a teammate's waits on them with no mark, and an answer reads as its stamp, led by a tick", async () => {
   const STEPS = threadItem([
     askingMessage({
       type: INBOX_ASK.DO,
@@ -6953,13 +7663,19 @@ test("a thread's row leads with what its open ask asks, then its latest message:
   ]);
   const { page } = mount();
   await settle();
-  const said = "Invites expire after 24 hours today, which trips up teams across time zones.";
-  assert.deepEqual(rowLines(page, STEPS.title), [true, `Steps · 0 of 3 · Agent: ${said}`]);
-  assert.deepEqual(rowLines(page, FIELDS.title), [true, `Fill in · Agent: ${said}`]);
-  assert.deepEqual(rowLines(page, EXPIRY.title), [true, `Your answer · Agent: ${said}`]);
+  assert.deepEqual(rowLines(page, STEPS.title), [true, "3 steps left · Open the settings"]);
+  assert.deepEqual(rowLines(page, FIELDS.title), [true, "Fill in Host"]);
+  assert.deepEqual(rowLines(page, EXPIRY.title), [true, "Write an answer"]);
   assert.deepEqual(rowLines(page, CHOSEN.title), [
     true,
     "You: Chose 7 days · and say so in the docs",
+  ]);
+  const glyphOf = (title: string) =>
+    rowNamed(page, title).querySelector(".inbox-row-line")?.getAttribute("data-line");
+  assert.deepEqual([STEPS.title, FIELDS.title, CHOSEN.title].map(glyphOf), [
+    "do",
+    "answer",
+    "settled",
   ]);
   assert.equal(needsYouMark(rowNamed(page, STEPS.title)), "*");
   assert.equal(needsYouMark(rowNamed(page, FIELDS.title)), "", "a teammate's ask needs them");
@@ -6977,7 +7693,38 @@ test("a thread's row leads with what its open ask asks, then its latest message:
   act(() => itemPane(page).querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
   act(() => rowNamed(page, CHOSEN.title).click());
   await settle();
-  assert.deepEqual(rowLines(page, STEPS.title), [true, `Steps · 1 of 3 · Agent: ${said}`]);
+  assert.deepEqual(rowLines(page, STEPS.title), [true, "2 steps left · Add the secret"]);
+
+  // Mark done pressed in the box ticks every step on the row and its card, as the box shows them.
+  act(() => rowNamed(page, STEPS.title).click());
+  await settle();
+  act(() => askPress(itemPane(page), "Mark done").click());
+  act(() => rowNamed(page, CHOSEN.title).click());
+  await settle();
+  assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
+  hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-row-card]");
+  assert.deepEqual(
+    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map((step) =>
+      step.getAttribute("data-done"),
+    ),
+    ["true", "true", "true"],
+  );
+});
+
+test("an item's card shows a to-do naming no steps of its own its title as its one step, as its box does", async () => {
+  const ROTATE = threadItem([askingMessage({ type: INBOX_ASK.DO, steps: [] })], {
+    title: "Rotate the deployment key",
+  });
+  inboxes = new Map([[BILLING.id, [ROTATE]]]);
+  const { page } = mount();
+  await settle();
+  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-row-card]");
+  assert.deepEqual(
+    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map(
+      (step) => step.textContent,
+    ),
+    ["Rotate the deployment key"],
+  );
 });
 
 test("with the inbox-first sidebar the sidebar lists the Inbox's items, read once with the page, and the page shows the chosen item alone, a press on a row choosing it", async () => {

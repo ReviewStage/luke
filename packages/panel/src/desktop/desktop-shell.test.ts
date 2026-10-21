@@ -97,16 +97,6 @@ const SETTINGS: SettingsPanelProps = {
     onInstall: ignore,
     onOpenLatest: ignore,
   },
-  shortcuts: {
-    voiceHotkeyHeld: false,
-    voiceChosen: false,
-    voiceOff: false,
-    onVoiceHotkeyChange: accepted,
-    stopChosen: false,
-    stopOff: false,
-    onStopHotkeyChange: accepted,
-    onCapture: ignore,
-  },
 };
 
 let root: Root | undefined;
@@ -591,13 +581,13 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Board's row is the Tasks page's", async () => {
+test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Tasks page's row stands either way", async () => {
   handState({});
   const off = mount(false);
   await settle();
-  assert.ok(placeRow(off, "Board"));
+  assert.ok(placeRow(off, "Tasks"));
+  assert.equal(placeRow(off, "Board"), undefined);
   assert.ok(placeRow(off, "Inbox"));
-  assert.equal(placeRow(off, "Tasks"), undefined);
   assert.equal(off.querySelector('aside .inbox-tasks[data-placement="sidebar"]'), null);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -1025,7 +1015,7 @@ test("walking every place in the window during a call about another plan, the ca
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
   }
   assert.deepEqual(
     standing,
@@ -1049,7 +1039,7 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
     act(() => root?.unmount());
     container.remove();
   }

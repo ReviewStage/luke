@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { type Duration, Effect, Schedule } from "effect";
+import { type Duration, Effect, type Option, Schedule } from "effect";
 
 /**
  * held-read.ts -- a read the desktop holds open while nothing it reads changed since its cursor: the cursor, and the hold.
@@ -48,6 +48,22 @@ export function cursorOf(stamps: readonly CursorStamp[]): string {
 }
 
 /**
+ * Reads again every `poll` until a read is one `moved` says moved, which it
+ * answers, or the hold ends, answering none.
+ */
+export function heldUntil<A, E, R>(
+  read: Effect.Effect<A, E, R>,
+  moved: (read: A) => boolean,
+  poll: Duration.Duration,
+  hold: Duration.Duration,
+): Effect.Effect<Option.Option<A>, E, R> {
+  return read.pipe(
+    Effect.repeat({ schedule: Schedule.spaced(poll), until: moved }),
+    Effect.timeoutOption(hold),
+  );
+}
+
+/**
  * Waits until the stamps move past the reader's cursor, or the hold ends:
  * each look reads where the rows stand and none of their words, and the
  * caller reads them whole once this returns.
@@ -58,10 +74,5 @@ export function heldUntilMoved<E, R>(
   poll: Duration.Duration,
   hold: Duration.Duration,
 ): Effect.Effect<void, E, R> {
-  const moved = Effect.map(stamps, (standing) => cursorOf(standing) !== after);
-  return moved.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(poll), until: (changed) => changed }),
-    Effect.timeoutOption(hold),
-    Effect.asVoid,
-  );
+  return Effect.asVoid(heldUntil(stamps, (standing) => cursorOf(standing) !== after, poll, hold));
 }

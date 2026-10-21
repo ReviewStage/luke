@@ -486,15 +486,17 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
-/* View options wears a dot while the view leaves tasks out, so a filtered
-   list never passes for the whole of it: drawn by the box around the
-   button, over its corner. */
-.sidebar-view-options {
+/* The sidebar's View options and the Tasks page's Filter wear a dot while
+   the view leaves tasks out, so a filtered list never passes for the whole
+   of it: drawn by the box around the button, over its corner. */
+.sidebar-view-options,
+.tasks-page-option {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after {
+.sidebar-view-options[data-filtered="true"]::after,
+.tasks-page-option[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
   right: var(--luke-space-4);
@@ -1631,17 +1633,6 @@ ul.actor-stack {
   padding-right: var(--column-inset);
 }
 
-/* A pane sliding in finds the work column already narrowed for it, so the
-   column's bars draw on past both its sides, beneath everything else, and
-   no gap opens between the column and a pane still on its way. */
-.desktop-call-bar::before {
-  position: absolute;
-  z-index: -1;
-  right: -100vw;
-  left: -100vw;
-  content: "";
-}
-
 /* The plan's toolbar leads with its tab rather than a title, so it starts
    the tab's pill a row's inset in, as the side panel's row starts its own;
    the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
@@ -1953,7 +1944,9 @@ ul.actor-stack {
    measure in the middle of the column, as they keep to it in a wide side
    panel, so the list's card and the composer's share both edges. The
    Inbox's pane is laid out the same way, its thread at that measure, the
-   box flowing at the thread's end, and what stands docked under it too. */
+   box flowing at the thread's end, and what stands docked under it too.
+   The thread's log is named by both its classes, so it keeps this inset
+   over the one a side panel gives a transcript's log. */
 .desktop-agent,
 .desktop-inbox {
   --reading-room: calc((100% - var(--luke-page-measure)) / 2);
@@ -1969,7 +1962,7 @@ ul.actor-stack {
 .desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
-.desktop-inbox .inbox-board,
+.desktop-inbox .conversation-log.inbox-board,
 .desktop-inbox > .agent-composer,
 .desktop-inbox .inbox-next-dock {
   padding-inline: max(var(--content-inset), var(--reading-room));
@@ -2140,9 +2133,10 @@ ul.actor-stack {
   white-space: pre;
 }
 
-/* The transcript's way back to its newest line stands on the column's own
-   ground rather than the panel's. */
-.desktop-agent .conversation-scroll {
+/* The transcript's way back to its newest line, and an Inbox thread's,
+   stands on the column's own ground rather than the panel's. */
+.desktop-agent .conversation-scroll,
+.desktop-inbox .conversation-scroll {
   --luke-button-ground: var(--luke-color-ground);
 }
 
@@ -2279,51 +2273,54 @@ ul.actor-stack {
 
 /* The call bar ------------------------------------------------------------- */
 
-/* It answers the column's width, so a narrow column gives the call bar and
-   the captions above it the room the summary's rail reserves. */
-.desktop-call-bar {
+/* A call into an agent stands at its tab's foot, over its composer: the
+   avatar's video, the captions, and the call bar, which answers the tab's
+   width, so a narrow tab stacks the bar's status over its controls. */
+.agent-call-foot {
   container: plan-call-bar / inline-size;
   position: relative;
-  flex: 0 0 auto;
-  padding: var(--luke-space-12) calc(var(--luke-page-inset) + var(--summary-room))
-    var(--luke-space-12) var(--luke-page-inset);
-  border-top: 1px solid var(--luke-color-border);
-  background: var(--luke-color-well);
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding-bottom: var(--luke-space-8);
 }
 
-.desktop-call-bar::before {
-  top: -1px;
-  bottom: 0;
-  border-top: 1px solid var(--luke-color-border);
-  background: var(--luke-color-well);
+/* The bar spans the tab's measure, as it spanned the column, so the call's
+   two lines keep their room at its left beside the controls. */
+.agent-call-foot > .call-bar {
+  width: 100%;
 }
 
-/* The live captions stand just above the call bar, centred on its row, so
-   they cover neither the call's controls nor the side panel beside the
-   column. */
-.desktop-call-bar .voice-caption {
+/* The live captions stand just above the call bar, centred on the tab, so
+   they cover neither the call's controls nor the composer under them. */
+.agent-call-foot .voice-caption {
   bottom: calc(100% + var(--luke-space-12));
-  left: calc(50% - var(--summary-room) / 2);
-  width: min(var(--caption-width-max), 100% - 2 * var(--luke-page-inset) - var(--summary-room));
+  left: 50%;
+  width: min(var(--caption-width-max), 100% - 2 * var(--luke-page-inset));
 }
 
-/* Too narrow a column to keep the rail's room: the bar, which stands under
-   the rail rather than beside it, runs to the page's inset at its right,
-   and the captions span the column to its insets, centred on it, their
-   volume hint wrapping rather than cut. */
+/* Too narrow a tab: the captions span it to its insets, their volume hint
+   wrapping rather than cut. */
 @container plan-call-bar (max-width: 359px) {
-  .desktop-call-bar > .call-bar {
-    margin-right: calc(-1 * var(--summary-room));
-  }
-
-  .desktop-call-bar .voice-caption {
-    left: 50%;
+  .agent-call-foot .voice-caption {
     width: calc(100% - 2 * var(--column-inset));
   }
 
-  .desktop-call-bar .volume-hint-text {
+  .agent-call-foot .volume-hint-text {
     white-space: normal;
   }
+}
+
+/* A task's column with no agent tab to show: the two ways to start one,
+   side by side in the middle of the room the plan's side panel leaves. */
+.desktop-no-agent {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-page-inset);
 }
 
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
@@ -2979,29 +2976,7 @@ ul.actor-stack {
   display: none;
 }
 
-/* The band the list's tabs stand in under its title, whose hairline is the
-   band's rather than the tabs'. */
-.inbox-show-tabs {
-  flex: none;
-  min-width: 0;
-  padding-block: var(--luke-space-6);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* Under a finger each tab is a finger's height. A row of them wider than
-   the list scrolls sideways (the fill bar's own), and a swipe that reaches
-   its end stops there rather than going on to the browser's Back. */
-@media (pointer: coarse) {
-  .inbox-show-tabs .luke-choice-bar[data-look="fill"][data-size="compact"] .luke-choice-bar-option {
-    height: var(--luke-touch-target);
-  }
-
-  .inbox-show-tabs .luke-choice-bar[data-look="fill"] {
-    overscroll-behavior-x: contain;
-  }
-}
-
-/* The chip saying whose items the list holds, under its tabs and over its
+/* The chip saying whose items the list holds, under its head and over its
    rows, on the rows' inset. */
 .inbox-tasks-chips {
   display: flex;
@@ -3178,6 +3153,132 @@ ul.actor-stack {
   display: inline-flex;
 }
 
+/* A task's card leads with where it stands (`task-card.tsx`): its key, its
+   status, and its priority, each a small chip of its mark and its words,
+   as the task page's head chips say them. */
+.task-card-standing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+}
+
+.task-card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  white-space: nowrap;
+}
+
+.task-card-chip > .luke-task-mark {
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+}
+
+.task-card-key {
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* An Inbox row's card, the thread's (`inbox-list.tsx`): where the item
+   stands in a caption, the attention ink while it waits on the reader; a
+   choice's options as quiet boxes, the recommended one tagged; a to-do's
+   steps, the ticked struck through. */
+.inbox-card-standing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-card-standing[data-needs-you="true"] {
+  color: var(--luke-color-attention);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.inbox-card-options,
+.inbox-card-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-card-options > li {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text);
+}
+
+.inbox-card-option {
+  min-width: 0;
+  flex: 1;
+}
+
+.inbox-card-recommended {
+  flex: none;
+  padding: 0 var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-attention-tint);
+  color: var(--luke-color-attention);
+}
+
+.inbox-card-steps > li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-6);
+  color: var(--luke-color-text);
+}
+
+.inbox-card-steps > li > svg {
+  flex: none;
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+  margin-top: 0.15em;
+  color: var(--luke-color-text-subtle);
+}
+
+.inbox-card-steps > li[data-done="true"] {
+  color: var(--luke-color-text-subtle);
+  text-decoration: line-through;
+}
+
+.inbox-card-steps > li[data-done="true"] > svg {
+  color: var(--luke-color-complete);
+}
+
+/* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's
+   glyph in the attention ink, or how it ended, led by a tick in the done
+   ink; words alone lead with nothing. The glyph sits on the words' line at
+   the caption's size, so a row with one and a row without line up. */
+.inbox-row-line > svg {
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+  margin-inline-end: var(--luke-space-4);
+  vertical-align: -0.125em;
+  color: var(--luke-color-attention);
+}
+
+.inbox-row-line[data-line="settled"] > svg {
+  color: var(--luke-color-complete);
+}
+
 .inbox-row-attention .attention-mark {
   width: 12px;
   height: 12px;
@@ -3267,11 +3368,15 @@ ul.actor-stack {
 }
 
 /* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
-   its writer's face in a column of its own, a list row's 20px, then its
-   name and when on one line and its words under it, and a line down from
-   the face to the next comment's, as an issue's timeline joins them. */
+   its writer's chip, their face and name as one target, and when on one
+   line, and its words under it, indented past a gutter a list row's 20px
+   wide. The chip stands out into the gutter, its 16px face centred on the
+   line that runs down through every comment's face, as an issue's
+   timeline joins them, so the face is the gutter's and is drawn once. */
 .inbox-thread {
   --inbox-face: 20px;
+  /* The chip's face, an actor's in a line (`ACTOR_SIZE.INLINE`). */
+  --inbox-mark: 16px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -3281,9 +3386,10 @@ ul.actor-stack {
 
 .inbox-comment {
   position: relative;
-  display: grid;
-  grid-template-columns: var(--inbox-face) minmax(0, 1fr);
-  column-gap: var(--luke-space-12);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-4);
   padding-bottom: var(--luke-space-20);
 }
 
@@ -3291,20 +3397,22 @@ ul.actor-stack {
   padding-bottom: 0;
 }
 
+/* The line runs from the comment's face down to the next one's, under it,
+   since each face's head stands over the line in a ring of the ground that
+   cuts the line short of the face. */
 .inbox-comment:not(:last-child)::before {
   position: absolute;
-  top: calc(var(--inbox-face) + var(--luke-space-6));
-  bottom: var(--luke-space-6);
+  top: calc(var(--inbox-face) / 2);
+  bottom: calc(var(--inbox-face) / -2);
   left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
-  border-radius: 1px;
   background: var(--luke-color-border);
   content: "";
 }
 
 /* Where a thread read is cut to its latest messages, a muted line in the
    comments' column says the earlier ones stand in the agent's tab, the line
-   down from the faces running on past it. */
+   down through the faces running on past it. */
 .inbox-thread-earlier {
   position: relative;
   padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-space-12));
@@ -3315,60 +3423,90 @@ ul.actor-stack {
 .inbox-thread-earlier::before {
   position: absolute;
   top: 0;
-  bottom: var(--luke-space-6);
-  left: 9px;
+  bottom: calc(var(--inbox-face) / -2);
+  left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
-  border-radius: 1px;
   background: var(--luke-color-border);
   content: "";
 }
 
-.inbox-comment-face {
-  display: flex;
-  height: var(--inbox-face);
-}
-
-.inbox-comment-main {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-}
-
+/* The head starts where its chip's face stands centred on the gutter's
+   line, and stands over the line the comment before draws into it. It
+   keeps to one row, so nothing after the chip wraps under it onto the
+   line: a narrow pane cuts the writer's name short first, and what is said
+   of when wraps beside the chip only once the name can give no more. */
 .inbox-comment-head {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   min-height: var(--inbox-face);
-  flex-wrap: wrap;
   align-items: center;
   column-gap: var(--luke-space-6);
+  margin-left: calc((var(--inbox-face) - var(--inbox-mark)) / 2);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
-/* The writer is named by name alone in the thread's own ink, since their
-   face already stands in the column beside it. */
+/* The writer is named by their chip in the thread's own ink, cut short
+   rather than run past a narrow pane. */
 .inbox-comment-name {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   color: var(--luke-color-text);
   font-size: var(--luke-type-label-size);
   font-weight: var(--luke-weight-medium);
 }
 
+/* The chip's face masks the line running through it with a ring of the
+   ground, as a facepile's faces are cut from it, so the line reads as
+   joining the faces. A bare square, or someone's outline, is filled with
+   the ground too, so the line never shows through its glyph; a member who
+   left keeps their own tile. */
+.inbox-comment-name .actor-mark {
+  box-shadow: 0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+.inbox-comment-name .actor-mark:not([data-left="true"]) {
+  background: var(--luke-color-ground);
+}
+
+.inbox-comment-name .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+/* Under the pointer the chip's wash runs on over the face's ring, so the
+   ring reads as the wash's own rather than a halo of the ground in it. */
+.inbox-comment-name .luke-inline-ref:hover .actor-mark {
+  box-shadow:
+    0 0 0 3px var(--luke-color-fill-hover),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+.inbox-comment-name .luke-inline-ref:hover .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 3px var(--luke-color-fill-hover),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
 .inbox-comment-when {
   display: inline-flex;
-  min-width: 0;
+  min-width: min-content;
   flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--luke-space-4);
 }
 
-/* A comment's words are set as a message's are, and clip what runs past
-   them as a message does, though not the keyboard's ring on an option laid
-   edge to edge in them. */
+/* A comment's words are set as a message's are, indented past the gutter
+   under the chip's name, and clip what runs past them as a message does,
+   though not the keyboard's ring on an option laid edge to edge in them. */
 .inbox-comment-body {
   display: flex;
+  margin-left: calc(var(--inbox-face) + var(--luke-space-12));
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-8);
@@ -3514,23 +3652,6 @@ ul.actor-stack {
   overflow-wrap: anywhere;
 }
 
-/* "Waiting on you" at an open ask's head, in the attention ink after its dot. */
-.inbox-waiting {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-attention);
-}
-
-.inbox-waiting::after {
-  order: -1;
-  width: 6px; /* off-scale: the attention dot */
-  height: 6px; /* off-scale: the attention dot */
-  border-radius: var(--luke-radius-full);
-  background: currentColor;
-  content: "";
-}
-
 /* A teammate's open ask names who it waits on in the line's own muted ink,
    as the list's Waiting on others does. */
 .inbox-waiting-on {
@@ -3583,10 +3704,10 @@ ul.actor-stack {
 }
 
 /* The ask closing the message that asks it, once it no longer waits: a
-   bordered card, its head the ask's kind and where it stands. Answered,
-   the card heads the reply that answered it with no head of its own, its
-   controls as the answer left them. A replaced or withdrawn ask is its
-   head alone, a replaced one struck through. */
+   bordered card, its head the ask's kind and where it stands. Once
+   answered, its controls alone head the reply that answered it, as the
+   answer left them, with no card around them. A withdrawn ask is its head
+   alone. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3615,12 +3736,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-medium);
 }
 
-.inbox-ask[data-inbox-ask="replaced"] .inbox-ask-kind {
-  color: var(--luke-color-text-muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--luke-color-text-subtle);
-}
-
 .inbox-ask-standing {
   display: inline-flex;
   min-width: 0;
@@ -3628,21 +3743,21 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
+/* An answered ask's controls stand in the reply itself, at its words' left
+   edge, a step further from the words under them than the reply's own gap
+   so the two do not run together. */
 .inbox-ask-answered {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-}
-
-.inbox-ask-body {
-  border-top: 1px solid var(--luke-color-border);
+  margin-bottom: var(--luke-space-4);
 }
 
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
-   complete ink. */
+   complete ink; a replaced ask with the same pill saying so, in the muted
+   ink alone. */
 .inbox-ask-settled {
   display: inline-flex;
   max-width: 100%;
@@ -3685,9 +3800,8 @@ ul.actor-stack {
 }
 
 /* An open ask's marker ending the agent's message (`inbox-pane.tsx`'s
-   AskMarker): a small pill saying whom it waits on, after a
-   dot in the attention ink where it waits on the reader, and the muted ink
-   where it waits on a teammate. */
+   AskMarker): a small pill saying which teammate it waits on, after a dot
+   in the muted ink. An ask waiting on the reader draws none. */
 .inbox-ask-marker {
   display: inline-flex;
   max-width: 100%;
@@ -3704,16 +3818,12 @@ ul.actor-stack {
 }
 
 .inbox-ask-marker::before {
-  width: 6px; /* off-scale: the attention dot */
-  height: 6px; /* off-scale: the attention dot */
+  width: 6px; /* off-scale: the marker's dot */
+  height: 6px; /* off-scale: the marker's dot */
   flex: none;
   border-radius: var(--luke-radius-full);
-  background: var(--luke-color-attention);
-  content: "";
-}
-
-.inbox-ask-marker[data-inbox-waiting="teammate"]::before {
   background: var(--luke-color-text-subtle);
+  content: "";
 }
 
 /* The reader's draft reply, the thread's last comment: the box stands in
@@ -3727,16 +3837,15 @@ ul.actor-stack {
   padding: 0;
 }
 
-/* The open question's controls at the top of the draft's card, over its
-   note, with no head of their own, since the agent's message says what it
-   asks; a hairline between them and the note. */
+/* The open question's controls as the draft's card's body, over its foot,
+   with no card, border, or head of their own, since the agent's message
+   says what it asks. */
 .inbox-draft-ask {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-4);
 }
 
 /* Put away with its task, the question stands in the agent's message as a
@@ -3747,14 +3856,6 @@ ul.actor-stack {
   background: var(--luke-color-overlay);
 }
 
-/* A thread's Reply names its chord after its words, in its own ink a step
-   quieter, since the button's fill is the text's own colour. */
-.inbox-answer-actions .luke-button .shortcut {
-  margin-left: var(--luke-space-6);
-
-  --shortcut-ink: color-mix(in srgb, currentColor 60%, transparent);
-}
-
 /* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
    and pager leave it, its crumbs giving way by their share. */
 .inbox-crumbs {
@@ -3763,10 +3864,18 @@ ul.actor-stack {
   flex: 0 1 auto;
 }
 
+/* Once the item's title joins the path, its last words (`inbox-pane.tsx`'s
+   `Crumbs`), the agent's crumb before it keeps its size, so a narrow bar cuts
+   the task's crumb short first and then the title. */
+.inbox-crumbs .luke-breadcrumbs li:has(+ li[data-words="true"]:last-child) {
+  flex-shrink: 0;
+}
+
 /* A settled item's foot, over its box: the next item that needs the
    developer as a card of one row (`inbox-pager.tsx`), led by its agent's
-   tile, then Next in the meta voice and its title in the unread weight, cut
-   short at the row's end, and J where J reaches it. */
+   tile, then Next in the meta voice, an arrow up where it lies above, and
+   its title in the unread weight, cut short at the row's end, and K or J
+   where that key reaches it. */
 .inbox-next-dock {
   padding-bottom: var(--luke-space-12);
 }
@@ -5082,7 +5191,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   list-style: none;
 }
 
-/* A message is laid out as an Inbox comment is (`.inbox-comment`): its
+/* A message is laid out as a comment thread is: its
    author's face in a column of its own at a list row's 20px, then their
    name and when on one line in the caption's muted ink, and the words under
    it at the reading measure's leading. */
@@ -5123,7 +5232,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* The author is named by name alone in the stream's own ink, their face
-   already standing beside it, as an Inbox comment's writer is. */
+   already standing beside it. */
 .chat-byline-name {
   display: flex;
   min-width: 0;
@@ -7617,8 +7726,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* New task's composer (`new-task-composer.tsx`): the agent box's own card
-   on the dialog's inset rather than a tab's foot, the reason Agent mode's
-   Start is held under it. */
+   on the dialog's inset rather than a tab's foot, the reason its Start is
+   held under it. */
 .new-task-composer {
   display: flex;
   min-width: 0;
@@ -7670,18 +7779,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* The foot's short chips stand whole, so the repository's name is what
    gives way, ellipsized, where the card is narrow. */
-:is(
-  .new-task-plan-toggle,
-  .new-task-composer .issue-picker-chip,
-  .new-task-composer .agent-model-chip
-) {
+:is(.new-task-composer .issue-picker-chip, .new-task-composer .agent-model-chip) {
   display: flex;
   flex-shrink: 0;
 }
 
 /* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: the Plan toggle and File for later draw
-   their marks alone (`new-task-composer.tsx`), the model chip's words are
+   round Start at the row's end: File for later draws its mark alone
+   (`new-task-composer.tsx`), the model chip's words are
    what give way, cut short, and the microphone stands in the row in place
    of a ⋯ that would hold it alone. */
 @container composer (max-width: 399px) {
@@ -8382,7 +8487,7 @@ button.tasks-board-card-press:focus-visible::after {
   flex: 1 1 auto;
 }
 
-/* The Tasks page (`tasks-page.tsx`), while the inbox-first sidebar is on: its
+/* The Tasks page (`tasks-page.tsx`): its
    List | Board switch stands beside its title, and the List runs its groups
    down the page, each headed as a Board's column is, its rows the page's
    own `ListRow`s led by the task's priority, key, and status. */

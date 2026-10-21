@@ -27,7 +27,7 @@
  * connections, and a name stored before a second account was possible is
  * the provider's own, which is its first account's. The accounts read are
  * the caller's, the member acting in the conversation, as the grant each
- * connection reads is (`../../integrations/integration-connection.ts`), so
+ * connection reads is (`../../integrations/integration-token.ts`), so
  * a mention of `notion-2` reaches the caller's own second account or none.
  * A provider with more than one account handed tells the model which each
  * is by its label alone, quoted as a string the label cannot step out of,
@@ -207,7 +207,7 @@ function providerConnections(
 /**
  * Whether the conversation's workspace connected Linear for every member,
  * standing connected or expired, so every member's Linear runs on its grant
- * (`../../integrations/integration-connection.ts`).
+ * (`../../integrations/integration-token.ts`).
  */
 const workspaceHoldsLinear = (conversationId: string) =>
   Effect.gen(function* () {

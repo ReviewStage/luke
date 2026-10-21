@@ -24,16 +24,17 @@
 
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
- * it is named (the desktop's `tasks/tab-look.tsx`): the task's Call, Inbox, and Chat, a
- * draft agent's tab and the "+" row that opens one, an agent the window holds
+ * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox and Chat, a
+ * draft agent's tab and the "+" row that opens one, the "+" row that starts a
+ * voice chat, an agent the window holds
  * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
-  CALL: "Call",
   INBOX: "Inbox",
   CHAT: "Chat",
-  NEW_AGENT: "New coding agent",
+  NEW_AGENT: "New agent",
+  NEW_VOICE_CHAT: "New voice chat",
   CODING_AGENT: "Coding agent",
   PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
@@ -186,10 +187,12 @@ export function isBrowserTab(tab: StripTab): tab is BrowserStripTab {
  * agent's latest step.
  */
 export function followedAgent(
-  tab: StripTab,
+  tab: StripTab | undefined,
   column: { readonly shown: boolean; readonly covered: boolean },
 ): string | undefined {
-  return column.shown && !column.covered && isAgentTab(tab) ? tab.agent : undefined;
+  return column.shown && !column.covered && tab !== undefined && isAgentTab(tab)
+    ? tab.agent
+    : undefined;
 }
 
 /**
@@ -197,14 +200,20 @@ export function followedAgent(
  * tab, or its Terminal tab, which is where a terminal command means that
  * agent (`terminal-entry.ts`); none for any other tab.
  */
-export function agentOfTab(tab: StripTab): string | undefined {
+export function agentOfTab(tab: StripTab | undefined): string | undefined {
+  if (tab === undefined) return undefined;
   if (isAgentTab(tab)) return tab.agent;
   if (isChangesTab(tab)) return tab.changes;
   return isTerminalTab(tab) ? tab.terminal : undefined;
 }
 
-/** Whether two tabs are the same tab. A delegated worker's call names it within its agent, as the service names its conversation, so its tab is the pair. */
-export function sameTab(a: StripTab, b: StripTab): boolean {
+/**
+ * Whether two tabs are the same tab. A delegated worker's call names it
+ * within its agent, as the service names its conversation, so its tab is the
+ * pair. No tab, as a column showing its plan has, is the same as none.
+ */
+export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boolean {
+  if (a === undefined || b === undefined) return false;
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
   if (isSubagentTab(a)) {
     return (

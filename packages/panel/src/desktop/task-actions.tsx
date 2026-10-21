@@ -1,8 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -28,7 +27,13 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
+import {
+  type Actor,
+  accountActor,
+  creatorActor,
+  personActor,
+  teammateCreator,
+} from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import {
   archiveAsks,
@@ -41,7 +46,7 @@ import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef, AssigneeHeard, CreatorHeard } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -63,7 +68,7 @@ import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
-import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -149,16 +154,54 @@ function placeActions(
   }));
 }
 
+/** One of a sidebar row's buttons at its end: what it says and runs, and the chord its tooltip names, where it has one. */
+export interface RowMark {
+  readonly key: string;
+  readonly label: string;
+  readonly icon: React.JSX.Element;
+  readonly onSelect: () => void;
+  readonly command?: KeyedCommand | undefined;
+}
+
 /**
- * Pin and Archive at a sidebar row's end, standing in the time's place while
- * the row is hovered or reached from the keyboard. Rested on, the row hangs
- * the task's card beside it (`task-card.tsx`): its name in full, its
- * repository, and its agents and pull requests, read from the list's row. Each runs what its menu
- * item runs, and only the open task's Archive names ⇧⌘A, because the chord
- * archives the open task rather than the row under the pointer. They are the
- * row's siblings rather than inside it, so a press on one opens nothing, but
- * part of the row to its card, which stands while the pointer is on them and
- * goes as one is pressed (`Tooltip`'s `cardRegion`).
+ * A sidebar row's buttons at its end, standing in the time's place while
+ * the row is hovered or reached from the keyboard: a task's and an agent's
+ * row alike draw their Pin and Archive here. They are the row's siblings
+ * rather than inside it, so a press on one opens nothing, but part of the
+ * row to its card, which stands while the pointer is on them and goes as
+ * one is pressed (`Tooltip`'s `cardRegion`).
+ */
+export function RowMarks({
+  marks,
+  disabled = false,
+}: {
+  marks: readonly RowMark[];
+  disabled?: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      {marks.map(({ key, label, icon, onSelect, command }) => (
+        <Tooltip key={key} label={label} {...(command === undefined ? undefined : { command })}>
+          <IconButton
+            icon={icon}
+            label={label}
+            size={BUTTON_SIZE.COMPACT}
+            disabled={disabled}
+            onClick={onSelect}
+          />
+        </Tooltip>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Pin and Archive at a task's sidebar row's end (`RowMarks`). Rested on,
+ * the row hangs the task's card beside it (`task-card.tsx`): its name in
+ * full, its repository, and its agents and pull requests, read from the
+ * list's row. Each runs what its menu item runs, and only the open task's
+ * Archive names ⇧⌘A, because the chord archives the open task rather than
+ * the row under the pointer.
  */
 function SidebarTaskMarks({
   tasks,
@@ -174,25 +217,16 @@ function SidebarTaskMarks({
   /** Archives the task as its menu's Archive does, asking first where it must. */
   onArchive: () => void;
 }): React.JSX.Element {
-  return (
-    <>
-      {placeMarks(task).map(({ mark, label, icon }) => (
-        <Tooltip
-          key={mark}
-          label={label}
-          {...(current && mark === TASK_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_TASK } : {})}
-        >
-          <IconButton
-            icon={icon}
-            label={label}
-            size={BUTTON_SIZE.COMPACT}
-            disabled={disabled}
-            onClick={mark === TASK_MARK.ARCHIVE ? onArchive : () => tasks.onMarkTask(task.id, mark)}
-          />
-        </Tooltip>
-      ))}
-    </>
+  const marks = placeMarks(task).map(
+    ({ mark, label, icon }): RowMark => ({
+      key: mark,
+      label,
+      icon,
+      onSelect: mark === TASK_MARK.ARCHIVE ? onArchive : () => tasks.onMarkTask(task.id, mark),
+      command: current && mark === TASK_MARK.ARCHIVE ? APP_COMMAND.ARCHIVE_TASK : undefined,
+    }),
   );
+  return <RowMarks marks={marks} disabled={disabled} />;
 }
 
 /**
@@ -389,10 +423,9 @@ export function useTaskMenu(
   // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
   const place = useRowPlace();
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
-  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
-    sectionsOn && task !== undefined && task.archivedAt === undefined
+    task !== undefined && task.archivedAt === undefined
       ? moveToSectionEntry(tasks, task, sections.askNew)
       : undefined;
   const menu =
@@ -498,6 +531,49 @@ export function TaskActions({
 }
 
 /**
+ * Which faces a row may wear: its creator's, which a list holding one
+ * creator's tasks or grouped by creator already says, and its assignee's,
+ * which a list holding the tasks assigned to one member already says.
+ */
+export interface RowFaces {
+  readonly creator: boolean;
+  readonly assignee: boolean;
+}
+
+/** Every face a row may wear, as a list naming nobody draws it. */
+const EVERY_FACE: RowFaces = { creator: true, assignee: true };
+
+/** The face a task's row wears, and whether it is its assignee's rather than its creator's. */
+interface RowFace {
+  readonly actor: Actor;
+  readonly assigned: boolean;
+}
+
+/**
+ * Who a task's row names by face: the member it is assigned to where that
+ * is someone other than the reader, nobody where it is the reader, and on a
+ * task no one is assigned to, whoever else created it (`teammateCreator`);
+ * each only where `faces` lets the row wear that kind, the list saying it
+ * already otherwise.
+ */
+function rowFaceOf(
+  task: TaskSummary,
+  reader: ReturnType<typeof useMemberDirectory>,
+  faces: RowFaces,
+): RowFace | undefined {
+  const { assignee } = task;
+  if (assignee === undefined) {
+    const creator = faces.creator ? teammateCreator(task, reader) : undefined;
+    return creator === undefined ? undefined : { actor: creator, assigned: false };
+  }
+  if (assignee.userId === reader.readerId || !faces.assignee) return undefined;
+  return {
+    actor: personActor(assignee, reader.members, reader.readerId, reader.former),
+    assigned: true,
+  };
+}
+
+/**
  * A task in the sidebar, pinned, listed, or archived alike: led by its
  * status's mark (`task-marks.tsx`), where its service gives it one; its name, in the
  * body's weight unless the task is unread, and at the row's end how long ago
@@ -505,10 +581,12 @@ export function TaskActions({
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
  * the first named in the row's card, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
- * their own words (`draft-mark.tsx`), and before that, on a task
- * someone else created, its creator's face (`teammateCreator`), read against
- * the members of the directory around the list; the reader's own tasks wear
- * none. Its repository's name, muted, where the list hands one (in one run),
+ * their own words (`draft-mark.tsx`), and before that the face of who
+ * is on it (`rowFaceOf`): its assignee's, where someone other than the
+ * reader is assigned, or, on a task no one is assigned to, the face of
+ * whoever else created it (`teammateCreator`), each read against the members
+ * of the directory around the list; a task assigned to the reader, and the
+ * reader's own task no one is on, wear none. Its repository's name, muted, where the list hands one (in one run),
  * and no face where its group is its creator's. Its time is the one the
  * list's order chooses. Pin
  * and Archive stand in place of all of it while the row is hovered or
@@ -527,7 +605,7 @@ export function SidebarTask({
   now,
   at = task.updatedAt,
   repository,
-  face = true,
+  faces = EVERY_FACE,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -544,8 +622,8 @@ export function SidebarTask({
   at?: number;
   /** The repository's name the row says, muted before its time, where the list hands one. */
   repository?: string | undefined;
-  /** Whether a teammate's task wears its creator's face, which a group by creator says instead. */
-  face?: boolean;
+  /** Which faces the row may wear (`rowFaceOf`): a group by creator, or a filter by person, says the one it names instead. */
+  faces?: RowFaces;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -554,8 +632,7 @@ export function SidebarTask({
     drawn: true,
     unread,
   });
-  const teammate = teammateCreator(task, useMemberDirectory());
-  const creator = face ? teammate : undefined;
+  const worn = rowFaceOf(task, useMemberDirectory(), faces);
   const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
@@ -599,7 +676,11 @@ export function SidebarTask({
               <>
                 {task.name}
                 {unread ? <span className="visually-hidden">(unread)</span> : null}
-                {creator === undefined ? null : <CreatorHeard actor={creator} />}
+                {worn === undefined ? null : worn.assigned ? (
+                  <AssigneeHeard actor={worn.actor} />
+                ) : (
+                  <CreatorHeard actor={worn.actor} />
+                )}
               </>
             )
           }
@@ -610,8 +691,8 @@ export function SidebarTask({
                 {repository === undefined ? null : (
                   <FadingWords className="sidebar-task-repository" words={repository} />
                 )}
-                {creator === undefined ? null : (
-                  <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+                {worn === undefined ? null : (
+                  <ActorMark actor={worn.actor} size={ACTOR_SIZE.MARK} />
                 )}
                 {drafted ? <DraftMark /> : null}
                 <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />

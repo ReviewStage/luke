@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAutomationClient,
   HostedCodingAgentClient,
@@ -29,6 +30,7 @@ import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
+import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeFactory } from "./compose-factory.js";
 import { composeIntegrations } from "./compose-integrations.js";
@@ -48,6 +50,7 @@ import {
   type Environment,
   Reporter,
   ShutdownSignal,
+  SignInConsent,
   TerminalSocket,
   VoiceSocket,
 } from "./effect/seams.js";
@@ -98,6 +101,7 @@ interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
+  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
 
 /**
@@ -133,6 +137,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // the live composer reads the open task, and hands it the task's drafts
     // and their activity, through these late bindings.
     let activeTaskId: () => string | undefined = () => undefined;
+    let agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
+      Effect.succeed(undefined);
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
     let taskCallEnded: (taskId: string) => void = () => undefined;
@@ -142,6 +148,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       settings,
       account,
       activeTaskId: () => activeTaskId(),
+      agentTaskOf: (agentId) => agentTaskOf(agentId),
       showPlanDraft: (draft) => showPlanDraft(draft),
       showTaskActivity: (activity) => showTaskActivity(activity),
       taskCallEnded: (taskId) => taskCallEnded(taskId),
@@ -157,9 +164,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
     });
+    /** The account signed in now, by its id, which every live read names. */
+    const accountId = () => {
+      const signedIn = account.session.snapshot();
+      return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
+    };
     const tasks = yield* composeTasks({
       kernel,
       account,
+      accountId,
       endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
         new HostedTaskClient({
@@ -180,6 +193,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
+      accountId,
       client: codingAgentClient,
     });
     const automations = yield* composeAutomations({
@@ -216,6 +230,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       ? yield* composeMacCommands({
           kernel,
           account,
+          accountId,
           enabled: Effect.map(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
@@ -240,7 +255,16 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           openSocket: yield* TerminalSocket,
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
+    const chatGptSignIn = platform.has(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN)
+      ? yield* composeChatGptSignIn({
+          kernel,
+          account,
+          client: codingAgentClient,
+          openConsent: (yield* SignInConsent).open,
+        })
+      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
     activeTaskId = tasks.activeTaskId;
+    agentTaskOf = codingAgents.agentTaskOf;
     showPlanDraft = tasks.showDraft;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
@@ -267,6 +291,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* tasks.reset;
       yield* codingAgents.reset;
       yield* terminals.reset;
+      yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -301,6 +326,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
+      [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     // Note that the platform concerns are the only ones a host may leave out.
     const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);

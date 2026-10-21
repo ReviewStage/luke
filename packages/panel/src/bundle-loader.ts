@@ -3,7 +3,7 @@ import type { DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import type * as Atom from "effect/reactivity/Atom";
-import { createContext, useCallback, useContext } from "react";
+import { createContext, useCallback, useContext, useEffect } from "react";
 import type { DiffViewModule } from "./diff-view/contract.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
 import type { PlanEditorModule } from "./plan-editor/contract.js";
@@ -161,4 +161,18 @@ export function usePrefetchEditorBundle(): () => void {
   return useCallback(() => {
     registry.get(planEditor);
   }, [registry, planEditor]);
+}
+
+/**
+ * Starts the diff bundle loading once `due`, where it has not started
+ * already: a call standing on the open task, where each snippet Luke shows
+ * lands as a Code tab card the bundle draws (`tasks/code-snippet.tsx`), so
+ * the first card draws its lines without waiting on the bundle's import.
+ */
+export function usePrefetchDiffBundle(due: boolean): void {
+  const registry = useContext(RegistryContext);
+  const { diffView } = useSideBundles();
+  useEffect(() => {
+    if (due) registry.get(diffView);
+  }, [due, registry, diffView]);
 }

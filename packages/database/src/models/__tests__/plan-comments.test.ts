@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -16,12 +17,14 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { readPlanAttachment } from "../plan-attachments.js";
 import {
   actOnPlanCommentThread,
   movePlanCommentAnchors,
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   type PlanCommentWriterRef,
+  readPlanCommentFile,
   readPlanCommentThreads,
   startPlanCommentThread,
 } from "../plan-comments.js";
@@ -33,7 +36,9 @@ import { createTask, savePlanText } from "../task-store.js";
  * they were started on, carried with those words through every save, left
  * with their quote where the words are deleted and anchored again where the
  * editor's undo reports them back, answered, resolved, and reopened by any
- * member, and a comment edited or deleted only by its writer.
+ * member, and a comment edited or deleted only by its writer. A comment's
+ * files are kept with it, read by every member and nobody else, and go
+ * with it.
  *
  * Synthetic accounts and plans throughout.
  */
@@ -416,5 +421,66 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         PLAN_COMMENT_OUTCOME.NO_THREAD,
       );
     }),
+  );
+
+  it.effect(
+    "a comment's files are named on its entry in order, read by every member and nobody else, and go with the comment",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, outsider, taskId } = yield* openSharedTask;
+        const notes = new TextEncoder().encode("expiry: 7 days\n");
+        const started = threadOf(
+          yield* startPlanCommentThread(member(teammate), taskId, {
+            ...startOn(PLAN_TEXT, "seven days", "See the attached."),
+            attachments: [
+              {
+                name: "expiry.txt",
+                mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+                data: Buffer.from(notes).toString("base64"),
+              },
+              {
+                name: "flow.pdf",
+                mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF,
+                data: Buffer.from("%PDF-1.4\n").toString("base64"),
+              },
+            ],
+          }),
+        );
+        const reply = threadOf(
+          yield* actOnPlanCommentThread(member(owner), taskId, started.id, {
+            action: PLAN_COMMENT_ACTION.REPLY,
+            clientKey: randomUUID(),
+            words: "No files here.",
+          }),
+        );
+
+        const read = yield* readOne(owner, taskId);
+        const [first, second] = read?.entries ?? [];
+        assert.deepEqual(
+          first?.files?.map((file) => [file.name, file.mediaType]),
+          [
+            ["expiry.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
+            ["flow.pdf", CODING_AGENT_ATTACHMENT_TYPE.PDF],
+          ],
+        );
+        assert.equal(second?.files, undefined);
+        const fileId = first?.files?.[0]?.attachmentId;
+        assert.ok(fileId !== undefined);
+
+        const kept = Option.getOrThrow(yield* readPlanCommentFile(owner, taskId, fileId));
+        assert.equal(kept.contentType, CODING_AGENT_ATTACHMENT_TYPE.TEXT);
+        assert.deepEqual([...kept.bytes], [...notes]);
+        assert.ok(Option.isNone(yield* readPlanCommentFile(outsider, taskId, fileId)));
+        // A comment's file is no picture of the plan's.
+        assert.ok(Option.isNone(yield* readPlanAttachment(owner, taskId, fileId)));
+
+        assert.deepEqual(
+          yield* actOnPlanCommentThread(member(teammate), taskId, reply.id, {
+            action: PLAN_COMMENT_ACTION.DELETE_THREAD,
+          }),
+          { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: reply.id } },
+        );
+        assert.ok(Option.isNone(yield* readPlanCommentFile(owner, taskId, fileId)));
+      }),
   );
 });

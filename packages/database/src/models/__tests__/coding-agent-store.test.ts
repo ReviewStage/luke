@@ -6,6 +6,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -18,6 +19,7 @@ import {
   MESSAGE_ROLE,
   TURN_ORIGIN,
   TURN_STATUS,
+  type TurnStatus,
 } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
@@ -34,7 +36,7 @@ import {
   CONVERSATION_RUNTIME,
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, linearIssueLink } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, leaveWorkspace, linearIssueLink } from "../../testing/index.js";
 import { VOICE_DELEGATION_MODE } from "../../voice-vocabulary.js";
 import {
   archiveCodingAgent,
@@ -62,6 +64,8 @@ import {
   readCodingAgent,
   readCodingAgentPublished,
   readCodingAgentRouting,
+  readNativeRunStanding,
+  readRunnerTokenConversation,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
@@ -1439,7 +1443,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
   const said = (line: CodingAgentLine) => ({
     id: line.id,
     title: line.title,
-    handedPrompt: line.handedPrompt,
+    brief: line.brief,
     automationName: line.automationName,
     startedFrom: line.startedFrom,
     text: ["planSnapshot", "prompt", "automationOrigin"].filter((column) => column in line),
@@ -1505,7 +1509,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           snapshotted: {
             id: snapshotted.id,
             title: "Invite emails",
-            handedPrompt: false,
+            brief: CODING_AGENT_BRIEF.PLAN,
             automationName: null,
             startedFrom: null,
             text: [],
@@ -1513,7 +1517,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           continued: {
             id: continued.id,
             title: null,
-            handedPrompt: true,
+            brief: CODING_AGENT_BRIEF.PROMPT,
             automationName: null,
             startedFrom: source,
             text: [],
@@ -1521,7 +1525,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           run: {
             id: run.id,
             title: null,
-            handedPrompt: true,
+            brief: CODING_AGENT_BRIEF.PROMPT,
             automationName: "Nightly triage",
             startedFrom: null,
             text: [],
@@ -1550,7 +1554,11 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           prompt: _prompt,
           ...rest
         } = whole;
-        const expected = { ...rest, automationName: "Nightly triage", handedPrompt: true };
+        const expected = {
+          ...rest,
+          automationName: "Nightly triage",
+          brief: CODING_AGENT_BRIEF.PROMPT,
+        };
         const [listed] = yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 1 });
         assert.deepEqual(listed, expected);
         assert.deepEqual(codingAgentLineOf(whole), expected);
@@ -1597,9 +1605,10 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
         );
         const lines = yield* listCodingAgentLines(teammate, task.id);
         assert.deepEqual(
-          lines.map((line) => [line.id, line.repository, line.handedPrompt]),
-          [[agent.id, null, false]],
+          lines.map((line) => [line.id, line.repository, line.brief]),
+          [[agent.id, null, CODING_AGENT_BRIEF.BLANK]],
         );
+        assert.equal(codingAgentLineOf(read).brief, CODING_AGENT_BRIEF.BLANK);
         const [stored] = yield* Database.use((db) =>
           db
             .select({ repositories: codingAgent.repositories })
@@ -1693,6 +1702,51 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   );
 
   it.effect(
+    "a runner's bearer digest finds the agent's conversation under its starter until it is retired, and another digest finds none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-held");
+
+        const held = yield* readRunnerTokenConversation("digest-held");
+        const other = yield* readRunnerTokenConversation("digest-other");
+        yield* recordCodingAgentRunnerToken(starter, agent.id, null);
+        const retired = yield* readRunnerTokenConversation("digest-held");
+
+        assert.deepEqual(Option.getOrThrow(held), {
+          userId: starter,
+          conversationId: agent.conversationId,
+          runtimeSessionId: null,
+        });
+        assert.ok(Option.isNone(other));
+        assert.ok(Option.isNone(retired));
+      }),
+  );
+
+  it.effect(
+    "a runner's bearer digest finds nothing once its starter left the agent's workspace",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-departed");
+
+        yield* leaveWorkspace(workspace, starter);
+
+        assert.ok(Option.isNone(yield* readRunnerTokenConversation("digest-departed")));
+      }),
+  );
+
+  it.effect(
     "an agent started with neither named runs on eve with no payer, and one from before the columns reads as eve too",
     () =>
       Effect.gen(function* () {
@@ -1715,6 +1769,79 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           Option.getOrThrow(yield* readCodingAgentRouting(starter, older)),
           expected,
         );
+      }),
+  );
+
+  it.effect(
+    "a native agent's run reads as ended once its newest turn ends, never while one is queued or running, and an eve, deleted, or unknown agent reads as none",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const claude = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const codex = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        const eve = yield* startIn(starter, workspace, {});
+        const deleted = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const settledAt = new Date(Date.UTC(2026, 9, 14, 12));
+        const turnOf = (conversationId: string, status: TurnStatus, at: Date) =>
+          db.insert(turns).values({
+            userId: starter,
+            conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status,
+            queuedAt: at,
+            settledAt: status === TURN_STATUS.RUNNING ? null : at,
+          });
+        for (const agent of [eve, deleted]) {
+          yield* turnOf(agent.conversationId, TURN_STATUS.SETTLED, settledAt);
+        }
+        yield* db
+          .update(conversations)
+          .set({ deletedAt: settledAt })
+          .where(eq(conversations.id, deleted.conversationId));
+
+        const beforeAnyTurn = yield* readNativeRunStanding(claude.id);
+        yield* turnOf(claude.conversationId, TURN_STATUS.SETTLED, settledAt);
+        yield* turnOf(codex.conversationId, TURN_STATUS.CANCELLED, settledAt);
+        const ended = yield* readNativeRunStanding(claude.id);
+        const cancelled = yield* readNativeRunStanding(codex.id);
+        yield* turnOf(
+          claude.conversationId,
+          TURN_STATUS.RUNNING,
+          new Date(settledAt.getTime() + 1),
+        );
+        const running = yield* readNativeRunStanding(claude.id);
+
+        assert.deepEqual(Option.getOrThrow(beforeAnyTurn), {
+          conversationId: claude.conversationId,
+          endedAt: null,
+        });
+        assert.deepEqual(Option.getOrThrow(ended), {
+          conversationId: claude.conversationId,
+          endedAt: settledAt,
+        });
+        assert.deepEqual(Option.getOrThrow(cancelled), {
+          conversationId: codex.conversationId,
+          endedAt: settledAt,
+        });
+        assert.deepEqual(Option.getOrThrow(running), {
+          conversationId: claude.conversationId,
+          endedAt: null,
+        });
+        assert.ok(Option.isNone(yield* readNativeRunStanding(eve.id)));
+        assert.ok(Option.isNone(yield* readNativeRunStanding(deleted.id)));
+        assert.ok(Option.isNone(yield* readNativeRunStanding(randomUUID())));
+        assert.ok(Option.isNone(yield* readNativeRunStanding("not-an-agent-id")));
       }),
   );
 

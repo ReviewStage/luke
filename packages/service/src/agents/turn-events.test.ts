@@ -9,7 +9,7 @@ import type { ToolSet } from "ai";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "../core.js";
+import { BRAIN_RUN_EVENT, SLOW_STEP_KIND, TURN_STATUS } from "../core.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
@@ -150,6 +150,7 @@ async function projected(
   userId: string,
   turnId: string,
   tools: ToolSet = HOSTED_TOOL_SET,
+  joinedAfterStep?: number,
 ): Promise<readonly TurnEvent[]> {
   const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.ok(turn);
@@ -157,7 +158,43 @@ async function projected(
     database.store.messages.byClientId(userId, turn.conversationId, tools, turn.id),
   );
   assert.ok(journal.ok);
-  return projectTurnEvents(turn, journal.value[0]?.message);
+  return projectTurnEvents(turn, journal.value[0]?.message, joinedAfterStep);
+}
+
+/** One step of an agent's coding turn as eve emits it: words, then a shell command and its answer. */
+function codingStep(turnId: string, stepIndex: number, words: string): MessageStreamEvent[] {
+  const step = { turnId, sequence: 0, stepIndex };
+  const callId = `call-${stepIndex}`;
+  return [
+    stamped({ type: "step.started", data: { ...step, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: { ...step, finishReason: "tool-calls", message: words },
+    }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        ...step,
+        actions: [
+          { kind: "tool-call", callId, toolName: AGENT_TOOL.BASH, input: { command: "pnpm test" } },
+        ],
+      },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        ...step,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId,
+          toolName: AGENT_TOOL.BASH,
+          output: { status: "completed", exitCode: 0, stdout: "ok\n", stderr: "" },
+        },
+      },
+    }),
+    stamped({ type: "step.completed", data: { ...step, finishReason: "tool-calls" } }),
+  ];
 }
 
 function kinds(events: readonly TurnEvent[]): readonly string[] {
@@ -228,6 +265,61 @@ test("an agent's turn a call follows is projected under the agent's tools, its s
     TURN_EVENT_KIND.REPLY_SENTENCE,
     TURN_EVENT_KIND.ENDED,
   ]);
+});
+
+test("a spoken ask that joined an agent's typed turn after its first step hears that turn from the next step on alone: the answer's words, never the turn's earlier ones nor the work it goes back to, and its run ends once the step after the answer began, the turn still running", async () => {
+  const agentRelay = new StreamRelay({
+    writer: await database.run(storeWriter({ tools: CODER_TOOL_SET })),
+    asks: { binding: askRecord(), stopTurn: () => Effect.void },
+    now: () => NOW,
+    report: () => undefined,
+  });
+  const target = await conversation();
+  const standing = { ...standingFor(target), turn: BRAIN_HOST_TURN.TYPED };
+  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
+  const sequence = 0;
+  await play(
+    [
+      stamped({ type: "turn.started", data: { turnId: EVE_TURN, sequence } }),
+      stamped({
+        type: "message.received",
+        data: { turnId: EVE_TURN, sequence, message: "Build the invites." },
+      }),
+      ...codingStep(EVE_TURN, 0, "I am rewriting the mailer first."),
+      stamped({
+        type: "message.received",
+        data: { turnId: EVE_TURN, sequence, message: "The developer asked how far along it is." },
+      }),
+      ...codingStep(EVE_TURN, 1, "Halfway through the mailer."),
+    ],
+    standing,
+    agentRelay,
+  );
+  const settled = TURN_EVENT_KIND.ACTIONS_SETTLED;
+  const answer = { kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence: "Halfway through the mailer." };
+
+  // The answering step is the last on the journal: its words are told, and nothing of its own work.
+  const answering = await projected(target.userId, turnId, CODER_TOOL_SET, 1);
+  assert.deepEqual(answering, [
+    { turnId, seq: 1, kind: settled },
+    { turnId, seq: 2, ...answer },
+  ]);
+  // The whole turn, as a line of its own kind hears it, holds the earlier words the call never hears.
+  assert.ok(
+    (await projected(target.userId, turnId, CODER_TOOL_SET)).some(
+      (event) =>
+        event.kind === TURN_EVENT_KIND.REPLY_SENTENCE &&
+        event.sentence === "I am rewriting the mailer first.",
+    ),
+  );
+
+  await play(codingStep(EVE_TURN, 2, "The tests pass."), standing, agentRelay);
+  assert.deepEqual(await projected(target.userId, turnId, CODER_TOOL_SET, 1), [
+    ...answering,
+    { turnId, seq: 3, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED },
+  ]);
+  const [turn] = await database.run(database.store.turns.named(target.userId, [turnId]));
+  assert.equal(turn?.status, TURN_STATUS.RUNNING);
 });
 
 test("a plan save Luke started holds back no sentence of his: the turn goes on being said while the save runs as a task", async () => {

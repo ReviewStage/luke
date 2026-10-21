@@ -2,9 +2,11 @@ import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_PAYER,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
+  type CodingAgentBrief,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
@@ -200,15 +202,15 @@ export interface CodingAgent {
  * One coding agent as a list line reads it (`CODING_AGENT_LINE_COLUMNS`):
  * the agent without what it was handed, the plan's text or the developer's
  * prompt, and without the run that started it, which only its own page and
- * its own turns read; whether it was handed a prompt, which its tab's brief
- * is drawn from, and its automation's name stand in their place.
+ * its own turns read; which of the two it was handed, or neither, which its
+ * tab's brief is drawn from, and its automation's name stand in their place.
  */
 export interface CodingAgentLine
   extends Omit<CodingAgent, "automationOrigin" | "planSnapshot" | "prompt"> {
   /** The name of the automation whose run started the agent, as it stood then; null for one started by hand. */
   readonly automationName: string | null;
-  /** Whether the agent was handed the developer's prompt rather than the plan. */
-  readonly handedPrompt: boolean;
+  /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
+  readonly brief: CodingAgentBrief;
 }
 
 /** One agent with no plan as the sidebar lists it for its reader: the agent's line, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
@@ -360,7 +362,11 @@ const CODING_AGENT_LINE_COLUMNS = {
   model: codingAgent.model,
   effort: codingAgent.effort,
   contextWindow: codingAgent.contextWindow,
-  handedPrompt: sql<boolean>`${codingAgent.prompt} is not null`,
+  brief: sql<CodingAgentBrief>`case
+    when ${codingAgent.prompt} is not null then ${CODING_AGENT_BRIEF.PROMPT}
+    when ${codingAgent.planSnapshot} is not null then ${CODING_AGENT_BRIEF.PLAN}
+    else ${CODING_AGENT_BRIEF.BLANK}
+  end`,
   repository: codingAgent.repository,
   branch: codingAgent.branch,
   startBranch: codingAgent.startBranch,
@@ -373,13 +379,21 @@ const CODING_AGENT_LINE_COLUMNS = {
   createdAt: codingAgent.createdAt,
 } as const;
 
+/** What an agent was handed as its first message, as `CODING_AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
+export function codingAgentBriefOf(
+  agent: Pick<CodingAgent, "planSnapshot" | "prompt">,
+): CodingAgentBrief {
+  if (agent.prompt !== null) return CODING_AGENT_BRIEF.PROMPT;
+  return agent.planSnapshot === null ? CODING_AGENT_BRIEF.BLANK : CODING_AGENT_BRIEF.PLAN;
+}
+
 /** The line a full read of an agent draws, as `CODING_AGENT_LINE_COLUMNS` reads it from the row. */
 export function codingAgentLineOf(agent: CodingAgent): CodingAgentLine {
-  const { automationOrigin, planSnapshot: _planSnapshot, prompt, ...line } = agent;
+  const { automationOrigin, planSnapshot: _planSnapshot, prompt: _prompt, ...line } = agent;
   return {
     ...line,
     automationName: automationOrigin?.name ?? null,
-    handedPrompt: prompt !== null,
+    brief: codingAgentBriefOf(agent),
   };
 }
 
@@ -479,7 +493,7 @@ const {
 const CodingAgentLineRowSchema = Schema.Struct({
   ...LINE_ROW_FIELDS,
   automationName: Schema.NullOr(Schema.String),
-  handedPrompt: Schema.Boolean,
+  brief: Schema.Literals(Object.values(CODING_AGENT_BRIEF)),
 });
 
 /** An agent's line with the reader's own pin beside it; null where they hold none. */
@@ -905,6 +919,94 @@ const updateAgentNativeSession = SqlSchema.findAll({
         .set({ nativeSession })
         .where(reachableAgentConversation(userId, agentId))
         .returning({ id: conversations.id }),
+    ),
+});
+
+/**
+ * The coding agent's conversation whose runner holds the bearer of this
+ * digest, read with no account in hand, because the digest is what admits
+ * the runner; a deleted conversation is found by none.
+ */
+const findRunnerTokenConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ runnerTokenHash: Schema.String }),
+  Result: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    runtimeSessionId: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ runnerTokenHash }) =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: conversations.userId,
+          conversationId: conversations.id,
+          runtimeSessionId: conversations.runtimeSessionId,
+        })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.runnerTokenHash, runnerTokenHash),
+            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/** The runtimes whose sandbox Luke opens itself, with a runner in it: the native harnesses. */
+const NATIVE_RUNTIMES = [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX] as const;
+
+/** The turn statuses a turn ends in; a queued or running one has not ended. */
+const ENDED_TURN_STATUSES = [
+  TURN_STATUS.SETTLED,
+  TURN_STATUS.CANCELLED,
+  TURN_STATUS.FAILED,
+] as const;
+
+/** A sandbox's agent id as its tag spells it, before a query takes it as a `uuid`. */
+const AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/**
+ * The conversation of the agent under this id, where it stands undeleted on a
+ * native harness, read with no account in hand, because the sweep that asks
+ * acts for every account at once.
+ */
+const findNativeAgentConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: conversations.id })
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(
+          and(
+            eq(codingAgent.id, agentId),
+            inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/** The conversation's newest turn: where it stands, and when it settled. */
+const findNewestTurnStanding = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({
+    status: Schema.String,
+    settledAt: Schema.NullOr(InstantColumnSchema),
+  }),
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ status: turns.status, settledAt: turns.settledAt })
+        .from(turns)
+        .where(eq(turns.conversationId, conversationId))
+        .orderBy(desc(turns.queuedAt), desc(turns.id))
+        .limit(1),
     ),
 });
 
@@ -2192,6 +2294,67 @@ export function recordCodingAgentRunnerToken(
     updateAgentRunnerToken({ userId, agentId, runnerTokenHash }),
     (rows) => rows.length > 0,
   );
+}
+
+/** A coding agent's conversation, as the runner whose bearer has this digest reaches it. */
+export interface RunnerTokenConversation {
+  /** The account that started the agent and opened its conversation, which the runner's tools act as. */
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly runtimeSessionId: string | null;
+}
+
+/**
+ * The coding agent's conversation whose runner was handed the bearer of this
+ * digest (`recordCodingAgentRunnerToken`), where its starter still reaches the
+ * agent; nothing for a digest no standing conversation holds, a retired
+ * bearer's among them, and nothing once the starter left the agent's
+ * workspace, since the runner acts as them.
+ */
+export function readRunnerTokenConversation(
+  runnerTokenHash: string,
+): CodingAgentStoreEffect<Option.Option<RunnerTokenConversation>> {
+  return Effect.gen(function* () {
+    const found = yield* findRunnerTokenConversation({ runnerTokenHash });
+    if (Option.isNone(found)) return found;
+    const { userId, conversationId } = found.value;
+    const agent = yield* findAgentOfConversation({ userId, conversationId });
+    return Option.isSome(agent) ? found : Option.none();
+  });
+}
+
+/** Where a native agent's run stands, as the sweep reads it from its sandbox's agent tag. */
+export interface NativeRunStanding {
+  /** The agent's conversation, which a Terminal's lease is held on. */
+  readonly conversationId: string;
+  /** When its newest turn ended; null while that turn is queued or running (a runner waiting on a wakeup among it), or before it has any turn. */
+  readonly endedAt: Date | null;
+}
+
+/**
+ * Where the run of the agent under this id stands, read with no account in
+ * hand, because the scheduled sweep stops ended native sandboxes for every
+ * account: its conversation, and when its newest turn ended. Nothing for an
+ * id that names no agent, an agent on eve, or one whose conversation was
+ * deleted. Only for an id a sandbox Luke opened carries; it answers nothing
+ * a member wrote.
+ */
+export function readNativeRunStanding(
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<NativeRunStanding>> {
+  return Effect.gen(function* () {
+    if (!AGENT_ID_PATTERN.test(agentId)) return Option.none();
+    const found = yield* findNativeAgentConversation({ agentId });
+    if (Option.isNone(found)) return Option.none();
+    const { conversationId } = found.value;
+    const newest = yield* findNewestTurnStanding({ conversationId });
+    const ended = Option.filter(newest, (turn) =>
+      ENDED_TURN_STATUSES.some((status) => status === turn.status),
+    );
+    // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
+    const endedAt = Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
+    return Option.some({ conversationId, endedAt });
+  });
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */

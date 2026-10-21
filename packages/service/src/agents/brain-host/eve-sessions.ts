@@ -217,9 +217,32 @@ export const EVE_SEND_OUTCOME = {
   FAILED: "failed",
 } as const;
 
+/**
+ * How the account's plan kept a native harness from launching or taking a
+ * message, where it is why a call failed: no sign-in, one the provider
+ * signed out, one the deployment cannot open, or the provider not reached.
+ * eve never answers one; the agent waits on it rather than turning to
+ * another payer.
+ */
+export const PLAN_REFUSAL = {
+  NONE: "none",
+  SIGNED_OUT: "signed_out",
+  UNREADABLE: "unreadable",
+  UNREACHABLE: "unreachable",
+} as const;
+
+export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];
+
+/** A call that failed: the status for the operator, and the plan's refusal where that is why. */
+interface EveFailed {
+  readonly outcome: typeof EVE_SEND_OUTCOME.FAILED;
+  readonly status: number;
+  readonly planRefusal?: PlanRefusal;
+}
+
 type EveOpened =
   | { readonly outcome: typeof EVE_SEND_OUTCOME.ACCEPTED; readonly sessionId: string }
-  | { readonly outcome: typeof EVE_SEND_OUTCOME.FAILED; readonly status: number };
+  | EveFailed;
 
 type EveSent =
   | {
@@ -229,7 +252,7 @@ type EveSent =
     }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.RETIRED }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.NOT_READY }
-  | { readonly outcome: typeof EVE_SEND_OUTCOME.FAILED; readonly status: number };
+  | EveFailed;
 
 /** How eve answered a cancel: its own two words, or an answer this build cannot read as either. */
 export const EVE_CANCEL_OUTCOME = {
@@ -262,6 +285,12 @@ export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly message: string | UserContent;
   /** The sender's time zone, which the turn the message opens reads the day in; none reads UTC. */
   readonly timeZone?: string;
+  /**
+   * Luke's own id for the message, the client id of the line it wrote for
+   * it: a native harness's runner names it back as it takes the message
+   * (`runner-sessions.ts`). eve is never handed it.
+   */
+  readonly lineId?: string;
 }
 
 /**

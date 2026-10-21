@@ -27,7 +27,7 @@ import {
   type MessageSender,
   useAgentComposer,
 } from "./tasks/use-agent-composer.js";
-import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
+import type { MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox.js";
 import { NO_LOOKS } from "./tasks/use-task-looks.js";
@@ -158,8 +158,8 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [MAIN_TAB.CALL, agentTab],
-        tab: onTask ? MAIN_TAB.CALL : agentTab,
+        tabs: [agentTab],
+        tab: onTask ? undefined : agentTab,
         openAgents: [open.agent.id],
       },
       agents: codingAgentsControl({
@@ -430,7 +430,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
     sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, pin.tab],
+      tabs: [pin.tab],
       tab: pin.tab,
       openAgents: [open.agent.id],
     },
@@ -566,7 +566,7 @@ function inboxPanel(tab: SidePanelTab): TasksControl["sidePanel"] {
  */
 async function columnOn(
   tabs: readonly MainTab[],
-  chosen: MainTab,
+  chosen: MainTab | undefined,
   agent = INVITES.agent,
   side: SidePanelTab | undefined = undefined,
   opening = "",
@@ -578,7 +578,7 @@ async function columnOn(
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, ...tabs],
+      tabs,
       tab: chosen,
       openAgents: tabs.some((tab) => sameTab(tab, { agent: INVITES.agent.id }))
         ? [INVITES.agent.id]
@@ -671,8 +671,8 @@ test("an inbox card's answer and a draft agent's first message mark their tabs w
   );
   const tabs = [{ draft: DRAFT_KEY }];
   for (const [chosen, side, inboxMarked, draftMarked] of [
-    [MAIN_TAB.CALL, SIDE_PANEL_TAB.PLAN, true, true],
-    [MAIN_TAB.CALL, SIDE_PANEL_TAB.INBOX, false, true],
+    [undefined, SIDE_PANEL_TAB.PLAN, true, true],
+    [undefined, SIDE_PANEL_TAB.INBOX, false, true],
     [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.INBOX, false, false],
     [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.PLAN, true, false],
   ] as const) {
@@ -703,7 +703,7 @@ test("a draft agent's tab holding no words, and an Inbox whose only draft answer
   );
   const column = await columnOn(
     [{ draft: DRAFT_KEY }],
-    MAIN_TAB.CALL,
+    undefined,
     INVITES.agent,
     SIDE_PANEL_TAB.PLAN,
   );
@@ -718,12 +718,12 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
       { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
     ]),
   );
-  const closed = await columnOn([], MAIN_TAB.CALL);
+  const closed = await columnOn([], undefined);
   assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
 
   const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
-  const marked = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.CALL, failed);
+  const marked = await columnOn([{ agent: INVITES.agent.id }], undefined, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);
 });

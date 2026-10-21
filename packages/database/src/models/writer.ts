@@ -375,11 +375,18 @@ type AwaitingLineWritten = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The line a turn received, as the relay reads it off eve's stream: its text parts joined (`attached-files.ts`), and the turn that received it. */
-interface AwaitingLineTake {
-  readonly text: string;
-  readonly turnId: string;
-}
+/**
+ * The line a turn received and the turn that received it: as eve's relay
+ * reads it off eve's stream, by its text parts joined (`attached-files.ts`),
+ * and whether those words hold a spoken ask's beside the lines, which eve
+ * coalesced into one message, so the lines are matched among them
+ * (`coalescedRunWithin`); or as a native harness's runner names it, by the
+ * client id of the row it was written under, which the runner was handed
+ * with the line.
+ */
+type AwaitingLineTake =
+  | { readonly text: string; readonly turnId: string; readonly beside?: boolean }
+  | { readonly clientId: string; readonly turnId: string };
 
 /**
  * The longest the hand-over to eve inside an awaiting line's write may take
@@ -423,7 +430,11 @@ export interface StoreWriter {
    * taken moves to a fresh place in the conversation's sequence, ahead of
    * everything the turn will write and of anything it already wrote, which
    * moves behind it, so a device that already passed its old place reads it
-   * again where it now stands. Under the conversation's lock,
+   * again where it now stands. A row of a spoken ask that joined a typed
+   * turn under way is the exception: it is given the turn where it stands,
+   * at a bumped revision, keeping how many of the turn's steps had begun
+   * before it, as a steered typed line is (`takeAwaitingLine`), and nothing
+   * of the turn moves. Under the conversation's lock,
    * so a row being written meanwhile is seen once it lands, never missed.
    */
   attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
@@ -433,7 +444,8 @@ export interface StoreWriter {
    * takes the delegation's id into its metadata in place, at a bumped
    * revision, so a device reading from its revision sees the row again where
    * it stands; and where the ask has already learned its turn, the rows are
-   * taken into it in the order they stand, ahead of the turn's work, as
+   * taken into it in the order they stand, ahead of the turn's work, or, for
+   * an ask that joined a typed turn under way, where they stand, as
    * `attachAskLines` takes them at the received message otherwise. Nothing is
    * re-keyed: a row's client id stays the ledger's for life, and a row a
    * delegation already owns keeps that one. A delegation told twice attaches
@@ -483,7 +495,10 @@ export interface StoreWriter {
    * reading from its revision sees the line again where it stands, now the
    * turn's, and keeps how many of the turn's steps had begun before it, so
    * a line that steered a turn under way is drawn among its work where it
-   * arrived rather than ahead of the turn. Answers the rows taken, or none where no such run awaits, which
+   * arrived rather than ahead of the turn. Where the receipt also carried a
+   * spoken ask (`beside`), the run is the one whose words stand whole among
+   * those received. A take by client id takes the one awaiting row written
+   * under it. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -1578,17 +1593,23 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = standing.value;
   const found = toolPartOf(row.parts, event.callId);
   if (found === undefined) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CALL });
+  // Note that an input told with the settlement replaces the one the start
+  // recorded, in the same write, so the call stands as it answered.
+  const settled = settledToolPart(
+    event.input === undefined ? found.part : { ...found.part, input: event.input },
+    event.settlement,
+  );
   // A call settles once. The same settlement told again is a repeat; a
   // different one, after the turn's end already settled the call as
   // unanswered, finds the call closed and is refused rather than rewritten.
   if (isSettledToolPartState(found.part.state)) {
-    return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
+    return isDeepStrictEqual(settled, found.part)
       ? Result.succeed(STORE_WRITE_EFFECT.REPEATED)
       : Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   }
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   const parts = [...row.parts];
-  parts[found.index] = settledToolPart(found.part, event.settlement);
+  parts[found.index] = settled;
   return yield* amendJournal(context, event.turnId, row, parts);
 });
 
@@ -1936,18 +1957,37 @@ function askTurnOf(key: {
   readonly conversationId: string;
   readonly clientId: string;
 }): Effect.Effect<string | undefined, QueryError | Schema.SchemaError, DatabaseServices> {
+  return Effect.map(askBindingOf(key), (bound) => bound?.turnId);
+}
+
+/** The turn an ask has learned, as `askTurnOf` reads it, and the place it joined that turn at where it joined a typed turn under way (`asks.joined_after_step`). */
+function askBindingOf(key: {
+  readonly conversationId: string;
+  readonly clientId: string;
+}): Effect.Effect<
+  { readonly turnId: string; readonly joinedAfterStep: number | null } | undefined,
+  QueryError | Schema.SchemaError,
+  DatabaseServices
+> {
   return Effect.map(findAskTurn(key), (found) =>
-    Option.match(found, { onNone: () => undefined, onSome: (row) => row.turnId ?? undefined }),
+    Option.match(found, {
+      onNone: () => undefined,
+      onSome: ({ turnId, joinedAfterStep }) =>
+        turnId === null ? undefined : { turnId, joinedAfterStep },
+    }),
   );
 }
 
 const findAskTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
-  Result: Schema.Struct({ turnId: Schema.NullOr(Schema.String) }),
+  Result: Schema.Struct({
+    turnId: Schema.NullOr(Schema.String),
+    joinedAfterStep: Schema.NullOr(Schema.Int),
+  }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ turnId: asks.turnId })
+        .select({ turnId: asks.turnId, joinedAfterStep: asks.joinedAfterStep })
         .from(asks)
         .innerJoin(turns, eq(turns.id, asks.turnId))
         .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
@@ -1963,11 +2003,15 @@ const findAskTurn = SqlSchema.findOneOption({
  */
 const findUnattachedAskRows = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, role: MessageRoleSchema }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    role: MessageRoleSchema,
+    joinedAfterStep: Schema.NullOr(Schema.Int),
+  }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id, role: messages.role })
+        .select({ id: messages.id, role: messages.role, joinedAfterStep: asks.joinedAfterStep })
         .from(messages)
         .innerJoin(
           asks,
@@ -2096,6 +2140,18 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
   });
   const attached: string[] = [];
   for (const row of standing) {
+    // A spoken ask that joined a typed turn under way is drawn where it arrived, among that
+    // turn's work, as a steered typed line is, and moves nothing of an hour's work behind it.
+    if (row.joinedAfterStep !== null) {
+      yield* giveLineToTurn({
+        id: row.id,
+        conversationId: context.target.conversationId,
+        turnId,
+        takenAfterStep: row.joinedAfterStep,
+      });
+      attached.push(row.id);
+      continue;
+    }
     const seq = yield* takeLineIntoTurn(context, turnId, row.id);
     // The received message ordinarily precedes the first step, so nothing of
     // the turn's stands yet; where one does — a received message eve told
@@ -2122,11 +2178,15 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
  */
 const findAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, parts: StoredPartsColumnSchema }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    clientId: Schema.String,
+    parts: StoredPartsColumnSchema,
+  }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id, parts: messages.parts })
+        .select({ id: messages.id, clientId: messages.clientId, parts: messages.parts })
         .from(messages)
         .innerJoin(conversations, eq(conversations.id, messages.conversationId))
         .where(
@@ -2208,6 +2268,37 @@ function coalescedRun<Row extends { readonly parts: Parts }>(
 }
 
 /**
+ * The oldest run of consecutive awaiting lines whose parts, joined as eve
+ * coalesces them, stand whole among the parts received, each segment as eve
+ * joined it, the longest such run from its first line; none where no run
+ * does. This is the run eve coalesced beside a spoken ask into one message,
+ * whose words the transcript holds and the store has no copy of, so the
+ * received words are matched a whole segment at a time and never a fragment
+ * of one.
+ */
+function coalescedRunWithin<Row extends { readonly parts: Parts }>(
+  awaiting: readonly Row[],
+  received: string,
+): readonly Row[] {
+  const fenced = `${COALESCED_LINE_SEPARATOR}${received}${COALESCED_LINE_SEPARATOR}`;
+  for (let start = 0; start < awaiting.length; start += 1) {
+    let run: readonly Row[] = [];
+    const pieces: string[] = [];
+    for (const [offset, row] of awaiting.slice(start).entries()) {
+      const parts = receivedPartsOf(row.parts);
+      if (parts === undefined) break;
+      pieces.push(...parts);
+      const joined = pieces.join(COALESCED_LINE_SEPARATOR);
+      if (!fenced.includes(`${COALESCED_LINE_SEPARATOR}${joined}${COALESCED_LINE_SEPARATOR}`))
+        break;
+      run = awaiting.slice(start, start + offset + 1);
+    }
+    if (run.length > 0) return run;
+  }
+  return [];
+}
+
+/**
  * The dispatch run to its answer or its deadline, from inside the
  * uninterruptible write: the dispatch is forked as a root fiber of its own,
  * which is interruptible as the write is not, and a second fiber interrupts
@@ -2265,7 +2356,12 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, WriteFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
-  const run = coalescedRun(awaiting, take.text);
+  const run =
+    "clientId" in take
+      ? awaiting.filter((line) => line.clientId === take.clientId)
+      : take.beside
+        ? coalescedRunWithin(awaiting, take.text)
+        : coalescedRun(awaiting, take.text);
   const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({
@@ -2336,10 +2432,11 @@ const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(functio
     delegationId: attach.delegationId,
     clientIds: attach.rowIds,
   });
-  const turnId = yield* askTurnOf({
+  const bound = yield* askBindingOf({
     conversationId: context.target.conversationId,
     clientId: attach.delegationId,
   });
+  const turnId = bound?.turnId;
   const attached: string[] = [];
   let lastSeq: number | undefined;
   for (const row of rows) {
@@ -2360,8 +2457,16 @@ const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(functio
       });
     }
     // Where the ask has learned its turn, a row still outside it moves in at a fresh place, as at
-    // the received message; a row already in a turn keeps its place.
-    if (turnId !== undefined && row.turnId === null) {
+    // the received message, or, for an ask that joined a typed turn under way, is given the turn
+    // where it stands, at the place it joined; a row already in a turn keeps its place.
+    if (bound !== undefined && row.turnId === null && bound.joinedAfterStep !== null) {
+      yield* giveLineToTurn({
+        id: row.id,
+        conversationId: context.target.conversationId,
+        turnId: bound.turnId,
+        takenAfterStep: bound.joinedAfterStep,
+      });
+    } else if (turnId !== undefined && row.turnId === null) {
       lastSeq = yield* takeLineIntoTurn(context, turnId, row.id);
     }
     attached.push(row.id);

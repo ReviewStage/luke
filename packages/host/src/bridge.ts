@@ -16,7 +16,7 @@ import {
   type VoiceCallTranscriptChange,
   type VoiceView,
 } from "@luke/voice/voice-view";
-import { isWireBoolean, type UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
 import type { PUSH_METHOD, PushMethod, PushPayload } from "./contract/pushes.js";
@@ -60,7 +60,6 @@ function args<Arguments extends BridgeArguments>(
 }
 
 const noArgs = args<[]>((values) => values.length === 0);
-const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBoolean(values[0]));
 
 /**
  * The instant a surface event's guard reads it at. Note that the guard asks
@@ -111,16 +110,6 @@ export const BRIDGE = {
         (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))) &&
         (v[2] === undefined || isVoiceCallTranscriptChange(v[2])),
     ),
-  }),
-  /**
-   * Whether a panel is recording a new shortcut, during which the talk key it
-   * is capturing must not open a turn. Panel state gating a global key the
-   * main process routes, so the main process is told rather than the window.
-   */
-  setShortcutCapturing: entry({
-    kind: "send",
-    channel: "app:set-shortcut-capturing",
-    args: oneBoolean,
   }),
   /**
    * One tapped live event for the development trace. Fire-and-forget on

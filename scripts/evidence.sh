@@ -22,7 +22,7 @@ fi
 # The captures below launch the packaged app, so they prove the bundle runs but
 # not that electron-builder carried everything into it: a helper or
 # the icon can be missing from a bundle whose panel still paints.
-for helper in mac-talk-key; do
+for helper in mac-output-volume; do
     if [[ ! -x "$PACKAGED_APP/Contents/Resources/$helper" ]]; then
         printf 'error: packaged app is missing the %s helper\n' "$helper" >&2
         exit 1

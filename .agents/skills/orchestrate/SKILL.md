@@ -21,7 +21,8 @@ Use the column for the host you are in:
 
 | Action | Conductor | Luke |
 | --- | --- | --- |
-| Ask the user | `AskUserQuestion` | `post_to_inbox` with a `decide` or `answer` ask, which waits for the reply |
+| Ask the user | `AskUserQuestion` | `post_to_inbox` with a `decide` or `answer` ask, which waits for the reply; where another coding agent started you, `message_agent` to it instead |
+| Tell the user | Your reply | `post_to_inbox` without an ask, and your reply; where another coding agent started you, `message_agent` to it instead |
 | Valid model ids | `conductor model` | `list_models` |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id |
 | Start a worker | `conductor workspace create` (below) | `start_agent` on your own task (no `taskId`, or the rollout task's id where you work on none), with `title` set to the PR title, the brief as `prompt`, plus `model` and `effort` (below) |
@@ -84,6 +85,24 @@ branch; a linear chain of them is a stack, and where chains branch off a
 shared PR (a tree), each branch-off chain is a stack of its own. Prefer small
 PRs and deep stacks over a few large PRs. Workers never restack: a
 short-lived restack worker restacks a whole stack in one pass (Step 3).
+
+**You alone talk to the user.** Workers report to you and never to the
+user, so the user hears one voice for the whole rollout. In Luke, a worker
+posts nothing to the developer's inbox, not even the PR it opened: the
+service tells every agent another agent starts that the inbox is its
+starter's, and the brief repeats it. What a worker would have put there (a
+PR ready for review, a question, a decision, a to-do only the user can do by
+hand, such as adding a secret) comes to you as a message, and you decide what
+reaches the user. Keep the user's inbox to what needs them: one item per held
+PR asking for its go, a question or a to-do only they can settle, relayed
+under its own thread, and the final report (Step 4). Never pass a worker's
+routine milestones (opened, fix pushed, CI green, merged) on to the user; the
+final report covers them. A worker's picture cannot travel in a message: the
+worker shows it in its own transcript, and your inbox item mentions the
+worker for the user to open it there. Where another coding agent started you,
+the inbox is that agent's, not yours: everything above that would reach the
+user goes to that agent instead, as the table's "Ask the user" and "Tell the
+user" rows say for it.
 
 ## Step 1: Kick off each worker
 
@@ -163,13 +182,18 @@ Every brief must contain:
    ```
 
    In Conductor, give the worker your session id to send it to. Also tell it
-   to answer any message the orchestrator sends it.
+   to answer any message the orchestrator sends it. It reports to the
+   orchestrator only, never to the user: in Luke, it posts nothing to the
+   developer's inbox, and sends the orchestrator instead whatever it would
+   have posted there.
 5. **Ask, do not guess**: when the task is ambiguous, the plan and the code
    disagree, or a choice would change a PR's shape, send the question to the
    orchestrator the same way and wait for the answer instead of picking an
-   interpretation. The orchestrator holds the whole plan and the user's
-   intent; the worker holds one PR. Small judgment calls stay with the
-   worker.
+   interpretation. So does anything only the user can do by hand (a secret,
+   a repository setting, a test on their Mac): the worker asks the
+   orchestrator, which puts it to the user. The orchestrator holds the
+   whole plan and the user's intent; the worker holds one PR. Small
+   judgment calls stay with the worker.
 
 Keep each worker's ids (in Conductor its workspace and session ids, in Luke
 its agent id and its mention), branch, and PR url; you need
@@ -186,8 +210,9 @@ and each message arrives as a new turn. On each report:
 - **CI green on a held PR**: ask the user for the go (Arguments, above), and
   relay it to the worker when it comes.
 - **Question or blocked**: answer from the plan and the other PRs' state by
-  messaging that worker. Escalate to the user only when the decision is
-  theirs, and relay the answer back yourself. A merge-on-green PR that
+  messaging that worker. Escalate to the user only when the decision or the
+  to-do is theirs, through the table's "Ask the user" row, and relay the
+  answer back yourself. A merge-on-green PR that
   turns out to need the user becomes a held PR: if it is already open and
   green (`gh pr checks <number>`), ask the user for the go now, since no
   later green report will come to prompt it; otherwise ask on its next one.
@@ -267,7 +292,9 @@ Luke, `list_agents` with `thisTask` (or the rollout task's `taskId`) shows none 
 unarchived, restack workers and replaced workers among them; in
 Conductor, none of the rollout's workspaces is left in the workspaces' list. Archive
 whatever is left. When every PR has merged, or been closed because it was
-cut, and every worker is archived, report to the user:
+cut, and every worker is archived, report to the user, as the table's "Tell
+the user" row says (in Luke, one inbox post without an ask, mentioning each
+PR):
 the merged PRs with links, anything that was cut or changed from the plan,
 and any follow-ups the workers surfaced. If the rollout came from a Linear
 issue, update the issue with the merged PRs.
@@ -275,6 +302,8 @@ issue, update the issue with the merged PRs.
 ## Rules
 
 - Never do the PR's implementation work yourself.
+- Only you talk to the user. Workers report to you and never post to the
+  user's inbox; you relay what needs the user and nothing routine.
 - Point the user at a worker or PR with a deep link or mention, not an id.
 - One PR per worker. Do not reuse a worker for a second PR; a continuation
   of a worker takes over its source's PR.

@@ -8,6 +8,7 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_PAYER,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
@@ -16,6 +17,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   type CodingAgentSender,
@@ -74,6 +76,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
+import { drawnCall } from "./native-tool-calls.js";
 import {
   changesSidebar,
   remoteCallOf,
@@ -118,17 +121,28 @@ function dollars(costUsd: number): string {
   return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
 }
 
+/** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
+const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
+  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude plan",
+  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT plan",
+};
+
 /**
  * What the agent has cost, for the model menu's foot: "This agent: 1.2M
  * tokens · $0.42", the dollars left off where the service could not price
- * every step; nothing before a turn settled. Note that this is the one
- * place the window draws a price, and it is the whole run's, the agent's
+ * every step; nothing before a turn settled. An agent paid for by a plan
+ * says the plan in the dollars' place, "This agent: 1.2M tokens · Claude
+ * plan", since a subscription has no bill per token. Note that this is the
+ * one place the window draws a price, and it is the whole run's, the agent's
  * own turns and its workers', at the catalog's list prices.
  */
 export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
   const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
-  return `This agent: ${usage.costUsd === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${dollars(usage.costUsd)}`}`;
+  const paid =
+    (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
+    (usage.costUsd === undefined ? undefined : dollars(usage.costUsd));
+  return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
 }
 
 /**
@@ -213,6 +227,20 @@ export function archivedByReading(
   return {
     words: archiver === undefined ? archived : `${archived} by ${archiver}`,
     reason: by.reason,
+  };
+}
+
+/**
+ * A subagent or a brain's worker as its card's tile draws it: the harness
+ * its model runs in, or the empty box where the model is not known, giving
+ * way to the working mark while it works, as an agent's tile does.
+ */
+export function subagentActor(model: string | undefined, state: GlyphState, name: string): Actor {
+  return {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: model === undefined ? undefined : providerOf(model),
+    state: ACTOR_STATE_OF_GLYPH[state],
   };
 }
 
@@ -329,7 +357,7 @@ export function endLineReason(
     : FAILURE_REASON.OTHER;
 }
 
-/** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
+/** The statuses an agent may still write under, which is when it can be stopped. */
 const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
@@ -353,15 +381,6 @@ export function agentGlyphState(status: CodingAgentStatus): GlyphState {
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: CodingAgentStatus): string | undefined {
   return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
-}
-
-/**
- * Whether an agent's transcript is read on the held long-poll now: only
- * while its tab is on screen and the agent may still write. A tab hidden,
- * a task left, and an agent that ended each stop the reads.
- */
-export function followsAgent(input: { shown: boolean; status: CodingAgentStatus }): boolean {
-  return input.shown && agentStillWriting(input.status);
 }
 
 /** What the Start button says while it cannot start: the task names no repository yet. */
@@ -1161,13 +1180,17 @@ function agentPart(part: WireValue): AgentPart {
   }
   if (part.type === AGENT_PART.STEP_START) return { kind: AGENT_PART.STEP_START };
   if (part.type.startsWith(TOOL_PART_TYPE_PREFIX)) {
-    return {
-      kind: AGENT_PART.TOOL,
+    // A native harness's call is read as the eve call that draws it (`native-tool-calls.ts`).
+    const call = drawnCall({
       tool: part.type.slice(TOOL_PART_TYPE_PREFIX.length),
-      callId: isWireString(part.toolCallId) ? part.toolCallId : "",
-      state: toolState(part.state),
       input: part.input,
       output: part.output,
+    });
+    return {
+      kind: AGENT_PART.TOOL,
+      ...call,
+      callId: isWireString(part.toolCallId) ? part.toolCallId : "",
+      state: toolState(part.state),
       errorText: isWireString(part.errorText) ? part.errorText : undefined,
     };
   }

@@ -114,9 +114,12 @@ export interface InboxColumns {
   readonly rows: InboxRowPresses;
 }
 
-/** The list head's tab shown, the list's one steady control. */
+/** What the list head's menu button is called, by which the list finds it. */
+export const VIEW_OPTIONS = "View options";
+
+/** The list head's View options button, the list's one steady control, which chooses what it lists. */
 export function listHeadControl(list: ParentNode | null): HTMLElement | null {
-  return list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null;
+  return list?.querySelector<HTMLElement>(`button[aria-label="${VIEW_OPTIONS}"]`) ?? null;
 }
 
 /** Whether the list was asked for, kept by the Inbox's holder rather than the Inbox, and the way to ask for it or give it up. */
@@ -216,7 +219,7 @@ export function useInboxColumns(
     }
     // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
     if (shown === INBOX_COLUMNS.ITEM) return;
-    // An item chosen that the list holds no row for, as a link's missing item or one its tab leaves out, hands the keyboard to the first row instead, or to the tab shown, the list's one steady control, where no row stands.
+    // An item chosen that the list holds no row for, as a link's missing item or one its scope leaves out, hands the keyboard to the first row instead, or to View options, the list's one steady control, where no row stands.
     const row = (chosen === undefined ? undefined : rows.find(chosen)) ?? rows.first();
     (row ?? listHeadControl(held.querySelector(".inbox-tasks")))?.focus();
     setShowAlls(0);

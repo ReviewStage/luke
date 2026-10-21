@@ -39,19 +39,11 @@ is a named instance without asking: `preview-<branch>` for the Preview the scrip
 looks up, `preview-<host>` for an address given by hand, so each Preview keeps a
 sign-in of its own and never touches the plain instance's.
 
-Vercel builds no Preview for a coding agent's branch (`luke/**`; the root
-`vercel.json`'s `git.deploymentEnabled`), so `--preview` finds none there. To
-try an agent's change against a Preview, push its branch under another name
-(`git push origin HEAD:<name>`) and run `--preview` from that branch, or pass
-that Preview's address by hand.
-
 Each instance has its own profile under `~/Library/Application Support/Luke Dev
 <name>/` (sign-in, settings, window place, single-instance lock), its own
 `Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
 `.build/traces/<name>/`. Its windows' titles end in `(<name>)`, and its app menu
-says "Quit Luke Dev <name>". The system-wide talk and stop keys are held by
-one Luke only, so a named instance leaves them to the plain one and registers
-none (a call starts from the panel instead). No development run claims the
+says "Quit Luke Dev <name>". No development run claims the
 `tryluke:` links, named or not.
 Agents' commands for this Mac go to whichever signed-in instance of the account
 reads them first, once each, and every instance runs them in the same login

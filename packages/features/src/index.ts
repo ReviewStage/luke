@@ -125,6 +125,7 @@ export {
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
+  MAC_COMMAND_NOT_CLAIMED,
 } from "./mac-command-client.js";
 export {
   automationPath,

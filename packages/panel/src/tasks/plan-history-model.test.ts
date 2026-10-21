@@ -328,15 +328,10 @@ test("only a revision of several changes opens its sections: not one change, a r
   );
 });
 
-test("a revision's Open goes to its agent's tab, Luke's call, or Luke's moment in Work, and nowhere for anyone else", () => {
-  const callId = "1c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22";
+test("a revision's Open goes to its agent's tab, and nowhere for Luke's own saves, whose work no tab draws, or anyone else", () => {
   const agentEdit = { actor: PLAN_ACTOR.AGENT, label: "Invite emails", at: NOW, duringCall: false };
 
-  assert.deepEqual(revisionSource({ ...line(), callId }), { kind: REVISION_SOURCE.CALL, callId });
-  assert.deepEqual(revisionSource(line()), {
-    kind: REVISION_SOURCE.WORK,
-    at: line().lastEdit.at,
-  });
+  assert.equal(revisionSource(line()), undefined);
   assert.deepEqual(revisionSource({ lastEdit: agentEdit, agentId: AGENT_ID }), {
     kind: REVISION_SOURCE.AGENT,
     agentId: AGENT_ID,
@@ -362,8 +357,6 @@ test("a revision's Open goes to its agent's tab, Luke's call, or Luke's moment i
     sourceLabel({ kind: REVISION_SOURCE.AGENT, agentId: AGENT_ID }, agent),
     "Open Invite emails",
   );
-  assert.equal(sourceLabel({ kind: REVISION_SOURCE.CALL, callId }, agent), "Open in Transcript");
-  assert.equal(sourceLabel({ kind: REVISION_SOURCE.WORK, at: NOW }, agent), "Open in Work");
 });
 
 test("two members of a plan each see the other's revisions under the other's name, and only their own as You", () => {

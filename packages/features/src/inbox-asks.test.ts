@@ -20,6 +20,7 @@ import {
   inboxReplyAnswers,
   inboxReplyRefusal,
   inboxResponseAsk,
+  inboxThreadPostInputSchema,
 } from "./inbox-wire.js";
 import {
   countedNumber,
@@ -197,6 +198,31 @@ test("an ask maps to the version 4 response nearest it", () => {
   assert.deepEqual(inboxAskResponse(WORDS), { type: INBOX_RESPONSE.TEXT });
 });
 
+test("an agent's answer ask keeps the option its select recommends, as the version 4 response it posts does", () => {
+  const ask = {
+    type: INBOX_ASK.ANSWER,
+    fields: [
+      {
+        type: INBOX_FIELD.SELECT,
+        label: "Region",
+        options: ["us-east", "eu-west"],
+        recommended: "eu-west",
+      },
+    ],
+  } as const;
+  const posted = read(inboxThreadPostInputSchema, {
+    key: "deploy-region",
+    title: "Where should it deploy?",
+    body: "Two regions are free.",
+    ask,
+  });
+  assert.deepEqual(posted?.ask, ask);
+  assert.deepEqual(posted?.ask && inboxAskResponse(posted.ask), {
+    type: INBOX_RESPONSE.FORM,
+    fields: ask.fields,
+  });
+});
+
 test("a stored version 4 response maps to the ask it stands for, and an acknowledgement to none", () => {
   const options = [{ label: "Postgres" }, { label: "SQLite", detail: "Simpler." }];
   assert.deepEqual(
@@ -357,6 +383,25 @@ test("a do takes Mark done once every step is ticked, or Couldn't do it with any
   ] as const;
   for (const [answers, refusal] of refusals) {
     assert.equal(inboxAnswersRefusal(SECRET, answers, "Done."), refusal, refusal);
+  }
+});
+
+test("a do takes the steps ticked with neither press as an answer, once one is ticked", () => {
+  const ticked = (steps?: number[]) => ({
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.ANSWERED,
+    ...(steps === undefined ? undefined : { steps }),
+  });
+  assert.equal(inboxAnswersRefusal(SECRET, ticked([1]), ""), undefined);
+  assert.equal(inboxAnswersRefusal(SECRET, ticked([0, 1]), ""), undefined);
+  const refusals = [
+    [ticked([]), "The ask does not take that answer."],
+    [ticked(), "The ask does not take that answer."],
+    [ticked([2]), "A tick names no step of the ask."],
+    [ticked([1, 1]), "A step is ticked twice."],
+  ] as const;
+  for (const [answers, refusal] of refusals) {
+    assert.equal(inboxAnswersRefusal(SECRET, answers, "Some words."), refusal, refusal);
   }
 });
 

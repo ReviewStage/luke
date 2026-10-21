@@ -323,8 +323,9 @@ export function useSkillPicker({
   };
 
   // The list stands by the slash's line, on the side asked, measured from the box's field, which it keeps inside.
+  // Note that the field is measured only while the list is open, since a measure in a draw lays out the whole window.
   const box = room.current;
-  const placed = box?.getBoundingClientRect();
+  const placed = open ? box?.getBoundingClientRect() : undefined;
   const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): SkillMenuPlace => {
     const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
     return side === MENTION_MENU_SIDE.BELOW

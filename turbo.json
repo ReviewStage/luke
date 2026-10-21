@@ -29,7 +29,7 @@
       "dependsOn": ["^transit"]
     },
     // No task declares outputs: each is a check, and what it leaves behind
-    // (the build's dist/ included) is read by nothing that runs after it. A
+    // is read by nothing that runs after it. A
     // hit replays the log and restores no files, so no bundle or stamped
     // commit ever travels through the cache.
     "typecheck": {
@@ -57,16 +57,9 @@
       "dependsOn": ["^transit"],
       "outputs": []
     },
-    "build": {
-      "dependsOn": ["^transit"],
-      "outputs": []
-    },
     // The whole-repository checks each read every file in one program, so
     // each is one root task whose inputs are every file the repository tracks.
     "//#lint": {
-      "outputs": []
-    },
-    "//#knip": {
       "outputs": []
     },
     "//#discarded-effect": {

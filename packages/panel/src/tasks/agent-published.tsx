@@ -4,6 +4,7 @@ import {
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import {
   CHIP_LOOK,
   Chip,
@@ -16,7 +17,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import {
@@ -25,7 +26,10 @@ import {
   pullRequestNumberLabel,
   pullRequestStateWord,
 } from "./coding-agent-model.js";
+import { MentionChipCard } from "./mention-chip.js";
 import { PullRequestMark } from "./pull-request-mark.js";
+import { useMentionDoors } from "./task-mentions.js";
+import { useLinkStanding } from "./use-link-standing.js";
 
 /**
  * agent-published.tsx -- what an agent published, on its tab: the pull request's row pinned over the box, or the branch's chip at the box's foot while no pull request stands.
@@ -41,7 +45,10 @@ import { PullRequestMark } from "./pull-request-mark.js";
  * (`agent-pull-request-tab.tsx`) where a panel takes it, and GitHub's page
  * otherwise; a right-click offers what a press does not: the pull request
  * on GitHub, where the press opened its tab, and copying the branch's name
- * or the command that checks it out.
+ * or the command that checks it out. The pointer resting on it hangs the
+ * card the pull request's chip hangs (`mention-chip.tsx`): its key and
+ * state, size, who opened it and when, branches, labels, and counts, as
+ * the workspace's GitHub App answers them (`use-link-standing.ts`).
  *
  * With a branch pushed and no pull request yet, the box's foot wears a
  * chip naming the branch instead, after the + and in the composer's pill
@@ -166,7 +173,7 @@ export function LinesChanged({
   );
 }
 
-/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click offers the rest, and the pointer reads its title whole where it is cut short. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
+/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click offers the rest, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
 export function PublishedRow({
   pullRequest,
   branch,
@@ -178,16 +185,34 @@ export function PublishedRow({
   doors: PublishedDoors;
 }): ReactNode {
   const menu = useMenu(true);
-  // Whether the title is cut short, which lets the pointer read it whole.
-  const [clipped, setClipped] = useState(false);
   const state = pullRequestStateWord(pullRequest.state);
   const inPanel = doors.openPullRequest;
   const actions = branchActions(branch, doors, inPanel === undefined ? undefined : pullRequest.url);
+  const mentionDoors = useMentionDoors();
+  const mention = {
+    kind: MENTION_KIND.LINK,
+    provider: INTEGRATION_PROVIDER.GITHUB,
+    url: pullRequest.url,
+  } as const;
+  const standing = useLinkStanding(mention, {
+    taskId: mentionDoors.taskId,
+    workspace: mentionDoors.place.workspace,
+  });
+  const card = (
+    <MentionChipCard
+      mention={mention}
+      target={pullRequest.url}
+      name={pullRequest.title}
+      doors={mentionDoors}
+      standing={standing}
+    />
+  );
   return (
     <>
       <div className="agent-published">
         <List label="Pull request" variant={LIST_VARIANT.CARD}>
-          <RowHintOptions shown={clipped}>
+          {/* Note that the card stands in the pill's place whatever the title's width, since it names the title whole, the published one where GitHub answered nothing. */}
+          <RowHintOptions card={card}>
             <ListRow
               leading={<PullRequestMark pullRequest={pullRequest} />}
               title={
@@ -208,7 +233,6 @@ export function PublishedRow({
                 </span>
               }
               hint={{ Hint: RowHint, label: pullRequest.title }}
-              onTitleClipped={setClipped}
               menuOpen={menu.open !== undefined}
               onPress={() => {
                 menu.close(false);

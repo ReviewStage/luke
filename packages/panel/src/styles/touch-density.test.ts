@@ -28,7 +28,7 @@ import { layContainersAt } from "../testing/container-width.js";
  * tab's × and a toast's, a press 44px tall and no wider than it draws, so a
  * near miss on the label closes nothing; a resize edge one across both
  * columns' gutters; and none takes one past its own box with a mouse. A
- * sign-in's provider button, the Inbox's tabs, and a chat thread's Reply
+ * sign-in's provider button and a chat thread's Reply
  * stand a finger tall on a touch screen, the Reply giving back its reach
  * so its line lays out as before; and no small words there, a menu row's
  * detail, a hover card's lines, a comment's time, are under 12px. jsdom answers no media query,
@@ -495,14 +495,6 @@ function providerButton(): HTMLButtonElement {
   );
 }
 
-/** One of the Inbox's tabs, in the markup \`inbox-list.tsx\`'s ShowTabs draws through the compact fill ChoiceBar. */
-function inboxTab(): HTMLElement {
-  return built(
-    '<div class="inbox-show-tabs"><div class="luke-choice-bar" data-look="fill" data-size="compact" role="tablist"><button class="luke-choice-bar-option" role="tab">Needs you</button></div></div>',
-    ".luke-choice-bar-option",
-  );
-}
-
 /** A chat thread's press, Reply at a quiet message's byline or how many replied under one, by what the developer calls it. */
 function threadPresses(): ReadonlyMap<string, HTMLElement> {
   return new Map([
@@ -533,15 +525,13 @@ function pressHeight(element: Element): number {
   );
 }
 
-test("on a touch screen a sign-in's provider button and the Inbox's tabs are a finger tall, and keep their heights with a mouse", () => {
+test("on a touch screen a sign-in's provider button is a finger tall, and keeps its height with a mouse", () => {
   layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
   assert.ok(pixels(getComputedStyle(providerButton()).height) >= FINGER, "the provider button");
-  assert.ok(pixels(getComputedStyle(inboxTab()).height) >= FINGER, "an Inbox tab");
   laid?.remove();
   document.body.replaceChildren();
   layFor(false, { "data-luke-profile": "web", "data-luke-density": "compact" });
   assert.equal(pixels(getComputedStyle(providerButton()).height), 40, "the provider button");
-  assert.equal(pixels(getComputedStyle(inboxTab()).height), 28, "an Inbox tab");
 });
 
 test("on a touch screen a chat thread's Reply takes a press a finger tall and wider than its words, and gives the room back so its line lays out as before; with a mouse it takes none", () => {

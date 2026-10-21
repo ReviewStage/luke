@@ -40,6 +40,10 @@
     "dest": "/api/default.js?route=account/integrations/connected"
   },
   {
+    "src": "/api/agents/runner-events",
+    "dest": "/api/default.js?route=agents/runner-events"
+  },
+  {
     "src": "/api/github/install",
     "dest": "/api/default.js?route=github/install"
   },
@@ -68,8 +72,20 @@
     "dest": "/api/default.js?route=workspaces/linear/connected"
   },
   {
+    "src": "/api/agents/mcp",
+    "dest": "/api/luke-mcp.js?route=agents/mcp"
+  },
+  {
     "src": "/api/maintenance/sweep",
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
+  },
+  {
+    "src": "/api/browser/live",
+    "dest": "/api/browser/live"
+  },
+  {
+    "src": "/api/browser/live\\.js",
+    "dest": "/api/browser/live.js"
   },
   {
     "src": "/api/feedback",

@@ -237,8 +237,13 @@ let listReveals: string[] = [];
 let marked: PullRequestActionRequest[] = [];
 
 const DIFF_STAND_IN: DiffViewModule = {
-  colourLines: () => Promise.resolve(undefined),
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
+  mountFile: () => ({
+    update: () => undefined,
+    revealLines: () => undefined,
+    pickedLines: () => undefined,
+    unmount: () => undefined,
+  }),
   mountList: (host, props) => {
     lists.push({ host, props });
     return {
