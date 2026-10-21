@@ -11,7 +11,7 @@ import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
 import { voiceSessions } from "@luke/database/schemas/voice";
 import { PLAN_HISTORY_BOUNDS } from "@luke/features/task-wire";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 
@@ -57,7 +57,10 @@ function revisionsStatement(userId: string, taskId: string) {
             liveSessionId: planRevision.liveSessionId,
             agentId: planRevision.agentId,
             agentModel: codingAgent.model,
-            agentTitle: codingAgent.title,
+            // The name the agent goes by: its human name, else its title.
+            agentTitle: sql<
+              string | null
+            >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
             callId: voiceSessions.id,
             changes: planRevision.changes,
             restoredFrom: planRevision.restoredFrom,

@@ -867,6 +867,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, tasks.invitations);
   // The agent is answered with the mention its starter names it by, the human name it was given.
+  assert.equal(started.agent.name, stored.personaName);
   assert.equal(
     started.agent.mention,
     `[@${stored.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,

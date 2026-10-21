@@ -14,7 +14,7 @@ import {
   type PlanRevisionsAnswer,
   UNKNOWN_AGENT_LABEL,
 } from "@luke/features/task-wire";
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -191,7 +191,10 @@ const findLastEdit = SqlSchema.findOneOption({
           at: planRevision.at,
           agentId: planRevision.agentId,
           agentModel: codingAgent.model,
-          agentTitle: codingAgent.title,
+          // The name the agent goes by: its human name, else its title.
+          agentTitle: sql<
+            string | null
+          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
         })
         .from(planRevision)
         .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
@@ -239,7 +242,10 @@ const findRevisionLines = SqlSchema.findAll({
           liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           agentModel: codingAgent.model,
-          agentTitle: codingAgent.title,
+          // The name the agent goes by: its human name, else its title.
+          agentTitle: sql<
+            string | null
+          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
           agentId: planRevision.agentId,
           callId: voiceSessions.id,
           seq: planRevision.seq,

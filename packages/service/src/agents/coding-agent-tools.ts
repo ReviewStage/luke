@@ -1454,6 +1454,7 @@ const startedReading = (
     const workspace = yield* workspaceStepOf(agent.userId, agent.organizationId);
     return {
       id: agent.id,
+      ...(agent.personaName === null ? undefined : { name: agent.personaName }),
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
       effort: agent.effort,

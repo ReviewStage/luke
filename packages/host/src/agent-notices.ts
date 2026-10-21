@@ -416,6 +416,7 @@ function noticeText(input: {
   subject: string | undefined;
   model: string;
   title: string | null;
+  personaName?: string | undefined;
   automationName?: string | undefined;
   status: CodingAgentStatus;
   models: readonly CatalogModel[] | undefined;
@@ -694,6 +695,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             : taskName(end.agent.taskId),
         model: end.agent.model,
         title: end.agent.title,
+        personaName: end.agent.personaName,
         automationName: end.agent.automationName,
         status: end.agent.status,
         models,

@@ -1165,7 +1165,10 @@ const findWaitingItems = SqlSchema.findAll({
           id: inboxItem.id,
           taskId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          agentTitle: codingAgent.title,
+          // The name the agent goes by: its human name, else its title.
+          agentTitle: sql<
+            string | null
+          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           title: inboxItem.title,
@@ -1211,7 +1214,10 @@ const findTasklessWaitingItems = SqlSchema.findAll({
         .select({
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          agentTitle: codingAgent.title,
+          // The name the agent goes by: its human name, else its title.
+          agentTitle: sql<
+            string | null
+          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           automationId: automation.id,
@@ -1346,7 +1352,10 @@ export function accountInboxLiveStatements(
           id: inboxItem.id,
           planId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          agentTitle: codingAgent.title,
+          // The name the agent goes by: its human name, else its title.
+          agentTitle: sql<
+            string | null
+          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           title: inboxItem.title,
@@ -1366,7 +1375,10 @@ export function accountInboxLiveStatements(
         {
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          agentTitle: codingAgent.title,
+          // The name the agent goes by: its human name, else its title.
+          agentTitle: sql<
+            string | null
+          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           automationId: automation.id,
