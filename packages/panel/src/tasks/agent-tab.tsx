@@ -15,8 +15,8 @@ import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/
 import { inboxLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
-import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
+import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import {
