@@ -410,6 +410,7 @@ export type TasksClient = Pick<
   | "saveBoard"
   | "readTranscript"
   | "readWork"
+  | "readCode"
   | "readFile"
   | "readTree"
   | "readSkills"
@@ -678,6 +679,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The tasks whose pages' mark moved, read one at a time by the loop below. */
   const pageReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose agents' answered `show_code` calls moved, whose code is read once by the loop below. */
+  const codeReads = yield* Queue.sliding<string>(1);
 
   /** The tasks a call just ended about, whose work the loop below reads and whose parked conversation read it wakes, and both again once the call's last writes have had time to land. */
   const callEndWakes = yield* Queue.sliding<string>(1);
@@ -975,13 +979,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * The code the record holds, oldest first, then each a call showed that
-   * the record does not hold yet. Note that a showing already held is kept
-   * as it is, so a refresh hands the Code tab the same showings and it
-   * draws none of them again.
+   * the record does not hold yet: one `show_code` call, told live and read
+   * back, is one showing, matched by the call's id. Note that a showing
+   * already held is kept as it is, bar the agent the record names it under,
+   * so a refresh hands the Code tab the same showings and it draws none of
+   * them again.
    */
   function withShownCode(recorded: readonly TaskShownCode[]): TaskCodeShowing[] {
     const byCall = new Map((view.shownCode ?? []).map((showing) => [showing.callId, showing]));
-    const read = recorded.map((shown) => byCall.get(shown.callId) ?? showingOf(shown));
+    const read = recorded.map((shown) => {
+      const held = byCall.get(shown.callId);
+      if (held === undefined) return showingOf(shown);
+      // Note that a call's frame names no agent, so the record's copy lends the held showing its own.
+      return shown.agentId === held.agentId || shown.agentId === undefined
+        ? held
+        : { ...held, agentId: shown.agentId };
+    });
     const recordedCalls = new Set(recorded.map((shown) => shown.callId));
     const held = view.shownCode ?? [];
     return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
@@ -1034,6 +1047,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         shownCode,
         workStatus: TASKS_READ.READY,
       });
+    });
+  }
+
+  /**
+   * Reads every code shown on the active task as the service keeps it, an
+   * agent's typed turn's among it, laid with what a call showed as
+   * `readWork` lays it. A failed read keeps what is held.
+   */
+  function readShownCode(taskId: string) {
+    return Effect.gen(function* () {
+      const stored = yield* served(client.readCode(taskId));
+      if (stored === undefined || view.activeTaskId !== taskId) return;
+      write({ shownCode: withShownCode(stored.code) });
     });
   }
 
@@ -1329,9 +1355,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Follows `taskId`'s pages and calls live while it is the open task: the
-   * pages read again once theirs move, and the transcript once an ended
-   * call's do, every part on each seal's first delivery.
+   * Follows `taskId`'s pages, calls, and agents' code live while it is the
+   * open task: the pages read again once theirs move, the transcript once an
+   * ended call's do, and the code once the `show_code` calls its agents
+   * answered do, every part on each seal's first delivery.
    */
   function followRecord(taskId: string) {
     return followLive(taskId, {
@@ -1340,6 +1367,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       moved: (parts: readonly TaskRecordPart[]) => {
         if (parts.includes(TASK_RECORD_PART.PAGES)) Queue.offerUnsafe(pageReads, taskId);
         if (parts.includes(TASK_RECORD_PART.CALLS)) Queue.offerUnsafe(callRecordReads, taskId);
+        if (parts.includes(TASK_RECORD_PART.CODE)) Queue.offerUnsafe(codeReads, taskId);
       },
     });
   }
@@ -2729,6 +2757,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(codeReads), (taskId) =>
+            Effect.suspend(() =>
+              gate() && view.activeTaskId === taskId ? serial(readShownCode(taskId)) : Effect.void,
+            ),
+          ),
         ),
       );
       yield* Effect.forkScoped(
