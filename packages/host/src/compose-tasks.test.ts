@@ -171,6 +171,8 @@ interface FakeService extends TasksClient {
   readonly recordReads: string[];
   /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
   readonly images: Record<string, string | undefined>;
+  /** The transaction the next board save answers, as one that moved the board's live row; none answers no txid. */
+  boardSaveTxid: string | undefined;
   /** Every code shown on each task as the service keeps it, by task id; a task with none answers nothing, as a service that did not answer. */
   codes: Record<string, readonly TaskShownCode[]>;
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
@@ -473,6 +475,7 @@ function fakeService(tasks: Task[]): FakeService {
     historySeals: {},
     recordReads: [],
     images: {},
+    boardSaveTxid: undefined,
     codes: {},
     files: {},
     folders: {},
@@ -986,7 +989,8 @@ function fakeService(tasks: Task[]): FakeService {
         service.images[taskId] = image;
         const board = { ...service.boards[taskId], elements, appliedDrawing };
         service.boards[taskId] = board;
-        return { board };
+        const txid = service.boardSaveTxid;
+        return txid === undefined ? { board } : { board, txid };
       }),
     listLive: () =>
       Effect.sync(() => {
@@ -3246,6 +3250,57 @@ it.effect(
       // Leaving the task lets the subscription go.
       yield* call(GATEWAY_METHOD.TASKS_CLOSE);
       assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a board save is answered once its transaction reaches the open task's followed board, and at once where nothing is followed",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
+      service.boardSeals[INVITES] = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          board: {
+            capability: "capability-board",
+            queryFingerprint: "board",
+            expiresAt: 3_600_000,
+          },
+        },
+      };
+      const realtime = fakeServiceRealtime();
+      const { call, tasks } = yield* subject(service, { openLive: realtime.open });
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* boardSettled;
+      realtime.deliver("board", [
+        { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },
+      ]);
+      yield* boardSettled;
+      const save = { taskId: INVITES, elements: [], appliedDrawing: 0 };
+
+      // A save that moved the live row waits on its transaction before it answers.
+      service.boardSaveTxid = "42";
+      const saving = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
+      yield* boardSettled;
+      assert.deepEqual(realtime.awaitingTxids(), ["42"]);
+      assert.equal(saving.pollUnsafe(), undefined, "not answered before the transaction arrives");
+      realtime.arrive("42");
+      assert.deepEqual(yield* Fiber.join(saving), { saved: true });
+
+      // A save that answers no transaction has nothing to wait for.
+      service.boardSaveTxid = undefined;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
+
+      // A follow Realtime stopped is polled, which hands out no wait, so a save answers at once.
+      delete service.boardSeals[INVITES];
+      realtime.fail("board");
+      yield* boardSettled;
+      service.boardSaveTxid = "43";
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
+      assert.deepEqual(realtime.awaitingTxids(), []);
     }),
 );
 
