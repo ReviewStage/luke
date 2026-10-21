@@ -43,10 +43,10 @@ import type { ToolSet } from "ai";
 import { Effect, Option, type Schema } from "effect";
 
 /** How many characters of a cut field a page carries at each end. */
-const CUT_END_CHARS = Math.floor(CODING_AGENT_BOUNDS.MAX_PART_CHARS / 2);
+export const CUT_END_CHARS = Math.floor(CODING_AGENT_BOUNDS.MAX_PART_CHARS / 2);
 
 /** The tools whose output a page may cut: each reads something and answers it as words, which the window only draws. */
-const CUT_TOOLS: ReadonlySet<string> = new Set([
+export const CUT_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.BASH,
   AGENT_TOOL.READ_FILE,
   AGENT_TOOL.GLOB,
@@ -70,7 +70,7 @@ const CUT_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /** The part type whose words a page may cut beside the tool parts. */
-const REASONING_PART_TYPE = "reasoning";
+export const REASONING_PART_TYPE = "reasoning";
 
 /** A part's heavy field as words: which field, and its words, a tool's output that is no string as its JSON text. */
 interface HeavyField {
