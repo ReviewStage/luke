@@ -156,6 +156,15 @@ function composed(
   /** The workspace whose followed list last drew each automation, by the automation's id. */
   const listedIn = new Map<string, string>();
 
+  /** A workspace's list as it now stands drawn: what it holds is noted under it, and what it dropped forgotten. */
+  const drawn = (workspaceId: string, automations: readonly { readonly id: string }[]) => {
+    const held = new Set(automations.map((each) => each.id));
+    for (const [id, listed] of listedIn) {
+      if (listed === workspaceId && !held.has(id)) listedIn.delete(id);
+    }
+    for (const id of held) listedIn.set(id, workspaceId);
+  };
+
   /**
    * The waits of the follows that show an automation: its workspace's list,
    * named or as a followed list last drew it, and, with `history`, its runs.
@@ -310,8 +319,7 @@ function composed(
                 followed.scope.kind === AUTOMATION_FOLLOW.WORKSPACE &&
                 "automations" in followed.view
               ) {
-                for (const each of followed.view.automations)
-                  listedIn.set(each.id, followed.scope.id);
+                drawn(followed.scope.id, followed.view.automations);
               }
               kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed));
             },
@@ -342,7 +350,10 @@ function composed(
       }),
   };
 
-  const reset = Effect.andThen(FiberMap.clear(follows.workspace), FiberMap.clear(follows.runs));
+  const reset = Effect.andThen(
+    Effect.andThen(FiberMap.clear(follows.workspace), FiberMap.clear(follows.runs)),
+    Effect.sync(() => listedIn.clear()),
+  );
 
   return { methods, lifetime: Effect.void, reset };
 }
