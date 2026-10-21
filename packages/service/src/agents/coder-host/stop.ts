@@ -11,6 +11,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import type { TaskArchivedAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
@@ -317,4 +318,24 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
   const status = codingAgentStatusOf(turn, standing);
   if (status === CODING_AGENT_STATUS.STARTING) return false;
   return status !== CODING_AGENT_STATUS.RUNNING || stoppable(turn);
+});
+
+/**
+ * Whether an agent stands stopped, read under its conversation's lock as a
+ * task's finish holds it (`tasks/task-finish.ts`): neither starting, nor
+ * running, nor holding a line awaiting the turn it opens, a turn whose Stop
+ * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
+ */
+export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
+  agent: TaskArchivedAgent,
+) {
+  const turns = yield* latestTurnsOfReached([agent.conversationId]);
+  const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
+  const status = codingAgentStatusOf(turns.get(agent.conversationId), {
+    createdAt: agent.createdAt,
+    now: yield* Clock.currentTimeMillis,
+    awaitingLineAt: awaiting.get(agent.conversationId),
+    blank: agent.blank,
+  });
+  return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
 });
