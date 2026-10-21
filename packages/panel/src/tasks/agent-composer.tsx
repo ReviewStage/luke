@@ -353,6 +353,7 @@ export function AgentComposer({
   actions,
   beforeSend,
   call,
+  dictates = true,
   sendable = true,
   onKey,
   onLeave,
@@ -405,8 +406,10 @@ export function AgentComposer({
   actions?: ((narrow: boolean) => ReactNode) | undefined;
   /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is: New task's File for later. */
   beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands beside Dictate: an agent's Call button, where the platform takes calls (`agent-call.tsx`). */
+  /** What stands beside Dictate: an agent's Call, or on a call its controls, where the platform takes calls (`agent-call.tsx`). */
   call?: ReactNode;
+  /** Whether the box offers Dictate; not while a call holds the microphone, whose own mute stands in the row. */
+  dictates?: boolean;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
@@ -771,7 +774,9 @@ export function AgentComposer({
                   onOpenChange={handBack(setContextOpen)}
                 />
                 {call}
-                <DictateButton dictation={dictation} disabled={held || module === undefined} />
+                {dictates ? (
+                  <DictateButton dictation={dictation} disabled={held || module === undefined} />
+                ) : null}
                 <ComposerMore foot={foot} offers={offers} />
                 {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
                 {showsStop ? (

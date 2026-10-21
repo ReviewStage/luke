@@ -70,7 +70,13 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { AgentCallButton, type AgentCallDoors, AgentCallFoot, takesCalls } from "./agent-call.js";
+import {
+  AgentCallControls,
+  type AgentCallDoors,
+  AgentCallFoot,
+  takesCalls,
+  useAgentOnCall,
+} from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -1865,6 +1871,7 @@ function AgentTabView({
 }): React.JSX.Element {
   // Note that an agent on a provider's own harness takes no call, so its tab draws neither the button nor the foot.
   const call = takesCalls(agent) ? offeredCall : undefined;
+  const onCall = useAgentOnCall(agent.id) && call !== undefined;
   const lines = useMemo(
     () => agentLines(transcript.messages, composer.sent),
     [transcript.messages, composer.sent],
@@ -1964,9 +1971,7 @@ function AgentTabView({
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
-        {call === undefined ? null : (
-          <AgentCallFoot agentId={agent.id} archived={onUnarchive !== undefined} doors={call} />
-        )}
+        {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (
@@ -2005,13 +2010,15 @@ function AgentTabView({
             closedRemedy={closedRemedy}
             call={
               call === undefined ? undefined : (
-                <AgentCallButton
+                <AgentCallControls
                   agentId={agent.id}
                   archived={onUnarchive !== undefined}
                   doors={call}
                 />
               )
             }
+            // Note that a call holds the microphone, so its own mute stands where Dictate would.
+            dictates={!onCall}
           />
         )}
       </footer>

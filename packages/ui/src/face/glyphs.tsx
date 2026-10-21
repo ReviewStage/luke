@@ -673,6 +673,23 @@ export function CallIcon(): React.JSX.Element {
 }
 
 /**
+ * A sound wave's bars: a call into an agent, which starts one where none is
+ * up. Its path is Lucide's `audio-lines` (ISC licence), drawn in our stroke.
+ */
+export function WaveformIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M2 10v3" />
+      <path d="M6 6v11" />
+      <path d="M10 3v18" />
+      <path d="M14 8v7" />
+      <path d="M18 5v13" />
+      <path d="M22 10v3" />
+    </Glyph>
+  );
+}
+
+/**
  * A speech bubble, for a plan's comments: the side panel's Comments tab and
  * the summary's row. Its path is Lucide's `message-square` (ISC licence),
  * drawn in our stroke.

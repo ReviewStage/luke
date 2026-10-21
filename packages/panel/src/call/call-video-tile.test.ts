@@ -127,7 +127,7 @@ test("the tile has no hang-up of its own, which the call bar already is", () => 
   }
 });
 
-test("video off collapses the tile to a strip whose one button turns video on again", () => {
+test("video off takes the tile away, since the call's own controls carry Video on", () => {
   const onSetVideo = vi.fn();
   const { container, root } = mountRoot(
     tile({ status: AVATAR_STATUS.LIVE, video: VIDEO, onSetVideo }),
@@ -135,11 +135,14 @@ test("video off collapses the tile to a strip whose one button turns video on ag
   act(() => button(container, CALL_VIDEO_LABEL.VIDEO_OFF)?.click());
   // Main answers the off with the avatar ended by the developer, which the model reads as OFF.
   act(() => root.render(tile({ status: AVATAR_STATUS.OFF, video: undefined, onSetVideo })));
-  assert.equal(container.querySelector("video"), null);
+  assert.equal(container.querySelector("section"), null);
+  assert.deepEqual(onSetVideo.mock.calls, [[false]]);
+});
+
+test("a tile that does not toggle offers no Video off of its own, as an agent's tab's, whose composer offers it", () => {
+  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, toggles: false }));
+  assert.ok(container.querySelector("section"));
   assert.equal(button(container, CALL_VIDEO_LABEL.VIDEO_OFF), undefined);
-  assert.match(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.TURNED_OFF));
-  act(() => button(container, CALL_VIDEO_LABEL.VIDEO_ON)?.click());
-  assert.deepEqual(onSetVideo.mock.calls, [[false], [true]]);
 });
 
 test("the tile draws no sound of its own, which the panel plays apart from it", () => {
@@ -166,9 +169,7 @@ test("the avatar's voice is let go of once its track is", () => {
   assert.equal(playing(audio), undefined);
 });
 
-test("the video toggle is round whichever way it flips, as the call's own controls are", () => {
+test("the tile's video toggle is round, as the call's own controls are", () => {
   const live = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO })).container;
   assert.equal(button(live, CALL_VIDEO_LABEL.VIDEO_OFF)?.dataset.shape, BUTTON_SHAPE.ROUND);
-  const off = mountRoot(tile({ status: AVATAR_STATUS.OFF })).container;
-  assert.equal(button(off, CALL_VIDEO_LABEL.VIDEO_ON)?.dataset.shape, BUTTON_SHAPE.ROUND);
 });
