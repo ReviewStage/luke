@@ -7628,12 +7628,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   white-space: nowrap;
 }
 
+/* The glyph keeps its own ink, a task's status mark's among them, as the tab's does. */
 .tab-switcher-name > :is(svg, img, .state-glyph) {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   --state-glyph-size: var(--luke-menu-glyph);
-  color: var(--luke-color-text-muted);
 }
 
 .tab-switcher-name > .luke-text {
