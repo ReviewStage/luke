@@ -1553,6 +1553,27 @@ it.effect(
 );
 
 it.effect(
+  "a part of an open that has not answered holds back neither the document nor the parts that have",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.codes[INVITES] = [];
+      // The pages are never answered, as a read that hangs until its deadline.
+      service.readPages = () => Effect.never;
+      const { call, last } = yield* subject(service);
+
+      const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }));
+      for (let turn = 0; turn < 8; turn += 1) yield* Effect.yieldNow;
+
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+      assert.equal(last()?.codeStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.shownCode, []);
+      yield* Fiber.interrupt(opening);
+    }),
+);
+
+it.effect(
   "a task's code read as none is held as none, and a task whose code read did not answer holds its code unread",
   () =>
     Effect.gen(function* () {
