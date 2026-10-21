@@ -25,6 +25,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { focusRestOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
@@ -444,7 +445,7 @@ function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSu
 function cardOn(row: HTMLElement | null): readonly (string | boolean | null | undefined)[] {
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
-  act(() => row.focus());
+  focusRestOn(row);
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [

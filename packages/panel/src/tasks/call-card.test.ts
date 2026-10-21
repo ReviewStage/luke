@@ -6,6 +6,7 @@ import type { TranscriptCallRow } from "@luke/voice/transcript-model";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { restOn } from "../testing/hint-rest.js";
 import { CodePane } from "./code-pane.js";
 import { RUN_CARD } from "./turn-card.js";
 
@@ -77,9 +78,7 @@ function mounted(view: ReactNode): HTMLElement {
 
 /** The card a closing line hangs while the pointer rests on it, the newest hung where an earlier one is still on its way out. */
 function cardOf(line: HTMLElement): string | undefined {
-  act(() => {
-    line.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(line);
   return [
     ...document.querySelectorAll(`.luke-tooltip-card > [data-run-card="${RUN_CARD.CALL}"]`),
   ].at(-1)?.outerHTML;

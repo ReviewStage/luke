@@ -22,6 +22,7 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -269,9 +270,7 @@ test("an agent's chip the window holds wears its harness's mark, on another task
 
   const worn = agentChips.map((chip) => {
     const onChip = chip.querySelector(".luke-inline-ref-glyph .harness-mark") !== null;
-    act(() => {
-      chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-    });
+    restOn(chip);
     const onCard =
       document.querySelector(".luke-tooltip-card [data-mention-card] .harness-mark") !== null;
     act(() => {

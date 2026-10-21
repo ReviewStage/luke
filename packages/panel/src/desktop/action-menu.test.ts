@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { MenuRow } from "../settings/menu-row.js";
 import { BarMenu } from "../tasks/file-menu.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 
 /**
@@ -178,7 +179,7 @@ test("a Settings row keeps its ⋯, named for its menu, and More on the pointer"
     container.querySelector<HTMLButtonElement>('button[aria-label="Linear actions"]') ??
     assert.fail("no ⋯");
 
-  act(() => ellipsis.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  restOn(ellipsis);
 
   assert.equal(ellipsis.textContent, "", "with no words of its own");
   assert.equal(document.querySelector(".luke-tooltip")?.textContent, "More");

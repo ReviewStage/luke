@@ -21,6 +21,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { Tooltip } from "../tooltip.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
@@ -153,9 +154,7 @@ const control = controlNaming(PEOPLE);
 
 /** Rests the pointer on a control, which hangs its card. */
 function hover(control: Element): void {
-  act(() => {
-    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(control);
 }
 
 test("a Changes card says who opened the pull request and its reviewers by where each stands, each the actor they are to the reader", async () => {

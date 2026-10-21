@@ -54,7 +54,6 @@ test("a pill says its control's name and then its chord, as the tooltip its id n
     createElement(TooltipPill, {
       id: "hint",
       anchor,
-      instant: true,
       label: "Archive plan",
       shortcut: createElement("kbd", null, "⌘E"),
     }),
@@ -73,7 +72,6 @@ test("a card's presses stop at the card, and only a press on one of its buttons 
       createElement(TooltipCard, {
         id: "hint",
         anchor,
-        instant: true,
         onPress: () => heard.push("press"),
         onChoice: () => heard.push("choice"),
         children: [

@@ -60,6 +60,7 @@ import {
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { ToastHost } from "../toast.js";
@@ -973,7 +974,7 @@ function cutShort(words: Element): void {
 
 /** The pill the pointer resting on `words` raises, or nothing where it raises none. */
 function pillOver(words: Element): string | undefined {
-  act(() => words.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  restOn(words);
   const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
   act(() => words.dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
   return pill;

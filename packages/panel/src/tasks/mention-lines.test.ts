@@ -18,6 +18,7 @@ import {
   pressInComposer,
   QUIET_COMPOSER,
 } from "../testing/composer.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
   installScrollTo,
@@ -170,9 +171,7 @@ function lineText(container: HTMLElement, line: number): Node {
 /** The file's card hung while the pointer rests on `element`: its name and its note. */
 function cardOn(element: Element | undefined): (string | null | undefined)[] {
   assert.ok(element, "the chip is drawn");
-  act(() => {
-    element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(element);
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [

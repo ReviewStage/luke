@@ -12,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 
@@ -70,9 +71,7 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
     ".task-summary-archived-agent .task-summary-row",
   );
   assert.ok(row, "the archived agent is listed");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row);
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Retry audit");
   assert.match(card?.querySelector(".luke-hover-card-corner")?.textContent ?? "", /^Archived · /u);
@@ -112,9 +111,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchiv
   const row = container.querySelector<HTMLElement>(
     ".task-summary-archived-agent .task-summary-row",
   );
-  act(() => {
-    row?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row ?? assert.fail("the row is drawn"));
   return [
     ...document.querySelectorAll(".luke-tooltip-card [data-tab-card] .luke-hover-card-note"),
   ].map((note) => note.textContent ?? "");

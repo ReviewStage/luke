@@ -57,6 +57,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -914,9 +915,7 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
   );
 
   const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
-    act(() => {
-      chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-    });
+    restOn(chip);
     const card = document.querySelector(".luke-tooltip-card [data-mention-card]");
     const words = card?.textContent ?? "";
     act(() => {

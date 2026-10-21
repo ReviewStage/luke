@@ -10,6 +10,7 @@ import { SidebarTask } from "../desktop/task-actions.js";
 import { lineWords } from "../testing/actor-line.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { PlanBody } from "./plan-body.js";
 import { RelativeTime } from "./relative-time.js";
@@ -91,9 +92,7 @@ test("a time hangs its full moment in the window's tooltip, not the system's", (
   assert.equal(time.getAttribute("dateTime"), new Date(at).toISOString());
   assert.equal(time.getAttribute("title"), null);
 
-  act(() => {
-    time.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(time);
 
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Oct 14, 2026, 3:42 PM");
 });

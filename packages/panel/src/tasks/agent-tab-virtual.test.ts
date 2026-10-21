@@ -23,6 +23,7 @@ import { useTabViews } from "../desktop/strip-tabs.js";
 import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { focusRestOn } from "../testing/hint-rest.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
@@ -340,7 +341,7 @@ test("a page that lands draws no message it did not touch again, the task's page
   );
   assert.ok(chip, "the earlier turn's row names the agent it messaged");
   document.documentElement.dataset.keyboard = "true";
-  act(() => chip.focus());
+  focusRestOn(chip);
   assert.ok(cardDraws > 0, "the card is drawn");
 
   cardDraws = 0;

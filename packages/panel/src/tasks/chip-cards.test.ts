@@ -31,6 +31,7 @@ import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.j
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { ChipCards, type TaskFocus } from "./chip-cards.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -249,9 +250,7 @@ async function settle(): Promise<void> {
 /** The card the chip hangs once what it reads has landed, its words by part. */
 async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   await settle();
   const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");

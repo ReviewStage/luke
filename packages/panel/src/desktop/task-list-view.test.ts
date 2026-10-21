@@ -15,6 +15,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -279,9 +280,7 @@ test("a shared workspace's tasks group by repository until View options groups t
       "Billing empty states",
   );
   assert.ok(row, "the task has a row");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row);
   assert.match(document.querySelector(".luke-tooltip-card")?.textContent ?? "", /acme\/console/);
 });
 

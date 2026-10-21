@@ -21,6 +21,7 @@ import {
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { FileNoteAnnotation } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
@@ -276,7 +277,7 @@ test("a plain link hangs its whole address in the window's hint, an address past
   const [bare, longLink] = [...container.querySelectorAll<HTMLElement>(".luke-text-link")];
   assert.ok(bare !== undefined && longLink !== undefined);
   const hint = (link: HTMLElement): string | null | undefined => {
-    act(() => link.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    restOn(link);
     return document.querySelector('[role="tooltip"]')?.textContent;
   };
 

@@ -21,6 +21,7 @@ import { AutomationDirectory } from "../automation-directory.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 import { agentActor } from "./coding-agent-model.js";
 
@@ -109,9 +110,7 @@ afterEach(() => {
 
 /** Rests the pointer on `element`, as hovering it does. */
 function hover(element: Element): void {
-  act(() => {
-    element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(element);
 }
 
 /** The cards standing in the window, the first hung first. */

@@ -63,6 +63,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
@@ -554,9 +555,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   ]);
   const row = document.querySelectorAll<HTMLElement>('[role="option"]')[1];
   assert.ok(row, "the agent is listed");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row);
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
   assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, undefined);
@@ -709,9 +708,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       each.textContent?.includes("Invoice export"),
     );
     assert.ok(row, "the agent is listed");
-    act(() => {
-      row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-    });
+    restOn(row);
     const words = document.querySelector(
       ".luke-tooltip-card .actor-words [data-actor-ref]",
     )?.textContent;
@@ -1011,9 +1008,7 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
     renderToStaticMarkup(plus.row.icon),
     'the row wears the icon the "+" row does',
   );
-  act(() => {
-    row?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row ?? assert.fail("the row is drawn"));
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.deepEqual(
     [

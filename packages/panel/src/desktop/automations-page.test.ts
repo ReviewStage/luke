@@ -59,6 +59,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { playMotions } from "../testing/pane-motion.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -1538,7 +1539,7 @@ test("a code review's page says it is an experiment while Code review is on, its
 
 /** The pill the pointer resting on `element` raises, or nothing where it raises none. */
 function pillOver(element: Element): string | undefined {
-  act(() => element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  restOn(element);
   const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
   act(() => element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
   return pill;

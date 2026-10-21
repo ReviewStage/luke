@@ -53,6 +53,7 @@ import {
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -1084,9 +1085,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
   const chip = page.querySelector("[data-mention-ref]");
   assert.ok(chip, "the version draws the plan's chip");
 
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
 
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);

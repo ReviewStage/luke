@@ -16,6 +16,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { PublishedRow } from "./agent-published.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -334,9 +335,7 @@ test("where the workspace has no GitHub App installed, an issue's link asks noth
 /** The notes of the card a chip hangs: its key and state, with a pull request's lines, who it is with, and its address where GitHub answered nothing. */
 function cardNotes(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(readable);
   act(() => {
@@ -358,9 +357,7 @@ function readable(note: Element): string | null {
 /** The face each card's opener wears: the kind of actor it is, and the avatar it is drawn with where one is. */
 function openerFace(chip: Element | undefined): [string | undefined, string | null | undefined] {
   assert.ok(chip, "the link is drawn as its chip");
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const mark = card?.querySelector<HTMLElement>(".luke-hover-card-note .actor-mark");
   const face: [string | undefined, string | null | undefined] = [
@@ -405,9 +402,7 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
 /** Each label a chip's card names, by its name. */
 function cardLabels(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(chip);
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const labels = [
     ...(card?.querySelectorAll<HTMLElement>('ul[aria-label="Labels"] > li') ?? []),
@@ -502,9 +497,7 @@ test("where GitHub answers nothing, an agent's pull request's row hangs a card n
   const row = container.querySelector(".agent-published button");
   assert.ok(row, "the pull request's row stands");
 
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row);
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Expire old invitations");
 });

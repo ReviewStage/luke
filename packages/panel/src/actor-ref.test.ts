@@ -15,6 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "./actor-ref.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { restOn } from "./testing/hint-rest.js";
 
 /**
  * Whoever did something is drawn one way: a person by their picture once it
@@ -156,9 +157,7 @@ test("a facepile draws its first few and counts the rest only where its words do
 function cardOf(actor: Actor): Element {
   const view = draw(createElement(ActorRef, { actor }));
   const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");
-  act(() => {
-    named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(named);
   return (
     document.querySelector('.luke-tooltip-card [data-actor-card="github"]') ??
     assert.fail("a card hangs")
@@ -291,11 +290,7 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
       label: "Reviewers",
     }),
   );
-  act(() => {
-    pile
-      .querySelector(".actor-stack-more")
-      ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(pile.querySelector(".actor-stack-more") ?? assert.fail("the count stands"));
   const row =
     document.querySelector('.luke-tooltip-card [data-actor-card="more"] .actor-more-row') ??
     assert.fail("the count's card names the rest");

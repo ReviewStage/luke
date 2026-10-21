@@ -34,9 +34,9 @@ const Hint: InlineRefHint = ({ label, card, children }) => {
   const hide = () => setAnchor(undefined);
   const hint =
     anchor === undefined ? null : card === undefined ? (
-      <TooltipPill id={id} anchor={anchor} instant={false} label={label} />
+      <TooltipPill id={id} anchor={anchor} label={label} />
     ) : (
-      <TooltipCard id={id} anchor={anchor} instant={false}>
+      <TooltipCard id={id} anchor={anchor}>
         {card}
       </TooltipCard>
     );

@@ -42,7 +42,7 @@ const Hint: FoldingButtonHint = ({ label, children }) => {
         onBlur: hide,
       })}
       {anchor === undefined || label === undefined ? null : (
-        <TooltipPill id={id} anchor={anchor} instant={false} label={label} />
+        <TooltipPill id={id} anchor={anchor} label={label} />
       )}
     </>
   );

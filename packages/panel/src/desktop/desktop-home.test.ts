@@ -41,6 +41,7 @@ import {
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { commandKeyshortcuts } from "../tooltip.js";
@@ -847,9 +848,7 @@ test("a waiting row wears its agent's tile, and hangs the thread's card, its tas
   const row = button(page, "Email the invitee when an invite is withdrawn?");
   assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
   assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the row wears the agent's tile");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row);
   const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
   assert.match(card?.textContent ?? "", /Email the invitee when an invite is withdrawn\?/u);
   assert.match(
@@ -909,9 +908,7 @@ test("a waiting row of an agent with no plan names the automation that started i
   await settle();
 
   const row = button(container, "Quarantine the flaky test?");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(row);
   const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
   assert.match(card?.textContent ?? "", /^Nightly flake sweep.*Sweep the flaky tests$/su);
 });

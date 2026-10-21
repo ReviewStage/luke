@@ -10,6 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { SIDE_PANEL_TAB } from "./use-side-panel.js";
@@ -103,9 +104,7 @@ function mount(
 /** The card hung while the pointer rests on `element`: its name and its note. */
 function cardOn(element: Element | null | undefined): (string | null | undefined)[] {
   assert.ok(element, "the file is named");
-  act(() => {
-    element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(element);
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [

@@ -16,7 +16,7 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useDraftedAgents } from "../composer-drafts.js";
@@ -88,9 +88,17 @@ function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAc
 /**
  * The agent's card, as its tab hangs it on a task (`agent-ref.tsx`): its
  * name, where it stands and when it last moved, who started it, and its
- * pull request, read from the list's row as a task's row's card is.
+ * pull request, read from the list's row as a task's row's card is. Note
+ * that it is a component of its own, so what the card reads is worked out
+ * only once the card is drawn, never on a render of the row.
  */
-function agentCardOf(agent: TasklessAgent, agents: CodingAgentsControl): React.JSX.Element {
+function SidebarAgentCard({
+  agent,
+  agents,
+}: {
+  agent: TasklessAgent;
+  agents: CodingAgentsControl;
+}): React.JSX.Element {
   return <AgentCard subject={tasklessRowSubject(agent, agents)} models={agents.models} />;
 }
 
@@ -189,9 +197,10 @@ export function SidebarAgent({
       ? { key: "unarchive", label: "Unarchive", icon: <UnarchiveIcon />, onSelect: put.onSelect }
       : { key: "archive", label: "Archive", icon: <ArchiveIcon />, onSelect: put.onSelect },
   ];
+  const card = useMemo(() => <SidebarAgentCard agent={agent} agents={agents} />, [agent, agents]);
   return (
     <>
-      <RowHintOptions card={agentCardOf(agent, agents)} cardBeside cardRegion={item}>
+      <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
           density={LIST_DENSITY.DENSE}

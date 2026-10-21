@@ -24,6 +24,7 @@ import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
 import { TurnCard } from "./tasks/turn-card.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
 /**
@@ -93,9 +94,7 @@ function drawn(element: ReactElement): HTMLElement {
 function hung(view: HTMLElement, selector: string): HTMLElement {
   const anchor = view.querySelector(selector);
   assert.ok(anchor, `${selector} is drawn`);
-  act(() => {
-    anchor.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(anchor);
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card");
   assert.ok(card, "the card hangs");
   return card;
