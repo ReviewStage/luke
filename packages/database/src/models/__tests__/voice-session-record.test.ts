@@ -145,6 +145,44 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
   );
 
   it.effect(
+    "a call into an agent with no task is held, registered with no task, and read back by its agent alone",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        const stranger = yield* openAccount;
+        const { workspaceId } = yield* startTask(userId, { name: "Billing export" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: null,
+          organizationId: workspaceId,
+          planSnapshot: null,
+          prompt: "Triage the overnight failures.",
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: null,
+        });
+        const agent = Option.getOrThrow(started).agent;
+        assert.equal((yield* record.heldAgent({ userId, agentId: agent.id }))?.taskId, null);
+        assert.equal(yield* record.heldAgent({ userId: stranger, agentId: agent.id }), undefined);
+
+        const sessionId = `live-${randomUUID()}`;
+        const voiceSessionId = yield* record.register({
+          userId,
+          sessionId,
+          agentId: agent.id,
+          attachId: randomUUID(),
+          model: "gpt-live",
+        });
+        assert.ok(voiceSessionId);
+        assert.deepEqual(yield* record.owned({ userId, sessionId }), {
+          voiceSessionId,
+          taskId: undefined,
+          agentId: agent.id,
+        });
+      }),
+  );
+
+  it.effect(
     "a new call into an agent reads back its own calls alone, and its transcript is those calls, never a sibling agent's or the task's own",
     () =>
       Effect.gen(function* () {
