@@ -145,9 +145,12 @@ protected_by_vercel() {
 
 # Prints the address of the preview built from `$sha` and exits, or returns
 # when the commit has no build of its own: Vercel skipped it, or it is not
-# the head and has no record. Every other ending exits with its own code.
+# the head and has no record. `$1` is the commit's role: the `head`, an
+# `ancestor` of it, or an `earlier` head of its branch, which also returns
+# where its own build did not succeed. Every other ending exits with its own
+# code.
 read_preview() {
-    local is_head=$1 attempt record status state description address vercel_status
+    local role=$1 attempt record status state description address vercel_status
     for ((attempt = 1; attempt <= attempts; attempt++)); do
         if ! record=$(read_record); then
             printf 'UNREADABLE: gh could not read the deployments of %s\n' "$sha" >&2
@@ -165,6 +168,13 @@ read_preview() {
                 state=$(field "$status" state)
                 description=$(field "$status" description)
                 address=$(field "$status" address)
+            fi
+            # Note that the build serving a skipped head ended before the head was
+            # pushed, so an earlier head whose own build failed or is still on
+            # its way is not it, and an older one is looked at instead.
+            if [[ $role == earlier && $state != success ]]; then
+                printf 'preview: record %s for %s is %s, not the build serving %s; passing over it\n' "$record" "$sha" "${state:-unsettled}" "$head" >&2
+                return
             fi
             case $state in
             success)
@@ -191,7 +201,7 @@ read_preview() {
                 ;;
             esac
             printf 'preview: waiting (record %s is %s)\n' "$record" "${state:-unsettled}" >&2
-        elif [[ $is_head == false ]]; then
+        elif [[ $role != head ]]; then
             return
         else
             # No record means Vercel has not started the build; its commit status
@@ -241,12 +251,16 @@ deploys_the_head() {
 }
 
 head=$sha
-read_preview true
-if [[ -n $branch ]]; then
-    if ! pushed=$(read_pushed_heads); then
-        printf 'UNREADABLE: gh could not read the pushes to %s\n' "$branch" >&2
-        exit "$EXIT_UNREADABLE"
-    fi
+read_preview head
+# Note that a branch whose pushes cannot be read is passed on to the ancestor
+# walk rather than ended, since that walk alone finds what an unrebased
+# branch serves.
+pushed=
+if [[ -n $branch ]] && ! pushed=$(read_pushed_heads); then
+    printf 'preview: gh could not read the pushes to %s; walking ancestors alone\n' "$branch" >&2
+    pushed=
+fi
+if [[ -n $pushed ]]; then
     while IFS= read -r candidate; do
         if [[ -z $candidate || $candidate == "$head" || $candidate =~ ^0+$ ]]; then
             continue
@@ -254,13 +268,12 @@ if [[ -n $branch ]]; then
         if deploys_the_head "$candidate"; then
             printf 'preview: %s, an earlier head of %s, deploys what %s does; looking there\n' "$candidate" "$branch" "$head" >&2
             sha=$candidate
-            read_preview false
+            read_preview earlier
         fi
     done <<<"$pushed"
     sha=$head
 fi
 
-is_head=false
 walked=0
 while true; do
     # Note that the walk passes over an ancestor whose deployed tree differs
@@ -283,5 +296,5 @@ while true; do
         fi
     done
     printf 'preview: %s deploys what %s does; looking there\n' "$sha" "$head" >&2
-    read_preview "$is_head"
+    read_preview ancestor
 done
