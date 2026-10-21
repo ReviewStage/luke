@@ -2,7 +2,6 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
-import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   HOVER_CARD_ROW_LOOK,
@@ -28,8 +27,9 @@ import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-mod
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { WorkspaceRef } from "./workspace-ref.js";
@@ -129,7 +129,10 @@ export function RepositoryDetail({
 
 /**
  * Who created the task, under its repository: their face and "Created by
- * Charles Pan · 3d ago", "Created by you", or a member who left saying so,
+ * Charles Pan · 3d ago", "Created by you", or a member who left saying so;
+ * or, for a task Luke or an agent made, its square with the member's face on
+ * its corner and "Created by Invite emails for you · from Teammate
+ * invitations",
  * read against the members of the directory around the card, a press
  * opening their page where the window offers one.
  */
@@ -143,15 +146,26 @@ function CreatorDetail({
   now: number;
 }): React.JSX.Element {
   const creator = useCreator(task, readerId);
+  const maker = useTaskMaker(task);
+  // Note that the line opens the member it names, whoever made the task for them, since Luke and an agent have no page.
   const door = useActorDoor(creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
+  const by = `${actorName(creator, { sentence: true })}${left ? ", who left" : ""}`;
   return (
     <HoverCardRow
       look={HOVER_CARD_ROW_LOOK.DETAIL}
-      glyph={<ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
+      glyph={
+        <ActorMark
+          actor={maker?.actor ?? creator}
+          size={ACTOR_SIZE.MARK}
+          forWhom={maker === undefined ? undefined : creator}
+        />
+      }
       label={
         <>
-          {`Created by ${actorName(creator, { sentence: true })}${left ? ", who left" : ""} · `}
+          {maker === undefined
+            ? `Created by ${by} · `
+            : `Created by ${actorName(maker.actor)} for ${by}${maker.fromTask === undefined ? "" : ` · from ${maker.fromTask}`} · `}
           <RelativeTime at={task.createdAt} now={now} hint={false} ago />
         </>
       }
@@ -272,8 +286,9 @@ export function TaskCard({
   const { members } = useMemberDirectory();
   const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
   const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
+  // Note that a task Luke or an agent made says so in a workspace of one too, where its member's own needs no saying.
   const creatorShown =
-    (shared ?? (members !== undefined && members.length > 1)) &&
+    (task.origin !== undefined || (shared ?? (members !== undefined && members.length > 1))) &&
     (task.createdBy !== undefined || task.ownerId !== undefined);
   return (
     <HoverCard data-task-card="">
@@ -353,28 +368,10 @@ export function TaskCard({
 }
 
 /**
- * A task's key as a card names it, “STAG-182” in a small chip of its own,
- * monospace, before what else the card leads with: the task's card, and an
- * Inbox row's card naming the task its item stands under; nothing for a task
- * from a service before keys, or where the window holds no such workspace.
- */
-export function TaskKeyChip({
-  task,
-  workspaceName,
-}: {
-  task: Pick<TaskSummary, "number">;
-  workspaceName: string | undefined;
-}): React.JSX.Element | null {
-  if (task.number === undefined || workspaceName === undefined) return null;
-  return (
-    <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
-  );
-}
-
-/**
- * Where a task stands, as its card leads with it: its key, its status, and
- * its priority, each a small chip of its mark and its words; none it has
- * not got, as a task from a service before keys, statuses, or priorities.
+ * Where a task stands, as its card leads with it: its key in plain words, as
+ * every place draws it (`TaskKey`), then its status and its priority, each a
+ * small chip of its mark and its words; none it has not got, as a task from
+ * a service before keys, statuses, or priorities.
  */
 function TaskStanding({
   task,
@@ -387,7 +384,7 @@ function TaskStanding({
   if (!keyed && task.status === undefined && task.priority === undefined) return null;
   return (
     <div className="task-card-standing">
-      <TaskKeyChip task={task} workspaceName={workspaceName} />
+      <TaskKey workspaceName={workspaceName} number={task.number} />
       {task.status === undefined ? null : (
         <span className="task-card-chip">
           <TaskStatusGlyph status={task.status} />

@@ -110,10 +110,11 @@ import {
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
-export interface AgentsProcedureSeams extends EveReach, PublishedReach {
+export interface AgentsProcedureSeams extends EveReach, PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
   /** The agent's sandbox as the shells reach it: Vercel's in production, a script's in a test. */
   readonly sandbox: Layer.Layer<AgentSandbox, never, HttpClient.HttpClient>;
@@ -428,12 +429,14 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           // An archived agent works on unseen, so a turn still running is stopped before the stamp.
           yield* stoppedForGood(seams, writer, context.request, userId, agent);
         }
-        return yield* committedAgent(
-          userId,
-          yield* hostedStoreOrUnavailable(
-            archiveCodingAgentCommitted(userId, agent.id, body.archived),
-          ),
+        const archived = yield* hostedStoreOrUnavailable(
+          archiveCodingAgentCommitted(userId, agent.id, body.archived),
         );
+        // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
+        if (body.archived && Option.isSome(archived)) {
+          yield* stoppedInBackground(seams, [agent]);
+        }
+        return yield* committedAgent(userId, archived);
       }
       if ("pinned" in body) {
         return yield* committedAgent(

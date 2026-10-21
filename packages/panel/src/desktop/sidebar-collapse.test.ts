@@ -138,11 +138,6 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
       sidebar,
       room: stage.room,
       settingsStep: { listed: true, onList: ignore },
-      call: undefined,
-      notice: {
-        notice: { content: undefined, shown: false },
-        onDismissHint: ignore,
-      },
       settings: SETTINGS,
     });
     return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);

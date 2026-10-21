@@ -64,6 +64,7 @@ import {
 } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
+import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -347,6 +348,7 @@ function TaskMenuFooter({
   const reader = useEditReader({ readerId: tasks.me });
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
+  const origin = useTaskOrigin()(task);
   const { region } = tasks;
   const opened = region.kind === DOCUMENT_REGION.READY && region.task.id === task.id;
   const edit = opened ? lastEditOf(region.task) : undefined;
@@ -354,13 +356,18 @@ function TaskMenuFooter({
     reader,
     sections: (opened ? region.task.sectionEdits : undefined) ?? [],
     agents: { control: tasks.agents, onOpen: undefined },
-    now,
   };
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
     <>
       <p className="task-menu-note actor-line">
         {"Created by "}
+        {origin === undefined ? null : (
+          <>
+            <ActorRef actor={origin} />
+            {" for "}
+          </>
+        )}
         <ActorRef actor={creatorActor(task, reader, you)} sentence />
         {" · "}
         <RelativeTime at={task.createdAt} now={now} ago />
@@ -437,7 +444,7 @@ export function useTaskMenu(
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
     task !== undefined && task.archivedAt === undefined
-      ? moveToSectionEntry(tasks, task, sections.askNew)
+      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
   const menu =
     drawn === undefined ? null : (
@@ -546,25 +553,38 @@ export interface RowFaces {
 /** Every face a row may wear, as a list naming nobody draws it. */
 const EVERY_FACE: RowFaces = { creator: true, assignee: true };
 
-/** The face a task's row wears, and whether it is its assignee's rather than its creator's. */
+/** The face a task's row wears, whether it is its assignee's rather than its creator's, and the member Luke or an agent made it for, on its corner. */
 interface RowFace {
   readonly actor: Actor;
   readonly assigned: boolean;
+  readonly forWhom?: Actor | undefined;
 }
 
 /**
  * Who a task's row names by face: the member it is assigned to where that
- * is someone other than the reader, nobody where it is the reader, and on a
- * task no one is assigned to, whoever else created it (`teammateCreator`);
- * each only where `faces` lets the row wear that kind, the list saying it
- * already otherwise.
+ * is someone other than the reader; otherwise Luke or the agent that made
+ * it (`origin`), the reader's own task included, with the member it was
+ * made for on its corner; and on a task no one is assigned to, whoever else
+ * created it (`teammateCreator`); each only where `faces` lets the row wear
+ * that kind, the list saying it already otherwise.
  */
 function rowFaceOf(
   task: TaskSummary,
   reader: ReturnType<typeof useMemberDirectory>,
   faces: RowFaces,
+  origin: Actor | undefined,
 ): RowFace | undefined {
   const { assignee } = task;
+  if (assignee === undefined || assignee.userId === reader.readerId || !faces.assignee) {
+    // Note that Luke or an agent wears its square on the reader's own task too, so it never passes for one they made by hand.
+    if (origin !== undefined) {
+      return {
+        actor: origin,
+        assigned: false,
+        ...(faces.creator ? { forWhom: creatorActor(task, reader, undefined) } : undefined),
+      };
+    }
+  }
   if (assignee === undefined) {
     const creator = faces.creator ? teammateCreator(task, reader) : undefined;
     return creator === undefined ? undefined : { actor: creator, assigned: false };
@@ -635,7 +655,7 @@ export function SidebarTask({
     drawn: true,
     unread,
   });
-  const worn = rowFaceOf(task, useMemberDirectory(), faces);
+  const worn = rowFaceOf(task, useMemberDirectory(), faces, useTaskOrigin()(task));
   const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
@@ -695,7 +715,7 @@ export function SidebarTask({
                   <FadingWords className="sidebar-task-repository" words={repository} />
                 )}
                 {worn === undefined ? null : (
-                  <ActorMark actor={worn.actor} size={ACTOR_SIZE.MARK} />
+                  <ActorMark actor={worn.actor} size={ACTOR_SIZE.MARK} forWhom={worn.forWhom} />
                 )}
                 {drafted ? <DraftMark /> : null}
                 <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />

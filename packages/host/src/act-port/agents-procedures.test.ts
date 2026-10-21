@@ -82,6 +82,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: "Could not mark the agent as read on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: "Could not read the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]:
     "Could not read the agent's pull request on this system.",
@@ -185,6 +186,10 @@ const ACTS: readonly {
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_SHOWN,
     payload: { agentId: AGENT_ID, inboxTaskId: null },
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_SEEN,
+    payload: { agentId: AGENT_ID },
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_PAGE,
@@ -294,6 +299,9 @@ function windowPort(
     },
     shown: (agentId) => {
       noted.push(`shown:${agentId}`);
+    },
+    seen: (agentId) => {
+      noted.push(`seen:${agentId}`);
     },
     shownInbox: (taskId) => {
       noted.push(`inbox:${taskId}`);
@@ -481,6 +489,16 @@ it("a panel's word on what it shows is noted whole, the Chat as none where it na
     "inbox:null",
     "chat:null",
   ]);
+  assert.deepEqual(asked, []);
+});
+
+it("a panel's Mark as read on an agent clears its unseen dot without naming a page shown, and answers nothing", async () => {
+  const { call, asked, noted } = windowPort(PANEL);
+
+  const answer = await call(AGENT_ACT_KIND.CODING_AGENTS_SEEN, { agentId: AGENT_ID });
+
+  assert.deepEqual(answer, { answer: undefined });
+  assert.deepEqual(noted, [`seen:${AGENT_ID}`]);
   assert.deepEqual(asked, []);
 });
 

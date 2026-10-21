@@ -65,7 +65,7 @@ export type OpenBrowserLive = (
 ) => BrowserLiveSocket;
 
 /** How long the view waits before it opens its socket again. */
-export const CLOUD_BROWSER_RECONNECT = {
+const CLOUD_BROWSER_RECONNECT = {
   /** The first wait after a drop, doubling on each drop before a socket is heard on again. */
   FIRST: Duration.seconds(1),
   /** The longest wait after a drop. */
@@ -75,7 +75,7 @@ export const CLOUD_BROWSER_RECONNECT = {
 } as const;
 
 /** How often the viewport is sent again while the socket stands, well inside the relay's idle bound. */
-export const CLOUD_BROWSER_VIEWPORT_EVERY = Duration.minutes(1);
+const CLOUD_BROWSER_VIEWPORT_EVERY = Duration.minutes(1);
 
 /** Where a view stands. */
 export const CLOUD_BROWSER_PHASE = {
@@ -89,7 +89,7 @@ export const CLOUD_BROWSER_PHASE = {
   ENDED: "ended",
 } as const;
 
-export type CloudBrowserPhase = (typeof CLOUD_BROWSER_PHASE)[keyof typeof CLOUD_BROWSER_PHASE];
+type CloudBrowserPhase = (typeof CLOUD_BROWSER_PHASE)[keyof typeof CLOUD_BROWSER_PHASE];
 
 type ServerOf<Type extends BrowserLiveServerMessage["type"]> = Extract<
   BrowserLiveServerMessage,

@@ -27,7 +27,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
-import { type CallCardInput, callControls } from "../call/call-card.js";
+import { CallCardContext, type CallCardInput, callControls } from "../call/call-card.js";
 import { MOUSE_BUTTON } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
@@ -193,7 +193,8 @@ function SettingsHarness({
   capabilities?: readonly HostCapability[];
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(opensOn);
-  return createElement(DesktopSettings, {
+  // The card is handed down as the window's root hands it, past every page between.
+  const settings = createElement(DesktopSettings, {
     sidebar: {
       collapsed: false,
       compact: false,
@@ -218,9 +219,9 @@ function SettingsHarness({
       ...settingsProps(view, setView, capabilities),
       ...(workspace ? { workspace } : undefined),
     },
-    call,
     onExit,
   });
+  return createElement(CallCardContext.Provider, { value: call }, settings);
 }
 
 let root: Root | undefined;

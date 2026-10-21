@@ -73,6 +73,7 @@ function scriptedSandboxes(
   const stopAsked: string[] = [];
   const service: SessionSandboxesService = {
     deleteFor: () => Effect.die("the terminal sweep deletes nothing"),
+    keepAliveFor: () => Effect.die("the terminal sweep keeps nothing alive"),
     stopFor: (sessionId) =>
       Effect.suspend(() => {
         stopAsked.push(sessionId);

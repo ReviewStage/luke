@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
-  CODING_AGENT_PAYER,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -188,14 +187,13 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(again, draft, "the plan's one draft is answered again");
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
-  // The words, the choice, the servers off, and the payer picked are the draft's, held while another task opens a draft of its own.
+  // The words, the choice, and the servers off are the draft's, held while another task opens a draft of its own.
   const prompt = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
   act(() => tab.control().onDraftChange({ prompt }));
   act(() => tab.control().onDraftChange({ choice }));
   act(() => tab.control().onDraftChange({ disabledServers }));
-  act(() => tab.control().onDraftChange({ payer: CODING_AGENT_PAYER.API_KEY }));
   await tab.stand({ taskId: OTHER_TASK });
   assert.equal(tab.control().draft, undefined);
   let other = "";
@@ -210,7 +208,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
     attachments: [],
     choice,
     disabledServers,
-    payer: CODING_AGENT_PAYER.API_KEY,
   });
 
   let failed: Failure | undefined;
@@ -226,9 +223,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab
-      .control()
-      .startPrompt(draft, prompt, undefined, [notes], disabledServers, CODING_AGENT_PAYER.API_KEY);
+    failed = await tab.control().startPrompt(draft, prompt, undefined, [notes], disabledServers);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
@@ -239,7 +234,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
       prompt,
       attachments: [notes],
       disabledServers,
-      payer: CODING_AGENT_PAYER.API_KEY,
     },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
@@ -452,7 +446,7 @@ test("on an agent's own page, its agent is continued and forked through the page
   act(() => {
     draft = tab.control().onForkDraft(fork);
   });
-  assert.equal(tab.control().draft?.fork, fork, "the page holds the fork's draft");
+  assert.deepEqual(tab.control().draft?.fork, fork, "the page holds the fork's draft");
   await act(async () => {
     failed = await tab.control().startFork(draft, fork, "", undefined, [], []);
   });
@@ -672,7 +666,8 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
     failed = await tab.control().startFork(joined, fork, ` ${words} `, undefined, [notes], []);
   });
   assert.equal(failed?.text, "The agent could not be started. Try again.");
-  assert.equal(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
+  // Note that the fork kept is the same fork, though the tab hands back the one it already held where its fields are the same (`useSteadyDoors`).
+  assert.deepEqual(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
   await act(async () => {
     failed = await tab.control().startFork(joined, fork, "", undefined, [], []);
   });
@@ -1070,4 +1065,56 @@ test("a draft's Call starts an empty draft's agent blank under a key of its own,
   assert.equal(first?.prompt, undefined);
   assert.notEqual(first?.idempotencyKey, empty, "under a key of the press's own");
   assert.deepEqual(second, { taskId: TASK, idempotencyKey: worded, prompt, call: true, ...choice });
+});
+
+test("what an agent's transcript said of it before its task's agents were read stands over the list's answer, which was read as it stood before", async () => {
+  let answer: (value: WireBoundaryInput) => void = () => undefined;
+  const tab = mount({ taskId: TASK, repository: null });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    new Promise<WireBoundaryInput>((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await tab.mount();
+  assert.equal(tab.control().agents, undefined, "the agents are still being read");
+
+  // The tab follows its agent from the id, so its page lands before the list does.
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
+  answer({ agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }] });
+  await settle();
+
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
+    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+  );
+});
+
+test("what an agent's transcript said before its task's agents were read outlasts a read of them that failed, and stands over the one that lands", async () => {
+  let fail: (value: WireBoundaryInput) => void = () => undefined;
+  const tab = mount({ taskId: TASK, repository: null });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    new Promise<WireBoundaryInput>((resolve) => {
+      fail = resolve;
+    }),
+  );
+  await tab.mount();
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
+  fail({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
+  assert.equal(tab.control().agents, undefined, "the read failed");
+
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, {
+    agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }],
+  });
+  act(() => tab.control().onRetryList());
+  await settle();
+
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
+    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+  );
 });

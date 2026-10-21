@@ -39,6 +39,7 @@ import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   type TaskBoardLiveAnswer,
+  type TaskBrowserTabsLiveAnswer,
   type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
@@ -520,6 +521,28 @@ export class HostedTaskClient {
   > {
     return hostedResult(
       askLive(this.#hosted.live.taskPages, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /** One task's Browser tabs, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
+  browserTabsLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskBrowserTabsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskBrowserTabs,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
       LIVE_REFUSALS,
     );
   }

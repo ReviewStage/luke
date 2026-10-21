@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+
+import { UsageChart } from "@luke/panel/admin/charts/usage-chart";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { UsageChart } from "../src/admin/charts/usage-chart";
 
 /**
  * admin-usage-chart.test.ts -- the usage chart names each day it draws on its

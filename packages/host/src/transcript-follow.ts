@@ -4,7 +4,9 @@ import {
   type CodingAgentTranscriptPage,
 } from "@luke/features/coding-agent-view";
 import {
+  applyMessagesPage,
   CODING_AGENT_BOUNDS,
+  type CodingAgentMessage,
   type CodingAgentNewestAnswer,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -13,6 +15,7 @@ import {
   LIVE_SIGNED_OUT,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
+import { windowMessagesOf } from "@luke/features/transcript-window";
 import {
   Data,
   Duration,
@@ -26,20 +29,27 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { confirmWrite, LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
  *
- * A follow opens with the transcript's newest page, read beside the seal
- * rather than after it, so the window draws the end of the transcript after
- * one request; the older pages are the window's to ask for. Once the
+ * A follow opens with the window this host last told of the transcript,
+ * where it holds one (`transcript-held.ts`), before it asks the service
+ * anything, and reads on from its cursor; otherwise with the transcript's
+ * newest page, read beside the seal rather than after it, so the window
+ * draws the end of the transcript after one request. The older pages are
+ * the window's to ask for. Once the
  * statements the pages are read from (`transcript-live.ts` on the service)
  * are subscribed to, the follow reads past the newest page's cursor, which
  * misses nothing written meanwhile, then the next page at once while the
- * last came back full, and otherwise again only when those statements move.
- * A page with fewer than a page's most is caught up. The page itself, its
- * usage priced from the model catalog among it, is still the service's.
+ * last came back full. A page with fewer than a page's most is caught up.
+ * From then on the newest messages are the statements' own rows (`window`,
+ * `windowParts`), which the follow draws (`windowMessagesOf`) and tells as
+ * they change, with no page read again; a page is read again only when the
+ * turns, the titles, or the workers move, since what it carries beside its
+ * messages, the agent's status, its usage priced from the model catalog,
+ * its context and its workers, is still the service's.
  * Where the service says the clock alone may move the page in so long, as
  * an agent passing the grace its first turn had to land in or the window of
  * a title it waits on closing, which no row says, the page is read again
@@ -70,16 +80,28 @@ export class TranscriptKey extends Data.Class<{
   readonly callId: string | undefined;
 }> {}
 
-/** What the statements last delivered, as one digest any change to any of them moves. */
+/** The newest messages as the rows last drew them, and the lowest and highest sequence among them. */
+interface Drawn {
+  readonly messages: readonly CodingAgentMessage[];
+  readonly lowest: number;
+  readonly highest: number;
+}
+
+/** What the statements last delivered: what a page beside the messages is read by, as one digest any change to it moves, and the newest messages drawn. */
 type LiveState =
   | { readonly kind: "waiting" }
-  | { readonly kind: "standing"; readonly digest: string }
+  | { readonly kind: "standing"; readonly digest: string; readonly drawn: Drawn }
   | { readonly kind: "broken" }
   | { readonly kind: "unsealed" };
 
 /** What a transcript's read is answered from. */
 type Standing =
-  | { readonly kind: "live"; readonly state: SubscriptionRef.SubscriptionRef<LiveState> }
+  | {
+      readonly kind: "live";
+      readonly state: SubscriptionRef.SubscriptionRef<LiveState>;
+      /** The wait for a write's transaction on the subscription standing now; none while it is polled or not yet live. */
+      readonly txWait: () => TxWait | undefined;
+    }
   | { readonly kind: "refused" };
 
 /** A failure as the service answered one. */
@@ -104,12 +126,67 @@ export interface TranscriptFollowDependencies<Key = TranscriptKey> {
 /** The subscriptions the windows' reads share, each held while read and a while after. */
 export type TranscriptFollows<Key = TranscriptKey> = RcMap.RcMap<Key, Standing, SealUnanswered>;
 
-/** Every part's rows as one text, in no order of Realtime's, so only a change to a row moves it; held here alone, so it needs no hash, and the host loads where no `node:` module does. */
+/**
+ * The rows a page beside the messages is read by as one text, in no order of
+ * Realtime's, so only a change to one moves it: the turns, the titles, and
+ * the workers. Note that the messages and the journal's revision are left
+ * out, because the window's own rows carry the messages. Held here alone,
+ * so it needs no hash, and the host loads where no `node:` module does.
+ */
 function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
-  const parts = Object.entries(rows).map(
-    ([part, list]) => [part, list.map((row) => JSON.stringify(row)).toSorted()] as const,
+  const parts = {
+    turns: rows.turns,
+    conversation: rows.conversation.map(({ id, title }) => ({ id, title })),
+    agent: rows.agent,
+    workers: rows.workers,
+  };
+  return JSON.stringify(
+    Object.entries(parts).map(
+      ([part, list]) => [part, list.map((row) => JSON.stringify(row)).toSorted()] as const,
+    ),
   );
-  return JSON.stringify(parts);
+}
+
+/** A value as JSON with every object's keys in order, so two messages alike read alike whichever read built them. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, held: unknown) =>
+    held !== null && typeof held === "object" && !Array.isArray(held)
+      ? Object.fromEntries(
+          Object.entries(held).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : held,
+  );
+}
+
+/** The window's messages as the rows draw them, with the sequences they span. */
+function drawnOf(rows: typeof agentTranscriptLiveRowsSchema.Type): Drawn {
+  const seqs = rows.window.map((row) => row.seq);
+  return {
+    messages: windowMessagesOf(rows.window, rows.windowParts),
+    lowest: seqs.length === 0 ? 0 : Math.min(...seqs),
+    highest: seqs.length === 0 ? 0 : Math.max(...seqs),
+  };
+}
+
+/** A cursor's highest message sequence, and the journal revision it was read at. */
+function cursorParts(cursor: string): { readonly seq: number; readonly revision: string } {
+  const [seq = "0", revision = "0"] = cursor.split(":");
+  return { seq: Number(seq), revision };
+}
+
+/**
+ * The read as the host follows it: every statement the service sealed but
+ * the count of its messages, which released desktops wake on and this host
+ * needs no longer, since the window's own rows carry the messages.
+ */
+function followedRead(sealed: AgentTranscriptLiveAnswer) {
+  const { messages: _messages, ...queries } = sealed.queries;
+  return { url: sealed.url, queries };
+}
+
+/** A seal's answer as the host follows it: the read without the count of its messages, or the failure as answered. */
+function followedAnswer<Failure extends Failed>(answer: AgentTranscriptLiveAnswer | Failure) {
+  return "failure" in answer ? answer : followedRead(answer);
 }
 
 /** The transcript sealed, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
@@ -149,23 +226,31 @@ export function transcriptFollows<Key = TranscriptKey>(
         const first = yield* sealedOf(seal);
         if (Option.isNone(first)) return { kind: "refused" } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
+        let txWait: TxWait | undefined;
         /** One seal followed until its subscription stops, which marks the state broken. */
         const follow = (sealed: AgentTranscriptLiveAnswer) =>
           Stream.runForEach(
             liveRows(
               {
                 openLive: dependencies.openLive,
-                reseal: () => seal(false),
-                poll: (after) => seal(true, after),
+                reseal: () => Effect.map(seal(false), followedAnswer),
+                poll: (after) => Effect.map(seal(true, after), followedAnswer),
                 now: dependencies.now,
+                onTxWait: (wait) => {
+                  txWait = wait;
+                },
               },
-              sealed,
+              followedRead(sealed),
             ),
             (read) =>
               Option.match(decode(read), {
                 onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
                 onSome: (decoded) =>
-                  SubscriptionRef.set(state, { kind: "standing", digest: digestOf(decoded) }),
+                  SubscriptionRef.set(state, {
+                    kind: "standing",
+                    digest: digestOf(decoded),
+                    drawn: drawnOf(decoded),
+                  }),
               }),
           ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: "broken" })));
         yield* Effect.forkScoped(
@@ -184,7 +269,7 @@ export function transcriptFollows<Key = TranscriptKey>(
             }
           }),
         );
-        return { kind: "live", state } as const;
+        return { kind: "live", state, txWait: () => txWait } as const;
       }),
   });
 }
@@ -231,57 +316,128 @@ export interface TranscriptReads {
   ) => Effect.Effect<TranscriptNowAnswer | CodingAgentMessagesAnswerView>;
 }
 
+/** What this host holds of one followed transcript (`transcript-held.ts`): its window as last told, recalled as a follow opens, kept as each page is told, and forgotten where the transcript is gone. */
+export interface TranscriptMemory {
+  readonly recall: Effect.Effect<Option.Option<CodingAgentNewestAnswer>>;
+  readonly keep: (window: CodingAgentNewestAnswer) => Effect.Effect<void>;
+  readonly forget: Effect.Effect<void>;
+}
+
+/** The window held, with a page past its cursor joined on by id: the page's word on the agent, its cursor, and the held window's `before`. */
+function joinedWindow(
+  window: CodingAgentNewestAnswer,
+  answer: TranscriptNowAnswer | CodingAgentMessagesAnswerView,
+): CodingAgentNewestAnswer {
+  const page = windowsPage(answer);
+  if ("failure" in page) return window;
+  const { wakeIn: _wakeIn, ...read } = page as typeof page & { readonly wakeIn?: number };
+  return {
+    ...read,
+    messages: applyMessagesPage(window.messages, read.messages),
+    ...(window.before === undefined ? undefined : { before: window.before }),
+  };
+}
+
 /**
  * The transcript followed until interrupted, each page told as it is read:
- * the newest first, read while the transcript is sealed, then the page past
- * its cursor once the subscription stands, the next at once while the last
- * came back full, and otherwise once the statements move, their
- * subscription stops or opens again, or the clock reaches the edge the
- * service named. One the account does not reach is told not found, which
- * ends the follow, as does a seal the service stopped answering, told as a
- * page that could not be read and let go, so a follow after it seals anew;
- * a page the service did not answer is told as such and read again after
- * `RESEAL`.
+ * the window this host held of it at once where it holds one, and
+ * otherwise the newest page, read while the transcript is sealed; then the
+ * page past that one's cursor once the subscription stands, the next at
+ * once while the last came back full, and otherwise once the turns,
+ * titles, or workers move, their subscription stops or opens again, or the
+ * clock reaches the edge the service named; meanwhile each message the
+ * window's rows draw anew is told at once, beside what the last page said
+ * of the agent, as caught up. A held cursor the service refuses is let go
+ * for the newest page, as a follow holding nothing opens with. One the
+ * account does not reach is told not found, which ends the follow and lets
+ * go of what was held of it, as does a seal the service stopped answering,
+ * told as a page that could not be read and let go, so a follow after it
+ * seals anew; a page the service did not answer is told as such and read
+ * again after `RESEAL`. Every page told is kept in `memory`.
  */
 export function followTranscript<Key>(
   follows: TranscriptFollows<Key>,
   key: Key,
   reads: TranscriptReads,
+  memory: TranscriptMemory,
   tell: (page: CodingAgentTranscriptPage) => Effect.Effect<void>,
 ): Effect.Effect<void> {
   return Effect.scoped(
     Effect.gen(function* () {
-      // Note that the newest page is read beside the seal, not after it, so the window draws the end while the subscription opens; its cursor is what makes following on from it safe.
       let toldNotFound = false;
-      const opening = yield* Effect.forkScoped(
-        reads.newest().pipe(
-          Effect.tap((answer) => {
-            if (!("failure" in answer)) return tell({ ...answer, newest: true, caughtUp: false });
-            toldNotFound = answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
-            return tell(answer);
-          }),
-          // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as a seal is, and then ends the follow on the failure told, so the window offers Try again.
-          Effect.repeat({
-            schedule: Schedule.spaced(RESEAL),
-            times: RESEALS,
-            until: (answer) => !unanswered(answer),
-          }),
-        ),
+      const readNewest = reads.newest().pipe(
+        Effect.tap((answer) => {
+          if (!("failure" in answer)) {
+            return Effect.andThen(
+              memory.keep(answer),
+              tell({ ...answer, newest: true, caughtUp: false }),
+            );
+          }
+          toldNotFound = answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+          return Effect.andThen(toldNotFound ? memory.forget : Effect.void, tell(answer));
+        }),
+        // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as a seal is, and then ends the follow on the failure told, so the window offers Try again.
+        Effect.repeat({
+          schedule: Schedule.spaced(RESEAL),
+          times: RESEALS,
+          until: (answer) => !unanswered(answer),
+        }),
       );
+      // Note that a window held is told before the service is asked anything, so the window draws it with no round trip; one holding nothing reads the newest page beside the seal, not after it, its cursor what makes following on from it safe.
+      const held = yield* memory.recall;
+      if (Option.isSome(held)) {
+        yield* tell({ ...held.value, newest: true, held: true, caughtUp: false });
+      }
+      const opening = Option.isSome(held) ? undefined : yield* Effect.forkScoped(readNewest);
       const sealed = yield* Effect.result(RcMap.get(follows, key));
       if (sealed._tag === "Failure" || sealed.success.kind === "refused") {
-        yield* Fiber.interrupt(opening);
+        if (opening !== undefined) yield* Fiber.interrupt(opening);
         if (sealed._tag === "Failure") {
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }
+        yield* memory.forget;
         if (toldNotFound) return;
         return yield* tell({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
       }
       const { state } = sealed.success;
-      const newest = yield* Fiber.join(opening);
-      if ("failure" in newest) return;
-      let after = newest.cursor;
+      const opened =
+        opening === undefined
+          ? held
+          : yield* Effect.map(Fiber.join(opening), (newest) =>
+              "failure" in newest ? Option.none() : Option.some(newest),
+            );
+      if (Option.isNone(opened)) return;
+      /** What the window was told, as one newest page: its cursor is where the next read follows on from. */
+      let window = opened.value;
+      // Whether the next read is the first past a held cursor, which falls back to the newest page where it is refused.
+      let fromHeld = Option.isSome(held);
+      /** Each message told, as it was told, so a row drawn again alike is not told again. */
+      const told = new Map<string, string>();
+      const heard = (messages: readonly CodingAgentMessage[]) =>
+        messages.filter((message) => {
+          const said = canonical(message);
+          if (told.get(message.id) === said) return false;
+          told.set(message.id, said);
+          return true;
+        });
+      heard(window.messages);
+      /** The rows' messages not yet told, beside what the last page said of the agent; the cursor moves past them where they follow on from it. */
+      const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState) =>
+        Effect.gen(function* () {
+          if (state.kind !== "standing" || "failure" in page) return;
+          const fresh = heard(state.drawn.messages);
+          if (fresh.length === 0) return;
+          const { seq, revision } = cursorParts(window.cursor);
+          // Note that the cursor moves only where the window holds every message past it, so a read past it misses none.
+          const cursor =
+            state.drawn.lowest <= seq + 1 && state.drawn.highest > seq
+              ? `${state.drawn.highest}:${revision}`
+              : window.cursor;
+          yield* tell({ ...page, messages: fresh, caughtUp: true });
+          window = { ...window, messages: applyMessagesPage(window.messages, fresh), cursor };
+          yield* memory.keep(window);
+        });
       // Note that the newest page may have been read before the subscription stood, so the page past it is read once its first rows land.
       let wake: Effect.Effect<unknown> = SubscriptionRef.changes(state).pipe(
         Stream.filter(movedFrom({ kind: "waiting" })),
@@ -294,22 +450,42 @@ export function followTranscript<Key>(
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }
-        const answer = yield* reads.after(after);
-        yield* tell(toldPage(answer));
+        const answer = yield* reads.after(window.cursor);
+        // Note that a held cursor the service refuses, gone or stale, is let go untold, and the follow opens on the newest page as one holding nothing does; the window joins it or takes it in place of what it drew.
+        if (fromHeld && unanswered(answer)) {
+          yield* memory.forget;
+          const newest = yield* readNewest;
+          if ("failure" in newest) {
+            if (newest.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+            // Note that a service that answers neither read is down rather than refusing the cursor, so the follow stays and tries both again, as any page it did not answer is read again.
+            wake = Effect.sleep(RESEAL);
+            continue;
+          }
+          fromHeld = false;
+          window = newest;
+          heard(newest.messages);
+          wake = Effect.void;
+          continue;
+        }
+        fromHeld = false;
+        const page = toldPage(answer);
+        if (!("failure" in page)) heard(page.messages);
+        yield* tell(page);
         if ("failure" in answer) {
-          if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+          if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
           wake = Effect.sleep(RESEAL);
           continue;
         }
-        after = answer.cursor;
+        window = joinedWindow(window, answer);
+        yield* memory.keep(window);
         // Note that a full page is followed by the next at once, and a short one is caught up, with no empty page read to say so.
         if (answer.messages.length >= CODING_AGENT_BOUNDS.MESSAGES_PAGE) {
           wake = Effect.void;
           continue;
         }
         const moved = SubscriptionRef.changes(state).pipe(
-          Stream.filter(movedFrom(was)),
-          Stream.runHead,
+          Stream.takeUntil(movedFrom(was)),
+          Stream.runForEach((now) => tellDrawn(page, now)),
         );
         const wakeIn = "holds" in answer && answer.holds ? answer.wakeIn : undefined;
         wake =
@@ -317,4 +493,28 @@ export function followTranscript<Key>(
       }
     }),
   );
+}
+
+/**
+ * Confirms a write to a transcript once its transaction has reached the
+ * transcript's live subscription, so the page it moved is told first; at
+ * once where the transcript is not followed, is polled, or the write
+ * answered no transaction.
+ */
+export function confirmTranscriptWrite<Key>(
+  follows: TranscriptFollows<Key>,
+  key: Key,
+  txid: string | undefined,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    if (txid === undefined || !(yield* RcMap.has(follows, key))) return;
+    yield* Effect.scoped(
+      Effect.flatMap(RcMap.get(follows, key), (standing) =>
+        standing.kind === "live" ? confirmWrite(standing.txWait(), txid) : Effect.void,
+      ),
+    ).pipe(
+      // A follow the service never sealed shows nothing to wait for.
+      Effect.catchTag("SealUnanswered", () => Effect.void),
+    );
+  });
 }

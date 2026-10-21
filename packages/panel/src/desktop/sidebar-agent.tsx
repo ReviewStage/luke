@@ -27,10 +27,12 @@ import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
+import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { RowHint, RowHintOptions } from "../tooltip.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
+import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
 
@@ -49,12 +51,14 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * keyboard (`RowMarks`), as on a task's row, and rested on, the row hangs the
  * agent's card beside it, as its tab does on a task (`agent-ref.tsx`). A
  * press opens the agent's own page, and it reads in semibold while it ended
- * unseen, as its tab does. A right-click offers its actions where the
+ * unseen, as its tab does, or while it is marked unread by hand. A right-click offers its actions where the
  * pointer is, in a task's row's groups: Copy link and Rename, which turns
- * the row into its name's field until the edit ends; then Pin or Unpin,
- * the reader's own, and Archive agent, asked first while the agent works
- * (`agent-archive.tsx`), or Unarchive. An archived agent offers neither a
- * pin nor a rename, as an archived task. Note that the agent is read again
+ * the row into its name's field until the edit ends, with Mark as unread
+ * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
+ * the reader's own, Archive agent, asked first while the agent works
+ * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
+ * own sections, as a task's (`sidebar-sections.tsx`). An archived agent
+ * offers neither a pin, a rename, nor a section, as an archived task. Note that the agent is read again
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
  */
@@ -104,13 +108,14 @@ export function SidebarAgent({
   shown,
   onOpen,
   onPin,
+  section,
 }: {
   agent: TasklessAgent;
   /** The window's agent control, whose archive and rename act on any agent by its id. */
   agents: CodingAgentsControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
-  /** Whether its turn ended while the developer was not looking at it. */
+  /** Whether its turn ended while the developer was not looking at it: main's unseen dot, which a mark by hand adds to. */
   unread: boolean;
   /** The time the row's time is counted back from. */
   now: number;
@@ -125,6 +130,8 @@ export function SidebarAgent({
   onOpen: () => void;
   /** Pins the agent for the reader or unpins it; none for an archived agent, which offers no pin. */
   onPin?: ((pinned: boolean) => void) | undefined;
+  /** Move to section, in the menu's group with Pin and Archive as a task's; none for an archived agent. */
+  section?: MenuEntry | undefined;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
@@ -140,6 +147,8 @@ export function SidebarAgent({
   const place = useRowPlace();
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   const { act } = useAct();
+  const reads = useAgentReadMarks();
+  const isUnread = unread || reads.markedUnread(agent.id);
   const archive = useAgentArchive(
     agent,
     { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
@@ -159,9 +168,13 @@ export function SidebarAgent({
   const renameItem: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: rename.begin };
   const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
   const put = archived ? unarchive : archive.action;
-  const groups = [
-    [...(copyLink === undefined ? [] : [copyLink]), ...(archived ? [] : [renameItem])],
-    [...(pin === undefined ? [] : [pin]), put],
+  const groups: MenuEntry[][] = [
+    [
+      ...(copyLink === undefined ? [] : [copyLink]),
+      markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) }),
+      ...(archived ? [] : [renameItem]),
+    ],
+    [...(pin === undefined ? [] : [pin]), put, ...(section === undefined ? [] : [section])],
   ].filter((group) => group.length > 0);
   // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const pinned = agent.pinnedAt !== undefined;
@@ -207,7 +220,7 @@ export function SidebarAgent({
             ) : (
               <>
                 {name}
-                {unread ? <span className="luke-visually-hidden">(unread)</span> : null}
+                {isUnread ? <span className="luke-visually-hidden">(unread)</span> : null}
               </>
             )
           }
@@ -227,7 +240,7 @@ export function SidebarAgent({
             )
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
-          unread={unread}
+          unread={isUnread}
           menuOpen={menu.open !== undefined}
           hint={rename.editing ? undefined : { Hint: RowHint, label: name }}
           onPress={

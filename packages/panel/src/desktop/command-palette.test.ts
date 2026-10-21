@@ -24,7 +24,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -1118,6 +1118,47 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
 });
 
+test("a task Luke or a coding agent made wears their square at its row's end, the reader's own too, says who in its detail, and is found by it", () => {
+  const dean = { userId: "user-dean", name: "Dean Stratakos" };
+  const task = (id: string, origin?: TaskSummary["origin"]) => ({
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/relay",
+    ownerId: dean.userId,
+    createdBy: dean,
+    ...(origin === undefined ? undefined : { origin }),
+  });
+  openPalette(
+    tasksControl({
+      me: dean.userId,
+      tasks: [
+        task("Invite emails", { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" }),
+        task("Audit log export", { actor: PLAN_ACTOR.NOTETAKER }),
+        task("Rate limits"),
+      ],
+    }),
+  );
+  chooseFilter("Tasks");
+  const marks = () =>
+    [...document.querySelectorAll('[role="option"]')].map(
+      (row) =>
+        row.querySelector(".luke-combobox-option-hint .actor-mark")?.getAttribute("data-kind") ??
+        null,
+    );
+
+  assert.deepEqual(rows(), [
+    "Invite emails · acme/relay · by Coding agent",
+    "Audit log export · acme/relay · by Luke",
+    "Rate limits · acme/relay",
+  ]);
+  assert.deepEqual(marks(), ["agent", "luke", null]);
+  type("coding agent");
+  assert.deepEqual(rows(), ["Invite emails · acme/relay · by Coding agent"]);
+});
+
 /** Offers ⌘K's own Show my tasks, as the sidebar does while it would change the list, and records each run. */
 function OffersMyTasks({ ran }: { ran: string[] }): null {
   useAppCommand(APP_COMMAND.SHOW_MY_TASKS, () => ran.push("show my tasks"));
@@ -1637,6 +1678,52 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   press("Unpin agent");
   assert.deepEqual(pinRows([]), []);
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
+});
+
+test("on a one-off agent's page, ⌘K marks the agent unread and then read, and offers no mark while no agent's page stands", () => {
+  const agent = {
+    id: "agent-8",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Triage overnight issues",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: "acme/relay",
+    activityAt: 2,
+  };
+  const seen: string[] = [];
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_SEEN]: ({ agentId }) => {
+      seen.push(agentId);
+      return Promise.resolve(undefined);
+    },
+  });
+  const draw = (agentId: string | undefined) => {
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    document.body.innerHTML = "";
+    openPalette(
+      tasksControl({
+        agentView: { agentId, onOpen: () => undefined, onClose: () => undefined },
+        listedAgents: { standing: [agent], archived: [] },
+      }),
+    );
+    type("mark");
+    return rows().filter((row) => row.startsWith("Mark as"));
+  };
+
+  assert.deepEqual(draw(undefined), []);
+  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
+  press("Mark as unread");
+  assert.deepEqual(draw(agent.id), ["Mark as read"]);
+  press("Mark as read");
+  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
+  assert.deepEqual(seen, [agent.id]);
 });
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */

@@ -35,6 +35,7 @@ import {
   type EveMessage,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { CODER } from "@luke/service/agents/coder-host/bounds";
+import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -47,6 +48,7 @@ import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
 } from "@luke/service/testing/integration-connect";
+import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
@@ -185,6 +187,8 @@ const answer = (routes: "comments" | "plans", request: Request) =>
         resolveUserId,
         workspaces: yield* fakeWorkspaceSeams,
         eveOrigin: () => undefined,
+        sessionSandboxes: sessionSandboxesLayer,
+        keepAwake: keepAwakeDetached,
       }),
     });
     const response = yield* Effect.promise(() => plans(request, services));

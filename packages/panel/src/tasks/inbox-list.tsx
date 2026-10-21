@@ -45,6 +45,7 @@ import {
   personActor,
 } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import * as Atom from "effect/reactivity/Atom";
 import {
   ArchiveIcon,
   ArrowDownNarrowWideIcon,
@@ -89,7 +90,6 @@ import {
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
-import { TaskKeyChip } from "../desktop/task-card.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
@@ -97,7 +97,7 @@ import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
@@ -159,6 +159,7 @@ import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
+import { TaskKey } from "./task-standing.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
@@ -536,14 +537,17 @@ function InboxItemCard({
   );
 }
 
+/** The account's workspaces, which tell their readers only as the list moves, not as the tasks beside it do. */
+const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
+
 /**
  * What holds an item, as its card leads with it, on one line: a task by its
- * key, as the task's own card leads with it (`TaskKeyChip`), and by its chip
+ * key, as the task's own card leads with it (`TaskKey`), and by its chip
  * as a mention of it is drawn (`HolderRef`); an automation, or the agents no
  * automation names, by their chip alone.
  */
 function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
-  const workspaces = useAppState()?.tasks?.workspaces;
+  const workspaces = useAppSlice(WORKSPACES);
   const workspaceName =
     holder.kind === INBOX_HOLDER.TASK
       ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name
@@ -551,7 +555,7 @@ function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
   return (
     <div className="task-card-standing" data-line="one">
       {holder.kind === INBOX_HOLDER.TASK ? (
-        <TaskKeyChip task={holder.task} workspaceName={workspaceName} />
+        <TaskKey workspaceName={workspaceName} number={holder.task.number} />
       ) : null}
       <HolderRef holder={holder} />
     </div>
@@ -1515,13 +1519,11 @@ function ListHead({
   return (
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
-      {sidebar && search.field !== null ? (
-        <div className="sidebar-section-head">
-          {search.field}
+      {sidebar ? (
+        // Note that the field stands in the name's place in one head, so View options stays mounted as the field gives way.
+        <SidebarSectionHead name={title} field={search.field}>
           {options}
-        </div>
-      ) : sidebar ? (
-        <SidebarSectionHead name={title}>{options}</SidebarSectionHead>
+        </SidebarSectionHead>
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">

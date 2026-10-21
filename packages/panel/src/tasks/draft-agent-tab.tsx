@@ -10,8 +10,6 @@ import { ArchivedComposerNote } from "./archived-task.js";
 import { agentTabLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
-import { PayerField, useStartPayerKeys } from "./payer-field.js";
-import { payerOffer, startPayer } from "./payer-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
 import { useWorkingNow, WorkingLine } from "./working-time.js";
@@ -53,14 +51,6 @@ import { useWorkingNow, WorkingLine } from "./working-time.js";
  * once it lands the tab gives way to the new agent's, and a Start that did
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
- *
- * For an account with a Claude plan connected, a draft on a Claude model
- * shows beside its chip who pays for the agent
- * (`payer-field.tsx`): the plan, or the API key or Luke's key, standing on
- * the account's default until the developer picks one for this agent, and
- * the Start names the payer the field shows, so a default changed in
- * Settings since the keys were read never starts the agent on another;
- * elsewhere nothing changes.
  *
  * Where the platform takes calls, the box's row offers Call, the waveform
  * an agent's tab offers (`agent-call.tsx`), and a draft's is the one way a
@@ -141,7 +131,6 @@ export function DraftAgentTab({
     };
   }, []);
 
-  const payerKeys = useStartPayerKeys();
   const { fork } = draft;
   const source =
     fork === undefined
@@ -151,8 +140,6 @@ export function DraftAgentTab({
         );
   // A fork runs on its source's model and effort until the developer picks another.
   const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
-  const offer = payerOffer(payerKeys, choice?.model);
-  const shownPayer = startPayer(offer, draft.payer) ?? offer?.fallback;
   const send = () => {
     const prompt = draft.prompt.trim();
     if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
@@ -162,12 +149,10 @@ export function DraftAgentTab({
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
-    // Note that the payer the field shows is the one sent, so the Start runs on what the developer saw.
-    const payer = shownPayer;
     const started =
       fork === undefined
-        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers, payer)
-        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers, payer);
+        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers)
+        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers);
     started.then((failed) => {
       setSending(false);
       setSentAt(undefined);
@@ -266,18 +251,6 @@ export function DraftAgentTab({
                 onPress={pressCall}
               />
             ) : undefined
-          }
-          actions={
-            offer === undefined || shownPayer === undefined
-              ? undefined
-              : () => (
-                  <PayerField
-                    offer={offer}
-                    value={shownPayer}
-                    disabled={sending}
-                    onChange={(payer) => control.onDraftChange({ payer })}
-                  />
-                )
           }
         />
       </footer>

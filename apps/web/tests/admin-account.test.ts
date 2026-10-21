@@ -1,24 +1,26 @@
 // @vitest-environment jsdom
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
+
+import {
+  ADMIN_FAILURE_KIND,
+  ADMIN_PULL_REQUEST,
+  ADMIN_WORKSPACE_KIND,
+} from "@luke/features/admin-account-wire";
+import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
 import {
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
+import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import {
-  ADMIN_FAILURE_KIND,
-  ADMIN_PULL_REQUEST,
-  ADMIN_WORKSPACE_KIND,
-} from "@luke/service/admin/admin-account-wire";
-import type { AdminUserDetail } from "@luke/service/admin/admin-user";
+import { AccountScreen } from "@luke/panel/admin/screens/account";
 import { EXPERIMENT } from "@luke/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { AccountScreen } from "../src/admin/screens/account";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-account.test.ts -- one account's page names the account, marks an
@@ -205,15 +207,17 @@ async function openAccount(response: Response | undefined): Promise<Opened> {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(AccountScreen, {
-        id: ID,
-        windowDays: 30,
-        onWindowDaysChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onBack: () => backs.push(backs.length),
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(AccountScreen, {
+          id: ID,
+          windowDays: 30,
+          onWindowDaysChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onBack: () => backs.push(backs.length),
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return { page, backs };

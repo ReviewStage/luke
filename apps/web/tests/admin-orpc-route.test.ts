@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { UsersScreen } from "@luke/panel/admin/screens/users";
 import type { AdminViewer } from "@luke/service/admin/admin-access";
 import { type AdminProcedureSeams, adminProcedures } from "@luke/service/admin/admin-procedures";
 import { buildAdminUserList } from "@luke/service/admin/admin-users";
@@ -8,7 +10,7 @@ import { Context, Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { UsersScreen } from "../src/admin/screens/users";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-orpc-route.test.ts -- the Users screen over the hosted oRPC route
@@ -116,16 +118,18 @@ async function mount(): Promise<HTMLElement> {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(UsersScreen, {
-        hideAdmins: false,
-        onHideAdminsChange: () => undefined,
-        windowDays: 7,
-        onWindowDaysChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onOpenAccount: () => undefined,
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(UsersScreen, {
+          hideAdmins: false,
+          onHideAdminsChange: () => undefined,
+          windowDays: 7,
+          onWindowDaysChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onOpenAccount: () => undefined,
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return page;

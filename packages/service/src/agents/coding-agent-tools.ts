@@ -49,7 +49,6 @@ import {
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
-  CODING_AGENT_PAYER,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
   type CodingAgentPullRequestAnswer,
@@ -448,9 +447,9 @@ export const START_CODING_AGENT_REFUSAL = {
   PLAN_UNREACHABLE:
     "Not started: the plan's provider did not answer; start it again in a minute or two.",
   PLAN_LIMIT_REACHED:
-    "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or on another payer.",
+    "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or its starter chooses the API key in Settings.",
   PLAN_INELIGIBLE:
-    "Not started: the plan's provider said the account is not eligible to run it; start it on another payer.",
+    "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -617,16 +616,8 @@ const START_BRANCH = Schema.String.check(
   Schema.isPattern(/^[^\s~^:?*[\\]+$/u),
 );
 
-/** A payer a start may pick for its one agent: the Claude or ChatGPT plan, or eve's payer by either name. */
-const START_PAYER = Schema.Literals([
-  CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-  CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
-  CODING_AGENT_PAYER.API_KEY,
-  CODING_AGENT_PAYER.LUKE,
-]);
-
 /**
- * A start names a prompt at most, a note at most, a branch at most, a payer at most, and a
+ * A start names a prompt at most, a note at most, a branch at most, and a
  * model with its effort or neither; the catalog decides whether the two
  * name anything, and GitHub whether the branch does. A
  * title it names is the agent's from the start, as an automation's run's
@@ -685,16 +676,6 @@ const START_AGENT_INPUT = Schema.Struct({
     describeWire(
       modelChoiceSchema.fields.effort,
       "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
-    ),
-  ),
-  payer: Schema.optionalKey(
-    describeWire(
-      START_PAYER,
-      "Who pays for this one agent: claude_plan for the member's Claude plan, which runs it on " +
-        "Claude Code, chatgpt_plan for the member's ChatGPT plan, which runs it on Codex, or " +
-        "api_key or luke, which run it as today on the member's own API key where they saved " +
-        "one and on Luke's key where they did not. Leave it out for the member's default; a " +
-        "plan is used only where it is connected and the model is its provider's.",
     ),
   ),
   from: Schema.optionalKey(
@@ -886,7 +867,8 @@ export const LIST_MODELS_TOOL = {
     "on, and whether it is still offered. Call it before you name a model or an effort to " +
     `${AGENT_TOOL.START_AGENT}, such as one the developer named in their own words. Name an ` +
     `agentId to list instead what that agent may move to with ${AGENT_TOOL.UPDATE_AGENT}: an ` +
-    "agent on Claude Code runs Claude models alone, and no fast version.",
+    "agent on Claude Code runs Claude models alone, and one on Codex GPT models alone, with no " +
+    "fast version.",
   inputSchema: LIST_MODELS_INPUT,
 } as const;
 
@@ -1891,7 +1873,6 @@ export function runStartAgent(
         note,
         title: asked.success.title,
         branch: asked.success.branch,
-        payer: asked.success.payer,
         from,
         summaryModel: call.summaryModel,
         ...(byAgent ? { noteHeading: START_NOTE_HEADING.AGENT } : undefined),

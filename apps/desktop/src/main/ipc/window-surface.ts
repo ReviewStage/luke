@@ -48,6 +48,16 @@ interface WindowSurfaceDependencies {
   saveFile: (sender: WebContents, name: string, text: string) => Promise<boolean>;
   /** Carries a note to the people who make Luke, answering whether it arrived. */
   deliverFeedback: (submission: FeedbackSubmission) => Effect.Effect<FeedbackResult>;
+  /** Takes a downscaled still of part of the asking window as a JPEG's data URL, none where nothing was drawn there. */
+  captureStill: (sender: WebContents, rect: CapturedRect) => Promise<string | null>;
+}
+
+/** The part of a window a still is asked of, in its CSS pixels. */
+interface CapturedRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 type WindowSurfaceActKind = (typeof WINDOW_SURFACE_ACT_KIND)[keyof typeof WINDOW_SURFACE_ACT_KIND];
@@ -59,7 +69,9 @@ const surfacePort = actPortFor<WebContents>();
  * own act and refused from anywhere else: it is about the display one panel
  * stands on, and no other surface has one. A save is a panel's too, since
  * only a panel draws a File tab, and its dialog hangs over the panel that
- * asked. The rest read no window.
+ * asked, and so is a still, of the panel that asked and answered to it
+ * alone, since only a panel's ⌃Tab previews its tabs. An empty part is no
+ * still. The rest read no window.
  */
 export function windowSurfaceProcedures(
   dependencies: WindowSurfaceDependencies,
@@ -123,6 +135,13 @@ export function windowSurfaceProcedures(
     ].handler(async ({ input, context, errors }) => {
       if (!context.actor.panel) throw errors.REFUSED();
       return dependencies.saveFile(context.actor.sender, input.name, input.text);
+    }),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_CAPTURE]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_CAPTURE
+    ].handler(async ({ input, context, errors }) => {
+      if (!context.actor.panel) throw errors.REFUSED();
+      if (input.width === 0 || input.height === 0) return null;
+      return dependencies.captureStill(context.actor.sender, input);
     }),
     [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND

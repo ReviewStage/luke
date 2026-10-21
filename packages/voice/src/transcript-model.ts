@@ -291,7 +291,7 @@ interface TranscriptRow extends TranscriptLine {
 }
 
 /** The lines of a call heard here that no row holds yet, and whether the call's divider stands above already. */
-export interface HeardTail {
+interface HeardTail {
   readonly call: TranscriptCallRow;
   readonly opened: boolean;
   readonly lines: readonly UIMessage[];
@@ -394,7 +394,9 @@ export function callPlaces(
       const drawn = rowsOf.get(call) ?? [];
       if (drawn.at(-1) !== row.id) drawn.push(row.id);
       rowsOf.set(call, drawn);
-      wordsHeld.set(call, [...(wordsHeld.get(call) ?? []), wordsOf(lineText(line))]);
+      const held = wordsHeld.get(call) ?? [];
+      held.push(wordsOf(lineText(line)));
+      wordsHeld.set(call, held);
     }
   }
   const opens = new Map<string, TranscriptCallRow[]>();

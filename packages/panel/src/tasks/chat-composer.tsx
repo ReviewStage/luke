@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { readerZone } from "@luke/features/date-mention";
-import { ComboboxList, comboboxOptionId, GAP, Inline, SUBMIT_STATE } from "@luke/ui";
+import { ComboboxList, comboboxOptionId, ErrorState, GAP, Inline, SUBMIT_STATE } from "@luke/ui";
 import {
   type ChatMention,
   type ChatTarget,
@@ -11,19 +11,23 @@ import {
   chooseTarget,
 } from "@luke/ui/chat-mention";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTools,
+  submitPromptInput,
 } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { type ChatDraftPlace, DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
+import { useLinkWorkspace } from "../copy-link-item.js";
 import { enterKeyHint, enterSends } from "../enter-sends.js";
 import { imageFiles } from "../feedback-images.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
+  type MentionNode,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
@@ -34,10 +38,11 @@ import { chatOption, useChatMentionPicker } from "./chat-mention-picker.js";
 import { ComposerField } from "./composer-field.js";
 import { useDatePicker } from "./date-picker.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
-import { MentionNodeChip } from "./mention-chip.js";
-import { useMentionDoors } from "./task-mentions.js";
+import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
+import { useMentionDoors, useTaskMentions } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
 import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
+import { useKnownNames } from "./use-known-names.js";
 
 /**
  * chat-composer.tsx -- the box a chat message is written in: at a place's foot, or under a thread opened for a reply, with the list an `@` or a `#` opens and a dictation laid in at the caret.
@@ -47,7 +52,16 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
  * and a plan comment's are, and under it the card's foot saying what it
  * takes, the microphone, and the shared round send. Enter sends, Shift-Enter
  * starts a new line, and the box is empty again once the post is taken; a
- * post refused keeps its words and says why under the box. An `@` or a `#`
+ * post refused keeps its words and says why under the box, with Retry,
+ * which posts it once whatever the first try did, since the same words go
+ * under the same key (`use-workspace-chat.ts`). While a post is out the
+ * field is held and Send with it, and the caret comes back to the field
+ * once it lands, unless it went somewhere else meanwhile, as the agent
+ * box's does. Escape, where no list or dictation takes it, leaves the box.
+ * What is typed and not sent is kept per channel, and per thread for a
+ * reply, as every box that sends somewhere keeps it (`composer-drafts.ts`),
+ * so another channel opened, a thread hidden, or the window reloaded finds
+ * it where it was left. An `@` or a `#`
  * at the start of a word opens the chat's own list over the box
  * (`chat-mention-picker.tsx`). A member chosen, a person, an agent, or a
  * task's Luke, is written as their chip, the same mention link the agent
@@ -56,6 +70,8 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
  * a channel is written as its word (`#general`).
  * Words after an `@` that read as a date offer it first, and a pick writes
  * the same date link the other boxes write (`[@Oct 20, 2026](luke://date/…)`).
+ * A Luke address pasted whole is written as its chip, as it is in the
+ * agent box, the Inbox, and a plan comment (`pastedMentionNode`).
  * The microphone records a dictation and lays its words in at the
  * caret (`use-dictation.ts`), listening for the chat's members' names and
  * its channels' (`chatKeywords`). Pictures go with a post as files go with an Inbox
@@ -73,7 +89,6 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
 
 /** What the send press is called. */
 const SEND = "Send";
-const SENDING = "Sending";
 
 /** What the box's + is called, which is its tooltip too. */
 const ATTACH = "Attach images";
@@ -133,6 +148,10 @@ function MentionMenu({
 
 /** What a chat box is handed by the place it stands in. */
 interface ChatComposerProps {
+  /** The channel the box posts in, which its draft is kept under. */
+  readonly channelId: string;
+  /** The thread's root the box replies under, by its place in the chat; none for a channel's foot. */
+  readonly replyTo?: number | undefined;
   /** What the box asks for while empty, which names it for assistive technology too. */
   readonly label: string;
   /** What an `@` or `#` offers. */
@@ -181,9 +200,7 @@ function ComposerFoot({
           <PromptInputSubmit
             label={SEND}
             status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-            disabled={!sending && empty}
-            busy={sending}
-            busyLabel={SENDING}
+            disabled={sending || empty}
           />
         </Tooltip>
       </Inline>
@@ -191,64 +208,88 @@ function ComposerFoot({
   );
 }
 
+/** What the box says under it: why a post did not go, which Retry sends again, or why a file or a dictation came to nothing. */
+interface ComposerNote {
+  readonly words: string;
+  readonly retries: boolean;
+}
+
+/** A note that offers no Retry, or none at all. */
+function plainNote(words: string | undefined): ComposerNote | undefined {
+  return words === undefined ? undefined : { words, retries: false };
+}
+
+/** The draft's place: the channel's foot, or a thread in it. */
+function chatPlace(channelId: string, replyTo: number | undefined): ChatDraftPlace {
+  return replyTo === undefined
+    ? { kind: DRAFT_PLACE.CHAT, channelId }
+    : { kind: DRAFT_PLACE.CHAT, channelId, replyTo };
+}
+
 /**
- * Sends the draft and its pictures once, holding them while they go:
- * emptied once taken, kept with why where refused. A send waits while
- * pictures handed to the box are still being read.
+ * Sends the draft kept for the box's place and its pictures once, holding
+ * them while they go: let go once taken, kept with why where refused. A
+ * send waits while pictures handed to the box are still being read.
  */
-function useChatSend(onSend: ChatComposerProps["onSend"]) {
-  const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
-  // Note that the pictures are read through a ref, because a read lands a while later and is taken after whatever the box holds by then.
-  const held = useRef(attachments);
-  held.current = attachments;
+function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"]) {
+  const { draft: kept, update } = useDraft(place);
+  const draft = kept.text;
+  const { attachments } = kept;
   const [sending, setSending] = useState(false);
   // How many hand-offs of files are still being read, during which the post waits.
   const [reading, setReading] = useState(0);
-  const [note, setNote] = useState<string | undefined>(undefined);
+  const [note, setNote] = useState<ComposerNote | undefined>(undefined);
   const empty = draft.trim() === "" && attachments.length === 0;
   const send = () => {
-    const text = draft.trim();
     if (empty || sending || reading > 0) return;
+    const sent = kept;
     setSending(true);
     setNote(undefined);
-    onSend(text, attachments).then(
+    onSend(draft.trim(), attachments).then(
       (refused) => {
         setSending(false);
-        setNote(refused);
-        if (refused !== undefined) return;
-        setDraft("");
-        setAttachments([]);
+        if (refused !== undefined) {
+          setNote({ words: refused, retries: true });
+          return;
+        }
+        // Note that only what was sent is let go, so words typed meanwhile in another window stay.
+        update((now) =>
+          now.text === sent.text && now.attachments === sent.attachments ? EMPTY_DRAFT : now,
+        );
       },
       (failed: Error) => {
         setSending(false);
-        setNote(failed.message);
+        setNote({ words: failed.message, retries: true });
       },
     );
   };
+  const setDraft = (text: string) => update((was) => ({ ...was, text }));
   /** Reads the images among the files handed in and takes them after those the box holds; the first that cannot come says why. */
   const attach = (files: readonly File[]) => {
     if (files.length === 0 || sending) return;
     const images = imageFiles(files);
     const other = files.find((file) => !images.includes(file));
-    setNote(other === undefined ? undefined : NOT_IMAGE(other.name));
+    setNote(plainNote(other === undefined ? undefined : NOT_IMAGE(other.name)));
     if (images.length === 0) return;
     setReading((count) => count + 1);
     readFiles(images)
       .then((read) => {
-        // Taken after whatever the box holds as the read lands, so neither a
+        // Taken after whatever the draft holds as the read lands, so neither a
         // read that landed first nor a chip taken off meanwhile is undone.
-        const taken = withFiles(held.current, read, CHAT_BOUNDS.MAX_POST_PICTURES);
-        held.current = taken.attachments;
-        setAttachments(taken.attachments);
-        const refusal = taken.refusal;
-        if (refusal !== undefined) setNote((said) => said ?? refusal);
+        let refusal = read.refusal;
+        update((was) => {
+          const taken = withFiles(was.attachments, read, CHAT_BOUNDS.MAX_POST_PICTURES);
+          refusal = taken.refusal;
+          return { ...was, attachments: taken.attachments };
+        });
+        const said = refusal;
+        if (said !== undefined) setNote((was) => was ?? plainNote(said));
       })
       .finally(() => setReading((count) => count - 1));
   };
   const remove = (index: number) => {
     setNote(undefined);
-    setAttachments((was) => was.filter((_, at) => at !== index));
+    update((was) => ({ ...was, attachments: was.attachments.filter((_, at) => at !== index) }));
   };
   return {
     draft,
@@ -265,11 +306,54 @@ function useChatSend(onSend: ChatComposerProps["onSend"]) {
   };
 }
 
+/** Where a box's note stands, under the card: why a post did not go, with Retry beside it, or why a file or a dictation came to nothing. */
+function NoteLine({
+  note,
+  onRetry,
+}: {
+  note: ComposerNote | undefined;
+  onRetry: () => void;
+}): React.JSX.Element | null {
+  if (note === undefined) return null;
+  return (
+    <div className="agent-composer-note">
+      <ErrorState onRetry={note.retries ? onRetry : undefined}>{note.words}</ErrorState>
+    </div>
+  );
+}
+
 /** A chat box takes no skills, which are an agent's. */
 const NO_SKILLS: ReadonlySet<string> = new Set();
 
+/** The plan text a place off any task's page holds: none. */
+const NO_TEXT = (): string => "";
+
+/**
+ * The mention a Luke address pasted whole stands for, as the other boxes
+ * write it (`pastedMentionNode`). Note that the window's Chat stands on no
+ * task's page, so its addresses are written under the workspace its links
+ * are, and where none is known yet one pastes as the words it is, rather
+ * than as a link naming no workspace.
+ */
+function usePastedMention(doors: MentionDoors): (words: string) => MentionNode | undefined {
+  const known = useKnownNames();
+  const text = useTaskMentions()?.text ?? NO_TEXT;
+  const linkWorkspace = useLinkWorkspace();
+  const workspace = doors.place.workspace === "" ? linkWorkspace : doors.place.workspace;
+  return (words) =>
+    workspace === undefined
+      ? undefined
+      : pastedMentionNode(
+          words,
+          { ...doors.place, workspace },
+          { known, taskId: doors.taskId, text },
+        );
+}
+
 /** The box on the agent box's editor: `@` and `#` open the chat's list over it, and the microphone lays a dictation in at the caret. */
 function EditorChatComposer({
+  channelId,
+  replyTo,
   label,
   targets,
   keywords,
@@ -295,10 +379,34 @@ function EditorChatComposer({
     note,
     setNote,
     send,
-  } = useChatSend(onSend);
-  const dictation = useDictation({ editor, keywords, onNote: setNote });
+  } = useChatSend(chatPlace(channelId, replyTo), onSend);
+  const dictation = useDictation({
+    editor,
+    keywords,
+    onNote: (words) => setNote(plainNote(words)),
+  });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
   const doors = useMentionDoors();
+  const pasted = usePastedMention(doors);
+
+  // Note that a held box gives up the caret, because a field that takes no
+  // words can hold none; a send made from the box hands it back as the box
+  // opens again, unless the caret went somewhere else meanwhile, as the
+  // agent box's does (`agent-composer.tsx`).
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (sending || !refocus.current) return;
+    refocus.current = false;
+    const active = document.activeElement;
+    const dropped =
+      active === null ||
+      active === document.body ||
+      room.current?.contains(active) === true ||
+      (active instanceof HTMLButtonElement &&
+        active.type === "submit" &&
+        card.current?.contains(active) === true);
+    if (dropped) editor.current?.focus();
+  }, [sending]);
   const mentions = useChatMentionPicker({
     targets,
     onChoose: (target) => {
@@ -319,7 +427,7 @@ function EditorChatComposer({
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
       ref={card}
-      className="chat-composer"
+      className="agent-composer chat-composer"
       data-compact={String(compact === true)}
       data-dropping={dropping ? "" : undefined}
       onDragOver={(event) => {
@@ -341,7 +449,12 @@ function EditorChatComposer({
     >
       {mentions.menu}
       {datePicker.popover}
-      <PromptInput onSubmit={send}>
+      <PromptInput
+        onSubmit={() => {
+          refocus.current = card.current?.contains(document.activeElement) === true;
+          send();
+        }}
+      >
         <AttachedFileChips
           files={attachmentChips(attachments)}
           onRemove={sending ? undefined : remove}
@@ -363,9 +476,18 @@ function EditorChatComposer({
           }
           maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
           skills={NO_SKILLS}
-          aria={mentions.aria}
-          onKey={(event) => dictation.onFieldKey(event) || mentions.onKey(event)}
-          onEnter={send}
+          aria={{ ...mentions.aria, "aria-placeholder": label }}
+          onKey={(event) => {
+            if (dictation.onFieldKey(event) || mentions.onKey(event)) return true;
+            // Escape, where no list or dictation takes it, leaves the box, as the agent box's does.
+            if (event.key !== "Escape") return false;
+            event.stopPropagation();
+            editor.current?.blur();
+            return true;
+          }}
+          onEnter={() => {
+            if (room.current !== null) submitPromptInput(room.current);
+          }}
           onPasteFiles={(files) => {
             // Only images are taken from the clipboard; text pastes as it always does.
             const pasted = imageFiles(files);
@@ -385,9 +507,11 @@ function EditorChatComposer({
                 edit={{ node, pickDate: datePicker.open }}
               />
             ),
-            pasted: () => undefined,
+            pasted,
           }}
-          // Note that a thread's box is opened by a press, so it takes the caret; a place's foot leaves it where it is.
+          // Note that a thread's box is opened by a press, so it takes the caret; a place's foot
+          // leaves it where it is, as the Inbox's box does, because K and J step the chat's places
+          // while the caret is out of the box.
           takesFocus={false}
           focus={compact === true ? true : undefined}
         />
@@ -412,17 +536,15 @@ function EditorChatComposer({
           </ComposerFoot>
         )}
       </PromptInput>
-      {note === undefined ? null : (
-        <p className="error-message chat-composer-note" role="alert">
-          {note}
-        </p>
-      )}
+      <NoteLine note={note} onRetry={send} />
     </div>
   );
 }
 
 /** The plain box a bundle that failed to load leaves: a textarea whose `@` or `#` word opens the same list. */
 function PlainChatComposer({
+  channelId,
+  replyTo,
   label,
   targets,
   compact,
@@ -430,7 +552,17 @@ function PlainChatComposer({
 }: ChatComposerProps): React.JSX.Element {
   const listId = useId();
   const field = useRef<HTMLTextAreaElement>(null);
-  const { draft, setDraft, sending, empty, note, send } = useChatSend(onSend);
+  const { draft, setDraft, sending, empty, note, send } = useChatSend(
+    chatPlace(channelId, replyTo),
+    onSend,
+  );
+  // The field grows with its words, a line at a time, as a plan comment's plain field does.
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (element === null) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  }, [draft]);
   const [caret, setCaret] = useState<number | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
@@ -502,7 +634,7 @@ function PlainChatComposer({
     }
     if (enterSends(event)) {
       event.preventDefault();
-      send();
+      submitPromptInput(event.currentTarget);
     }
   };
 
@@ -514,7 +646,7 @@ function PlainChatComposer({
     "aria-activedescendant": listed ? comboboxOptionId(listId, at) : undefined,
   } as const;
   return (
-    <div className="chat-composer" data-compact={String(compact === true)}>
+    <div className="agent-composer chat-composer" data-compact={String(compact === true)}>
       {listed && mention !== undefined ? (
         <MentionMenu
           id={listId}
@@ -548,11 +680,7 @@ function PlainChatComposer({
         />
         <ComposerFoot sending={sending} empty={empty} />
       </PromptInput>
-      {note === undefined ? null : (
-        <p className="error-message chat-composer-note" role="alert">
-          {note}
-        </p>
-      )}
+      <NoteLine note={note} onRetry={send} />
     </div>
   );
 }

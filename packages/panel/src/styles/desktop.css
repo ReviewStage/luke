@@ -165,21 +165,22 @@ body,
 
 /* A narrow room shows a screen's list or the item chosen in it, one at a
    time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
-   list or its page, a version history's versions or the version, each the
-   shell's one column, and Chat's rail or its place, the view's one column.
-   The one shown stands alone, so no edge parts it from the other. */
+   list or its page and a version history's versions or the version, each the
+   shell's one column. Chat does the same by its own width as well as a
+   narrow room's (`column-split.ts`), its rail or its place the view's one
+   column. The one shown stands alone, so no edge parts it from the other. */
 .desktop-shell[data-room="narrow"]:not([data-sidebar-collapsed]),
-.desktop-shell[data-room="narrow"] .chat-view {
+.chat-view[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.desktop-shell[data-room="narrow"]
-  :is(.desktop-settings, .desktop-version-history, .chat-view)
-  > [hidden] {
+.desktop-shell[data-room="narrow"] :is(.desktop-settings, .desktop-version-history) > [hidden],
+.chat-view[data-single="true"] > [hidden] {
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log, .chat-rail) {
+.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log),
+.chat-view[data-single="true"] > .chat-rail {
   border-right: 0;
 }
 
@@ -697,6 +698,38 @@ body,
   opacity: 0.8;
 }
 
+/* The member Luke, an agent, or an automation acted for, on the corner of
+   its square: their face at a share of the mark's edge, cut from the ground
+   by a ring of it, so a task one of them made reads as theirs and its
+   member's at once. The face is drawn at the smallest size and scaled, so
+   a letter keeps its weight at every size the mark is. */
+.actor-mark-for {
+  position: absolute;
+  right: -22%;
+  bottom: -18%;
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
+  transform: scale(0.6);
+  transform-origin: bottom right;
+}
+
+.actor-mark[data-size="inline"] .actor-mark-for {
+  transform: scale(0.68);
+}
+
+.actor-mark:is([data-size="row"], [data-size="account"]) .actor-mark-for {
+  transform: scale(0.8);
+}
+
+.actor-mark:is([data-size="card"], [data-size="page"]) .actor-mark-for {
+  right: -8%;
+  bottom: -8%;
+  transform: scale(1);
+}
+
 /* A line that names an actor: its words and the actor in one row centred on
    the disc, so the disc never rides above the words' baseline. Note that
    its spaces stand inside its words, because a row drops a run that is
@@ -928,6 +961,17 @@ ul.actor-stack {
 .tab[data-unread="true"] .tab-label {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-bold);
+}
+
+/* The wrapper that hears typing in a preview's content lays nothing out. */
+.side-panel-keeps {
+  display: contents;
+}
+
+/* A preview tab, which the next link opened takes the place of, wears its
+   name in italics until it is kept, as VS Code draws one. */
+.tab[data-preview="true"] .tab-label {
+  font-style: italic;
 }
 
 .desktop-sidebar .sidebar-task[data-unread="true"] .sidebar-task-name {
@@ -3074,6 +3118,23 @@ ul.actor-stack {
 .inbox-search {
   min-width: 0;
   flex: 1;
+  animation:
+    inbox-search-unfold var(--duration-pane) var(--motion-pane),
+    popup-fade var(--duration-quick) var(--motion-pane);
+}
+
+/* Opening, the field unfolds leftward from where the magnifier stood at its
+   end, over the name it takes the place of: revealed rather than stretched,
+   so its words never squash. It is uncovered a little past its edge, so the
+   focus ring the caret brings is never clipped on the way. Reduced motion
+   zeroes the durations (`base.css`), so it then simply stands. */
+@keyframes inbox-search-unfold {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(calc(-1 * var(--luke-space-4)));
+  }
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle
@@ -3102,7 +3163,11 @@ ul.actor-stack {
   > .page-find
   > .inbox-view
   .inbox-tasks-bar,
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main > .chat-view .chat-rail-bar {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .chat-view
+  .chat-rail-bar {
   display: grid;
   grid-template-columns:
     minmax(
@@ -3123,6 +3188,7 @@ ul.actor-stack {
   .desktop-toolbar-heading,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .chat-view
   .chat-rail-bar
   .desktop-toolbar-heading {
@@ -3138,6 +3204,7 @@ ul.actor-stack {
   .desktop-toolbar-actions,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .chat-view
   .chat-rail-bar
   .desktop-toolbar-actions {
@@ -3241,6 +3308,7 @@ ul.actor-stack {
 .task-card-standing {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--luke-space-4);
 }
 
@@ -3276,12 +3344,16 @@ ul.actor-stack {
   height: var(--luke-type-caption-size);
 }
 
-/* A key is short and read whole; the chip beside it gives way instead. */
-.task-card-key {
+/* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
+   stands: its words are `Text`'s caption, subtle and monospace, with even
+   figures. It is short and read whole, so it never shrinks, and what stands
+   beside it gives way instead; it sits centred on the row it leads. */
+.task-key {
+  display: inline-flex;
   flex-shrink: 0;
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
+  align-items: center;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's
@@ -5175,10 +5247,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* A place's glyph (#, @, a document) stands at the size an actor's row
-   mark does beside it, as a menu's glyph does. */
+   mark does beside it, as a menu's glyph does, in the muted ink. A task's
+   status mark keeps the colour its status gives it. */
 .chat-rail .inbox-row-mark > svg {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
+}
+
+.chat-rail .inbox-row-mark > svg:not(.luke-task-status-mark) {
   color: var(--luke-color-text-muted);
 }
 
@@ -5229,7 +5305,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: auto;
 }
 
-/* The stream's body, inside the `ScrollArea` that scrolls it. */
+/* The stream's body, the block a log's lines stand in (`ConversationContent`). */
 .chat-stream-body {
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5244,7 +5320,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A message is laid out as Slack's is: its author's face in a column of its
    own at a card's 32px, a rounded square for everyone, then their name in
-   bold and the clock time in the caption's muted ink on one line, and the
+   bold and how long ago in the caption's muted ink on one line, and the
    words under it. Rows sit tight and light up while hovered. */
 .chat-message,
 .chat-reply {
@@ -5276,10 +5352,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .chat-face {
   display: flex;
   padding-top: var(--luke-space-2);
-}
-
-.chat-face :is(.actor-mark, .luke-avatar) {
-  border-radius: 22%;
 }
 
 /* A continued message's time stands in its face's column, shown only while
@@ -5356,16 +5428,28 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .chat-byline-action {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
   margin-left: auto;
   opacity: 0;
+}
+
+/* The presses show as their row does, so a message's Copy stands with its
+   Reply rather than waiting on a transcript's hover of its own. */
+.chat-byline-action > .message-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .chat-byline-action:focus-within {
   opacity: 1;
 }
 
+/* Note that a root's own byline is reached by children alone, so hovering a
+   reply in its open thread shows that reply's presses and not the root's. */
 @media (hover: hover) {
-  .chat-message:hover .chat-byline-action {
+  :is(.chat-message, .chat-reply):hover > .chat-message-body > .chat-byline > .chat-byline-action {
     opacity: 1;
   }
 }
@@ -5382,9 +5466,51 @@ polygon.factory-campus-edge[data-edge="selected"] {
   line-height: var(--luke-type-reading-leading);
 }
 
-/* An ask draws as a card in its row (`Card`), a step under the byline. */
+/* The line before the first message posted since the reader last read the
+   channel, as Slack's "New" line is: a rule in the unread dot's accent with
+   its word at its end, kept a step below the log's top when it opens there. */
+.chat-unread-line {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin-block: var(--luke-space-8);
+  color: var(--luke-color-accent-text);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-bold);
+  scroll-margin-top: var(--luke-space-16);
+}
+
+.chat-unread-line::before {
+  flex: 1;
+  border-top: 1px solid var(--luke-color-accent);
+  content: "";
+}
+
+/* An ask draws as the Inbox's ask in its row (`chat-ask.tsx`), a step
+   under the byline: the Inbox's bordered card and head, and under the head
+   its title, the poster's words, and its answer box or its answer. The box
+   is the Inbox's answer card with the note under it, as the agent
+   composer's stands, though it is no `.agent-composer`, which docks at a
+   column's foot (`column-dock.ts`) where this box scrolls with the
+   messages. */
 .chat-ask {
   margin-top: var(--luke-space-4);
+}
+
+.chat-ask-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-12);
+}
+
+.chat-ask-box {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-8);
 }
 
 .chat-thread {
@@ -5435,9 +5561,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
    shared composer card (`PromptInput`) around the box, its foot saying what
    the box takes with the round send at its end. */
 .chat-composer {
-  position: relative;
   width: calc(100% - 2 * var(--column-inset));
   margin: var(--luke-space-12) auto var(--luke-space-16);
+  padding: 0;
 }
 
 /* Where no box is offered (an archived channel, or a direct message
@@ -5469,23 +5595,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
   outline: none; /* no ring: the caret marks the field */
 }
 
+/* A thread's box stands a line high, its field and its placeholder at
+   the plain field's compact insets, as a plan comment's field does
+   (`.comment-field .agent-composer-input`). */
 .chat-composer[data-compact="true"] .chat-composer-field {
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
-.chat-composer-note {
-  margin: var(--luke-space-6) 0 0;
+.chat-composer[data-compact="true"] .agent-composer-field {
+  --agent-composer-field-block: calc(var(--luke-space-8) + var(--luke-space-4));
 }
 
-/* The pictures a post will carry, as chips over the box's words at the
-   agent composer's inset (`.agent-composer .attached-files`); and files
-   dragged over the box brighten the card's edge, as the agent box's do. */
-.chat-composer .attached-files {
-  padding: var(--luke-space-12) var(--luke-space-12) 0;
+.chat-composer[data-compact="true"] .agent-composer-input {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
-.chat-composer[data-dropping] form {
-  border-color: var(--luke-color-border-selected);
+.chat-composer[data-compact="true"] .agent-composer-placeholder {
+  padding: var(--luke-space-8) var(--luke-space-12) 0;
 }
 
 /* A picture a message carries (`chat-pane.tsx`'s ChatPicture): a plan's
@@ -5514,19 +5640,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .desktop-shell[data-room="narrow"] .chat-mention-menu {
   max-width: 100%;
-}
-
-/* The note's field and, where the answer is sent by one, its send beside it. */
-.chat-ask-note {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-  margin: 0;
-}
-
-.chat-ask-note-field {
-  flex: 1;
-  min-width: 0;
 }
 
 /* A chat notice in an agent's transcript: a card across the column washed
@@ -6570,7 +6683,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
 .side-panel-content .draft-fork-dock,
-.side-panel-content .agent-composer {
+.side-panel-content .agent-composer:not(.chat-composer) {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
 
@@ -7001,7 +7114,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .chat-byline-where[data-overflow="true"],
 .chat-notice-place[data-overflow="true"],
 .version-row-author[data-overflow="true"],
-.new-task-issue-title[data-overflow="true"] {
+.new-task-issue-title[data-overflow="true"],
+.tasks-list-name[data-overflow="true"],
+.tasks-list-repository[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
   text-overflow: clip;
 }
@@ -7447,6 +7562,183 @@ polygon.factory-campus-edge[data-edge="selected"] {
 @keyframes command-palette-drop {
   from {
     transform: translateY(-16px);
+  }
+}
+
+/* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
+   as a row of cards over the window, drawn as ⌘K's palette is, its ground,
+   edge, corner, shadow, and scrim, and stood in the middle of the stage, as
+   ⌘Tab's are. A card is its preview over its glyph and name, its task and
+   strip under them; the card chosen is lit as a menu's row is, its edge
+   drawn in the selected border, and the card of the stop here is dimmed. A
+   preview is a still of the tab, or its glyph large until it has one, and
+   the session recording leaves it out by its class (`ph-no-capture`). */
+.tab-switcher-backdrop {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  inset: 0;
+  background: var(--luke-color-scrim);
+  animation: confirm-dialog-dim var(--duration-quick) ease-out;
+}
+
+.tab-switcher {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) / 2);
+  left: 50%;
+  display: flex;
+  max-width: calc(100vw - 2 * var(--luke-space-24));
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-dialog-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  color: var(--luke-color-text);
+  overflow: clip;
+  transform: translate(-50%, -50%);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    tab-switcher-rise var(--duration-fast) var(--spring-fast) backwards;
+}
+
+[data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
+  -webkit-app-region: no-drag;
+}
+
+.tab-switcher-cards {
+  display: flex;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  overflow-x: auto;
+}
+
+.tab-switcher-card {
+  display: flex;
+  width: 176px;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6);
+  border: 1px solid transparent;
+  border-radius: var(--luke-radius-10);
+  cursor: default;
+}
+
+.tab-switcher-card[aria-selected="true"] {
+  border-color: var(--luke-color-border-selected);
+  background: var(--luke-color-fill-strong);
+}
+
+.tab-switcher-preview {
+  display: flex;
+  height: 110px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-surface);
+  overflow: hidden;
+}
+
+.tab-switcher-card[data-here="true"] .tab-switcher-preview {
+  opacity: 0.55;
+}
+
+/* A still fills the preview from its top left, as the tab it was taken of stands. */
+.tab-switcher-still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+/* A stop with no still yet wears its glyph, large and quiet, in the preview's middle. */
+.tab-switcher-glyph {
+  display: inline-flex;
+  --state-glyph-size: 28px;
+  color: var(--luke-color-text-subtle);
+}
+
+.tab-switcher-glyph :is(svg, img, .state-glyph) {
+  width: 28px;
+  height: 28px;
+}
+
+.tab-switcher-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-2);
+  white-space: nowrap;
+}
+
+/* The glyph keeps its own ink, a task's status mark's among them, as the tab's does. */
+.tab-switcher-name > :is(svg, img, .state-glyph) {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  flex: 0 0 auto;
+  --state-glyph-size: var(--luke-menu-glyph);
+}
+
+.tab-switcher-name > .luke-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The task and strip under the name, inset to the name's words; the line stands empty where a place has none, so every card is one height. */
+.tab-switcher-detail {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  min-height: calc(var(--luke-type-caption-size) * 1.4);
+  padding-left: calc(var(--luke-space-2) + var(--luke-menu-glyph) + var(--luke-icon-gap));
+  white-space: nowrap;
+}
+
+/* The column's agent wears its glyph before the tabs' names, a step smaller than the name's. */
+.tab-switcher-detail > :is(svg, img, .state-glyph) {
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+  flex: 0 0 auto;
+  --state-glyph-size: var(--luke-type-caption-size);
+}
+
+.tab-switcher-detail > .luke-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The keys' hints along the foot, as ⌘K's foot has them. */
+.tab-switcher-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-16);
+  height: 36px;
+  padding: 0 var(--luke-space-16);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.tab-switcher-footer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+.tab-switcher-footer .shortcut {
+  --shortcut-ink: var(--luke-color-text-muted);
+}
+
+@keyframes tab-switcher-rise {
+  from {
+    transform: translate(-50%, -50%) scale(0.96);
   }
 }
 
@@ -8481,7 +8773,8 @@ button.tasks-board-card-press:focus-visible::after {
   box-shadow: 0 0 0 2px var(--luke-color-focus-ring);
 }
 
-/* A card's first line: its key, and its creator's face at its end. */
+/* A card's first line: its key, and at its end what waits on the reader,
+   when it last moved, and its creator's face. */
 .tasks-board-card-head {
   display: flex;
   min-height: var(--luke-space-20);
@@ -8489,9 +8782,13 @@ button.tasks-board-card-press:focus-visible::after {
   gap: var(--luke-space-6);
 }
 
-.tasks-board-key {
+.tasks-board-card-marks {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin-left: auto;
   color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
@@ -8499,7 +8796,20 @@ button.tasks-board-card-press:focus-visible::after {
 
 .tasks-board-face {
   display: inline-flex;
-  margin-left: auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* Who made a card's task where its member did not by hand, Luke or an
+   agent, named muted before their square, cut short rather than pushing
+   the key aside. */
+.tasks-board-maker {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--luke-color-text-subtle);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* A card's name stands whole under its line, in the label's weight,
@@ -8583,6 +8893,13 @@ button.tasks-board-card-press:focus-visible::after {
   pointer-events: none;
 }
 
+/* What the card's agents are doing and their pull requests stand after its
+   repository, given up last, so a long repository is cut before a mark. */
+.tasks-board-card-foot > .task-work-marks {
+  margin-left: var(--luke-space-4);
+  pointer-events: none;
+}
+
 .tasks-board-card-more {
   display: flex;
   margin-left: auto;
@@ -8629,42 +8946,379 @@ button.tasks-board-card-press:focus-visible::after {
   gap: var(--luke-space-12);
 }
 
+/* The List is one grid (`tasks-list.tsx`), its columns the properties the
+   view draws (`--tasks-list-columns`), and every group and every row a
+   subgrid of it, so each column lines up down the whole page whatever any
+   one row holds, as Linear's list stands its rows. */
 .tasks-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-16);
+  display: grid;
+  grid-template-columns: var(--tasks-list-columns);
+  column-gap: var(--luke-space-8);
+  row-gap: var(--luke-space-16);
   padding-bottom: var(--luke-space-24);
 }
 
-.tasks-list-head {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  min-height: var(--luke-control-height);
+.tasks-list > p.luke-text {
+  grid-column: 1 / -1;
+}
+
+.tasks-list-group,
+.tasks-list-rows {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-content: start;
+}
+
+.tasks-list-rows {
   margin: 0;
-  padding: 0 var(--row-inset);
+  padding: 0;
+  list-style: none;
+}
+
+.tasks-list-group {
+  row-gap: var(--luke-space-2);
+  border-radius: var(--luke-radius-10);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.tasks-list-group > :not(.tasks-list-rows) {
+  grid-column: 1 / -1;
+}
+
+.tasks-list-group > p.luke-text {
+  padding: var(--luke-space-4) var(--row-inset);
+}
+
+/* The group a row is carried over (use-row-drag.ts) is washed and its head
+   ringed, so it reads as the one the row will land in. */
+.tasks-list-group[data-drop-target="true"] {
+  background: var(--luke-color-fill-hover);
+}
+
+.tasks-list-group[data-drop-target="true"] > .tasks-list-head {
+  border-color: var(--luke-color-focus-ring);
+}
+
+/* A group's head: the fold's chevron, its glyph, its name, and how many it
+   holds, on a quiet band under its hairline, standing at the top of the page
+   while its rows scroll beneath it. */
+.tasks-list-head {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  margin: 0;
   border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-ground);
   color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.tasks-list-head > svg,
-.tasks-list-head > .luke-task-mark {
+.tasks-list-fold {
+  display: flex;
+  width: 100%;
+  min-height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--row-inset) 0 var(--luke-space-4);
+  border: 0;
+  border-radius: var(--luke-control-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.tasks-list-fold:hover {
+  background: var(--luke-color-fill-hover);
+}
+
+.tasks-list-fold:focus-visible {
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: calc(-1 * var(--luke-focus-ring-width));
+}
+
+.tasks-list-chevron {
+  display: inline-flex;
   flex: none;
+  color: var(--luke-color-text-subtle);
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.tasks-list-chevron > svg {
+  width: var(--luke-space-12);
+  height: var(--luke-space-12);
+}
+
+.tasks-list-fold[aria-expanded="true"] .tasks-list-chevron {
+  transform: rotate(90deg);
+}
+
+.tasks-list-glyph {
+  display: inline-flex;
+  flex: none;
+}
+
+.tasks-list-glyph > svg,
+.tasks-list-glyph > .luke-task-mark {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
 }
 
-.tasks-list-lead {
-  display: inline-flex;
+/* A row: one line of the grid's columns, lit under the pointer as a list's
+   row is. Its press is the name's column, and reaches every edge of the row
+   under its chips and its ⋯, which stand over it; its other cells let the
+   pointer through to it. Its transform is a drag's (use-row-drag.ts), on
+   the motion tokens as a Board card's is. */
+.tasks-list-row {
+  position: relative;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  min-height: var(--luke-control-height);
   align-items: center;
-  gap: var(--luke-space-8);
+  padding: var(--luke-space-2) var(--row-inset);
+  border-radius: var(--luke-control-radius);
+  color: var(--luke-color-text);
+  transition:
+    transform var(--duration-fast) var(--spring-fast),
+    background-color var(--duration-hover) ease,
+    opacity var(--duration-quick) var(--motion-exit);
 }
 
-.tasks-list-key {
-  min-width: 7ch;
+.tasks-list-row:hover,
+.tasks-list-row[data-menu-open="true"] {
+  background: var(--luke-color-fill-hover);
+}
+
+.tasks-list-row[data-menu-open="true"] {
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+}
+
+/* The row holding the keyboard, or whose menu is open, stands over its
+   neighbours, so its ring is drawn whole. */
+.tasks-list-row:has(:focus-visible),
+.tasks-list-row[data-menu-open="true"],
+.tasks-list-row:has([aria-expanded="true"]) {
+  z-index: 2;
+}
+
+/* A row being dragged stays in its group as its own placeholder, faded,
+   while its copy follows the pointer; the copy, out of the grid, lays its
+   cells out on a line of its own. */
+.tasks-list-rows > li[data-dragging="true"] {
+  opacity: 0.4;
+}
+
+.tasks-list-rows[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.tasks-list-row[data-lifted="true"] {
+  display: flex;
+  gap: var(--luke-space-8);
+  background: var(--luke-color-surface);
+  box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
+}
+
+.tasks-list-row[data-lifted="true"] > [data-cell="name"] {
+  flex: 1;
+}
+
+/* The line a row would land at in Pinned or a section. */
+.tasks-list-rows > li[data-drop-before="true"] {
+  box-shadow: inset 0 2px 0 var(--luke-color-focus-ring);
+}
+
+.tasks-list-rows > li[data-drop-after="true"] {
+  box-shadow: inset 0 -2px 0 var(--luke-color-focus-ring);
+}
+
+/* Each cell stands in its property's column, in the order a row reads:
+   priority, key, and status before the name, the rest after it. */
+.tasks-list-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
   color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tasks-list-cell[data-cell="priority"] {
+  order: 1;
+}
+
+.tasks-list-cell[data-cell="key"] {
+  order: 2;
+}
+
+.tasks-list-cell[data-cell="status"] {
+  order: 3;
+}
+
+.tasks-list-cell[data-cell="name"] {
+  order: 4;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
+  pointer-events: auto;
+}
+
+.tasks-list-cell[data-cell="waiting"] {
+  order: 5;
+}
+
+.tasks-list-cell[data-cell="repository"] {
+  order: 6;
+}
+
+.tasks-list-cell[data-cell="creator"] {
+  order: 7;
+}
+
+.tasks-list-cell[data-cell="agents"] {
+  order: 8;
+}
+
+/* The time ends on its last letter, so times of any length line up at
+   their ends down the column. */
+.tasks-list-cell[data-cell="updated"] {
+  order: 9;
+  justify-content: flex-end;
+}
+
+.tasks-list-cell[data-cell="more"] {
+  order: 10;
+}
+
+/* The chips and the ⋯ stand over the row's press and take their own presses. */
+.tasks-list-cell:is([data-cell="priority"], [data-cell="status"], [data-cell="more"]) {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.tasks-list-press {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--luke-weight-medium);
+  text-align: left;
+}
+
+/* The press reaches every edge of the row, under its chips and its ⋯. */
+button.tasks-list-press::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+
+button.tasks-list-press:focus-visible {
+  outline: none;
+}
+
+button.tasks-list-press:focus-visible::after {
+  box-shadow: inset 0 0 0 2px var(--luke-color-focus-ring);
+}
+
+.tasks-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tasks-list-row[data-editing="true"] .tasks-list-press {
+  font-weight: var(--luke-weight-regular);
+}
+
+.tasks-list-note {
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* A row's repository is led by its owner's picture, or a folder's glyph
+   where it has none to draw, at a caption's size. */
+.tasks-list-cell[data-cell="repository"] > :is(.repository-picture, .tasks-list-repository-glyph) {
+  flex: none;
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+}
+
+.tasks-list-glyph > .repository-picture {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+/* Who made a row's task where its member did not by hand, Luke or an
+   agent, named before their square, as a Board card names them. */
+.tasks-list-maker {
+  overflow: hidden;
+  max-width: 16ch;
+  text-overflow: ellipsis;
+}
+
+.tasks-list-repository {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* With a pointer, the ⋯ comes in while the row is hovered, holds the
+   keyboard, or has its menu open; its column keeps its room meanwhile, so
+   nothing moves. A touch screen has no hover to spend a tap on, so there
+   it always stands (`touch-hover.test.ts`). */
+@media (hover: hover) {
+  .tasks-list-cell[data-cell="more"] {
+    opacity: 0;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .tasks-list-row:hover .tasks-list-cell[data-cell="more"],
+  .tasks-list-row:has(:focus-visible) .tasks-list-cell[data-cell="more"],
+  .tasks-list-row[data-menu-open="true"] .tasks-list-cell[data-cell="more"] {
+    opacity: 1;
+  }
+}
+
+/* What a task's agents are doing and the pull requests they opened
+   (`task-row-parts.tsx`): the working mark, then each pull request's mark in
+   GitHub's colour for where it stands and its number, then how many more. */
+.task-work-marks {
+  display: inline-flex;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.task-work-pull-request {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.task-work-pull-request > .task-mark-glyph {
+  vertical-align: baseline;
 }

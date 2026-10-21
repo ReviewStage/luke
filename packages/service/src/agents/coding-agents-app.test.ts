@@ -62,6 +62,7 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -199,6 +200,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Queue,
   Redacted,
   Result,
   type Schema,
@@ -256,6 +258,7 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
@@ -303,6 +306,7 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 import { messagesProcedures } from "./messages-procedures.js";
+import { type SandboxStopReach, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
 
 /**
@@ -601,6 +605,7 @@ const standing = (
   eve: ReturnType<typeof fakeEve>,
   titles: boolean,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
+  sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -640,6 +645,8 @@ const standing = (
       eveAs: (account: string) => eve.eve(deploymentFor(account)),
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
+      sessionSandboxes,
+      keepAwake: keepAwakeDetached,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -832,6 +839,8 @@ const openTask = (
     readonly otherToken?: string | null;
     /** The model a replay's summary is written on; none unless a test names one. */
     readonly summaryModel?: SummaryModelOf;
+    /** The sandboxes an archive stops; Vercel's own, which a test with no token in its environment finds unavailable, unless a test scripts them. */
+    readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -859,6 +868,7 @@ const openTask = (
       eve,
       options.titles ?? false,
       options.summaryModel,
+      options.sessionSandboxes,
     );
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
@@ -1159,7 +1169,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           }),
         );
 
-        const { plan, agent, agentRefusal } = readAnswer(
+        const { plan, agent, agentRefusal, txid } = readAnswer(
           taskStartAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           started,
@@ -1167,6 +1177,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agentRefusal, undefined);
         assert.ok(agent !== undefined);
         assert.notEqual(plan.id, task.id);
+        const db = yield* Database;
+        const [written] = yield* db
+          .select({ xmin: sql<string>`xmin::text` })
+          .from(taskTable)
+          .where(eq(taskTable.id, plan.id));
+        assert.equal(txid, written?.xmin, "the start answers its last write, the task's standing");
         assert.equal(plan.repository, RELAY_FULL_NAME);
         assert.equal(plan.document.body, "");
         assert.equal(
@@ -4314,9 +4330,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
     turn: { readonly running: boolean } | undefined,
+    sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
   ) =>
     Effect.gen(function* () {
-      const opened = yield* openTask({ eve });
+      const opened = yield* openTask({
+        eve,
+        ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
+      });
       const agent = readAnswer(
         codingAgentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
@@ -4475,6 +4495,24 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       }),
   );
 
+  it.effect("a task's archive stops the sandboxes of the agents it archives, keeping them", () =>
+    Effect.gen(function* () {
+      const sandboxes = yield* scriptedSessionSandboxes();
+      const { owner, task, ask, sessionId } = yield* startedAgent(
+        fakeEve(),
+        { running: false },
+        sandboxes.layer,
+      );
+
+      const archived = yield* ask(
+        request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } }),
+      );
+
+      assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
+    }),
+  );
+
   it.effect(
     "over a browser's session cookie a task's delete stops its agent and retires the agent's session as the deployment acting for the cookie's account, before the task goes",
     () =>
@@ -4617,7 +4655,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a model change of a Claude Code agent is refused another provider's model, a fast version, or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
+    "a model change of a Claude Code agent is refused another provider's model or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
     () =>
       Effect.gen(function* () {
         const onEve = yield* startedAgent(fakeEve(), undefined);
@@ -4641,7 +4679,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         const refused = [
           yield* change(onClaudeCode, { model: SOL, effort: "low" }),
-          yield* change(onClaudeCode, { model: `${SMALL_WINDOW.model}-fast`, effort: "low" }),
           yield* change(onClaudeCode, {
             model: SMALL_WINDOW.model,
             effort: "low",

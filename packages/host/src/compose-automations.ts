@@ -153,11 +153,36 @@ function composed(
         : Effect.raceAll(standing.map((wait) => confirmWrite(wait, txid)));
     });
 
-  /** The waits of the workspace an automation stands in, or of every workspace followed where it is not known. */
-  const workspaceWaits = (workspaceId: string | undefined) =>
-    workspaceId === undefined
-      ? [...waits[AUTOMATION_FOLLOW.WORKSPACE].values()]
-      : [waits[AUTOMATION_FOLLOW.WORKSPACE].get(workspaceId)];
+  /** The workspace whose followed list last drew each automation, by the automation's id. */
+  const listedIn = new Map<string, string>();
+
+  /** A workspace's list as it now stands drawn: what it holds is noted under it, and what it dropped forgotten. */
+  const drawn = (workspaceId: string, automations: readonly { readonly id: string }[]) => {
+    const held = new Set(automations.map((each) => each.id));
+    for (const [id, listed] of listedIn) {
+      if (listed === workspaceId && !held.has(id)) listedIn.delete(id);
+    }
+    for (const id of held) listedIn.set(id, workspaceId);
+  };
+
+  /**
+   * The waits of the follows that show an automation: its workspace's list,
+   * named or as a followed list last drew it, and, with `history`, its runs.
+   * Note that no other follow is waited on, since a list that never drew the
+   * automation never carries its transaction and would only hold the write
+   * to its timeout.
+   */
+  const waitsShowing = (
+    automationId: string,
+    workspaceId: string | undefined,
+    history: boolean,
+  ) => {
+    const listed = workspaceId ?? listedIn.get(automationId);
+    return [
+      listed === undefined ? undefined : waits[AUTOMATION_FOLLOW.WORKSPACE].get(listed),
+      history ? waits[AUTOMATION_FOLLOW.RUNS].get(automationId) : undefined,
+    ];
+  };
 
   /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
@@ -194,7 +219,10 @@ function composed(
         );
         const answer = yield* asked(client.create(made));
         if ("automation" in answer) {
-          yield* confirmed(answer.txid, workspaceWaits(answer.automation.workspaceId));
+          yield* confirmed(
+            answer.txid,
+            waitsShowing(answer.automation.id, answer.automation.workspaceId, false),
+          );
         }
         return carried<AutomationView>(answer);
       }),
@@ -207,7 +235,10 @@ function composed(
         );
         const answer = yield* asked(client.change(change));
         if ("automation" in answer) {
-          yield* confirmed(answer.txid, workspaceWaits(answer.automation.workspaceId));
+          yield* confirmed(
+            answer.txid,
+            waitsShowing(answer.automation.id, answer.automation.workspaceId, false),
+          );
         }
         return carried<AutomationView>(answer);
       }),
@@ -215,8 +246,10 @@ function composed(
       Effect.gen(function* () {
         const named = yield* read(automationIdParamsSchema, params, "a delete names an automation");
         const answer = yield* asked(client.remove(named));
-        // Note that a delete answers no workspace, so it is confirmed on whichever followed list had it.
-        if ("deleted" in answer) yield* confirmed(answer.txid, workspaceWaits(undefined));
+        // A delete takes the automation off its list and its runs out of its history.
+        if ("deleted" in answer) {
+          yield* confirmed(answer.txid, waitsShowing(named.automationId, undefined, true));
+        }
         return carried<AutomationDeletedView>(answer);
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUN]: (params) =>
@@ -229,10 +262,7 @@ function composed(
         const answer = yield* asked(client.runNow(run));
         // A run stands in its automation's followed history and as the last run on a followed list.
         if ("run" in answer) {
-          yield* confirmed(answer.txid, [
-            waits[AUTOMATION_FOLLOW.RUNS].get(run.automationId),
-            ...workspaceWaits(undefined),
-          ]);
+          yield* confirmed(answer.txid, waitsShowing(run.automationId, undefined, true));
         }
         return carried<AutomationRunView>(answer);
       }),
@@ -257,7 +287,10 @@ function composed(
           }),
         );
         if ("failure" in replaced) return carried<AutomationView>(replaced);
-        yield* confirmed(replaced.txid, workspaceWaits(replaced.automation.workspaceId));
+        yield* confirmed(
+          replaced.txid,
+          waitsShowing(replaced.automation.id, replaced.automation.workspaceId, false),
+        );
         return carried<AutomationView>({ automation: replaced.automation, webhookSecret: secret });
       }),
     [GATEWAY_METHOD.AUTOMATIONS_FOLLOW]: (params) =>
@@ -281,8 +314,15 @@ function composed(
             openLive: dependencies.openLive ?? openRealtimeClient,
             now: kernel.now,
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            publish: (followed: AutomationFollowed) =>
-              kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed)),
+            publish: (followed: AutomationFollowed) => {
+              if (
+                followed.scope.kind === AUTOMATION_FOLLOW.WORKSPACE &&
+                "automations" in followed.view
+              ) {
+                drawn(followed.scope.id, followed.view.automations);
+              }
+              kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed));
+            },
             // Note that a follow lets go only of its own wait, since one started over may hand its wait first.
             onTxWait: (wait) => {
               const standing = waits[scope.kind];
@@ -310,7 +350,10 @@ function composed(
       }),
   };
 
-  const reset = Effect.andThen(FiberMap.clear(follows.workspace), FiberMap.clear(follows.runs));
+  const reset = Effect.andThen(
+    Effect.andThen(FiberMap.clear(follows.workspace), FiberMap.clear(follows.runs)),
+    Effect.sync(() => listedIn.clear()),
+  );
 
   return { methods, lifetime: Effect.void, reset };
 }

@@ -1,4 +1,6 @@
 import type { FaceMotion } from "@luke/brand";
+import { CARD_GAP } from "@luke/panel/admin/charts/stat-card";
+import { AdminPage } from "@luke/panel/admin/chrome/page-header";
 import {
   ALIGN,
   Card,
@@ -21,8 +23,6 @@ import {
   indexAnimationAssets,
 } from "@luke/ui/admin-animations";
 import { useEffect, useRef } from "react";
-import { CARD_GAP } from "../charts/stat-card";
-import { AdminPage } from "../chrome/page-header";
 
 /**
  * The committed motion SVGs, inlined into the bundle at build time. The glob

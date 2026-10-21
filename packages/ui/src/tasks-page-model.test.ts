@@ -1,4 +1,5 @@
 import {
+  PLAN_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
@@ -13,6 +14,7 @@ import {
   DEFAULT_LIST_DISPLAY,
   keptTasksDisplay,
   NO_TASKS_FILTER,
+  TASK_MAKER,
   TASKS_FILTER_FIELD,
   TASKS_GROUP,
   TASKS_GROUPING,
@@ -243,7 +245,7 @@ test("each order runs a group's tasks its own way, a tie falling to the latest a
   expect(run(TASKS_ORDER.NAME)).toEqual(["Alpha", "Beta", "Gamma"]);
 });
 
-test("the List leads with the pins, then each section, a task in one group alone, and every group holds only the tasks that stand", () => {
+test("the List leads with the pins, then each section, one holding no task among them, a task in one group alone, and every group holds only the tasks that stand", () => {
   const tasks = [
     task("Pinned", { status: TASK_STATUS.TODO }),
     task("Pinned and shipped", { status: TASK_STATUS.DONE }),
@@ -269,6 +271,7 @@ test("the List leads with the pins, then each section, a task in one group alone
   expect(groups(true)).toEqual([
     [[TASKS_GROUP.PINNED], ["Pinned"]],
     [["section", "launch"], ["Sectioned"]],
+    [["section", "empty"], []],
     [["status", "todo"], ["Loose"]],
   ]);
   expect(groups(false)).toEqual([
@@ -421,4 +424,24 @@ test("a display kept before the completed window reads its Done and Canceled swi
     keptTasksDisplay({ completed: COMPLETED_WINDOW.ALL, done: false }, DEFAULT_LIST_DISPLAY)
       .completed,
   ).toBe(COMPLETED_WINDOW.ALL);
+});
+test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Luke made on a call, a task from before origins as made by hand", () => {
+  const tasks = [
+    task("By hand"),
+    { ...task("By an agent"), origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-1" } },
+    { ...task("On a call"), origin: { actor: PLAN_ACTOR.NOTETAKER } },
+  ];
+  const byAgents = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.MADE_BY, TASK_MAKER.AGENT);
+  expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, byAgents)).toEqual([
+    [["all"], ["By an agent"]],
+  ]);
+  const byPeople = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.MADE_BY, TASK_MAKER.PERSON);
+  expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, byPeople)).toEqual([
+    [["all"], ["By hand"]],
+  ]);
+  expect([...valueCounts(tasks, TASKS_FILTER_FIELD.MADE_BY)]).toEqual([
+    [TASK_MAKER.PERSON, 1],
+    [TASK_MAKER.AGENT, 1],
+    [TASK_MAKER.LUKE, 1],
+  ]);
 });

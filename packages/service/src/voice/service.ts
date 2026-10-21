@@ -506,6 +506,11 @@ export class VoiceService {
       // the relay is about to pipe. The socket is paused since the attach, so a
       // frame the session spoke while the exchange stood is read once both
       // consumers listen, by both, in order.
+      // Every frame of the service's own about the call names its agent, and the agent's task where it has one.
+      const subject = {
+        ...(opened.taskId === undefined ? undefined : { planId: opened.taskId }),
+        agentId: opened.agentId,
+      };
       const standing = yield* this.#attachExchange({
         accountId,
         sessionId,
@@ -519,7 +524,7 @@ export class VoiceService {
         onActivity: (activity) => {
           const frame: TaskActivityFrame = {
             type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-            planId: opened.taskId,
+            ...subject,
             ...activity,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
@@ -530,8 +535,8 @@ export class VoiceService {
         onCode: (shown) => {
           const frame: TaskCodeFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CODE,
-            planId: opened.taskId,
             ...shown,
+            ...subject,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
@@ -542,7 +547,7 @@ export class VoiceService {
           this.#log({ event: LOG_EVENT.CALL_ENDING });
           const frame: TaskCallEndingFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CALL_ENDING,
-            planId: opened.taskId,
+            ...subject,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

@@ -14,9 +14,12 @@ import { CODER } from "./bounds.js";
  * holding no function open, and a message ends it early, as it steers any
  * turn: the developer's, or GitHub's saying every check on the agent's pull
  * request finished (`github/agent-wakes.ts`), which is what the agent waits
- * on after a push rather than watching CI; the sandbox and
- * what runs in it stand while the turn does, since only a turn's end stops
- * them (`../agent-runtime/sandbox.ts`). One pause is held to
+ * on after a push rather than watching CI. A pause of
+ * `CODER.SLEEP_STOPS_AT` or more stops the sandbox where no process the
+ * agent started still runs in it, and the next step resumes it from its
+ * snapshot with its files as they stood; a command left running in the
+ * background keeps it up, and runs on through the pause
+ * (`../agent-runtime/sandbox.ts`'s `parksForLongSleep`). One pause is held to
  * `CODER.SLEEP_MAX`, inside what is left of the GitHub credential its
  * background commands reach GitHub with, since only a step renews it; a
  * longer wait is several pauses, each one's end a step.

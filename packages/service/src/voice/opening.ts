@@ -70,13 +70,13 @@ export interface Admission {
   bearer: string;
 }
 
-/** The account a device's handshake resolved to, its task and the agent it names admitted and a session counted, or the reason it is refused. */
+/** The account a device's handshake resolved to, the agent it names and that agent's task admitted and a session counted, or the reason it is refused. */
 type AdmittedAccount =
   | {
       accountId: string;
-      /** The task the call is about, read as the account holds it. */
-      task: Task;
-      /** The agent of the task the call speaks into. */
+      /** The task the agent is on, read as the account holds it; none for an agent with no task. */
+      task: Task | undefined;
+      /** The agent the call speaks into. */
       agent: HeldVoiceAgent;
     }
   | Refusal;
@@ -92,9 +92,9 @@ type Opened =
       sessionId: string;
       /** The account the session is billed to. */
       accountId: string;
-      /** The task the call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row. */
-      taskId: string;
-      /** The agent of the task the call speaks into, as the creation named it or the row reads it back. */
+      /** The task the call is bound to: its agent's, shown the account holds, or the one a re-attach read off the session's row; none for a call into an agent with no task. */
+      taskId: string | undefined;
+      /** The agent the call speaks into, as the creation named it or the row reads it back. */
       agentId: string;
       /** This connection's own name on the session's row, which a detach it writes must still match. */
       attachId: string;
@@ -263,7 +263,7 @@ function newestWithin(lines: readonly EarlierCallLine[], tokens: number): string
 
 /**
  * The input a call is created with, under the API's bounds: the plan's seed
- * first, then, for a call into an agent that has worked, the agent's own
+ * first, for an agent on a task, then, for a call into an agent that has worked, the agent's own
  * work, then what was said on its earlier calls as one quoted transcript,
  * then the device's own input, then the opening, last, so it is the newest
  * thing the session holds as it starts and Luke speaks first with no append
@@ -280,7 +280,7 @@ function newestWithin(lines: readonly EarlierCallLine[], tokens: number): string
  */
 function startupInput(
   input: readonly InitialItem[],
-  task: Task,
+  task: Task | undefined,
   earlier: readonly EarlierCallLine[],
   agent: AgentCallHistory | undefined,
 ): readonly InitialItem[] {
@@ -292,30 +292,39 @@ function startupInput(
   if (input.length + 1 >= LIVE_INPUT_BOUNDS.MESSAGES) return [...input, opening];
   const agentAtWork = agent !== undefined;
   const room = openingRoom - seedItemTokens(input);
-  const taskFloor = Math.min(
-    room,
-    TASK_SEED_FLOOR_TOKENS,
-    startupTokens(taskSeedText(task, true, agentAtWork)),
-  );
+  // Note that an agent with no task has no plan to seed, so its own work and its calls take the whole room.
+  const taskFloor =
+    task === undefined
+      ? 0
+      : Math.min(
+          room,
+          TASK_SEED_FLOOR_TOKENS,
+          startupTokens(taskSeedText(task, true, agentAtWork)),
+        );
   // The plan's seed, the agent's work, and the transcript are one message each, and the plan's is kept first.
+  // Note that the opening and a plan's seed, where there is a plan, are the messages counted before either.
+  const fixed = input.length + (task === undefined ? 1 : 2);
   const agentItem = agent === undefined ? undefined : developerSeedItem(agentSeedText(agent));
   const agentItems =
     agentItem === undefined ||
-    input.length + 3 > LIVE_INPUT_BOUNDS.MESSAGES ||
+    fixed + 1 > LIVE_INPUT_BOUNDS.MESSAGES ||
     seedItemTokens([agentItem]) > room - taskFloor
       ? []
       : [agentItem];
   const historyRoom = room - taskFloor - seedItemTokens(agentItems);
   const said =
-    input.length + 3 + agentItems.length > LIVE_INPUT_BOUNDS.MESSAGES
+    fixed + 1 + agentItems.length > LIVE_INPUT_BOUNDS.MESSAGES
       ? []
       : newestWithin(earlier, historyRoom - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
   const history =
     said.length === 0 ? [] : [developerSeedItem(`${EARLIER_CALLS_NOTE}\n\n${said.join("\n")}`)];
-  const seed = startupPrefix(
-    taskSeedText(task, said.length > 0, agentAtWork),
-    room - seedItemTokens(history) - seedItemTokens(agentItems),
-  );
+  const seed =
+    task === undefined
+      ? ""
+      : startupPrefix(
+          taskSeedText(task, said.length > 0, agentAtWork),
+          room - seedItemTokens(history) - seedItemTokens(agentItems),
+        );
   const taskItems = seed.length <= TASK_SEED_MARKER.length ? [] : [developerSeedItem(seed)];
   return [...taskItems, ...agentItems, ...history, ...input, opening];
 }
@@ -378,39 +387,59 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       }),
     );
 
+  /** The task named as the account holds it, or the reason a call about it is refused: not held, or archived, which no call is about until it is brought back. */
+  const admitTask = (
+    userId: string,
+    taskId: string,
+  ): Effect.Effect<Task | Refusal, SessionFailure, DatabaseServices> =>
+    Effect.map(record.heldTask({ userId, taskId }), (task) =>
+      task === undefined
+        ? refused(HOSTED_API_ERROR.NOT_FOUND)
+        : task.archivedAt !== undefined
+          ? refused(HOSTED_API_ERROR.TASK_ARCHIVED)
+          : task,
+    );
+
   /**
    * A handshake as an account, in the order the refusals are cheapest: the
-   * bearer resolved, the task it named read from the tasks the account
-   * holds, the agent it named read from the agents the account reaches, and
-   * only then a session counted. A task the account does not hold is refused
-   * before the count, so a claim on someone else's task counts nothing and
-   * creates nothing, and so is an archived task, which no call is about until
-   * it is brought back. An agent is refused as not found where the account
-   * does not reach it, where it works on another task than the one named, or
-   * where it is archived and so takes nothing; an agent on a native harness
-   * (Claude Code or Codex) is refused by name, since a call runs on eve
-   * alone; a teammate's agent the account reaches takes the call, which runs
-   * on its starter's key as its every turn does.
+   * bearer resolved, a task it named read from the tasks the account holds,
+   * the agent it named read from the agents the account reaches, the agent's
+   * own task where it named none, and only then a session counted. The call
+   * is keyed by its agent: a frame that names no task is a call into the
+   * agent on its own task, or on none where it has none, as an automation's
+   * run starts one. A task the account does not hold is refused before the
+   * count, so a claim on someone else's task counts nothing and creates
+   * nothing, and so is an archived task. An agent is refused as not found
+   * where the account does not reach it, where it works on another task than
+   * the one named, or where it is archived and so takes nothing; an agent on
+   * a native harness (Claude Code or Codex) is refused by name, since a call
+   * runs on eve alone; a teammate's agent the account reaches takes the
+   * call, which runs on its starter's key as its every turn does.
    */
   const admitAccount = (
     admission: Admission,
-    taskId: string,
+    taskId: string | undefined,
     agentId: string,
   ): Effect.Effect<AdmittedAccount, SessionFailure, DatabaseServices> =>
     Effect.gen(function* () {
       const account = yield* accounts.resolveUserId(admission.bearer);
       if (Option.isNone(account)) return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       const accountId = account.value;
-      const task = yield* record.heldTask({ userId: accountId, taskId });
-      if (task === undefined) return refused(HOSTED_API_ERROR.NOT_FOUND);
-      if (task.archivedAt !== undefined) return refused(HOSTED_API_ERROR.TASK_ARCHIVED);
+      const named = taskId === undefined ? undefined : yield* admitTask(accountId, taskId);
+      if (named !== undefined && "refusal" in named) return named;
       const agent = yield* record.heldAgent({ userId: accountId, agentId });
-      if (agent === undefined || agent.taskId !== taskId || agent.archived) {
+      if (agent === undefined || agent.archived) return refused(HOSTED_API_ERROR.NOT_FOUND);
+      if (taskId !== undefined && agent.taskId !== taskId) {
         return refused(HOSTED_API_ERROR.NOT_FOUND);
       }
+      // Note that a frame naming no task still binds the call to the agent's own task, so a
+      // call keyed by its agent alone is fenced by that task's archive as a named one is.
+      const task =
+        named ?? (agent.taskId === null ? undefined : yield* admitTask(accountId, agent.taskId));
+      if (task !== undefined && "refusal" in task) return task;
       // A call runs on eve alone: an agent on a native harness is refused before anything is
       // counted, so eve never answers its conversation beside the harness that does.
-      if (agent !== undefined && agent.runtime !== CONVERSATION_RUNTIME.EVE) {
+      if (agent.runtime !== CONVERSATION_RUNTIME.EVE) {
         return refused(HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE);
       }
       yield* accounts.spend(accountId);
@@ -458,10 +487,11 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const attachId = randomUUID();
       // The store's id for the session's row rides the answer, so the device
       // can name its own rows.
+      const taskId = account.task?.id;
       const voiceSessionId = yield* record.register({
         userId: account.accountId,
         sessionId,
-        taskId: frame.planId,
+        taskId,
         agentId,
         attachId,
         model: config.model,
@@ -482,7 +512,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       return {
         sessionId,
         accountId: account.accountId,
-        taskId: frame.planId,
+        taskId,
         agentId,
         attachId,
         voiceSessionId,
@@ -503,7 +533,9 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * re-attached exchange lands in the agent the session was created for; a
    * task archived since takes the call back no more, and neither does a
    * session that names no agent, a call about a task's own Luke from before
-   * every call named one, or one whose agent was deleted since.
+   * every call named one, or one whose agent was deleted since. A row that
+   * names an agent and no task is a call into an agent with no task, and is
+   * taken back as it was created.
    */
   const openAttached = (
     upstream: LiveUpstream,
@@ -518,12 +550,13 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (Option.isNone(account) || owned === undefined) {
         return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       }
-      // A session no task or no agent was bound to is no call this service still runs.
-      if (owned.taskId === undefined || owned.agentId === undefined) {
-        return refused(HOSTED_API_ERROR.INVALID_REQUEST);
-      }
+      // A session no agent was bound to is no call this service still runs.
+      if (owned.agentId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
-      const task = yield* record.heldTask({ userId: accountId, taskId: owned.taskId });
+      const task =
+        owned.taskId === undefined
+          ? undefined
+          : yield* record.heldTask({ userId: accountId, taskId: owned.taskId });
       if (task?.archivedAt !== undefined) return refused(HOSTED_API_ERROR.TASK_ARCHIVED);
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);

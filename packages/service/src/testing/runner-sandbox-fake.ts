@@ -32,6 +32,12 @@ export interface FakeSandbox {
   tags: Record<string, string>;
   snapshotId: string;
   deleted: boolean;
+  /** The timeout each session of the sandbox opens with, as its create or a later update set it. */
+  timeout: number;
+  /** The timeout each session a resume opened started with, in order. */
+  resumedWith: number[];
+  /** Whether the snapshot the sandbox resumes from expired, so a resume is answered 410 as Vercel answers it. */
+  snapshotExpired?: boolean;
 }
 
 export interface FakeCommand {
@@ -92,6 +98,7 @@ export function runnerSandboxApi() {
     status: sandbox.status,
     currentSessionId: sandbox.currentSessionId,
     tags: sandbox.tags,
+    timeout: sandbox.timeout,
   });
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
@@ -110,6 +117,8 @@ export function runnerSandboxApi() {
         tags: asked.tags,
         snapshotId: asked.source.snapshotId,
         deleted: false,
+        timeout: asked.timeout,
+        resumedWith: [],
       };
       sandboxes.push(sandbox);
       return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
@@ -128,16 +137,24 @@ export function runnerSandboxApi() {
       const sandbox = sandboxes.find((each) => each.name === decodeURIComponent(named[1] ?? ""));
       if (sandbox === undefined || sandbox.deleted) return new Response(null, { status: 404 });
       if (method === "PATCH") {
-        sandbox.tags = (await body()).tags;
+        // Only the fields given change, as Vercel's update takes them.
+        const asked = await body();
+        if (asked.tags !== undefined) sandbox.tags = asked.tags;
+        if (asked.timeout !== undefined) sandbox.timeout = asked.timeout;
         return Response.json({ sandbox: listed(sandbox) });
       }
       if (method === "DELETE") {
         sandbox.deleted = true;
         return Response.json({});
       }
-      if (parsed.searchParams.get("resume") === "true" && sandbox.status === "stopped") {
+      const resuming = parsed.searchParams.get("resume") === "true";
+      if (resuming && sandbox.status === "stopped" && sandbox.snapshotExpired === true) {
+        return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
+      }
+      if (resuming && sandbox.status === "stopped") {
         sandbox.status = "running";
         sandbox.currentSessionId = id("sbs");
+        sandbox.resumedWith.push(sandbox.timeout);
       }
       return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
     }

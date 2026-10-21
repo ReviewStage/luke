@@ -98,7 +98,7 @@ test("a GitHub merge-queue branch is not deployed, and every other branch is", (
   for (const branch of [
     "main",
     "ci/vercel-no-merge-queue-deploys",
-    "conductor/some-workspace",
+    "feature/some-workspace",
     "pr-assets",
     "gh-readonly-queue",
   ]) {

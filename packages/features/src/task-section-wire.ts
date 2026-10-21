@@ -13,8 +13,10 @@ import { workspaceIdSchema } from "./task-wire.js";
  * the text's own, and a place among the account's sections once dragged there
  * (`pin-order.ts`'s keys; with none, it stands by when it was made). A task
  * stands in at most one of the account's sections, an entry with a place
- * of its own among the section's tasks. Deleting a section deletes its
- * entries and none of its tasks, which go back under Tasks.
+ * of its own among the section's tasks, and so does a coding agent with no
+ * task, its entry ordered among the tasks' in the one key space. Deleting
+ * a section deletes its entries and none of its tasks or agents, which go
+ * back under Tasks.
  *
  * Every write is one request to `PUT /api/task-sections`, and every answer,
  * the read's and each write's alike, is the whole of the account's sections
@@ -86,6 +88,7 @@ export const TASK_SECTION_WRITE = {
   MOVE: "move",
   DELETE: "delete",
   PLACE: "place",
+  PLACE_AGENT: "place-agent",
 } as const;
 
 /** What reads as an emoji: a pictograph, a flag's letters, or a keycap. */
@@ -157,10 +160,23 @@ export const taskSectionEntrySchema = EffectSchema.Struct({
 
 export type TaskSectionEntry = typeof taskSectionEntrySchema.Type;
 
-/** The account's sections and the tasks in them (GET, and every PUT's answer). */
+/** A coding agent with no task the account keeps in one of its sections, standing among its tasks by the same order. */
+export const agentSectionEntrySchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  sectionId: wireUuidSchema,
+  /** Where it stands among the section's rows once dragged there; absent while it stands by `addedAt`. */
+  position: EffectSchema.optionalKey(pinPositionSchema),
+  /** Epoch milliseconds it was put in the section. */
+  addedAt: countedNumber,
+});
+
+export type AgentSectionEntry = typeof agentSectionEntrySchema.Type;
+
+/** The account's sections and the tasks and agents in them (GET, and every PUT's answer). */
 export const taskSectionsAnswerSchema = EffectSchema.Struct({
   sections: EffectSchema.Array(taskSectionSchema),
   entries: EffectSchema.Array(taskSectionEntrySchema),
+  agentEntries: EffectSchema.Array(agentSectionEntrySchema),
 });
 
 export type TaskSections = typeof taskSectionsAnswerSchema.Type;
@@ -181,8 +197,8 @@ export type TaskSectionsWritten = typeof taskSectionsWrittenSchema.Type;
  * One write (PUT): make a section under the id given, in a workspace the
  * account is a member of; give one a new title and icon, null for none;
  * stand one at a place among the others; delete one, which puts its tasks
- * back under Tasks; or put a task in a section at a place, or, under null,
- * in none.
+ * back under Tasks with its agents; or put a task, or an agent with no
+ * task, in a section at a place, or, under null, in none.
  */
 export const taskSectionWriteSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -210,6 +226,12 @@ export const taskSectionWriteSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(TASK_SECTION_WRITE.PLACE),
     taskId: wireUuidSchema,
+    sectionId: EffectSchema.NullOr(wireUuidSchema),
+    position: EffectSchema.optionalKey(pinPositionSchema),
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(TASK_SECTION_WRITE.PLACE_AGENT),
+    agentId: wireUuidSchema,
     sectionId: EffectSchema.NullOr(wireUuidSchema),
     position: EffectSchema.optionalKey(pinPositionSchema),
   }),

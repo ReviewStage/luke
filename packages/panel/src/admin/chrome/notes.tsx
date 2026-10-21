@@ -1,0 +1,104 @@
+import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
+import { TEXT_TONE, Text } from "@luke/ui";
+import { formatNumber } from "@luke/ui/admin-format";
+
+/** A note under the cards of the section it explains, in the muted body role; the section stands it. */
+function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <Text tone={TEXT_TONE.MUTED}>{children}</Text>;
+}
+
+/**
+ * What every figure on a page is, where its title cannot say it: a muted
+ * line at the top of its content, since the toolbar holds a title alone;
+ * the page stands it a section's gap above the first section.
+ */
+export function PageNote({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <Text tone={TEXT_TONE.MUTED}>{children}</Text>;
+}
+
+/**
+ * What a retention cell counts, by the grid's basis: a meaningful action, or
+ * any hosted-tier call, the basis the grid had before the Overview was rebuilt.
+ */
+export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.Element {
+  return (
+    <SectionNote>
+      Each cell is the share of one UTC week's signups that{" "}
+      {basis === RETENTION_BASIS.MEANINGFUL
+        ? "created a task, wrote a plan revision, started a coding agent, or held a call"
+        : "spent hosted voice or attention"}{" "}
+      that many weeks after signup. Wk 0 is the signup week, and dashed cells are still accruing.
+      {basis === RETENTION_BASIS.MEANINGFUL
+        ? " A deleted task takes its agents and revisions with it, so a cohort's past weeks can shrink."
+        : " Local use of the desktop app writes no row here, so a cohort that never touched the hosted tier reads the same as one that left."}
+    </SectionNote>
+  );
+}
+
+export function TopAccountsNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active day is a UTC day the account created a task, wrote a plan revision, started a coding
+      agent, or held a call. PRs merged count its agents' pull requests merged in the window. Last
+      seen is the account's latest sign-in session.
+    </SectionNote>
+  );
+}
+
+/** What the activity chart and the headline tiles count, and what they cannot. */
+export function ActivityNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active developer created a task, wrote a plan revision, started a coding agent, or held a
+      call in the last 7 UTC days. Plan revisions count the developer's own and Luke's notes on
+      their calls; automation runs leave out the ones a guard held back. A deleted task leaves no
+      row, and takes its agents and revisions with it, so past counts can shrink.
+    </SectionNote>
+  );
+}
+
+export function AccountActivityNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active day is a UTC day this account spent hosted voice or attention. Local use of the
+      desktop app writes no row here. Launch activity is in product analytics, not this database.
+    </SectionNote>
+  );
+}
+
+export function RosterNote({
+  truncatedTo,
+  searched,
+}: {
+  truncatedTo?: number | undefined;
+  searched?: boolean | undefined;
+}): React.JSX.Element {
+  return (
+    <SectionNote>
+      Active days count the window's UTC days with hosted voice or attention. Last seen is the
+      account's latest sign-in session, which a sign-in moves without any hosted use.
+      {truncatedTo !== undefined
+        ? searched
+          ? ` Only the ${formatNumber(truncatedTo)} most recently active matches are listed. Narrow the search to reach the rest.`
+          : ` Only the ${formatNumber(truncatedTo)} most recently active accounts are listed. Search reads every account.`
+        : ""}
+    </SectionNote>
+  );
+}
+
+export function DayNote({
+  truncatedTo,
+  totalAccounts,
+}: {
+  truncatedTo?: number | undefined;
+  totalAccounts: number;
+}): React.JSX.Element {
+  return (
+    <SectionNote>
+      Voice and attention count the hosted-tier calls each account spent on this UTC day.
+      {truncatedTo !== undefined
+        ? ` Only the ${formatNumber(truncatedTo)} busiest accounts are listed. The totals count all ${formatNumber(totalAccounts)}.`
+        : ""}
+    </SectionNote>
+  );
+}

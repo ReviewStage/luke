@@ -323,23 +323,26 @@ const callTimeZone = Schema.optionalKey(
 
 /**
  * The desktop's opening frame: the offer, the voice, the seed, the id of
- * the saved task the call is about and of its agent the call speaks into,
- * and the developer's time zone, which a desktop released before it sends
- * none of. The service checks the task and the agent are the account's,
- * creates the session under the planning scene, lands its asks in the
- * agent's conversation, and writes the binding on the session's row, so a
- * later `session.attach` is bound to the same agent by that row and never by
- * anything the attaching connection says. The ids name the task and the
- * agent and nothing of the task's document. A frame that names no agent is
- * no request at all, and the service refuses it as one.
+ * the agent the call speaks into and, where the agent is on a task, of that
+ * task, and the developer's time zone, which a desktop released before it
+ * sends none of. The service checks the agent is one the account reaches,
+ * and a task named is the one the agent is on, creates the session, lands
+ * its asks in the agent's conversation, and writes the binding on the
+ * session's row, so a later `session.attach` is bound to the same agent by
+ * that row and never by anything the attaching connection says. The ids
+ * name the task and the agent and nothing of the task's document. A frame
+ * that names no agent is no request at all, and the service refuses it as
+ * one; one that names no task is a call into the agent as it stands, on its
+ * own task where it has one, and on none where it has none.
  */
 export const sessionCreateFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
   sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
-  planId: wireUuidSchema,
-  /** The agent of the task the call speaks into: its asks run in that agent's conversation and its transcript is that agent's. */
+  /** The task the agent is on, which a released desktop always names; none for a call keyed by the agent alone. */
+  planId: Schema.optionalKey(wireUuidSchema),
+  /** The agent the call speaks into: its asks run in that agent's conversation and its transcript is that agent's. */
   agentId: wireUuidSchema,
   timeZone: callTimeZone,
 });
@@ -414,33 +417,46 @@ export const sessionReportFrameSchema = Schema.Union([
 
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
 
-/** The activity on the call about the task named, as the service sends it to the desktop. */
+/**
+ * Whom a frame the service sends about a call names: the agent the call
+ * speaks into, and that agent's task where it has one. Note that the agent
+ * is optional on the read, because a service from before it sent none, and
+ * that a released desktop only ever opens a call naming a task, so every
+ * frame it is sent still names one.
+ */
+const callSubjectFields = {
+  planId: Schema.optionalKey(wireUuidSchema),
+  agentId: Schema.optionalKey(wireUuidSchema),
+};
+
+/** The activity on the call into the agent named, as the service sends it to the desktop. */
 const taskActivityFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_ACTIVITY),
-  planId: wireUuidSchema,
+  ...callSubjectFields,
   ...taskActivitySchema.fields,
 });
 
 export type TaskActivityFrame = typeof taskActivityFrameSchema.Type;
 
 /**
- * Code Luke put on screen on the call about the task named, with its lines
- * as the service read them from the task's repository, and the `show_code`
- * call and turn that showed it, as the task's work reads them back, so the
- * desktop holds a call's code and the record's copy of it once.
+ * Code Luke put on screen on the call into the agent named, with its lines
+ * as the service read them from the agent's repository, and the `show_code`
+ * call and turn that showed it, as the agent's work reads them back, so the
+ * desktop holds a call's code and the record's copy of it once. The agent
+ * is the shown code's own `agentId`.
  */
 const taskCodeFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CODE),
-  planId: wireUuidSchema,
+  planId: callSubjectFields.planId,
   ...taskShownCodeSchema.fields,
 });
 
 export type TaskCodeFrame = typeof taskCodeFrameSchema.Type;
 
-/** Luke is ending the call about the task named, once his goodbye has played. */
+/** Luke is ending the call into the agent named, once his goodbye has played. */
 const taskCallEndingFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CALL_ENDING),
-  planId: wireUuidSchema,
+  ...callSubjectFields,
 });
 
 export type TaskCallEndingFrame = typeof taskCallEndingFrameSchema.Type;

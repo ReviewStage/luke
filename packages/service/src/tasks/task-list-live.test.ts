@@ -14,6 +14,8 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { linkTaskIssue, unlinkTaskIssue } from "@luke/database/models/task-issue-store";
 import {
+  assignUnassignedTaskCommitted,
+  beginTaskWorkCommitted,
   deleteTaskCommitted,
   listTasks,
   updateTask,
@@ -289,6 +291,23 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.equal(again.txid, undefined, "a pin asked again writes nothing to wait for");
         assert.match(deleted.txid, /^[0-9]+$/u);
         assert.ok(Option.isNone(missing), "a task already gone is deleted by nothing");
+      }),
+  );
+
+  it.effect(
+    "a Start's move into progress and its assignment answer their own later transactions, and none asked again",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+
+        const begun = Option.getOrThrow(yield* beginTaskWorkCommitted(owner, plan.id));
+        const assigned = Option.getOrThrow(yield* assignUnassignedTaskCommitted(owner, plan.id));
+
+        assert.match(begun.txid, /^[0-9]+$/u);
+        assert.ok(BigInt(assigned.txid) > BigInt(begun.txid), "the later write's transaction");
+        assert.ok(Option.isNone(yield* beginTaskWorkCommitted(owner, plan.id)));
+        assert.ok(Option.isNone(yield* assignUnassignedTaskCommitted(owner, plan.id)));
       }),
   );
 

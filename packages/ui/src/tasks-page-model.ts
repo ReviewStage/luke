@@ -1,4 +1,5 @@
 import {
+  PLAN_ACTOR,
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
@@ -40,6 +41,7 @@ export const TASKS_FILTER_FIELD = {
   STATUS: "status",
   PRIORITY: "priority",
   CREATOR: "creator",
+  MADE_BY: "madeBy",
   REPOSITORY: "repository",
 } as const;
 
@@ -54,8 +56,21 @@ export interface TasksFilter {
   readonly status?: readonly TaskStatus[];
   readonly priority?: readonly TaskPriority[];
   readonly creator?: readonly (string | null)[];
+  readonly madeBy?: readonly TaskMaker[];
   readonly repository?: readonly (string | null)[];
 }
+
+/** Who made a task, as the filter's Made by tells them apart: a person by hand, a coding agent, or Luke on a call. */
+export const TASK_MAKER = {
+  PERSON: "person",
+  AGENT: "agent",
+  LUKE: "luke",
+} as const;
+
+export type TaskMaker = (typeof TASK_MAKER)[keyof typeof TASK_MAKER];
+
+/** Every maker, in the order the filter offers them. */
+export const TASK_MAKER_ORDER: readonly TaskMaker[] = Object.values(TASK_MAKER);
 
 /** No filter: every task stands. */
 export const NO_TASKS_FILTER: TasksFilter = {};
@@ -104,8 +119,15 @@ export type TaskProperty = (typeof TASK_PROPERTY)[keyof typeof TASK_PROPERTY];
 /** Every property, in the order a row draws them and the menu lists them. */
 export const TASK_PROPERTY_ORDER: readonly TaskProperty[] = Object.values(TASK_PROPERTY);
 
-/** The properties a Board's card has a place for. */
-export const BOARD_PROPERTIES: readonly TaskProperty[] = [
+/** The properties a Board's card has a place for: every one a row has. */
+export const BOARD_PROPERTIES: readonly TaskProperty[] = TASK_PROPERTY_ORDER;
+
+/**
+ * The properties a Board's card offered before it offered every one, which a
+ * Board display kept by an earlier build was chosen among: whatever it has
+ * a place for since stands as the Board's own display draws it.
+ */
+export const EARLIER_BOARD_PROPERTIES: readonly TaskProperty[] = [
   TASK_PROPERTY.PRIORITY,
   TASK_PROPERTY.KEY,
   TASK_PROPERTY.STATUS,
@@ -184,15 +206,31 @@ export const DEFAULT_LIST_DISPLAY: TasksDisplay = {
   properties: TASK_PROPERTY_ORDER,
 };
 
-/** The Board until its reader changes it: a column for every status, every one standing, the most pressing first, the settled finished in the past week. */
+/** The Board until its reader changes it: a column for every status, every one standing, the most pressing first, the settled finished in the past week, each card drawing all but when it was last updated. */
 export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
   grouping: TASKS_GROUPING.STATUS,
   order: TASKS_ORDER.PRIORITY,
   emptyGroups: true,
   completed: COMPLETED_WINDOW.PAST_WEEK,
   pinnedFirst: false,
-  properties: BOARD_PROPERTIES,
+  properties: TASK_PROPERTY_ORDER.filter((property) => property !== TASK_PROPERTY.UPDATED),
 };
+
+/**
+ * A display kept when its view offered only `offered`, read today: each
+ * property offered since stands as the view's own display, `initial`, draws
+ * it, so a property a card gained is drawn rather than read as one turned
+ * off; the rest stand as kept.
+ */
+export function withPropertiesOffered(
+  properties: readonly TaskProperty[],
+  offered: readonly TaskProperty[],
+  initial: readonly TaskProperty[],
+): readonly TaskProperty[] {
+  return TASK_PROPERTY_ORDER.filter((property) =>
+    offered.includes(property) ? properties.includes(property) : initial.includes(property),
+  );
+}
 
 /** What heads one group: a pin, a section, or a value of the grouping. */
 export const TASKS_GROUP = {
@@ -258,6 +296,18 @@ function creatorOf(task: TaskSummary): string | null {
   return task.createdBy?.userId ?? task.ownerId ?? null;
 }
 
+/** Who made a task: a person by hand, read so for a task from a service before origins; a coding agent, one an automation's run started among them, whose task names the automation; or Luke on a call. */
+function makerOf(task: Pick<TaskSummary, "origin">): TaskMaker {
+  switch (task.origin?.actor) {
+    case undefined:
+      return TASK_MAKER.PERSON;
+    case PLAN_ACTOR.AGENT:
+      return TASK_MAKER.AGENT;
+    case PLAN_ACTOR.NOTETAKER:
+      return TASK_MAKER.LUKE;
+  }
+}
+
 /** A field's value on one task. */
 function fieldValue(task: TaskSummary, field: TasksFilterField): string | null {
   switch (field) {
@@ -267,6 +317,8 @@ function fieldValue(task: TaskSummary, field: TasksFilterField): string | null {
       return priorityOf(task);
     case TASKS_FILTER_FIELD.CREATOR:
       return creatorOf(task);
+    case TASKS_FILTER_FIELD.MADE_BY:
+      return makerOf(task);
     case TASKS_FILTER_FIELD.REPOSITORY:
       return task.repository;
   }
@@ -552,9 +604,11 @@ function groupedBy(
  * first, in the order handed, then each of the account's sections, in its
  * own order, then the rest under the grouping chosen. Every group holds only
  * the tasks that stand (`standingTasks`), and a task stands in one group
- * alone: a pin before its section, a section before its grouping's group. A
- * pin or a section left with no task is not drawn; a status's or a
- * priority's group is where the display shows empty groups.
+ * alone: a pin before its section, a section before its grouping's group.
+ * Pinned left with no task is not drawn, nor a section whose every task the
+ * view leaves out, though a section holding no task at all is, so a row may
+ * be dragged into it; a status's or a priority's group is where the display
+ * shows empty groups.
  */
 export function tasksListGroups(
   tasks: readonly TaskSummary[],
@@ -593,9 +647,12 @@ export function tasksListGroups(
       });
     const pins = take(pinned);
     if (pins.length > 0) groups.push(group({ kind: TASKS_GROUP.PINNED }, pins));
+    // Note that a section holding no task at all still stands, empty, so a row can be dragged into it, as the sidebar draws one; one whose tasks are only filtered out does not.
     for (const { sectionId, taskIds } of sections) {
       const held = take(taskIds);
-      if (held.length > 0) groups.push(group({ kind: TASKS_GROUP.SECTION, sectionId }, held));
+      if (held.length > 0 || taskIds.length === 0) {
+        groups.push(group({ kind: TASKS_GROUP.SECTION, sectionId }, held));
+      }
     }
   }
   const rest = standing.filter((task) => !placed.has(task.id));

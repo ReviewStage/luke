@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import {
+  agentSectionEntrySchema,
   type TaskSections,
   taskSectionEntrySchema,
   taskSectionSchema,
@@ -21,9 +22,9 @@ function byText(a: string, b: string): number {
 }
 
 /**
- * The account's sidebar sealed for following: the address, and three
- * statements, its sections, the tasks it keeps in them, and its pinned
- * repositories. Asked to poll, or where Realtime cannot seal them, the
+ * The account's sidebar sealed for following: the address, and four
+ * statements, its sections, the tasks and the agents it keeps in them, and
+ * its pinned repositories. Asked to poll, or where Realtime cannot seal them, the
  * service answers each statement's rows inline instead (`LIVE_POLL`).
  */
 export const sidebarLiveAnswerSchema = EffectSchema.Struct({
@@ -31,6 +32,7 @@ export const sidebarLiveAnswerSchema = EffectSchema.Struct({
   queries: EffectSchema.Struct({
     sections: sealedLiveQuerySchema,
     entries: sealedLiveQuerySchema,
+    agentEntries: sealedLiveQuerySchema,
     pins: sealedLiveQuerySchema,
   }),
 });
@@ -52,16 +54,16 @@ export const sidebarLiveRowsSchema = EffectSchema.Struct({
       position: EffectSchema.NullOr(taskSectionEntrySchema.fields.position),
     }),
   ),
+  agentEntries: EffectSchema.Array(
+    EffectSchema.Struct({
+      ...agentSectionEntrySchema.fields,
+      position: EffectSchema.NullOr(agentSectionEntrySchema.fields.position),
+    }),
+  ),
   pins: EffectSchema.Array(repositoryPinSchema),
 });
 
-/** The sidebar as the held reads answer it: the account's sections and the tasks in them, and its pins. */
-export interface SidebarRead {
-  readonly taskSections: TaskSections;
-  readonly repositoryPins: readonly RepositoryPin[];
-}
-
-/** The sidebar as the held reads answer it: the account's sections and the tasks in them, and its pins. */
+/** The sidebar as the held reads answer it: the account's sections and the tasks and agents in them, and its pins. */
 export interface SidebarRead {
   readonly taskSections: TaskSections;
   readonly repositoryPins: readonly RepositoryPin[];
@@ -69,9 +71,9 @@ export interface SidebarRead {
 
 /**
  * The sidebar as the held reads answer it: the sections oldest made first,
- * the tasks in them oldest put there first, each by id among one instant,
- * an icon and a place only where they stand; and the pins newest pinned
- * first, then by name.
+ * the tasks and the agents in them oldest put there first, each by id among
+ * one instant, an icon and a place only where they stand; and the pins
+ * newest pinned first, then by name.
  */
 export function sidebarOfLiveRows(rows: typeof sidebarLiveRowsSchema.Type): SidebarRead {
   return {
@@ -85,6 +87,12 @@ export function sidebarOfLiveRows(rows: typeof sidebarLiveRowsSchema.Type): Side
         })),
       entries: rows.entries
         .toSorted((a, b) => a.addedAt - b.addedAt || byText(a.taskId, b.taskId))
+        .map(({ position, ...entry }) => ({
+          ...entry,
+          ...(position === null ? undefined : { position }),
+        })),
+      agentEntries: rows.agentEntries
+        .toSorted((a, b) => a.addedAt - b.addedAt || byText(a.agentId, b.agentId))
         .map(({ position, ...entry }) => ({
           ...entry,
           ...(position === null ? undefined : { position }),

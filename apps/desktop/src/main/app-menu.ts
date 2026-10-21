@@ -511,6 +511,9 @@ function fullMenuTemplate(
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),
         commandItem(APP_COMMAND.FORWARD),
+        SEPARATOR,
+        commandItem(APP_COMMAND.NEXT_RECENT_TAB),
+        commandItem(APP_COMMAND.PREVIOUS_RECENT_TAB),
       ],
     },
     {

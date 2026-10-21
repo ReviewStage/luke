@@ -409,31 +409,50 @@ export function modelCatalogOf(
 
 // ------------------------------------------------------------- the checks
 
+/** What decides which fast versions an account is offered: whether the Anthropic key its steps run on may run fast mode, and whether its ChatGPT plan pays for its GPT agents. */
+export interface AccountFastOffer {
+  readonly anthropic: FastAccess | undefined;
+  readonly chatGptPlan: boolean;
+}
+
 /**
- * The catalog as one account is offered it, by whether the Anthropic key
- * its steps run on may run fast mode: where Anthropic said its organization
- * may not, Anthropic's fast versions are withheld and each base model says
- * so; everything else as the catalog lists it. Note that a key no fast
+ * The catalog as one account is offered it. Where Anthropic said the
+ * organization of the Anthropic key its steps run on may not run fast mode,
+ * Anthropic's fast versions are withheld and each base model says so
+ * (`fastNotEnabled`). Where its ChatGPT plan pays for its GPT agents, which
+ * Codex runs with no fast mode, OpenAI's fast versions are withheld and
+ * every GPT model says so (`fastWithheldByPlan`), listed fast version or
+ * not, so no Fast is drawn for it at all. Everything else as the catalog
+ * lists it. Note that a key no fast
  * request has answered is offered its fast versions, because a fast step
  * Anthropic refuses runs at standard speed anyway (`coder-host/model.ts`)
  * and the refusal is the answer the key is then offered by.
  */
 export function offeredToAccount(
   offered: readonly OfferedModel[],
-  anthropicFastAccess: FastAccess | undefined,
+  fast: AccountFastOffer,
 ): readonly OfferedModel[] {
-  if (anthropicFastAccess !== FAST_ACCESS.NOT_ENABLED) return offered;
-  const withheld = new Set<string>();
+  const anthropic = fast.anthropic === FAST_ACCESS.NOT_ENABLED;
+  if (!anthropic && !fast.chatGptPlan) return offered;
+  const notEnabled = new Set<string>();
   const kept: OfferedModel[] = [];
   for (const model of offered) {
-    const fast = providerModelOf(model.id)?.fast ?? false;
-    if (fast && model.provider === MODEL_PROVIDER.ANTHROPIC) {
-      withheld.add(standardModelIdOf(model.id));
+    const isFast = providerModelOf(model.id)?.fast ?? false;
+    if (isFast && fast.chatGptPlan && model.provider === MODEL_PROVIDER.OPENAI) continue;
+    if (isFast && anthropic && model.provider === MODEL_PROVIDER.ANTHROPIC) {
+      notEnabled.add(standardModelIdOf(model.id));
     } else {
       kept.push(model);
     }
   }
-  return kept.map((model) => (withheld.has(model.id) ? { ...model, fastNotEnabled: true } : model));
+  return kept.map((model) => ({
+    ...model,
+    ...(notEnabled.has(model.id) ? { fastNotEnabled: true } : undefined),
+    // Every GPT model says so, whether or not the catalog lists a fast version of it.
+    ...(fast.chatGptPlan && model.provider === MODEL_PROVIDER.OPENAI
+      ? { fastWithheldByPlan: true }
+      : undefined),
+  }));
 }
 
 /**
@@ -463,11 +482,11 @@ export function validateModelChoice(
 /** The choice checked against the instance's catalog as the account is offered it (`offeredToAccount`): accepted, refused, or the catalog unavailable. */
 export function acceptedModelChoice(
   choice: ModelChoice,
-  anthropicFastAccess: FastAccess | undefined,
+  fast: AccountFastOffer,
 ): Effect.Effect<ModelChoice, ModelChoiceRefused | ModelCatalogUnavailable, ModelCatalog> {
   return Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
-    const offered = offeredToAccount(yield* catalog.read, anthropicFastAccess);
+    const offered = offeredToAccount(yield* catalog.read, fast);
     return yield* Effect.fromResult(validateModelChoice(offered, choice)).pipe(
       Effect.mapError((reason) => new ModelChoiceRefused({ reason, offered })),
     );

@@ -1008,6 +1008,13 @@ leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked. Each recording carries Luke's version and whether it is a released
 build or a development one; only a released build records at all.
 
+**Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
+small, downscaled still of a screen you visited, taken by the app as you
+settle on it and as ⌃Tab leaves it. Those stills stay in that window's memory
+while it is open, a few at a time: they are never written to disk and never
+reach our service, a trace, a counted event, or the voice window, and the
+screen recording leaves them out, as it leaves out a Browser tab's still.
+
 **Browser tabs.** With the Browser tab experiment on, a Browser tab opens a
 web page you choose, your own `localhost` included, in a view of its own on
 your Mac. Luke does not see, store, log, or count the page, its address, or
@@ -1126,11 +1133,11 @@ them the things he remembered about you in `USER.md`) with their embeddings,
 and the device rows and push tokens an earlier Mac, iOS, or Apple Watch app
 registered. What stays in our database, unread, is the conversations Luke kept
 for the sessions he followed and for the helpers he delegated to, deleted
-with your account. A key or a calendar
-grant an earlier version kept encrypted on this Mac stays in its settings
-file as that version left it, still encrypted: this version neither reads nor
-sends it. A key of your own an earlier version stored for voice is removed
-from your Mac the next time Luke opens, without being read.
+with your account. A calendar grant an earlier version kept encrypted on
+this Mac stays in its settings file as that version left it, still encrypted:
+this version neither reads nor sends it. Every provider key an earlier version
+stored on this Mac, a key of your own for voice among them, is removed from
+your Mac the next time Luke opens, without being read.
 
 **Feedback.** If you use the feedback form, we receive what you typed, any
 screenshots you attached, and — unless you untick "Include my name and email"

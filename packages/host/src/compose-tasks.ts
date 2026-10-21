@@ -10,9 +10,12 @@ import {
   type WorkspaceCallResult,
 } from "@luke/features";
 import {
+  browserTabsOfLiveRows,
   LIVE_SIGNED_OUT,
+  nextBrowserTabLapse,
   pagesOfLiveRows,
   revisionsOfLiveRows,
+  taskBrowserTabsLiveRowsSchema,
   taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
@@ -62,6 +65,7 @@ import {
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
+  taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksArchiveParamsSchema,
@@ -132,6 +136,7 @@ import {
   Duration,
   Effect,
   Exit,
+  Fiber,
   FiberHandle,
   FiberMap,
   Option,
@@ -300,6 +305,7 @@ export type TasksClient = Pick<
   | "recordLive"
   | "pagesLive"
   | "historyLive"
+  | "browserTabsLive"
   | "saveBoard"
   | "readCode"
   | "readFile"
@@ -400,6 +406,13 @@ export interface TasksComposer extends Composer {
   showCode: (taskId: string, shown: TaskShownCode) => void;
   /** The call about `taskId` ended: what it was doing is no longer drawn. */
   callEnded: (taskId: string) => void;
+  /**
+   * Waits for a write's transaction to arrive on the task list followed
+   * live, which holds every task and agent row, so a write is confirmed once
+   * the list carries it; no txid, or a list not followed over Realtime,
+   * waits for nothing.
+   */
+  listed: (txid: string | undefined) => Effect.Effect<void>;
 }
 
 /**
@@ -425,6 +438,15 @@ type Unsealed = { readonly failure: string; readonly gone?: boolean };
 function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is Unsealed {
   return "failure" in sealed;
 }
+
+/** The parts of an open task read apart from its document, each laid over the view as it lands. */
+const OPENED_PART = {
+  BOARD: "board",
+  CODE: "code",
+  PAGES: "pages",
+} as const;
+
+type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
 
 /**
  * The panel's tasks as one concern. The view is told to every client whole
@@ -573,6 +595,80 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
+  /** The Browser tabs of each task a window's side panel follows, by the task. */
+  const browserTabsFollows = yield* FiberMap.make<string>();
+  const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
+
+  /**
+   * Follows `taskId`'s Browser tabs live until let go, each change emitted as
+   * `TASKS_BROWSER_TABS_CHANGED`. A takeover lapses with no row moving, so
+   * the rows last delivered are told again at each instant one lapses, until
+   * the next delivery takes their place.
+   */
+  function followBrowserTabs(taskId: string) {
+    type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    const tell = (rows: Rows | undefined, now: number) =>
+      kernel.emit(
+        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
+        carried({
+          taskId,
+          view:
+            rows === undefined
+              ? { failure: TASK_CALL_FAILURE.UNANSWERED }
+              : { tabs: browserTabsOfLiveRows(rows, now) },
+        }),
+      );
+    // The rows told as they arrive, then again at each takeover's lapse in turn.
+    const toldUntilMoved = (rows: Rows | undefined) =>
+      Effect.gen(function* () {
+        let now = yield* Clock.currentTimeMillis;
+        tell(rows, now);
+        if (rows === undefined) return;
+        let lapse = nextBrowserTabLapse(rows, now);
+        while (lapse !== undefined) {
+          yield* Effect.sleep(Duration.millis(lapse - now));
+          now = Math.max(lapse, yield* Clock.currentTimeMillis);
+          tell(rows, now);
+          lapse = nextBrowserTabLapse(rows, now);
+        }
+      });
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const delivered = yield* Queue.sliding<Rows | undefined>(1);
+        yield* Effect.forkScoped(
+          Stream.runDrain(
+            Stream.switchMap(Stream.fromQueue(delivered), (rows) =>
+              Stream.fromEffect(toldUntilMoved(rows)),
+            ),
+          ),
+        );
+        return yield* pushLive({
+          seal: (poll, after) =>
+            gate() && userId !== undefined
+              ? Effect.map(served(client.browserTabsLive(taskId, userId, poll, after)), (sealed) =>
+                  sealed.ok
+                    ? sealed.answer
+                    : {
+                        failure: sealed.failure,
+                        gone:
+                          sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                          sealed.failure === LIVE_SIGNED_OUT.failure,
+                      },
+                )
+              : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
+          decode: decodeBrowserTabs,
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+          publish: (rows) => {
+            Queue.offerUnsafe(delivered, rows);
+          },
+        });
+      }),
+    );
+  }
+
   /** The pages of each task a window's Inbox follows, by the task. */
   const pagesFollows = yield* FiberMap.make<string>();
   const decodePages = Schema.decodeUnknownOption(taskPagesLiveRowsSchema);
@@ -636,6 +732,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The one follow of the list, started on the first refresh and stopped by a sign-out. */
   const listFollow = yield* FiberHandle.make<void>();
 
+  /** The list's wait for a write's transaction, while every part of it is followed over Realtime. */
+  let listWait: TxWait | undefined;
+
+  const listed = (txid: string | undefined): Effect.Effect<void> =>
+    Effect.suspend(() => confirmWrite(listWait, txid));
+
+  /**
+   * A task write run under the serial lock, its answer drawn there, then
+   * confirmed once its transaction reaches the followed list, outside the
+   * lock, so no other read or write waits on Realtime, and a newer row the
+   * list publishes meanwhile is drawn over the answer rather than under it.
+   */
+  const writtenThenListed = <
+    Written extends readonly [answer: unknown, txid: string | undefined],
+    E,
+    R,
+  >(
+    write: Effect.Effect<Written, E, R>,
+  ): Effect.Effect<Written[0], E, R> =>
+    Effect.flatMap(serial(write), ([answer, txid]) => Effect.as(listed(txid), answer));
+
   const followList = Effect.suspend(() => {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
@@ -662,6 +779,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       },
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED }),
+      onTxWait: (wait) => {
+        listWait = wait;
+      },
     });
   });
 
@@ -862,6 +982,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one follow of the account's sidebar sections and pinned repositories, from the first refresh after a launch or a sign-in until a sign-out. */
   const sidebarFollow = yield* FiberHandle.make<void>();
+  /** The sidebar follow's wait for a write's transaction while it is subscribed over Realtime; none while it polls or is let go. */
+  let sidebarTxWait: TxWait | undefined;
 
   /**
    * Follows the account's sidebar over Realtime where nothing follows it
@@ -890,6 +1012,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           poll: (after) => seal(true, after),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
+          onTxWait: (wait) => {
+            sidebarTxWait = wait;
+          },
         },
         sealed,
       );
@@ -907,41 +1032,150 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
 
   /**
-   * Reads the active task's document. A copy of the same task already held
-   * stays drawn while the read is out, and stays drawn through a read that
-   * failed, so a save redraws in place and a moment offline blanks nothing;
-   * with no copy held, the failure is what the panel draws.
+   * The active task's document as a read of it left it. A copy of the same
+   * task already `held` stays drawn through a read that failed, so a moment
+   * offline blanks nothing; with no copy held, the failure is what the panel
+   * draws.
    */
-  function readDocument(taskId: string) {
+  function documentAfter(
+    opened: Effect.Success<ReturnType<typeof client.open>>,
+    held: Task | undefined,
+  ): TasksView["document"] {
+    if (opened.ok) return { status: TASKS_READ.READY, task: opened.answer };
+    if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) return { status: TASKS_READ.MISSING };
+    return held === undefined
+      ? { status: TASKS_READ.FAILED }
+      : { status: TASKS_READ.READY, task: held };
+  }
+
+  /** The view with the task's code as a read answered it: what it holds laid with what a call showed, or the read said to have failed. */
+  function withCodeRead(
+    was: TasksView,
+    stored: Effect.Success<ReturnType<typeof client.readCode>>,
+  ): TasksView {
+    if (stored === undefined) return { ...was, codeStatus: TASKS_READ.FAILED };
+    // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
+    return { ...was, shownCode: withShownCode(stored.code), codeStatus: TASKS_READ.READY };
+  }
+
+  /** The view with the task's pages as a read answered them; a failed read keeps the pages held. */
+  function withPagesRead(
+    was: TasksView,
+    pages: Effect.Success<ReturnType<typeof client.readPages>>,
+  ): TasksView {
+    if (pages === undefined) return was;
+    const { pages: _held, ...rest } = was;
+    return pages.length === 0 ? rest : { ...rest, pages };
+  }
+
+  /**
+   * Each of the open task's parts read apart from its document, by the
+   * number of reads of it started and of the newest laid over the view, so
+   * a read that left before a newer one, or before a write of the part,
+   * never lands over it (`laidNow`).
+   */
+  const partReads: Record<OpenedPart, { started: number; laid: number }> = {
+    [OPENED_PART.BOARD]: { started: 0, laid: 0 },
+    [OPENED_PART.CODE]: { started: 0, laid: 0 },
+    [OPENED_PART.PAGES]: { started: 0, laid: 0 },
+  };
+
+  /** Numbers a read of the part as it starts. */
+  function partReadStarted(part: OpenedPart): number {
+    partReads[part].started += 1;
+    return partReads[part].started;
+  }
+
+  /** Whether the read numbered `read` is still the newest of the part to land, which it then is; false where a newer one, or a write, landed first. */
+  function laidNow(part: OpenedPart, read: number): boolean {
+    if (read < partReads[part].laid) return false;
+    partReads[part].laid = read;
+    return true;
+  }
+
+  /** Marks a write of the part, which every read that left before it is older than. */
+  function partWritten(part: OpenedPart): void {
+    laidNow(part, partReadStarted(part));
+  }
+
+  /** The open's part reads still out, one per part, a newer open's taking the place of the last. */
+  const openedParts = yield* FiberMap.make<OpenedPart, void>();
+
+  /**
+   * Reads what the active task's page draws, its document, board, code, and
+   * pages, all at once, and tells the window the document with every part
+   * that answered before it in one view, so the page lands whole rather than
+   * a part at a time, each reflowing what the one before laid out. A part
+   * answering after the document is laid over the view as it lands, on its
+   * own, so neither the document nor another part waits for it, and the
+   * lock (`serial`), held for the document's read alone as before, waits on
+   * none of them. A copy of the same task already held stays drawn while the
+   * reads are out and through a document read that failed, so a save
+   * redraws in place; a failed board, code, or pages read keeps what is held
+   * of it, as their own reads do. The document and the code say they are
+   * reading only where nothing of them is held, which a switch has already
+   * told (`TASKS_OPEN`).
+   */
+  function readOpened(taskId: string) {
     return Effect.gen(function* () {
       const held = heldTaskOf(taskId);
-      if (held === undefined) write({ document: { status: TASKS_READ.READING } });
-      const opened = yield* served(client.open(taskId));
-      // Another task opened while this read was out: its answer is not the panel's any more.
-      if (view.activeTaskId !== taskId) return;
-      if (opened.ok) {
-        write({ document: { status: TASKS_READ.READY, task: opened.answer } });
-        return;
-      }
-      if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) {
-        write({ document: { status: TASKS_READ.MISSING } });
-        return;
-      }
       write({
-        document:
-          held === undefined
-            ? { status: TASKS_READ.FAILED }
-            : { status: TASKS_READ.READY, task: held },
+        ...(held === undefined ? { document: { status: TASKS_READ.READING } } : undefined),
+        ...(view.codeStatus === TASKS_READ.READY ? undefined : { codeStatus: TASKS_READ.READING }),
       });
+      /** The parts that answered before the document, each laid with it where still the newest of its part. */
+      const early: { part: OpenedPart; read: number; lay: (was: TasksView) => TasksView }[] = [];
+      let documentLanded = false;
+      const readPart = <A, E>(
+        part: OpenedPart,
+        ask: Effect.Effect<A, E, HttpClient.HttpClient>,
+        lay: (was: TasksView, answer: A) => TasksView,
+      ) => {
+        const read = partReadStarted(part);
+        // Note that a part landing before the document waits for it, which holds the lock as it is read,
+        // and one landing after takes the lock only to lay itself over the view, never for its read.
+        const landed = (answer: A) =>
+          Effect.suspend(() =>
+            documentLanded
+              ? serial(
+                  Effect.sync(() => {
+                    if (view.activeTaskId !== taskId || !laidNow(part, read)) return;
+                    view = lay(view, answer);
+                    publish();
+                  }),
+                )
+              : Effect.sync(() => {
+                  early.push({ part, read, lay: (was) => lay(was, answer) });
+                }),
+          );
+        return FiberMap.run(openedParts, part, Effect.ignore(Effect.flatMap(served(ask), landed)));
+      };
+      yield* readPart(OPENED_PART.BOARD, client.readBoard(taskId), (was, board) =>
+        board === undefined ? was : { ...was, board },
+      );
+      yield* readPart(OPENED_PART.CODE, client.readCode(taskId), withCodeRead);
+      yield* readPart(OPENED_PART.PAGES, client.readPages(taskId), withPagesRead);
+      // Note that the document is read beside the parts, a fiber of its own, so a part as quick as it lands with it.
+      const opened = yield* Fiber.join(yield* Effect.forkChild(served(client.open(taskId))));
+      // Another task opened while these reads were out: their answers are not the panel's any more.
+      if (view.activeTaskId !== taskId) return;
+      let read: TasksView = { ...view, document: documentAfter(opened, held) };
+      for (const part of early.splice(0)) {
+        if (laidNow(part.part, part.read)) read = part.lay(read);
+      }
+      documentLanded = true;
+      view = read;
+      publish();
     });
   }
 
   /** Reads the active task's board; a failed read keeps the board drawn. */
   function readBoard(taskId: string) {
     return Effect.gen(function* () {
+      const read = partReadStarted(OPENED_PART.BOARD);
       const board = yield* served(client.readBoard(taskId));
       if (board === undefined || view.activeTaskId !== taskId) return;
-      write({ board });
+      if (laidNow(OPENED_PART.BOARD, read)) write({ board });
     });
   }
 
@@ -979,10 +1213,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function readPages(taskId: string) {
     return Effect.gen(function* () {
+      const read = partReadStarted(OPENED_PART.PAGES);
       const pages = yield* served(client.readPages(taskId));
-      if (pages === undefined || view.activeTaskId !== taskId) return;
-      const { pages: _held, ...rest } = view;
-      view = pages.length === 0 ? rest : { ...rest, pages };
+      if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.PAGES, read)) return;
+      view = withPagesRead(view, pages);
       publish();
     });
   }
@@ -998,14 +1232,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       if (view.activeTaskId === taskId && view.codeStatus !== TASKS_READ.READY) {
         write({ codeStatus: TASKS_READ.READING });
       }
+      const read = partReadStarted(OPENED_PART.CODE);
       const stored = yield* served(client.readCode(taskId));
-      if (view.activeTaskId !== taskId) return;
-      if (stored === undefined) {
-        write({ codeStatus: TASKS_READ.FAILED });
-        return;
-      }
-      // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
-      write({ shownCode: withShownCode(stored.code), codeStatus: TASKS_READ.READY });
+      if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.CODE, read)) return;
+      view = withCodeRead(view, stored);
+      publish();
     });
   }
 
@@ -1283,12 +1514,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** Pins or archives one task on the service, or undoes either, and draws what it answered. */
   function markTask(taskId: string, marks: TaskMarks) {
-    return serial(
+    return writtenThenListed(
       Effect.gen(function* () {
         const marked = yield* served(client.mark(taskId, marks));
-        if (marked === undefined) return { changed: false };
+        if (marked === undefined) return [{ changed: false }, undefined] as const;
         takeMarks(marked.task);
-        return { changed: true };
+        return [{ changed: true }, marked.txid] as const;
       }),
     );
   }
@@ -1343,10 +1574,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const tasks = serial(
           Effect.gen(function* () {
             const taskId = view.activeTaskId;
-            if (taskId !== undefined) yield* readDocument(taskId);
-            if (taskId !== undefined) yield* readBoard(taskId);
-            if (taskId !== undefined) yield* readShownCode(taskId);
-            if (taskId !== undefined) yield* readPages(taskId);
+            if (taskId !== undefined) yield* readOpened(taskId);
           }),
         );
         yield* followWorkspaces;
@@ -1372,23 +1600,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // because the call outlives the task on screen: moving it to this
         // task is this task's own Talk press.
         if (view.activeTaskId !== taskId) {
+          // Note that the code says it is reading in the same view, so the
+          // page is told twice in all: that it is reading, then what it read.
           view = {
             ...withoutActivity(view),
             activeTaskId: taskId,
             document: { status: TASKS_READ.READING },
+            codeStatus: TASKS_READ.READING,
           };
           publish();
         }
         yield* openBoard(taskId);
         yield* openRecord(taskId);
-        yield* serial(
-          Effect.gen(function* () {
-            yield* readDocument(taskId);
-            yield* readBoard(taskId);
-            yield* readShownCode(taskId);
-            yield* readPages(taskId);
-          }),
-        );
+        yield* serial(readOpened(taskId));
         return { opened: true };
       }),
     [GATEWAY_METHOD.TASKS_FILE]: (params) =>
@@ -1639,6 +1863,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(historyFollows, read.success.taskId);
         return {};
       }),
+    // A task's Browser tabs are followed for a window's side panel while it
+    // lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
+    // what is already followed does nothing.
+    [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("following a task's Browser tabs names the task");
+        if (!gate()) return {};
+        const { taskId } = read.success;
+        yield* FiberMap.run(browserTabsFollows, taskId, followBrowserTabs(taskId), {
+          onlyIfMissing: true,
+        });
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("letting a task's Browser tabs go names the task");
+        yield* FiberMap.remove(browserTabsFollows, read.success.taskId);
+        return {};
+      }),
     // A plan's pages are followed for a window's Inbox while it draws an item
     // of that plan, and told only as `TASKS_PAGES_CHANGED`; a follow of what
     // is already followed does nothing.
@@ -1773,10 +2020,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const request = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
-            if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
+            if (!started.ok) {
+              return [carried<TasksStartAnswer>({ failure: started.failure }), undefined] as const;
+            }
             const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
@@ -1788,10 +2037,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             publish();
             yield* openBoard(task.id);
             yield* openRecord(task.id);
-            return carried<TasksStartAnswer>({
-              planId: task.id,
-              ...(agent === undefined ? undefined : { agentStart: agent }),
-            });
+            return [
+              carried<TasksStartAnswer>({
+                planId: task.id,
+                ...(agent === undefined ? undefined : { agentStart: agent }),
+              }),
+              started.answer.txid,
+            ] as const;
           }),
         );
       }),
@@ -1804,10 +2056,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return { deleted: false };
         const { taskId } = read.success;
         yield* endTaskCall(taskId);
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
-            if (deleted === undefined) return { deleted: false };
+            if (deleted === undefined) return [{ deleted: false }, undefined] as const;
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(boardFollow);
@@ -1816,7 +2068,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
             }
             write({ tasks });
-            return { deleted: true };
+            return [{ deleted: true }, deleted.txid] as const;
           }),
         );
       }),
@@ -1828,10 +2080,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (Result.isFailure(read)) return yield* invalid("renaming a task names it and its name");
         if (!gate()) return { renamed: false };
         const { taskId, name } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const written = yield* served(client.rename(taskId, { name }));
-            if (written === undefined) return { renamed: false };
+            if (written === undefined) return [{ renamed: false }, undefined] as const;
             const renamed = written.task;
             const tasks = view.tasks.map((task) =>
               task.id === taskId ? { ...task, name: renamed.name } : task,
@@ -1848,7 +2100,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                     },
                   },
             );
-            return { renamed: true };
+            return [{ renamed: true }, written.txid] as const;
           }),
         );
       }),
@@ -1864,12 +2116,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return { changed: false };
         const { taskId, ...standing } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const changed = yield* served(client.setStanding(taskId, standing));
-            if (changed === undefined) return { changed: false };
+            if (changed === undefined) return [{ changed: false }, undefined] as const;
             takeAnswered(changed.task);
-            return { changed: true };
+            return [{ changed: true }, changed.txid] as const;
           }),
         );
       }),
@@ -1887,7 +2139,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // The service answers the pins as they then stand, so the view takes its
-    // word rather than the window's guess.
+    // word rather than the window's guess, once the followed sidebar has the
+    // pin's transaction, so a delivery from before it draws nothing back.
     [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksPinRepositoryParamsSchema)(unparsedWire(params));
@@ -1900,12 +2153,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const answer = yield* served(client.pinRepository(repository, pinned));
             if (answer === undefined) return { changed: false };
+            yield* confirmWrite(sidebarTxWait, answer.txid);
             write({ repositoryPins: answer.pins });
             return { changed: true };
           }),
         );
       }),
-    // The service answers the sections as they then stand, as it does the pins.
+    // The service answers the sections as they then stand, as it does the pins, and waits on the followed sidebar as a pin does.
     [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWriteSectionParamsSchema)(unparsedWire(params));
@@ -1918,7 +2172,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const written = yield* served(client.writeTaskSection(asked));
             if (written === undefined) return { changed: false };
-            const { txid: _txid, ...sections } = written;
+            const { txid, ...sections } = written;
+            yield* confirmWrite(sidebarTxWait, txid);
             write({ taskSections: sections });
             return { changed: true };
           }),
@@ -1964,14 +2219,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksSetRepositoryAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const { taskId, repository } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const changed = yield* served(client.setRepository(taskId, repository));
-            if (!changed.ok) return carried<TasksSetRepositoryAnswer>({ failure: changed.failure });
+            if (!changed.ok) {
+              return [
+                carried<TasksSetRepositoryAnswer>({ failure: changed.failure }),
+                undefined,
+              ] as const;
+            }
             takeAnswered(changed.answer.task);
-            return carried<TasksSetRepositoryAnswer>({
-              repository: changed.answer.task.repository,
-            });
+            return [
+              carried<TasksSetRepositoryAnswer>({ repository: changed.answer.task.repository }),
+              changed.answer.txid,
+            ] as const;
           }),
         );
       }),
@@ -1987,12 +2248,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksMoveAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const { taskId, workspaceId } = read.success;
-        return yield* serial(
+        return yield* writtenThenListed(
           Effect.gen(function* () {
             const moved = yield* served(client.move(taskId, workspaceId));
-            if (!moved.ok) return carried<TasksMoveAnswer>({ failure: moved.failure });
+            if (!moved.ok) {
+              return [carried<TasksMoveAnswer>({ failure: moved.failure }), undefined] as const;
+            }
             takeAnswered(moved.answer.task);
-            return carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId });
+            return [
+              carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId }),
+              moved.answer.txid,
+            ] as const;
           }),
         );
       }),
@@ -2385,17 +2651,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return yield* invalid("saving a board names a task and its scene");
         const { taskId, elements, appliedDrawing, image } = read.success;
         if (!gate() || view.activeTaskId !== taskId) return { saved: false };
-        const saved = yield* serial(
+        const sent = yield* serial(
           Effect.gen(function* () {
+            // The follow standing as the save goes out, which alone may see its transaction.
+            const sentUnder = boardWait?.taskId === taskId ? boardWait.wait : undefined;
             const answer = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
-            if (answer !== undefined && view.activeTaskId === taskId)
+            if (answer !== undefined && view.activeTaskId === taskId) {
+              partWritten(OPENED_PART.BOARD);
               write({ board: answer.board });
-            return answer;
+            }
+            return { answer, sentUnder };
           }),
         );
+        const { answer: saved, sentUnder } = sent;
         if (saved === undefined) return { saved: false };
-        // Note that the save is answered once the board's follow has seen its transaction, outside `serial` so the wait holds up nothing else.
-        yield* confirmWrite(boardWait?.taskId === taskId ? boardWait.wait : undefined, saved.txid);
+        // Note that the save waits only on the follow that stood as it went out, and only while that one still stands, since a replacement may never see a transaction the one before it already did; it runs outside `serial` so the wait holds up nothing else.
+        const still =
+          boardWait?.taskId === taskId && boardWait.wait === sentUnder ? sentUnder : undefined;
+        yield* confirmWrite(still, saved.txid);
         return { saved: true };
       }),
   };
@@ -2407,12 +2680,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     showActivity,
     showCode,
     callEnded,
+    listed,
     reset: Effect.gen(function* () {
       yield* endTaskCall(undefined);
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(boardFollow);
       yield* FiberMap.clear(pagesFollows);
+      yield* FiberMap.clear(browserTabsFollows);
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);

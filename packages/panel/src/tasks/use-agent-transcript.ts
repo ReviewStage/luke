@@ -17,7 +17,7 @@ import {
   type CodingAgentUsage,
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { askAct } from "../act.js";
 import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
@@ -35,14 +35,17 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  * one pushed after the tab was away while more was written than a page
  * holds, takes its place. Older pages are read one at a time as the reader
  * asks for them (`loadOlder`, `codingAgents.transcriptOlder`), each put
- * before the messages held. Each page's status is
+ * before the messages held in a transition, which a page landing meanwhile
+ * goes ahead of. Each page's status is
  * the agent's as the page was read, with why where its turn failed, which
  * the tab's end line says, what its model's context holds, which the box's
  * ring draws, and when its run and each worker it waits on began, which the
  * working line and a subagent's row count from. A page that says the
  * transcript could not be read says so, with Try again, which follows it
  * anew; the messages held stand meanwhile. Each follow is timed to its
- * first page drawn and to the page that caught it up (`panel-spans.ts`).
+ * first page drawn and to the page that caught it up (`panel-spans.ts`),
+ * each told whether that first page was the window the host held, which
+ * draws with no round trip.
  */
 
 /** How one read is asked at once: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. Copy transcript reads this way. */
@@ -66,7 +69,7 @@ export type TranscriptOlderReader = (
 ) => Promise<CodingAgentTranscriptOlderAnswer>;
 
 /** The window's own older read, through the act door. */
-export const windowTranscriptOlder: TranscriptOlderReader = (params) =>
+const windowTranscriptOlder: TranscriptOlderReader = (params) =>
   askAct(ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER, params);
 
 /** The window's own follower: the transcript's stream, opened through the act door. */
@@ -229,7 +232,12 @@ function meets(held: readonly CodingAgentMessage[], page: CodingAgentTranscriptP
 
 /** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
 function joined(was: Held, page: CodingAgentTranscriptPage): Held {
-  if ("failure" in page) return { ...was, failed: true };
+  // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
+  if ("failure" in page) {
+    return page.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
+      ? { ...fresh(was.transcript), pages: was.pages, failed: true }
+      : { ...was, failed: true };
+  }
   // Note that a newest page that does not meet what is held replaces it, older pages and all, rather than leave a gap.
   const replaces =
     page.newest === true && (was.messages.length === 0 || !meets(was.messages, page));
@@ -267,12 +275,14 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
 
 /**
  * One follow, as it is timed: when it opened, how many readable pages it
- * has heard and the last of them, and which of its two spans ended.
+ * has heard and the last of them, whether the first was the window the host
+ * held, and which of its two spans ended.
  */
 interface FollowTiming {
   readonly startedAt: number;
   heard: number;
   page: CodingAgentTranscriptPage | undefined;
+  held: boolean;
   painted: boolean;
   caughtUp: boolean;
 }
@@ -291,6 +301,7 @@ function endFollowSpan(
     attributes: () => ({
       [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: messageCount,
       [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: page === undefined ? 0 : jsonBytes(page),
+      [PANEL_SPAN_ATTRIBUTE.CACHE_HIT]: timing.held ? 1 : 0,
     }),
   });
 }
@@ -329,6 +340,7 @@ export function useAgentTranscript(input: {
       startedAt: Date.now(),
       heard: 0,
       page: undefined,
+      held: false,
       painted: false,
       caughtUp: false,
     };
@@ -336,6 +348,8 @@ export function useAgentTranscript(input: {
     const stop = latest.current.follower(transcript, (page) => {
       setHeld((was) => (sameTranscript(was.transcript, transcript) ? joined(was, page) : was));
       if ("failure" in page) return;
+      // Note that a follow whose first page the host held is timed as such, so a span with no round trip in it is told apart.
+      if (timed.heard === 0) timed.held = page.held === true;
       timed.heard += 1;
       timed.page = page;
       latest.current.onStatus(agentId, page);
@@ -388,9 +402,11 @@ export function useAgentTranscript(input: {
           olderOut: undefined,
         };
       });
-    latest.current
-      .older({ ...transcript, before })
-      .then(settle, () => settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    // Note that an older page is put before the messages in a transition, so drawing it never holds the window: a page or a keystroke landing meanwhile is drawn first.
+    latest.current.older({ ...transcript, before }).then(
+      (answer) => startTransition(() => settle(answer)),
+      () => settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    );
   }, [transcript, before, olderOut]);
 
   const onRetry = useCallback(() => {

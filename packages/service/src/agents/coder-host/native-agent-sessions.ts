@@ -48,11 +48,7 @@ export interface NativeAgentSessionsOptions {
  * as its developer, the workspace its links are written under, and whether
  * its starter turned Chat on; each read that fails reads as eve's does.
  */
-export const nativeCoderInstructions = (
-  userId: string,
-  agent: CodingAgent,
-  harness: CoderHarness,
-) =>
+const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: CoderHarness) =>
   Effect.gen(function* () {
     const target = { userId, conversationId: agent.conversationId };
     const ciReadable = hasRepository(agent) ? yield* agentCiReadable(target, agent) : false;

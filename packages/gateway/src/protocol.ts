@@ -88,6 +88,15 @@ export const GATEWAY_METHOD = {
   TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
   /** A followed plan's history let go: no more `TASKS_HISTORY_CHANGED` events of it until it is followed again. */
   TASKS_HISTORY_UNFOLLOW: "tasks.historyUnfollow",
+  /**
+   * One task's cloud Browser tabs, the agent's pointer on each among them,
+   * followed from now until let go, over Neon Realtime. What they hold is
+   * heard as `TASKS_BROWSER_TABS_CHANGED` events, never answered; following
+   * what is already followed does nothing.
+   */
+  TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
+  /** A followed task's Browser tabs let go: no more `TASKS_BROWSER_TABS_CHANGED` events of it until it is followed again. */
+  TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
@@ -690,6 +699,8 @@ export const GATEWAY_EVENT = {
   TASKS_PAGES_CHANGED: "tasks.pagesChanged",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
+  /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
+  TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
   /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
   AUTOMATIONS_CHANGED: "automations.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */

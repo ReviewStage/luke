@@ -91,6 +91,7 @@ import {
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
+import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
@@ -120,7 +121,7 @@ import {
   liveTaskIssues,
 } from "./task-issue-links.js";
 
-export interface TasksProcedureSeams extends EveReach {
+export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
   /** The plugin's write that makes an account's first workspace, the first time a start needs it. */
   workspaces: WorkspaceSeams;
@@ -357,7 +358,10 @@ const startedAgentOn = (
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),
-        (plan): TaskStartAnswer => ({ plan, agent: started.agent }),
+        (plan): TaskStartAnswer =>
+          started.txid === undefined
+            ? { plan, agent: started.agent }
+            : { plan, agent: started.agent, txid: started.txid },
       ),
     ),
     Effect.catch((refusal) =>
@@ -493,9 +497,11 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         agent === undefined
           ? { plan: task }
           : yield* startedAgentOn(seams, request, userId, task, agent);
+      // An agent's Start commits after the task's insert, so its transaction, where it has one, is the later.
+      const committed = answer.txid ?? txid;
       return {
         status: TASK_START_STATUS.CREATED,
-        body: txid === undefined ? answer : { ...answer, txid },
+        body: committed === undefined ? answer : { ...answer, txid: committed },
       };
     }),
 
@@ -562,8 +568,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const archiving = changes.archived === true;
+      // The agents the archive archives with the task, whose sandboxes are stopped once it stands.
+      const archivedWith = archiving
+        ? yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId))
+        : [];
       if (archiving) {
-        const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
+        const agents = archivedWith;
         // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
         const ready = yield* Effect.forEach(agents, stopsForGood);
         if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
@@ -603,6 +613,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (archiving) yield* stoppedInBackground(seams, archivedWith);
       const { task: plan, txid } = task.value;
       return txid === undefined ? { plan } : { plan, txid };
     }),

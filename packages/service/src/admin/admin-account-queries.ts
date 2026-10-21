@@ -31,6 +31,7 @@ import { task } from "@luke/database/schemas/task";
 import { voiceSessionUsage } from "@luke/database/schemas/usage";
 import { voiceSessions } from "@luke/database/schemas/voice";
 import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
+import type { AdminMetricsWindow } from "@luke/features/admin-wire";
 import { AUTOMATION_RUN_REASON, AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import { CONTEXT_WINDOW, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -69,7 +70,6 @@ import {
 } from "./admin-account.js";
 import { lastNDayKeys } from "./admin-metrics.js";
 import { AggregateColumnSchema } from "./admin-queries.js";
-import type { AdminMetricsWindow } from "./http.js";
 
 type AdminQueryFailure = QueryError | Schema.SchemaError;
 

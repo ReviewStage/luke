@@ -12,8 +12,8 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
 import {
-  assignUnassignedTask,
-  beginTaskWork,
+  assignUnassignedTaskCommitted,
+  beginTaskWorkCommitted,
   readTask,
   readTaskWorkspace,
 } from "@luke/database/models/task-store";
@@ -39,7 +39,6 @@ import {
   CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
-  type CodingAgentPayer,
   type CodingAgentStartFrom,
   type CodingAgentStartRequest,
   type CodingAgentSummary,
@@ -92,8 +91,11 @@ import {
 import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { anthropicFastAccess } from "./account-keys.js";
-import { type AgentRuntimeChoice, agentRuntimeChoice } from "./agent-runtime-choice.js";
+import {
+  type AgentRuntimeChoice,
+  accountFastOffer,
+  agentRuntimeChoice,
+} from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import {
@@ -390,8 +392,6 @@ export type StartAsk = StartPlace & {
   readonly serverWords?: string | undefined;
   /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
   readonly branch?: string | undefined;
-  /** Who Start picked to pay for this one agent; none for the account's default (`agentRuntimeChoice`). */
-  readonly payer?: CodingAgentPayer | undefined;
   /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
 };
@@ -426,7 +426,7 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<AccountModelChoices, HostedRefusal, DatabaseServices | ModelCatalog> {
   const stored = (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent;
-  const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(userId));
+  const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(userId));
   const catalog = yield* ModelCatalog;
   const read = yield* catalog.read.pipe(
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
@@ -436,7 +436,7 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
   );
   return {
-    offered: offeredToAccount(read, fastAccess),
+    offered: offeredToAccount(read, fastOffer),
     defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE,
   };
 });
@@ -837,8 +837,8 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
  * whatever the account's routing would choose: a call reaches eve alone
  * (`voice/opening.ts` refuses an agent on any other runtime). Every
  * other Start is decided by the account's routing (`agentRuntimeChoice`),
- * with its payer, after the blank case: the payer the ask picked where it
- * picked one, the account's default otherwise, a continue and a fork alike.
+ * with its payer, after the blank case: the credential Settings chose, a
+ * continue and a fork alike.
  */
 function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
   if (ask.blank === true || ask.call === true) {
@@ -847,7 +847,7 @@ function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
       payer: undefined,
     });
   }
-  return agentRuntimeChoice(userId, model, ask.payer);
+  return agentRuntimeChoice(userId, model);
 }
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
@@ -1008,20 +1008,23 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
   // further along stands; a move that fails is logged, never the Start's failure. A blank agent
   // was handed no work, so its task stands where it is.
+  // The Start answers the last transaction it committed in, which Realtime delivers after every
+  // one before it, so a client waiting on it sees the agent and its task's standing alike.
+  let committed = txid;
   if (landing.task !== undefined) {
     if (handed !== null) {
-      yield* beginTaskWork(userId, landing.task.id).pipe(
-        Effect.asVoid,
-        Effect.catch(logStoreFailure),
+      const begun = yield* beginTaskWorkCommitted(userId, landing.task.id).pipe(
+        Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none())),
       );
+      if (Option.isSome(begun)) committed = begun.value.txid;
     }
     // Its starter is on a task no one was, where they started it by hand, a blank agent among them;
     // an automation's run assigns no one.
     if (ask.automationOrigin === undefined) {
-      yield* assignUnassignedTask(userId, landing.task.id).pipe(
-        Effect.asVoid,
-        Effect.catch(logStoreFailure),
+      const assigned = yield* assignUnassignedTaskCommitted(userId, landing.task.id).pipe(
+        Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none())),
       );
+      if (Option.isSome(assigned)) committed = assigned.value.txid;
     }
   }
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
@@ -1047,7 +1050,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
     has_task: ask.taskId !== null,
   });
-  return txid === undefined ? { agent, created } : { agent, created, txid };
+  return committed === undefined ? { agent, created } : { agent, created, txid: committed };
 });
 
 /** A Start as a request reached the service, answered: the agent's summary, and whether this request made it or found it under its key. */
@@ -1115,7 +1118,6 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     note: note === "" ? undefined : note,
     blank: request.blank,
     call: request.call,
-    payer: request.payer,
     summaryModel,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };

@@ -657,8 +657,9 @@
   font-weight: var(--luke-weight-semibold);
 }
 
-/* A narrow row stacks the stage over the faces rather than squeezing both;
-   the row is its own container (`@luke/ui`'s `settings-row.css`). */
+/* A narrow row stacks the stage over the faces rather than squeezing both,
+   the stage centered over them; the row is its own container (`@luke/ui`'s
+   `settings-row.css`). */
 @container luke-settings-row (width < 480px) {
   .picture-choice {
     grid-template-columns: minmax(0, 1fr);
@@ -666,6 +667,7 @@
 
   .picture-choice-stage {
     width: min(100%, 200px);
+    justify-self: center;
   }
 }
 

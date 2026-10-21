@@ -90,7 +90,6 @@ import {
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
-import { anthropicFastAccess } from "./account-keys.js";
 import {
   type AgentToolCall,
   type BoardTool,
@@ -106,6 +105,7 @@ import {
   runAgentShowPage,
   runAgentTools,
 } from "./agent-doors.js";
+import { accountFastOffer } from "./agent-runtime-choice.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import { type ChatToolResult, chatDigest } from "./chat.js";
 import {
@@ -859,9 +859,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           const catalog = yield* ModelCatalog;
           const offered = yield* catalog.read.pipe(Effect.option);
           if (Option.isNone(offered)) return Result.fail(CODER_REFUSAL.CATALOG_UNAVAILABLE);
-          // A worker is offered what the agent's account is, so no worker runs a fast version its key's organization was never granted.
-          const fastAccess = yield* anthropicFastAccess(admitted.target.userId);
-          const chosen = delegationChoice(own, asked, offeredToAccount(offered.value, fastAccess));
+          // A worker is offered what the agent's account is, so no worker runs a fast version the account is not offered.
+          const fastOffer = yield* accountFastOffer(admitted.target.userId);
+          const chosen = delegationChoice(own, asked, offeredToAccount(offered.value, fastOffer));
           if (Result.isFailure(chosen)) return chosen;
           choice = chosen.success;
         }

@@ -533,6 +533,23 @@ export function stagedAnswer(read: FixtureChat, answered: ChatAskAnswer, at: num
   return { chat: { ...read, answer } };
 }
 
+/** The fixture's chat with each channel named read to its newest message, as the service moves a channel's cursor and never back. */
+export function stagedRead(read: FixtureChat, channelIds: readonly string[]): Staged {
+  const chat = read.answer;
+  const furthest = new Map((chat.reads ?? []).map((each) => [each.channelId, each.readSeq]));
+  for (const channelId of channelIds) {
+    const newest = Math.max(
+      0,
+      ...chat.messages.flatMap((message) =>
+        message.channelId === channelId ? [message.touchedSeq] : [],
+      ),
+    );
+    furthest.set(channelId, Math.max(furthest.get(channelId) ?? 0, newest));
+  }
+  const reads = [...furthest].map(([channelId, readSeq]) => ({ channelId, readSeq }));
+  return { chat: { ...read, answer: { ...chat, reads } } };
+}
+
 /**
  * A topic channel opened or edited in a fixture's chat, as the service
  * takes it: a new name another channel holds, `general` among them, is

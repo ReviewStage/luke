@@ -26,6 +26,12 @@ import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
+import {
+  ADMIN_METRICS_SCOPE,
+  ADMIN_WORKSPACES_KIND,
+  type AdminMetricsScope,
+  type AdminWorkspacesKind,
+} from "@luke/features/admin-wire";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import {
@@ -54,12 +60,6 @@ import {
   ADMIN_WORKSPACES_LIMIT,
   type AdminWorkspaceListSource,
 } from "./admin-workspaces.js";
-import {
-  ADMIN_METRICS_SCOPE,
-  ADMIN_WORKSPACES_KIND,
-  type AdminMetricsScope,
-  type AdminWorkspacesKind,
-} from "./http.js";
 import type { AdminSeamEffect } from "./seam.js";
 
 /** The fewest members a workspace has to count as shared. */

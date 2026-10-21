@@ -11,28 +11,12 @@
  * is not listed.
  */
 
+import type { AdminIntegration } from "@luke/features/admin-answer-wire";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-
-export interface AdminDatabaseHealth {
-  reachable: boolean;
-  /** Round-trip of a trivial probe query, in milliseconds. */
-  latencyMs: number;
-}
-
-/**
- * Whether one provider is wired, by the presence of its keys alone. The key
- * is stable for anything that keys off the row; the label is the
- * maintainer-facing name.
- */
-export interface AdminIntegration {
-  key: string;
-  label: string;
-  configured: boolean;
-}
 
 /** The providers the deployment reads from its own environment, in the order the list draws them. */
 const ADMIN_INTEGRATION = {

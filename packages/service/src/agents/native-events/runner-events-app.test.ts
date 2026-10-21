@@ -42,13 +42,16 @@ import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { CODER } from "../coder-host/bounds.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
+  type RunnerAlive,
   type RunnerEnded,
   type RunnerEventsOptions,
   runnerEventsApp,
@@ -354,6 +357,67 @@ it.layer(getTestDB())("the runner events route", (it) => {
         ]);
         const routing = yield* readCodingAgentRouting(agent.userId, agent.agentId);
         assert.equal(Option.getOrThrow(routing).nativeSession, SESSION);
+      }),
+  );
+
+  it.effect(
+    "a run under way keeps its sandbox alive at its first batch and once a keep-alive interval after the last, and a batch that ends the launch keeps nothing alive",
+    () =>
+      Effect.gen(function* () {
+        const told: RunnerAlive[] = [];
+        const post = yield* standingWith({
+          alive: (alive) => Effect.sync(() => void told.push(alive)),
+        });
+        const agent = yield* agentWithBearer;
+        const events = workflowTurn(agent.lineId);
+
+        yield* post(agent.bearer, events.slice(0, 3));
+        yield* post(agent.bearer, events.slice(3, 6));
+        const withinInterval = told.length;
+        yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+        yield* post(agent.bearer, events.slice(6, 11));
+        // The batch carrying the launch's END, past another interval, is the stop's to settle.
+        yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+        yield* post(agent.bearer, events.slice(11));
+
+        assert.equal(withinInterval, 1, "a batch inside the interval asks Vercel nothing");
+        assert.deepEqual(
+          told.map((alive) => alive.target),
+          [agent.target, agent.target],
+        );
+      }),
+  );
+
+  it.effect(
+    "a heartbeat with no events keeps a run's sandbox alive through its harness's silence, applying nothing, and none before the launch applied an event",
+    () =>
+      Effect.gen(function* () {
+        const told: RunnerAlive[] = [];
+        const post = yield* standingWith({
+          alive: (alive) => Effect.sync(() => void told.push(alive)),
+        });
+        const agent = yield* agentWithBearer;
+        const events = workflowTurn(agent.lineId);
+
+        const early = yield* post(agent.bearer, []);
+        yield* post(agent.bearer, events.slice(0, 9));
+        const silence = [];
+        // An hour and more of a background command, the harness saying nothing, and the runner beating.
+        for (const _beat of [1, 2, 3, 4, 5, 6, 7]) {
+          yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+          silence.push(yield* post(agent.bearer, []));
+        }
+        const midway = yield* transcriptOf(agent.target.conversationId);
+        // The END, a moment after the last heartbeat, is the stop's to settle.
+        yield* post(agent.bearer, events.slice(9));
+
+        assert.deepEqual(early.body, { applied: 0, sequence: null });
+        assert.equal(told.length, 8, "the first batch, then each heartbeat an interval apart");
+        assert.ok(silence.every((beat) => beat.body.applied === 0 && beat.body.sequence === 8));
+        assert.deepEqual(
+          midway.turns.map((turn) => turn.status),
+          [TURN_STATUS.RUNNING],
+        );
       }),
   );
 

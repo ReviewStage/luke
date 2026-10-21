@@ -17,7 +17,6 @@ import {
   type CodingAgentAttachment,
   type CodingAgentChangesPeople,
   type CodingAgentOrigin,
-  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
   hasWordsOrFiles,
@@ -42,6 +41,7 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import { rendererPause } from "../renderer-runtime.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -218,9 +218,7 @@ export interface CodingAgentsControl {
   onDropFork: () => void;
   /** Writes the open task's draft: the words in its box, the choice on its chip, the MCP servers it switched off, or that the refusal it was handed was let go. */
   onDraftChange: (
-    change: Partial<
-      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "payer" | "refused">
-    >,
+    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
   ) => void;
   /**
    * Hands a task New task just started, whose agent the service refused, a
@@ -250,7 +248,6 @@ export interface CodingAgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
-    payer?: CodingAgentPayer,
   ) => Promise<Failure | undefined>;
   /**
    * Starts the draft's fork: from its source at its message, under the
@@ -266,7 +263,6 @@ export interface CodingAgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
-    payer?: CodingAgentPayer,
   ) => Promise<Failure | undefined>;
   /** Brings the open task back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
@@ -404,8 +400,6 @@ export interface AgentDraft {
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
   readonly fork?: AgentFork | undefined;
-  /** Who the developer picked to pay for this one agent where Start offered it (`payer-model.ts`); none for the account's default. */
-  readonly payer?: CodingAgentPayer | undefined;
   /** Why the service refused the agent of a draft New task handed over (`onHandDraft`), which its tab shows under the box until the next send. */
   readonly refused?: Failure | undefined;
 }
@@ -414,10 +408,7 @@ export interface AgentDraft {
 export type DraftCallStart = { readonly agentId: string } | { readonly failure: Failure };
 
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
-type DraftChoices = Pick<
-  AgentDraft,
-  "id" | "choice" | "disabledServers" | "fork" | "payer" | "refused"
->;
+type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork" | "refused">;
 
 /** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
 function taskDraft(
@@ -434,7 +425,6 @@ function taskDraft(
     disabledServers: held?.disabledServers ?? [],
     // Note that a fork is kept with the words too, so a relaunch keeps the draft a fork.
     ...forkOf(held === undefined ? kept?.place.fork : held.fork),
-    ...(held?.payer === undefined ? undefined : { payer: held.payer }),
     ...(held?.refused === undefined ? undefined : { refused: held.refused }),
   };
 }
@@ -546,6 +536,32 @@ export function readAgentById(
   );
 }
 
+/** What one agent's transcript pages said of it before its task's list was read: its run, its title, or both. */
+interface HeardOfAgent {
+  readonly run?: AgentRun;
+  readonly title?: string | null;
+}
+
+/** Keeps what a page said of an agent beside what earlier pages said, the latest of each. */
+function heardOf(heard: Map<string, HeardOfAgent>, agentId: string, said: HeardOfAgent): void {
+  heard.set(agentId, { ...heard.get(agentId), ...said });
+}
+
+/** The list's agents with what their pages said before it was read laid over them. */
+function withHeard(
+  agents: readonly CodingAgentSummary[],
+  heard: ReadonlyMap<string, HeardOfAgent>,
+): readonly CodingAgentSummary[] {
+  let laid = agents;
+  for (const [agentId, { run, title }] of heard) {
+    if (run !== undefined) laid = withAgentRun(laid, agentId, run);
+    if (title !== undefined) {
+      laid = laid.map((agent) => (agent.id === agentId ? { ...agent, title } : agent));
+    }
+  }
+  return laid;
+}
+
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return (
@@ -643,6 +659,21 @@ export function useCodingAgents(input: {
   );
   const listFailed = ours(list) && list.failed;
   const listMissing = ours(list) && list.missing === true;
+  // What transcript pages said of their agents before the list was read: a
+  // tab follows its agent from the id alone, so a page may land first, and
+  // it knows the agent's run and title better than the list's answer does,
+  // which is laid under it once a read of it lands (`withHeard`). What was
+  // heard is kept through a read that failed, and is the open task's, or
+  // the page's agent's, alone: another's list lets it go.
+  const subject = taskId ?? agentId;
+  const heardBeforeList = useRef<{ subject: string | undefined; heard: Map<string, HeardOfAgent> }>(
+    { subject, heard: new Map() },
+  );
+  if (heardBeforeList.current.subject !== subject) {
+    heardBeforeList.current = { subject, heard: new Map() };
+  }
+  const listedNow = useRef(false);
+  listedNow.current = held !== undefined;
 
   // Read when the task opens, or the page's agent where no task is, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
@@ -651,6 +682,8 @@ export function useCodingAgents(input: {
     listRead(latest.current.acts.act, taskId, agentId).then(
       (answer) => {
         if (!live) return;
+        const { heard } = heardBeforeList.current;
+        if (!("failure" in answer)) heardBeforeList.current.heard = new Map();
         setList((was) =>
           "failure" in answer
             ? {
@@ -666,7 +699,7 @@ export function useCodingAgents(input: {
             : {
                 taskId,
                 agentId: listOf,
-                agents: answer.agents,
+                agents: withHeard(answer.agents, heard),
                 failed: false,
                 workspaceId: answer.workspaceId,
                 repository: answer.repository,
@@ -977,9 +1010,7 @@ export function useCodingAgents(input: {
   };
 
   const onDraftChange = (
-    change: Partial<
-      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "payer" | "refused">
-    >,
+    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
   ) => {
     if (startsOn === undefined || draft === undefined) return;
     const { prompt, ...choices } = change;
@@ -990,7 +1021,6 @@ export function useCodingAgents(input: {
       choice: draft.choice,
       disabledServers: draft.disabledServers,
       ...(draft.fork === undefined ? undefined : { fork: draft.fork }),
-      ...(draft.payer === undefined ? undefined : { payer: draft.payer }),
       ...(draft.refused === undefined ? undefined : { refused: draft.refused }),
       ...choices,
     });
@@ -1040,7 +1070,6 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly string[] = [],
-    payer?: CodingAgentPayer,
   ): Promise<Failure | undefined> => {
     if (taskId === undefined || repository === null)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
@@ -1051,7 +1080,6 @@ export function useCodingAgents(input: {
       ...(attachments.length === 0 ? undefined : { attachments }),
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
-      ...(payer === undefined ? undefined : { payer }),
     });
     if ("failure" in answer) return startFailureNote(answer, taskId);
     withDraft(taskId, undefined);
@@ -1068,7 +1096,6 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly string[] = [],
-    payer?: CodingAgentPayer,
   ): Promise<Failure | undefined> => {
     if (archived) return { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED };
     if (startsOn === undefined || !startsFrom)
@@ -1080,7 +1107,6 @@ export function useCodingAgents(input: {
       attachments,
       choice,
       disabledServers,
-      payer,
     });
     const answer = await askStart(startsOn, asked);
     if ("failure" in answer) return startFailureNote(answer, taskId ?? null);
@@ -1273,6 +1299,7 @@ export function useCodingAgents(input: {
   );
 
   const onTitle = useCallback((agentId: string, title: string | null) => {
+    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { title });
     setList((was) =>
       was.agents === undefined ||
       !was.agents.some((agent) => agent.id === agentId && agent.title !== title)
@@ -1287,6 +1314,7 @@ export function useCodingAgents(input: {
   // Every transcript page says where its agent stands, mostly as it stood:
   // the list is kept as it was then, so the window is not drawn again for it.
   const onStatus = useCallback((agentId: string, run: AgentRun) => {
+    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { run });
     setList((was) => {
       if (was.agents === undefined) return was;
       const agents = withAgentRun(was.agents, agentId, run);
@@ -1454,12 +1482,17 @@ export function useCodingAgents(input: {
     );
   }, [act, taskId, workspaceId, agentRepository, repository]);
 
+  // A start reads the agents as they stand when it is pressed, so the doors to it stand across draws.
+  const steadyStartPrompt = useSteadyDoor(startPrompt);
+  const steadyStartFork = useSteadyDoor(startFork);
+
   const readInboxImage = useCallback<InboxImageReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
     [act],
   );
 
-  return {
+  // Handed back steady, so a part drawn from the agents holds while they do (`memo`).
+  return useSteadyDoors({
     chatOn,
     agents,
     archived: archivedAgents,
@@ -1478,8 +1511,8 @@ export function useCodingAgents(input: {
     onTaskStarted,
     onDraftAttachments,
     onDiscardDraft,
-    startPrompt,
-    startFork,
+    startPrompt: steadyStartPrompt,
+    startFork: steadyStartFork,
     listFailed,
     listMissing,
     onRetryList: readAgain,
@@ -1530,5 +1563,5 @@ export function useCodingAgents(input: {
     answerInbox,
     messageInbox,
     readInboxImage,
-  };
+  });
 }

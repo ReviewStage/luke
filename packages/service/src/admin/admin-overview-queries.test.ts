@@ -21,6 +21,13 @@ import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { VOICE_DELEGATION_MODE } from "@luke/database/voice-vocabulary";
 import {
+  DAILY_COUNT,
+  type DailyCount,
+  FUNNEL_STEP,
+  REACH_FEATURE,
+} from "@luke/features/admin-overview-vocabulary";
+import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
@@ -35,13 +42,6 @@ import { PLAN_ACTOR, type PlanActor } from "@luke/features/task-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminOverviewSource } from "./admin-overview-queries.js";
-import {
-  DAILY_COUNT,
-  type DailyCount,
-  FUNNEL_STEP,
-  REACH_FEATURE,
-} from "./admin-overview-vocabulary.js";
-import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * admin-overview-queries.test.ts -- the Overview's reads over a real dialect:

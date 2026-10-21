@@ -14,6 +14,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import { pressedWithCommand } from "../press-intent.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { INBOX_SCOPES, InboxList, InboxListNote, ItemMark } from "../tasks/inbox-list.js";
 import {
@@ -43,6 +44,7 @@ import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-pane
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   COLUMN,
+  changesTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
   type SidePanelDrawing,
@@ -97,7 +99,8 @@ import { taskCardOf } from "./task-card.js";
  * workspace's members (`member-directory.tsx`). The chosen item's box
  * mentions what its repository and workspace hold (`answerPlace`), and
  * its skills are read through its holder and drawn as chips that open
- * their `SKILL.md` on GitHub.
+ * their `SKILL.md` in the panel beside it, as a file the item names opens,
+ * or on GitHub where the item has no plan whose panel could open it.
  *
  * Its items are read and listed by `use-inbox-listing.ts`. While the account
  * has the inbox-first sidebar on, the shell reads them once and hands the
@@ -306,25 +309,44 @@ function InboxShown({
       agentIds: named.agentIds,
     });
     if (target === undefined || panelFor === undefined) return false;
+    // A link pressed with ⌘ goes to its task, opening what it names there as a tab of its own, as against a
+    // plain press, which opens it beside the item as the panel's preview, so reading an item leaves no tab
+    // standing on its task but the one last read.
+    const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
     switch (target.kind) {
       case INBOX_PANEL_TARGET.FILE: {
         const { path, lines } = target;
-        if (lines === undefined) sidePanel.onOpenFile({ path });
-        else
-          sidePanel.onOpenFile(
-            { path, startLine: lines.startLine, endLine: lines.endLine },
-            lines.commit,
-          );
+        const ref =
+          lines === undefined
+            ? { path }
+            : { path, startLine: lines.startLine, endLine: lines.endLine };
+        if (going !== undefined) {
+          if (lines?.commit !== undefined) tasks.onShowFile(going, ref, lines.commit);
+          else {
+            // A file read at no commit is drawn on the task it is browsed on, so it is opened here first, on the item's task, and then shown there.
+            sidePanel.onOpenFile(ref);
+            tasks.onShowPanelTab(going, { file: path });
+          }
+        } else sidePanel.onPreviewFile(ref, lines?.commit);
         return true;
       }
       case INBOX_PANEL_TARGET.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move.
-        sidePanel.onChoose({ page: target.pageId });
+        if (going !== undefined) tasks.onShowPanelTab(going, { page: target.pageId });
+        else sidePanel.onPreview({ page: target.pageId });
         return true;
       case INBOX_PANEL_TARGET.CHANGES:
-        sidePanel.onChoose({ changes: target.agentId });
+        if (going !== undefined) tasks.onShowPanelTab(going, { changes: target.agentId });
+        else sidePanel.onPreview({ changes: target.agentId });
         return true;
       case INBOX_PANEL_TARGET.PULL_REQUEST:
+        if (going !== undefined) {
+          // The tab is the one the plain press would open, the pull request's own where it is another than the agent's.
+          const tab = changesTabOf(named, target.agentId, sidePanel.changes, target.number);
+          sidePanel.onPullRequestView(tab, PULL_REQUEST_VIEW.CONVERSATION);
+          tasks.onShowPanelTab(going, tab);
+          return true;
+        }
         showPullRequest(
           sidePanel,
           named,
@@ -421,13 +443,13 @@ function InboxShown({
                     <SkillFiles
                       source={agents.readSkills}
                       onOpen={(skill) => {
-                        // Note that a skill's file opens on GitHub, as off any plan's page, since the panel beside the Inbox opens only what the item names.
+                        // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the item has no plan's panel to open it in.
                         if (place === undefined) return;
                         const url = encodeMention(
                           { kind: MENTION_KIND.FILE, path: skill.path },
                           place,
                         );
-                        appPlatform().openGitHub(url);
+                        if (!openHere(url)) appPlatform().openGitHub(url);
                       }}
                     >
                       {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
@@ -540,7 +562,7 @@ function InboxSidePanel({
 }): React.JSX.Element {
   const { panel } = drawing;
   const openTarget = (target: ToolTarget) => {
-    if (target.kind === TOOL_TARGET.PAGE) return panel.onChoose({ page: target.page });
+    if (target.kind === TOOL_TARGET.PAGE) return panel.onPreview({ page: target.page });
     if (target.kind === TOOL_TARGET.TASK) return tasks.onShowTask(target.task);
     if (target.kind === TOOL_TARGET.AGENT) {
       return taskId === undefined
@@ -603,9 +625,10 @@ function paneDoors(
       code: {
         repository: task.repository,
         readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
+        // Note that code is a link like any other: beside the item it opens as the panel's preview, and pressed with ⌘ it goes to the task.
         onOpenFile: (ref, commit) =>
-          seams.panelFor === task.id
-            ? tasks.sidePanel.onOpenFile(ref, commit)
+          seams.panelFor === task.id && !pressedWithCommand()
+            ? tasks.sidePanel.onPreviewFile(ref, commit)
             : tasks.onShowFile(task.id, ref, commit),
       },
     };

@@ -75,7 +75,7 @@ import {
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { UserContent } from "ai";
-import { Clock, Data, DateTime, Duration, Effect, Option, Stream } from "effect";
+import { Clock, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
 import type { HostedEnvironment } from "../../environment.js";
 import {
   AgentSandboxImage,
@@ -93,6 +93,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   credentialPolicy,
   OPEN_INTERNET_POLICY,
@@ -104,6 +105,7 @@ import {
   type NetworkPolicy,
   SandboxUnavailable,
   SESSION_TAG,
+  SNAPSHOT_GONE_STATUS,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
@@ -609,50 +611,54 @@ export const runnerSessions = <
         status: failedStatus(failure),
       });
 
+    /**
+     * A new sandbox opened under the session given, the agent's repository
+     * checked out in it, and the runner launched on the first line. A sandbox
+     * whose launch failed is deleted again, since no conversation records the
+     * session that would find it.
+     */
+    const openedSandbox = (agent: CodingAgent, sessionId: string, first: InputLine) =>
+      Effect.gen(function* () {
+        const snapshot = yield* (yield* AgentSandboxImage).snapshotId;
+        if (Option.isNone(snapshot))
+          return yield* Effect.fail(new LaunchRefused({ reason: "no snapshot" }));
+        const target: ConversationTarget = { userId, conversationId: agent.conversationId };
+        const opened = yield* api.create({
+          name: `${SANDBOX_NAME}${randomUUID()}`,
+          snapshotId: snapshot.value,
+          tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
+          timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
+          vcpus: CODER.SANDBOX_VCPUS,
+          keepLastSnapshots: {
+            count: CODER.SANDBOX_SNAPSHOTS.count,
+            expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
+            deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
+          },
+          env: SANDBOX_ENV,
+        });
+        yield* Effect.gen(function* () {
+          const running = opened.currentSessionId;
+          if (running === undefined) return yield* new SandboxUnavailable({});
+          const repositorySandbox = repositorySandboxOver(api, running, options.run);
+          // The checkout eve's sandbox makes, then at once what eve's first write does
+          // (`deepenAgentCheckout`): the write token at the firewall, the whole history, and the
+          // commit identity, since the harness's own shell has no hook for a first write.
+          if (hasRepository(agent)) {
+            yield* checkOutAgentRepository(target, agent, repositorySandbox);
+            yield* deepenAgentCheckout(target, agent, repositorySandbox);
+          } else {
+            yield* openWorkingFolder(repositorySandbox);
+          }
+          yield* launch(sessionId, agent, { name: opened.name, running }, first, undefined);
+        }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+      });
+
     const sessions: NativeSessions<Turn> = {
       open: (message) =>
         Effect.gen(function* () {
           const agent = yield* agentOf(message.conversationId);
-          const snapshot = yield* (yield* AgentSandboxImage).snapshotId;
-          if (Option.isNone(snapshot))
-            return yield* Effect.fail(new LaunchRefused({ reason: "no snapshot" }));
           const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
-          const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-          const opened = yield* api.create({
-            name: `${SANDBOX_NAME}${randomUUID()}`,
-            snapshotId: snapshot.value,
-            tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
-            timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-            vcpus: CODER.SANDBOX_VCPUS,
-            keepLastSnapshots: {
-              count: CODER.SANDBOX_SNAPSHOTS.count,
-              expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
-              deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-            },
-            env: SANDBOX_ENV,
-          });
-          // A sandbox whose launch failed is deleted again, since no conversation records the session that would find it.
-          yield* Effect.gen(function* () {
-            const running = opened.currentSessionId;
-            if (running === undefined) return yield* new SandboxUnavailable({});
-            const repositorySandbox = repositorySandboxOver(api, running, options.run);
-            // The checkout eve's sandbox makes, then at once what eve's first write does
-            // (`deepenAgentCheckout`): the write token at the firewall, the whole history, and the
-            // commit identity, since the harness's own shell has no hook for a first write.
-            if (hasRepository(agent)) {
-              yield* checkOutAgentRepository(target, agent, repositorySandbox);
-              yield* deepenAgentCheckout(target, agent, repositorySandbox);
-            } else {
-              yield* openWorkingFolder(repositorySandbox);
-            }
-            yield* launch(
-              sessionId,
-              agent,
-              { name: opened.name, running },
-              messageLine(message),
-              undefined,
-            );
-          }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+          yield* openedSandbox(agent, sessionId, messageLine(message));
           return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
         }).pipe(Effect.catch(failed("open")), Effect.provideContext(context)),
 
@@ -697,8 +703,31 @@ export const runnerSessions = <
             return accepted;
           }
           // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
-          const resumed = yield* api.resume(found.value.name);
-          const running = resumed.currentSessionId;
+          // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+          yield* capSandboxTimeout(api, found.value);
+          const resumed = yield* Effect.result(api.resume(found.value.name));
+          if (Result.isFailure(resumed)) {
+            if (resumed.failure.status !== SNAPSHOT_GONE_STATUS) return yield* resumed.failure;
+            // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
+            // the session goes on in a fresh one, a clean checkout of the repository under the
+            // session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
+            // gone). The harness's own session files went with the old filesystem, so none is
+            // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
+            // that fails (the image still preparing, a clone refused) leaves the session standing
+            // for the next message to try again rather than retired.
+            yield* openedSandbox(agent, sessionId, sent);
+            yield* api
+              .deleteSandbox(found.value.name)
+              .pipe(
+                Effect.catch((failure) =>
+                  Effect.logWarning(
+                    `An expired ${harness.name} sandbox was not deleted: ${failure.message}`,
+                  ),
+                ),
+              );
+            return accepted;
+          }
+          const running = resumed.success.currentSessionId;
           if (running === undefined) return yield* new SandboxUnavailable({});
           yield* renewCredential(target, agent, running);
           const routing = yield* readCodingAgentRouting(userId, agent.id);

@@ -87,7 +87,15 @@ import {
   Text,
   UnpinIcon,
 } from "@luke/ui";
-import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
+import {
+  ACTOR_KIND,
+  type Actor,
+  actorName,
+  creatorActor,
+  memberActor,
+  ROLE_WORDS,
+  teammateCreator,
+} from "@luke/ui/actor-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import {
   agentRow,
@@ -143,12 +151,14 @@ import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
+import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
 import { Tooltip } from "../tooltip.js";
+import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
@@ -545,6 +555,13 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
 }
 
 /** A task's muted words: its repository, and whether it is archived. */
+/** The word a task Luke or an agent made is also found by, beside its maker's name. */
+const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
+  [ACTOR_KIND.LUKE]: "luke",
+  [ACTOR_KIND.AGENT]: "agent",
+  [ACTOR_KIND.AUTOMATION]: "automation",
+};
+
 function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
   const words = [task.repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
@@ -565,14 +582,14 @@ function taskRows(
   members: readonly WorkspaceMember[] | undefined,
   open: (taskId: string) => void,
   openAgent: (agentId: string) => void,
+  originOf: (task: TaskSummary) => Actor | undefined,
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
   // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
+  const listedMembers = (task: TaskSummary) =>
+    task.workspaceId === listedId ? members : undefined;
   const creatorOf = (task: TaskSummary) =>
-    teammateCreator(task, {
-      members: task.workspaceId === listedId ? members : undefined,
-      readerId: tasks.me,
-    });
+    teammateCreator(task, { members: listedMembers(task), readerId: tasks.me });
   const elsewhereOf = (task: TaskSummary): Workspace | undefined =>
     listedId === undefined || task.workspaceId === listedId
       ? undefined
@@ -581,21 +598,46 @@ function taskRows(
     const elsewhere = elsewhereOf(task);
     const creator = creatorOf(task);
     const createdBy = task.createdBy?.name ?? null;
+    // Note that a task Luke or an agent made wears its maker on the reader's own task too, and says them in its detail, so it is found by them.
+    const origin = originOf(task);
+    const madeBy = origin === undefined ? null : actorName(origin);
+    const detail = taskDetail(task, archived);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
-      detail: taskDetail(task, archived),
+      detail:
+        madeBy === null
+          ? detail
+          : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
       endMark:
-        creator === undefined ? undefined : (
+        origin !== undefined ? (
+          <>
+            <ActorMark
+              actor={origin}
+              size={ACTOR_SIZE.MARK}
+              forWhom={creatorActor(
+                task,
+                { members: listedMembers(task), readerId: tasks.me },
+                undefined,
+              )}
+            />
+            <CreatorHeard actor={origin} />
+          </>
+        ) : creator === undefined ? undefined : (
           <>
             <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
             <CreatorHeard actor={creator} />
           </>
         ),
       creator: createdBy ?? undefined,
-      terms: [task.name, task.repository, elsewhere?.name ?? null, createdBy].filter(
-        (term) => term !== null,
-      ),
+      terms: [
+        task.name,
+        task.repository,
+        elsewhere?.name ?? null,
+        createdBy,
+        madeBy,
+        origin === undefined ? null : MADE_BY_WORDS[origin.kind],
+      ].filter((term) => term !== null && term !== undefined),
       onChoose: () => open(task.id),
     };
   };
@@ -936,6 +978,35 @@ function readMarkRows(
   const item = markReadItem({
     unread: reads.markedUnread(task.id),
     onMark: (unread) => reads.mark(task, unread),
+  });
+  return [
+    {
+      icon: item.icon,
+      label: item.label,
+      terms: [item.label],
+      onChoose: () => choose(item.onSelect),
+    },
+  ];
+}
+
+/**
+ * Mark as unread for the agent whose page stands, or Mark as read once it is
+ * unread, as its sidebar row's menu offers it, through the plans' marks;
+ * none while no agent's page stands. Note that the open page is unread only
+ * by a mark by hand, since its unseen dot goes as the page is shown.
+ */
+function agentReadMarkRows(
+  tasks: TasksControl,
+  reads: AgentReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const { agentId } = tasks.agentView;
+  const { standing, archived } = tasks.listedAgents;
+  const agent = [...standing, ...archived].find((each) => each.id === agentId);
+  if (agent === undefined) return [];
+  const item = markReadItem({
+    unread: reads.markedUnread(agent.id),
+    onMark: (unread) => reads.mark(agent, unread),
   });
   return [
     {
@@ -1325,8 +1396,10 @@ export function CommandPalette({
   const tokens = searchTokens(query);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
+  const originOf = useTaskOrigin();
   const { members } = membersRead;
   const reads = useReadMarks();
+  const agentReads = useAgentReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const taskId = tasks.activeTaskId;
   const repository =
@@ -1386,6 +1459,7 @@ export function CommandPalette({
             members,
             (id) => onTasks(() => tasks.onSelect(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
+            originOf,
           )
         : [],
     ],
@@ -1411,6 +1485,7 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(tasks, onTasks),
         ...readMarkRows(tasks, reads, choose),
+        ...agentReadMarkRows(tasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(tasks, choose),
       ],

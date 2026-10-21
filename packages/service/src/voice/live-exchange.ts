@@ -85,9 +85,9 @@ export interface HostedLiveExchangeOptions {
 export interface AttachedSession {
   readonly accountId: string;
   readonly sessionId: string;
-  /** The task the call is bound to. */
-  readonly taskId: string;
-  /** The agent of the task the call speaks into, whose conversation its asks and its record land in. */
+  /** The task the call's agent is on; none for an agent with no task. */
+  readonly taskId: string | undefined;
+  /** The agent the call speaks into, whose conversation its asks and its record land in. */
   readonly agentId: string;
   /** The developer's time zone as the connection's opening frame named it, which the agent's turns read the day in; none reads UTC. */
   readonly timeZone?: string | undefined;

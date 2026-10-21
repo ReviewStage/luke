@@ -39,17 +39,19 @@ export function useAgentCalls(input: {
   messages: readonly { readonly id: string; readonly metadata?: unknown }[];
   /** The reader's own account, whose calls name nobody. */
   readerId: string | undefined;
-}): readonly TranscriptCallRow[] {
+}): AgentCalls {
   const { agentId, messages, readerId } = input;
   const view = useStandingVoiceView();
   const callTranscript = useCallTranscript();
   // Note that only a read that answered is held, so a read out, or one that
   // did not answer, draws the tab nothing new: the calls heard here stand
   // either way, and the next call's end asks again.
-  const [read, setRead] = useState<{ agentId: string; transcript: TaskTranscript | undefined }>({
-    agentId,
-    transcript: undefined,
-  });
+  const [read, setRead] = useState<{
+    agentId: string;
+    transcript: TaskTranscript | undefined;
+    /** Whether a read for the agent answered, a refusal among them. */
+    settled: boolean;
+  }>({ agentId, transcript: undefined, settled: false });
   const recorded = read.agentId === agentId ? read.transcript : undefined;
   const held: CallsRead =
     recorded === undefined ? NOTHING_READ : { status: TASKS_READ.READY, transcript: recorded };
@@ -60,7 +62,14 @@ export function useAgentCalls(input: {
   useEffect(() => {
     let live = true;
     latest.current(agentId).then((answer) => {
-      if (live && !("failure" in answer)) setRead({ agentId, transcript: answer.transcript });
+      if (!live) return;
+      setRead((was) =>
+        "failure" in answer
+          ? was.agentId === agentId
+            ? { ...was, settled: true }
+            : { agentId, transcript: undefined, settled: true }
+          : { agentId, transcript: answer.transcript, settled: true },
+      );
     });
     return () => {
       live = false;
@@ -118,7 +127,13 @@ export function useAgentCalls(input: {
     const region = transcriptRegion({ transcript: held, heard, lukeEndedCall, readerId });
     return region.kind === TRANSCRIPT_REGION.READY ? region.calls : NO_CALLS;
   }, [held, heard, lukeEndedCall, readerId]);
-  return calls;
+  return { calls, settled: read.agentId === agentId && read.settled };
+}
+
+/** The calls into an agent, and whether their first read has answered, before which a transcript drawn would have its dividers land between its rows later. */
+export interface AgentCalls {
+  readonly calls: readonly TranscriptCallRow[];
+  readonly settled: boolean;
 }
 
 const NO_CALLS: readonly TranscriptCallRow[] = [];

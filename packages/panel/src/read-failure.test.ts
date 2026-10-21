@@ -171,7 +171,6 @@ test("the sidebar's plans that could not be read say so, and Retry reads the lis
         onOpenLatest: ignore,
       },
       onSignOut: () => Promise.resolve(),
-      call: undefined,
     }),
   );
   const failure = readFailure(page);
