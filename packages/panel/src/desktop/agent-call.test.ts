@@ -385,6 +385,19 @@ test("hovering the video brings out its resize controls, each named and reached 
   } finally {
     laid.remove();
   }
+  const touch = layContainersAt({}, { touch: true });
+  try {
+    const controls = [
+      ...room.querySelectorAll<HTMLElement>(".agent-call-video-corner, .agent-call-video-sizes"),
+    ].map((each) => getComputedStyle(each).opacity);
+    assert.deepEqual(
+      controls,
+      ["1", "1", "1"],
+      "a touch screen, which has no hover, always shows them",
+    );
+  } finally {
+    touch.remove();
+  }
   for (const side of ["left", "right"] as const) {
     const handle = corner(page, side);
     assert.equal(handle.tabIndex, 0, `the ${side} corner is reached from the keyboard`);

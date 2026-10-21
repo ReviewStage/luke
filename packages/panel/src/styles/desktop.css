@@ -2360,6 +2360,13 @@ ul.actor-stack {
   opacity: 1;
 }
 
+/* A touch screen has no hover to bring them out, so there they always stand. */
+@media (hover: none) {
+  .agent-call-video :is(.agent-call-video-corner, .agent-call-video-sizes) {
+    opacity: 1;
+  }
+}
+
 .agent-call-video-corner {
   position: absolute;
   z-index: 1;

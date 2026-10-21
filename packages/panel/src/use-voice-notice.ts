@@ -70,9 +70,11 @@ function liveContent(options: UseVoiceNoticeOptions): VoiceNoticeContent | undef
 }
 
 /**
- * The notice line's words. Live words always win; once they clear, the last
- * of them stay for {@link NOTICE_LINGER_MS} and then leave, and they stay
- * held after that, undrawn, so the line's fade has words to fade.
+ * The notice line's words. Live words always win; once a failure or a
+ * notice clears, its words stay for {@link NOTICE_LINGER_MS} and then leave,
+ * while the volume hint leaves at once, since it is cleared by being
+ * answered; either is held after that, undrawn, so the line's fade has words
+ * to fade.
  */
 export function useVoiceNotice(options: UseVoiceNoticeOptions): VoiceNoticePresentation {
   const live = liveContent(options);
@@ -88,5 +90,7 @@ export function useVoiceNotice(options: UseVoiceNoticeOptions): VoiceNoticePrese
     const timer = window.setTimeout(() => setExpired(lingering), NOTICE_LINGER_MS);
     return () => window.clearTimeout(timer);
   }, [asking]);
-  return { content: held, shown: asking || (held !== undefined && held !== expired) };
+  // Note that a volume hint never lingers: once Got it quiets it, or the output is heard again, it was answered.
+  const lingers = held !== undefined && held !== expired && held.tone !== VOICE_NOTICE_TONE.VOLUME;
+  return { content: held, shown: asking || lingers };
 }
