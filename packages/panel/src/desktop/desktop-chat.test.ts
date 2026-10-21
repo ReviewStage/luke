@@ -5,16 +5,18 @@ import {
   ASK_STATUS,
   CHANNEL_KIND,
   CHAT_ASK,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_IMAGE_TYPE,
   type ChatAnswer,
+  type ChatMessage,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { CodeRef, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -36,6 +38,7 @@ import {
   stagedPost,
   stagedRead,
 } from "../tasks/chat-fixture.js";
+import { FIXTURE_TASK_ID } from "../tasks/tasks-fixture.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
@@ -1465,4 +1468,182 @@ test("a group's ⋯ and a right-click on its header offer Mark all as read, whic
     [],
     "nothing in the group waits unread",
   );
+});
+
+/** The fixture's chat with messages posted in a channel, named by its name, each by the member named and holding the blocks given, after every other. */
+function withPosts(
+  chat: FixtureChat,
+  channelName: string,
+  posts: readonly { readonly by: string; readonly blocks: ChatMessage["blocks"] }[],
+): FixtureChat {
+  const { answer } = chat;
+  const channel = answer.channels.find((each) => each.name === channelName);
+  assert.ok(channel, `no channel ${channelName}`);
+  const last = Math.max(...answer.messages.map((message) => message.touchedSeq));
+  const posted = posts.map(({ by, blocks }, index): ChatMessage => {
+    const author = answer.members.find((member) => member.name === by);
+    assert.ok(author, `no member ${by}`);
+    const seq = last + index + 1;
+    return {
+      id: `7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c${String(seq).padStart(2, "0")}`,
+      seq,
+      touchedSeq: seq,
+      channelId: channel.id,
+      authorId: author.id,
+      blocks,
+      mentions: [],
+      postedAt: AT,
+    };
+  });
+  return { ...chat, answer: { ...answer, messages: [...answer.messages, ...posted] } };
+}
+
+/** The words a message drew, by its place in the chat's sequence. */
+function messageWords(page: HTMLElement, seq: number): HTMLElement {
+  const words = page.querySelector<HTMLElement>(`.chat-message[data-seq="${seq}"] .chat-words`);
+  assert.ok(words, `no words for m ${seq}`);
+  return words;
+}
+
+test("a person's words keep each line break they typed, as the Inbox draws a member's, while an agent's lines join as Markdown joins them", () => {
+  let seqs: number[] = [];
+  const page = mount((chat) => {
+    const posted = withPosts(chat, "teammate-invitations", [
+      {
+        by: "Dean Stratakos",
+        blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "first line\nsecond line" }],
+      },
+      {
+        by: "Invite emails",
+        blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "first line\nsecond line" }],
+      },
+    ]);
+    seqs = posted.answer.messages.slice(-2).map((message) => message.seq);
+    return posted;
+  });
+  act(() => railRow(page, "teammate-invitations").click());
+  const [person, agent] = seqs.map((seq) => messageWords(page, seq ?? 0));
+  assert.equal(person?.querySelectorAll("br").length, 1, "the person's Shift-Enter stands");
+  assert.equal(agent?.querySelectorAll("br").length, 0, "the agent's lines are one paragraph");
+});
+
+/** The task the fixture's chat names for its plan's channel, as the window lists it, over a repository. */
+const INVITES_TASK: TaskSummary = {
+  id: FIXTURE_TASK_ID,
+  workspaceId: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
+  name: "Teammate invitations",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
+};
+
+/** A commit the code a message points at is read at. */
+const SHA = "0123456789abcdef0123456789abcdef01234567";
+
+test("in a task's channel, a code block and a link to lines alone on its line are the Inbox's cards, read through the task, and a file's chip opens the file in its task", async () => {
+  const read: { taskId: string; path: string; ref: string | undefined }[] = [];
+  const shown: [string, CodeRef, string | undefined][] = [];
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    // A file's lines are held unread, so a card stands as it reads them.
+    [ACT_KIND.TASKS_FILE]: ({ taskId, path, ref }) => {
+      read.push({ taskId, path, ref });
+      return new Promise<never>(() => undefined);
+    },
+  });
+  let seqs: number[] = [];
+  const page = mount(
+    (chat) => {
+      const posted = withPosts(chat, "teammate-invitations", [
+        {
+          by: "Invite emails",
+          blocks: [
+            {
+              type: CHAT_BLOCK.CODE,
+              repo: "acme/relay",
+              path: "src/invites.ts",
+              sha: SHA,
+              startLine: 3,
+              endLine: 5,
+            },
+            {
+              type: CHAT_BLOCK.MARKDOWN,
+              text: `https://github.com/acme/relay/blob/${SHA}/src/seats.ts#L7-L9`,
+            },
+          ],
+        },
+        {
+          by: "Dean Stratakos",
+          blocks: [
+            {
+              type: CHAT_BLOCK.MARKDOWN,
+              text: "see [@roles.ts](https://github.com/acme/relay/blob/HEAD/src/roles.ts) too",
+            },
+          ],
+        },
+      ]);
+      seqs = posted.answer.messages.slice(-2).map((message) => message.seq);
+      return posted;
+    },
+    ACME,
+    undefined,
+    undefined,
+    { tasks: [INVITES_TASK], onShowFile: (...asked) => shown.push(asked) },
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  const [agentSeq, personSeq] = seqs;
+  const agent = page.querySelector(`.chat-message[data-seq="${agentSeq}"]`);
+  assert.ok(agent);
+  assert.deepEqual(
+    [...agent.querySelectorAll("[data-inbox-code]")].map((card) => card.getAttribute("aria-label")),
+    ["src/invites.ts, Lines 3–5", "src/seats.ts, Lines 7–9"],
+  );
+  // The fixture's own code in the channel is read too, so the reads of these lines are picked out by their commit.
+  assert.deepEqual(
+    read.filter((each) => each.ref === SHA),
+    [
+      { taskId: FIXTURE_TASK_ID, path: "src/invites.ts", ref: SHA },
+      { taskId: FIXTURE_TASK_ID, path: "src/seats.ts", ref: SHA },
+    ],
+  );
+  const open = agent.querySelector<HTMLButtonElement>('button[aria-label="Open file"]');
+  assert.ok(open, "the code card opens its file");
+  act(() => open.click());
+  assert.deepEqual(shown.at(-1), [
+    FIXTURE_TASK_ID,
+    { path: "src/invites.ts", startLine: 3, endLine: 5 },
+    SHA,
+  ]);
+
+  const chip = page.querySelector<HTMLButtonElement>(
+    `.chat-message[data-seq="${personSeq}"] button[data-mention-ref]`,
+  );
+  assert.ok(chip, "the file's chip is a press, read against the task's repository");
+  act(() => chip.click());
+  assert.deepEqual(shown.at(-1), [FIXTURE_TASK_ID, { path: "src/roles.ts" }, undefined]);
+});
+
+test("outside a task's channel, a code block still names its file and lines, with nothing to read them through", () => {
+  const page = mount((chat) =>
+    withPosts(chat, "general", [
+      {
+        by: "Dean Stratakos",
+        blocks: [
+          {
+            type: CHAT_BLOCK.CODE,
+            repo: "acme/relay",
+            path: "src/invites.ts",
+            sha: SHA,
+            startLine: 3,
+            endLine: 5,
+          },
+        ],
+      },
+    ]),
+  );
+  act(() => railRow(page, "general").click());
+  assert.equal(page.querySelector("[data-inbox-code]"), null);
+  assert.match(page.querySelector(".chat-stream")?.textContent ?? "", /invites\.ts/u);
 });
