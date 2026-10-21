@@ -190,7 +190,7 @@ test("where motion is reduced the agent's pointer is held still: it neither rock
   assert.equal(drawn.querySelector(".cloud-browser-cursor-ripple"), null, "no ripple");
 });
 
-test("over a dark page the agent's pointer is drawn in its lighter grey, and over a light one in its own", async () => {
+test("over a dark or mid-grey page the agent's pointer is drawn in its lighter grey, and over a light one in its own", async () => {
   let shade = 0;
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
     drawImage: () => undefined,
@@ -200,6 +200,15 @@ test("over a dark page the agent's pointer is drawn in its lighter grey, and ove
   } as unknown as CanvasRenderingContext2D);
   const { redraw } = await paneOf(CLICKED);
   assert.equal(pointer()?.dataset.ground, "dark", "a black page reads as dark");
+
+  // A mid-grey page (#777777), whose bytes average past the middle but whose light is dark.
+  shade = 0x77;
+  await redraw({
+    ...CLICKED,
+    lastActedAt: NOW,
+    cursor: { x: 200, y: 200, kind: "move", viewport: { width: 1280, height: 800 }, at: NOW },
+  });
+  assert.equal(pointer()?.dataset.ground, "dark", "a mid-grey page reads as dark");
 
   shade = 255;
   await redraw({

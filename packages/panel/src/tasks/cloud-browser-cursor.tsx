@@ -36,8 +36,13 @@ import { usePrefersReducedMotion } from "../use-reduced-motion.js";
 /** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
 export const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
 
-/** The arrowhead's outline: a triangle pointing up and to the left, its tail notched, its tip at (1, 1), where the view box starts. */
-const ARROW = "M1 1 15 6.2 9.2 9.2 6.2 15z";
+/**
+ * The arrowhead's outline, a dart along the diagonal like a map's location
+ * arrow: its tip at (1, 1), where the view box starts, the one sharp corner,
+ * pointing up and to the left; its two wings rounded; and its tail, at the
+ * bottom right, notched.
+ */
+const ARROW = "M1 1 11.94 6.29Q13.87 7.22 12.56 7.58L8.64 8.64 7.58 12.56Q7.22 13.87 6.29 11.94Z";
 
 /** How far the arrow reaches from its tip, in CSS pixels: `--luke-space-16`, its drawn size. */
 const ARROW_REACH = 16;

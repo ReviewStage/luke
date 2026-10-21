@@ -1952,7 +1952,7 @@
   overflow: visible;
   fill: var(--agent-pointer);
   stroke: var(--agent-pointer);
-  stroke-width: 1.5;
+  stroke-width: 0.6;
   stroke-linejoin: round;
   transform-origin: 0 0;
 }

@@ -154,8 +154,19 @@ function paint(canvas: HTMLCanvasElement | null, image: HTMLImageElement | undef
   canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
 }
 
-/** The relative luminance under which the page beneath the agent's pointer reads as dark. */
-const DARK_PAGE_LUMA = 0.4;
+/**
+ * The relative luminance (WCAG 2, linear light) under which the page beneath
+ * the agent's pointer reads as dark: about where its two greys, `--agent-pointer`
+ * (#6b6f76) and `--agent-pointer-on-dark` (#ced1d6), stand apart from the page
+ * equally, so the one that stands further apart is drawn.
+ */
+const DARK_PAGE_LUMA = 0.32;
+
+/** One sRGB channel byte in linear light, as WCAG 2's relative luminance reads it. */
+function linearOf(byte: number): number {
+  const channel = byte / 255;
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
 
 /** The side of the square of canvas pixels the page beneath the pointer is read across. */
 const GROUND_SAMPLE = 8;
@@ -189,11 +200,11 @@ function darkBeneath(
   let luma = 0;
   for (let index = 0; index < data.length; index += 4) {
     luma +=
-      0.2126 * (data[index] ?? 0) +
-      0.7152 * (data[index + 1] ?? 0) +
-      0.0722 * (data[index + 2] ?? 0);
+      0.2126 * linearOf(data[index] ?? 0) +
+      0.7152 * linearOf(data[index + 1] ?? 0) +
+      0.0722 * linearOf(data[index + 2] ?? 0);
   }
-  return luma / (data.length / 4) / 255 < DARK_PAGE_LUMA;
+  return luma / (data.length / 4) < DARK_PAGE_LUMA;
 }
 
 /**
