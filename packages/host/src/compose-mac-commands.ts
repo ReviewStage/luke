@@ -170,28 +170,45 @@ export function composeMacCommands(
     );
 
     /**
-     * Commands taken from the service, each run on a fiber of its own; with
-     * the gate shut since they were taken, answered as not run instead.
-     * Note that the gate is read again once they are taken, because it may
-     * have shut while they were on their way.
+     * One command heard of, claimed by its id and, once granted, run on a
+     * fiber of its own; with the gate shut since, answered as not run
+     * instead. A claim the service did not answer is asked again a few times
+     * (`CLAIM_RETRY`), since the rows that named it may not change again to
+     * say so. Note that the claim and its answer are uninterruptible and run
+     * on the concern's own set rather than the follow's fiber, because a
+     * command the service granted is this Mac's alone to answer, and a follow
+     * ended mid-claim would otherwise leave its call waiting out its time.
      */
-    const taken = (running: FiberSet.FiberSet, commands: readonly MacCommandRead[]) =>
+    const claimed = (running: FiberSet.FiberSet, command: MacCommandRead) =>
       Effect.gen(function* () {
+        const answer = yield* asked(client.claim(command.id)).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced(CLAIM_RETRY.every),
+            times: CLAIM_RETRY.times,
+            until: (granted) => granted !== undefined,
+          }),
+        );
+        // A claim refused, or never answered, runs nothing: the command is another Mac's, or its call has given up.
+        if (answer === undefined || !("id" in answer)) return;
         if (!(yield* gateOpen)) {
-          yield* FiberSet.clear(running);
-          for (const command of commands) yield* asked(client.settle(command.id, SWITCHED_OFF));
+          yield* asked(client.settle(answer.id, SWITCHED_OFF));
           return;
         }
-        for (const command of commands) yield* FiberSet.run(running, run(command));
-      });
+        yield* FiberSet.run(running, run(answer));
+      }).pipe(Effect.uninterruptible);
 
-    /** That this Mac listens for its kinds, said every `LISTENING_EVERY` for as long as the gate stands; it returns once the gate shuts. */
-    const presence = Effect.gen(function* () {
-      while (yield* gateOpen) {
-        yield* asked(client.listening(RUNS));
-        yield* Effect.sleep(LISTENING_EVERY);
-      }
-    });
+    /**
+     * That this Mac listens for its kinds, said every `LISTENING_EVERY` for
+     * as long as the gate stands and the account signed in is the one the
+     * follow is for; it returns once either changes, which ends the follow.
+     */
+    const presence = (userId: string) =>
+      Effect.gen(function* () {
+        while ((yield* gateOpen) && dependencies.accountId() === userId) {
+          yield* asked(client.listening(RUNS));
+          yield* Effect.sleep(LISTENING_EVERY);
+        }
+      });
 
     /** The unclaimed commands of this Mac's kinds, sealed or with `poll` inline, for the account `userId` names. */
     const seal = (userId: string, poll: boolean, after?: string) =>
@@ -201,10 +218,10 @@ export function composeMacCommands(
      * The unclaimed commands followed (`live-follow.ts`, which polls the
      * service, held, where Realtime is off or fails) until the gate shuts or
      * the session signs out, each new one claimed by its id, the earliest
-     * queued first. A claim the service did not answer is asked again a few
-     * times (`CLAIM_RETRY`); past that, or once the service answered, a
-     * command is not claimed again in this follow, and it is forgotten once
-     * it leaves the rows, so the ids this keeps are only those still waiting.
+     * queued first (`claimed`). A command is claimed once per follow, and
+     * forgotten once it leaves the rows, so the ids this keeps are only those
+     * still waiting. A follow ends where the gate shuts, the session signs
+     * out, or the account signed in changes.
      */
     const followed = (running: FiberSet.FiberSet, userId: string, first: MacCommandsLiveAnswer) =>
       Effect.suspend(() => {
@@ -213,17 +230,7 @@ export function composeMacCommands(
           Effect.gen(function* () {
             const fresh = commands.filter((command) => !tried.has(command.id));
             tried = new Set(commands.map((command) => command.id));
-            for (const command of fresh) {
-              const claimed = yield* asked(client.claim(command.id)).pipe(
-                Effect.repeat({
-                  schedule: Schedule.spaced(CLAIM_RETRY.every),
-                  times: CLAIM_RETRY.times,
-                  until: (answer) => answer !== undefined,
-                }),
-              );
-              // Note that a claim refused, or never answered, runs nothing: the command is another Mac's, or its call has given up.
-              if (claimed !== undefined && "id" in claimed) yield* taken(running, [claimed]);
-            }
+            for (const command of fresh) yield* FiberSet.run(running, claimed(running, command));
           });
         const rows = liveRows(
           {
@@ -240,7 +247,7 @@ export function composeMacCommands(
             onSome: (read) => claimNew(macCommandsOfLiveRows(read)),
           }),
         );
-        return Effect.raceFirst(following, presence).pipe(
+        return Effect.raceFirst(following, presence(userId)).pipe(
           Effect.catch(() => Effect.sleep(LIVE_RESTART)),
         );
       });

@@ -72,7 +72,12 @@ const settled = Effect.repeat(Effect.yieldNow, { times: 200 });
  * read, presence, and result the Mac sent, as the service would observe it.
  */
 function scriptedService(
-  options: { readonly signedOut?: boolean; readonly unansweredClaims?: number } = {},
+  options: {
+    readonly signedOut?: boolean;
+    readonly unansweredClaims?: number;
+    /** What happens as a claim is made, before the service grants it, such as the setting being switched off. */
+    readonly duringClaim?: Effect.Effect<void>;
+  } = {},
 ) {
   let unanswered = options.unansweredClaims ?? 0;
   const waiting: (MacCommand & { readonly queuedAt: number })[] = [];
@@ -104,21 +109,24 @@ function scriptedService(
         return answer(after !== String(version));
       }),
     claim: (id) =>
-      Effect.sync(() => {
-        claims.push(id);
-        // A claim lost on its way, as a network fault loses one, reaches nothing.
-        if (unanswered > 0) {
-          unanswered -= 1;
-          return undefined;
-        }
-        const at = waiting.findIndex((command) => command.id === id);
-        if (at < 0) return MAC_COMMAND_NOT_CLAIMED;
-        const [claimed] = waiting.splice(at, 1);
-        version += 1;
-        if (claimed === undefined) return MAC_COMMAND_NOT_CLAIMED;
-        const { queuedAt: _queuedAt, ...command } = claimed;
-        return command;
-      }),
+      Effect.andThen(
+        options.duringClaim ?? Effect.void,
+        Effect.sync((): MacCommand | typeof MAC_COMMAND_NOT_CLAIMED | undefined => {
+          claims.push(id);
+          // A claim lost on its way, as a network fault loses one, reaches nothing.
+          if (unanswered > 0) {
+            unanswered -= 1;
+            return undefined;
+          }
+          const at = waiting.findIndex((command) => command.id === id);
+          if (at < 0) return MAC_COMMAND_NOT_CLAIMED;
+          const [claimed] = waiting.splice(at, 1);
+          version += 1;
+          if (claimed === undefined) return MAC_COMMAND_NOT_CLAIMED;
+          const { queuedAt: _queuedAt, ...command } = claimed;
+          return command;
+        }),
+      ),
     listening: (kinds) =>
       Effect.sync(() => {
         beats.push(kinds);
@@ -164,12 +172,12 @@ const machine = (spawner: ReturnType<typeof scriptedSpawner>) =>
 const subject = (
   service: ReturnType<typeof scriptedService>,
   spawner: ReturnType<typeof scriptedSpawner>,
-  gate: { enabled: boolean; signedIn: boolean },
+  gate: { enabled: boolean; signedIn: boolean; account?: string },
 ) =>
   composeMacCommands({
     kernel: { runMode: { sendsNetwork: true }, now: () => NOW },
     account: { capabilitiesActive: () => gate.signedIn },
-    accountId: () => ACCOUNT,
+    accountId: () => gate.account ?? ACCOUNT,
     enabled: Effect.sync(() => gate.enabled),
     client: service.client,
   }).pipe(Effect.provide(machine(spawner)));
@@ -308,4 +316,64 @@ it.effect("a claim the service never heard is asked again, and the command runs"
     assert.deepEqual(service.claims, [COMMAND.id, COMMAND.id, COMMAND.id]);
     assert.ok(service.settledResults.has(COMMAND.id), "it ran once the claim got through");
   }),
+);
+
+it.effect(
+  "a command granted as the setting is switched off is answered as not run, though the follow ends mid-claim",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const gate = { enabled: true, signedIn: true };
+      const service = scriptedService({
+        // The setting goes off as the claim leaves, and the service is slow to grant it, so a beat sees the gate shut first.
+        duringClaim: Effect.andThen(
+          Effect.sync(() => {
+            gate.enabled = false;
+          }),
+          Effect.sleep("20 seconds"),
+        ),
+      });
+      service.queue(COMMAND, NOW);
+      const composer = yield* subject(service, spawner, gate);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* composer.lifetime;
+          yield* settled;
+          yield* TestClock.adjust("30 seconds");
+          yield* settled;
+        }),
+      );
+
+      const answered = service.settledResults.get(COMMAND.id);
+      assert.ok(answered !== undefined && "stderr" in answered, "the call hears it was not run");
+      assert.match(answered.stderr, /switched off/u);
+      assert.deepEqual(spawner.spawned, []);
+    }),
+);
+
+it.effect(
+  "an account switched between beats ends the follow, and the next names the new account",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      const gate = { enabled: true, signedIn: true, account: ACCOUNT };
+      const composer = yield* subject(service, spawner, gate);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* composer.lifetime;
+          yield* settled;
+          gate.account = "user-other";
+          yield* TestClock.adjust("15 seconds");
+          yield* settled;
+          yield* TestClock.adjust("5 seconds");
+          yield* settled;
+        }),
+      );
+
+      assert.equal(service.reads[0]?.userId, ACCOUNT);
+      assert.ok(service.reads.some((read) => read.userId === "user-other"));
+    }),
 );
