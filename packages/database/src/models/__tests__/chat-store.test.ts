@@ -13,6 +13,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { EXPERIMENT } from "@luke/settings";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
@@ -21,6 +22,7 @@ import { member, organization, user } from "../../schemas/auth.js";
 import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
+import { writeAccountPreferences } from "../account-store.js";
 import {
   agentMembersOf,
   agentWorkspace,
@@ -44,8 +46,10 @@ import {
   findOrMakeDm,
   history,
   homeRoster,
+  joinedMemberOf,
   leave,
   markNoticed,
+  memberIn,
   memberOfSubject,
   messageAt,
   moveTaskChat,
@@ -68,6 +72,7 @@ import {
   waitingOn,
   waitingStamps,
   withdrawAnswer,
+  workspaceChatStamp,
 } from "../chat-store.js";
 import { createCodingAgent } from "../coding-agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
@@ -2266,6 +2271,118 @@ it.layer(getTestDB())("the chat store's writes", (it) => {
           [renamed.name, renamed.purpose, renamed.txid !== undefined, renamed.txid === topic.txid],
           ["ship", "Release notes.", true, false],
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's keyed member reads and the chat's stamp", (it) => {
+  it.effect(
+    "a joined member is read by its key: the account's own, never made, and nothing for an account that has not joined, is outside, or has left the workspace",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount("Ada Lovelace");
+        const teammate = yield* openAccount("Grace Hopper");
+        const stranger = yield* openAccount();
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const person = (userId: string) => ({ kind: MEMBER_KIND.HUMAN, userId }) as const;
+        const ada = Option.getOrThrow(yield* ensureMember(owner, workspace, person(owner)));
+
+        assert.deepEqual(yield* joinedMemberOf(owner, workspace, person(owner)), Option.some(ada));
+        // Another account's read answers its own member, never the owner's, and makes none.
+        assert.deepEqual(
+          yield* joinedMemberOf(teammate, workspace, person(teammate)),
+          Option.none(),
+        );
+        assert.deepEqual(yield* roster(owner, workspace), [ada]);
+        assert.deepEqual(yield* joinedMemberOf(stranger, workspace, person(owner)), Option.none());
+        assert.deepEqual(yield* joinedMemberOf(owner, randomUUID(), person(owner)), Option.none());
+        assert.deepEqual(yield* memberIn(owner, workspace, ada.id), Option.some(ada));
+        assert.deepEqual(yield* memberIn(stranger, workspace, ada.id), Option.none());
+
+        const grace = Option.getOrThrow(yield* ensureMember(teammate, workspace, person(teammate)));
+        assert.deepEqual(
+          yield* joinedMemberOf(owner, workspace, person(teammate)),
+          Option.some(grace),
+        );
+        // One who left the workspace keeps a row for what they wrote, but is no member to read.
+        const db = yield* Database;
+        yield* db
+          .delete(member)
+          .where(and(eq(member.organizationId, workspace), eq(member.userId, teammate)));
+        assert.deepEqual(yield* joinedMemberOf(owner, workspace, person(teammate)), Option.none());
+        assert.deepEqual(yield* ensureMember(owner, workspace, person(teammate)), Option.none());
+      }),
+  );
+
+  it.effect(
+    "the chat's stamp stands while nothing the live read reads moved, and moves on a post, a join, a read, a channel opened, a purpose said, a person or an agent member renamed, an agent moved, and Chat turned off",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount("Ada Lovelace");
+        const teammate = yield* openAccount("Grace Hopper");
+        const stranger = yield* openAccount();
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const ada = Option.getOrThrow(
+          yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId: owner }),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(owner, workspace));
+        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CHAT]: true } });
+        const stamp = Effect.map(workspaceChatStamp(owner, ada), Option.getOrThrow);
+        const seen: string[] = [yield* stamp];
+        const moves = (why: string) =>
+          Effect.gen(function* () {
+            const now = yield* stamp;
+            assert.ok(!seen.includes(now), why);
+            seen.push(now);
+          });
+
+        assert.equal(yield* stamp, seen[0], "nothing moved");
+        const posted = Result.getOrThrow(
+          yield* postMessage(owner, workspace, {
+            authorMemberId: ada.id,
+            to: { channelId: general.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Morning." }],
+            clientKey: randomUUID(),
+          }),
+        );
+        yield* moves("a post");
+        yield* ensureMember(teammate, workspace, { kind: MEMBER_KIND.HUMAN, userId: teammate });
+        yield* moves("a join");
+        assert.ok(yield* readTo(owner, workspace, ada.id, general.id, posted.message.seq));
+        yield* moves("a channel read");
+        const topic = Result.getOrThrow(
+          yield* openTopicChannel(owner, workspace, "launch", ada.id),
+        );
+        yield* moves("a channel opened");
+        Result.getOrThrow(
+          yield* editTopicChannel(owner, workspace, ada.id, topic.id, { purpose: "Ship notes." }),
+        );
+        yield* moves("a purpose said");
+        const db = yield* Database;
+        yield* db.update(user).set({ name: "Grace Brewster Hopper" }).where(eq(user.id, teammate));
+        yield* moves("a person member renamed");
+        const taskId = yield* openTask(owner, workspace);
+        const agentId = yield* openAgent(owner, taskId);
+        yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.AGENT, agentId });
+        yield* moves("an agent joined");
+        yield* db
+          .update(codingAgent)
+          .set({ title: "Invite expiry" })
+          .where(eq(codingAgent.id, agentId));
+        yield* moves("an agent member renamed");
+        yield* db
+          .update(codingAgent)
+          .set({ taskId: yield* openTask(owner, workspace, "Other") })
+          .where(eq(codingAgent.id, agentId));
+        yield* moves("an agent moved to another plan");
+        // A name written again as it stands moves nothing.
+        yield* db.update(user).set({ name: "Grace Brewster Hopper" }).where(eq(user.id, teammate));
+        assert.equal(yield* stamp, seen.at(-1), "nothing moved since");
+        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CHAT]: false } });
+        yield* moves("Chat turned off");
+        assert.deepEqual(yield* workspaceChatStamp(stranger, ada), Option.none());
       }),
   );
 });

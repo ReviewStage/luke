@@ -1,8 +1,10 @@
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { agentSandboxDoors } from "@luke/service/agents/luke-mcp/sandbox-door";
 import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
+import { AfterResponse } from "@luke/service/http/after-response";
 import { sentryLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
+import { waitUntil } from "@vercel/functions";
 import { type Context, Effect, Layer, ManagedRuntime } from "effect";
 
 /**
@@ -15,12 +17,24 @@ import { type Context, Effect, Layer, ManagedRuntime } from "effect";
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 
 /**
+ * Work a request hands on past its answer (`after-response.ts`), run as a
+ * root of its own on this runtime, so the request's end interrupts none of
+ * it, and handed to Vercel's `waitUntil`, so the instance is not frozen
+ * before it ends. The work never fails, and carries the request's services.
+ */
+const afterResponseLayer = Layer.succeed(AfterResponse, {
+  keep: (work) => Effect.sync(() => waitUntil(runWeb(work))),
+});
+
+/**
  * The one runtime a web function runs an effect on, with Sentry started
  * before the services it watches, as Sentry's Effect guide provides it to
- * the HTTP layer.
+ * the HTTP layer, and the after-response work beside them.
  */
 function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> {
-  standing ??= ManagedRuntime.make(Layer.provideMerge(webServices, sentryLayer()));
+  standing ??= ManagedRuntime.make(
+    Layer.provideMerge(webServices, Layer.merge(sentryLayer(), afterResponseLayer)),
+  );
   return standing;
 }
 

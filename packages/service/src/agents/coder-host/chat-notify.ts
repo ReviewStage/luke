@@ -8,6 +8,7 @@ import {
   type ChatMemberRow,
   type ChatMessageRow,
   type ChatPost,
+  type ChatPosted,
   type ChatRefusal,
   channelOf,
   leave,
@@ -443,17 +444,25 @@ export function tellMessage(
       channel: channel.value,
       threadAuthors: authors,
     }).flatMap((id) => Option.toArray(Option.fromNullishOr(members.get(id))));
-    const outcomes = yield* Effect.forEach(told, (member) => {
-      switch (member.kind) {
-        case MEMBER_KIND.AGENT:
-          return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
-        case MEMBER_KIND.HUMAN:
-          return Effect.map(telling.doors.human(member, notice), (outcome) => ({
-            member,
-            outcome,
-          }));
-      }
-    });
+    // Note that each member is told at once beside the others, because each claim and steer is its own member's, and an answer waited on three steers in a row.
+    const outcomes = yield* Effect.forEach(
+      told,
+      (member) => {
+        switch (member.kind) {
+          case MEMBER_KIND.AGENT:
+            return Effect.map(tellAgent(telling, member, notice), (outcome) => ({
+              member,
+              outcome,
+            }));
+          case MEMBER_KIND.HUMAN:
+            return Effect.map(telling.doors.human(member, notice), (outcome) => ({
+              member,
+              outcome,
+            }));
+        }
+      },
+      { concurrency: CHAT_BOUNDS.MAX_STEERS_PER_POST },
+    );
     const named = (outcome: NoticeOutcome) =>
       outcomes.filter((each) => each.outcome === outcome).map((each) => names.mention(each.member));
     return {
@@ -477,23 +486,20 @@ export const HOSTED_OF_CHAT_REFUSAL = {
 } as const satisfies Record<ChatRefusal, HostedRefusal>;
 
 /**
- * Posts a message and tells the members it addresses: the one door a
- * coding agent's `post_chat` and the window's post both call. The pictures
- * handed in are kept under the ids its image blocks name in the same
- * transaction as the message, so no reader sees the message before its
- * pictures stand, and before anyone is told. A post repeated under its key
- * answers the message it made, and is told again, which steers no one
- * twice. Refused as the store refuses the post, in the route's words.
+ * Posts a message and tells no one yet: what `postChat` does before it
+ * tells, and what the window's post answers at, telling the members after
+ * its answer has left. The pictures handed in are kept under the ids its
+ * image blocks name in the same transaction as the message, so no reader
+ * sees the message before its pictures stand, and before anyone is told. A
+ * post repeated under its key answers the message it made. Refused as the
+ * store refuses the post, in the route's words.
+ * @public
  */
-export function postChat(
-  telling: ChatTelling,
+export function writeChatPost(
+  telling: Pick<ChatTelling, "userId" | "organizationId">,
   post: ChatPost,
   images: readonly ChatImageWrite[] = [],
-): Effect.Effect<
-  ChatPostTold,
-  HostedRefusal,
-  DatabaseServices | HttpClient.HttpClient | GitHubApp
-> {
+): Effect.Effect<ChatPosted, HostedRefusal, DatabaseServices> {
   return Effect.gen(function* () {
     const { userId, organizationId } = telling;
     const written = Effect.gen(function* () {
@@ -507,7 +513,27 @@ export function postChat(
       Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written)),
     );
     if (Result.isFailure(posted)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[posted.failure]);
-    const { message, repeated, unresolved } = posted.success;
+    return posted.success;
+  });
+}
+
+/**
+ * Posts a message and tells the members it addresses: the door a coding
+ * agent's `post_chat` calls, which reads who heard it in the receipt. A
+ * post repeated under its key answers the message it made, and is told
+ * again, which steers no one twice.
+ */
+export function postChat(
+  telling: ChatTelling,
+  post: ChatPost,
+  images: readonly ChatImageWrite[] = [],
+): Effect.Effect<
+  ChatPostTold,
+  HostedRefusal,
+  DatabaseServices | HttpClient.HttpClient | GitHubApp
+> {
+  return Effect.gen(function* () {
+    const { message, repeated, unresolved } = yield* writeChatPost(telling, post, images);
     const receipt = yield* tellMessage(telling, message, unresolved);
     return { message, repeated, receipt };
   });

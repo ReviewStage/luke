@@ -203,12 +203,25 @@ export const chatRead = pgTable(
   ],
 );
 
-/** The next place a workspace's chat sequence hands out, from one; the row is made with the workspace's first post. */
+/**
+ * The next place a workspace's chat sequence hands out, from one, and the
+ * revision of who and where its chat is; the row is made with the
+ * workspace's first post or the first change to its roster.
+ */
 export const workspaceChat = pgTable("workspace_chat", {
   organizationId: text("organization_id")
     .primaryKey()
     .references(() => organization.id, { onDelete: "cascade" }),
   nextSeq: integer("next_seq").notNull().default(1),
+  /**
+   * Moved on in the same transaction as every change to what a reader's
+   * roster and channels read: a member joining, leaving, or going, a
+   * channel made, named, archived, moved, or gone, and an agent member
+   * renamed or moved to another plan, or a person member renamed. Kept by
+   * the triggers of `workspace_chat_add_revision`, so no write can miss it;
+   * a held read of the chat compares it, with `next_seq`, between reads.
+   */
+  revision: integer("revision").notNull().default(0),
 });
 
 export const chatMessage = pgTable(

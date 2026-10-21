@@ -71,10 +71,11 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
-import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
+import { workspaceChatLiveStatements, workspaceChatStamp } from "@luke/database/models/chat-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
@@ -96,7 +97,7 @@ import {
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
-import { Duration, Effect, Option, Result } from "effect";
+import { Duration, Effect, Equal, Option, Ref, Result, Schedule } from "effect";
 import { SqlClient } from "effect/sql";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
@@ -139,6 +140,9 @@ export interface LiveProcedureSeams {
  */
 const LIVE_POLL_HOLD = { LOOK: Duration.seconds(1), HOLD: Duration.seconds(25) } as const;
 
+/** How many of a read's parts are sealed or read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
+const LIVE_PART_CONCURRENCY = 3;
+
 /** The id a query named, where it is a UUID; any other names no row, and is not found. */
 const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   id: string,
@@ -158,18 +162,22 @@ const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
   asked: { readonly [LIVE_POLL.QUERY]?: string; readonly [LIVE_POLL.AFTER]?: string },
+  stamp?: Effect.Effect<Option.Option<string>, HostedRefusal, DatabaseServices>,
 ): Effect.fn.Return<
   {
     readonly url: string;
     readonly queries: Record<Part, Effect.Success<ReturnType<LiveSealer["seal"]>>>;
   },
   HostedRefusal,
-  SqlClient.SqlClient
+  DatabaseServices
 > {
   const all = (sealer: LiveSealer) =>
     Effect.map(
-      Effect.forEach(Object.entries<LiveStatement>(statements), ([part, statement]) =>
-        Effect.map(sealer.seal(statement), (sealed) => [part, sealed] as const),
+      Effect.forEach(
+        Object.entries<LiveStatement>(statements),
+        ([part, statement]) =>
+          Effect.map(sealer.seal(statement), (sealed) => [part, sealed] as const),
+        { concurrency: LIVE_PART_CONCURRENCY },
       ),
       (sealed) => ({
         url: sealer.url,
@@ -197,12 +205,15 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   }
   if (after === undefined) return yield* polled;
   // A poll past `after` is held until the rows move past it, or answered unchanged: its digests and no rows.
-  const moved = yield* heldUntil(
-    polled,
-    (read) => liveDigestOf(read.queries) !== after,
-    LIVE_POLL_HOLD.LOOK,
-    LIVE_POLL_HOLD.HOLD,
-  );
+  const moved =
+    stamp === undefined
+      ? yield* heldUntil(
+          polled,
+          (read) => liveDigestOf(read.queries) !== after,
+          LIVE_POLL_HOLD.LOOK,
+          LIVE_POLL_HOLD.HOLD,
+        )
+      : yield* heldUntilStampMoved(polled, stamp, (read) => liveDigestOf(read.queries) !== after);
   if (Option.isSome(moved)) return moved.value;
   const standing = yield* polled;
   if (liveDigestOf(standing.queries) !== after) return standing;
@@ -217,6 +228,35 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
     ) as typeof standing.queries,
   };
 });
+
+/**
+ * A held poll that reads the statements once, then only the stamp each
+ * look, and the statements again only where the stamp moved: answers the
+ * first read `moved` says moved, or none at the hold's end.
+ */
+function heldUntilStampMoved<A, R>(
+  read: Effect.Effect<A, HostedRefusal, R>,
+  stamp: Effect.Effect<Option.Option<string>, HostedRefusal, DatabaseServices>,
+  moved: (read: A) => boolean,
+): Effect.Effect<Option.Option<A>, HostedRefusal, R | DatabaseServices> {
+  return Effect.gen(function* () {
+    const seen = yield* Ref.make(yield* stamp);
+    const first = yield* read;
+    if (moved(first)) return Option.some(first);
+    const look = Effect.gen(function* () {
+      const now = yield* stamp;
+      // Note that a stamp that reads nothing, as for an account gone from the workspace, always reads again.
+      if (Option.isSome(now) && Equal.equals(now, yield* Ref.getAndSet(seen, now))) {
+        return Option.none<A>();
+      }
+      const again = yield* read;
+      return moved(again) ? Option.some(again) : Option.none<A>();
+    });
+    return yield* look.pipe(
+      Effect.repeat({ schedule: Schedule.spaced(LIVE_POLL_HOLD.LOOK), until: Option.isSome }),
+    );
+  }).pipe(Effect.timeoutOption(LIVE_POLL_HOLD.HOLD), Effect.map(Option.flatten));
+}
 
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -373,7 +413,8 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = workspaceChatLiveStatements(reader, self.value);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      const stamp = hostedStoreOrUnavailable(workspaceChatStamp(reader, self.value));
+      return yield* sealedParts(statements.value, input, stamp);
     }),
     sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

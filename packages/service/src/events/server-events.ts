@@ -4,6 +4,7 @@ import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { HostedEnvironment } from "../environment.js";
+import { afterResponse } from "../http/after-response.js";
 import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
 
 /**
@@ -116,10 +117,9 @@ interface ServerEvent<Name extends ServerEventName = ServerEventName> {
 const SERVER_EVENT_LIB = "luke-service";
 
 /**
- * How long one capture may hold the request it rides on. A serverless
- * instance may freeze once it answers, so the capture is awaited rather than
- * left in the background, and bounded so a slow processor costs a count rather
- * than a request.
+ * How long one capture may take. It runs once the request has answered
+ * (`recordServerEvent`), the instance kept awake for it, and is bounded so a
+ * slow processor costs a count rather than an instance held open.
  */
 const SERVER_EVENT_TIMEOUT_MS = 2_000;
 
@@ -187,7 +187,9 @@ export const productAnalyticsFromEnvironment = Layer.effect(
 /**
  * Counts one event where the work was committed. Typed per event, so a call
  * site can only hand over that event's own properties; a runtime without
- * `ProductAnalytics` makes this a no-op.
+ * `ProductAnalytics` makes this a no-op. The capture runs once the request
+ * has answered (`after-response.ts`), so no answer waits on PostHog; a
+ * runtime that runs nothing past its answers captures it in place.
  */
 export function recordServerEvent<Name extends ServerEventName>(
   name: Name,
@@ -197,9 +199,12 @@ export function recordServerEvent<Name extends ServerEventName>(
   return Effect.flatMap(Effect.serviceOption(ProductAnalytics), (analytics) =>
     Option.isNone(analytics)
       ? Effect.void
-      : // SAFETY: `properties` is typed as this `name`'s own entry above; the
-        // union `ServerEvent` widens the pairing TypeScript cannot follow.
-        analytics.value.capture({ name, userId, properties } as ServerEvent),
+      : afterResponse(
+          name,
+          // SAFETY: `properties` is typed as this `name`'s own entry above; the
+          // union `ServerEvent` widens the pairing TypeScript cannot follow.
+          analytics.value.capture({ name, userId, properties } as ServerEvent),
+        ),
   );
 }
 
