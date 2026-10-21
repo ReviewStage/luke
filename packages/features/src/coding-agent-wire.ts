@@ -761,6 +761,18 @@ export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
 
 /**
+ * A message handed to an agent, as the service answers it: the agent as it
+ * then stands, and the transaction that wrote the message's row, where this
+ * send wrote one, which the host waits to see on the transcript's live
+ * subscription before it confirms the send. Absent from a send that wrote
+ * nothing, and from a service older than it.
+ */
+export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+/**
  * The run of an automation that started an agent, as its page opens on it:
  * the automation's prompt alone, without the lines Luke adds of the firing,
  * then what fired it, each where the firing has one: the issue or pull

@@ -128,6 +128,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
+  codingAgentMessageAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentNewestAnswerSchema,
   codingAgentOlderAnswerSchema,
@@ -4381,7 +4382,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
       const sent = (text: string, clientKey = randomUUID()) =>
         Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
-          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
+          readAnswer(codingAgentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
@@ -4830,7 +4831,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(userTexts(read), [SNAPSHOT]);
 
         const sent = readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* asOther("Rename the subject line too."),
         );
@@ -4976,7 +4977,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const sent = readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
@@ -5311,7 +5312,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const steer = () =>
           ask(messageAs(other, agent.id, { text: "Use seven days, not five.", clientKey }));
 
-        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        const first = readAnswer(
+          codingAgentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* steer(),
+        );
+        // The send that wrote the line answers the transaction that wrote it.
+        assert.match(first.txid ?? "", /^\d+$/u);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
           [[`Bearer ${other}`, sessionId, target.conversationId]],
@@ -5325,7 +5332,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           status: CODING_AGENT_STATUS.RUNNING,
         });
 
-        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        const again = readAnswer(
+          codingAgentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* steer(),
+        );
+        // A repeat wrote nothing, so there is no transaction to wait for.
+        assert.equal(again.txid, undefined);
         assert.equal(eve.sent.length, 1);
       }),
   );
@@ -5349,7 +5362,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // Charles answers a minute later, which the time each line names says.
         yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
@@ -5737,7 +5750,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
         // The bounds themselves are taken.
         readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, {
