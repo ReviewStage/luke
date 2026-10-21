@@ -58,6 +58,7 @@ import {
 import { runBrowserActions } from "@luke/features/browser-agent-cdp";
 import type { CdpSession, PageTarget } from "@luke/features/browser-cdp";
 import {
+  MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
   type MacBrowserParams,
   type MacCommandImage,
@@ -395,10 +396,18 @@ function withMacImage(run: BrowserAgentRun, image: MacCommandImage | undefined):
   return { ...run, steps };
 }
 
+/** The actions that leave a tab's page as it was, so an address and title read before them still stand. */
+const PAGE_KEEPING: ReadonlySet<string> = new Set([
+  BROWSER_AGENT_ACTION.SCREENSHOT,
+  BROWSER_AGENT_ACTION.CONSOLE,
+  BROWSER_AGENT_ACTION.WAIT,
+]);
+
 /**
- * The tabs a Mac's run acted on, each with the address and title it last
- * showed in the run, a list's or a snapshot's; a tab the run never showed
- * a page of is left out, since the Mac answers no page beside its steps.
+ * The tabs a Mac's run acted on, each with the address and title the run
+ * last read of it, a list's or a snapshot's, where nothing after that read
+ * could have moved its page; any other tab is left out, since the Mac
+ * answers no page beside its steps.
  */
 function macTabs(steps: readonly BrowserAgentStep[]): readonly ShownTab[] {
   const seen = new Map<string, PageTarget>();
@@ -406,15 +415,39 @@ function macTabs(steps: readonly BrowserAgentStep[]): readonly ShownTab[] {
     if (step.status !== BROWSER_STEP_STATUS.DONE) continue;
     if (step.action === BROWSER_AGENT_ACTION.LIST) {
       for (const tab of step.tabs) seen.set(tab.tab, { targetId: tab.tab, ...tab });
-    }
-    if (step.action === BROWSER_AGENT_ACTION.SNAPSHOT) {
+    } else if (step.action === BROWSER_AGENT_ACTION.SNAPSHOT) {
       seen.set(step.tab, { targetId: step.tab, url: step.url, title: step.title });
+    } else if (!PAGE_KEEPING.has(step.action)) {
+      // Note that a click, a key, or a navigation may have moved the page since it was read.
+      seen.delete(step.tab);
     }
   }
   return tabsActedOn(steps).flatMap((tab) => {
     const page = seen.get(tab);
     return page === undefined ? [] : [shownTab(page)];
   });
+}
+
+/** How long past its actions' own bounds a Mac's run may take: attaching to its tabs, and its screenshots' encoding. */
+const MAC_RUN_OVERHEAD_MS = 15_000;
+
+/**
+ * How long the Mac may take over the actions, in whole seconds: each
+ * action's own bound, a `wait` its longest, and room beside them, within
+ * the most a Mac command may run. Note that the Mac holds the whole run
+ * to this and answers only a refusal past it, so a shorter one would cut a
+ * valid run short and lose the steps it took.
+ */
+function macTimeoutSeconds(actions: readonly BrowserAgentAction[]): number {
+  const bounds = actions.reduce(
+    (total, action) =>
+      total +
+      (action.action === BROWSER_AGENT_ACTION.WAIT
+        ? BROWSER_AGENT_LIMITS.WAIT_MAX_MS
+        : BROWSER_AGENT_LIMITS.ACTION_TIMEOUT_MS),
+    MAC_RUN_OVERHEAD_MS,
+  );
+  return Math.min(Math.ceil(bounds / 1_000), MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS);
 }
 
 /**
@@ -433,6 +466,7 @@ function onMac(mac: MacBrowserCall | undefined, actions: readonly BrowserAgentAc
     const answer = yield* askMac(mac.userId, {
       kind: MAC_COMMAND_KIND.BROWSER,
       params,
+      timeoutSeconds: macTimeoutSeconds(actions),
     });
     if (answer.status === MAC_COMMAND_STATUS.NOT_RUN) return browserNotRun(answer.reason);
     if (!("output" in answer)) return browserNotRun(BROWSER_TOOL_REFUSAL.MAC_UNREADABLE);

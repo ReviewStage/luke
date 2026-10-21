@@ -936,6 +936,12 @@ export function TranscriptTool({
               <ActorRef actor={macOwner} sentence possessive />
               {" Mac"}
             </ActorLine>
+          ) : kind === CALL_KIND.MAC_BROWSER && macOwner !== undefined ? (
+            <ActorLine>
+              {"Browser · on "}
+              <ActorRef actor={macOwner} sentence possessive />
+              {" Mac"}
+            </ActorLine>
           ) : (
             callPlace(kind)
           )

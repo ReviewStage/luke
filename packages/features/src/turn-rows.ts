@@ -173,7 +173,7 @@ const ON_YOUR_MAC = "On your Mac";
 /** What a row of a call in the agent's own browser says of where it ran, beside its line. */
 const IN_THE_BROWSER = "Browser";
 
-/** What a row of a call on the Browser tabs of the developer's own Mac says of where it ran, beside its line. */
+/** What a row of a call on the Browser tabs of the developer's own Mac says of where it ran, beside its line; a row that knows the agent's starter names their Mac in its place. */
 const IN_THE_MAC_BROWSER = "Browser · on your Mac";
 
 /** What each of the browser's actions says it did, on a browser call's line. */

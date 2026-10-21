@@ -653,6 +653,56 @@ it.layer(getTestDB())("the browser tool on the developer's Mac", (it) => {
       }),
   );
 
+  it.effect(
+    "a Mac's run is given time for every wait it asks, and a tab whose page may have moved since it was read is not named by the old page",
+    () =>
+      Effect.gen(function* () {
+        const { userId, conversationId } = yield* openConversation;
+        yield* markMacListening(userId, MAC_KINDS);
+        const { call } = macCall(conversationId, userId, TASK_ID);
+        const waits = Array.from({ length: 8 }, () => ({
+          action: BROWSER_AGENT_ACTION.WAIT,
+          timeoutMs: 30_000,
+        }));
+        const actions = [
+          { action: BROWSER_AGENT_ACTION.SNAPSHOT, tab: "mac-1" },
+          { action: BROWSER_AGENT_ACTION.CLICK, ref: "e3" },
+          ...waits,
+        ];
+        const output = {
+          steps: [
+            {
+              action: BROWSER_AGENT_ACTION.SNAPSHOT,
+              status: BROWSER_STEP_STATUS.DONE,
+              tab: "mac-1",
+              url: "https://app.test/login",
+              title: "Sign in",
+              text: 'button "Sign in" [e3]',
+              truncated: false,
+            },
+            { action: BROWSER_AGENT_ACTION.CLICK, status: BROWSER_STEP_STATUS.DONE, tab: "mac-1" },
+            ...waits.map(() => ({
+              action: BROWSER_AGENT_ACTION.WAIT,
+              status: BROWSER_STEP_STATUS.DONE,
+              tab: "mac-1",
+            })),
+          ],
+          skipped: 0,
+        };
+
+        const pending = yield* Effect.forkChild(callOn(call, { actions, on: "mac" }));
+        const { taken, result } = yield* macAnswering(userId, pending, (command) =>
+          settleMacBrowserResult(userId, command.id, { output }),
+        );
+
+        assert.ok(
+          taken.timeoutSeconds >= 8 * 30 + 2 * 20,
+          "the Mac may take every action's own bound",
+        );
+        assert.deepEqual(ran(result).tabs, []);
+      }),
+  );
+
   it.effect("a Mac that ran nothing is told in its own words, and so is no Mac listening", () =>
     Effect.gen(function* () {
       const { userId, conversationId } = yield* openConversation;
