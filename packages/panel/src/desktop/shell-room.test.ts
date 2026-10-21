@@ -146,9 +146,9 @@ function Window(): React.JSX.Element {
     room,
     settingsStep: { listed: true, onList: ignore },
     call: undefined,
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    notice: {
+      notice: { content: undefined, shown: false },
+      onDismissHint: ignore,
     },
     settings: SETTINGS,
   });

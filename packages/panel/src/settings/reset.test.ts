@@ -103,25 +103,20 @@ test("a zoom changed in a browser, which draws no Zoom row, offers no reset on A
   );
 });
 
-test("captions turned on while the Voice page holds only its way in offer no reset there; once its controls are drawn they do", () => {
-  const captioned = settingsView({ voiceCaptions: true });
+test("media ducking turned off while the Voice page holds only its way in offers no reset there; once its controls are drawn it does", () => {
+  const unducked = settingsView({ duckOtherMedia: false });
 
   assert.equal(
     pageResetControl(
       SETTINGS_VIEW.VOICE,
-      captioned,
+      unducked,
       writes,
-      rowsOn(captioned, DESKTOP_CAPABILITIES, false),
+      rowsOn(unducked, DESKTOP_CAPABILITIES, false),
     ),
     undefined,
   );
   assert.notEqual(
-    pageResetControl(
-      SETTINGS_VIEW.VOICE,
-      captioned,
-      writes,
-      rowsOn(captioned, DESKTOP_CAPABILITIES),
-    ),
+    pageResetControl(SETTINGS_VIEW.VOICE, unducked, writes, rowsOn(unducked, DESKTOP_CAPABILITIES)),
     undefined,
   );
 });

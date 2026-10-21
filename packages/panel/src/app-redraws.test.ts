@@ -158,7 +158,7 @@ test("a delivery that moves only the settings draws ⌘K again and neither the s
   await deliver({
     ...FIRST,
     version: 2,
-    settings: appSettingsWire(settingsView({ voiceCaptions: true })),
+    settings: appSettingsWire(settingsView({ duckOtherMedia: false })),
   });
   assert.ok((draws.get("palette") ?? 0) > 0, "⌘K, which reads the settings, is drawn again");
   assert.equal(draws.get("sidebar") ?? 0, 0, "the sidebar is not drawn again");

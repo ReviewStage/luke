@@ -30,7 +30,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import type { ShellRoom } from "../shell-room.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { CallCaptions } from "../tasks/agent-call.js";
+import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
@@ -386,18 +386,18 @@ function TaskInboxTab({
  * While the task is read, its strip holds one tab-shaped skeleton where the
  * plan's tab will stand, so the row does not move when the task is drawn,
  * and no name is guessed before the read says it; a task that could not be
- * drawn has no tab at all. The captions, handed in while the task is drawn,
- * stand just above the call bar.
+ * drawn has no tab at all. The voice's notice line, handed in while the
+ * task is drawn, rides the foot of the call's agent's tab.
  */
 function PlanDocument({
   tasks,
   looks,
-  captions,
+  notice,
   summary,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
-  captions: React.ReactNode;
+  notice: React.ReactNode;
   summary: SummaryPin;
 }): React.JSX.Element {
   const { region } = tasks;
@@ -978,7 +978,7 @@ function PlanDocument({
                         >
                           {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
                           {tab === undefined ? null : (
-                            <CallCaptions.Provider value={captions}>
+                            <CallNotice.Provider value={notice}>
                               <AgentPane
                                 call={tasks.calls}
                                 label={mainTabLabel(tab, agents)}
@@ -995,7 +995,7 @@ function PlanDocument({
                                 onFork={forkDoor}
                                 onContinue={continueDoor}
                               />
-                            </CallCaptions.Provider>
+                            </CallNotice.Provider>
                           )}
                         </FindScope>
                         <TaskSummary
@@ -1070,7 +1070,7 @@ function PlanDocument({
 export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
-  captions,
+  notice,
   summary,
   room,
   accountName,
@@ -1082,8 +1082,8 @@ export const DesktopTasks = memo(function DesktopTasks({
   accountName?: string | undefined;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: TaskLooks;
-  /** The live captions, while they ride the open task's call bar. */
-  captions?: React.ReactNode;
+  /** The voice's notice line, while it rides the foot of the open task's call. */
+  notice?: React.ReactNode;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
 }): React.JSX.Element {
@@ -1101,7 +1101,7 @@ export const DesktopTasks = memo(function DesktopTasks({
           // so its tab stands on this task though Luke never showed it.
           onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
         >
-          <PlanDocument tasks={tasks} looks={looks} captions={captions} summary={summary} />
+          <PlanDocument tasks={tasks} looks={looks} notice={notice} summary={summary} />
           {secondCall}
         </SkillFiles>
       );

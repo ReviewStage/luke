@@ -30,8 +30,8 @@
   --voice-luke: var(--luke-color-working);
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
-  /* The caption strip's ground, opaque because the document scrolls on beneath it. */
-  --surface-caption: var(--luke-color-overlay);
+  /* The voice's notice line's ground, opaque because the document scrolls on beneath it. */
+  --surface-notice: var(--luke-color-overlay);
   /* The code on screen, in the ground and inks of GitHub's themes, and the
      mark beside a line changed in that theme's blue. */
   --code-ground: light-dark(#fff, #0d1117);
@@ -410,14 +410,14 @@ body,
   }
 }
 
-/* Voice caption ----------------------------------------------------------- */
+/* Voice notice ------------------------------------------------------------ */
 
-/* The live captions (caption-strip.tsx): who is speaking, then at most two
-   lines of their words, the newest at the foot. One element in every state so
-   both edges of its fade can run; where it stands is the window's layout
-   (desktop.css). It takes no pointer but the volume hint's button, so the
-   document beneath it keeps answering. */
-.voice-caption {
+/* The voice's notice line (voice-notice-strip.tsx): a failure, a notice, or
+   the hint that the Mac's output is off, never spoken words. One element in
+   every state so both edges of its fade can run; where it stands is the
+   window's layout (desktop.css). It takes no pointer but the hint's button,
+   so the document beneath it keeps answering. */
+.voice-notice {
   position: absolute;
   z-index: 6;
   left: 50%;
@@ -425,7 +425,7 @@ body,
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
   /* Opaque, because the document scrolls on beneath it. */
-  background: var(--surface-caption);
+  background: var(--surface-notice);
   box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
   opacity: 0;
   pointer-events: none;
@@ -435,7 +435,7 @@ body,
     transform var(--duration-exit) var(--motion-exit);
 }
 
-.voice-caption[data-shown="true"] {
+.voice-notice[data-shown="true"] {
   opacity: 1;
   transform: translate(-50%, 0);
   transition:
@@ -443,98 +443,45 @@ body,
     transform var(--duration-shape) var(--spring);
 }
 
-/* Who is speaking, in the colour their meter wears in the sidebar. */
-.voice-caption-speaker {
-  margin: 0 0 var(--luke-space-2);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.voice-caption[data-tone="luke"] .voice-caption-speaker {
-  color: var(--voice-luke);
-}
-
-.voice-caption[data-tone="developer"] .voice-caption-speaker {
-  color: var(--luke-color-complete);
-}
-
-/* Two lines at most, clipped rather than scrolled by hand: the renderer keeps
-   the words scrolled to their foot, so the newest line is always the bottom
-   one, and once they outgrow the two lines their top edge fades as the older
-   lines leave through it. The fade rides a scroll timeline, so it stands only
-   while the words overflow and a caption that fits is left whole. */
-.voice-caption-words {
-  max-height: calc(2 * var(--luke-type-dialog-leading));
-  overflow: hidden;
-  animation: caption-overflow-fade linear both;
-  animation-timeline: scroll(self block);
-}
-
-@keyframes caption-overflow-fade {
-  from {
-    mask-image: linear-gradient(to bottom, #000 0, #000 100%);
-  }
-
-  to {
-    mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
-  }
-}
-
-/* Mirrors the height above: two of these lines. */
-.voice-caption-text {
-  display: block;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-dialog-leading);
-}
-
-/* A voice failure borrows the strip in the `.error-message` red, because it
-   is a fault being reported rather than words being spoken. */
-.voice-caption[data-tone="error"] .voice-caption-text {
-  color: var(--luke-color-danger-text);
-}
-
-/* A state notice borrows it more quietly, in the attention orange: temporary
-   unavailability must not wear a fault's red. */
-.voice-caption[data-tone="notice"] .voice-caption-text {
-  color: var(--luke-color-attention);
-}
-
-/* A quote in a failure or a notice keeps the tone's colour and is set off by
-   its rule alone, because a quote's quiet ink would read as words that are
-   not the fault or the notice. */
-.voice-caption:is([data-tone="error"], [data-tone="notice"]) .markdown-quote {
-  color: inherit;
-}
-
-/* Volume hint ------------------------------------------------------------- */
-
-/* Why the words above are the only part of Luke arriving: the Mac's output is
-   muted or at zero. A row of its own at the strip's foot, under a hairline,
-   and the one part of the strip that takes the pointer. */
-.volume-hint {
+/* The words, and the hint's Got it at their right, the one part of the line
+   that takes the pointer. */
+.voice-notice-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--luke-control-gap);
-  margin-top: var(--luke-space-8);
-  padding-top: var(--luke-space-8);
-  border-top: 1px solid var(--luke-color-border);
+}
+
+.voice-notice-row > button {
   pointer-events: auto;
 }
 
-/* Attention's own orange, because this is the one line that asks the user to
-   do something; the caption above it keeps its own colour. */
-.volume-hint-text {
-  overflow: hidden;
+.voice-notice-text {
+  display: block;
+  min-width: 0;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
+}
+
+/* A voice failure in the `.error-message` red, because it is a fault being
+   reported. */
+.voice-notice[data-tone="error"] .voice-notice-text {
+  color: var(--luke-color-danger-text);
+}
+
+/* A state notice more quietly, and the volume hint, the one line that asks
+   the user to do something, in the attention orange: temporary
+   unavailability must not wear a fault's red. */
+.voice-notice:is([data-tone="notice"], [data-tone="volume"]) .voice-notice-text {
   color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  line-height: var(--luke-type-caption-leading);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* A quote keeps the tone's colour and is set off by its rule alone, because
+   a quote's quiet ink would read as words that are not the fault or the
+   notice. */
+.voice-notice .markdown-quote {
+  color: inherit;
 }
 
 /* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,

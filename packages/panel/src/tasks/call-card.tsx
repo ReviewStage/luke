@@ -1,43 +1,39 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
+import { WaveformIcon } from "@luke/ui";
 import type { CallRecord } from "@luke/voice/transcript-model";
-import { AudioLinesIcon } from "lucide-react";
+import { PhoneOffIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
-import { Checkpoint } from "../ai-elements/checkpoint.js";
 import { usePerson } from "../member-directory.js";
 import { Tooltip } from "../tooltip.js";
 import { callHeading, useMinute } from "./task-time.js";
 import { RUN_CARD, RunCard } from "./turn-card.js";
-import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time.js";
+import { WORKED_SEPARATOR, workingTime } from "./working-time.js";
 
 /**
- * call-card.tsx -- a call's span in a task's logs, the Call tab's and the Code tab's alike: the divider it begins at, and the quiet line it closes with once it has ended, hanging its card.
+ * call-card.tsx -- a call's span in a task's logs, an agent's transcript and the Code tab's feed alike: the labelled rule it begins at, and the one it closes with once it has ended, hanging its card.
  *
- * A call begins at a Checkpoint saying the day and time it started, marked
- * live at its right while it stands, in the developer's colour beside the
- * voice mark, and it begins and ends the same in the Call tab's thread and
- * in the Code tab's feed of what was shown on it. It closes the way a
- * finished turn does (`working-time.tsx`'s
- * WorkedFor): one line saying it ended, how long it ran, and the day and
- * time it ended, worded as a call's header words it: "Call ended · 12m 34s
- * · Today, 3:04 PM", set at the column's start in the type and colour a
- * turn's line is. The whole line hangs the call's card while the pointer
- * rests on it, which is the turn's card (`turn-card.tsx`'s `RunCard`): the
- * voice model at its head wearing its provider's mark as a turn's model
- * does, when it began and ended, in full, under it, and at the head's right
- * how the call ended where it did not simply hang up; and under a hairline,
- * the seconds the Live API metered it for, where they differ from the time
- * it ran, marked estimated where the call's close never confirmed them. The Live API meters a call by its seconds alone, so
- * the card has no tokens, and no price is said. Only what the call's record
+ * A call is marked at each end by a rule across the log carrying a pill, on
+ * no band of its own. It begins at "Call started" beside the voice's
+ * waveform and the day and time it started, with a Live mark while it
+ * stands, and it closes at "Call ended" beside a hang-up glyph, how long it
+ * ran, and the day and time it ended: "Call ended · 12m 34s · Today, 3:04
+ * PM". It begins and ends the same in an agent's transcript and in the Code
+ * tab's feed of what was shown on it. The closing pill hangs the call's card
+ * while the pointer rests on it, which is the turn's card (`turn-card.tsx`'s
+ * `RunCard`): the voice model at its head wearing its provider's mark as a
+ * turn's model does, when it began and ended, in full, under it, and at the
+ * head's right how the call ended where it did not simply hang up; and under
+ * a hairline, the seconds the Live API metered it for, where they differ
+ * from the time it ran, marked estimated where the call's close never
+ * confirmed them. The Live API meters a call by its seconds alone, so the
+ * card has no tokens, and no price is said. Only what the call's record
  * holds is said, so a call recorded before a field was has no row for it,
- * and a call whose end is not on record yet closes with the bare line.
+ * and a call whose end is not on record yet closes with the bare words.
  */
 
 const SECOND_MS = 1_000;
-
-/** What a call's checkpoint says at its right while the call stands. */
-const LIVE_LABEL = "Live";
 
 /** What the card's corner says for how a call ended; nothing for a hang-up, from either end. */
 const ENDING_WORD = {
@@ -100,30 +96,66 @@ function CallCard({
   );
 }
 
+/** What a call's markers say. */
+const CALL_MARKER_WORDS = {
+  STARTED: "Call started",
+  LIVE: "Live",
+} as const;
+
+/** Which end of a call a marker stands at. */
+const CALL_MARKER_END = {
+  START: "start",
+  END: "end",
+} as const;
+
+type CallMarkerEnd = (typeof CALL_MARKER_END)[keyof typeof CALL_MARKER_END];
+
 /**
- * A teammate's call as its divider names it: "Charles Pan’s call · Today,
- * 3:42 PM", their face and name one target hanging their card. Note that
- * the words keep their spaces inside them and the line keeps every space,
- * because a flex row drops a run of whitespace standing alone.
+ * A rule across the log with a pill in its middle, which is how a call is
+ * marked at each end: the rule says where the call's lines begin or end, and
+ * the pill says what happened and when, on no band of its own.
  */
-function CallerHeading({
-  caller,
-  heading,
+function CallMarker({
+  end,
+  live = false,
+  children,
 }: {
-  caller: PlanEditor;
-  heading: string;
+  end: CallMarkerEnd;
+  live?: boolean;
+  children: ReactNode;
 }): React.JSX.Element {
+  return (
+    <div className="call-marker" data-call-marker={end} data-live={live ? "" : undefined}>
+      <span className="call-marker-rule" aria-hidden="true" />
+      {children}
+      <span className="call-marker-rule" aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * A teammate's call as its start names it: "Charles Pan’s call started",
+ * their face and name one target hanging their card. Note that the words
+ * keep their spaces inside them and the line keeps every space, because a
+ * flex row drops a run of whitespace standing alone.
+ */
+function CallerStarted({ caller }: { caller: PlanEditor }): React.JSX.Element {
   const actor = usePerson(caller);
   return (
     <span className="call-caller">
       <ActorRef actor={actor} possessive />
-      {` call${WORKED_SEPARATOR}${heading}`}
+      {" call started"}
     </span>
   );
 }
 
-/** The divider a call begins at: the day and time it started, and while it stands, that it is live. */
-export function CallCheckpoint({
+/**
+ * Where a call begins: a rule carrying a pill with the voice's waveform,
+ * "Call started", and the day and time it started, and while it stands, a
+ * Live mark, which keeps the marker pinned to the log's top while the
+ * developer scrolls among the call's lines (tasks.css).
+ */
+export function CallStartMarker({
   startedAt,
   live,
   now,
@@ -133,37 +165,38 @@ export function CallCheckpoint({
   live: boolean;
   /** The moment the log was drawn, which the day is said against. */
   now: number;
-  /** The teammate whose call it was, named before when it started; none for the reader's own. */
+  /** The teammate whose call it was, named in place of "Call"; none for the reader's own. */
   caller?: PlanEditor | undefined;
 }): React.JSX.Element {
   return (
-    <Checkpoint
-      trailing={
-        live ? (
-          <span className="checkpoint-live">
-            <AudioLinesIcon aria-hidden="true" />
-            {LIVE_LABEL}
+    <CallMarker end={CALL_MARKER_END.START} live={live}>
+      <span className="call-marker-pill">
+        <span className="call-marker-icon" data-live={live ? "" : undefined} aria-hidden="true">
+          <WaveformIcon />
+        </span>
+        <span className="call-marker-text">
+          <span className="call-marker-words">
+            {caller === undefined ? CALL_MARKER_WORDS.STARTED : <CallerStarted caller={caller} />}
           </span>
-        ) : null
-      }
-    >
-      {caller === undefined ? (
-        callHeading(startedAt, now)
-      ) : (
-        <CallerHeading caller={caller} heading={callHeading(startedAt, now)} />
-      )}
-    </Checkpoint>
+          <span className="call-marker-detail">
+            {WORKED_SEPARATOR}
+            <time dateTime={new Date(startedAt).toISOString()}>{callHeading(startedAt, now)}</time>
+          </span>
+        </span>
+        {live ? <span className="call-marker-live">{CALL_MARKER_WORDS.LIVE}</span> : null}
+      </span>
+    </CallMarker>
   );
 }
 
 /**
- * The line a call that ended closes with: who ended it as far as this
- * window saw, then, where the record holds its end, how long it ran and
- * when it ended, hanging the call's card. Note that the line is only as
- * wide as its words, so the card answers the words and not the empty
- * column beside them.
+ * Where a call that ended closes: a rule carrying a pill with a hang-up
+ * glyph, who ended the call as far as this window saw, then, where the
+ * record holds its end, how long it ran and when it ended, the pill hanging
+ * the call's card. Note that the pill is only as wide as its words, so the
+ * card answers the words and not the rules beside them.
  */
-export function CallEnded({
+export function CallEndMarker({
   line,
   startedAt,
   record,
@@ -172,28 +205,51 @@ export function CallEnded({
   line: string;
   startedAt: number;
   record: CallRecord | undefined;
-}): ReactNode {
+}): React.JSX.Element {
   const now = useMinute();
   const endedAt = record?.endedAt;
+  const icon = (
+    <span className="call-marker-icon" aria-hidden="true">
+      <PhoneOffIcon />
+    </span>
+  );
   if (record === undefined || endedAt === undefined) {
-    return <p className={STATUS_LINE_CLASS}>{line}</p>;
+    return (
+      <CallMarker end={CALL_MARKER_END.END}>
+        <p className="call-marker-pill" data-call-ended="">
+          {icon}
+          <span className="call-marker-text">
+            <span className="call-marker-words">{line}</span>
+          </span>
+        </p>
+      </CallMarker>
+    );
   }
   const length = workingTime(endedAt - startedAt);
   const ended = callHeading(endedAt, now);
   return (
-    <Tooltip
-      label={`${line}${WORKED_SEPARATOR}${length}${WORKED_SEPARATOR}${ended}`}
-      card={<CallCard startedAt={startedAt} endedAt={endedAt} record={record} />}
-    >
-      <p className={STATUS_LINE_CLASS} data-call-ended="">
-        <span data-call-length="">
-          {line}
-          {WORKED_SEPARATOR}
-          {length}
-        </span>
-        {WORKED_SEPARATOR}
-        <time dateTime={new Date(endedAt).toISOString()}>{ended}</time>
-      </p>
-    </Tooltip>
+    <CallMarker end={CALL_MARKER_END.END}>
+      <Tooltip
+        label={`${line}${WORKED_SEPARATOR}${length}${WORKED_SEPARATOR}${ended}`}
+        card={<CallCard startedAt={startedAt} endedAt={endedAt} record={record} />}
+      >
+        <p className="call-marker-pill" data-call-ended="">
+          {icon}
+          <span className="call-marker-text">
+            <span className="call-marker-words" data-call-length="">
+              {line}
+              <span className="call-marker-detail">
+                {WORKED_SEPARATOR}
+                {length}
+              </span>
+            </span>
+            <span className="call-marker-detail">
+              {WORKED_SEPARATOR}
+              <time dateTime={new Date(endedAt).toISOString()}>{ended}</time>
+            </span>
+          </span>
+        </p>
+      </Tooltip>
+    </CallMarker>
   );
 }

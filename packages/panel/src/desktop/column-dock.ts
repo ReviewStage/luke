@@ -1,10 +1,10 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, and on a phone the toasts and the captions.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, and on a phone the toasts and the voice's notice line.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a task's call bar, whichever stand. */
+/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a call's video, whichever stand. */
 const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .agent-call-foot";
 
 /**

@@ -131,8 +131,6 @@ class FakeCall implements LiveVoiceCall {
 
 const SURROUNDINGS: LiveVoiceSurroundings = {
   voiceAvailable: true,
-  captionsEnabled: true,
-  outputSilent: false,
   microphoneGranted: true,
 };
 
@@ -318,7 +316,7 @@ function captionRow(rowId: string, kind: ConversationEntryKind, words: string): 
 }
 
 it.effect(
-  "caption rows landing within 100 ms are one report with the latest words, and a line said is carried once rather than with every later caption",
+  "heard rows landing within 100 ms are one report with the latest words, and a line said is carried once rather than with every later row",
   () =>
     Effect.gen(function* () {
       const f = fixture({}, yield* Effect.context<never>());
@@ -358,7 +356,11 @@ it.effect(
       yield* TestClock.adjust(Duration.millis(10));
       yield* Effect.yieldNow;
       assert.equal(f.views.length, before + 1);
-      assert.deepEqual(f.views[before]?.lukeCaptions, [words.join(" ")]);
+      assert.deepEqual(
+        Object.keys(f.views[before] ?? {}).filter((key) => /caption/iu.test(key)),
+        [],
+        "the view carries no captions: what is said is the transcript's alone",
+      );
       assert.deepEqual(f.transcripts[before], {
         voiceSessionId: "voice-session-1",
         from: 0,
@@ -390,10 +392,6 @@ it.effect(
           [1, ["Anything else on invites?"]],
         ],
       );
-      assert.deepEqual(f.views.at(-1)?.lukeCaptions, [
-        words.join(" "),
-        "Anything else on invites?",
-      ]);
 
       // Rows that moved nothing are not reported at all.
       call.events.onCaptions([first(words.length), second("Anything else on invites?")]);

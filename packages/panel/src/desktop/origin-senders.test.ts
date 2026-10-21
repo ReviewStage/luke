@@ -129,7 +129,7 @@ async function mount(input: {
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          captions: undefined,
+          notice: undefined,
           tasks: control,
         }),
       ),

@@ -254,7 +254,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          captions: undefined,
+          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -359,7 +359,7 @@ async function narrowTaskInbox(
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          captions: undefined,
+          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -919,7 +919,7 @@ async function chatTabMounted(ownChannel: boolean) {
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          captions: undefined,
+          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -1064,7 +1064,7 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
           createElement(DesktopTasks, {
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
-            captions: undefined,
+            notice: undefined,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
               activeTaskId: TASK.id,

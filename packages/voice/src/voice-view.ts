@@ -22,7 +22,7 @@ export interface VoiceSpeakers {
   lukeSpeaking: boolean;
 }
 
-/** One line said on the standing call, as the voice window's captions group it, with its span in milliseconds into the call. */
+/** One line said on the standing call, as the voice window's ledger groups it, with its span in milliseconds into the call. */
 const voiceCallLineSchema = Schema.Struct({
   rowId: Schema.String,
   speaker: Schema.Literals(Object.values(TRANSCRIPT_SPEAKER)),
@@ -39,7 +39,7 @@ type VoiceCallLine = typeof voiceCallLineSchema.Type;
  * ends, and its lines in the order they opened.
  *
  * It is not part of {@link VoiceView}, because it grows for the whole call
- * and the view is reported at caption rate. It is the app-state slice
+ * and the view is reported at the heard lines' rate. It is the app-state slice
  * `voice.callTranscript`, beside `voice.view`: the voice window reports only
  * a {@link VoiceCallTranscriptChange} with each view, main splices it in
  * with {@link withCallTranscriptChange}, and a panel opened mid-call reads
@@ -96,22 +96,19 @@ export function sameCallAbout(
 
 export interface VoiceView extends VoiceSpeakers {
   /**
-   * The one claim the status names, which the media duck, the exchange count,
-   * and the captions read; who is actually being heard is the two flags
+   * The one claim the status names, which the media duck and the exchange
+   * count read; who is actually being heard is the two flags
    * above, since a full-duplex session can carry both at once.
    */
   voiceStatus: LiveStatus;
   voiceError: string | undefined;
   voiceNotice: string | undefined;
   talkOpening: boolean;
-  lukeCaptions: readonly string[] | undefined;
-  /** The developer's own words still being said, drawn only under the captions preference. */
-  developerCaptions: readonly string[] | undefined;
   /** The agent the standing call speaks into, and its task; none for no call. */
   call: VoiceCallAbout | undefined;
   /** The store's id for the session of the last call Luke ended himself; none before he has. */
   lukeEndedCall: string | undefined;
-  /** Whether Luke's voice is silenced on this Mac for the standing call, his words still captioned; never while none stands. */
+  /** Whether Luke's voice is silenced on this Mac for the standing call, his words still streaming into the transcript; never while none stands. */
   speakerMuted: boolean;
 }
 
@@ -145,8 +142,6 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   voiceError: undefined,
   voiceNotice: undefined,
   talkOpening: false,
-  lukeCaptions: undefined,
-  developerCaptions: undefined,
   call: undefined,
   lukeEndedCall: undefined,
   speakerMuted: false,
@@ -189,10 +184,6 @@ function isOptionalCallAbout(value: UnparsedWireValue): boolean {
   );
 }
 
-function isOptionalWireStrings(value: UnparsedWireValue): value is readonly string[] | undefined {
-  return value === undefined || (Array.isArray(value) && value.every(isWireString));
-}
-
 /**
  * The transcript held with a change applied: the lines before `from` kept
  * and the change's lines after them. A change about another session than
@@ -220,8 +211,5 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   if (!isOptionalCallAbout(value.call)) return false;
   if (!isOptionalWireString(value.lukeEndedCall)) return false;
   if (!isWireBoolean(value.speakerMuted)) return false;
-  if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;
-  return (
-    isOptionalWireStrings(value.lukeCaptions) && isOptionalWireStrings(value.developerCaptions)
-  );
+  return isWireBoolean(value.listening) && isWireBoolean(value.lukeSpeaking);
 }

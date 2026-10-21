@@ -91,7 +91,7 @@ import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
-import { CallCheckpoint, CallEnded } from "./call-card.js";
+import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice.js";
 import {
@@ -1093,7 +1093,7 @@ function CallOpen({
 }): React.JSX.Element | null {
   if (call === undefined) return null;
   return (
-    <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
+    <CallStartMarker startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
   );
 }
 
@@ -1101,7 +1101,7 @@ function CallOpen({
 function CallClose({ call }: { call: TranscriptCallRow | undefined }): React.ReactNode {
   const line = call === undefined ? undefined : callEndedLine(call);
   if (call === undefined || line === undefined) return null;
-  return <CallEnded line={line} startedAt={call.startedAt} record={call.record} />;
+  return <CallEndMarker line={line} startedAt={call.startedAt} record={call.record} />;
 }
 
 /** A line heard on a call that no row holds yet, drawn as the row it will be: the speaker's words, one text part. */

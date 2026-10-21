@@ -158,9 +158,9 @@ function shellProps(
     room: SHELL_ROOM.WIDE,
     settingsStep: { listed: true, onList: ignore },
     call: undefined,
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    notice: {
+      notice: { content: undefined, shown: false },
+      onDismissHint: ignore,
     },
     settings: SETTINGS,
   };
@@ -856,9 +856,9 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       speakerMuted: false,
       controls: callControls(tell, false),
     },
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    notice: {
+      notice: { content: undefined, shown: false },
+      onDismissHint: ignore,
     },
     settings: SETTINGS,
   });

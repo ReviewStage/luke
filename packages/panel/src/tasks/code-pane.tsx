@@ -18,7 +18,7 @@ import {
 } from "../ai-elements/conversation.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
-import { CallCheckpoint, CallEnded } from "./call-card.js";
+import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { CodeSnippet, useSnippetNote } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
 import { callHeading } from "./task-time.js";
@@ -39,9 +39,9 @@ import { WORKED_SEPARATOR } from "./working-time.js";
  * snippets of one file are two cards. Code an agent showed on a turn of its
  * own, typed or spoken, stands under that turn, headed by the agent's name
  * and when the turn began. The cards stand under the call they
- * were shown on, each call opening at the Checkpoint the Call tab
- * opens it at and, once it has ended, closing on the line the Call tab
- * closes it on, its card on hover, and the feed keeps to its newest card
+ * were shown on, each call opening at the marker an agent's transcript
+ * opens it at and, once it has ended, closing on the marker it closes it
+ * on, its card on hover, and the feed keeps to its newest card
  * while it is scrolled there, so code shown on a live call lands at the bottom as the
  * transcript's lines do, and scrolling up to read an earlier card leaves
  * it where it is until the developer scrolls back down. Every line here is
@@ -190,20 +190,25 @@ const CodeCard = memo(
   (was, now) => was.showing.callId === now.showing.callId && was.taskId === now.taskId,
 );
 
-/** The divider an agent's turn begins at: the agent's name and when the turn began, "Invite flow · Today, 3:42 PM". */
+/** The divider an agent's turn begins at: the agent's name and when the turn began, "Invite flow · Today, 3:42 PM", or when alone for an agent the task no longer lists. */
 function AgentTurnCheckpoint({
   agent,
   startedAt,
   now,
 }: {
-  agent: string;
+  agent: string | undefined;
   startedAt: number;
   now: number;
 }): React.JSX.Element {
-  return <Checkpoint>{`${agent}${WORKED_SEPARATOR}${callHeading(startedAt, now)}`}</Checkpoint>;
+  const heading = callHeading(startedAt, now);
+  return (
+    <Checkpoint>
+      {agent === undefined ? heading : `${agent}${WORKED_SEPARATOR}${heading}`}
+    </Checkpoint>
+  );
 }
 
-/** One call's or one agent's turn's run: the checkpoint it begins at, each code shown on it, and once a call has ended, the line it closes with, as the Call tab draws them (`call-card.tsx`). */
+/** One call's or one agent's turn's run: the marker or divider it begins at, each code shown on it, and once a call has ended, the marker it closes with, as an agent's transcript draws them (`call-card.tsx`). */
 function CodeFeedRun({
   call,
   now,
@@ -217,18 +222,21 @@ function CodeFeedRun({
   agentLabel: (agentId: string) => string | undefined;
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
-  const agent = call.agentId === undefined ? undefined : agentLabel(call.agentId);
   return (
     <>
-      {agent === undefined ? (
-        <CallCheckpoint
+      {call.agentId === undefined ? (
+        <CallStartMarker
           startedAt={call.startedAt}
           live={call.live}
           now={now}
           caller={call.caller}
         />
       ) : (
-        <AgentTurnCheckpoint agent={agent} startedAt={call.startedAt} now={now} />
+        <AgentTurnCheckpoint
+          agent={agentLabel(call.agentId)}
+          startedAt={call.startedAt}
+          now={now}
+        />
       )}
       {call.showings.map((showing) => (
         <CodeCard
@@ -240,7 +248,7 @@ function CodeFeedRun({
         />
       ))}
       {call.ended === undefined ? null : (
-        <CallEnded line={call.ended} startedAt={call.startedAt} record={call.record} />
+        <CallEndMarker line={call.ended} startedAt={call.startedAt} record={call.record} />
       )}
     </>
   );

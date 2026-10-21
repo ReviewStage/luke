@@ -296,9 +296,9 @@ test("on a platform without voice or Mac commands, the Settings filter lists nei
   chooseFilter("Settings");
 
   assert.deepEqual(rows().slice(0, shown.length), shown);
-  type("Captions");
+  type("Quiet Music and Spotify");
   assert.equal(
-    rows().some((row) => row.includes("Captions")),
+    rows().some((row) => row.includes("Quiet Music and Spotify")),
     false,
   );
   type("Let agents run commands on this Mac");

@@ -185,9 +185,9 @@ function Shell({
     room,
     settingsStep,
     call: undefined,
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    notice: {
+      notice: { content: undefined, shown: false },
+      onDismissHint: ignore,
     },
     settings,
   });
