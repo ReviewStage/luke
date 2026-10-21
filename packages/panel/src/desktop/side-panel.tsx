@@ -1292,6 +1292,7 @@ function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | 
 function TabContent({
   tab,
   taskId,
+  codeFilesRead,
   repository,
   board,
   shownCode,
@@ -1329,6 +1330,8 @@ function TabContent({
   repository: string | null;
   board: Board | undefined;
   shownCode: readonly TaskCodeShowing[] | undefined;
+  /** Whether a File tab reads the files code was shown in: a task's panel's does, and an agent's page's, with no task to read them by, does not. */
+  codeFilesRead: boolean;
   /** The task's code read that did not land, where the last did not. */
   codeFailed: CodeFailed | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
@@ -1571,9 +1574,9 @@ function TabContent({
         <CodePane
           shown={shownCode}
           calls={NO_CODE_CALLS}
-          taskId={taskId}
+          taskId={codeFilesRead ? taskId : undefined}
           agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
-          onOpenFile={onOpenFile}
+          onOpenFile={codeFilesRead ? onOpenFile : undefined}
         />
       );
     case SIDE_PANEL_TAB.COMMENTS:
@@ -2120,6 +2123,7 @@ export function SidePanel({
             <TabContent
               tab={tab}
               taskId={taskId}
+              codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
               repository={repository}
               board={board}
               shownCode={shownCode}

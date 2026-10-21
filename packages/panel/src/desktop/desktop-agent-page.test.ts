@@ -1707,4 +1707,7 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   const panel = container.querySelector("aside.side-panel");
   assert.ok(panel, "the panel stands beside the page");
   assert.match(panel.textContent ?? "", /src\/relay\.ts/u);
+  // No File tab reads a repository no task names, so the card offers no way into one.
+  assert.ok(panel.querySelector(".code-card"), "the code's card stands");
+  assert.equal(panel.querySelector(".code-card [aria-label^='Open ']"), null);
 });

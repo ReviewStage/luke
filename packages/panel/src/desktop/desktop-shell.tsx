@@ -773,7 +773,7 @@ export function DesktopShell({
                 key={pageAgent}
                 tasks={tasks}
                 agentId={pageAgent}
-                notice={pageCallShown ? noticeStrip : undefined}
+                notice={pageCallShown ? NOTICE_STRIP : undefined}
               />
             ) : pagePerson !== undefined ? (
               // Keyed by the person, so another person's page holds nothing of the last, its find among it.

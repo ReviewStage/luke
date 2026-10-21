@@ -149,7 +149,8 @@ function CodeCardContent({
   showing: TaskCodeShowing;
   taskId: string | undefined;
   agentLabel: (agentId: string) => string | undefined;
-  onOpenFile: (ref: CodeRef, commit?: string) => void;
+  /** Opens the code's file in a File tab; none where no File tab reads it, as on an agent's page with no task. */
+  onOpenFile: ((ref: CodeRef, commit?: string) => void) | undefined;
 }): React.JSX.Element {
   const { code } = showing;
   const notes = useSnippetNote(
@@ -170,7 +171,7 @@ function CodeCardContent({
         codeRef={code.ref}
         note={code.note}
         copied={copiedLines(code)}
-        onOpen={() => onOpenFile(code.ref, code.commit)}
+        onOpen={onOpenFile === undefined ? undefined : () => onOpenFile(code.ref, code.commit)}
       />
       <CodeSnippet code={code} notes={notes} />
     </article>
@@ -220,7 +221,8 @@ function CodeFeedRun({
   now: number;
   taskId: string | undefined;
   agentLabel: (agentId: string) => string | undefined;
-  onOpenFile: (ref: CodeRef, commit?: string) => void;
+  /** Opens the code's file in a File tab; none where no File tab reads it, as on an agent's page with no task. */
+  onOpenFile: ((ref: CodeRef, commit?: string) => void) | undefined;
 }): React.JSX.Element {
   return (
     <>
@@ -270,7 +272,8 @@ export function CodePane({
   /** An agent on the task as its tab names it, which heads the code its turns showed; none for an agent not listed, whose turn is headed by its time alone. */
   agentLabel?: ((agentId: string) => string | undefined) | undefined;
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
-  onOpenFile: (ref: CodeRef, commit?: string) => void;
+  /** Opens the code's file in a File tab; none where no File tab reads it, as on an agent's page with no task. */
+  onOpenFile: ((ref: CodeRef, commit?: string) => void) | undefined;
 }): React.JSX.Element {
   const now = Date.now();
   return (
