@@ -302,16 +302,18 @@ function startupInput(
           startupTokens(taskSeedText(task, true, agentAtWork)),
         );
   // The plan's seed, the agent's work, and the transcript are one message each, and the plan's is kept first.
+  // Note that the opening and a plan's seed, where there is a plan, are the messages counted before either.
+  const fixed = input.length + (task === undefined ? 1 : 2);
   const agentItem = agent === undefined ? undefined : developerSeedItem(agentSeedText(agent));
   const agentItems =
     agentItem === undefined ||
-    input.length + 3 > LIVE_INPUT_BOUNDS.MESSAGES ||
+    fixed + 1 > LIVE_INPUT_BOUNDS.MESSAGES ||
     seedItemTokens([agentItem]) > room - taskFloor
       ? []
       : [agentItem];
   const historyRoom = room - taskFloor - seedItemTokens(agentItems);
   const said =
-    input.length + 3 + agentItems.length > LIVE_INPUT_BOUNDS.MESSAGES
+    fixed + 1 + agentItems.length > LIVE_INPUT_BOUNDS.MESSAGES
       ? []
       : newestWithin(earlier, historyRoom - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
   const history =

@@ -22,6 +22,7 @@ import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
 import {
   callOpeningHistory,
   LIVE_CLIENT_EVENT,
+  LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
   type LiveClientEvent,
@@ -1094,6 +1095,51 @@ it.effect(
       );
       assert.equal(context.openAi.creates.length, 1);
       assert.deepEqual(context.accounts.spent, [userId]);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into an agent with no task keeps the agent's work in a startup input the device fills to all but two messages, since no plan's seed takes a message",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const userId = context.target.userId;
+      const agent = await startTasklessAgent(userId);
+      const typed = "Which nightly jobs failed?";
+      const at = new Date(NOW);
+      await insertMessage(database.run, {
+        userId,
+        conversationId: agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: typed }],
+        metadata: { author: "developer", channel: "typed" },
+        createdAt: at,
+        finishedAt: at,
+      });
+      const filled = Array.from({ length: LIVE_INPUT_BOUNDS.MESSAGES - 2 }, (_, index) => ({
+        type: SEED_ITEM_TYPE,
+        role: SEED_ROLE.USER,
+        content: [{ type: SEED_CONTENT_TYPE.INPUT_TEXT, text: `line ${index}` }],
+      }));
+
+      const session = await openSessionWith(context, createFrame(undefined, agent.id, filled));
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      const input = create.body.session.input;
+      assert.ok(Array.isArray(input));
+      assert.equal(input.length, LIVE_INPUT_BOUNDS.MESSAGES);
+      assert.ok(JSON.stringify(input[0]).includes(typed));
+      assert.deepEqual(input.at(-1), callOpeningHistory());
+
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
       await context.stop();
     }),
 );
