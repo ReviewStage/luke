@@ -406,7 +406,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRenameTask: () => Promise.resolve(true),
     onDraftName: ignore,
     onMarkTask: ignore,
-    onArchiveTasks: ignore,
+    onSettleTasks: ignore,
     pinnedRepositories: [],
     onPinRepository: ignore,
     taskSections: NO_TASK_SECTIONS,

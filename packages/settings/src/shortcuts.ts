@@ -30,7 +30,8 @@ export const APP_COMMAND = {
   COPY_PLAN: "copy-plan",
   COPY_LINK: "copy-link",
   COMMENT_ON_SELECTION: "comment-on-selection",
-  ARCHIVE_TASK: "archive-plan",
+  // Note that Mark done keeps Archive's id, because it took Archive's place and its chord, so the menu bar's item and any saved use of the id still reach it.
+  MARK_TASK_DONE: "archive-plan",
   DELETE_TASK: "delete-plan",
   PREVIOUS_TASK: "previous-plan",
   NEXT_TASK: "next-plan",
@@ -332,8 +333,8 @@ export const APP_SHORTCUTS = {
     label: "Comment on selection",
     chord: { key: SHORTCUT_KEY.M, option: true },
   },
-  [APP_COMMAND.ARCHIVE_TASK]: {
-    label: "Archive task",
+  [APP_COMMAND.MARK_TASK_DONE]: {
+    label: "Mark done",
     chord: { key: SHORTCUT_KEY.A, shift: true },
   },
   [APP_COMMAND.DELETE_TASK]: {
@@ -512,7 +513,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.COPY_PLAN,
       APP_COMMAND.COPY_LINK,
       APP_COMMAND.COMMENT_ON_SELECTION,
-      APP_COMMAND.ARCHIVE_TASK,
+      APP_COMMAND.MARK_TASK_DONE,
       APP_COMMAND.DELETE_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.HOME,

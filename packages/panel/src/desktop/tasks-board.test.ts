@@ -529,7 +529,7 @@ test("a right-click on a card drops the task's own menu", async () => {
     (label) => label.textContent,
   );
   assert.ok(labels.includes("Rename"), "the menu offers Rename");
-  assert.ok(labels.includes("Archive"), "the menu offers Archive");
+  assert.ok(labels.includes("Mark done"), "the menu offers Mark done");
   assert.deepEqual(opened, []);
 });
 

@@ -1,13 +1,11 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_BOUNDS, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
-  ArchiveIcon,
   BUTTON_SIZE,
   ConfirmDialog,
   CopyIcon,
-  DIALOG_TONE,
   type DialogQuestion,
   EllipsisIcon,
   ExternalIcon,
@@ -18,6 +16,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  MarkDoneIcon,
   PinIcon,
   ProviderMark,
   TaskStatusMark as TaskStandingMark,
@@ -36,14 +35,13 @@ import {
 } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import {
-  archiveAsks,
   DOCUMENT_REGION,
   RENAME_FAILED_NOTE,
+  SETTLED_STATUS,
+  settleOffered,
   TASK_MARK,
-  type TaskMark,
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, AssigneeHeard, CreatorHeard } from "../actor-ref.js";
@@ -89,20 +87,21 @@ import { TaskStatusMark, taskCardOf } from "./task-card.js";
  * name where the door draws it: the sidebar's row turns into a field, and
  * the toolbar's ⋯ opens its title as one. Version history
  * opens the plan's versions over the whole window, opening the task first
- * where it is not the open one, the one item that moves it. Pin and Archive
- * move the task in the sidebar at once, and each is undone from the same
- * menu; a sidebar row also offers both as buttons at its end on hover.
- * Archive stops and archives the task's coding agents with it, so a task
- * with an agent not yet archived asks first, whichever door it was chosen
- * from, and one with none archives at once.
+ * where it is not the open one, the one item that moves it. Pin moves the
+ * task in the sidebar at once and is undone from the same menu; Mark done,
+ * where Archive used to stand, with its chord, sets the task Done, and
+ * Cancel task sets it Canceled, each said in a toast whose Undo puts back
+ * the status it stood at, and neither asking anything, since neither stops
+ * an agent. A sidebar row also offers Pin and Mark done as buttons at its
+ * end on hover. A task still archived offers only Unarchive there.
  * Move to workspace opens a dialog listing the account's other workspaces
  * and what the move does (`move-task-dialog.tsx`), offered on a task the
- * reader started. Move to section, beside Pin and Archive while the account
+ * reader started. Move to section, beside Pin and Mark done while the account
  * has sections on, puts the task in one of the reader's own sections, a new
  * one, or none (`sidebar-sections.tsx`).
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
- * over the window that names the task and offers Archive as the way to keep
- * it, whichever door it was chosen from. Under the items, pressed by nothing,
+ * over the window that names the task and offers Mark done as the way to
+ * keep it, whichever door it was chosen from. Under the items, pressed by nothing,
  * the menu says who created the task and who last edited it, and when.
  */
 
@@ -116,42 +115,69 @@ export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undef
     : undefined;
 }
 
-/** One way a task can be moved in the sidebar, as the menu and the row's own buttons both offer it. */
+/** One way a task can be moved in the sidebar or settled, as the menu and the row's own buttons both offer it, and the chord that runs it on the open task, where it has one. */
 interface PlaceMark {
-  mark: TaskMark;
+  key: string;
   label: string;
   icon: React.JSX.Element;
+  onSelect: () => void;
+  command?: KeyedCommand;
 }
 
 /**
- * Pin and Archive, each offered as whichever way the task is not yet. An
- * archived task offers no pin, because the sidebar draws it among the
- * archived whether or not it is pinned.
+ * Pin, offered as whichever way the task is not yet, and Mark done, offered
+ * on a task not yet done. A task still archived offers only Unarchive,
+ * because the sidebar draws it among the archived whether or not it is
+ * pinned or done.
  */
-function placeMarks(task: TaskSummary): PlaceMark[] {
+function placeMarks(tasks: TasksControl, task: TaskSummary): PlaceMark[] {
+  const marking =
+    (mark: typeof TASK_MARK.PIN | typeof TASK_MARK.UNPIN | typeof TASK_MARK.UNARCHIVE) => () =>
+      tasks.onMarkTask(task.id, mark);
   if (task.archivedAt !== undefined) {
-    return [{ mark: TASK_MARK.UNARCHIVE, label: "Unarchive", icon: <UnarchiveIcon /> }];
+    return [
+      {
+        key: TASK_MARK.UNARCHIVE,
+        label: "Unarchive",
+        icon: <UnarchiveIcon />,
+        onSelect: marking(TASK_MARK.UNARCHIVE),
+      },
+    ];
   }
-  return [
+  const pin: PlaceMark =
     task.pinnedAt === undefined
-      ? { mark: TASK_MARK.PIN, label: "Pin", icon: <PinIcon /> }
-      : { mark: TASK_MARK.UNPIN, label: "Unpin", icon: <UnpinIcon /> },
-    { mark: TASK_MARK.ARCHIVE, label: "Archive", icon: <ArchiveIcon /> },
-  ];
+      ? { key: TASK_MARK.PIN, label: "Pin", icon: <PinIcon />, onSelect: marking(TASK_MARK.PIN) }
+      : {
+          key: TASK_MARK.UNPIN,
+          label: "Unpin",
+          icon: <UnpinIcon />,
+          onSelect: marking(TASK_MARK.UNPIN),
+        };
+  const done: PlaceMark = {
+    key: SETTLED_STATUS.DONE,
+    label: "Mark done",
+    icon: <MarkDoneIcon />,
+    onSelect: () => tasks.onSettleTasks([task.id], SETTLED_STATUS.DONE),
+    command: APP_COMMAND.MARK_TASK_DONE,
+  };
+  return settleOffered(task, SETTLED_STATUS.DONE) ? [pin, done] : [pin];
 }
 
-/** Pin and Archive as the menu's items, Archive through `archive`, which asks first where it must; nothing for a task neither the list nor the document holds. */
-function placeActions(
-  tasks: TasksControl,
-  task: TaskSummary | undefined,
-  archive: () => void,
-): MenuAction[] {
+/** Pin, Mark done, and Cancel task as the menu's items, Cancel task on a task neither archived nor already canceled; nothing for a task neither the list nor the document holds. */
+function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuAction[] {
   if (task === undefined) return [];
-  return placeMarks(task).map(({ mark, label, icon }) => ({
+  const marks = placeMarks(tasks, task).map(({ label, icon, onSelect }) => ({
     label,
     icon,
-    onSelect: mark === TASK_MARK.ARCHIVE ? archive : () => tasks.onMarkTask(task.id, mark),
+    onSelect,
   }));
+  const cancel: MenuAction = {
+    label: "Cancel task",
+    icon: <TaskStandingMark status={TASK_STATUS.CANCELED} />,
+    onSelect: () => tasks.onSettleTasks([task.id], SETTLED_STATUS.CANCELED),
+  };
+  const cancelable = task.archivedAt === undefined && settleOffered(task, SETTLED_STATUS.CANCELED);
+  return cancelable ? [...marks, cancel] : marks;
 }
 
 /** One of a sidebar row's buttons at its end: what it says and runs, and the chord its tooltip names, where it has one. */
@@ -165,8 +191,8 @@ export interface RowMark {
 
 /**
  * A sidebar row's buttons at its end, standing in the time's place while
- * the row is hovered or reached from the keyboard: a task's and an agent's
- * row alike draw their Pin and Archive here. They are the row's siblings
+ * the row is hovered or reached from the keyboard: a task's row draws its
+ * Pin and Mark done here, and an agent's its Pin and Archive. They are the row's siblings
  * rather than inside it, so a press on one opens nothing, but part of the
  * row to its card, which stands while the pointer is on them and goes as
  * one is pressed (`Tooltip`'s `cardRegion`).
@@ -196,34 +222,32 @@ export function RowMarks({
 }
 
 /**
- * Pin and Archive at a task's sidebar row's end (`RowMarks`). Rested on,
- * the row hangs the task's card beside it (`task-card.tsx`): its name in
- * full, its repository, and its agents and pull requests, read from the
- * list's row. Each runs what its menu item runs, and only the open task's
- * Archive names ⇧⌘A, because the chord archives the open task rather than
- * the row under the pointer.
+ * Pin and Mark done at a task's sidebar row's end (`RowMarks`), Mark done
+ * as a check where Archive's box stood. Rested on, the row hangs the task's
+ * card beside it (`task-card.tsx`): its name in full, its repository, and
+ * its agents and pull requests, read from the list's row. Each runs what
+ * its menu item runs, and only the open task's Mark done names ⇧⌘A,
+ * because the chord marks the open task rather than the row under the
+ * pointer.
  */
 function SidebarTaskMarks({
   tasks,
   task,
   current,
   disabled,
-  onArchive,
 }: {
   tasks: TasksControl;
   task: TaskSummary;
   current: boolean;
   disabled: boolean;
-  /** Archives the task as its menu's Archive does, asking first where it must. */
-  onArchive: () => void;
 }): React.JSX.Element {
-  const marks = placeMarks(task).map(
-    ({ mark, label, icon }): RowMark => ({
-      key: mark,
+  const marks = placeMarks(tasks, task).map(
+    ({ key, label, icon, onSelect, command }): RowMark => ({
+      key,
       label,
       icon,
-      onSelect: mark === TASK_MARK.ARCHIVE ? onArchive : () => tasks.onMarkTask(task.id, mark),
-      command: current && mark === TASK_MARK.ARCHIVE ? APP_COMMAND.ARCHIVE_TASK : undefined,
+      onSelect,
+      command: current ? command : undefined,
     }),
   );
   return <RowMarks marks={marks} disabled={disabled} />;
@@ -233,7 +257,7 @@ function SidebarTaskMarks({
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
  * offers it, ahead of Copy link, Mark as unread or read, Rename,
- * and Version history; Pin and Archive follow; the repository is changed from any plan and opened on
+ * and Version history; Pin, Mark done, and Cancel task follow; the repository is changed from any plan and opened on
  * GitHub where there is one, beside Move to workspace where the plan may be
  * moved; Permanently delete is last and alone. An archived plan takes
  * nothing until it is brought back, so it offers neither Rename, Change
@@ -247,7 +271,6 @@ function taskActionGroups(
   doors: {
     rename: () => void;
     askDelete: () => void;
-    archive: () => void;
     askMove: (() => void) | undefined;
     copy: (words: string, label: string) => void;
     read: ReadMark;
@@ -285,10 +308,7 @@ function taskActionGroups(
   };
   const groups: MenuEntry[][] = [
     [...(drawn ? [copy] : []), ...link, ...(archived ? [] : [rename]), versions],
-    [
-      ...placeActions(tasks, task, doors.archive),
-      ...(doors.section === undefined ? [] : [doors.section]),
-    ],
+    [...placeActions(tasks, task), ...(doors.section === undefined ? [] : [doors.section])],
     [
       ...(archived ? [] : [change]),
       ...move,
@@ -361,34 +381,31 @@ function TaskMenuFooter({
  * The question Permanently delete asks, naming the task. Deleting a task
  * removes its document and its board and clears the conversation its
  * transcript is read from, which nothing in the app brings back, so a task
- * not yet archived is pointed at Archive, which keeps all of it.
+ * not yet done, canceled, or archived is pointed at Mark done, which keeps
+ * all of it.
  */
-function deleteQuestion(name: string, archived: boolean): DialogQuestion {
+function deleteQuestion(name: string, settled: boolean): DialogQuestion {
   const lost = `“${name}” and its board and transcript will be deleted. This can’t be undone.`;
   return {
     title: "Permanently delete task?",
-    body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
+    body: settled ? lost : `${lost} To keep it out of the way instead, mark it done.`,
     verb: "Permanently delete",
     running: "Deleting",
   };
 }
 
-/** The question Archive asks of a task with coding agents not yet archived, naming the task, since the archive stops them and an Unarchive brings them back. */
-function archiveQuestion(name: string): DialogQuestion {
-  return {
-    title: "Archive task?",
-    body: `Archiving “${name}” will stop and archive all its agents. Unarchiving it brings them back.`,
-    verb: "Archive",
-    running: "Archiving",
-    tone: DIALOG_TONE.PRIMARY,
-  };
+/** Whether a task is already out of the way: done, canceled, or archived. */
+function settledTask(task: TaskSummary | undefined): boolean {
+  if (task === undefined) return false;
+  return (
+    task.archivedAt !== undefined ||
+    !settleOffered(task, SETTLED_STATUS.DONE) ||
+    !settleOffered(task, SETTLED_STATUS.CANCELED)
+  );
 }
 
-/** What the archive question answers once Archive is pressed: the archive is drawn at once, and a refusal says so in its toast. */
-const ARCHIVE_ASKED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
-
 /**
- * One task's menu and its archive and delete questions, held for whichever door offers
+ * One task's menu and its delete question, held for whichever door offers
  * them: the sidebar's row, the toolbar's ⋯, and a Board card. Neither outlives the tab going off screen, the menu does not
  * outlive its door, and the question does not outlive the task: each is
  * taken down in the render that finds it gone, so neither is left standing
@@ -406,17 +423,11 @@ export function useTaskMenu(
   const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
     tasks.onDeleteTask(taskId),
   );
-  const archiving = useConfirmDialog(
-    { subject: task !== undefined && task.archivedAt === undefined, surfaceOpen: tasks.shown },
-    () => {
-      tasks.onMarkTask(taskId, TASK_MARK.ARCHIVE);
-      return Promise.resolve(ARCHIVE_ASKED);
-    },
-  );
-  const archive = () => {
-    if (task !== undefined && archiveAsks([task])) archiving.ask();
-    else tasks.onMarkTask(taskId, TASK_MARK.ARCHIVE);
-  };
+  // Mark done as the chord runs it: on a task neither archived nor already done, and nothing otherwise.
+  const markDone =
+    task !== undefined && task.archivedAt === undefined && settleOffered(task, SETTLED_STATUS.DONE)
+      ? () => tasks.onSettleTasks([taskId], SETTLED_STATUS.DONE)
+      : undefined;
   const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu, keyMenu } = useMenu(tasks.shown && doors.drawn);
@@ -438,7 +449,6 @@ export function useTaskMenu(
           taskActionGroups(tasks, taskId, {
             rename: doors.rename,
             askDelete: deletion.ask,
-            archive,
             askMove: moving.ask,
             copy,
             section,
@@ -456,18 +466,14 @@ export function useTaskMenu(
     );
   const dialog = (
     <>
-      <ConfirmDialog
-        confirm={deletion}
-        question={deleteQuestion(name, task?.archivedAt !== undefined)}
-      />
-      <ConfirmDialog confirm={archiving} question={archiveQuestion(name)} />
+      <ConfirmDialog confirm={deletion} question={deleteQuestion(name, settledTask(task))} />
       {moving.dialog}
       {sections.dialog}
     </>
   );
   return {
     deletion,
-    archive,
+    markDone,
     open: open !== undefined,
     close,
     trigger,
@@ -481,10 +487,10 @@ export function useTaskMenu(
 /**
  * The open task's ⋯ button in the toolbar, and the menu it drops, drawn
  * while the task's own tab is chosen, because the menu is the task's and not
- * an agent's. It is also what offers the open task's Archive and Permanently
- * delete shortcuts, on every tab of the task, so each runs exactly as its
- * menu item would: Permanently delete still asks first, as Archive does of a
- * task with agents, and an archived task has no Archive to offer.
+ * an agent's. It is also what offers the open task's Mark done and
+ * Permanently delete shortcuts, on every tab of the task, so each runs
+ * exactly as its menu item would: Permanently delete still asks first, and a
+ * task already done or still archived has no Mark done to offer.
  */
 export function TaskActions({
   tasks,
@@ -508,10 +514,7 @@ export function TaskActions({
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE_TASK, asking || deletion.busy ? undefined : deletion.ask);
-  useAppCommand(
-    APP_COMMAND.ARCHIVE_TASK,
-    task.archivedAt === undefined ? actions.archive : undefined,
-  );
+  useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
   return (
     <>
       {button ? (
@@ -589,7 +592,7 @@ function rowFaceOf(
  * reader's own task no one is on, wear none. Its repository's name, muted, where the list hands one (in one run),
  * and no face where its group is its creator's. Its time is the one the
  * list's order chooses. Pin
- * and Archive stand in place of all of it while the row is hovered or
+ * and Mark done stand in place of all of it while the row is hovered or
  * reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
@@ -648,7 +651,7 @@ export function SidebarTask({
     row.current?.focus();
   }, [rename.editing]);
   // Note that the row is what the menu rings and hands focus back to, even
-  // when the right-click lands on Pin or Archive over its end.
+  // when the right-click lands on Pin or Mark done over its end.
   const showMenu = actions.contextMenu(row);
   return (
     <>
@@ -722,7 +725,6 @@ export function SidebarTask({
                 task={task}
                 current={current}
                 disabled={actions.deletion.busy}
-                onArchive={actions.archive}
               />
             )
           }

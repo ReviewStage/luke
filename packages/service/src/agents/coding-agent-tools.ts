@@ -754,7 +754,7 @@ const UPDATE_TASK_INPUT = Schema.Struct({
   archived: Schema.optionalKey(
     describeWire(
       Schema.Boolean,
-      "true to archive it, as the Archive task menu does, false to bring an archived one back.",
+      "true to archive it, false to bring an archived one back. A task whose work is done is marked done with status done rather than archived.",
     ),
   ),
   pinned: Schema.optionalKey(
@@ -901,11 +901,12 @@ export const UPDATE_TASK_TOOL = {
     "issue to link read from its provider first; name at least one change, and several go in " +
     "one call. An archived task leaves the sidebar and every list but the archived ones, its " +
     "plan takes no edit, and its agents take no message and start no new turn, while " +
-    "everything on it is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
-    "agent: one still working on the task finishes the turn it is on. Archive a task whose work is " +
-    "done, such as one whose pull requests merged, or one the developer asked you to clean up; " +
-    "never a teammate's task still in use unless the developer asked for it. The task you work on " +
-    "yourself is never archived, though its other changes are yours to make. Find an archived " +
+    "everything on it is kept and any member can bring it back. An archive asks no one and stops no " +
+    "agent: one still working on the task finishes the turn it is on. Mark a task whose work is " +
+    "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
+    "merged, or one the developer asked you to clean up, and archive none; never a teammate's " +
+    "task still in use unless the developer asked for it. The task you work on yourself is never " +
+    "archived, though its other changes are yours to make. Find an archived " +
     `task with ${AGENT_TOOL.LIST_TASKS} and includeArchived. Answers \`accepted\` with the task as ` +
     "it now stands, the issues it links where the call changed them, `already` true where every " +
     "change named already stood, or `rejected` and why. Then say which tasks you changed and how.",
