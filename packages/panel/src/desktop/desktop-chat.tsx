@@ -58,6 +58,7 @@ import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { keptSkills } from "../tasks/repository-skills.js";
+import type { SkillSource } from "../tasks/skill-picker.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
@@ -145,8 +146,18 @@ function useTaskDoors(
   latest.current = tasks;
   const workspace = mentionPlaceOf(tasks)?.workspace;
   const { tasks: listed, archived } = tasks;
+  // Note that each task's skills are read once and kept while its repository stands, because a source made anew, as a change to any listed task would make it, reads them again and draws its chips as words until it lands.
+  const skillSources = useRef(new Map<string, { repository: string; source: SkillSource }>());
   const doors = useMemo(() => {
     const held = new Map<string, ChatTaskDoors>();
+    const kept = skillSources.current;
+    const skillSourceOf = (taskId: string, repository: string): SkillSource => {
+      const standing = kept.get(taskId);
+      if (standing?.repository === repository) return standing.source;
+      const source = keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: taskId }));
+      kept.set(taskId, { repository, source });
+      return source;
+    };
     for (const task of [...listed, ...archived]) {
       const showFile = (ref: CodeRef, commit: string | undefined) =>
         latest.current.onShowFile(task.id, ref, commit);
@@ -170,7 +181,7 @@ function useTaskDoors(
         repository === null
           ? undefined
           : {
-              source: keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: task.id })),
+              source: skillSourceOf(task.id, repository),
               onOpen: (skill: SkillOption) => showFile({ path: skill.path }, undefined),
             };
       held.set(task.id, {
@@ -179,6 +190,8 @@ function useTaskDoors(
         skills,
       });
     }
+    // A task no longer listed lets its skills go.
+    for (const taskId of kept.keys()) if (!held.has(taskId)) kept.delete(taskId);
     return held;
   }, [listed, archived, act, openTask, workspace, mentions]);
   return (taskId) => doors.get(taskId);

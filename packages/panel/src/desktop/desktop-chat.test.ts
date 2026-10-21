@@ -1867,3 +1867,56 @@ test("in the window's Chat, a person's /skill in a task's channel is drawn as it
     undefined,
   ]);
 });
+
+test("a task's skills are read once while the listed tasks change around it, rather than again on every draw", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () => {
+      reads += 1;
+      return Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+        },
+      });
+    },
+  });
+  let seq = 0;
+  // Each draw lists the task anew, as a change to any listed task hands the window a new list.
+  const listing: Partial<TasksControl> = {
+    get tasks() {
+      return [{ ...INVITES_TASK }];
+    },
+  };
+  const page = mount(
+    (chat) => {
+      const posted = withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]);
+      seq = posted.answer.messages.at(-1)?.seq ?? 0;
+      return posted;
+    },
+    ACME,
+    undefined,
+    undefined,
+    listing,
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  assert.ok(messageWords(page, seq).querySelector("[data-skill-ref]"), "the skill is its chip");
+  // A post draws the window again over a new list of its tasks.
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "shipping it");
+  pressInComposer(box, "Enter");
+  await settle();
+  assert.ok(messageWords(page, seq).querySelector("[data-skill-ref]"), "the chip stands");
+  assert.equal(reads, 1, "the skills are not read again");
+});
