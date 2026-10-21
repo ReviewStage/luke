@@ -9,13 +9,14 @@
  * A read answers the service's answer as it came, the page's shape for the
  * procedure it named, or the word a screen tells its refusal apart by, read
  * off the status: the gate's two refusals, a detail read whose account is
- * gone, and the service not answering. Anything else, a status the admin
- * routes do not document or a body that is no JSON, is unanswered, which a
+ * gone, and the service not answering, a body that stalls past its own
+ * deadline among it. A success whose body is no JSON was answered by
+ * something in front of the service. Any other status is unanswered, which a
  * screen words as its own failure.
  */
 
 import { HTTP_METHOD } from "@luke/wire";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   accountCall,
@@ -36,6 +37,7 @@ import {
   type AdminReadParams,
   type AdminRefused,
 } from "./admin-wire.js";
+import { textWithin } from "./hosted-link.js";
 
 interface HostedAdminClientOptions {
   serviceBaseUrl: string;
@@ -70,18 +72,31 @@ function faultRefused(answer: Exclude<CallAnswer, { response: Response }>): Admi
     : { refused: ADMIN_REFUSED.SIGNED_OUT };
 }
 
-/** A body read as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<{ readonly json: unknown } | undefined> {
-  return Effect.promise(() =>
-    response.json().then(
-      (json: unknown) => ({ json }),
-      () => undefined,
-    ),
+/** A body's text as JSON, or nothing where it is not JSON at all. */
+function parsedJson(text: string): { readonly json: unknown } | undefined {
+  try {
+    return { json: JSON.parse(text) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether a star write's answer says the star stands as asked: the route answers `{ favorite }`. */
+function favoriteLanded(json: unknown, favorite: boolean): boolean {
+  return (
+    typeof json === "object" && json !== null && "favorite" in json && json.favorite === favorite
   );
 }
 
 export class HostedAdminClient {
   readonly #send: ReturnType<typeof sendInSession>;
+  /**
+   * How long an answer's body may take once its headers arrived. The call's
+   * own deadline ends with the headers, so a body that stalls after them is
+   * given one deadline of its own, as the hosted link gives one
+   * (`hosted-link.ts`'s `textWithin`), and its stream is let go after it.
+   */
+  readonly #bodyDeadline: Duration.Duration;
 
   constructor(options: HostedAdminClientOptions) {
     const call = accountCall({
@@ -90,11 +105,19 @@ export class HostedAdminClient {
       requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#send = sendInSession(call, options.sessionCredential);
+    this.#bodyDeadline = Duration.millis(call.requestTimeoutMs);
   }
 
-  /** One admin read: the service's answer as it came, or why there is none. */
+  /**
+   * One admin read: the service's answer as it came, or why there is none.
+   * Every admin route answers JSON, so a success whose body is none was
+   * answered by something in front of the service, such as a preview's
+   * deployment protection, whose redirect the transport followed to its
+   * login page; and a body that stalls is the service not answering.
+   */
   read(params: AdminReadParams): Effect.Effect<AdminReadAnswer, never, HttpClient.HttpClient> {
     const send = this.#send;
+    const deadline = this.#bodyDeadline;
     return Effect.gen(function* () {
       const answer = yield* send({
         method: HTTP_METHOD.GET,
@@ -102,23 +125,33 @@ export class HostedAdminClient {
       });
       if (!callAnswered(answer)) return faultRefused(answer);
       const { response } = answer;
-      if (response.redirected) return { refused: ADMIN_REFUSED.INTERCEPTED };
-      if (!response.ok)
+      if (!response.ok) {
         return { refused: REFUSED_BY_STATUS.get(response.status) ?? ADMIN_UNANSWERED };
-      const body = yield* jsonOf(response);
-      return body === undefined ? { refused: ADMIN_UNANSWERED } : { answer: body.json };
+      }
+      const text = yield* textWithin(response, deadline);
+      if (text === undefined) return { refused: ADMIN_REFUSED.UNAVAILABLE };
+      const body = parsedJson(text);
+      return body === undefined ? { refused: ADMIN_REFUSED.INTERCEPTED } : { answer: body.json };
     });
   }
 
-  /** The star set or taken back on one account, for the viewing admin alone; whether it landed. */
+  /**
+   * The star set or taken back on one account, for the viewing admin alone;
+   * whether it landed, which the route's own answer says (`{ favorite }`),
+   * so a login page a redirect led to, answering 200, is no star set.
+   */
   favorite(id: string, favorite: boolean): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     const send = this.#send;
-    return Effect.map(
-      send({
+    const deadline = this.#bodyDeadline;
+    return Effect.gen(function* () {
+      const answer = yield* send({
         method: favorite ? HTTP_METHOD.PUT : HTTP_METHOD.DELETE,
         path: withQuery(ADMIN_ROUTE_PATH.FAVORITE, { [ADMIN_USER_ID_PARAM]: id }),
-      }),
-      (answer) => callAnswered(answer) && answer.response.ok,
-    );
+      });
+      if (!callAnswered(answer) || !answer.response.ok) return false;
+      const text = yield* textWithin(answer.response, deadline);
+      const body = text === undefined ? undefined : parsedJson(text);
+      return body !== undefined && favoriteLanded(body.json, favorite);
+    });
   }
 }

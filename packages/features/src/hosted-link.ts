@@ -233,7 +233,7 @@ function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<
  * renewal can spend all of it before an answer that did arrive is read, so
  * the body is given one deadline more of its own rather than what is left.
  */
-function textWithin(
+export function textWithin(
   response: Response,
   deadline: Duration.Duration,
 ): Effect.Effect<string | undefined> {

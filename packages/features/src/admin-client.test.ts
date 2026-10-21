@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { fakeCloudApi, HTTP_STATUS, recordingHttpClient } from "@luke/wire/testing";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { sessionBearer } from "./account-call.js";
 import type { AccountSessionToken } from "./account-token.js";
 import { HostedAdminClient } from "./admin-client.js";
@@ -111,7 +112,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
-        [`PUT ${ADMIN_ROUTE_PATH.FAVORITE}`]: { answer: () => ({}) },
+        [`PUT ${ADMIN_ROUTE_PATH.FAVORITE}`]: { answer: () => ({ favorite: true }) },
         [`DELETE ${ADMIN_ROUTE_PATH.FAVORITE}`]: {
           answer: () => ({ error: "user-not-found" }),
           status: HTTP_STATUS.NOT_FOUND,
@@ -127,5 +128,59 @@ it.effect(
         api.requests().map((request) => request.searchParams.get(ADMIN_QUERY.USER_ID)),
         ["user-ada", "user-gone"],
       );
+    }),
+);
+
+/** A login page, as a preview's deployment protection answers a redirect the transport followed. */
+const LOGIN_PAGE = () =>
+  new Response("<!doctype html><title>Log in</title>", {
+    status: HTTP_STATUS.OK,
+    headers: { "content-type": "text/html" },
+  });
+
+it.effect(
+  "a success that is no JSON was answered by something in front of the service: a read is intercepted, and a star did not land",
+  () =>
+    Effect.gen(function* () {
+      const http = recordingHttpClient(LOGIN_PAGE);
+
+      const read = yield* Effect.provide(client().read(USERS_READ), http.layer);
+      const starred = yield* Effect.provide(client().favorite("user-ada", true), http.layer);
+
+      assert.deepEqual(read, { refused: ADMIN_REFUSED.INTERCEPTED });
+      assert.equal(starred, false);
+    }),
+);
+
+it.effect("a star the route answered for the other state did not land", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`PUT ${ADMIN_ROUTE_PATH.FAVORITE}`]: { answer: () => ({ favorite: false }) },
+    });
+
+    assert.equal(yield* Effect.provide(client().favorite("user-ada", true), api.layer), false);
+  }),
+);
+
+it.effect(
+  "a body that stalls after its headers answers the service as not answering once its own deadline passes",
+  () =>
+    Effect.gen(function* () {
+      const stalled = recordingHttpClient(
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start: (controller) => controller.enqueue(new TextEncoder().encode('{"rows":[')),
+            }),
+            { status: HTTP_STATUS.OK, headers: { "content-type": "application/json" } },
+          ),
+      );
+
+      const reading = yield* Effect.forkChild(
+        Effect.provide(client().read(USERS_READ), stalled.layer),
+      );
+      yield* TestClock.adjust("11 seconds");
+
+      assert.deepEqual(yield* Fiber.join(reading), { refused: ADMIN_REFUSED.UNAVAILABLE });
     }),
 );
