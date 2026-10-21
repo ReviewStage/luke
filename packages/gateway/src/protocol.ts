@@ -220,6 +220,8 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /** A ChatGPT sign-in for Luke's hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
   CHATGPT_SIGN_IN: "chatGpt.signIn",
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */

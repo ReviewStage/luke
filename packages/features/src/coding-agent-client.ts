@@ -62,6 +62,7 @@ import {
   type PlanTemplateRevisionsAnswerView,
   type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
+  type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -127,6 +128,7 @@ import {
   type ChatGptHostAnswer,
   chatGptCredentialsSaveRequestSchema,
   PROVIDER_KEY_QUERY,
+  providerKeyForAgentsRequestSchema,
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
 import {
@@ -547,6 +549,19 @@ export class HostedCodingAgentClient {
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
+  }
+
+  /**
+   * A connected plan's default for the account's coding agents turned on or
+   * off, answering the keys as they then stand; a request the service would
+   * refuse by shape never travels.
+   */
+  setProviderKeyForAgents(
+    params: ProviderKeyForAgentsParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(providerKeyForAgentsRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.setProviderKeyForAgents, admitted), {});
   }
 
   /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */

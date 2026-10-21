@@ -69,6 +69,7 @@ import {
   planTemplateRevisionParamsSchema,
   planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
+  providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
@@ -168,6 +169,7 @@ export type CodingAgentClient = Pick<
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
+  | "setProviderKeyForAgents"
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
@@ -432,6 +434,16 @@ function composed(
           "a removal names a provider",
         );
         const answer = yield* asked(client.removeProviderKey(removal));
+        return carried<ProviderKeysAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: (params) =>
+      Effect.gen(function* () {
+        const change = yield* read(
+          providerKeyForAgentsParamsSchema,
+          params,
+          "a default names a provider, a plan, and on or off",
+        );
+        const answer = yield* asked(client.setProviderKeyForAgents(change));
         return carried<ProviderKeysAnswerView>(answer);
       }),
     [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>

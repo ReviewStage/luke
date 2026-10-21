@@ -44,6 +44,7 @@ import {
 } from "./plan-document-template.js";
 import {
   PROVIDER_KEY_PROVIDER,
+  providerKeyForAgentsRequestSchema,
   providerKeyKindSchema,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
@@ -182,6 +183,11 @@ export const providerKeyRemoveParamsSchema = EffectSchema.Struct({
 });
 
 export type ProviderKeyRemoveParams = typeof providerKeyRemoveParamsSchema.Type;
+
+/** Turning a plan's default for the account's coding agents, as the window asks it: the provider, the plan's kind, and on or off. */
+export const providerKeyForAgentsParamsSchema = providerKeyForAgentsRequestSchema;
+
+export type ProviderKeyForAgentsParams = typeof providerKeyForAgentsParamsSchema.Type;
 
 /** The member's own GitHub token, as the window hears it read, saved, or removed: what it is, or why there is no answer. */
 export const githubTokenAnswerViewSchema = EffectSchema.Union([githubTokenAnswerSchema, failed]);

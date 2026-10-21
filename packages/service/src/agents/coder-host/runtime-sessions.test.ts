@@ -12,6 +12,7 @@ import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-ke
 import {
   listProviderKeyRows,
   saveProviderKey,
+  setProviderKeyForAgents,
   setProviderKeyStatus,
 } from "@luke/database/models/provider-key-store";
 import {
@@ -22,7 +23,7 @@ import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -167,7 +168,7 @@ function runtimes() {
 }
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 16 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 32 }, (_, index) => ({
   id: 9_100 + index,
   login: RELAY.owner,
   accountId: 91_000 + index,
@@ -805,6 +806,27 @@ const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
     return { owner, workspaceId };
   });
 
+/** The account's own Anthropic API key, saved as Settings saves one. */
+const saveAnthropicApiKey = (owner: string) =>
+  Effect.gen(function* () {
+    const ring = parseKeyRing(Redacted.make(RING));
+    assert.ok(Result.isSuccess(ring));
+    const kind = {
+      userId: owner,
+      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      kind: PROVIDER_KEY_KIND.API_KEY,
+    };
+    yield* saveProviderKey(
+      owner,
+      kind.provider,
+      kind.kind,
+      sealProviderKey(ring.success, kind, Redacted.make("sk-ant-api03-fixture")),
+      "sk-ant-api…ture",
+      null,
+      new Date(0),
+    );
+  });
+
 const startIn = (workspaceId: string, model: string, key = randomUUID()) => ({
   taskId: null,
   organizationId: workspaceId,
@@ -1029,6 +1051,104 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(refused.failure.error, HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error);
           assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, ask.idempotencyKey)));
           assert.deepEqual([heard(codex), eve.calls], [["open"], []]);
+        }),
+    );
+
+    it.effect(
+      "where the plan is offered, a payer picked at Start is honoured and else the plan's default decides: the plan runs on Claude Code, and the API key, or Luke's key where none was saved, on eve; outside the cohort a pick changes nothing",
+      () =>
+        Effect.gen(function* () {
+          const cases: readonly {
+            readonly name: string;
+            readonly cohort: boolean;
+            readonly forAgents: boolean;
+            readonly apiKey: boolean;
+            readonly picked: CodingAgentPayer | undefined;
+            readonly recorded: readonly [string, CodingAgentPayer | null];
+          }[] = [
+            {
+              name: "the override to the API key",
+              cohort: true,
+              forAgents: true,
+              apiKey: true,
+              picked: CODING_AGENT_PAYER.API_KEY,
+              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+            },
+            {
+              name: "the override with no API key saved",
+              cohort: true,
+              forAgents: true,
+              apiKey: false,
+              picked: CODING_AGENT_PAYER.LUKE,
+              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
+            },
+            {
+              name: "the default off, an API key saved",
+              cohort: true,
+              forAgents: false,
+              apiKey: true,
+              picked: undefined,
+              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+            },
+            {
+              name: "the default off, no API key",
+              cohort: true,
+              forAgents: false,
+              apiKey: false,
+              picked: undefined,
+              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
+            },
+            {
+              name: "the default off, the plan picked",
+              cohort: true,
+              forAgents: false,
+              apiKey: true,
+              picked: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+              recorded: ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
+            },
+            {
+              name: "outside the cohort, the plan picked",
+              cohort: false,
+              forAgents: true,
+              apiKey: false,
+              picked: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+              recorded: ["eve", null],
+            },
+          ];
+          for (const each of cases) {
+            const { owner, workspaceId } = yield* openStarter(true);
+            if (!each.forAgents) {
+              const turned = yield* setProviderKeyForAgents(
+                owner,
+                PROVIDER_KEY_PROVIDER.ANTHROPIC,
+                PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+                false,
+              );
+              assert.equal(turned, true, each.name);
+            }
+            if (each.apiKey) yield* saveAnthropicApiKey(owner);
+            const { eve, claudeCode, native } = runtimes();
+            const layers = Layer.mergeAll(
+              githubReaching(INSTALLATIONS).layer,
+              CATALOG,
+              environment(each.cohort ? [owner] : []),
+              native,
+            );
+            const started = yield* startCodingAgent(routedSessions(eve.sessions, owner), owner, {
+              ...startIn(workspaceId, "anthropic/claude-opus-5.5"),
+              payer: each.picked,
+            }).pipe(Effect.provide(layers));
+
+            const routing = Option.getOrThrow(
+              yield* readCodingAgentRouting(owner, started.agent.id),
+            );
+            assert.deepEqual([routing.runtime, routing.payer], each.recorded, each.name);
+            assert.deepEqual(
+              [heard(eve), heard(claudeCode)],
+              each.recorded[0] === "claude_code" ? [[], ["open"]] : [["open"], []],
+              each.name,
+            );
+          }
         }),
     );
 

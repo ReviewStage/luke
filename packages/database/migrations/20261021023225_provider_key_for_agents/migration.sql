@@ -1,0 +1,1 @@
+ALTER TABLE "account_provider_key" ADD COLUMN "for_agents" boolean DEFAULT true NOT NULL;
