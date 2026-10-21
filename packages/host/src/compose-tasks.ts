@@ -949,10 +949,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * One workspace's people followed over Realtime (`workspaces-follow.ts`),
-   * polled while Realtime fails them, each change and each refusal told as
+   * polled while Realtime fails them, each change told as
    * `WORKSPACE_PEOPLE_CHANGED`. A seal the service did not answer, or a
-   * follow that stopped, is sealed again on the board's backoff; a workspace
-   * the account is not in is told not found once, and not asked again.
+   * follow that stopped, is sealed again on the board's backoff without a
+   * word, so the window keeps the people it holds; a workspace the account
+   * is not in is told not found once, and not asked again.
    */
   function followPeople(workspaceId: string): Effect.Effect<void> {
     const told = (view: TasksWorkspaceMembersAnswer) =>
@@ -979,7 +980,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const attempt = Effect.gen(function* () {
       const sealed = yield* seal(false);
       if ("failure" in sealed) {
-        if (sealed.failure !== LIVE_SIGNED_OUT.failure) yield* told({ failure: sealed.failure });
+        if (sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND)
+          yield* told({ failure: sealed.failure });
         return yield* Effect.fail(sealed.failure);
       }
       const moves = peopleMoves(
