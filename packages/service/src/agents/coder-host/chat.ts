@@ -19,8 +19,10 @@ import {
   ensureGeneral,
   ensureMember,
   ensureTaskChannel,
+  findOrMakeDm,
   history,
   homeRoster,
+  memberOfSubject,
   openAsksOf,
   postAsk,
   postMessage,
@@ -29,7 +31,11 @@ import {
   seqsOf,
   unreadFor,
 } from "@luke/database/models/chat-store";
-import { type CodingAgent, listCodingAgents } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  listCodingAgents,
+  readCodingAgentRouting,
+} from "@luke/database/models/coding-agent-store";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
@@ -50,12 +56,14 @@ import {
   resolveAskInputSchema,
 } from "@luke/features/chat-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
+import { Data, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure, type StoreFailure } from "../../http/store-failure.js";
+import { agentStarterName, controlsAgent, writesToAgent } from "../agent-reach.js";
+import { workspaceAgent } from "../workspace-agents.js";
 import {
   ASK_REFUSAL,
   type AskLine,
@@ -81,14 +89,21 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * DM by. The chat is scoped to the task, as
  * the store holds it: a post goes to the agent's plan channel, or a
  * planless agent's to its workspace's general channel, or into the thread
- * of a message there it answers, and never to another channel or a new DM,
- * which the agent is refused with words that send it back to its channel;
+ * of a message there it answers, or, where `to` names a member by its
+ * mention link, into the DM with that member, made where it is not yet:
+ * another agent on any task of the workspace, or a person. A DM is how one
+ * agent messages another, so a DM to an agent is held to what a steer
+ * into that agent is held to before anything is written: an archived agent
+ * takes none, one on its starter's own token takes them from its starter
+ * alone (`controlsAgent`), and one its starter's own plan pays for from
+ * whom that plan admits (`writesToAgent`). A post to any other channel is
+ * refused with words that send the agent back to its own;
  * it is told to the members it addresses through the one door a person's
  * post goes through too (`chat-notify.ts`), and the call answers the
  * receipt, so the agent knows who heard it now, who reads it next, who has
  * left, and which links named no one. A read answers who is in the task's
- * chat, the channels the agent sees, its own and a DM a person opened with
- * it, with what it has not read in each, and then the messages: what it has
+ * chat, the channels the agent sees, its own and every DM it is one of,
+ * with what it has not read in each, and then the messages: what it has
  * not read, which the read marks read,
  * or a channel's, a thread's, or what came before a place, which marks
  * nothing. Every message is named by its place in the workspace's
@@ -103,9 +118,10 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * `MAX_POSTS_PER_TURN` times, counted in the session's own state as
  * `edit_plan` counts its notes (`plan-edit.ts`); a repeat of one call is
  * the one post it made. A worker gets none of these tools, because the
- * agent it works for is the member. Chat is an experiment: an agent whose
- * starter has not turned it on is offered none of these tools, and a call
- * that reaches the host anyway is refused (`host.ts`).
+ * agent it works for is the member. Chat is an experiment in the window
+ * alone: every agent has these tools and is told what is said to it,
+ * whatever its starter's Chat setting, since the chat is how agents
+ * message each other.
  */
 
 /** The tools as the model is shown them (`coder/tools/`): each one's name, words, and input. */
@@ -115,8 +131,10 @@ export const CHAT_TOOLS = {
     description:
       "Post a message in your task's chat channel, where the task's coding agents and the developer's team talk. " +
       `text is Markdown, at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters. ` +
-      "Every post goes to your task's own channel: leave to out, since you post in no other channel and open no direct " +
-      "message. replyTo is a message's number to answer it in its thread. " +
+      "Leave to out to post in your task's own channel. To message one agent or person directly, set to their mention " +
+      "link, [@Name](link) as read_chat, list_agents, or start_agent names them: that is a direct message, which reaches " +
+      "an agent on any task of your workspace and tells it at once, and which only the two of you and the developer's " +
+      "team read. You post in no other channel. replyTo is a message's number to answer it in its thread. " +
       "A member's mention link in the words, [@Name](link) as read_chat lists it, and a reply in a thread each tell the members they address, " +
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
       "An @word that is no link names no one. The call answers with the message's number, who was told now, who reads it " +
@@ -148,9 +166,9 @@ export const CHAT_TOOLS = {
     name: CHAT_TOOL.READ,
     description:
       "Read your task's chat: who is in it, each member by the mention link you name them by, the channels you see, " +
-      "your task's own and any direct message a person opened with you, with how many messages you have not read in each, " +
+      "your task's own and every direct message you are one of, with how many messages you have not read in each, " +
       "then the messages. With nothing named, the messages are the ones you have not read, oldest first, and reading them " +
-      "marks them read. channel (#name, or a person's mention link for your direct messages with them) reads its " +
+      "marks them read. channel (#name, or a member's mention link for your direct messages with them) reads its " +
       "latest messages, " +
       "thread (a message's number) reads that message's whole thread, and before (a message's number) reads back from " +
       "there; these mark nothing read. Each message names its number, where it was said, who said it, and the thread it " +
@@ -200,8 +218,16 @@ export const CHAT_TOOL_REFUSAL = {
     "Not posted: a reply goes in the thread of the message it answers, in that message's channel; name replyTo or to, not both.",
   TOO_MANY_POSTS: `Not posted: you have posted ${CHAT_BOUNDS.MAX_POSTS_PER_TURN} times this turn already. Say the rest in one message next turn.`,
   ELSEWHERE:
-    "Not posted: you talk in your task's own channel alone, never in another channel or a new direct message. Leave to " +
-    "out to post in your channel, write a member's mention link in the words to tell them, or answer a message with replyTo.",
+    "Not posted: you post in your task's own channel or a direct message, never in another channel. Leave to out to " +
+    "post in your channel, set to a member's mention link to message them directly, or answer a message with replyTo.",
+  NO_MEMBER:
+    "Not posted: no agent or person of your workspace answers to that link. list_agents and read_chat name them by theirs.",
+  TO_SELF: "Not posted: that link names you.",
+  PERSON_CHAT_OFF:
+    "Not posted: that person has not turned Chat on, so they would never read a direct message. Ask the developer " +
+    "through the inbox instead, or the agent that started you where one did.",
+  AGENT_ARCHIVED:
+    "Not posted: that agent is archived, so it takes no message until it is brought back. list_agents names the agents standing.",
   NO_CHANNEL: "Not read: you see no channel under that name. read_chat lists the channels you see.",
   NO_MESSAGE:
     "Not posted: replyTo names no message you can see, or one in a channel you cannot post in.",
@@ -212,7 +238,6 @@ export const CHAT_TOOL_REFUSAL = {
   LEFT: "Not posted: you have left the chat, as an archived agent does.",
   NO_AGENT: "Not done: this conversation is no coding agent's, or its task is no longer reachable.",
   UNAVAILABLE: "Not done: the service could not reach the chat.",
-  OFF: "Not done: Chat is not turned on for the account that started you.",
 } as const;
 
 /** A member as a read lists it: its mention link, or a plain label where none can be written, its kind, and whether it has left. */
@@ -322,6 +347,9 @@ const POST_REFUSAL = {
   [CHAT_REFUSAL.ASK_ELSEWHERE]: ASK_REFUSAL.ELSEWHERE,
 } as const satisfies Record<ChatRefusal, string>;
 
+/** A post the place or the store refused, which undoes what its transaction wrote, the DM it made among it. */
+class PostRefused extends Data.TaggedError("PostRefused")<{ readonly reason: string }> {}
+
 /** The most settled asks a call answers beside the open ones: the latest, enough to see what came of what the agent asked last. */
 const SETTLED_ASKS_SHOWN = 5;
 
@@ -427,8 +455,8 @@ function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow
 
 /**
  * The agent's seat: where it posts by default (`homeOf`), its workspace,
- * and its member. Note that every agent on its plan not yet a member, whose
- * starter turned Chat on, is minted first, in the order they were started, because an agent that has
+ * and its member. Note that every agent on its plan not yet a member is
+ * minted first, in the order they were started, because an agent that has
  * never posted or read must still answer to its link when another on its
  * plan writes to it.
  */
@@ -442,11 +470,7 @@ function seatOf(
     const { organizationId } = home.value;
     const members = new Set((yield* roster(userId, organizationId)).map((row) => row.agentId));
     const onTask = taskId === null ? [] : yield* listCodingAgents(userId, taskId);
-    // An agent whose starter has not turned Chat on is seated only once that starter does.
-    const unminted = yield* Effect.filter(
-      onTask.filter((each) => !members.has(each.id)),
-      (each) => chatEnabledFor(each.userId),
-    );
+    const unminted = onTask.filter((each) => !members.has(each.id));
     yield* Effect.forEach(unminted, (each) =>
       ensureMember(userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: each.id }),
     );
@@ -504,20 +528,112 @@ function seenBy(channel: ChatChannelRow, seat: ChatSeat): boolean {
 }
 
 /**
- * Where a post goes: the thread of the message it replies to, or the
- * agent's own channel, which a `to` may name; refused where `to` names any
- * other place, since the agent talks in its task's channel alone.
+ * The member an agent's DM goes to, minted where it is not one yet, or why
+ * it takes none: another agent of the workspace on any task, held to what
+ * a steer into it is held to, or a person of the workspace.
+ */
+function dmMemberOf(
+  agent: ChatReader,
+  seat: ChatSeat,
+  subject: ChatMemberSubject,
+): Effect.Effect<Result.Result<ChatMemberRow, string>, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const { userId } = agent;
+    const { organizationId } = seat;
+    if (subject.kind !== MEMBER_KIND.AGENT) {
+      // A person reads a DM in the window's Chat alone, so one who has not turned it on would never see it.
+      if (!(yield* chatEnabledFor(subject.userId)))
+        return Result.fail(CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF);
+      const person = yield* memberOfSubject(userId, organizationId, subject);
+      return Option.match(person, {
+        onNone: () => Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER),
+        onSome: (member) => Result.succeed(member),
+      });
+    }
+    const found = yield* workspaceAgent(userId, organizationId, subject.agentId);
+    if (Option.isNone(found)) return Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER);
+    const target = found.value;
+    if (target.archivedAt !== null) return Result.fail(CHAT_TOOL_REFUSAL.AGENT_ARCHIVED);
+    if (!controlsAgent(userId, target)) {
+      return Result.fail(
+        `Not posted: only ${yield* agentStarterName(target)} can message that agent.`,
+      );
+    }
+    const routing = yield* readCodingAgentRouting(userId, target.id);
+    if (!writesToAgent(userId, target, Option.isSome(routing) ? routing.value.payer : null)) {
+      return Result.fail(
+        `Not posted: ${yield* agentStarterName(target)}'s own plan pays for that agent, so only they and their agents can message it.`,
+      );
+    }
+    // An agent never seated in the chat, such as one on another task, joins it as it is messaged.
+    const member = yield* ensureMember(userId, organizationId, subject);
+    return Option.match(member, {
+      onNone: () => Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER),
+      onSome: (row) => Result.succeed(row),
+    });
+  });
+}
+
+/** The DM between the agent and the member a mention link names, made where it is not yet, and that member; or why there is none. */
+function dmWith(
+  agent: ChatReader,
+  seat: ChatSeat,
+  target: string,
+): Effect.Effect<
+  Result.Result<{ readonly channel: ChatChannelRow; readonly with: ChatMemberRow }, string>,
+  StoreFailure,
+  DatabaseServices
+> {
+  return Effect.gen(function* () {
+    const mention = chatTargetMember(target);
+    if (mention === undefined) return Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER);
+    const subject = subjectOf(mention);
+    if (subject.kind === MEMBER_KIND.AGENT && standsFor(seat.self, subject)) {
+      return Result.fail(CHAT_TOOL_REFUSAL.TO_SELF);
+    }
+    const named = yield* dmMemberOf(agent, seat, subject);
+    if (Result.isFailure(named)) return Result.fail(named.failure);
+    if (named.success.id === seat.self.id) return Result.fail(CHAT_TOOL_REFUSAL.TO_SELF);
+    const dm = yield* findOrMakeDm(
+      agent.userId,
+      seat.organizationId,
+      seat.self.id,
+      named.success.id,
+    );
+    return Option.match(dm, {
+      onNone: () => Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER),
+      onSome: (channel) => Result.succeed({ channel, with: named.success }),
+    });
+  });
+}
+
+/**
+ * Where a post goes: the thread of the message it replies to, the agent's
+ * own channel, which a `to` may name, or the DM with the member a `to`
+ * names by its mention link; refused where `to` names any other channel,
+ * since the agent posts in its task's channel and its DMs alone.
  */
 function placeOf(
+  agent: ChatReader,
   seat: ChatSeat,
   post: typeof postChatAskInputSchema.Type,
-): Result.Result<PostPlace, string> {
+): Effect.Effect<Result.Result<PostPlace, string>, StoreFailure, DatabaseServices> {
   if (post.replyTo !== undefined) {
-    return Result.succeed({ to: { replyTo: post.replyTo }, named: { thread: post.replyTo } });
+    return Effect.succeed(
+      Result.succeed({ to: { replyTo: post.replyTo }, named: { thread: post.replyTo } }),
+    );
   }
   const name = `${CHAT_TARGET_SIGIL.CHANNEL}${seat.home.name ?? ""}`;
-  if (post.to !== undefined && post.to !== name) return Result.fail(CHAT_TOOL_REFUSAL.ELSEWHERE);
-  return Result.succeed({ to: { channelId: seat.home.id }, named: { in: name } });
+  const to = post.to;
+  if (to === undefined || to === name) {
+    return Effect.succeed(Result.succeed({ to: { channelId: seat.home.id }, named: { in: name } }));
+  }
+  if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
+    return Effect.succeed(Result.fail(CHAT_TOOL_REFUSAL.ELSEWHERE));
+  }
+  return Effect.map(dmWith(agent, seat, to), (found) =>
+    Result.map(found, (dm) => ({ to: { channelId: dm.channel.id }, named: { with: dm.with, to } })),
+  );
 }
 
 /**
@@ -669,17 +785,34 @@ export function postAsAgent(
   return Effect.gen(function* () {
     const seat = yield* seatOf(agent);
     if (Option.isNone(seat)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
-    const place = placeOf(seat.value, post);
-    if (Result.isFailure(place)) return chatRejected(place.failure);
+    // The pictures are read before the place, since a DM the place makes must not stand where the post is refused.
     const pictures = yield* postPictures(post, call.clientKey, call.sandbox);
     if (Result.isFailure(pictures)) return chatRejected(pictures.failure);
-    const posted = yield* writePost(agent, seat.value, post, {
-      to: place.success.to,
-      clientKey: call.clientKey,
-      pictures: pictures.success,
-    });
-    if (Result.isFailure(posted)) return chatRejected(POST_REFUSAL[posted.failure]);
-    const line = yield* postedLine(agent, seat.value, posted.success, place.success.named);
+    // A DM made for the post, and the member it seats, stand only with the post: one the store refuses undoes them.
+    const written = yield* inTransaction(
+      Effect.gen(function* () {
+        const place = yield* placeOf(agent, seat.value, post);
+        if (Result.isFailure(place)) return yield* new PostRefused({ reason: place.failure });
+        const posted = yield* writePost(agent, seat.value, post, {
+          to: place.success.to,
+          clientKey: call.clientKey,
+          pictures: pictures.success,
+        });
+        if (Result.isFailure(posted)) {
+          return yield* new PostRefused({ reason: POST_REFUSAL[posted.failure] });
+        }
+        return Result.succeed({ posted: posted.success, named: place.success.named });
+      }),
+    ).pipe(
+      Effect.catchTag("PostRefused", (refused) => Effect.succeed(Result.fail(refused.reason))),
+    );
+    if (Result.isFailure(written)) return chatRejected(written.failure);
+    const line = yield* postedLine(
+      agent,
+      seat.value,
+      written.success.posted,
+      written.success.named,
+    );
     const asks = post.ask === undefined ? undefined : yield* asksOf(agent, seat.value);
     return {
       status: ACTION_RESULT_STATUS.ACCEPTED,

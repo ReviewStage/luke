@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   attachMessageImages,
   CHAT_REFUSAL,
@@ -361,9 +360,6 @@ function tellAgent(
       isWorkspaceMember(agent.value.userId, organizationId),
     );
     if (!starterStays) return NOTICE_OUTCOME.LEFT;
-    // An agent whose starter has not turned Chat on has no chat tools to answer with, so it is steered nothing.
-    const chatOn = yield* hostedStoreOrUnavailable(chatEnabledFor(agent.value.userId));
-    if (!chatOn) return NOTICE_OUTCOME.HELD;
     // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
     const eve = telling.eveFor(agent.value.userId);
     if (eve === undefined) return NOTICE_OUTCOME.HELD;

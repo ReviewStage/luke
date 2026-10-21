@@ -20,7 +20,6 @@ import {
   type BoardTool,
   type ChatCall,
   type CoderHost,
-  type CoderSessionPromptRecord,
   type CoderTurnMessage,
   coderHost,
   type InboxCall,
@@ -255,25 +254,6 @@ export function sessionSeed(auth: SessionAuth, sessionId: string): Promise<strin
       const admitted = yield* host.admitStarting(auth, sessionId);
       if (Result.isFailure(admitted)) return undefined;
       return yield* host.seed(admitted.success);
-    }),
-  );
-}
-
-/**
- * Whether the session is offered the chat's tools for the turn it opens,
- * for those tools' own files: only where the account that started the agent
- * turned Chat on; never for a session the host does not admit.
- */
-export function offeredChatTools(
-  auth: SessionAuth,
-  sessionId: string,
-  prompt: CoderSessionPromptRecord,
-): Promise<boolean> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return false;
-      return yield* host.chatOffered(admitted.success, prompt);
     }),
   );
 }

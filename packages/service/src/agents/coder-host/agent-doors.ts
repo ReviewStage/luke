@@ -12,7 +12,6 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   hasRepository,
   readCodingAgentHeaderOfConversation,
@@ -367,9 +366,6 @@ export function runAgentChat(
   return Effect.gen(function* () {
     const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
-    if (!(yield* chatEnabledFor(admitted.target.userId))) {
-      return chatRejected(CHAT_TOOL_REFUSAL.OFF);
-    }
     const { id: agentId, taskId, repository } = found.success;
     const self = { kind: MEMBER_KIND.AGENT, agentId };
     const reader = { userId: admitted.target.userId, taskId, self };
