@@ -34,9 +34,11 @@ import { creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import {
+  COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
   DEFAULT_LIST_DISPLAY,
   filteredFields,
+  keptTasksDisplay,
   NO_TASKS_FILTER,
   TASK_PROPERTY,
   TASK_PROPERTY_ORDER,
@@ -81,6 +83,7 @@ import {
   creatorWords,
   NO_CREATOR,
   NO_REPOSITORY,
+  OlderCompleted,
   TasksFilterButton,
   TasksFilterChips,
   type TasksViewFrame,
@@ -144,12 +147,13 @@ const storedFilters = Schema.fromJsonString(
   ),
 );
 
-/** A display as kept: each choice optional, so one kept by an earlier build reads over the view's own for whatever it lacks. */
+/** A display as kept (`KeptTasksDisplay`): each choice optional, the Done and Canceled switches of an earlier build among them. */
 const storedDisplay = Schema.fromJsonString(
   Schema.Struct({
     grouping: Schema.optionalKey(Schema.Literals(Object.values(TASKS_GROUPING))),
     order: Schema.optionalKey(Schema.Literals(Object.values(TASKS_ORDER))),
     emptyGroups: Schema.optionalKey(Schema.Boolean),
+    completed: Schema.optionalKey(Schema.Literals(Object.values(COMPLETED_WINDOW))),
     done: Schema.optionalKey(Schema.Boolean),
     canceled: Schema.optionalKey(Schema.Boolean),
     pinnedFirst: Schema.optionalKey(Schema.Boolean),
@@ -207,7 +211,7 @@ function ViewSwitch({
 
 /** A view's display as kept, over its own initial one; its own where none was kept. */
 function readDisplay(view: TasksView): TasksDisplay {
-  return { ...INITIAL_DISPLAY[view], ...readKept(DISPLAY_KEY[view], storedDisplay, {}) };
+  return keptTasksDisplay(readKept(DISPLAY_KEY[view], storedDisplay, {}), INITIAL_DISPLAY[view]);
 }
 
 /** The Tasks page, in the plan's place: the List or the Board, as the reader last chose, under its Filter and View options. */
@@ -276,7 +280,7 @@ export function TasksPage({
     filteredFields(filter).length === 0 ? null : (
       <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />
     );
-  const frame = { toolbar, chips, filter, display };
+  const frame = { toolbar, chips, filter, display, onDisplay };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
     <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
@@ -470,6 +474,7 @@ function TasksList({
     sections: listSections(tasks),
     readerId: tasks.me,
     creatorName,
+    now,
   });
   const creatorMark = (creatorId: string) => {
     const named = listed.find((task) => (task.createdBy?.userId ?? task.ownerId) === creatorId);
@@ -501,9 +506,11 @@ function TasksList({
           </h2>
         )}
         {group.tasks.length === 0 ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            No tasks
-          </Text>
+          group.older === undefined ? (
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              No tasks
+            </Text>
+          ) : null
         ) : (
           <List label={name}>
             {group.tasks.map((task) => (
@@ -519,6 +526,10 @@ function TasksList({
             ))}
           </List>
         )}
+        <OlderCompleted
+          older={group.older}
+          onShow={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
+        />
       </section>
     );
   };

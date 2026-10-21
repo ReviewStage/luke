@@ -416,6 +416,12 @@ const taskSummaryFields = {
   createdBy: EffectSchema.optionalKey(memberRefSchema),
   /** Where the task stands; absent from a service before tasks had one. */
   status: EffectSchema.optionalKey(taskStatusSchema),
+  /**
+   * Epoch milliseconds the task's status last moved to Done or Canceled;
+   * absent while it stands in any other, and from a service before this was
+   * kept, where a settled task counts as finished at `updatedAt`.
+   */
+  completedAt: EffectSchema.optionalKey(countedNumber),
   /** How much the task matters; absent from a service before tasks had one. */
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   /** The task's number in its workspace, which its key is drawn from with the workspace's prefix; absent from a service before tasks had one. */

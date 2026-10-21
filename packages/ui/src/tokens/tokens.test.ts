@@ -314,3 +314,24 @@ test("the desktop's light accent ink reads at AA on every light ground, a curren
     "--luke-color-accent-text",
   );
 });
+
+/** The parts of a list row that are marks, whose meaning its words carry, so a muted row may fade them. */
+const LIST_ROW_MARKS = new Set([".luke-list-row-leading", ".luke-list-row-attachments"]);
+
+test("a muted list row fades only its marks, never its words, which must still read at AA", () => {
+  const source = readFileSync(
+    new URL("../components/list-row/list-row.css", import.meta.url),
+    "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const [, selectors = "", body = ""] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/(?:^|[\s;])opacity\s*:/.test(body)) continue;
+    for (const selector of selectors.split(",").map((part) => part.trim())) {
+      if (!selector.includes('[data-muted="true"]')) continue;
+      const part = selector.split(/[\s>+~]+/).at(-1) ?? "";
+      assert.ok(
+        LIST_ROW_MARKS.has(part),
+        `list-row.css fades a muted row's ${part}, words included`,
+      );
+    }
+  }
+});

@@ -47,6 +47,7 @@ import {
 import { creatorActor } from "@luke/ui/actor-model";
 import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import {
+  COMPLETED_WINDOW,
   TASK_PROPERTY,
   TASKS_GROUP,
   type TaskProperty,
@@ -63,6 +64,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { issueTagWords } from "../tasks/task-issue-links-model.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -70,7 +72,7 @@ import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import { useTaskMenu } from "./task-actions.js";
-import type { TasksViewFrame } from "./tasks-page-options.js";
+import { OlderCompleted, type TasksViewFrame } from "./tasks-page-options.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -432,6 +434,7 @@ function TaskBoardColumnView({
   properties,
   onOpen,
   onStanding,
+  onShowOlder,
 }: {
   tasks: TasksControl;
   column: TasksGroup;
@@ -444,6 +447,8 @@ function TaskBoardColumnView({
   properties: readonly TaskProperty[];
   onOpen: (task: TaskSummary) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
+  /** Shows every settled task, as the column's "+ N older" line asks. */
+  onShowOlder: () => void;
 }): React.JSX.Element {
   // Note that a card is carried by its press alone, so a press on one of its chips, its ⋯, or a menu they drop stays that control's.
   const drag = useRowDrag(undefined, {
@@ -479,9 +484,11 @@ function TaskBoardColumnView({
         )}
       </h2>
       {column.tasks.length === 0 ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {NO_TASKS}
-        </Text>
+        column.older === undefined ? (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {NO_TASKS}
+          </Text>
+        ) : null
       ) : (
         <div className="tasks-board-column-scroll">
           <ScrollArea
@@ -505,6 +512,7 @@ function TaskBoardColumnView({
           </ScrollArea>
         </div>
       )}
+      <OlderCompleted older={column.older} onShow={onShowOlder} />
     </section>
   );
 }
@@ -529,7 +537,8 @@ export function TasksBoard({
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const { filter, display } = frame;
-  const columns = tasksBoardColumns(listed, { filter, display });
+  const now = useMinute();
+  const columns = tasksBoardColumns(listed, { filter, display, now });
   const narrow = room === SHELL_ROOM.NARROW;
   const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
@@ -609,6 +618,7 @@ export function TasksBoard({
               properties={display.properties}
               onOpen={(task) => tasks.onSelect(task.id)}
               onStanding={setStanding}
+              onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
             />
           ),
         )}

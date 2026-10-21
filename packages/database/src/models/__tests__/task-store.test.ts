@@ -920,10 +920,15 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         assert.deepEqual(seen.toSorted(), [merged, reader].toSorted());
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.IN_PROGRESS);
 
-        // Everyone idle: done, and done once.
+        // Everyone idle: done, and done once, stamped when it finished; the work taken up again clears the stamp.
+        yield* TestClock.adjust("1 minute");
+        const finishedAt = yield* Clock.currentTimeMillis;
         assert.equal(yield* finishTaskWork(charles, taskId, everyoneIdle), true);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.DONE);
+        assert.equal((yield* listedTask(dean, taskId)).completedAt, finishedAt);
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
+        assert.equal(yield* beginTaskWork(dean, taskId), true);
+        assert.equal((yield* listedTask(dean, taskId)).completedAt, undefined);
       }),
   );
 
@@ -977,6 +982,79 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.CANCELED);
       }),
+  );
+});
+
+/** When the task was finished, as the account reads it in the list and opened alike, which must agree. */
+const completedReadBy = (userId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const listed = (yield* listedTask(userId, taskId)).completedAt;
+    const opened = yield* readTask(userId, taskId);
+    assert.equal(Option.getOrUndefined(opened)?.task.completedAt, listed);
+    return listed;
+  });
+
+it.layer(getTestDB())("when a task was finished", (it) => {
+  it.effect("a task started settled is finished as it starts, and one started open is not", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      yield* TestClock.adjust("1 minute");
+      const startedAt = yield* Clock.currentTimeMillis;
+
+      const done = yield* createTask(dean, { organizationId, status: TASK_STATUS.DONE });
+      const todo = yield* createTask(dean, { organizationId });
+
+      assert.equal(done.completedAt, startedAt);
+      assert.equal(yield* completedReadBy(dean, done.id), startedAt);
+      assert.equal(yield* completedReadBy(dean, todo.id), undefined);
+    }),
+  );
+
+  it.effect(
+    "is stamped as the status moves to Done or Canceled, kept while it stays, and cleared as it moves back",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        yield* TestClock.adjust("1 minute");
+        const doneAt = yield* Clock.currentTimeMillis;
+
+        yield* updateTask(charles, taskId, { status: TASK_STATUS.DONE });
+        assert.equal(yield* completedReadBy(dean, taskId), doneAt);
+
+        yield* TestClock.adjust("1 hour");
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.DONE, priority: TASK_PRIORITY.LOW });
+        yield* updateTask(dean, taskId, { name: "Invitations, shipped" });
+        assert.equal(yield* completedReadBy(dean, taskId), doneAt, "asked again, it stands");
+
+        yield* TestClock.adjust("1 hour");
+        const canceledAt = yield* Clock.currentTimeMillis;
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.CANCELED });
+        assert.equal(yield* completedReadBy(dean, taskId), canceledAt);
+
+        const reopened = yield* updateTask(dean, taskId, { status: TASK_STATUS.TODO });
+        assert.equal(Option.getOrUndefined(reopened)?.completedAt, undefined);
+        assert.equal(yield* completedReadBy(dean, taskId), undefined);
+      }),
+  );
+
+  it.effect("work beginning clears a stamp an earlier build left standing on an open task", () =>
+    Effect.gen(function* () {
+      const db = yield* Database;
+      const dean = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      const todo = yield* createTask(dean, { organizationId });
+      // An earlier build moved the task back to Todo without clearing the stamp.
+      yield* db
+        .update(task)
+        .set({ completedAt: new Date(0) })
+        .where(eq(task.id, todo.id));
+      assert.equal(yield* completedReadBy(dean, todo.id), 0);
+
+      assert.equal(yield* beginTaskWork(dean, todo.id), true);
+
+      assert.equal(yield* completedReadBy(dean, todo.id), undefined);
+    }),
   );
 });
 

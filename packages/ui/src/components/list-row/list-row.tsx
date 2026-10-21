@@ -77,8 +77,10 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * shown beside the list, as an Inbox's item is, or the one item chosen in
  * its set. An unread row's title stands in the heavier weight, and its
  * description in the body's ink, until it is read, as a mail app's unread
- * thread does. A row whose thing is done with stands back (`muted`), its
- * words and marks faded, its fill as the row's own, as a done to-do grays. A row that opens something may hang the app's hint from its press
+ * thread does. A row whose thing is done with stands back (`muted`), as a
+ * done to-do grays: its words in the palette's quieter inks, still legible,
+ * and only its marks faded, its fill as the row's own. A row that opens
+ * something may hang the app's hint from its press
  * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
@@ -320,7 +322,7 @@ export function ListRow({
   current?: ListRowCurrent | undefined;
   /** Whether what the row stands for has not been seen, its title in the heavier weight. */
   unread?: boolean | undefined;
-  /** Whether what the row stands for is done with, so the row stands back, its press's words and marks faded together, its fill and acts as they are. */
+  /** Whether what the row stands for is done with, so the row stands back, its words in quieter inks and its marks faded, its fill and acts as they are. */
   muted?: boolean | undefined;
   /** The app's hint hung from the row's press and the words it raises; a row that opens nothing raises none. */
   hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
