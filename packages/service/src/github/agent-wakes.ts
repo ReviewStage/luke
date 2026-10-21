@@ -7,6 +7,7 @@ import {
   listCodingAgentsOnBranches,
   listCodingAgentsOnPullRequest,
   type OwnedCodingAgent,
+  readCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -22,7 +23,12 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import type { GitHubApp } from "./github-app.js";
-import { type GitHubReviewLineComment, reviewLineComments } from "./pull-requests.js";
+import {
+  type GitHubReviewLineComment,
+  type HeadChecks,
+  headChecksOf,
+  reviewLineComments,
+} from "./pull-requests.js";
 
 /**
  * agent-wakes.ts -- a review, a comment, or a failed check on a coding agent's pull request, told to the agent as a message from GitHub.
@@ -63,7 +69,27 @@ import { type GitHubReviewLineComment, reviewLineComments } from "./pull-request
  * author. That is what keeps an agent's own replies from waking it, while
  * the code-review agent's findings on another agent's pull request do. A
  * failed check reaches only an agent idle since before it failed, since an
- * agent at work watches its own checks. An archived agent is told nothing.
+ * agent at work waits on its own checks. An archived agent is told nothing.
+ *
+ * That wait is the fourth thing told: every check on the pull request's
+ * head finished, told only to an agent at work on it, so the message ends
+ * the `sleep` it waits in after a push (`coder-host/sleep.ts`) as any
+ * message steered into its turn does, rather than the agent holding its
+ * sandbox up to watch CI. A check suite completed (all of its check runs
+ * completed, with a conclusion), a check run completed, or a commit status
+ * set to anything but pending on a `luke/` branch says the head's checks
+ * moved (https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_suite,
+ * #check_run and #status); no one delivery says they all finished, since a
+ * commit has a suite for each App and statuses beside them, so the head's
+ * check runs and commit statuses are read from GitHub, the set the pull
+ * request's checks count (`pull-requests.ts`'s `headChecksOf`), on the
+ * token of the first agent told, and the agents are told only where none is
+ * still to finish and there is at least one. Only an agent whose row keeps
+ * that commit as its pull request's head is told, so checks finishing on a
+ * commit it has pushed past end no wait. It is told under a key of the
+ * repository, the commit, and the instant its newest check finished, rather
+ * than the delivery's id: two suites that finish together read the same
+ * checks and tell once, and a check run again tells again.
  */
 
 /** What a delivery tells an agent of. */
@@ -71,6 +97,8 @@ export const AGENT_WAKE = {
   REVIEW: "review",
   COMMENT: "comment",
   CHECK_FAILED: "check-failed",
+  /** Every check on the pull request's head finished, told to an agent at work, which waits on it. */
+  CHECKS_COMPLETED: "checks-completed",
 } as const;
 
 type AgentWakeKind = (typeof AGENT_WAKE)[keyof typeof AGENT_WAKE];
@@ -94,6 +122,8 @@ export interface AgentWake {
   readonly words?: string | undefined;
   /** GitHub's id of a review, by which its inline comments are read. */
   readonly reviewId?: number | undefined;
+  /** The commit whose checks finished, which the agent's pull request's head must still be. */
+  readonly sha?: string | undefined;
 }
 
 /** The events read, by GitHub's own names, and the one action of each that tells an agent anything. */
@@ -101,6 +131,7 @@ const WAKE_EVENT = {
   PULL_REQUEST_REVIEW: "pull_request_review",
   ISSUE_COMMENT: "issue_comment",
   CHECK_SUITE: "check_suite",
+  CHECK_RUN: "check_run",
   /** A commit status, which a pull request's checks count beside the check runs. */
   STATUS: "status",
 } as const;
@@ -116,6 +147,12 @@ const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set(["failure", "timed_out"]
 
 /** The states of a commit status that read as failed. */
 const FAILED_STATES: ReadonlySet<string> = new Set(["failure", "error"]);
+
+/** The one state of a commit status still to finish; the others are its outcome. */
+const PENDING_STATE = "pending";
+
+/** How many characters of a commit's id the message names it by, as GitHub's own pages shorten one. */
+const SHORT_SHA_CHARS = 7;
 
 /** The branch prefix a coding agent works on (`coder-host/bounds.ts`), the only branches a failed check is told on. */
 const AGENT_BRANCH_PREFIX = "luke/";
@@ -193,6 +230,20 @@ const CheckSuiteDeliverySchema = Schema.Struct({
     conclusion: Schema.NullOr(Schema.String),
     updated_at: Schema.String,
     app: Schema.optionalKey(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
+    pull_requests: Schema.Array(Schema.Struct({ number: Schema.Int })),
+  }),
+});
+
+const CheckRunDeliverySchema = Schema.Struct({
+  action: Schema.String,
+  repository: Schema.Struct({ full_name: Schema.String, html_url: Schema.String }),
+  check_run: Schema.Struct({
+    head_sha: Schema.String,
+    completed_at: Schema.NullOr(Schema.String),
+    app: Schema.optionalKey(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
+    check_suite: Schema.optionalKey(
+      Schema.Struct({ head_branch: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
+    ),
     pull_requests: Schema.Array(Schema.Struct({ number: Schema.Int })),
   }),
 });
@@ -308,6 +359,92 @@ function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | 
   };
 }
 
+/** The agent branches of those named, the null a detached head or a fork's branch leaves dropped. */
+function agentBranchesOf(named: readonly (string | null | undefined)[]): readonly string[] {
+  return named.filter(
+    (branch): branch is string =>
+      typeof branch === "string" && branch.startsWith(AGENT_BRANCH_PREFIX),
+  );
+}
+
+/** The wake that the checks on `sha` may all have finished, on the agent branches given; nothing where none is an agent's. */
+function checksMovedWake(
+  repository: { readonly full_name: string; readonly html_url: string },
+  branches: readonly string[],
+  sha: string,
+  pullRequest: number | undefined,
+  by: string,
+  at: number,
+): AgentWake | undefined {
+  if (branches.length === 0) return undefined;
+  return {
+    kind: AGENT_WAKE.CHECKS_COMPLETED,
+    repository: repository.full_name,
+    branches,
+    pullRequest,
+    url: `${repository.html_url}/commit/${sha}/checks`,
+    by,
+    at,
+    sha,
+  };
+}
+
+/**
+ * The wake that every check on a commit of an agent's branch may have
+ * finished: a check suite or a check run completed, whatever its
+ * conclusion, or a commit status set to its outcome. Whether they all have
+ * is read from GitHub as the agents are told (`wakeAgents`).
+ */
+export function checksCompletedWakeOf(
+  event: string,
+  payload: UnparsedWireValue,
+  now: number,
+): AgentWake | undefined {
+  switch (event) {
+    case WAKE_EVENT.CHECK_SUITE: {
+      const read = readDelivery(CheckSuiteDeliverySchema, payload);
+      if (Result.isFailure(read) || read.success.action !== WAKE_ACTION.COMPLETED) return undefined;
+      const { repository, check_suite: suite } = read.success;
+      return checksMovedWake(
+        repository,
+        agentBranchesOf([suite.head_branch]),
+        suite.head_sha,
+        suite.pull_requests[0]?.number,
+        `${suite.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`,
+        instantOf(suite.updated_at, now),
+      );
+    }
+    case WAKE_EVENT.CHECK_RUN: {
+      const read = readDelivery(CheckRunDeliverySchema, payload);
+      if (Result.isFailure(read) || read.success.action !== WAKE_ACTION.COMPLETED) return undefined;
+      const { repository, check_run: run } = read.success;
+      return checksMovedWake(
+        repository,
+        agentBranchesOf([run.check_suite?.head_branch]),
+        run.head_sha,
+        run.pull_requests[0]?.number,
+        `${run.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`,
+        instantOf(run.completed_at, now),
+      );
+    }
+    case WAKE_EVENT.STATUS: {
+      const read = readDelivery(StatusDeliverySchema, payload);
+      if (Result.isFailure(read) || read.success.state === PENDING_STATE) return undefined;
+      const { repository, sender, sha, branches } = read.success;
+      return checksMovedWake(
+        repository,
+        agentBranchesOf(branches.map((each) => each.name)),
+        sha,
+        undefined,
+        sender.login,
+        instantOf(read.success.updated_at, now),
+      );
+    }
+    default:
+      return undefined;
+  }
+}
+
 /** What a delivery tells the agents on its pull request, where it is one of those read; nothing otherwise. */
 export function agentWakeOf(
   event: string,
@@ -365,12 +502,14 @@ function withWords(head: string, tag: string, said: string, close: string): stri
  * The message the agent on `branch` is told, which is also the line its
  * transcript draws as GitHub's: a review with what it says and its inline
  * comments, where they were read (`inline` none where they could not be),
- * a comment with what it says, and a failed check by its address.
+ * a comment with what it says, a failed check by its address, and every
+ * check finished by its commit, with whether any `failing`.
  */
 function agentWakeText(
   wake: AgentWake,
   branch: string | null,
   inline: Option.Option<readonly GitHubReviewLineComment[]>,
+  failing: boolean,
 ): string {
   switch (wake.kind) {
     case AGENT_WAKE.REVIEW: {
@@ -396,6 +535,13 @@ function agentWakeText(
       );
     case AGENT_WAKE.CHECK_FAILED:
       return `A check failed on your branch \`${branch ?? ""}\`: ${wake.url}\n\nRead why with \`gh\`, fix the cause, and push, as you watch your own checks.`;
+    case AGENT_WAKE.CHECKS_COMPLETED: {
+      const sha = (wake.sha ?? "").slice(0, SHORT_SHA_CHARS);
+      const outcome = failing
+        ? "At least one failed: read why with `gh`, fix the cause, and push."
+        : "None failed.";
+      return `Every check finished on \`${sha}\`, the head of ${pullRequestWords(wake)}\n\n${outcome}`;
+    }
   }
 }
 
@@ -448,7 +594,9 @@ function inlineCommentsOf(
  * comment by Luke's App, only where the agent is not at work and its newest
  * turn ended before GitHub says it was made: the agent did not make that
  * comment, and was not watching when that check failed, so a delivery that
- * arrives after the turn that watched it does not start another.
+ * arrives after the turn that watched it does not start another. Every
+ * check finished reaches only an agent at work, which waits on it; one idle
+ * needs no turn for checks that passed, and is told of a failure as above.
  */
 export function agentIsWoken(
   wake: AgentWake,
@@ -458,11 +606,64 @@ export function agentIsWoken(
   now: number,
 ): boolean {
   if (agent.archivedAt !== null) return false;
+  const atWork = AT_WORK.has(codingAgentStatusOf(turn, { createdAt: agent.createdAt, now }));
+  if (wake.kind === AGENT_WAKE.CHECKS_COMPLETED) return atWork;
   const byLuke = lukeLogin !== undefined && wake.by.toLowerCase() === lukeLogin.toLowerCase();
   if (wake.kind !== AGENT_WAKE.CHECK_FAILED && !byLuke) return true;
-  const atWork = AT_WORK.has(codingAgentStatusOf(turn, { createdAt: agent.createdAt, now }));
   const settledAt = turn?.settledAt?.getTime();
   return !atWork && (settledAt === undefined || settledAt < wake.at);
+}
+
+/** The services a wake's reads and sends run on. */
+type WakeServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
+
+/**
+ * The checks on the wake's commit, read on the pull-request token of the
+ * agent given, where every one of them finished and there is at least one;
+ * none for any other wake, while one is still to finish, or where the read
+ * fails, which is logged by its kind alone.
+ */
+function finishedChecksOf(
+  wake: AgentWake,
+  told: OwnedCodingAgent | undefined,
+): Effect.Effect<Option.Option<HeadChecks>, never, WakeServices> {
+  const { sha } = wake;
+  if (
+    wake.kind !== AGENT_WAKE.CHECKS_COMPLETED ||
+    told === undefined ||
+    !hasRepository(told.agent) ||
+    sha === undefined
+  ) {
+    return Effect.succeed(Option.none());
+  }
+  const agent = told.agent;
+  return agentPullRequestReach(told.userId, agent).pipe(
+    Effect.flatMap(({ token }) => headChecksOf(token, agent.repository, sha)),
+    Effect.map((checks) =>
+      checks.any && !checks.pending ? Option.some(checks) : Option.none<HeadChecks>(),
+    ),
+    // The kind alone: nothing of the checks or the token rides the line.
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning("github webhook: a head's checks could not be read", {
+          failure: failure._tag,
+        }),
+        Option.none(),
+      ),
+    ),
+  );
+}
+
+/** Whether the agent's row keeps the wake's commit as its pull request's head, as the read of its pull request this delivery made left it. */
+const standsOnHead = (wake: AgentWake, { userId, agent }: OwnedCodingAgent) =>
+  Effect.map(
+    readCodingAgentPublished(userId, agent.id),
+    (published) => published?.headSha !== undefined && published.headSha === wake.sha,
+  );
+
+/** The key every check finished is told under: the repository, the commit, and the instant its newest check finished, so a delivery read again tells once and a check run again tells again. */
+function checksCompletedKey(wake: AgentWake, checks: HeadChecks): string {
+  return JSON.stringify([AGENT_WAKE.CHECKS_COMPLETED, wake.repository, wake.sha, checks.settledAt]);
 }
 
 /** The agents a delivery is about: those on its branches, or, for a comment, those whose pull request it is. */
@@ -477,32 +678,45 @@ function agentsOf(wake: AgentWake) {
 /**
  * Tells every agent the delivery is about that `agentIsWoken` admits, each
  * through eve as the deployment acting for its owner, under the delivery's
- * id; answers how many were told. A send refused is logged by its kind
- * alone, and the delivery is still answered, as the webhook answers any.
+ * id; answers how many were told. Every check finished is told only where
+ * they all did, to the agents standing on that head, under its own key
+ * (`checksCompletedKey`). A send refused is logged by its kind alone, and
+ * the delivery is still answered, as the webhook answers any.
  */
 export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(function* (
   eveFor: EveForAccount,
   wake: AgentWake,
   deliveryId: string,
   lukeLogin: string | undefined,
-): Effect.fn.Return<number, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+): Effect.fn.Return<number, never, WakeServices> {
   // A delivery with no id has no key to be told once under, so it tells nobody.
   if (deliveryId === "") return 0;
   const now = yield* Clock.currentTimeMillis;
+  const checksCompleted = wake.kind === AGENT_WAKE.CHECKS_COMPLETED;
   const told = yield* Effect.gen(function* () {
     const agents = yield* agentsOf(wake);
     const turns = yield* latestTurnsOfReached(agents.map(({ agent }) => agent.conversationId));
-    const woken = agents.filter(({ agent }) =>
+    const admitted = agents.filter(({ agent }) =>
       agentIsWoken(wake, agent, turns.get(agent.conversationId), lukeLogin, now),
     );
-    // Read once for every agent told, since each is told the same review.
+    // Checks finished on a commit an agent has pushed past end none of its waits.
+    const woken = checksCompleted
+      ? yield* Effect.filter(admitted, (owned) => standsOnHead(wake, owned))
+      : admitted;
+    // Read once for every agent told, since each is told the same review, or the same checks.
     const inline = yield* inlineCommentsOf(wake, woken[0]);
+    const finished = yield* finishedChecksOf(wake, woken[0]);
+    if (checksCompleted && Option.isNone(finished)) return [];
+    const clientKey = Option.isSome(finished)
+      ? checksCompletedKey(wake, finished.value)
+      : deliveryId;
+    const failing = Option.isSome(finished) && finished.value.failing;
     return yield* Effect.forEach(woken, ({ userId, agent }) =>
       Effect.gen(function* () {
         const eve = yield* eveFor(userId);
         yield* steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
-          text: agentWakeText(wake, agent.branch, inline),
-          clientKey: deliveryId,
+          text: agentWakeText(wake, agent.branch, inline, failing),
+          clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },
         });
         return true;

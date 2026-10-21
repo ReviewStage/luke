@@ -32,7 +32,7 @@ import {
   readBodyBytesEffect,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { agentWakeOf, wakeAgents } from "./agent-wakes.js";
+import { agentWakeOf, checksCompletedWakeOf, wakeAgents } from "./agent-wakes.js";
 import { clearRevokedAuthorization, GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
 
@@ -80,7 +80,8 @@ import { setInstallationStatus } from "./github-installations.js";
  * listens for it, and the minute sweep starts each one's agent. And a
  * review, a comment on a pull request, or a check that failed on an
  * agent's branch is told to the agents on that pull request as a message
- * from GitHub (`agent-wakes.ts`), through eve as the deployment acting for
+ * from GitHub (`agent-wakes.ts`), and so is every check on an agent's head
+ * finished, to the agent at work waiting on them, through eve as the deployment acting for
  * each agent's owner, under the deployment's own eve secret an automation's
  * run reaches eve by; a deployment without it tells nobody.
  */
@@ -364,22 +365,27 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     );
     const target = deliveryTarget(event, payload);
     const read = target === undefined ? 0 : yield* readAgainOnBranches(target);
-    const wake = agentWakeOf(event, payload, yield* Clock.currentTimeMillis);
+    const now = yield* Clock.currentTimeMillis;
+    // Note that the checks finishing are read after the agents' pull requests were read again above,
+    // because a wake tells only the agents whose row keeps the finished commit as their head.
+    const wakes = [agentWakeOf(event, payload, now), checksCompletedWakeOf(event, payload, now)];
     // eve's coding-agent service as the deployment acting for each agent's owner, as an automation's
     // run reaches it (`agents/deployment-eve.ts`); a deployment that cannot reach it tells nobody.
     const eveForAccount: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
       deploymentEveOrigin(),
       EVE_MOUNT.CODER,
     );
-    const told =
+    const counts = yield* Effect.forEach(wakes, (wake) =>
       wake === undefined
-        ? 0
-        : yield* wakeAgents(
+        ? Effect.succeed(0)
+        : wakeAgents(
             eveForAccount,
             wake,
             request.headers[DELIVERY_HEADER.DELIVERY] ?? "",
             agentLogin,
-          );
+          ),
+    );
+    const told = counts.reduce((sum, count) => sum + count, 0);
     return hostedJsonResponse(200, { read, queued, told });
   },
 );

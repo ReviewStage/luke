@@ -208,7 +208,11 @@ const ListedPullRequestsSchema = Schema.Array(ListedPullRequestSchema);
 
 const CheckRunsSchema = Schema.Struct({
   check_runs: Schema.Array(
-    Schema.Struct({ status: Schema.String, conclusion: Schema.NullOr(Schema.String) }),
+    Schema.Struct({
+      status: Schema.String,
+      conclusion: Schema.NullOr(Schema.String),
+      completed_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    }),
   ),
 });
 
@@ -239,7 +243,9 @@ const PullRequestFilesSchema = Schema.Array(
 );
 
 const CombinedStatusSchema = Schema.Struct({
-  statuses: Schema.Array(Schema.Struct({ state: Schema.String })),
+  statuses: Schema.Array(
+    Schema.Struct({ state: Schema.String, updated_at: Schema.optionalKey(Schema.String) }),
+  ),
 });
 
 /** A GitHub account as a pull request, a review, or a commit names it. */
@@ -429,17 +435,36 @@ export function branchStands(
   );
 }
 
-/** What one set of outcomes says: failing beats pending beats passing, and nothing at all is none. */
-interface CheckTally {
+/**
+ * The checks on one head, read together: whether any failed, whether any is
+ * still to finish, whether there are any at all, and the newest instant one
+ * of them finished at, in epoch milliseconds, where GitHub wrote one.
+ */
+export interface HeadChecks {
   readonly failing: boolean;
   readonly pending: boolean;
   readonly any: boolean;
+  readonly settledAt: number | undefined;
 }
 
-function summaryOf(tally: CheckTally): CheckSummary {
-  if (tally.failing) return CHECK_SUMMARY.FAILING;
-  if (tally.pending) return CHECK_SUMMARY.PENDING;
-  return tally.any ? CHECK_SUMMARY.PASSING : CHECK_SUMMARY.NONE;
+/** What one set of outcomes says: failing beats pending beats passing, and nothing at all is none. */
+function summaryOf(checks: HeadChecks): CheckSummary {
+  if (checks.failing) return CHECK_SUMMARY.FAILING;
+  if (checks.pending) return CHECK_SUMMARY.PENDING;
+  return checks.any ? CHECK_SUMMARY.PASSING : CHECK_SUMMARY.NONE;
+}
+
+/** The newest of the instants GitHub wrote, in epoch milliseconds; none where it wrote none it can read. */
+function newestOf(written: readonly (string | null | undefined)[]): number | undefined {
+  const instants = written.map((each) => (each == null ? Number.NaN : Date.parse(each)));
+  const read = instants.filter((at) => !Number.isNaN(at));
+  return read.length === 0 ? undefined : Math.max(...read);
+}
+
+/** The later of two instants, either of which may be missing. */
+function later(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b;
+  return b === undefined ? a : Math.max(a, b);
 }
 
 /** A head's checks read as one answer, or as none where the App may not read them, said once in the log. */
@@ -447,9 +472,9 @@ function readChecks<A>(
   what: string,
   request: HttpClientRequest.HttpClientRequest,
   schema: Schema.Codec<A, unknown>,
-  tally: (answer: A) => CheckTally,
-): Read<CheckTally> {
-  const none: CheckTally = { failing: false, pending: false, any: false };
+  tally: (answer: A) => HeadChecks,
+): Read<HeadChecks> {
+  const none: HeadChecks = { failing: false, pending: false, any: false, settledAt: undefined };
   return Effect.scoped(
     Effect.flatMap(send(request), (response: HttpClientResponse.HttpClientResponse) => {
       if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Effect.succeed(none);
@@ -466,12 +491,19 @@ function readChecks<A>(
   );
 }
 
-/** The checks on one head as one word: its check runs and its commit statuses together. */
-export function checkSummaryOf(
+/**
+ * The checks on one head: its check runs, the latest of each as GitHub lists
+ * them by default
+ * (https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference),
+ * and its commit statuses, the latest of each context
+ * (https://docs.github.com/en/rest/commits/statuses#get-the-combined-status-for-a-specific-reference),
+ * together: the set the pull request's checks count.
+ */
+export function headChecksOf(
   token: Redacted.Redacted,
   fullName: string,
   sha: string,
-): Read<CheckSummary> {
+): Read<HeadChecks> {
   const commit = `${repositoryPath(fullName)}/commits/${segment(sha)}`;
   const perPage = HttpClientRequest.setUrlParams({ per_page: CHECKS_PER_PAGE });
   const runs = readChecks(
@@ -484,6 +516,7 @@ export function checkSummaryOf(
       ),
       pending: answer.check_runs.some((run) => run.status !== COMPLETED),
       any: answer.check_runs.length > 0,
+      settledAt: newestOf(answer.check_runs.map((run) => run.completed_at)),
     }),
   );
   const statuses = readChecks(
@@ -494,15 +527,24 @@ export function checkSummaryOf(
       failing: answer.statuses.some((status) => FAILING_STATUS_STATES.has(status.state)),
       pending: answer.statuses.some((status) => status.state === PENDING_STATUS_STATE),
       any: answer.statuses.length > 0,
+      settledAt: newestOf(answer.statuses.map((status) => status.updated_at)),
     }),
   );
-  return Effect.map(Effect.all([runs, statuses]), ([a, b]) =>
-    summaryOf({
-      failing: a.failing || b.failing,
-      pending: a.pending || b.pending,
-      any: a.any || b.any,
-    }),
-  );
+  return Effect.map(Effect.all([runs, statuses]), ([a, b]) => ({
+    failing: a.failing || b.failing,
+    pending: a.pending || b.pending,
+    any: a.any || b.any,
+    settledAt: later(a.settledAt, b.settledAt),
+  }));
+}
+
+/** The checks on one head as one word: its check runs and its commit statuses together. */
+export function checkSummaryOf(
+  token: Redacted.Redacted,
+  fullName: string,
+  sha: string,
+): Read<CheckSummary> {
+  return Effect.map(headChecksOf(token, fullName, sha), summaryOf);
 }
 
 /**

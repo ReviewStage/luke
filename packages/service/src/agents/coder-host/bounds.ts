@@ -38,8 +38,8 @@ export const CODER = {
    * The longest one pause (`sleep.ts`) may be. The credential at the
    * firewall is renewed only as a step starts, so a step may start on one
    * nearly fifty minutes old; a pause past the ten minutes it has left would
-   * leave a background command reaching GitHub, such as a watch of the
-   * checks, signed out before the next step renews it. Eight leaves room for
+   * leave a background command reaching GitHub signed out before the next
+   * step renews it. Eight leaves room for
    * the step's own model call ahead of the pause; a longer wait is two.
    */
   SLEEP_MAX: Duration.minutes(8),
