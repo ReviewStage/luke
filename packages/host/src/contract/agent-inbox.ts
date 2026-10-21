@@ -18,9 +18,11 @@
  */
 
 import {
+  type CodingAgentChatAnswerView,
   codingAgentAgentInboxParamsSchema,
   codingAgentChatAnswerViewSchema,
   codingAgentChatAttachmentParamsSchema,
+  codingAgentChatFollowParamsSchema,
   codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChatWriteAnswerViewSchema,
@@ -39,6 +41,7 @@ import {
   codingAgentPictureParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
@@ -104,4 +107,9 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentChatAttachmentParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: actProcedure(
+    "Could not follow the workspace's chat on this system.",
+  )
+    .input(exactInput(codingAgentChatFollowParamsSchema))
+    .output(eventIterator(type<CodingAgentChatAnswerView>())),
 };

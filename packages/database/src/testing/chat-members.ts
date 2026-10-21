@@ -1,4 +1,4 @@
-import { LUKE_HANDLE, MEMBER_KIND } from "@luke/features/chat-wire";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { DateTime, Effect } from "effect";
 import { Database } from "../core/query.js";
 import { chatMember } from "../schemas/chat.js";
@@ -11,7 +11,7 @@ import { chatMember } from "../schemas/chat.js";
  * chat history still reads writes one straight over the table.
  */
 
-/** A task's Luke in the workspace, as an old row stands: its handle `luke`, the next ordinal given, still hearing. Answers the row's id. */
+/** A task's Luke in the workspace, as an old row stands: the ordinal given, still hearing. Answers the row's id. */
 export const insertFormerLuke = (organizationId: string, taskId: string, ordinal = 1) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -22,7 +22,6 @@ export const insertFormerLuke = (organizationId: string, taskId: string, ordinal
         organizationId,
         kind: MEMBER_KIND.LUKE,
         taskId,
-        handle: LUKE_HANDLE,
         ordinal,
         joinedAt: now,
       })

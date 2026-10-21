@@ -739,6 +739,7 @@ const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
   [CALL_KIND.BROWSER]: GlobeIcon,
+  [CALL_KIND.MAC_BROWSER]: GlobeIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
   [CALL_KIND.WRITE_FILE]: FilePenIcon,
   [CALL_KIND.EDIT]: FilePenIcon,
@@ -932,6 +933,12 @@ export function TranscriptTool({
           kind === CALL_KIND.MAC_COMMAND && macOwner !== undefined ? (
             <ActorLine>
               {"On "}
+              <ActorRef actor={macOwner} sentence possessive />
+              {" Mac"}
+            </ActorLine>
+          ) : kind === CALL_KIND.MAC_BROWSER && macOwner !== undefined ? (
+            <ActorLine>
+              {"Browser · on "}
               <ActorRef actor={macOwner} sentence possessive />
               {" Mac"}
             </ActorLine>

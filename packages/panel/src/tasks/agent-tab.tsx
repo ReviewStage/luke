@@ -70,7 +70,7 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { AgentCallButton, type AgentCallDoors, AgentCallFoot } from "./agent-call.js";
+import { AgentCallButton, type AgentCallDoors, AgentCallFoot, takesCalls } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -1806,7 +1806,7 @@ function AgentTabView({
   continuedNote,
   continuable = false,
   calls,
-  call,
+  call: offeredCall,
 }: {
   agent: CodingAgentSummary;
   /** The calls into the agent, which its transcript places among its rows (`useAgentCalls`). */
@@ -1863,6 +1863,8 @@ function AgentTabView({
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
+  // Note that an agent on a provider's own harness takes no call, so its tab draws neither the button nor the foot.
+  const call = takesCalls(agent) ? offeredCall : undefined;
   const lines = useMemo(
     () => agentLines(transcript.messages, composer.sent),
     [transcript.messages, composer.sent],

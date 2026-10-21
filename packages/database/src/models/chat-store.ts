@@ -18,7 +18,6 @@ import {
   chatReplySchema,
   formValueLines,
   GENERAL_CHANNEL,
-  LUKE_HANDLE,
   MEMBER_KIND,
   replyWords,
 } from "@luke/features/chat-wire";
@@ -66,11 +65,11 @@ import { isWorkspaceMember, taskReachableBy, workspaceReachableBy } from "./work
  * the coding agent or the plan acting, which must be in the workspace too.
  * A workspace that account is not in reads as nothing. A member is minted
  * once under the workspace's lock, the `organization` row held for the
- * transaction, so two mints at once take turns over the handles and
- * ordinals standing and never mint one twice; a channel a name is picked
- * for is made under the same lock. A person's handle is a slug of their
- * name with `-2`, `-3`, … on a clash, and never `luke` or an agent's
- * `agent-N`, which are spoken for. A channel is found or made by what names
+ * transaction, so two mints at once take turns over the ordinals standing
+ * and never mint one twice; a channel a name is picked for is made under
+ * the same lock. A member is named by what it stands for, never by a handle
+ * of its own: a person by their account, an agent by its coding agent, and
+ * a Luke by his task. A channel is found or made by what names
  * it, the general one by its name, a plan's by its plan, a DM by its pair,
  * so asking twice answers the same row. A member joins at the workspace's
  * head: its cursor starts at the last place the sequence handed out, so its
@@ -146,15 +145,6 @@ const READ_ORDER = {
 
 type ReadOrder = (typeof READ_ORDER)[keyof typeof READ_ORDER];
 
-/** The longest a person's handle is spelled before a clash's suffix. */
-const MAX_HANDLE_STEM_CHARS = 32;
-
-/** The handle a person's name spells nothing of. */
-const FALLBACK_HANDLE = "member";
-
-/** The handles no person is minted: Luke's, and the shape of an agent's. */
-const SPOKEN_FOR = /^(luke|agent-\d+)$/u;
-
 const ChatMemberRowSchema = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
@@ -162,7 +152,6 @@ const ChatMemberRowSchema = Schema.Struct({
   userId: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
   taskId: Schema.NullOr(Schema.String),
-  handle: Schema.String,
   ordinal: Schema.Number,
   readSeq: Schema.Number,
   noticeSeq: Schema.NullOr(Schema.Number),
@@ -288,7 +277,6 @@ const MEMBER_COLUMNS = {
   userId: chatMember.userId,
   agentId: chatMember.agentId,
   taskId: chatMember.taskId,
-  handle: chatMember.handle,
   ordinal: chatMember.ordinal,
   readSeq: chatMember.readSeq,
   noticeSeq: chatMember.noticeSeq,
@@ -408,31 +396,6 @@ const findLastOrdinal = SqlSchema.findOne({
     ),
 });
 
-/** Every handle a person or agent of the workspace holds, which a person's mint must step past. */
-const findHandles = SqlSchema.findAll({
-  Request: OrganizationKeySchema,
-  Result: Schema.Struct({ handle: Schema.String }),
-  execute: (key) =>
-    Database.use((db) =>
-      db
-        .select({ handle: chatMember.handle })
-        .from(chatMember)
-        .where(
-          and(
-            eq(chatMember.organizationId, key.organizationId),
-            ne(chatMember.kind, MEMBER_KIND.LUKE),
-          ),
-        ),
-    ),
-});
-
-const findAccountName = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: Schema.Struct({ name: Schema.String }),
-  execute: (userId) =>
-    Database.use((db) => db.select({ name: user.name }).from(user).where(eq(user.id, userId))),
-});
-
 /** The workspace an agent was started in, which it keeps whether or not it works a plan. */
 const findAgentWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -474,7 +437,6 @@ const insertMember = SqlSchema.findOne({
     userId: Schema.NullOr(Schema.String),
     agentId: Schema.NullOr(Schema.String),
     taskId: Schema.NullOr(Schema.String),
-    handle: Schema.String,
     ordinal: Schema.Number,
     now: Schema.Date,
   }),
@@ -489,7 +451,6 @@ const insertMember = SqlSchema.findOne({
           userId: row.userId,
           agentId: row.agentId,
           taskId: row.taskId,
-          handle: row.handle,
           ordinal: row.ordinal,
           joinedAt: row.now,
           // A member joins at the workspace's head, so what it has not read starts with what is said after.
@@ -1068,12 +1029,6 @@ function firstFree(stem: string, taken: (candidate: string) => boolean): string 
   return `${stem}-${suffix}`;
 }
 
-/** A person's handle stem: a slug of their name opening on a letter. */
-function personStem(name: string): string {
-  const stem = slugOf(name, MAX_HANDLE_STEM_CHARS).replace(/^[^a-z]+/u, "");
-  return stem === "" ? FALLBACK_HANDLE : stem;
-}
-
 /** The workspace a subject belongs to, where it is the one named; nothing for one of another workspace or none. */
 function subjectInWorkspace(
   organizationId: string,
@@ -1097,21 +1052,6 @@ function subjectId(subject: ChatMemberSubject): string {
     case MEMBER_KIND.AGENT:
       return subject.agentId;
   }
-}
-
-/** The handle a new member of the kind is minted, its ordinal given; a person's steps past every handle held and spoken for. */
-function mintHandle(
-  organizationId: string,
-  subject: ChatMemberSubject,
-  ordinal: number,
-): ChatStoreEffect<string> {
-  return Effect.gen(function* () {
-    if (subject.kind === MEMBER_KIND.AGENT) return `agent-${ordinal}`;
-    const account = yield* findAccountName(subject.userId);
-    const held = new Set((yield* findHandles({ organizationId })).map((row) => row.handle));
-    const stem = personStem(Option.match(account, { onNone: () => "", onSome: (row) => row.name }));
-    return firstFree(stem, (candidate) => held.has(candidate) || SPOKEN_FOR.test(candidate));
-  });
 }
 
 /**
@@ -1339,8 +1279,7 @@ function madeOrStanding(
 
 /**
  * The workspace's member for the subject, minted the first time it is asked
- * for under the workspace's lock: its ordinal the next of its kind, and its
- * handle as above. Nothing where the account is not in the workspace or the
+ * for under the workspace's lock, its ordinal the next of its kind. Nothing where the account is not in the workspace or the
  * subject is not of it: a person not in it, or an agent or a plan of
  * another workspace.
  */
@@ -1362,7 +1301,6 @@ export function ensureMember(
         Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
       );
       const ordinal = (last ?? 0) + 1;
-      const handle = yield* mintHandle(organizationId, subject, ordinal);
       const now = yield* DateTime.nowAsDate;
       const row = yield* insertMember({
         organizationId,
@@ -1370,7 +1308,6 @@ export function ensureMember(
         userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
         agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
         taskId: null,
-        handle,
         ordinal,
         now,
       }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
@@ -2917,7 +2854,8 @@ export function workspaceChatLiveStatements(
         {
           id: chatMember.id,
           kind: chatMember.kind,
-          handle: chatMember.handle,
+          // Note that a window from before members were named by their links still reads a handle, so it is handed the member's id in its place; nothing reads the retired column.
+          handle: sql<string>`${chatMember.id}::text`,
           // A person by their account's name; an agent by its title, else its model's id, as `agentMembersOf` names one.
           name: sql<
             string | null
@@ -3443,7 +3381,6 @@ function mintFormer(
       userId: null,
       agentId: null,
       taskId: null,
-      handle: member.kind === MEMBER_KIND.LUKE ? LUKE_HANDLE : `agent-${ordinal}`,
       ordinal,
       now,
     }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
@@ -3460,7 +3397,6 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
     const ordinal = (last ?? 0) + 1;
-    const handle = yield* mintHandle(organizationId, subject, ordinal);
     const now = yield* DateTime.nowAsDate;
     return yield* insertMember({
       organizationId,
@@ -3468,7 +3404,6 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
       userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
       agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
       taskId: null,
-      handle,
       ordinal,
       now,
     }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));

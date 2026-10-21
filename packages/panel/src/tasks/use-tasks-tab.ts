@@ -186,7 +186,7 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
-import { useWorkspaceChat } from "./use-workspace-chat.js";
+import { chatFollowerOf, useWorkspaceChat } from "./use-workspace-chat.js";
 import { sayRestored } from "./version-view.js";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
@@ -427,7 +427,7 @@ interface AutomationsViewControl {
  * Inbox does and on the same terms: the workspace's channels in a rail of
  * their own, and For you or the channel chosen beside it. It gives way to
  * the Inbox, an agent's page, Factory, and the Automations page, and they to it. A live run reads
- * the listed workspace's chat from the service (`use-workspace-chat.ts`) while
+ * the listed workspace's chat, followed and pushed (`use-workspace-chat.ts`), while
  * the account has Chat on; a fixture run stages its own.
  */
 interface ChatViewControl {
@@ -1380,7 +1380,7 @@ export function useTasksTab(input: {
       !(standIn.listed && input.room === SHELL_ROOM.NARROW)
         ? standIn.place.channelId
         : tabReading,
-    readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
+    followChat: chatFollowerOf(act),
     writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
     readPicture: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT, params),
   });

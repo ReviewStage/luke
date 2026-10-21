@@ -1,3 +1,4 @@
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { CallIcon, IconButton } from "@luke/ui";
 import { callStatus, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/tasks-model";
@@ -23,6 +24,9 @@ import { CallBar } from "./tasks-parts.js";
  * draws neither. The call bar draws the call's words and nobody's
  * conversation, and the captions ride it as they rode the task's call bar;
  * the tab around them is left out of the screen recording (`agent-tab.tsx`).
+ * An agent on a provider's own harness, Claude Code or Codex, takes no call,
+ * since calls run on eve alone and the service refuses one into it
+ * (`NATIVE_AGENT_NOT_HERE`), so its tab draws neither (`takesCalls`).
  */
 
 /** What an agent's tab is handed to take calls; none where the platform has no voice. */
@@ -33,6 +37,11 @@ export interface AgentCallDoors {
    * first where it would hang another agent's call up.
    */
   readonly onPress: (agentId: string) => void;
+}
+
+/** Whether a call may go into the agent: one on eve, whose summary names no native runtime, and never one on Claude Code or Codex. */
+export function takesCalls(agent: Pick<CodingAgentSummary, "runtime">): boolean {
+  return agent.runtime === undefined;
 }
 
 /** The live captions, which ride the foot of the tab of the agent the call speaks into; none where the window draws them elsewhere. */
