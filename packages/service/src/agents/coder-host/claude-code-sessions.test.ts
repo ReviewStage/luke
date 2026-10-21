@@ -641,6 +641,52 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "an expired sandbox whose delete failed stands beside its replacement, which later messages and the launch's END still reach",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const target = { userId, conversationId: agent.conversationId };
+        sequence.next = 42;
+        yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
+          Effect.provide(api.layer),
+        );
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+        api.failDelete.remaining = 1;
+
+        const replaced = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        const later = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+
+        assert.deepEqual(
+          [replaced.outcome, later.outcome],
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        assert.equal(expired.deleted, false);
+        assert.equal(api.sandboxes.length, 2);
+        const fresh = api.sandboxes[1];
+        assert.ok(fresh !== undefined);
+        // The later message went to the running replacement's runner, not to a third sandbox.
+        assert.equal(api.commands.length, 2);
+        const [, relaunch] = api.commands;
+        assert.ok(linesOf(relaunch).length >= 3);
+        const ended = yield* runnerEnded({
+          target,
+          sessionId: opened.sessionId,
+          sequence: 42,
+        }).pipe(Effect.provide(api.layer));
+        assert.equal(ended, RUNNER_ENDED.STOPPED);
+        assert.equal(fresh.status, "stopped");
+      }),
+  );
+
+  it.effect(
     "an END the replaced launch posts while its replacement's command is starting stops nothing",
     () =>
       Effect.gen(function* () {
