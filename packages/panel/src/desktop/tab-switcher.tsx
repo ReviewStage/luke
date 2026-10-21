@@ -532,7 +532,8 @@ export function TabSwitcher({
       const taskId = stopTask(stop);
       if (taskId === undefined) return false;
       if (control.listRead && taskName(control, taskId) === undefined) return true;
-      if (taskId !== open) return false;
+      // Note that only the task's own page says which of its tabs stand, because the Inbox or an agent's page standing in its place hands the panel a strip of its own.
+      if (taskId !== open || !shown.current.some((each) => stopTask(each) === open)) return false;
       if (stop.kind === STOP_KIND.PANEL) {
         return !control.sidePanel.strip.some((each) => sameTab(each, stop.tab));
       }

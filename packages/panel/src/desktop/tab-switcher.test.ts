@@ -314,3 +314,21 @@ test("the task's own tab is named for the task once, its card saying only the st
     `${DOCUMENT_TASK.name} · Panel`,
   );
 });
+
+test("a task's tabs stay stops while the Inbox stands in its place with a panel strip of its own", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  const inboxOver = onTask(SIDE_PANEL_TAB.CODE, told);
+  await window.draw({
+    ...inboxOver,
+    inboxView: { ...inboxOver.inboxView, open: true },
+    sidePanel: { ...inboxOver.sidePanel, strip: [] },
+  });
+
+  tab();
+  letGo();
+  assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.CODE]]);
+});
