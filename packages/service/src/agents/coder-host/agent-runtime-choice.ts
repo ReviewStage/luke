@@ -22,6 +22,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
@@ -31,7 +32,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
@@ -61,18 +62,32 @@ const UNUSABLE_SIGN_IN: ReadonlySet<string> = new Set([
   PROVIDER_KEY_STATUS.UNREADABLE,
 ]);
 
-/** Whether the account keeps the plan credential its provider's harness launches on, as above. */
-const keepsPlan = (userId: string, provider: string) =>
+/**
+ * Whether the account keeps the plan credential its provider's harness
+ * launches on, as above. A ChatGPT sign-in must also open under the
+ * deployment's ring as it stands, since a row sealed under a key since
+ * rotated out still reads as its last stored status.
+ */
+const keepsPlan = (userId: string, provider: string, ring: Redacted.Redacted | undefined) =>
   provider === MODEL_PROVIDER.ANTHROPIC
     ? Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN), (rows) =>
         rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC),
       )
-    : Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH), (rows) =>
-        rows.some(
+    : Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH), (rows) => {
+        const parsed = ring === undefined ? undefined : parseKeyRing(ring);
+        if (parsed === undefined || Result.isFailure(parsed)) return false;
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+          kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+        };
+        return rows.some(
           (row) =>
-            row.provider === PROVIDER_KEY_PROVIDER.OPENAI && !UNUSABLE_SIGN_IN.has(row.status),
-        ),
-      );
+            row.provider === PROVIDER_KEY_PROVIDER.OPENAI &&
+            !UNUSABLE_SIGN_IN.has(row.status) &&
+            Result.isSuccess(openProviderKey(parsed.success, owner, row)),
+        );
+      });
 
 /** The runtime and payer of a new agent of the account's on the model given, as above. */
 export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -86,6 +101,7 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   const provider = providerModelOf(model);
   if (provider === undefined || provider.fast) return ON_EVE;
   if (Option.isNone(yield* Effect.serviceOption(NativeAgentSessions))) return ON_EVE;
-  if (!(yield* keepsPlan(userId, provider.provider))) return ON_EVE;
+  const ring = environment.value.providerKeyEncryptionKeys;
+  if (!(yield* keepsPlan(userId, provider.provider, ring))) return ON_EVE;
   return provider.provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
 });

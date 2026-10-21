@@ -730,8 +730,8 @@ const CATALOG = modelCatalogOf([
   },
 ]);
 
-/** How the owner's ChatGPT sign-in stands: none, one Codex launches on, or one OpenAI signed out. */
-type SignIn = "none" | "signed_in" | "signed_out";
+/** How the owner's ChatGPT sign-in stands: none, one Codex launches on, one OpenAI signed out, or one sealed under a key the ring no longer holds. */
+type SignIn = "none" | "signed_in" | "signed_out" | "rotated_out";
 
 /** A workspace connected to GitHub, its owner keeping a Claude setup-token and a ChatGPT sign-in where asked. */
 const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
@@ -760,7 +760,11 @@ const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
       );
     }
     if (chatGpt !== "none") {
-      const ring = parseKeyRing(Redacted.make(RING));
+      const ring = parseKeyRing(
+        Redacted.make(
+          chatGpt === "rotated_out" ? `2:${Buffer.alloc(32, 9).toString("base64")}` : RING,
+        ),
+      );
       assert.ok(Result.isSuccess(ring));
       const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(
         ring.success,
@@ -918,6 +922,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               name: "signed out",
               cohort: true,
               chatGpt: "signed_out",
+              model: "openai/gpt-5.5",
+              native: true,
+              on: "eve",
+            },
+            {
+              name: "a sign-in the ring no longer opens",
+              cohort: true,
+              chatGpt: "rotated_out",
               model: "openai/gpt-5.5",
               native: true,
               on: "eve",
