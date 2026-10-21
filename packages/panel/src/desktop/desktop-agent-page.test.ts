@@ -33,7 +33,9 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -41,8 +43,9 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
-import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -58,7 +61,12 @@ import {
   fakeAppPlatform,
   QUIET_PANEL,
 } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handCapabilities, stateWith } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -1614,4 +1622,92 @@ test("a delete the service refused for an agent still starting says why in the d
   const reason = document.querySelector('[role="alertdialog"] [role="alert"]');
   assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
   assert.equal(closed, 0);
+});
+
+test("the page offers Call in its agent's composer, whose press asks for a call into that agent on no task, and an agent on a task on its own", async () => {
+  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
+  const pressed: { agentId: string; place: AgentCallPlace }[] = [];
+  const calls = {
+    onPress: (agentId: string, place: AgentCallPlace) => pressed.push({ agentId, place }),
+  };
+  const page = mount(tasksControl({ calls }));
+  await settle();
+
+  const call = page.querySelector<HTMLButtonElement>(`button[aria-label="${CALL_LABEL}"]`);
+  assert.ok(call, "the composer offers Call");
+  act(() => call.click());
+  assert.deepEqual(pressed, [{ agentId: AGENT_ID, place: { taskId: undefined, archived: false } }]);
+
+  act(() => root?.unmount());
+  pages = [{ agent: { ...PAGE, planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" } }];
+  const onTask = mount(tasksControl({ calls }));
+  await settle();
+  act(() => onTask.querySelector<HTMLButtonElement>(`button[aria-label="${CALL_LABEL}"]`)?.click());
+  assert.deepEqual(pressed.at(-1), {
+    agentId: AGENT_ID,
+    place: { taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", archived: false },
+  });
+});
+
+test("a window with no voice hands the page no Call", async () => {
+  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
+  const page = mount(tasksControl({ calls: undefined }));
+  await settle();
+  assert.equal(page.querySelector(`button[aria-label="${CALL_LABEL}"]`), null);
+});
+
+/** The page of an agent a call into, with no task, showed code on, over the window's own side panel. */
+function CodePanelPage(): React.JSX.Element {
+  const agents = [AGENT_ID];
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: { [SIDE_PANEL_TAB.CODE]: true } },
+    agents,
+    [],
+    [],
+    [],
+    agents,
+  );
+  drawnPanel = sidePanel;
+  const showing = {
+    callId: "call-1",
+    turnId: "turn-1",
+    shownAt: 10,
+    agentId: AGENT_ID,
+    code: {
+      ref: { path: "src/relay.ts", startLine: 1, endLine: 1 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: 1,
+      lines: ["const retries = 3;"],
+    },
+  };
+  return createElement(DesktopAgentPage, {
+    tasks: {
+      ...tasksControl({
+        agentCallCode: { agentId: AGENT_ID, shownCode: [showing] },
+      }),
+      sidePanel,
+    },
+    agentId: AGENT_ID,
+  });
+}
+
+test("code Luke showed on a call into the agent with no task stands in its page's side panel, in its Code tab", async () => {
+  localStorage.clear();
+  installScrollIntoView();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(CodePanelPage))));
+  await settle();
+  act(() => drawnPanel?.onChoose(SIDE_PANEL_TAB.CODE));
+  await settle();
+
+  const panel = container.querySelector("aside.side-panel");
+  assert.ok(panel, "the panel stands beside the page");
+  assert.match(panel.textContent ?? "", /src\/relay\.ts/u);
+  // No File tab reads a repository no task names, so the card offers no way into one.
+  assert.ok(panel.querySelector(".code-card"), "the code's card stands");
+  assert.equal(panel.querySelector(".code-card [aria-label^='Open ']"), null);
 });

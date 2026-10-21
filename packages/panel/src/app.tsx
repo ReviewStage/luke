@@ -497,16 +497,17 @@ function AppWindow(): React.JSX.Element {
   );
   useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
   // The agent whose call bar is on screen, which the call card gives way to
-  // (`WindowVoice`): another agent's tab or none, the home page, Settings, or the
-  // agent's own task under its version history, the Inbox, an agent's page,
-  // or a side panel filling the window draw the card instead.
+  // (`WindowVoice`): another agent's tab or page or none, the home page,
+  // Settings, or the agent's own task under its version history, the Inbox,
+  // another agent's page, or a side panel filling the window draw the card
+  // instead.
   const columnTab = tasks.mainTabs.tab;
   const agentShown = callBarAgentId({
     tasksTab: tab === PANEL_TAB.TASKS,
     documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
     historyOpen: tasks.history.open,
     inboxOpen: tasks.inboxView.open || tasks.chatView.open,
-    agentPageOpen: tasks.agentView.agentId !== undefined,
+    pageAgentId: tasks.agentView.agentId,
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
     columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
   });

@@ -69,7 +69,8 @@ export function voiceRuntimeProcedures(
       const about = state.snapshot().voice.view?.call;
       if ((!call && !panel) || about === undefined) return;
       panels.focusExpanded();
-      panels.broadcast(PUSH.SHOW_AGENT, { taskId: about.taskId, agentId: about.agentId });
+      // An agent with no task opens on its own page, as its notification's click opens it.
+      panels.broadcast(PUSH.SHOW_AGENT, { taskId: about.taskId ?? null, agentId: about.agentId });
     }),
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
@@ -78,8 +79,8 @@ export function voiceRuntimeProcedures(
     ].effect(function* ({ input, context }) {
       if (!context.actor.voice) return undefined;
       const created = yield* liveSession.createLiveSession(input.sdp, {
-        taskId: input.taskId,
         agentId: input.agentId,
+        ...(input.taskId === undefined ? undefined : { taskId: input.taskId }),
       });
       return Option.getOrUndefined(created);
     }),

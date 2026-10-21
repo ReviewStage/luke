@@ -134,7 +134,11 @@ export function useVoiceSession(
         events,
         acts: {
           createSession: (sdp, { taskId, agentId }) =>
-            act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, taskId, agentId }),
+            act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, {
+              sdp,
+              agentId,
+              ...(taskId === undefined ? undefined : { taskId }),
+            }),
           endSession: (request) => tell(ACT_KIND.VOICE_END_LIVE_SESSION, request),
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),

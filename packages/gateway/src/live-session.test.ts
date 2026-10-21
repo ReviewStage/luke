@@ -29,7 +29,7 @@ function parseAnswer<Value, Encoded>(
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
-test("a create request carries the offer, the agent it speaks into, and that agent's task, and nothing else", () => {
+test("a create request carries the offer, the agent it speaks into, and that agent's task where it has one, and nothing else", () => {
   const offer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
   const taskId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
   const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
@@ -39,8 +39,11 @@ test("a create request carries the offer, the agent it speaks into, and that age
     agentId,
   });
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, {}), undefined);
-  // Every call is into an agent of a task: an offer naming either alone is refused.
-  assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, agentId }), undefined);
+  // Every call is into an agent, keyed by it: one with no task names none, and an offer naming no agent is refused.
+  assert.deepEqual(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, agentId }), {
+    sdp: offer,
+    agentId,
+  });
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, taskId }), undefined);
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: "", taskId, agentId }), undefined);
   assert.equal(

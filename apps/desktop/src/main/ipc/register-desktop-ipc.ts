@@ -297,7 +297,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
           colourCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
-          activeTaskId: () => state.snapshot().tasks.activeTaskId,
           talkTo: (about) => {
             const voice = voiceWindow.current();
             if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, about);

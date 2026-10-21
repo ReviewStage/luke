@@ -56,9 +56,10 @@ import {
 } from "./graceful-close.js";
 
 /**
- * The peer's side of one hosted task call, which is everything the Mac
- * still holds of a session once the exchange is the service's. It creates
- * the session about the open task for the renderer's offer, and holds the
+ * The peer's side of one hosted call, which is everything the Mac still
+ * holds of a session once the exchange is the service's. It creates the
+ * session into the agent the renderer's offer names, on that agent's task
+ * where it has one, and holds the
  * sideband the service answered on for three things: the graceful close,
  * which asks the service for the `session.close` it owns and waits for
  * `session.closed` as the conversations guide prescribes; and the stop key
@@ -159,8 +160,8 @@ export interface LiveSessionHolderOptions {
   onTaskActivity?: (activity: TaskActivityFrame) => void;
   /** Luke put code on screen on the standing task call, on the same terms as `onTaskActivity`. */
   onTaskCode?: (code: TaskCodeFrame) => void;
-  /** The task call about the task named ended, so what it put on screen goes with it. */
-  onTaskCallEnded?: (taskId: string) => void;
+  /** The call about the agent named, and its task where it has one, ended, so what it put on screen goes with it. */
+  onTaskCallEnded?: (about: VoiceCallAbout) => void;
 }
 
 /**
@@ -207,9 +208,9 @@ interface HeldSession {
   /** The hand that first decided the end, and the peer's own reason where it reported one. */
   endCause: LiveSessionEndCause | undefined;
   peerReason: LivePeerEndReason | undefined;
-  /** The task the call is about, which the session is bound to for its life. */
-  readonly taskId: string;
-  /** The agent the call speaks into, which the host checked belongs to that task before the call was created. */
+  /** The task the call's agent is on, which the session is bound to for its life; none for an agent with no task. */
+  readonly taskId: string | undefined;
+  /** The agent the call speaks into, which the session is keyed by, and which the host checked is the task's before the call was created. */
   readonly agentId: string;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
@@ -226,6 +227,20 @@ interface HeldSession {
   readonly torn: Deferred.Deferred<void>;
   /** Settled once the session's scope is closed and its transport released. */
   readonly released: Deferred.Deferred<void>;
+}
+
+/**
+ * Whether a frame the service sent about a call is about the session's:
+ * by its agent, which the service names on every frame now, or by its task
+ * alone where it names no agent, as a service from before calls were keyed
+ * by the agent did.
+ */
+function aboutSession(
+  session: HeldSession,
+  frame: { readonly planId?: string | undefined; readonly agentId?: string | undefined },
+): boolean {
+  if (frame.agentId !== undefined) return frame.agentId === session.agentId;
+  return frame.planId !== undefined && frame.planId === session.taskId;
 }
 
 /** What a line names of a session: its id, never its words. */
@@ -365,7 +380,7 @@ export class LiveSessionHolder {
         taskId === undefined
           ? LIVE_SESSION_END_CAUSE.SIGNED_OUT
           : LIVE_SESSION_END_CAUSE.TASK_DELETED;
-      const about = (candidate: string) => taskId === undefined || candidate === taskId;
+      const about = (candidate: string | undefined) => taskId === undefined || candidate === taskId;
       const creating = this.#creating;
       if (creating !== undefined && about(creating.about.taskId)) creating.endedBy ??= cause;
       const session = this.#held;
@@ -796,13 +811,13 @@ export class LiveSessionHolder {
 
   /** The service's activity about the task the session is bound to, passed on while the session stands. */
   #activity(session: HeldSession, activity: TaskActivityFrame): void {
-    if (session.ended || activity.planId !== session.taskId) return;
+    if (session.ended || !aboutSession(session, activity)) return;
     this.#options.onTaskActivity?.(activity);
   }
 
   /** Code Luke put on screen on the call about the task the session is bound to, passed on while the session stands. */
   #code(session: HeldSession, code: TaskCodeFrame): void {
-    if (session.ended || code.planId !== session.taskId) return;
+    if (session.ended || !aboutSession(session, code)) return;
     this.#options.onTaskCode?.(code);
   }
 
@@ -812,7 +827,7 @@ export class LiveSessionHolder {
    * has played, and hangs up through its own hang-up, so nothing ends here.
    */
   #ending(session: HeldSession, ending: TaskCallEndingFrame): void {
-    if (session.ended || ending.planId !== session.taskId) return;
+    if (session.ended || !aboutSession(session, ending)) return;
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.ENDING });
   }
 
@@ -884,12 +899,17 @@ export class LiveSessionHolder {
     if (this.#held === session) this.#held = undefined;
     // Note that we say a task call's end as nothing doing, because the
     // service's own last word may never arrive once the socket is gone.
+    const about = {
+      agentId: session.agentId,
+      ...(session.taskId === undefined ? undefined : { taskId: session.taskId }),
+    };
     this.#options.onTaskActivity?.({
       type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-      planId: session.taskId,
+      ...(about.taskId === undefined ? undefined : { planId: about.taskId }),
+      agentId: about.agentId,
       notes: false,
     });
-    this.#options.onTaskCallEnded?.(session.taskId);
+    this.#options.onTaskCallEnded?.(about);
     // The service closes the avatar with the call, so nothing is sent for it.
     this.#avatarEnded({ by: LIVE_AVATAR_END.CALL_ENDED });
     this.#releasing = session.released;

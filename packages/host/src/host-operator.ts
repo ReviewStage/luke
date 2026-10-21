@@ -435,7 +435,7 @@ export interface HostOperator {
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
   /**
-   * The peer's SDP offer, and the agent the call speaks into with its task,
+   * The peer's SDP offer, and the agent the call speaks into with its task where it has one,
    * answered with the session the host created; a host that creates none
    * answers nothing.
    */
@@ -1198,7 +1198,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     createLiveSession: (sdp, { taskId, agentId }) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, taskId, agentId }),
+        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, {
+          sdp,
+          agentId,
+          ...(taskId === undefined ? undefined : { taskId }),
+        }),
         (answer) =>
           answer.ok
             ? Result.getSuccess(

@@ -8,6 +8,7 @@ import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ConfirmDialog,
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -29,6 +30,7 @@ import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { SpinnerRegion } from "../spinner.js";
+import { CallNotice } from "../tasks/agent-call.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
@@ -47,7 +49,7 @@ import {
   openPullRequestsHere,
   useReadLinkOpener,
 } from "../tasks/use-open-link.js";
-import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
@@ -55,6 +57,7 @@ import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
   useAgentActions,
+  useAgentCallDoors,
   useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
@@ -106,7 +109,13 @@ import { contentActionGroups, useTabViews } from "./strip-tabs.js";
  * workspace's members, as on a plan, and the automation whose run started
  * it against its workspace's automations, so the prompt it opens on names
  * the automation and opens its page. Escape leaves it for wherever it was
- * opened from, and so does any row of the sidebar.
+ * opened from, and so does any row of the sidebar. Its composer offers Call
+ * as its tab's does, through the window's same press (`agent-actions.tsx`'s
+ * `useAgentCallDoors`), told the agent's own task, or none, whatever task is
+ * open: the call is keyed by the agent, and asks first where it would hang
+ * another agent's call up. While its call stands its foot draws the call as
+ * its tab's would, and the code Luke shows on a call into an agent with no
+ * task lands in its side panel's Code tab, which no task's record holds.
  */
 
 /** What the page says where the agent could not be read. */
@@ -234,9 +243,12 @@ function useTaskAgentsFollow(
 export function DesktopAgentPage({
   tasks,
   agentId,
+  notice,
 }: {
   tasks: TasksControl;
   agentId: string;
+  /** The voice's notice line, while it rides the foot of the page's agent's call. */
+  notice?: React.ReactNode;
 }): React.JSX.Element {
   // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
   const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
@@ -276,6 +288,14 @@ export function DesktopAgentPage({
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   useTaskAgentsFollow(tasks, agentId, agent);
+  // Its Call names the agent's own task, or none, and an archived agent takes none.
+  const calls = useAgentCallDoors(tasks.calls, {
+    taskId: agent?.planId ?? undefined,
+    archived: agent?.archivedAt !== undefined,
+  });
+  // The code a call into the agent showed, where it has no task to hold it.
+  const held = tasks.agentCallCode;
+  const shownCode = agent?.planId == null && held?.agentId === agentId ? held.shownCode : undefined;
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -344,6 +364,9 @@ export function DesktopAgentPage({
     if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
+    // Code Luke showed on its call opens in the Code tab, its showings' one place on a page no task's File tab reads for.
+    if (target.kind === TOOL_TARGET.SHOWN_CODE && shownCode !== undefined)
+      sidePanel.onChoose(SIDE_PANEL_TAB.CODE);
   };
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
@@ -378,7 +401,7 @@ export function DesktopAgentPage({
     held: views.held,
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
-    shownCode: [],
+    shownCode: shownCode ?? [],
   });
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {
@@ -467,20 +490,23 @@ export function DesktopAgentPage({
                           active={tasks.shown && !sideFocused}
                           subject={tab}
                         >
-                          <AgentPane
-                            label={agentTabLabel(agent, control.models)}
-                            tabbed={false}
-                            tab={paneTab}
-                            agents={control}
-                            shown={shown}
-                            views={views}
-                            onOpenDelegation={openDelegation}
-                            onOpenPullRequest={openPullRequest}
-                            onOpenTarget={openTarget}
-                            cards={cards}
-                            onFork={draftDoors.onFork}
-                            onContinue={draftDoors.onContinue}
-                          />
+                          <CallNotice.Provider value={notice}>
+                            <AgentPane
+                              call={calls}
+                              label={agentTabLabel(agent, control.models)}
+                              tabbed={false}
+                              tab={paneTab}
+                              agents={control}
+                              shown={shown}
+                              views={views}
+                              onOpenDelegation={openDelegation}
+                              onOpenPullRequest={openPullRequest}
+                              onOpenTarget={openTarget}
+                              cards={cards}
+                              onFork={draftDoors.onFork}
+                              onContinue={draftDoors.onContinue}
+                            />
+                          </CallNotice.Provider>
                         </FindScope>
                       </section>
                       {drawing.panel ? (
@@ -492,7 +518,7 @@ export function DesktopAgentPage({
                           taskId={agentId}
                           repository={agentRepository ?? null}
                           board={undefined}
-                          shownCode={undefined}
+                          shownCode={shownCode}
                           codeFailed={undefined}
                           pages={undefined}
                           agents={control}
@@ -505,6 +531,11 @@ export function DesktopAgentPage({
                         />
                       ) : null}
                     </div>
+                    {/* The second call's question, which a Call press here asks over another agent's call. */}
+                    <ConfirmDialog
+                      confirm={tasks.secondCall.confirm}
+                      question={tasks.secondCall.question}
+                    />
                   </OpenHereProvider>
                 </OpenLinkProvider>
               </AgentMentions>

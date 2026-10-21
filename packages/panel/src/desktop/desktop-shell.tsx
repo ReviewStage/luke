@@ -714,8 +714,15 @@ export function DesktopShell({
   const panelToggle =
     planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
   // Note that the notice line rides the foot of the call's agent's
-  // tab while that is on screen, and floats at the window's foot otherwise.
-  const noticeInColumn = callShown;
+  // tab, or its own page, while that is on screen, and floats at the
+  // window's foot otherwise.
+  const pageCallShown =
+    !inboxOpen &&
+    !chatOpen &&
+    pageAgent !== undefined &&
+    pageAgent === calling &&
+    !tasks.sidePanel.fullScreen;
+  const noticeInColumn = callShown || pageCallShown;
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it
@@ -762,7 +769,12 @@ export function DesktopShell({
               <DesktopInbox tasks={tasks} listing={sharedListing} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-              <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
+              <DesktopAgentPage
+                key={pageAgent}
+                tasks={tasks}
+                agentId={pageAgent}
+                notice={pageCallShown ? NOTICE_STRIP : undefined}
+              />
             ) : pagePerson !== undefined ? (
               // Keyed by the person, so another person's page holds nothing of the last, its find among it.
               <PageFind

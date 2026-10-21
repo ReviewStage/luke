@@ -102,9 +102,9 @@ const UNAVAILABLE_STATUS = 503;
 export interface LiveSessionCreateInput {
   /** The renderer's SDP offer, as written. */
   sdpOffer: string;
-  /** The task the call's agent is on. */
-  taskId: string;
-  /** The agent the call speaks into, which the service reads and checks is on the task. */
+  /** The task the call's agent is on; none for an agent with no task. */
+  taskId?: string | undefined;
+  /** The agent the call speaks into, which the service reads and checks is on the task named. */
   agentId: string;
 }
 
@@ -430,7 +430,8 @@ class ServiceLiveSessionSource {
         // A call is seeded with nothing from here: the service seeds it with
         // what the agent knows and what was said on its earlier calls.
         input: [],
-        planId: input.taskId,
+        // Note that a call into an agent with no task names none, which the service keys by the agent alone.
+        ...(input.taskId === undefined ? undefined : { planId: input.taskId }),
         agentId: input.agentId,
         // The brain's turns on the call count the developer's days and spell their times in it.
         timeZone: this.#timeZone(),

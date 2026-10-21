@@ -282,6 +282,19 @@ export const tasksViewSchema = EffectSchema.Struct({
    * call's end keeps them.
    */
   shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
+  /**
+   * The code shown on calls into an agent with no task, which no task's
+   * record holds, oldest first, by its call: what that agent's page draws in
+   * its side panel. Absent before such a call shows any; a call into another
+   * agent with no task replaces it as it shows its first, and a call's end
+   * keeps it, as a task's code is kept.
+   */
+  agentCallCode: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      agentId: EffectSchema.String,
+      shownCode: EffectSchema.Array(taskShownCodeSchema),
+    }),
+  ),
   /** Where the read of the active task's code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
   codeStatus: EffectSchema.optionalKey(tasksReadSchema),
   /**

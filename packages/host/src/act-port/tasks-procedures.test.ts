@@ -253,8 +253,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
 interface Script {
   /** What a start answers. */
   start: TasksStartAnswer;
-  /** The task the host has open, if any. */
-  activeTaskId: string | undefined;
   /** The page the host names to connect the account's own GitHub, or none. */
   connectPage: string | undefined;
   /** Whether GitHub is the account's only way to sign in. */
@@ -289,7 +287,6 @@ function windowPort(
   const browserTabsListeners = new Set<(followed: TaskBrowserTabsFollowed) => void>();
   const script: Script = {
     start: { failure: TASK_CALL_FAILURE.UNANSWERED },
-    activeTaskId: TASK_ID,
     connectPage: CONNECT_PAGE,
     lastSignIn: false,
     startExtra: false,
@@ -447,7 +444,6 @@ function windowPort(
         return Promise.resolve();
       },
       serviceBaseUrl: options.serviceBaseUrl ?? SERVICE,
-      activeTaskId: () => script.activeTaskId,
       talkTo: (about) => {
         talked.push(about);
       },
@@ -610,17 +606,17 @@ it("a start the host could not make is answered with why, and opens no call", as
   assert.deepEqual(talked, []);
 });
 
-it("an agent's Call press opens a call into it on the task the host has open, and is refused in its own words where none is open", async () => {
-  const { client, talked, script } = windowPort(PANEL);
+it("an agent's Call press opens a call into it on the task it names, and into an agent with no task with none", async () => {
+  const { client, talked } = windowPort(PANEL);
 
+  assert.deepEqual(
+    await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID, taskId: TASK_ID }),
+    { answer: undefined },
+  );
   assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID }), {
     answer: undefined,
   });
-  script.activeTaskId = undefined;
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID }), {
-    refused: REFUSAL[TASKS_ACT_KIND.TASKS_TALK],
-  });
-  assert.deepEqual(talked, [{ taskId: TASK_ID, agentId: AGENT_ID }]);
+  assert.deepEqual(talked, [{ taskId: TASK_ID, agentId: AGENT_ID }, { agentId: AGENT_ID }]);
 });
 
 it("a web link opens an http or https address in the browser, and no other scheme nor an address past the cap", async () => {

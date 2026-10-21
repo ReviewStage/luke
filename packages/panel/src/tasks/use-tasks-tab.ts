@@ -153,7 +153,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { useStandingCall, voiceViewNow } from "../use-voice-view.js";
-import type { AgentCallDoors } from "./agent-call.js";
+import type { AgentCallPlace, AgentCallPress } from "./agent-call.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -614,8 +614,8 @@ export interface TasksControl {
   copy: { onPress: () => void };
   /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
   edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
-  /** What the open task's agents' tabs take calls through; none where the window has no voice, as the web's has none. */
-  calls: AgentCallDoors | undefined;
+  /** What an agent's tab, or an agent's page, takes calls through, told where its agent stands (`useAgentCallDoors`); none where the window has no voice, as the web's has none. */
+  calls: AgentCallPress | undefined;
   /** Whether a call into one of the open task's agents is in progress, so the plan may still be written. */
   live: boolean;
   /** The task's column's tabs: its agents' and its draft's, and its Chat, and which is shown. */
@@ -628,6 +628,8 @@ export interface TasksControl {
   board: Board | undefined;
   /** Every code the open task's agents showed, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: TasksView["shownCode"];
+  /** The code shown on calls into an agent with no task, by that agent, which its page draws; none before such a call showed any. */
+  agentCallCode: TasksView["agentCallCode"];
   /** Whether the last read of the open task's code did not land, what is held still drawn. */
   codeFailed: boolean;
   /** Reads the open task's code again after a read that did not land. */
@@ -1001,8 +1003,14 @@ const NO_PENDING_POSITIONS: PendingPinPositions = new Map();
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<TasksView["pages"]> = [];
 
+/** No code shown yet on the call standing on an agent's page, the same array every render. */
+const NO_CODE: NonNullable<TasksView["shownCode"]> = [];
+
 /** What an agent's page holds of the plan's panel kinds: nothing, its tabs being the agent's own. */
 const NO_HOLDS: TaskHolds = {};
+
+/** An agent's page holding code a call into it showed, which its Code tab stands for. */
+const CODE_HOLDS: TaskHolds = { [SIDE_PANEL_TAB.CODE]: true };
 
 /** No ids, the same array every render. */
 const NO_IDS: readonly string[] = [];
@@ -1097,6 +1105,11 @@ function rememberedChoice(
   return "taskId" in chosen
     ? { taskId: chosen.taskId, itemId: chosen.itemId }
     : { agentId: chosen.agentId, itemId: chosen.itemId };
+}
+
+/** What a Call press asks the host: the agent, and the task it is on where it is on one. */
+function talkOf(agentId: string, place: AgentCallPlace): { agentId: string; taskId?: string } {
+  return place.taskId === undefined ? { agentId } : { agentId, taskId: place.taskId };
 }
 
 /** What the second call's question says: the call it ends, and what the act does. */
@@ -1630,13 +1643,18 @@ export function useTasksTab(input: {
         ) === true
       ? true
       : undefined;
+  // An agent's page holds code where a call into it, with no task, showed some.
+  const pageCodeHeld =
+    pageAgent !== undefined &&
+    viewed.agentCallCode?.agentId === pageAgent &&
+    viewed.agentCallCode.shownCode.length > 0;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
       ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
       : pageAgents === undefined
         ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld, taskChatHeld) }
-        : { id: pageAgent, holds: NO_HOLDS },
+        : { id: pageAgent, holds: pageCodeHeld ? CODE_HOLDS : NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
     inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
@@ -2454,24 +2472,33 @@ export function useTasksTab(input: {
   // A call into one of the open task's agents is in progress, so the plan may still be written.
   // Note that the call is read apart from who is heard on it, so the tab is not drawn again with every breath of a call.
   const standingCall = useStandingCall();
-  const live = standingCall !== undefined && standingCall.taskId === tasks.activeTaskId;
+  // Note that a call into an agent with no task is no task's, though no task is open either.
+  const live = standingCall?.taskId !== undefined && standingCall.taskId === tasks.activeTaskId;
   // A Call press that would open a call into one agent while another's call
   // stands ends that call, so it asks first; the answer is the same press,
   // and Cancel leaves the call standing as it was. The question is the
-  // agent's it was asked for on the task open, so it goes the moment another
-  // task opens, and its surface is the task's page, which a version history
-  // covers.
-  const [askedFor, setAskedFor] = useState<{ taskId: string; agentId: string }>();
+  // agent's it was asked for on the page it was asked on, the task open or
+  // an agent's own page, so it goes the moment another opens, and its
+  // surface is that page, which a version history covers.
+  const callSurface = pageAgent ?? tasks.activeTaskId;
+  const [askedFor, setAskedFor] = useState<{
+    surface: string;
+    agentId: string;
+    place: AgentCallPlace;
+  }>();
   const otherCall = (agentId: string) =>
     standingCall !== undefined && standingCall.agentId !== agentId;
   const secondCallFor =
     askedFor !== undefined && otherCall(askedFor.agentId) ? askedFor : undefined;
   const secondCall = useConfirmDialog(
-    { subject: secondCallFor?.taskId === tasks.activeTaskId, surfaceOpen: shown && !historyOpen },
+    {
+      subject: secondCallFor !== undefined && secondCallFor.surface === callSurface,
+      surfaceOpen: shown && !historyOpen,
+    },
     () =>
       secondCallFor === undefined
         ? Promise.resolve<ActionResult>({ status: ACTION_RESULT_STATUS.ACCEPTED })
-        : act(ACT_KIND.TASKS_TALK, { agentId: secondCallFor.agentId }).then(
+        : act(ACT_KIND.TASKS_TALK, talkOf(secondCallFor.agentId, secondCallFor.place)).then(
             (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
             (refused: Error): ActionResult => ({
               status: ACTION_RESULT_STATUS.REJECTED,
@@ -2479,17 +2506,18 @@ export function useTasksTab(input: {
             }),
           ),
   );
-  // The press names its agent and no task: main reads the one the host has
-  // open, and the voice window, which owns the call, opens it into the agent
-  // or toggles it. It is read off the document as the press lands, so a door
-  // handed down once answers for the voice as it stands.
-  const pressCall = (agentId: string) => {
+  // The press names its agent and where it stands, the task it is on or
+  // none, whatever task is open, and the voice window, which owns the call,
+  // opens it into the agent or toggles it. It is read off the document as
+  // the press lands, so a door handed down once answers for the voice as it
+  // stands.
+  const pressCall = (agentId: string, place: AgentCallPlace) => {
     const now = voiceViewNow();
     const button = microphoneButton({
       voiceAvailable: input.voiceAvailable,
       microphoneStatus: input.microphoneStatus,
       agentId,
-      archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
+      archived: place.archived,
       listening: now.listening,
       call: now.call,
       voiceStatus: now.voiceStatus,
@@ -2498,18 +2526,18 @@ export function useTasksTab(input: {
       tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
     }
     if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
-    if (button.press !== MICROPHONE_PRESS.TALK || tasks.activeTaskId === undefined) return;
-    if (!otherCall(agentId)) tell(ACT_KIND.TASKS_TALK, { agentId });
+    if (button.press !== MICROPHONE_PRESS.TALK || callSurface === undefined) return;
+    if (!otherCall(agentId)) tell(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
     else {
-      setAskedFor({ taskId: tasks.activeTaskId, agentId });
+      setAskedFor({ surface: callSurface, agentId, place });
       secondCall.ask();
     }
   };
   const pressCallNow = useRef(pressCall);
   pressCallNow.current = pressCall;
   // The doors an agent's tab takes calls through, the same from draw to draw; none where the window has no voice.
-  const callDoors = useMemo<AgentCallDoors>(
-    () => ({ onPress: (agentId) => pressCallNow.current(agentId) }),
+  const callDoors = useMemo<AgentCallPress>(
+    () => ({ onPress: (agentId, place) => pressCallNow.current(agentId, place) }),
     [],
   );
 
@@ -2517,12 +2545,30 @@ export function useTasksTab(input: {
   usePrefetchDiffBundle(live);
   // A fixture's staged task has nothing arriving on it, and code arrives
   // only on a call, since what a task opens with it already held.
+  // A call into an agent with no task stands on that agent's page, whose
+  // side panel the code it shows arrives in.
+  const pageCall =
+    pageAgent !== undefined &&
+    standingCall !== undefined &&
+    standingCall.agentId === pageAgent &&
+    standingCall.taskId === undefined;
+  const pageCode =
+    tasks.agentCallCode?.agentId === pageAgent ? tasks.agentCallCode?.shownCode : undefined;
   const arrivedTabs = usePanelArrivals({
-    // Note that nothing arrives while an agent's page holds the panel, so the plan's visit ends, and what it gained meanwhile counts as seen.
-    taskId: fixture === undefined && pageAgent === undefined ? tasks.activeTaskId : undefined,
-    board: tasks.board,
-    code: live ? (tasks.shownCode ?? []) : undefined,
-    pages: live ? (tasks.pages ?? NO_PAGES) : undefined,
+    // Note that nothing of the plan's arrives while an agent's page holds the
+    // panel, so the plan's visit ends, and what it gained meanwhile counts as
+    // seen; the page's own visit takes what its agent's call shows.
+    taskId: fixture === undefined ? (pageAgent ?? tasks.activeTaskId) : undefined,
+    board: pageAgent === undefined ? tasks.board : undefined,
+    code:
+      pageAgent === undefined
+        ? live
+          ? (tasks.shownCode ?? [])
+          : undefined
+        : pageCall
+          ? (pageCode ?? NO_CODE)
+          : undefined,
+    pages: pageAgent === undefined && live ? (tasks.pages ?? NO_PAGES) : undefined,
     panel: sidePanel,
   });
   // An agent that ended unseen marks its tab unread as an arrival does; main
@@ -3412,6 +3458,7 @@ export function useTasksTab(input: {
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
+    agentCallCode: tasks.agentCallCode,
     codeFailed: tasks.codeStatus === TASKS_READ.FAILED,
     onRetryCode: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
@@ -3622,7 +3669,7 @@ export function useTasksTab(input: {
     // The call card's way back lands where the task's call bar is in sight.
     secondCall: {
       confirm: secondCall,
-      question: secondCallQuestion(callTaskName(tasks, standingCall?.taskId)),
+      question: secondCallQuestion(callTaskName(tasks, standingCall)),
     },
     onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.

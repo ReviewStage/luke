@@ -528,12 +528,13 @@ const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
  * `voice.createLiveSession`: the peer's SDP offer, and the agent the call
- * speaks into with the task it is on. The host creates a call only into an
- * agent of the task the panel has open.
+ * speaks into with the task it is on, none for an agent with no task. The
+ * host creates a call only into an agent the account reaches on eve, whose
+ * own task is the one named.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
-  taskId: text,
+  taskId: Schema.optionalKey(text),
   agentId: text,
 });
 

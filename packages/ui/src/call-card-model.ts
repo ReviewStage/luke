@@ -1,12 +1,14 @@
 /**
  * call-card-model.ts -- what the call card says about the standing call, and where it is drawn.
  *
- * The card draws no words of the conversation: the call's task by name over
+ * The card draws no words of the conversation: the call's task by name, or
+ * its agent's for a call into an agent with no task, over
  * the call bar's own status and mutes. Everything here is read off the
  * document the card is handed, in the call bar's own terms, so the card and
  * the bar can never disagree about the call they draw.
  */
 
+import { agentTabLabel } from "@luke/features/model-label";
 import type { TasksView } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
 import {
@@ -16,7 +18,7 @@ import {
   avatarStanding,
   avatarTiled,
 } from "@luke/voice/avatar";
-import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
+import { callInProgress, type VoiceCallAbout, type VoiceView } from "@luke/voice/voice-view";
 import { type CallStatus, standingCallStatus } from "./tasks-model.js";
 
 /** The task's name where the document has none to give, which a task just started can briefly be. */
@@ -30,8 +32,13 @@ export interface CallCardModel {
   readonly microphoneMuted: boolean;
 }
 
-/** The call's task by name, from the list or the task open, whichever holds it. */
-export function callTaskName(tasks: TasksView, taskId: string | undefined): string {
+/** The call's task by name, from the list or the task open, whichever holds it; or its agent's, as its row names it, where it has no task. */
+export function callTaskName(tasks: TasksView, call: VoiceCallAbout | undefined): string {
+  if (call !== undefined && call.taskId === undefined) {
+    const agent = tasks.tasklessAgents?.find((each) => each.id === call.agentId);
+    return agent === undefined ? CALL_CARD_UNNAMED : agentTabLabel(agent);
+  }
+  const taskId = call?.taskId;
   const open = tasks.document.task;
   const named =
     tasks.tasks.find((task) => task.id === taskId)?.name ??
@@ -45,7 +52,7 @@ export function callCard(input: {
 }): CallCardModel {
   const { view, tasks } = input;
   return {
-    taskName: callTaskName(tasks, view.call?.taskId),
+    taskName: callTaskName(tasks, view.call),
     status: standingCallStatus(view, tasks.callActivity),
     microphoneMuted: !view.listening && view.voiceStatus !== LIVE_STATUS.CONNECTING,
   };
@@ -53,8 +60,9 @@ export function callCard(input: {
 
 /**
  * The agent whose call bar this window has on screen, or none: the Tasks tab
- * on a task's document with that agent's tab chosen in its column, unless its
- * version history, the window's Inbox, an agent's page, or a side panel
+ * on an agent's own page, which draws its agent's call bar as its tab would,
+ * or on a task's document with that agent's tab chosen in its column, unless
+ * its version history, the window's Inbox, an agent's page, or a side panel
  * filling the window covers the column the agent's tab stands in.
  */
 export function callBarAgentId(input: {
@@ -62,14 +70,15 @@ export function callBarAgentId(input: {
   documentPage: boolean;
   historyOpen: boolean;
   inboxOpen: boolean;
-  agentPageOpen: boolean;
+  /** The agent whose own page stands in the plan's place; none while no agent's page does. */
+  pageAgentId: string | undefined;
   sidePanelFullScreen: boolean;
   /** The agent whose tab the open task's column has chosen; none on its Chat or with no agent tab. */
   columnAgentId: string | undefined;
 }): string | undefined {
-  const covered =
-    input.historyOpen || input.inboxOpen || input.agentPageOpen || input.sidePanelFullScreen;
-  return input.tasksTab && input.documentPage && !covered ? input.columnAgentId : undefined;
+  if (!input.tasksTab || input.inboxOpen || input.sidePanelFullScreen) return undefined;
+  if (input.pageAgentId !== undefined) return input.pageAgentId;
+  return input.documentPage && !input.historyOpen ? input.columnAgentId : undefined;
 }
 
 /**

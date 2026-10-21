@@ -6,8 +6,10 @@ import type {
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
+import { useMemo } from "react";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useSteadyDoor } from "../steady-door.js";
+import type { AgentCallDoors, AgentCallPlace, AgentCallPress } from "../tasks/agent-call.js";
 import type { AgentFork } from "../tasks/fork-model.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { agentTranscript, readWholeTranscript } from "../tasks/transcript-copy.js";
@@ -37,7 +39,10 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * (`useAgentTerminalDoors`), and so are those that open a fork of one of its
  * messages or a continue of it as a draft (`useAgentDraftDoors`): the
  * task's draft tab, or the draft on an agent's own page, each started
- * through the same control.
+ * through the same control. So are the doors its Call takes a call through
+ * (`useAgentCallDoors`), the window's one press told where the surface's
+ * agents stand: the open task for its column, and the agent's own task, or
+ * none, for its page.
  */
 
 /** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`). */
@@ -134,6 +139,24 @@ export function useAgentDraftDoors(
           onOpenDraft(agents.onContinueDraft(agentId, words, attachments)),
   );
   return { onFork, onContinue };
+}
+
+/**
+ * The doors a surface's agents take calls through: the window's press
+ * (`TasksControl.calls`), told where the surface's agents stand, the task a
+ * column holds or the task an agent's page's agent is on, none for an agent
+ * with no task, and whether it is archived. Steady across renders, so a
+ * pane handed them draws nothing again as the place moves; none where the
+ * window has no voice.
+ */
+export function useAgentCallDoors(
+  calls: AgentCallPress | undefined,
+  place: AgentCallPlace,
+): AgentCallDoors | undefined {
+  const onPress = useSteadyDoor(
+    calls === undefined ? undefined : (agentId: string) => calls.onPress(agentId, place),
+  );
+  return useMemo(() => (onPress === undefined ? undefined : { onPress }), [onPress]);
 }
 
 /** One agent's actions, as every surface that draws it offers them. */
