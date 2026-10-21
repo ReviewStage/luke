@@ -84,8 +84,8 @@ import { plainWords } from "./tool-call-model.js";
  * What the developer has put on a card so far: the options picked on a
  * choice, the fields filled on a form, their note, and the files they
  * attached to it; on a thread, the steps ticked in its open `do` ask and the
- * answer pressed in it and attached to the reply (Mark done, Couldn't do it,
- * or Answer), a `decide`'s pick being its choices and an `answer`'s fields
+ * answer pressed in it and attached to the reply (Mark done or Couldn't
+ * do it), a `decide`'s pick being its choices and an `answer`'s fields
  * filled its values.
  */
 export interface InboxDraft {
@@ -322,20 +322,11 @@ export const INBOX_MISSING = {
   WORDS: "words",
 } as const;
 
-/** What the answer lacks, with the line the box's foot says it in; a field's by its label. */
+/** What the answer lacks; a field's by its label. */
 export type InboxMissing =
-  | { readonly kind: typeof INBOX_MISSING.OPTION; readonly line: string }
-  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string; readonly line: string }
-  | { readonly kind: typeof INBOX_MISSING.WORDS; readonly line: string };
-
-/** What the box's foot says an answer lacks, by what it lacks. */
-const MISSING_LINE = {
-  ONE: "Pick an option",
-  MANY: "Pick at least one",
-  APPROVAL: "Approve or decline",
-  TODO: "Tick it, or say you couldn't",
-  WORDS: "Write your answer",
-} as const;
+  | { readonly kind: typeof INBOX_MISSING.OPTION }
+  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string }
+  | { readonly kind: typeof INBOX_MISSING.WORDS };
 
 /**
  * What the card's answer still lacks, the first thing in the item's order,
@@ -354,30 +345,20 @@ export function inboxMissing(
   const ownWords = draft.note.trim() !== "" || draft.attachments.length > 0;
   switch (response.type) {
     case INBOX_RESPONSE.CHOICE:
-      if (draft.choices.length > 0 || ownWords) return undefined;
-      return {
-        kind: INBOX_MISSING.OPTION,
-        line: response.multiple === true ? MISSING_LINE.MANY : MISSING_LINE.ONE,
-      };
+      return draft.choices.length > 0 || ownWords ? undefined : { kind: INBOX_MISSING.OPTION };
     case INBOX_RESPONSE.FORM: {
       if (formSendable(response, draft)) return undefined;
       const sent = new Set(sentValues(response, draft).map((value) => value.label));
       const empty = response.fields.find(
         (field) => field.required === true && !sent.has(field.label),
       );
-      return empty === undefined
-        ? undefined
-        : { kind: INBOX_MISSING.FIELD, label: empty.label, line: `Fill in ${empty.label}` };
+      return empty === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: empty.label };
     }
     case INBOX_RESPONSE.TEXT:
-      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS, line: MISSING_LINE.WORDS };
+      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS };
     case INBOX_RESPONSE.APPROVAL:
     case INBOX_RESPONSE.TODO:
-      if (decidedOf(response, draft) !== undefined) return undefined;
-      return {
-        kind: INBOX_MISSING.OPTION,
-        line: response.type === INBOX_RESPONSE.APPROVAL ? MISSING_LINE.APPROVAL : MISSING_LINE.TODO,
-      };
+      return decidedOf(response, draft) === undefined ? { kind: INBOX_MISSING.OPTION } : undefined;
     default:
       return undefined;
   }
@@ -452,11 +433,6 @@ export function withChoice(
     ? draft.choices.filter((each) => each !== label)
     : [...draft.choices, label];
   return { ...draft, choices };
-}
-
-/** What the box's foot says of a choice of several: how many are picked, or that any may be. */
-export function pickedWords(count: number): string {
-  return count === 0 ? "Pick any that apply" : `${count} picked`;
 }
 
 /** What follows an item's question on its thread: a message on it, or where it was settled. */
@@ -728,9 +704,10 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
             }
           : undefined;
       }
-      return draft.press === INBOX_REPLY.ANSWERED
-        ? { ask: id, reply: INBOX_REPLY.ANSWERED }
-        : undefined;
+      // An ask of words alone is answered by the reply's own words or files, which the box holds as its one field.
+      return draft.note.trim() === "" && draft.attachments.length === 0
+        ? undefined
+        : { ask: id, reply: INBOX_REPLY.ANSWERED };
   }
 }
 
