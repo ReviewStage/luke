@@ -1356,6 +1356,22 @@ const lockStandingAgents = SqlSchema.findAll({
 });
 
 /**
+ * The task's standing agents with their conversations locked, once any
+ * hand-over to eve under way in them has been waited out, in the
+ * conversations' order (`dispatch-lock.ts`): a line eve took then stands
+ * awaiting when the caller's guard reads each agent idle or not, as it did
+ * when a hand-over held the row lock. An agent started meanwhile has none
+ * under way.
+ */
+const lockStandingAgentsAfterHandOvers = Effect.fnUntraced(function* (taskId: string) {
+  const standing = yield* findStandingConversations({ taskId });
+  yield* Effect.forEach(standing, ({ conversationId }) =>
+    waitOutConversationDispatch(conversationId),
+  );
+  return yield* lockStandingAgents({ taskId });
+});
+
+/**
  * The task's standing agents archived with it, at the task's own stamp and
  * as the member who archived it, once the guard, where one is handed, reads
  * every one of them stopped under its conversation's lock.
@@ -1366,13 +1382,7 @@ const archivedAgents = Effect.fnUntraced(function* <R>(
   archivedAt: Date,
   guard: TaskArchiveGuard<R> | undefined,
 ) {
-  // A hand-over to eve under way in any of them is waited out first, in the conversations' order,
-  // so its line stands awaiting when the guard reads; an agent started meanwhile has none under way.
-  const standing = yield* findStandingConversations({ taskId });
-  yield* Effect.forEach(standing, ({ conversationId }) =>
-    waitOutConversationDispatch(conversationId),
-  );
-  const agents = yield* lockStandingAgents({ taskId });
+  const agents = yield* lockStandingAgentsAfterHandOvers(taskId);
   if (agents.length === 0) return;
   if (guard !== undefined) {
     const stopped = yield* Effect.forEach(agents, guard);
@@ -1721,7 +1731,7 @@ export function finishTaskWork<R = never>(
           return false;
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
-        const agents = yield* lockStandingAgents({ taskId });
+        const agents = yield* lockStandingAgentsAfterHandOvers(taskId);
         const standings = yield* Effect.forEach(agents, idle);
         if (standings.includes(false)) return false;
         const now = yield* DateTime.nowAsDate;
