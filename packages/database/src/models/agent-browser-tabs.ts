@@ -18,6 +18,10 @@
  * drive already, and renews only a takeover of their own still standing, so
  * two members never both drive one tab, and one whose window went away
  * leaves the tab to the agent once their instant passes.
+ *
+ * The agent's side also keeps its pointer on a tab (`pointBrowserTab`), and
+ * a member's window follows a task's tabs live
+ * (`taskBrowserTabsLiveStatement`), under the same rule as the list.
  */
 
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
@@ -27,12 +31,14 @@ import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-reposito
 import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
+import { member } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
-import { agentReachableBy, reachableTask, taskReachableBy } from "./workspace-store.js";
+import { agentReachableBy, reachableTask, taskReachableBy, taskSeenBy } from "./workspace-store.js";
 
 type BrowserTabFailure = QueryError | Schema.SchemaError;
 
@@ -530,4 +536,59 @@ export function renewBrowserTabTakeover(
 /** Hands the tab back to its agent where the member drives it, answering whether they did; another member's takeover stands. */
 export function handBackBrowserTab(tabId: string, userId: string): BrowserTabEffect<boolean> {
   return Effect.map(releaseTab({ tabId, userId }), (rows) => rows.length > 0);
+}
+
+/**
+ * One task's tabs written for Neon Realtime, so a member's window follows
+ * them, the agent's pointer among them, as they move: each tab
+ * `listTaskBrowserTabs` lists the account, under the same rule of who may
+ * read it, every column under the key the wire's tab line reads it by
+ * (`@luke/features/agent-browser-tab-wire`'s `agentBrowserTabLineSchema`)
+ * and every instant in epoch milliseconds. The account is joined through its
+ * membership of the task's workspace, as Neon's guide authorizes a live
+ * read. It reads no clock, as Realtime requires, so a takeover past its
+ * instant is delivered as it stands and lapsed by the reader, and keeps no
+ * order, which the reader keeps. None where a value cannot be carried, which
+ * a caller answers as the tabs not being live.
+ */
+export function taskBrowserTabsLiveStatement(
+  userId: string,
+  taskId: string,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: agentBrowserTab.id,
+            agentId: codingAgent.id,
+            address: agentBrowserTab.address,
+            title: agentBrowserTab.title,
+            openedBy: agentBrowserTab.openedBy,
+            openedByUserId: agentBrowserTab.openedByUserId,
+            driverUserId: agentBrowserTab.driverUserId,
+            cursorX: agentBrowserTab.cursorX,
+            cursorY: agentBrowserTab.cursorY,
+            cursorKind: agentBrowserTab.cursorKind,
+            cursorViewportW: agentBrowserTab.cursorViewportW,
+            cursorViewportH: agentBrowserTab.cursorViewportH,
+          },
+          {
+            heldUntil: agentBrowserTab.heldUntil,
+            createdAt: agentBrowserTab.createdAt,
+            lastActedAt: agentBrowserTab.lastActedAt,
+            cursorAt: agentBrowserTab.cursorAt,
+          },
+        ),
+      )
+      .from(agentBrowserTab)
+      .innerJoin(task, eq(task.id, agentBrowserTab.taskId))
+      .innerJoin(
+        member,
+        and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
+      )
+      // Note that a tab no coding agent's conversation names is listed to no one, as the held list reads it.
+      .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
+      .where(and(eq(agentBrowserTab.taskId, taskId), taskSeenBy(userId), agentReachableBy(userId))),
+  );
 }

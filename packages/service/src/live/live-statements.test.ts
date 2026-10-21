@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
@@ -78,6 +79,7 @@ function liveStatements() {
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
     "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
+    "task.browserTabs": Option.getOrThrow(taskBrowserTabsLiveStatement(USER_ID, randomUUID())),
     "task.history": Option.getOrThrow(taskHistoryLiveStatements(USER_ID, randomUUID())).revisions,
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),

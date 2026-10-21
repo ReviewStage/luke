@@ -19,7 +19,12 @@
  * as one statement that marks where it stands, after the task is read as
  * the account, so one it does not reach is not found, as its board read
  * answers; and `GET /api/live/task-record?id=` its pages and calls, one
- * statement a part (`task-record-live.ts`), on the same terms.
+ * statement a part (`task-record-live.ts`), on the same terms. `GET
+ * /api/live/task-browser-tabs?id=` answers its Browser tabs as one
+ * statement, the agent's pointer on each among them, so a window draws the
+ * pointer moving within a moment of the agent's action; a takeover is
+ * delivered as it stands and lapsed by the reader, since no statement reads
+ * the clock.
  *
  * Either read asked with `?poll=true`, or one Realtime is off for or could
  * not seal, is answered with each statement's rows inline at the poll
@@ -66,6 +71,7 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
+import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
@@ -306,6 +312,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statements = taskHistoryLiveStatements(context.userId, taskId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
+    }),
+    taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const taskId = yield* rowIdOf(input.id);
+      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statement = taskBrowserTabsLiveStatement(context.userId, taskId);
+      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts({ tabs: statement.value }, input);
     }),
     macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

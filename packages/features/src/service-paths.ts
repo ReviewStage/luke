@@ -93,6 +93,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_PAGES: "/api/live/task-pages",
   /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
+  /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
+  LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
   /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */

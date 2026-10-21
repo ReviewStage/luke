@@ -89,6 +89,77 @@ const agentBrowserTabSchema = EffectSchema.Struct({
 
 export type AgentBrowserTab = typeof agentBrowserTabSchema.Type;
 
+/**
+ * A tab as the service keeps it, every instant in epoch milliseconds and
+ * every value as its column holds it: what the held list and the live read
+ * (`live-wire.ts`) each build a tab from (`agentBrowserTabOf`), so the two
+ * never answer one tab apart.
+ */
+export const agentBrowserTabLineSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  /** The coding agent whose browser holds the tab. */
+  agentId: wireUuidSchema,
+  address: EffectSchema.String,
+  title: EffectSchema.String,
+  openedBy: EffectSchema.Literals(Object.values(AGENT_BROWSER_TAB_OPENER)),
+  openedByUserId: EffectSchema.NullOr(EffectSchema.String),
+  driverUserId: EffectSchema.NullOr(EffectSchema.String),
+  heldUntil: EffectSchema.NullOr(countedNumber),
+  createdAt: countedNumber,
+  lastActedAt: countedNumber,
+  cursorX: EffectSchema.NullOr(EffectSchema.Finite),
+  cursorY: EffectSchema.NullOr(EffectSchema.Finite),
+  cursorKind: EffectSchema.NullOr(EffectSchema.Literals(Object.values(BROWSER_CURSOR_KIND))),
+  cursorViewportW: EffectSchema.NullOr(countedNumber),
+  cursorViewportH: EffectSchema.NullOr(countedNumber),
+  cursorAt: EffectSchema.NullOr(countedNumber),
+});
+
+export type AgentBrowserTabLine = typeof agentBrowserTabLineSchema.Type;
+
+/** Where the agent's pointer last went on the tab; none until every cursor column is written. */
+function cursorOfLine(line: AgentBrowserTabLine): AgentBrowserTabCursor | undefined {
+  const { cursorX, cursorY, cursorKind, cursorViewportW, cursorViewportH, cursorAt } = line;
+  if (cursorX === null || cursorY === null || cursorKind === null) return undefined;
+  if (cursorViewportW === null || cursorViewportH === null || cursorAt === null) return undefined;
+  return {
+    x: cursorX,
+    y: cursorY,
+    kind: cursorKind,
+    viewport: { width: cursorViewportW, height: cursorViewportH },
+    at: cursorAt,
+  };
+}
+
+/**
+ * A kept tab as a member's window reads it at the instant given, in epoch
+ * milliseconds: its driver only while their takeover stands then, and its
+ * cursor once the agent has pointed at it. Note that a takeover lapsing
+ * changes no column, so a reader that follows the rows reads them again
+ * at the instant one lapses.
+ */
+export function agentBrowserTabOf(line: AgentBrowserTabLine, now: number): AgentBrowserTab {
+  const driving =
+    line.driverUserId !== null && line.heldUntil !== null && line.heldUntil > now
+      ? { userId: line.driverUserId, heldUntil: line.heldUntil }
+      : null;
+  const cursor = cursorOfLine(line);
+  return {
+    id: line.id,
+    agentId: line.agentId,
+    address: line.address.slice(0, BROWSER_SHOWN_MAX_CHARS),
+    title: line.title.slice(0, BROWSER_SHOWN_MAX_CHARS),
+    openedBy:
+      line.openedBy === AGENT_BROWSER_TAB_OPENER.MEMBER
+        ? { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId: line.openedByUserId }
+        : { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
+    driver: driving,
+    createdAt: line.createdAt,
+    lastActedAt: line.lastActedAt,
+    ...(cursor === undefined ? {} : { cursor }),
+  };
+}
+
 /** A task's tabs, every agent's, the oldest first (GET). */
 export const agentBrowserTabsAnswerSchema = EffectSchema.Struct({
   tabs: EffectSchema.Array(agentBrowserTabSchema),
