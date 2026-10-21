@@ -88,7 +88,9 @@ export function useAutomations(workspaceId: string | undefined) {
   /**
    * One write out: counted as its automation's newest, a new one's under
    * no automation yet, and its answer handed to `land` only while it still
-   * is and no list was pushed since it was sent.
+   * is and, for a write of one the list holds, no list was pushed since it
+   * was sent. A new one's answer is always handed on, since its page opens on
+   * it before any push may carry it.
    */
   const written = useCallback(
     <Answer>(
@@ -102,14 +104,33 @@ export function useAutomations(workspaceId: string | undefined) {
       if (automationId !== undefined) newestWrite.set(automationId, count);
       const pushedBefore = pushes.current;
       const settled = (answer: Answer): Answer => {
-        const newest = automationId === undefined || newestWrite.get(automationId) === count;
-        if (newest && pushes.current === pushedBefore) land(answer);
+        if (automationId === undefined) {
+          land(answer);
+          return answer;
+        }
+        if (newestWrite.get(automationId) === count && pushes.current === pushedBefore) {
+          land(answer);
+        }
         return answer;
       };
       return asked.then(settled, () => settled(refused));
     },
     [newestWrite],
   );
+  /** A new automation taken into the list of the workspace it is of, first, unless a push already carried it, which is as new as the answer or newer. */
+  const landCreated = useCallback((answer: AutomationView) => {
+    if (!("automation" in answer)) return;
+    const { automation } = answer;
+    setHeld((was) =>
+      was !== undefined &&
+      was.workspaceId === automation.workspaceId &&
+      was.read !== undefined &&
+      "automations" in was.read &&
+      !was.read.automations.some((each) => each.id === automation.id)
+        ? { ...was, read: replaced(was.read, automation) }
+        : was,
+    );
+  }, []);
   /** A write's answer taken into the list of the workspace it is of, in its place, and into no other's. */
   const landAutomation = useCallback((answer: AutomationView) => {
     if (!("automation" in answer)) return;
@@ -126,9 +147,9 @@ export function useAutomations(workspaceId: string | undefined) {
         undefined,
         act(ACT_KIND.AUTOMATIONS_CREATE, params),
         UNANSWERED,
-        landAutomation,
+        landCreated,
       ),
-    [act, written, landAutomation],
+    [act, written, landCreated],
   );
   const change = useCallback(
     (params: AutomationChangeParams) =>
