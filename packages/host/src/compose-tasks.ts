@@ -10,9 +10,12 @@ import {
   type WorkspaceCallResult,
 } from "@luke/features";
 import {
+  browserTabsOfLiveRows,
   LIVE_SIGNED_OUT,
+  nextBrowserTabLapse,
   pagesOfLiveRows,
   revisionsOfLiveRows,
+  taskBrowserTabsLiveRowsSchema,
   taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
@@ -62,6 +65,7 @@ import {
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
+  taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksArchiveParamsSchema,
@@ -300,6 +304,7 @@ export type TasksClient = Pick<
   | "recordLive"
   | "pagesLive"
   | "historyLive"
+  | "browserTabsLive"
   | "saveBoard"
   | "readCode"
   | "readFile"
@@ -578,6 +583,80 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         else historyTxWaits.set(taskId, wait);
       },
     });
+  }
+
+  /** The Browser tabs of each task a window's side panel follows, by the task. */
+  const browserTabsFollows = yield* FiberMap.make<string>();
+  const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
+
+  /**
+   * Follows `taskId`'s Browser tabs live until let go, each change emitted as
+   * `TASKS_BROWSER_TABS_CHANGED`. A takeover lapses with no row moving, so
+   * the rows last delivered are told again at each instant one lapses, until
+   * the next delivery takes their place.
+   */
+  function followBrowserTabs(taskId: string) {
+    type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    const tell = (rows: Rows | undefined, now: number) =>
+      kernel.emit(
+        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
+        carried({
+          taskId,
+          view:
+            rows === undefined
+              ? { failure: TASK_CALL_FAILURE.UNANSWERED }
+              : { tabs: browserTabsOfLiveRows(rows, now) },
+        }),
+      );
+    // The rows told as they arrive, then again at each takeover's lapse in turn.
+    const toldUntilMoved = (rows: Rows | undefined) =>
+      Effect.gen(function* () {
+        let now = yield* Clock.currentTimeMillis;
+        tell(rows, now);
+        if (rows === undefined) return;
+        let lapse = nextBrowserTabLapse(rows, now);
+        while (lapse !== undefined) {
+          yield* Effect.sleep(Duration.millis(lapse - now));
+          now = Math.max(lapse, yield* Clock.currentTimeMillis);
+          tell(rows, now);
+          lapse = nextBrowserTabLapse(rows, now);
+        }
+      });
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const delivered = yield* Queue.sliding<Rows | undefined>(1);
+        yield* Effect.forkScoped(
+          Stream.runDrain(
+            Stream.switchMap(Stream.fromQueue(delivered), (rows) =>
+              Stream.fromEffect(toldUntilMoved(rows)),
+            ),
+          ),
+        );
+        return yield* pushLive({
+          seal: (poll, after) =>
+            gate() && userId !== undefined
+              ? Effect.map(served(client.browserTabsLive(taskId, userId, poll, after)), (sealed) =>
+                  sealed.ok
+                    ? sealed.answer
+                    : {
+                        failure: sealed.failure,
+                        gone:
+                          sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                          sealed.failure === LIVE_SIGNED_OUT.failure,
+                      },
+                )
+              : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
+          decode: decodeBrowserTabs,
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+          publish: (rows) => {
+            Queue.offerUnsafe(delivered, rows);
+          },
+        });
+      }),
+    );
   }
 
   /** The pages of each task a window's Inbox follows, by the task. */
@@ -1709,6 +1788,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(historyFollows, read.success.taskId);
         return {};
       }),
+    // A task's Browser tabs are followed for a window's side panel while it
+    // lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
+    // what is already followed does nothing.
+    [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("following a task's Browser tabs names the task");
+        if (!gate()) return {};
+        const { taskId } = read.success;
+        yield* FiberMap.run(browserTabsFollows, taskId, followBrowserTabs(taskId), {
+          onlyIfMissing: true,
+        });
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("letting a task's Browser tabs go names the task");
+        yield* FiberMap.remove(browserTabsFollows, read.success.taskId);
+        return {};
+      }),
     // A plan's pages are followed for a window's Inbox while it draws an item
     // of that plan, and told only as `TASKS_PAGES_CHANGED`; a follow of what
     // is already followed does nothing.
@@ -2508,6 +2610,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(boardFollow);
       yield* FiberMap.clear(pagesFollows);
+      yield* FiberMap.clear(browserTabsFollows);
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);

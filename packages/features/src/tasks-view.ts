@@ -678,6 +678,25 @@ export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
 
 export type TasksBrowserTabsAnswer = typeof tasksBrowserTabsAnswerSchema.Type;
 
+/** A task's agents' Browser tabs, followed by a window while its side panel lists them. */
+export const taskBrowserTabsFollowSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+});
+
+export type TaskBrowserTabsFollow = typeof taskBrowserTabsFollowSchema.Type;
+
+/**
+ * A followed task's Browser tabs as they now stand, the agent's pointer on
+ * each among them, told each time one moves or a takeover lapses while
+ * followed, or why there are none.
+ */
+export const taskBrowserTabsFollowedSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  view: tasksBrowserTabsAnswerSchema,
+});
+
+export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
+
 /** An issue to link to a task, as its page names it: by what its provider finds it by, with its relation. */
 export const tasksIssueLinkParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
