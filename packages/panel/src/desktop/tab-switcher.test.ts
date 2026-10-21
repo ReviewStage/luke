@@ -332,3 +332,33 @@ test("a task's tabs stay stops while the Inbox stands in its place with a panel 
   letGo();
   assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.CODE]]);
 });
+
+test("a tab closed on its task's page stays let go once the Inbox stands in the task's place", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  const home = { ...tasksControl().inboxView, open: false };
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { boundFor: undefined, inboxView: home }));
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  const closed = onTask(SIDE_PANEL_TAB.PLAN, told);
+  await window.draw({
+    ...closed,
+    sidePanel: { ...closed.sidePanel, strip: [SIDE_PANEL_TAB.PLAN] },
+  });
+  const inboxOver = onTask(SIDE_PANEL_TAB.PLAN, told);
+  await window.draw({
+    ...inboxOver,
+    inboxView: { ...inboxOver.inboxView, open: true },
+    sidePanel: { ...inboxOver.sidePanel, strip: [] },
+  });
+
+  tab();
+  tab();
+  assert.deepEqual(
+    cards().map((card) => card.querySelector(".tab-switcher-name")?.textContent),
+    ["Inbox", DOCUMENT_TASK.name, "Home"],
+  );
+  key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
+  letGo();
+});

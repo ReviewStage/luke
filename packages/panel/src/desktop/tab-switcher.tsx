@@ -462,6 +462,8 @@ export function TabSwitcher({
     shown.current = now;
     const first = stops.current[0];
     stops.current = arrived(stops.current, before, now, front.current);
+    // A tab closed on its task's page is let go then, before a page standing in its place can hide the close.
+    standing();
     const settled = stops.current[0];
     if (settled === undefined || (first !== undefined && sameStop(first, settled))) return;
     startSettle({
