@@ -12,6 +12,8 @@ import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
+  type TaskBrowserTabsFollow,
+  type TaskBrowserTabsFollowed,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -100,6 +102,10 @@ export interface TasksProceduresDependencies {
     tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
     tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
     tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
+    /** A task's Browser tabs followed at the host, their changes heard through `onTaskBrowserTabsChanged`. */
+    tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
+    tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
+    onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
     tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
@@ -164,6 +170,8 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages. */
   const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
+  /** How many streams stand open of each task's Browser tabs. */
+  const openBrowserTabs: OpenFollows<TasksBrowserTabsAnswer> = MutableHashMap.empty();
   /** How many streams stand open of each plan's history. */
   const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
   return {
@@ -422,6 +430,25 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* Effect.fail(errors.REFUSED());
       },
     ),
+    // A task's Browser tabs followed for its side panel: two panels on one task share one follow at the host.
+    [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actPort[
+      TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const tabs = followedStream(
+        {
+          keyOf: (scope: TaskBrowserTabsFollow) => scope.taskId,
+          follow: host.tasksBrowserTabsFollow,
+          unfollow: host.tasksBrowserTabsUnfollow,
+          onChanged: host.onTaskBrowserTabsChanged,
+          valueOf: (changed: TaskBrowserTabsFollowed, scope: TaskBrowserTabsFollow) =>
+            changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+        },
+        openBrowserTabs,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(tabs));
+    }),
     [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOUR_CODE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

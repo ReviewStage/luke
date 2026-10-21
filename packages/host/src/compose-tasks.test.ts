@@ -30,6 +30,7 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import {
   LIVE_SIGNED_OUT,
   type TaskBoardLiveAnswer,
+  type TaskBrowserTabsLiveAnswer,
   type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
@@ -165,6 +166,8 @@ interface FakeService extends TasksClient {
   recordSeals: Record<string, TaskRecordLiveAnswer>;
   /** What the service seals for following each task's pages; none answers unanswered. */
   pageSeals: Record<string, TaskPagesLiveAnswer>;
+  /** What the service seals for following each task's Browser tabs; none answers unanswered. */
+  browserTabSeals: Record<string, TaskBrowserTabsLiveAnswer>;
   /** What the service seals for following each task's newest page of history; none answers unanswered. */
   historySeals: Record<string, TaskHistoryLiveAnswer>;
   /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
@@ -478,6 +481,7 @@ function fakeService(tasks: Task[]): FakeService {
     boardSeals: {},
     recordSeals: {},
     pageSeals: {},
+    browserTabSeals: {},
     historySeals: {},
     recordReads: [],
     images: {},
@@ -972,6 +976,13 @@ function fakeService(tasks: Task[]): FakeService {
     historyLive: (taskId) =>
       Effect.sync(() => {
         const sealed = service.historySeals[taskId];
+        return sealed === undefined
+          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
+          : { ok: true, answer: sealed };
+      }),
+    browserTabsLive: (taskId) =>
+      Effect.sync(() => {
+        const sealed = service.browserTabSeals[taskId];
         return sealed === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
           : { ok: true, answer: sealed };
@@ -3682,6 +3693,92 @@ it.effect(
       );
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+/** A task's Browser tabs sealed for following, named by the round it was sealed in. */
+function sealedBrowserTabs(round: number): TaskBrowserTabsLiveAnswer {
+  return {
+    url: "wss://realtime.example/v1",
+    queries: {
+      tabs: { capability: `tabs-${round}`, queryFingerprint: "tabs", expiresAt: 3_600_000 },
+    },
+  };
+}
+
+/** One kept tab's row, as the live read delivers it, the agent's pointer on it. */
+const SIGN_IN_TAB = {
+  id: "7c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+  agentId: "8d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a",
+  address: "https://example.com/sign-in",
+  title: "Sign in",
+  openedBy: "agent",
+  openedByUserId: null,
+  driverUserId: null,
+  heldUntil: null,
+  createdAt: 1_000,
+  lastActedAt: 1_500,
+  cursorX: 320,
+  cursorY: 200,
+  cursorKind: "click",
+  cursorViewportW: 1280,
+  cursorViewportH: 800,
+  cursorAt: 1_500,
+} as const;
+
+it.effect(
+  "a task's Browser tabs followed for the side panel are told as they move, the agent's pointer among them, told again as a takeover lapses, and let go they stop",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeBoardRealtime();
+      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const changed = (view: WireValue) => [
+        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
+        { taskId: INVITES, view },
+      ];
+      const tab = {
+        id: SIGN_IN_TAB.id,
+        agentId: SIGN_IN_TAB.agentId,
+        address: SIGN_IN_TAB.address,
+        title: SIGN_IN_TAB.title,
+        openedBy: { kind: "agent" },
+        createdAt: 1_000,
+        lastActedAt: 1_500,
+        cursor: {
+          x: 320,
+          y: 200,
+          kind: "click",
+          viewport: { width: 1280, height: 800 },
+          at: 1_500,
+        },
+      };
+
+      yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
+
+      service.browserTabSeals[INVITES] = sealedBrowserTabs(1);
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* boardSettled;
+      // Dana takes the tab over until ten seconds in.
+      realtime.deliver("tabs-1", [
+        { ...SIGN_IN_TAB, driverUserId: "user-dana", heldUntil: 10_000 },
+      ]);
+      yield* boardSettled;
+      assert.deepEqual(pushed.slice(1), [
+        changed({ tabs: [{ ...tab, driver: { userId: "user-dana", heldUntil: 10_000 } }] }),
+      ]);
+
+      // Her window goes away, so the takeover lapses with no row moving.
+      yield* TestClock.adjust(Duration.seconds(8));
+      yield* boardSettled;
+      assert.deepEqual(pushed.slice(2), [changed({ tabs: [{ ...tab, driver: null }] })]);
+      assert.equal(told.length, 0, "a task's Browser tabs are never told in the view");
+
+      yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), []);
     }),

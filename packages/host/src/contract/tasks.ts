@@ -12,8 +12,10 @@
 import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
 import {
   codeLinesSchema,
+  type TasksBrowserTabsAnswer,
   type TasksPagesAnswer,
   type TasksRevisionsAnswer,
+  taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksArchiveParamsSchema,
@@ -192,6 +194,11 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actProcedure("Could not read the task's Browser tabs.")
     .input(exactInput(tasksBrowserTabsParamsSchema))
     .output(EffectSchema.flip(agentBrowserTabsAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actProcedure(
+    "Could not follow the task's Browser tabs on this system.",
+  )
+    .input(exactInput(taskBrowserTabsFollowSchema))
+    .output(eventIterator(type<TasksBrowserTabsAnswer>())),
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actProcedure("Could not colour that code on this system.")
     .input(exactInput(colourCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),
