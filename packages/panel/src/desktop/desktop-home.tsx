@@ -14,7 +14,7 @@ import {
   Text,
   WingFace,
 } from "@luke/ui";
-import { teammateCreator } from "@luke/ui/actor-model";
+import { creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { type ReactNode, useCallback, useRef, useState } from "react";
@@ -37,6 +37,7 @@ import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { useMinute } from "../tasks/task-time.js";
+import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { TaskStatusMark } from "./task-card.js";
@@ -149,8 +150,12 @@ export function RecentRow({
   face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const teammate = teammateCreator(task, useMemberDirectory());
-  const creator = face ? teammate : undefined;
+  const directory = useMemberDirectory();
+  // Note that Luke or the agent that made a task wears its square on a person's page too, where the person's own face is left to the head.
+  const origin = useTaskOrigin()(task);
+  const creator = origin ?? (face ? teammateCreator(task, directory) : undefined);
+  const forWhom =
+    origin !== undefined && face ? creatorActor(task, directory, undefined) : undefined;
   return (
     <ListRow
       leading={
@@ -171,7 +176,9 @@ export function RecentRow({
         <span className="home-row-meta">
           <FadingWords className="home-row-context" words={task.repository ?? "No repository"} />
           {creator === undefined ? null : <CreatorHeard actor={creator} />}
-          {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
+          {creator === undefined ? null : (
+            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} forWhom={forWhom} />
+          )}
           <TaskStatusMark task={task} />
           <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} />
         </span>

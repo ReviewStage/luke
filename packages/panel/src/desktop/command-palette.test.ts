@@ -24,7 +24,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -1116,6 +1116,47 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
   // A query running from the task's name into its creator's names them too.
   type("budgetch");
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+});
+
+test("a task Luke or a coding agent made wears their square at its row's end, the reader's own too, says who in its detail, and is found by it", () => {
+  const dean = { userId: "user-dean", name: "Dean Stratakos" };
+  const task = (id: string, origin?: TaskSummary["origin"]) => ({
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/relay",
+    ownerId: dean.userId,
+    createdBy: dean,
+    ...(origin === undefined ? undefined : { origin }),
+  });
+  openPalette(
+    tasksControl({
+      me: dean.userId,
+      tasks: [
+        task("Invite emails", { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" }),
+        task("Audit log export", { actor: PLAN_ACTOR.NOTETAKER }),
+        task("Rate limits"),
+      ],
+    }),
+  );
+  chooseFilter("Tasks");
+  const marks = () =>
+    [...document.querySelectorAll('[role="option"]')].map(
+      (row) =>
+        row.querySelector(".luke-combobox-option-hint .actor-mark")?.getAttribute("data-kind") ??
+        null,
+    );
+
+  assert.deepEqual(rows(), [
+    "Invite emails · acme/relay · by Coding agent",
+    "Audit log export · acme/relay · by Luke",
+    "Rate limits · acme/relay",
+  ]);
+  assert.deepEqual(marks(), ["agent", "luke", null]);
+  type("coding agent");
+  assert.deepEqual(rows(), ["Invite emails · acme/relay · by Coding agent"]);
 });
 
 /** Offers ⌘K's own Show my tasks, as the sidebar does while it would change the list, and records each run. */

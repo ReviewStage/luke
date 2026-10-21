@@ -697,6 +697,38 @@ body,
   opacity: 0.8;
 }
 
+/* The member Luke, an agent, or an automation acted for, on the corner of
+   its square: their face at a share of the mark's edge, cut from the ground
+   by a ring of it, so a task one of them made reads as theirs and its
+   member's at once. The face is drawn at the smallest size and scaled, so
+   a letter keeps its weight at every size the mark is. */
+.actor-mark-for {
+  position: absolute;
+  right: -22%;
+  bottom: -18%;
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
+  transform: scale(0.6);
+  transform-origin: bottom right;
+}
+
+.actor-mark[data-size="inline"] .actor-mark-for {
+  transform: scale(0.68);
+}
+
+.actor-mark:is([data-size="row"], [data-size="account"]) .actor-mark-for {
+  transform: scale(0.8);
+}
+
+.actor-mark:is([data-size="card"], [data-size="page"]) .actor-mark-for {
+  right: -8%;
+  bottom: -8%;
+  transform: scale(1);
+}
+
 /* A line that names an actor: its words and the actor in one row centred on
    the disc, so the disc never rides above the words' baseline. Note that
    its spaces stand inside its words, because a row drops a run that is
@@ -8666,7 +8698,21 @@ button.tasks-board-card-press:focus-visible::after {
 
 .tasks-board-face {
   display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
   margin-left: auto;
+}
+
+/* Who made a card's task where its member did not by hand, Luke or an
+   agent, named muted before their square, cut short rather than pushing
+   the key aside. */
+.tasks-board-maker {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--luke-color-text-subtle);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* A card's name stands whole under its line, in the label's weight,

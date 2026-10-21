@@ -78,6 +78,7 @@ import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
+import { useTaskMaker } from "./use-task-origin.js";
 import {
   useWordsDatePicker,
   WordsDatePickerRoom,
@@ -309,9 +310,11 @@ function PlanByline({
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
   const creator = useCreator(task, place.reader.readerId);
+  const maker = useTaskMaker(task);
   return (
     <DocumentByline
       creator={creator}
+      maker={maker}
       createdAt={task.createdAt}
       now={place.now}
       edited={
