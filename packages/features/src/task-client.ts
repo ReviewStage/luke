@@ -39,6 +39,7 @@ import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   type TaskBoardLiveAnswer,
+  type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
@@ -465,6 +466,27 @@ export class HostedTaskClient {
   > {
     return hostedResult(
       askLive(this.#hosted.live.taskRecord, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /**
+   * One task's pages, each at its newest version, sealed for following over
+   * Neon Realtime, or with `poll` their rows inline at the poll address, on
+   * the terms its record's is.
+   */
+  pagesLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskPagesLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskPages, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
       LIVE_REFUSALS,
     );
   }

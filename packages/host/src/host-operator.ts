@@ -170,6 +170,8 @@ import {
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskPagesFollow,
+  type TaskPagesFollowed,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
   type TasksBrowserTabsAnswer,
@@ -254,6 +256,7 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  taskPagesFollowedSchema,
   tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
@@ -500,6 +503,12 @@ export interface HostOperator {
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's pages, each by its newest version; or that the service did not answer. */
   tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
+  /** One plan's pages followed from now until let go, heard through `onTaskPagesChanged`. */
+  tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
+  /** A followed plan's pages let go: nothing more is heard of them until they are followed again. */
+  tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
+  /** A followed plan's pages as they now stand, each time they move while followed. */
+  onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
   /** One picture of one plan as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
@@ -1485,6 +1494,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(tasksPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksPagesFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, scope)),
+    tasksPagesUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, scope)),
+    onTaskPagesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(taskPagesFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     tasksPages: (params) =>
       Effect.map(

@@ -20,6 +20,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
+import { taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
@@ -83,6 +84,7 @@ function liveStatements() {
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
+    "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
     ),

@@ -24,7 +24,12 @@ import {
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
-import { LIVE_SIGNED_OUT, type TaskConversationLiveAnswer } from "@luke/features/live-wire";
+import {
+  LIVE_SIGNED_OUT,
+  pagesOfLiveRows,
+  type TaskConversationLiveAnswer,
+  taskPagesLiveRowsSchema,
+} from "@luke/features/live-wire";
 import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
@@ -72,6 +77,7 @@ import {
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TaskWorkTurn,
+  taskPagesFollowSchema,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksBrowserTabsParamsSchema,
@@ -161,6 +167,7 @@ import type { Composer } from "./composer.js";
 import { type ConversationMark, conversationMark, markMoved } from "./conversation-follow.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
+import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt } from "./task-code.js";
 import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
@@ -414,6 +421,7 @@ export type TasksClient = Pick<
   | "readBoard"
   | "boardLive"
   | "recordLive"
+  | "pagesLive"
   | "saveBoard"
   | "readTranscript"
   | "readWork"
@@ -702,6 +710,42 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
+
+  /** The pages of each task a window's Inbox follows, by the task. */
+  const pagesFollows = yield* FiberMap.make<string>();
+  const decodePages = Schema.decodeUnknownOption(taskPagesLiveRowsSchema);
+
+  /** Follows `taskId`'s pages live until let go, each change emitted as `TASKS_PAGES_CHANGED`. */
+  function followPages(taskId: string) {
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    return pushLive({
+      seal: (poll, after) =>
+        gate() && userId !== undefined
+          ? Effect.map(served(client.pagesLive(taskId, userId, poll, after)), (sealed) =>
+              sealed.ok
+                ? sealed.answer
+                : {
+                    failure: sealed.failure,
+                    gone:
+                      sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                      sealed.failure === LIVE_SIGNED_OUT.failure,
+                  },
+            )
+          : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
+      decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: kernel.now,
+      publish: (pages) =>
+        kernel.emit(
+          GATEWAY_EVENT.TASKS_PAGES_CHANGED,
+          carried({
+            taskId,
+            view: pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
+          }),
+        ),
+    });
+  }
 
   /** The planning workers' transcripts main follows for its windows, one fiber each. */
   const followedWorkers = yield* FiberMap.make<TaskWorkerKey>();
@@ -1970,6 +2014,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A plan's pages are answered to the Inbox that asked and held nowhere,
     // since the view holds the active plan's alone.
+    // A plan's pages are followed for a window's Inbox while it draws an item
+    // of that plan, and told only as `TASKS_PAGES_CHANGED`; a follow of what
+    // is already followed does nothing.
+    [GATEWAY_METHOD.TASKS_PAGES_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskPagesFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("following a task's pages names the task");
+        if (!gate()) return {};
+        const { taskId } = read.success;
+        yield* FiberMap.run(pagesFollows, taskId, followPages(taskId), { onlyIfMissing: true });
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskPagesFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("letting a task's pages go names the task");
+        yield* FiberMap.remove(pagesFollows, read.success.taskId);
+        return {};
+      }),
     [GATEWAY_METHOD.TASKS_PAGES]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
@@ -2701,6 +2766,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(conversationRead);
       yield* FiberHandle.clear(boardFollow);
+      yield* FiberMap.clear(pagesFollows);
       yield* FiberMap.clear(followedWorkers);
       // A follow outlives its last reader a while, sealed for the account it opened under, so a sign-out lets every one go.
       for (const key of yield* RcMap.keys(workerTranscripts)) {
