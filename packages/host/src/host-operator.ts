@@ -1715,7 +1715,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentStart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
-          taskId: params.taskId,
+          ...(params.taskId === undefined ? undefined : { taskId: params.taskId }),
           idempotencyKey: params.idempotencyKey,
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),

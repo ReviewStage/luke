@@ -648,6 +648,31 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * Starts an agent from the one named, continuing it or forking it at the
+   * message the request's `from` names, in that agent's own place: its task,
+   * or its workspace and repository where it has none. Keyed and refused as
+   * `start` is; a request whose `from` names no agent is refused here.
+   */
+  startFrom(
+    request: CodingAgentStartRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const sourceId = request.from?.agentId;
+    const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
+    if (sourceId === undefined || admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      Effect.map(
+        askHosted(
+          this.#hosted.agents.startFrom,
+          { params: { id: sourceId }, body: admitted },
+          HOSTED_DEADLINE.START,
+        ),
+        (started) => started.body,
+      ),
+      START_REFUSALS,
+    );
+  }
+
+  /**
    * One agent's transcript past the cursor, or a worker's, read at once
    * rather than held, with whether the held read would have held on it: for
    * a reader following the transcript's live statements, which reads again

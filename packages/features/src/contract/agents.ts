@@ -8,7 +8,10 @@
  * (`inputStructure: "detailed"`), the body exactly. A Start answers 201
  * for the agent it made and 200 for the one a retry under the same key
  * already made, so it answers its status beside its body
- * (`outputStructure: "detailed"`). Outputs are the wire schemas flipped
+ * (`outputStructure: "detailed"`). A Start from an agent is keyed by that
+ * agent rather than a task (`POST /api/agents/{id}/agents`), so an agent with
+ * no task is continued and forked as one on a task is; its body is a Start's,
+ * whose `from` names the path's agent. Outputs are the wire schemas flipped
  * (`packages/service/src/orpc/base.ts`).
  */
 
@@ -121,6 +124,19 @@ export const agentsContract = {
       openapi({
         method: HTTP_METHOD.POST,
         path: `${HOSTED_SERVICE_PATH.TASKS}/{id}/agents`,
+        inputStructure: "detailed",
+        outputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(idParams, codingAgentStartRequestSchema))
+    .output(EffectSchema.flip(startAnswerSchema)),
+  /** An agent started from the one the path names, continuing it or forking it, in that agent's own place: its task, or its workspace and repository where it has no task. */
+  startFrom: hostedProcedure
+    .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: `${AGENT_PATH}/agents`,
         inputStructure: "detailed",
         outputStructure: "detailed",
       }),

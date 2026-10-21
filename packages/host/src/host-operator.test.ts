@@ -164,6 +164,30 @@ it.effect("a task filed for later carries its status and priority to the host", 
   }),
 );
 
+it.effect(
+  "a Start from an agent that names no task travels to the host with no task key, and one on a task with its task",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const from = { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
+
+      yield* operator.codingAgentStart({ idempotencyKey: "press-1", from });
+      yield* operator.codingAgentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.CODING_AGENTS_START, { idempotencyKey: "press-1", from }],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_START,
+            { taskId: "task-1", idempotencyKey: "press-2", from },
+          ],
+        ],
+      );
+    }),
+);
+
 it.effect("an inbox answer's files travel to the host with its words, under the answer's key", () =>
   Effect.gen(function* () {
     const { client, requests } = recordingClient();

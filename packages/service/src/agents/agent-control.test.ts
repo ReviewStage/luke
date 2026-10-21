@@ -75,7 +75,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
         const startFrom = (userId: string, messageId?: string) =>
           startFromOf(
             userId,
-            task.id,
+            { taskId: task.id },
             { agentId: agent.id, ...(messageId === undefined ? undefined : { messageId }) },
             [],
             randomUUID(),
