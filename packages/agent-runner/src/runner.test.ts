@@ -1,10 +1,10 @@
 /**
- * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake Luke: the config line in, messages in, Stop, every event out in order through failed posts, and the launch's end where the agent's turn ends.
+ * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake Luke: the config line in, messages in, Stop, every event out in order through failed posts, a heartbeat while the CLI says nothing, and the launch's end where the agent's turn ends.
  */
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Cause, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
@@ -16,6 +16,7 @@ import {
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
+  RUNNER_HEARTBEAT,
   type RunnerConfig,
   type RunnerEvent,
 } from "./protocol.js";
@@ -267,6 +268,38 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
       RUNNER_EVENT.END,
     ]);
   }),
+);
+
+it.effect(
+  "posts a heartbeat with no events every interval while the harness says nothing, and none once the launch ended",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke([], "Working on the first message.");
+      const { prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
+      const heartbeats = () =>
+        luke.bodies.filter((body) => JSON.parse(body).events.length === 0).length;
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+      const beforeAny = heartbeats();
+      // Each interval is let run out, and its heartbeat land, before the next begins.
+      for (const beat of [1, 2]) {
+        yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS));
+        for (let step = 0; step < 500 && heartbeats() < beat; step += 1) yield* Effect.yieldNow;
+      }
+      const whileSilent = heartbeats();
+      yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
+      yield* Queue.take(prompted);
+      yield* Queue.take(prompted);
+      yield* release;
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      yield* TestClock.adjust(Duration.millis(2 * RUNNER_HEARTBEAT.EVERY_MS));
+
+      assert.equal(beforeAny, 0);
+      assert.equal(whileSilent, 2);
+      assert.equal(heartbeats(), 2, "a launch that ended posts no heartbeat");
+      assert.ok(luke.bearers.every((header) => header === `Bearer ${BEARER}`));
+    }),
 );
 
 it.effect("interrupts a turn a wakeup started when Luke stops it", () =>

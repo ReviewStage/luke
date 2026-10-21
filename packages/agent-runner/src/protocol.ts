@@ -327,7 +327,21 @@ export interface RunnerEvent {
   readonly message: RunnerMessage;
 }
 
-/** One POST's body: consecutive events, in order. Luke applies each sequence at most once. */
+/**
+ * One POST's body: consecutive events, in order. Luke applies each sequence
+ * at most once. A batch with no events is the launch's heartbeat
+ * (`RUNNER_HEARTBEAT`), which applies nothing.
+ */
 export interface RunnerEventBatch {
   readonly events: readonly RunnerEvent[];
 }
+
+/**
+ * How often a launch tells Luke it still runs, as a batch with no events,
+ * for as long as it runs. A harness may say nothing for an hour while a
+ * background command or a wakeup it waits on runs, and Luke keeps the
+ * sandbox alive only on what the runner posts (its keep-alive interval is
+ * ten minutes, its timeout an hour), so five minutes leaves room for a
+ * heartbeat Luke did not take, and costs one small post each.
+ */
+export const RUNNER_HEARTBEAT = { EVERY_MS: 5 * 60 * 1_000 } as const;
