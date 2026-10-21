@@ -4358,6 +4358,11 @@ it.effect(
         [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
         [1, [CODING_AGENT_STATUS.STARTING]],
       );
+      assert.deepEqual(
+        last()?.taskAgents?.map((each) => [each.planId, each.status, each.turnId]),
+        [[INVITES, CODING_AGENT_STATUS.STARTING, null]],
+      );
+
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* call(GATEWAY_METHOD.TASKS_DELETE, { taskId: BILLING });
       yield* TestClock.adjust(Duration.minutes(5));
@@ -4435,6 +4440,7 @@ it.effect(
       realtime.deliverPart("agents", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
+      assert.deepEqual(last()?.taskAgents, []);
 
       realtime.failPart("plans");
       yield* realtime.settled;

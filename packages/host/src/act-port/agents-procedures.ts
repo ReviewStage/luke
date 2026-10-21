@@ -122,7 +122,6 @@ export interface AgentProceduresDependencies {
     | "observeTitle"
     | "observeMessaged"
     | "observeModels"
-    | "observePublished"
     | "observeTaskGone"
     | "shown"
     | "shownInbox"
@@ -360,12 +359,7 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that a read of another pull request by its number is no word on what the agent itself published.
-      return yield* noted(host.codingAgentPullRequest(input), (answer) => {
-        if ("pullRequest" in answer && input.number === undefined) {
-          notices.observePublished(input.agentId, answer.pullRequest);
-        }
-      });
+      return yield* host.codingAgentPullRequest(input);
     }),
     [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CHANGES].effect(
       function* ({ input, context, errors }) {
