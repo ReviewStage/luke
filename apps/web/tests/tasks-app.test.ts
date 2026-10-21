@@ -55,6 +55,7 @@ import {
   EVE_RESET_OUTCOME,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { messagesProcedures } from "@luke/service/agents/messages-procedures";
+import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import {
   requestUserId,
   type SessionEndpoint,
@@ -295,6 +296,7 @@ const answer = (
         requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
       workspaces: yield* fakeWorkspaceSeams,
       eveOrigin: () => ORIGIN,
+      sessionSandboxes: sessionSandboxesLayer,
       ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
     };
     const { handler, dispose } = HttpRouter.toWebHandler(

@@ -28,10 +28,16 @@ export const CODER = {
    * The snapshots Vercel keeps of the agent's sandbox: the newest alone, which
    * is all a resume reads, so snapshot storage stays flat however many turns
    * stop it. An evicted one is deleted at once, and the kept one expires a
-   * month after it was last used, named here because Vercel's own pages
-   * disagree on the default.
+   * week after it was last used, named here because Vercel's own pages
+   * disagree on the default. A week, because the storage is billed for as long
+   * as a snapshot is kept and an agent left idle longer is rarely picked up
+   * again. The cost: an agent resumed after 7 idle days finds no snapshot and
+   * starts from a fresh clone of its repository, so its uncommitted and
+   * unpushed work is gone. An eve agent's sandbox opens anew where its
+   * snapshot is gone, and a native agent's resume does the same
+   * (`runner-sessions.ts`).
    */
-  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(30), deleteEvicted: true },
+  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(7), deleteEvicted: true },
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */
   GITHUB_TOKEN_REFRESH: Duration.minutes(50),
   /**

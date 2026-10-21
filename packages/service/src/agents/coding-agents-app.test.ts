@@ -194,6 +194,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Queue,
   Redacted,
   Result,
   type Schema,
@@ -251,6 +252,7 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
@@ -298,6 +300,7 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 import { messagesProcedures } from "./messages-procedures.js";
+import { type SandboxStopReach, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
 
 /**
@@ -593,6 +596,7 @@ const standing = (
   eve: ReturnType<typeof fakeEve>,
   titles: boolean,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
+  sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -632,6 +636,7 @@ const standing = (
       eveAs: (account: string) => eve.eve(deploymentFor(account)),
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
+      sessionSandboxes,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -816,6 +821,8 @@ const openTask = (
     readonly otherToken?: string | null;
     /** The model a replay's summary is written on; none unless a test names one. */
     readonly summaryModel?: SummaryModelOf;
+    /** The sandboxes an archive stops; Vercel's own, which a test with no token in its environment finds unavailable, unless a test scripts them. */
+    readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -843,6 +850,7 @@ const openTask = (
       eve,
       options.titles ?? false,
       options.summaryModel,
+      options.sessionSandboxes,
     );
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
@@ -4203,9 +4211,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
     turn: { readonly running: boolean } | undefined,
+    sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
   ) =>
     Effect.gen(function* () {
-      const opened = yield* openTask({ eve });
+      const opened = yield* openTask({
+        eve,
+        ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
+      });
       const agent = readAnswer(
         codingAgentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
@@ -4362,6 +4374,24 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           null,
         );
       }),
+  );
+
+  it.effect("a task's archive stops the sandboxes of the agents it archives, keeping them", () =>
+    Effect.gen(function* () {
+      const sandboxes = yield* scriptedSessionSandboxes();
+      const { owner, task, ask, sessionId } = yield* startedAgent(
+        fakeEve(),
+        { running: false },
+        sandboxes.layer,
+      );
+
+      const archived = yield* ask(
+        request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } }),
+      );
+
+      assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
+    }),
   );
 
   it.effect(
