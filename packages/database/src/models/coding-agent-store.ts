@@ -1029,6 +1029,33 @@ const findNativeAgentConversation = SqlSchema.findOneOption({
 });
 
 /**
+ * The agents whose conversation runs on eve in the session named, read with
+ * no account in hand, because the sweep that asks acts for every account at
+ * once. Note that a conversation from before the runtime column runs on eve
+ * too, and that a deleted conversation is still its agent's: its sandbox is
+ * no less the agent's to stop once its turn ended. At most two, which is
+ * enough to tell one from several.
+ */
+const findEveAgentsOfSession = SqlSchema.findAll({
+  Request: Schema.Struct({ runtimeSessionId: Schema.String }),
+  Result: Schema.Struct({ agentId: Schema.String, conversationId: Schema.String }),
+  execute: ({ runtimeSessionId }) =>
+    Database.use((db) =>
+      db
+        .select({ agentId: codingAgent.id, conversationId: conversations.id })
+        .from(conversations)
+        .innerJoin(codingAgent, eq(codingAgent.conversationId, conversations.id))
+        .where(
+          and(
+            eq(conversations.runtimeSessionId, runtimeSessionId),
+            or(isNull(conversations.runtime), eq(conversations.runtime, CONVERSATION_RUNTIME.EVE)),
+          ),
+        )
+        .limit(2),
+    ),
+});
+
+/**
  * The native runtime of each conversation named that runs on one, read with
  * no account in hand: only for ids a gate already read, as
  * `latestTurnsOfReached`, such as the agents a member's workspace reaches.
@@ -2436,6 +2463,17 @@ export function readRunnerTokenConversation(
   });
 }
 
+/** When the conversation's newest turn ended; null while it is queued or running, or before any turn. */
+function newestTurnEndedAt(conversationId: string): CodingAgentStoreEffect<Date | null> {
+  return Effect.map(findNewestTurnStanding({ conversationId }), (newest) => {
+    const ended = Option.filter(newest, (turn) =>
+      ENDED_TURN_STATUSES.some((status) => status === turn.status),
+    );
+    // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
+    return Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
+  });
+}
+
 /** Where a native agent's run stands, as the sweep reads it from its sandbox's agent tag. */
 export interface NativeRunStanding {
   /** The agent's conversation, which a Terminal's lease is held on. */
@@ -2460,13 +2498,37 @@ export function readNativeRunStanding(
     const found = yield* findNativeAgentConversation({ agentId });
     if (Option.isNone(found)) return Option.none();
     const { conversationId } = found.value;
-    const newest = yield* findNewestTurnStanding({ conversationId });
-    const ended = Option.filter(newest, (turn) =>
-      ENDED_TURN_STATUSES.some((status) => status === turn.status),
-    );
-    // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
-    const endedAt = Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
-    return Option.some({ conversationId, endedAt });
+    return Option.some({ conversationId, endedAt: yield* newestTurnEndedAt(conversationId) });
+  });
+}
+
+/** Where an eve agent's run stands, as the sweep reads it from its sandbox's session tag. */
+export interface EveRunStanding {
+  readonly agentId: string;
+  /** The agent's conversation, which a Terminal's or a watched browser's lease is held on. */
+  readonly conversationId: string;
+  /** When its newest turn ended; null while that turn is queued or running, or before it has any turn. */
+  readonly endedAt: Date | null;
+}
+
+/**
+ * Where the run of the eve agent whose conversation runs in the session
+ * named stands, read with no account in hand, because the scheduled sweep
+ * stops orphaned eve sandboxes for every account: the agent, its
+ * conversation, and when its newest turn ended. Nothing where no agent's
+ * eve conversation runs in the session, or where more than one does, since
+ * a sandbox the sweep cannot name one agent for is not its to stop. Only
+ * for a session id a sandbox's tag carries; it answers nothing a member
+ * wrote.
+ */
+export function readEveRunStanding(
+  runtimeSessionId: string,
+): CodingAgentStoreEffect<Option.Option<EveRunStanding>> {
+  return Effect.gen(function* () {
+    const found = yield* findEveAgentsOfSession({ runtimeSessionId });
+    const [only] = found;
+    if (only === undefined || found.length > 1) return Option.none();
+    return Option.some({ ...only, endedAt: yield* newestTurnEndedAt(only.conversationId) });
   });
 }
 

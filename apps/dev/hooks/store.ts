@@ -17,6 +17,7 @@ import { handedAfterCompaction } from "@luke/service/agents/coder-host/turn-cont
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
 import { Effect, Result } from "effect";
+import type { MessageStreamEvent } from "eve/client";
 import { defineState } from "eve/context";
 import { defineHook, type HookContext } from "eve/hooks";
 import { host, seams } from "../host.js";
@@ -179,6 +180,28 @@ async function renewCredential(
   }));
 }
 
+/**
+ * The sandbox at its turn's end, after the branch and the relay however they
+ * ended: a member's token taken off where the policy says, and the sandbox
+ * stopped unless a terminal holds it. Whether a terminal holds it is read
+ * last, just before the stop, so a developer who typed during the turn's end
+ * keeps it.
+ */
+async function endSandbox(
+  ctx: HookContext,
+  event: MessageStreamEvent,
+  sandbox: ReturnType<typeof pinnedState<SandboxRecord>>,
+  ending: Awaited<ReturnType<HookContext["getSandbox"]>>,
+): Promise<void> {
+  const held = await terminalHolds(ctx);
+  const record = sandbox.get();
+  if (withdrawsCredential(AGENT_ROLE.CODER, event, record, held)) await withdrawCredential(ctx);
+  if (lapsesCredential(AGENT_ROLE.CODER, event, record)) {
+    sandbox.update((standing) => ({ ...standing, credentialLapsed: true }));
+  }
+  if (stopsAtTurnEnd(AGENT_ROLE.CODER, event, record, held)) await ending.stop();
+}
+
 export default defineHook({
   events: {
     async "*"(event, ctx) {
@@ -207,35 +230,31 @@ export default defineHook({
         endsTurn(event) && sandbox.get().openedAt !== undefined
           ? await ctx.getSandbox()
           : undefined;
-      if (ending !== undefined) await recordBranch(ctx, ending);
-      await runAgent(
-        Effect.gen(function* () {
-          if (event.type === "session.started") {
-            const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
-            if (Result.isFailure(starting)) return;
-            if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
-          }
-          // A fragment the store need hear nothing of is folded into the relay's state without
-          // admitting the session, whose reads would otherwise run for every one of them.
-          if (host.relaysQuietly(event, state)) return;
-          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-          if (Result.isFailure(admitted)) return;
-          yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
-        }),
-      );
-      const now = seams.now();
-      if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
-        await renewCredential(ctx, sandbox, now);
+      // Note that the stop is in a `finally`, because a branch, relay, or renewal that threw would otherwise leave the sandbox running until its timeout.
+      try {
+        if (ending !== undefined) await recordBranch(ctx, ending);
+        await runAgent(
+          Effect.gen(function* () {
+            if (event.type === "session.started") {
+              const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
+              if (Result.isFailure(starting)) return;
+              if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
+            }
+            // A fragment the store need hear nothing of is folded into the relay's state without
+            // admitting the session, whose reads would otherwise run for every one of them.
+            if (host.relaysQuietly(event, state)) return;
+            const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+            if (Result.isFailure(admitted)) return;
+            yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
+          }),
+        );
+        const now = seams.now();
+        if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
+          await renewCredential(ctx, sandbox, now);
+        }
+      } finally {
+        if (ending !== undefined) await endSandbox(ctx, event, sandbox, ending);
       }
-      if (ending === undefined) return;
-      // Whether a terminal holds the sandbox is read last, just before the stop, so a developer who typed during the turn's end keeps it.
-      const held = await terminalHolds(ctx);
-      const record = sandbox.get();
-      if (withdrawsCredential(AGENT_ROLE.CODER, event, record, held)) await withdrawCredential(ctx);
-      if (lapsesCredential(AGENT_ROLE.CODER, event, record)) {
-        sandbox.update((standing) => ({ ...standing, credentialLapsed: true }));
-      }
-      if (stopsAtTurnEnd(AGENT_ROLE.CODER, event, record, held)) await ending.stop();
     },
   },
 });

@@ -68,6 +68,7 @@ import {
   readCodingAgentOfConversation,
   readCodingAgentPublished,
   readCodingAgentRouting,
+  readEveRunStanding,
   readNativeRunStanding,
   readRunnerTokenConversation,
   recordCodingAgentAuthor,
@@ -1925,6 +1926,59 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         assert.ok(Option.isNone(yield* readNativeRunStanding(deleted.id)));
         assert.ok(Option.isNone(yield* readNativeRunStanding(randomUUID())));
         assert.ok(Option.isNone(yield* readNativeRunStanding("not-an-agent-id")));
+      }),
+  );
+
+  it.effect(
+    "an eve agent's run is read from its session: ended once its newest turn ends, and none for a native agent's session, a session two agents name, or one no agent names",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const eve = yield* startIn(starter, workspace, {});
+        const native = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const twinA = yield* startIn(starter, workspace, {});
+        const twinB = yield* startIn(starter, workspace, {});
+        const sessionOf = (conversationId: string, runtimeSessionId: string) =>
+          db
+            .update(conversations)
+            .set({ runtimeSessionId })
+            .where(eq(conversations.id, conversationId));
+        yield* sessionOf(eve.conversationId, "wrun_fixture_eve");
+        yield* sessionOf(native.conversationId, "wrun_fixture_native");
+        yield* sessionOf(twinA.conversationId, "wrun_fixture_twin");
+        yield* sessionOf(twinB.conversationId, "wrun_fixture_twin");
+        const settledAt = new Date(Date.UTC(2026, 9, 14, 12));
+        const turnOf = (conversationId: string, status: TurnStatus, at: Date) =>
+          db.insert(turns).values({
+            userId: starter,
+            conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status,
+            queuedAt: at,
+            settledAt: status === TURN_STATUS.QUEUED ? null : at,
+          });
+        for (const agent of [native, twinA, twinB]) {
+          yield* turnOf(agent.conversationId, TURN_STATUS.SETTLED, settledAt);
+        }
+
+        const beforeAnyTurn = yield* readEveRunStanding("wrun_fixture_eve");
+        yield* turnOf(eve.conversationId, TURN_STATUS.FAILED, settledAt);
+        const ended = yield* readEveRunStanding("wrun_fixture_eve");
+        yield* turnOf(eve.conversationId, TURN_STATUS.QUEUED, new Date(settledAt.getTime() + 1));
+        const queued = yield* readEveRunStanding("wrun_fixture_eve");
+
+        const standing = { agentId: eve.id, conversationId: eve.conversationId };
+        assert.deepEqual(Option.getOrThrow(beforeAnyTurn), { ...standing, endedAt: null });
+        assert.deepEqual(Option.getOrThrow(ended), { ...standing, endedAt: settledAt });
+        assert.deepEqual(Option.getOrThrow(queued), { ...standing, endedAt: null });
+        assert.ok(Option.isNone(yield* readEveRunStanding("wrun_fixture_native")));
+        assert.ok(Option.isNone(yield* readEveRunStanding("wrun_fixture_twin")));
+        assert.ok(Option.isNone(yield* readEveRunStanding("wrun_fixture_unknown")));
       }),
   );
 

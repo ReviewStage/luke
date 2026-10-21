@@ -97,7 +97,7 @@ function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
  * first on an odd one, so the running sandboxes past one end's bound are
  * reached from the other's within two minutes.
  */
-function listOrderAt(now: Date): ListOrder {
+export function listOrderAt(now: Date): ListOrder {
   return Math.floor(now.getTime() / 60_000) % 2 === 0
     ? LIST_ORDER.OLDEST_FIRST
     : LIST_ORDER.NEWEST_FIRST;
