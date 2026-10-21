@@ -1722,10 +1722,10 @@ export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
 const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
-   * The turn the message is the journal of, on a task conversation's
-   * page, so the Call tab knows which of the developer's lines asked for it;
-   * absent on a coding agent's page, on any other row, and from a service
-   * older than it.
+   * The turn the message is the journal of, so the Call tab knows which of
+   * the developer's lines asked for it and an agent's tab which turn a line
+   * said on a call answers (`readFrom`); absent on any other row, and from
+   * a service older than it.
    */
   turnId: EffectSchema.optionalKey(EffectSchema.String),
   /**
@@ -1788,6 +1788,21 @@ const codingAgentMessageSchema = EffectSchema.Struct({
    */
   arrivedIn: EffectSchema.optionalKey(
     EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
+  ),
+  /**
+   * The turn whose work a line the agent said on a call answers: the turn
+   * the ask it followed ran in, by the turn's id as its journal names it
+   * (`turnId`), and where that ask joined a typed turn under way, how many
+   * of the turn's steps had begun before it, so the tab folds only the work
+   * after them under the line. Absent on a line that followed no ask, or
+   * one whose ask has learned no turn, on every other row, and from a
+   * service older than it.
+   */
+  readFrom: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      turnId: EffectSchema.String,
+      afterStep: EffectSchema.optionalKey(countedNumber),
+    }),
   ),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),

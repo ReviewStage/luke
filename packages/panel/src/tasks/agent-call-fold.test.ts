@@ -30,9 +30,12 @@ import { CallCheckpoint } from "./call-card.js";
  * conversation: the developer's line, what the voice said, and the turn
  * whose words the voice read aloud folded closed under that, its
  * reasoning, calls, written answer, and how long it worked one press away,
- * a line typed on the call alike. A turn outside a call is drawn as it
- * always was, and the call's divider is a plain rule on no ground of its
- * own, live or ended. Synthetic throughout.
+ * a line typed on the call alike. A call into a busy agent, whose ask
+ * joined the turn under way, folds only the work after the join under
+ * the answer, and a turn the service names by `readFrom` alone, as it does
+ * for a reply said long after the turn settled, folds the same way. A turn
+ * outside a call is drawn as it always was, and the call's divider is a
+ * plain rule on no ground of its own, live or ended. Synthetic throughout.
  */
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
@@ -160,6 +163,51 @@ const LATER_TURN = turn(
   "Done: invites now last fourteen days.",
   CALL_START + 120_000,
 );
+
+/** A turn the agent was on before the call: a search in its first step, then a test run and its written answer in its second. */
+const BUSY_TURN: CodingAgentMessage = {
+  id: "busy-turn",
+  turnId: "turn-busy",
+  role: MESSAGE_ROLE.ASSISTANT,
+  parts: [
+    STEP,
+    { type: "reasoning", text: "Find where the expiry is set.", state: "done" },
+    {
+      type: "tool-run_command",
+      toolCallId: "busy-turn-grep",
+      state: "output-available",
+      input: { command: "rg INVITE_TTL" },
+      output: { exitCode: 0, stdout: "src/invite.ts", stderr: "" },
+    },
+    STEP,
+    {
+      type: "tool-run_command",
+      toolCallId: "busy-turn-test",
+      state: "output-available",
+      input: { command: "pnpm test" },
+      output: { exitCode: 0, stdout: "ok", stderr: "" },
+    },
+    { type: "text", text: "Invites now last fourteen days, and the tests pass." },
+  ],
+  metadata: { author: "brain" },
+  startedAt: CALL_START - 30_000,
+  finishedAt: CALL_START + 40_000,
+};
+
+/** What the developer said on a call into the agent while that turn ran, which joined it after its first step. */
+const JOINED: CodingAgentMessage = {
+  ...ASKED,
+  id: "joined",
+  parts: [{ type: "text", text: "Where are you with the invites?" }],
+  arrivedIn: { journalId: "busy-turn", afterStep: 1 },
+  sentAt: CALL_START + 5_000,
+};
+
+/** What the voice answered while the turn still ran: the service names the turn and the join, and no `read_from`, which it writes only once a turn settled. */
+const JOINED_REPLY: CodingAgentMessage = {
+  ...voiceLine("joined-reply", "Found the expiry; the tests are running.", 12_000),
+  readFrom: { turnId: "turn-busy", afterStep: 1 },
+};
 
 let root: Root | undefined;
 
@@ -372,6 +420,101 @@ test("a line typed on the call folds the same way: the line, what the voice said
     "call ended",
   ]);
   assert.doesNotMatch(container.textContent ?? "", /fresh seven days/u);
+});
+
+test("on a call into a busy agent, the answer to an ask that joined its turn under way stands after the ask among the turn's work, and once the turn ends only the work after the join folds under it", async () => {
+  const container = await drawnTab([TASK, JOINED, JOINED_REPLY, BUSY_TURN]);
+
+  assert.deepEqual(drawnOrder(container), [
+    "message: task",
+    "call begins",
+    "message: busy-turn",
+    "fold: 1 tool call (closed)",
+    "message: joined",
+    "message: joined-reply",
+    "fold: 1 tool call, 1 message (closed)",
+    "call ended",
+  ]);
+  assert.doesNotMatch(container.textContent ?? "", /fourteen days/u);
+
+  pressFold(container, "1 tool call, 1 message");
+  assert.ok(
+    container.querySelector('[data-call-id="busy-turn-test"]'),
+    "the work after the join is inside its fold",
+  );
+  assert.match(container.textContent ?? "", /fourteen days/u, "so is the turn's written answer");
+  assert.match(container.textContent ?? "", /Worked for 1m 10s/u, "and how long it worked");
+});
+
+test("two asks that joined a busy turn at the same step each stand ahead of their own answer", async () => {
+  const second: CodingAgentMessage = {
+    ...JOINED,
+    id: "joined-again",
+    parts: [{ type: "text", text: "And the resend path?" }],
+    sentAt: CALL_START + 20_000,
+  };
+  const secondReply: CodingAgentMessage = {
+    ...voiceLine("joined-again-reply", "Same expiry there.", 25_000),
+    readFrom: { turnId: "turn-busy", afterStep: 1 },
+  };
+  const container = await drawnTab([TASK, JOINED, JOINED_REPLY, second, secondReply, BUSY_TURN]);
+
+  assert.deepEqual(drawnOrder(container), [
+    "message: task",
+    "call begins",
+    "message: busy-turn",
+    "fold: 1 tool call (closed)",
+    "message: joined",
+    "message: joined-reply",
+    "message: joined-again",
+    "message: joined-again-reply",
+    "fold: 1 tool call, 1 message (closed)",
+    "call ended",
+  ]);
+});
+
+test("a reply the service names its turn for by readFrom alone, as one said minutes after the turn settled, folds that turn under it as one said at once does", async () => {
+  const late = {
+    ...voiceLine("late", "Seven days.", 50_000),
+    readFrom: { turnId: "turn-spoken" },
+  };
+  const container = await drawnTab([
+    TASK,
+    ASKED,
+    ACK,
+    { ...SPOKEN_TURN, turnId: "turn-spoken" },
+    late,
+  ]);
+
+  assert.deepEqual(drawnOrder(container), [
+    "message: task",
+    "call begins",
+    "message: asked",
+    "message: ack",
+    "message: late",
+    "message: spoken-turn",
+    "fold: 1 tool call, 1 message (closed)",
+    "call ended",
+  ]);
+  assert.doesNotMatch(container.textContent ?? "", /Invites expire after seven days/u);
+});
+
+test("a line the voice said that the service names no turn for stands where it was said, and the turn before it is drawn unfolded", async () => {
+  const aside = voiceLine("aside", "Nothing to add.", 50_000);
+  const container = await drawnTab([TASK, ASKED, ACK, SPOKEN_TURN, aside]);
+
+  assert.deepEqual(drawnOrder(container), [
+    "message: task",
+    "call begins",
+    "message: asked",
+    "message: ack",
+    "message: spoken-turn",
+    "fold: 1 tool call (closed)",
+    "worked for",
+    "message: aside",
+    "call ended",
+  ]);
+  assert.match(container.textContent ?? "", /Invites expire after seven days/u);
 });
 
 test("a turn outside a call is drawn as it always was: its work folded and its written answer and how long it worked under it, and a voice line naming a turn the page does not hold stands where it was said", async () => {

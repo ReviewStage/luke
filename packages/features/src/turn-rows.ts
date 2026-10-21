@@ -20,7 +20,10 @@
  * moves, where a run with no call drops them; and once it has finished,
  * all of it is folded closed, its words with its work and counted as
  * messages, a turn of thoughts and words alone included, so what was said
- * reads with the work behind it one press away. A group or a fold
+ * reads with the work behind it one press away. Where a call joined the
+ * turn under way, only the work from the join on was answered aloud, so
+ * only that is folded as said, and the work before it folds as it would on
+ * a turn no one read aloud. A group or a fold
  * holding a call that failed says so on its line, so a failure is not
  * folded out of sight. That
  * fold is the one grouping its calls get: a run of calls is folded once,
@@ -536,9 +539,13 @@ export function turnRows<B>(
     readonly done: boolean;
     /** Whether its words were said aloud and stand after it, which folds all of a finished turn's blocks. */
     readonly said?: boolean;
+    /** The first block of the work a call that joined the turn under way answered aloud, which folds all of a finished turn's blocks as `said` does, the ones before it read as unsaid; `said` is this at 0. */
+    readonly saidFrom?: number;
   },
 ): readonly TurnRow<B>[] {
-  const said = turn.said === true;
+  const saidFrom = turn.said === true ? 0 : turn.saidFrom;
+  const said = saidFrom !== undefined;
+  const whole = saidFrom === 0;
   const keyed = blocks.map((block, index) => ({ key: read.key(block, index), block }));
   const words = said
     ? blocks.length
@@ -548,7 +555,7 @@ export function turnRows<B>(
   // a closed group of the calls beside it.
   const keepsOne = keyed.some((each) => read.kept?.(each.block) === true);
   const last = words < 0 && turn.done && keepsOne ? blocks.length : words;
-  if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, true, said);
+  if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, true, whole);
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
@@ -558,10 +565,11 @@ export function turnRows<B>(
     // Note that a lead with no call is not folded, but a block kept out still
     // stands apart from it, because grouped with the lead's reasoning it would
     // close with it.
-    if (kept.length === 0) return groupedRows(keyed, read, turn.moving, true, said);
-    return [...groupedRows(lead, read, turn.moving, true, said), ...rest];
+    if (kept.length === 0) return groupedRows(keyed, read, turn.moving, true, whole);
+    return [...groupedRows(lead, read, turn.moving, true, whole), ...rest];
   }
-  return [...foldedLead(lead, read, turn.key, said), ...rest];
+  const saidBlocks = new Set(keyed.slice(saidFrom ?? blocks.length).map((each) => each.block));
+  return [...foldedLead(lead, read, turn.key, (each) => saidBlocks.has(each.block)), ...rest];
 }
 
 /**
@@ -570,7 +578,8 @@ export function turnRows<B>(
  * on its own row between them; a stretch with no call keeps its rows, as a
  * lead with none does, unless its words were said aloud, and a stretch of
  * one call alone stands as that call's row. Inside a fold every block
- * stands on a row of its own, said words among them. Note that the first
+ * stands on a row of its own, said words among them. A stretch is said
+ * where its first block was (`saidAt`). Note that the first
  * fold keeps the turn's own key, so a turn no message reached folds under
  * the key it always had.
  */
@@ -578,7 +587,7 @@ function foldedLead<B>(
   lead: readonly Keyed<B>[],
   read: RowReading<B>,
   turnKey: string,
-  said: boolean,
+  saidAt: (block: Keyed<B>) => boolean,
 ): TurnRow<B>[] {
   const rows: TurnRow<B>[] = [];
   let folds = 0;
@@ -589,6 +598,7 @@ function foldedLead<B>(
     }
     const [first] = run.blocks;
     if (first === undefined) continue;
+    const said = saidAt(first);
     const held = counted(run.blocks, read);
     if (foldable(held, said) === 0) {
       rows.push(...groupedRows(run.blocks, read, false, true, said));

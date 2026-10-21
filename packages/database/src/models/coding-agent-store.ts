@@ -55,7 +55,7 @@ import {
   type StoredPullRequest,
   type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
-import { conversations, messages, turns } from "../schemas/storage.js";
+import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
 import {
@@ -2757,6 +2757,71 @@ export function linePlacesOf(
     findLinePlaces({ userId: target.userId, conversationId: target.conversationId, messageIds }),
     (rows) =>
       new Map(rows.map(({ id, journalId, afterStep }) => [id, { journalId, afterStep }] as const)),
+  );
+}
+
+/**
+ * The turn an ask the voice handed on ran in, as its binding names it: the
+ * turn, and for an ask that joined a typed turn under way how many of that
+ * turn's steps had begun before it (`asks.joined_after_step`), from which
+ * its answer is read.
+ */
+export interface AskTurn {
+  readonly turnId: string;
+  readonly afterStep?: number;
+}
+
+const findAskTurns = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    clientIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({
+    clientId: Schema.String,
+    turnId: Schema.String,
+    afterStep: Schema.NullOr(Schema.Int),
+  }),
+  execute: ({ userId, conversationId, clientIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          clientId: asks.clientId,
+          turnId: sql<string>`${asks.turnId}::text`,
+          afterStep: asks.joinedAfterStep,
+        })
+        .from(asks)
+        .where(
+          and(
+            eq(asks.userId, userId),
+            eq(asks.conversationId, conversationId),
+            inArray(asks.clientId, [...clientIds]),
+            isNotNull(asks.turnId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The turn each of these asks of the account's conversation ran in, by the
+ * ask's client id, for the asks that have learned one: an ask still unbound,
+ * and one of another conversation or account, names none. None asked, none
+ * read.
+ */
+export function askTurnsOf(
+  target: ConversationTarget,
+  clientIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, AskTurn>> {
+  if (clientIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findAskTurns({ userId: target.userId, conversationId: target.conversationId, clientIds }),
+    (rows) =>
+      new Map(
+        rows.map(({ clientId, turnId, afterStep }) => [
+          clientId,
+          afterStep === null ? { turnId } : { turnId, afterStep },
+        ]),
+      ),
   );
 }
 
