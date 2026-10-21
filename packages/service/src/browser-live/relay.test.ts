@@ -110,7 +110,11 @@ const scriptedViewer = Effect.gen(function* () {
 
 /** A Chromium holding the tab, answering the live view's own commands, and every command it was sent, kept. */
 function liveBrowser(
-  options: { readonly pages?: readonly { targetId: string; url: string; title: string }[] } = {},
+  options: {
+    readonly pages?: readonly { targetId: string; url: string; title: string }[];
+    /** Whether the browser never answers a mouse event, as one stuck behind a slow page. */
+    readonly mouseHangs?: boolean;
+  } = {},
 ) {
   return Effect.gen(function* () {
     const commands: FakeCdpCommand[] = [];
@@ -123,6 +127,9 @@ function liveBrowser(
         if (command.method === "Target.attachToTarget")
           return { result: { sessionId: TARGET_SESSION } };
         if (command.method === "Target.getTargets") return undefined;
+        if (options.mouseHangs === true && command.method === "Input.dispatchMouseEvent") {
+          return { silent: true };
+        }
         return { result: {} };
       },
     });
@@ -637,5 +644,155 @@ it.effect("a panel that sends nothing for the idle bound closes as idle", () =>
       reason: BROWSER_LIVE_CLOSE_REASON.IDLE,
     });
     assert.deepEqual(panel.closed, [BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE]]);
+  }),
+);
+
+it.effect(
+  "closing one window leaves the tab to the same member's other window that moved the takeover on since",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const first = yield* scriptedViewer;
+      const second = yield* scriptedViewer;
+      const store = world(browser);
+      const relay = (panel: Effect.Success<typeof scriptedViewer>) =>
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps));
+      const one = yield* started(peer, commands, relay(first));
+      yield* first.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* until(() => first.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+
+      yield* TestClock.adjust(Duration.seconds(20));
+      const two = yield* Effect.forkChild(relay(second));
+      yield* until(() => second.ofType(BROWSER_LIVE_SERVER.DRIVER).length > 0);
+      yield* second.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* until(
+        () =>
+          second.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours === true &&
+          second.ofType(BROWSER_LIVE_SERVER.DRIVER).length > 1,
+      );
+      yield* first.leave;
+      yield* Fiber.join(one.fiber);
+      assert.deepEqual(store.handedBack, [], "the other window still drives");
+
+      yield* second.leave;
+      yield* Fiber.join(two);
+      assert.deepEqual(store.handedBack, [MEMBER], "the last window's close hands the tab back");
+    }),
+);
+
+it.effect(
+  "input queued behind a slow browser never lands once the member handed the tab back",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser({ mouseHangs: true });
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+      yield* peer.emit(frameEvent(1));
+      yield* until(() => acks(commands).length === 1);
+      yield* panel.push(VIEWPORT);
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+
+      yield* panel.push(CLICK);
+      yield* until(() => inputs(commands).length === 1);
+      yield* panel.push({ ...CLICK, action: BROWSER_LIVE_MOUSE_ACTION.UP });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HAND_BACK });
+      yield* until(() => store.handedBack.length === 1);
+      yield* TestClock.adjust(Duration.seconds(31));
+      yield* settle;
+
+      assert.equal(
+        inputs(commands).length,
+        1,
+        "the click queued before the hand-back went nowhere",
+      );
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
+  "a renewal the store cannot answer keeps input going only until the last write lapses",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const deps = { ...store.deps, renew: () => Effect.fail("store down") };
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), deps)),
+      );
+      yield* peer.emit(frameEvent(1));
+      yield* until(() => acks(commands).length === 1);
+      yield* panel.push(VIEWPORT);
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+
+      yield* TestClock.adjust(Duration.seconds(30));
+      yield* panel.push(CLICK);
+      yield* until(() => inputs(commands).length === 1);
+      yield* TestClock.adjust(Duration.seconds(31));
+      yield* panel.push(CLICK);
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 1);
+
+      assert.equal(inputs(commands).length, 1);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect("a hand-back the store did not take is tried again as the socket closes", () =>
+  Effect.gen(function* () {
+    const { peer, browser, commands } = yield* liveBrowser();
+    const panel = yield* scriptedViewer;
+    const store = world(browser);
+    let refusals = 1;
+    const deps: BrowserLiveDependencies = {
+      ...store.deps,
+      handBack: (tab, userId) => {
+        if (refusals === 0) return store.deps.handBack(tab, userId);
+        refusals -= 1;
+        return Effect.fail("store down");
+      },
+    };
+    const { fiber } = yield* started(
+      peer,
+      commands,
+      Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), deps)),
+    );
+    yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+    yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+    yield* panel.push({ type: BROWSER_LIVE_CLIENT.HAND_BACK });
+    yield* until(() => refusals === 0);
+    assert.deepEqual(store.handedBack, []);
+
+    yield* panel.leave;
+    yield* Fiber.join(fiber);
+    assert.deepEqual(store.handedBack, [MEMBER]);
+  }),
+);
+
+it.effect("the tab's screencast is stopped as the view ends", () =>
+  Effect.gen(function* () {
+    const { peer, browser, commands } = yield* liveBrowser();
+    const panel = yield* scriptedViewer;
+    const { fiber } = yield* started(
+      peer,
+      commands,
+      Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), world(browser).deps)),
+    );
+    yield* panel.leave;
+    yield* Fiber.join(fiber);
+
+    const stop = commands.find((command) => command.method === "Page.stopScreencast");
+    assert.equal(stop?.sessionId, TARGET_SESSION);
+    assert.ok(commands.some((command) => command.method === "Target.detachFromTarget"));
   }),
 );
