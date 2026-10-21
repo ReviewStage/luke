@@ -6415,6 +6415,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   -webkit-app-region: drag;
 }
 
+/* A bar inside the panel, an Inbox item's, draws its own hairline and no
+   more: the toolbar's hairline running past both sides (shell.css) is the
+   work column's, for a pane sliding in beside it, and from the panel it
+   would run on across the column's transcript at the item bar's height. */
+.side-panel .desktop-toolbar::before {
+  content: none;
+}
+
 /* Full screen with the sidebar folded, the row starts where the plan's
    toolbar would: clear of the traffic lights and the sidebar toggle. */
 .desktop-shell[data-sidebar-collapsed="true"] .side-panel[data-full-screen="true"] .side-panel-bar {
