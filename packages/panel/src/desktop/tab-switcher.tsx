@@ -534,27 +534,28 @@ export function TabSwitcher({
     });
   });
 
-  // Goes to a stop through the window's own doors, as any move there would.
+  // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave cancelled moves nothing, the stops' order included.
   const go = (stop: Stop) => {
     const { tasks: control, tab: shownTab, onTabChange: changeTab } = doors.current;
-    if (shownTab !== PANEL_TAB.TASKS) changeTab(PANEL_TAB.TASKS);
-    switch (stop.kind) {
-      case STOP_KIND.TASK:
-        // The whole screen is restored past one ask, so leaving unsaved work and cancelling changes neither pane.
-        control.leaveGuard.guard(() => showTask(control, stop))();
-        break;
-      case STOP_KIND.AGENT:
-        control.agentView.onOpen(stop.agentId);
-        break;
-      case STOP_KIND.PERSON:
-        control.personView.onOpen(stop.userId, stop.name, stop.workspaceId);
-        break;
-      case STOP_KIND.PLACE:
-        openPlace(control, stop.place);
-        break;
-    }
-    // Note that the stop is the most recent now, before the window's own moves arrive, so they take it in place.
-    stops.current = [stop, ...stops.current.filter((each) => !sameStop(each, stop))];
+    control.leaveGuard.guard(() => {
+      if (shownTab !== PANEL_TAB.TASKS) changeTab(PANEL_TAB.TASKS);
+      switch (stop.kind) {
+        case STOP_KIND.TASK:
+          showTask(control, stop);
+          break;
+        case STOP_KIND.AGENT:
+          control.agentView.onOpen(stop.agentId);
+          break;
+        case STOP_KIND.PERSON:
+          control.personView.onOpen(stop.userId, stop.name, stop.workspaceId);
+          break;
+        case STOP_KIND.PLACE:
+          openPlace(control, stop.place);
+          break;
+      }
+      // Note that the stop is the most recent now, before the window's own moves arrive, so they take it in place.
+      stops.current = [stop, ...stops.current.filter((each) => !sameStop(each, stop))];
+    })();
   };
 
   // The stops that still stand: no tab the open task no longer holds, as its strips' own state says, and no task the window no longer lists.
@@ -729,8 +730,11 @@ function showTask(tasks: TasksControl, stop: Extract<Stop, { kind: typeof STOP_K
     if (sidePanel.open) sidePanel.onSetOpen(false);
   }
   if (column !== undefined && fullScreen) mainTabs.onShow(taskId, column);
-  const filling = columnShown ? false : sidePanel.fullScreen;
-  if (panel !== undefined && fullScreen !== filling) sidePanel.onToggleFullScreen();
+  // Note that a narrow room's panel fills the window whenever it stands, and its toggle shuts it, so it is left as it opens.
+  const filling = columnShown || !sidePanel.open ? false : sidePanel.fullScreen;
+  if (panel !== undefined && !sidePanel.fullScreenOnly && fullScreen !== filling) {
+    sidePanel.onToggleFullScreen();
+  }
 }
 
 /** Opens a place through its own door. */

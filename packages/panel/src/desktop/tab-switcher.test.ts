@@ -478,8 +478,43 @@ test("a screen picked past unsaved work is restored only once the leave is confi
   tab();
   letGo();
   assert.deepEqual(told.shown, [], "nothing moves while the ask stands");
+  tab();
+  tab();
+  assert.equal(
+    cards()[0]?.dataset.here,
+    "true",
+    "a leave not yet confirmed leaves the screen here first",
+  );
+  assert.match(cards()[0]?.textContent ?? "", /Inbox/u);
+  key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
+  letGo();
   asks[0]?.();
   assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: code"]);
+});
+
+test("a narrow room's panel, which fills the window as it stands, is opened on the screen's tab and not toggled shut", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const turned: string[] = [];
+  const narrow = (control: TasksControl): TasksControl => ({
+    ...control,
+    sidePanel: {
+      ...control.sidePanel,
+      fullScreenOnly: true,
+      onToggleFullScreen: () => turned.push("full screen turned"),
+    },
+  });
+  const window = await mounted();
+  const filled = onTask(SIDE_PANEL_TAB.CODE, told);
+  await window.draw(narrow({ ...filled, sidePanel: { ...filled.sidePanel, fullScreen: true } }));
+  press();
+  const shut = onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen() });
+  await window.draw(narrow({ ...shut, sidePanel: { ...shut.sidePanel, open: false } }));
+
+  tab();
+  letGo();
+  assert.deepEqual(told.shown, ["panel the task: code"]);
+  assert.deepEqual(turned, []);
 });
 
 test("a screen picked with its panel shut shuts the panel, and one with the panel filling the window fills it again", async () => {
