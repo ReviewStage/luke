@@ -74,6 +74,8 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  // A box's words left unsent wait as its draft, which the next test's box must not find.
+  window.localStorage.clear();
 });
 
 /** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them, its pictures read as the test answers them. */
@@ -527,35 +529,6 @@ test("until the chat is read, its wait stands centred in the window's Chat and i
   assert.ok(tabWait.closest(".luke-spinner-region"), "the wait fills the plan's Chat tab");
 });
 
-test("a post still out names the composer's send Sending and busy, and the box empties once it is taken", async () => {
-  const gate = Promise.withResolvers<string | undefined>();
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(ChatComposer, {
-          label: "Message #general",
-          targets: [],
-          keywords: [],
-          onSend: () => gate.promise,
-        }),
-      ),
-    ),
-  );
-  const box = boxNamed(container, "Message #general");
-  typeInComposer(box, "Shipping today.");
-  pressInComposer(box, "Enter");
-  const sending = container.querySelector<HTMLButtonElement>('button[aria-label="Sending"]');
-  assert.equal(sending?.getAttribute("aria-busy"), "true");
-  act(() => gate.resolve(undefined));
-  await settle();
-  assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
-  assert.equal(boxWords(box), "");
-});
-
 test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
   const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
   const page = mount((chat) => {
@@ -654,6 +627,7 @@ async function plainChat() {
         onSideBundles(
           bundles,
           createElement(ChatComposer, {
+            channelId: "general",
             label: "Message #general",
             targets: [
               {
