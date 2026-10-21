@@ -2347,22 +2347,20 @@ ul.actor-stack {
 
 /* How the video resizes, brought out while the pointer is over it, a drag
    is under way, or the keyboard is on one of them (`AgentCallVideo`): a
-   bracket on each top corner, since the video grows upward, and S, M and L
-   at its foot. */
-.agent-call-video-corner,
-.agent-call-video-sizes {
+   bracket on each top corner, since the video grows upward. */
+.agent-call-video-corner {
   opacity: 0;
   transition: opacity var(--duration-hover) ease;
 }
 
-.agent-call-video[data-reveal="true"] :is(.agent-call-video-corner, .agent-call-video-sizes),
-.agent-call-video:focus-within :is(.agent-call-video-corner, .agent-call-video-sizes) {
+.agent-call-video[data-reveal="true"] .agent-call-video-corner,
+.agent-call-video:focus-within .agent-call-video-corner {
   opacity: 1;
 }
 
 /* A touch screen has no hover to bring them out, so there they always stand. */
 @media (hover: none) {
-  .agent-call-video :is(.agent-call-video-corner, .agent-call-video-sizes) {
+  .agent-call-video .agent-call-video-corner {
     opacity: 1;
   }
 }
@@ -2395,15 +2393,6 @@ ul.actor-stack {
 
 .agent-call-video-corner:is(:hover, :active, :focus-visible) {
   border-color: var(--luke-color-accent);
-}
-
-.agent-call-video-sizes {
-  position: absolute;
-  z-index: 1;
-  bottom: var(--luke-space-6);
-  left: 50%;
-  width: max-content;
-  transform: translateX(-50%);
 }
 
 /* Anywhere no call's tab is drawn (Settings, the home page, a panel
