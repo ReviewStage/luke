@@ -7928,3 +7928,24 @@ test("with the inbox-first sidebar, the sidebar's list head offers the same sear
 
   assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
 });
+
+test("with the inbox-first sidebar, a press on View options while the search stands empty folds the search and opens the menu at once", async () => {
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  const button = page.querySelector<HTMLButtonElement>(
+    '.desktop-sidebar .sidebar-section-head button[aria-label="Search inbox"]',
+  );
+  assert.ok(button, "the sidebar's head offers the search");
+  act(() => button.click());
+  const options = page.querySelector<HTMLButtonElement>(
+    '.desktop-sidebar .sidebar-section-head button[aria-label="View options"]',
+  );
+  assert.ok(options, "the head keeps the view's menu beside the field");
+
+  // Note that the press moves the focus first, which folds the empty search before the click lands.
+  act(() => options.focus());
+  act(() => options.click());
+
+  assert.equal(options.isConnected, true, "the button pressed is the one still standing");
+  assert.equal(viewItem("To do").getAttribute("role")?.startsWith("menuitem"), true);
+});

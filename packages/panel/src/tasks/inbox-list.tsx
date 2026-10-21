@@ -1515,13 +1515,11 @@ function ListHead({
   return (
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
-      {sidebar && search.field !== null ? (
-        <div className="sidebar-section-head">
-          {search.field}
+      {sidebar ? (
+        // Note that the field stands in the name's place in one head, so View options stays mounted as the field gives way.
+        <SidebarSectionHead name={title} field={search.field}>
           {options}
-        </div>
-      ) : sidebar ? (
-        <SidebarSectionHead name={title}>{options}</SidebarSectionHead>
+        </SidebarSectionHead>
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">
