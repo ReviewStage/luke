@@ -11,7 +11,7 @@ import {
   workspaceChatOfLiveRows,
 } from "@luke/features/live-wire";
 import { Duration, Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
 
 /**
  * chat-follow.ts -- a workspace's chat followed over Neon Realtime: joined once, sealed, and each change told whole.
@@ -29,6 +29,11 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  * or a seal the service did not
  * answer is told unanswered, and it, or a follow that stopped, is joined and
  * sealed again after `LIVE_RESTART`.
+ *
+ * A write to a followed chat is confirmed as Neon's mutations guide says:
+ * the follow hands out the wait for a transaction to reach its read
+ * (`onTxWait`) while it is subscribed over Realtime, and the write waits on
+ * it with the txid the service answered (`confirmWrite`).
  */
 
 /** How long after a join or seal went unanswered, or a follow stopped, the chat is followed again. */
@@ -52,6 +57,8 @@ export interface ChatFollowDependencies {
   readonly now: () => number;
   /** The chat whole, or why there is none, each time it changes. */
   readonly tell: (chat: CodingAgentChatAnswerView) => Effect.Effect<void>;
+  /** Hears the wait for a write's transaction while the chat is subscribed over Realtime, and none once it is not. */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /** The chat sealed again, gone where the account no longer reaches it, so the follow ends. */
@@ -84,6 +91,7 @@ function tellLive(
       reseal: () => resealed(dependencies, false),
       poll: (after) => resealed(dependencies, true, after),
       now: dependencies.now,
+      ...(dependencies.onTxWait === undefined ? {} : { onTxWait: dependencies.onTxWait }),
     },
     first,
   );

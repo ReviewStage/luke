@@ -98,7 +98,7 @@ import { followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type LiveClient, openRealtimeClient } from "./live-follow.js";
+import { confirmWrite, type LiveClient, openRealtimeClient, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
@@ -319,6 +319,8 @@ function composed(
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
+  /** Each followed chat's wait for a write's transaction, by its workspace, while it is subscribed over Realtime. */
+  const chatTxWaits = new Map<string, TxWait>();
 
   /**
    * The agent as a line handed to its call leaves it, as a message's answer
@@ -898,6 +900,8 @@ function composed(
           "writing to a workspace's chat names the workspace and one post, answer, resolve, or read",
         );
         const answer = yield* asked(client.chatPost(workspaceId, write));
+        // As Neon's mutations guide says: answered once the followed chat holds the write.
+        if (!("failure" in answer)) yield* confirmWrite(chatTxWaits.get(workspaceId), answer.txid);
         return carried<CodingAgentChatWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW]: (params) =>
@@ -911,6 +915,7 @@ function composed(
           Effect.sync(() =>
             kernel.emit(GATEWAY_EVENT.CHAT_CHANGED, carried({ workspaceId, chat })),
           );
+        let mine: TxWait | undefined;
         const follow = gate()
           ? followWorkspaceChat({
               join: () => asked(client.chatJoin(workspaceId)),
@@ -918,6 +923,15 @@ function composed(
               openLive: dependencies.openLive ?? openRealtimeClient,
               now: kernel.now,
               tell,
+              onTxWait: (wait) => {
+                // Note that only this follow's own wait is let go, never a newer follow's.
+                if (wait !== undefined) {
+                  mine = wait;
+                  chatTxWaits.set(workspaceId, wait);
+                } else if (chatTxWaits.get(workspaceId) === mine) {
+                  chatTxWaits.delete(workspaceId);
+                }
+              },
             })
           : tell(UNANSWERED);
         yield* FiberMap.run(chats, workspaceId, follow);
