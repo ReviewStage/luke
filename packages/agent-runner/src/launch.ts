@@ -12,7 +12,7 @@
 import type { Cause, Queue, Redacted } from "effect";
 import { Data } from "effect";
 import type { EventSink } from "./events.js";
-import type { RunnerEnd } from "./protocol.js";
+import type { RunnerEnd, RunnerWakeup } from "./protocol.js";
 
 /** Why a launch could not run at all, before or after its harness. */
 export class RunnerFailed extends Data.TaggedError("RunnerFailed")<{ readonly detail: string }> {}
@@ -39,8 +39,9 @@ export interface LaunchContext<Config> {
   readonly self?: RunnerSelf | undefined;
 }
 
-/** Why a launch ended, and the harness's failure where it failed, for the last event. */
+/** Why a launch ended, the harness's failure where it failed, and the wakeups a released wait left, for the last event. */
 export interface LaunchOutcome {
   readonly end: RunnerEnd;
   readonly failure: string;
+  readonly wakeups?: readonly RunnerWakeup[];
 }

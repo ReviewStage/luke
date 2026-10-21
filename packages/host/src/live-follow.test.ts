@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
-import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
+import { Clock, Deferred, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
@@ -9,6 +9,7 @@ import {
   LiveBroken,
   type LiveClient,
   liveRows,
+  liveShown,
   openRealtimeClient,
   type SealedRead,
   shareLiveClients,
@@ -548,4 +549,106 @@ it.effect("a write whose transaction never arrives is confirmed still once ten s
     const exit = committed.pollUnsafe();
     assert.ok(exit !== undefined && Exit.isSuccess(exit), "confirmed, since it committed");
   }),
+);
+
+it.effect(
+  "a write's wait settles only once the caller has handled the rows its transaction changed",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const handed: { wait?: TxWait | undefined } = {};
+      const gate = yield* Deferred.make<void>();
+      const shown: unknown[] = [];
+      const following = yield* Effect.forkChild(
+        Stream.runForEach(
+          liveRows<Part>(
+            {
+              openLive: () => realtime.client,
+              reseal: () => Effect.succeed(read(1, 3_600_000)),
+              poll: () => Effect.succeed({ failure: "unavailable" }),
+              now: () => 0,
+              onTxWait: (next) => {
+                handed.wait = next;
+              },
+            },
+            read(0, 3_600_000),
+          ),
+          // The caller pushes each change on, slowly for the write's.
+          (rows) =>
+            Effect.andThen(
+              shown.length === 0 ? Effect.void : Deferred.await(gate),
+              Effect.sync(() => void shown.push(rows)),
+            ),
+        ),
+      );
+      yield* settled;
+      realtime.deliver("left-0", []);
+      realtime.deliver("right-0", []);
+      yield* settled;
+      const wait = handed.wait as TxWait | undefined;
+      assert.ok(wait, "a wait once every part is live");
+
+      // Realtime has the write's transaction, after its onChange, as Neon's guide says.
+      realtime.deliver("left-0", [{ id: "written" }]);
+      const confirmed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+      yield* settled;
+      assert.equal(
+        confirmed.pollUnsafe(),
+        undefined,
+        "not confirmed before the caller has the rows",
+      );
+      yield* Deferred.succeed(gate, undefined);
+      yield* settled;
+      assert.deepEqual(shown.at(-1), { left: [{ id: "written" }], right: [] });
+      assert.ok(confirmed.pollUnsafe(), "confirmed once the caller has the rows");
+      yield* Fiber.interrupt(following);
+    }),
+);
+
+it.effect(
+  "a write's wait through a reshaping stage settles only once what it made of the rows is shown",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const handed: { wait?: TxWait | undefined } = {};
+      const gate = yield* Deferred.make<void>();
+      const shown: unknown[] = [];
+      const rows = liveRows<Part>(
+        {
+          openLive: () => realtime.client,
+          reseal: () => Effect.succeed(read(1, 3_600_000)),
+          poll: () => Effect.succeed({ failure: "unavailable" }),
+          now: () => 0,
+          onTxWait: (next) => {
+            handed.wait = next;
+          },
+        },
+        read(0, 3_600_000),
+      );
+      // A stage that pulls rows ahead on its own and makes the view of the write's rows slowly.
+      const views = Stream.switchMap(rows, (whole) =>
+        Stream.fromEffect(
+          Effect.as(whole.left.length === 0 ? Effect.void : Deferred.await(gate), whole),
+        ),
+      );
+      const following = yield* Effect.forkChild(
+        Stream.runForEach(liveShown(views), (view) => Effect.sync(() => void shown.push(view))),
+      );
+      yield* settled;
+      realtime.deliver("left-0", []);
+      realtime.deliver("right-0", []);
+      yield* settled;
+      const wait = handed.wait as TxWait | undefined;
+      assert.ok(wait, "a wait once every part is live");
+
+      realtime.deliver("left-0", [{ id: "written" }]);
+      const confirmed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+      yield* settled;
+      assert.equal(confirmed.pollUnsafe(), undefined, "not confirmed before the view is shown");
+      yield* Deferred.succeed(gate, undefined);
+      yield* settled;
+      assert.deepEqual(shown.at(-1), { left: [{ id: "written" }], right: [] });
+      assert.ok(confirmed.pollUnsafe(), "confirmed once the view is shown");
+      yield* Fiber.interrupt(following);
+    }),
 );

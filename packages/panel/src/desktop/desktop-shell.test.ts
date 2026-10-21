@@ -24,6 +24,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
+import { NAV_COUNT_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -164,7 +165,7 @@ function shellProps(
 }
 
 /**
- * The window's shell on the home page with the sidebar folded, the Inbox
+ * The window's shell with no task open and the sidebar folded, the Inbox
  * open over it or not, New task opening its dialog and Cancel putting it
  * away as the tab does.
  */
@@ -238,7 +239,7 @@ test("while Settings is still loading its frame stands, a page of placeholder se
   assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
 });
 
-test("with the sidebar folded, New plan stands beside its toggle over the home page and the Inbox alike", () => {
+test("with the sidebar folded, New plan stands beside its toggle over the welcome and the Inbox alike", () => {
   assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New task"]);
   act(() => root?.unmount());
   root = undefined;
@@ -258,11 +259,11 @@ test("the title bar's buttons, each wrapped in its hint, tell a reader the chord
   ]);
 });
 
-test("the home page welcomes an account with no plan on New task's composer, and the title bar's New task still raises the dialog over the window, which Escape puts away", () => {
+test("an account with no plan is welcomed on New task's composer, and the title bar's New task still raises the dialog over the window, which Escape puts away", () => {
   const page = mount(false);
-  const home = page.querySelector('section[aria-label="Home"]');
-  assert.ok(home, "the home page stands");
-  assert.ok(home.querySelector(".new-task-composer"), "the home page holds New task's composer");
+  const welcome = page.querySelector('section[aria-label="Welcome"]');
+  assert.ok(welcome, "the welcome stands");
+  assert.ok(welcome.querySelector(".new-task-composer"), "the welcome holds New task's composer");
   const newTask = page.querySelector<HTMLButtonElement>(
     '.title-bar-controls:not([data-edge]) button[aria-label="New task"]',
   );
@@ -280,9 +281,9 @@ test("the home page welcomes an account with no plan on New task's composer, and
   );
 });
 
-test("while a launch reopens the plan last open, the column draws no home page to flash before it", () => {
+test("while a launch reopens the plan last open, the column draws no welcome to flash before it", () => {
   const page = mount(false, true);
-  assert.equal(page.querySelector('section[aria-label="Home"]'), null);
+  assert.equal(page.querySelector('section[aria-label="Welcome"]'), null);
 });
 
 /** The sidebar's row named `name`: the button whose first words a reader hears are it. */
@@ -299,32 +300,10 @@ function placeRow(page: HTMLElement, name: string): HTMLButtonElement | undefine
   return rowNamed(page.querySelector("aside.desktop-sidebar") ?? page, name);
 }
 
-/** The sidebar's Home row. */
-function homeRow(page: HTMLElement): HTMLButtonElement {
-  const row = placeRow(page, "Home");
-  assert.ok(row, "the Home row stands");
-  return row;
-}
-
-test("the sidebar's Home row is the place shown on the home page, and neither over the Inbox nor while a launch reopens a plan", () => {
-  assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
-  act(() => root?.unmount());
-  assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
-  act(() => root?.unmount());
-  assert.equal(homeRow(mount(false, true)).getAttribute("aria-current"), null);
-});
-
-test("Home, pressed or by its chord from Settings, brings the Plans tab forward on the home page", () => {
-  let home = 0;
-  const tabs: PanelTab[] = [];
-  mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
-  act(() => runAppCommand(APP_COMMAND.HOME));
-  assert.deepEqual([home, tabs], [1, [PANEL_TAB.TASKS]]);
-  act(() => root?.unmount());
-
-  const tasks = mount(false, false, { onGoHome: () => (home += 1) });
-  act(() => homeRow(tasks).click());
-  assert.equal(home, 2);
+test("the sidebar offers no Home row, the window resting on the Inbox with no task open", () => {
+  const page = mount(false);
+  assert.equal(placeRow(page, "Home"), undefined);
+  assert.ok(placeRow(page, "Inbox"), "the Inbox's row stands");
 });
 
 const ACME: Workspace = {
@@ -760,7 +739,7 @@ const CALL_TASK_NAME = "Checkout redesign";
 
 /** Every place in the window the developer can stand while a call goes on about another task, as the shell is handed it. */
 const PLACE = {
-  HOME: "home",
+  HOME: "a new account's welcome",
   OTHER_TASK: "another plan",
   INBOX: "the Inbox",
   AGENT_PAGE: "an agent's page",
@@ -981,7 +960,8 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     container.remove();
   }
   assert.deepEqual(found, {
-    [PLACE.HOME]: true,
+    // Note that the welcome holds only New task's composer, so it holds no words to find.
+    [PLACE.HOME]: false,
     [PLACE.OTHER_TASK]: true,
     [PLACE.INBOX]: true,
     // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
@@ -1110,8 +1090,31 @@ test("the sidebar's Chat row stands only while the account has Chat on and a cha
   const open = mount(false, false, { chatView: { ...view, open: true } });
   await settle();
   assert.equal(chatRow(open)?.getAttribute("aria-current"), "page");
-  assert.equal(homeRow(open).getAttribute("aria-current"), null);
-  assert.ok(open.querySelector(".desktop-main > .chat-view"), "Chat stands in the plan's place");
+  assert.equal(placeRow(open, "Inbox")?.getAttribute("aria-current"), null);
+  assert.ok(
+    open.querySelector(".desktop-main > .page-find > .chat-view"),
+    "Chat stands in the plan's place",
+  );
+});
+
+test("⌘K's Chat opens Chat only while the account has it on and a chat is available, and the row counts what waits in the Inbox's accent", async () => {
+  let opened = 0;
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
+  handState({});
+  mount(false, false, { chatView: view });
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.CHAT), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const page = mount(false, false, { chatView: view });
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.CHAT), true);
+  assert.equal(opened, 1);
+  const count = chatRow(page)?.querySelector<HTMLElement>(".luke-nav-item-count");
+  assert.equal(count?.dataset.tone, NAV_COUNT_TONE.ACCENT);
 });
 
 test("with Chat off for the account, its row stands nowhere, and Chat standing in the plan's place gives it back", async () => {

@@ -51,6 +51,23 @@ test("a click names a ref or a whole point, and a scroll a ref or a distance", (
   assert.equal(readsAction({ ...scroll, deltaY: -300 }), true);
 });
 
+test("a select names a dropdown's ref and an option", () => {
+  const select = { action: BROWSER_AGENT_ACTION.SELECT, tab: "page-1" };
+  assert.equal(readsAction({ ...select, ref: "e7", option: "Option 2" }), true);
+  assert.equal(readsAction({ ...select, ref: "e7", option: "" }), true);
+  assert.equal(readsAction({ ...select, ref: "e7" }), false);
+  assert.equal(readsAction({ ...select, option: "Option 2" }), false);
+  assert.equal(readsAction({ ...select, ref: "dropdown", option: "Option 2" }), false);
+  assert.equal(
+    readsAction({
+      ...select,
+      ref: "e7",
+      option: "x".repeat(BROWSER_AGENT_LIMITS.OPTION_MAX_CHARS + 1),
+    }),
+    false,
+  );
+});
+
 test("a key is a named one or a single character", () => {
   const key = { action: BROWSER_AGENT_ACTION.KEY, tab: "page-1" };
   assert.equal(readsAction({ ...key, key: "Enter" }), true);

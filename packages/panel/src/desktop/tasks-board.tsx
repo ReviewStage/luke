@@ -6,7 +6,6 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
-import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -61,7 +60,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { issueTagWords } from "../tasks/task-issue-links-model.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
@@ -232,9 +231,9 @@ function TaskBoardCard({
   }, [rename.editing]);
   const head = (
     <span className="tasks-board-card-head">
-      {task.number === undefined || !drawn(TASK_PROPERTY.KEY) ? null : (
-        <span className="tasks-board-key">{taskKey(workspaceName, task.number)}</span>
-      )}
+      {drawn(TASK_PROPERTY.KEY) ? (
+        <TaskKey workspaceName={workspaceName} number={task.number} />
+      ) : null}
       <span className="tasks-board-card-marks">
         {drawn(TASK_PROPERTY.WAITING) ? <WaitingBadge count={waiting} /> : null}
         {drawn(TASK_PROPERTY.UPDATED) ? (

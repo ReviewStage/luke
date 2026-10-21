@@ -165,7 +165,7 @@ export type PlanAgentWriters = (typeof PLAN_AGENT_WRITERS)[keyof typeof PLAN_AGE
  * it, billed to its starter's plan, as with an agent on any other payer.
  * Changing it is this one line.
  */
-export const PLAN_AGENT_WRITER_POLICY: PlanAgentWriters = PLAN_AGENT_WRITERS.WORKSPACE;
+const PLAN_AGENT_WRITER_POLICY: PlanAgentWriters = PLAN_AGENT_WRITERS.WORKSPACE;
 
 /** The payers that are a member's own plan, which the policy above holds writers to. */
 const PLAN_PAYERS: ReadonlySet<CodingAgentPayer> = new Set([

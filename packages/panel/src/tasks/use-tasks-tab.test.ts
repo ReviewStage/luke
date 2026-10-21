@@ -724,19 +724,19 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
 });
 
-/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all and at work. */
-function namingRow(lines: readonly string[], total: number, working = 0) {
+/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all. */
+function namingRow(lines: readonly string[], total: number) {
   return {
     ...row(TASK.id, 1),
     agents: {
       total,
-      working,
+      working: 0,
       agents: lines.map((id) => ({
         id,
         title: null,
         model: RUNNING_AGENT.model,
         effort: RUNNING_AGENT.effort,
-        status: working > 0 ? CODING_AGENT_STATUS.RUNNING : CODING_AGENT_STATUS.COMPLETED,
+        status: CODING_AGENT_STATUS.COMPLETED,
       })),
       pullRequestTotal: 0,
       pullRequests: [],
@@ -753,7 +753,6 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     lines: readonly string[],
     total: number,
     recent: readonly string[] | undefined,
-    working = 0,
   ) => {
     window.localStorage.setItem(
       "luke.mainTabs",
@@ -764,7 +763,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
       }),
     );
     const tab = mount(
-      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total, working)] } },
+      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total)] } },
       unread,
     );
     await settle();
@@ -778,9 +777,9 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     "the agent last viewed, which the row names",
   );
   assert.deepEqual(
-    await shownOn([AGENT_ID, OLDER], 2, undefined),
+    await shownOn([AGENT_ID], 1, undefined),
     { agent: AGENT_ID },
-    "the newest started, where the row names every agent and none was viewed",
+    "the task's one agent, where none was viewed",
   );
   assert.deepEqual(
     await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
@@ -793,9 +792,9 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     "one viewed last that the row does not name may stand among those it leaves out",
   );
   assert.equal(
-    await shownOn([AGENT_ID, OLDER], 2, undefined, 1),
+    await shownOn([AGENT_ID, OLDER], 2, undefined),
     undefined,
-    "a row naming some at work and some not cannot say which started last",
+    "of two agents none viewed, the row cannot say which started last, as two started together stand by id",
   );
 });
 
@@ -1594,7 +1593,7 @@ test("the Inbox opened again stands on the item last chosen in it, as a row's ch
       place: { kind: LINK_PLACE.INBOX_ITEM, planId: "notes", itemId },
     }),
   );
-  act(() => tab.control().onGoHome());
+  act(() => tab.control().factoryView.onOpen());
   act(() => tab.control().inboxView.onOpen());
   const linked = tab.control().inboxView.chosen;
   act(() => tab.control().onChooseWorkspace(ACME.id));
@@ -2453,7 +2452,7 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
   });
 
   act(() => tab.control().factoryView.onOpen());
-  act(() => tab.control().onGoHome());
+  act(() => tab.control().boardView.onOpen());
   act(() => tab.control().onChooseWorkspace("workspace-other"));
   assert.equal(tab.control().inboxView.open, true, "the page stands while it is asked about");
   assert.equal(asked.length, 3, "the workspace switcher asks as the other doors do");
@@ -2467,7 +2466,7 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
   assert.equal(asked.length, 3, "nothing is asked once the ask is down");
 });
 
-test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
+test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and a plan's press puts Factory away", () => {
   const tab = mount({ shown: true, tasks: listRead([listed()]) });
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().factoryView.onOpen());
@@ -2479,30 +2478,101 @@ test("Factory and the Inbox stand in the plan's place in turn: opening one puts 
   assert.equal(tab.control().inboxView.open, true);
 
   act(() => tab.control().factoryView.onOpen());
-  act(() => tab.control().onGoHome());
-  assert.equal(tab.control().factoryView.open, false);
-
-  act(() => tab.control().factoryView.onOpen());
   act(() => tab.control().onSelect(TASK.id));
   assert.equal(tab.control().factoryView.open, false);
 });
 
-test("Home from an open plan leaves it, and from the home page only puts the Inbox away, asking the host nothing", () => {
+test("with no plan open the window rests on the Inbox: it stands once the list lands, and closing it or any page over it lands on it again", () => {
+  const tab = mount({ shown: true, tasks: listRead([listed()]) });
+  assert.equal(tab.control().inboxView.open, true, "the window opens on the Inbox");
+
+  act(() => tab.control().inboxView.onClose());
+  assert.equal(tab.control().inboxView.open, true, "the Inbox has nothing under it to close to");
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().factoryView.onClose());
+  assert.equal(tab.control().inboxView.open, true, "Factory put away lands on the Inbox");
+
+  act(() => tab.control().boardView.onOpen());
+  act(() => tab.control().boardView.onClose());
+  assert.equal(tab.control().inboxView.open, true, "the Tasks page put away lands on the Inbox");
+  assert.equal(tab.control().resting, true, "the Inbox stands as the page rested on");
+
+  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
+  assert.equal(tab.control().resting, true, "an item chosen in it keeps it the page rested on");
+
+  act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-2" }));
+  assert.equal(tab.control().resting, false, "an item opened by a press is a place of its own");
+});
+
+test("leaving an open plan rests on the Inbox, on the item last chosen there", () => {
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
   );
+  assert.equal(tab.control().inboxView.open, false, "an open plan stands with nothing over it");
   act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().onGoHome());
-  assert.equal(tab.control().inboxView.open, false);
+  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
+  act(() => tab.control().onSelect(TASK.id));
+
+  act(() => tab.control().onLeaveTask());
   assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
   assert.equal(tab.control().boundFor, undefined);
+  assert.equal(tab.control().inboxView.open, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { taskId: TASK.id, itemId: "item-1" });
+});
 
-  const home = mount({ shown: true, tasks: listRead([]) });
-  act(() => home.control().inboxView.onOpen());
-  act(() => home.control().onGoHome());
-  assert.equal(home.control().inboxView.open, false);
-  assert.ok(!home.told.includes(ACT_KIND.TASKS_CLOSE));
+test("another workspace listed with no plan open rests the window again, on that workspace's Inbox rather than the item chosen in the last", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() =>
+    tab.control().inboxView.onChoose({ agentId: "agent-personal", itemId: "item-personal" }),
+  );
+  assert.deepEqual(tab.control().inboxView.chosen, {
+    agentId: "agent-personal",
+    itemId: "item-personal",
+  });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  assert.equal(tab.control().inboxView.open, true, "the other workspace rests on its Inbox");
+  assert.equal(tab.control().inboxView.chosen, undefined, "on none of the last workspace's items");
+});
+
+test("an account with nothing yet rests on no page, its welcome standing, and neither does a window whose list is still read", () => {
+  const fresh = mount({ shown: true, tasks: listRead([]) });
+  assert.equal(fresh.control().page, TASKS_PAGE.HOME);
+  assert.equal(fresh.control().inboxView.open, false);
+  assert.equal(fresh.control().boardView.open, false);
+
+  const reading = mount({
+    shown: true,
+    tasks: { ...listRead([listed()]), listStatus: TASKS_READ.READING },
+  });
+  assert.equal(reading.control().inboxView.open, false);
+});
+
+test("under the inbox-first sidebar the window rests on the newest item waiting, and on the Tasks page where nothing waits", async () => {
+  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
+  const older = { id: "older", agentId: "agent-1", title: "Older", postedAt: 1 };
+  const newer = { id: "newer", agentId: "agent-1", title: "Newer", postedAt: 2 };
+  const waiting = mount(
+    {
+      shown: true,
+      tasks: listRead([listed()]),
+      inboxWaiting: [{ taskId: TASK.id, items: [older, newer] }],
+    },
+    {},
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  assert.equal(waiting.control().inboxView.open, true);
+  assert.deepEqual(waiting.control().inboxView.chosen, { taskId: TASK.id, itemId: "newer" });
+
+  const none = mount({ shown: true, tasks: listRead([listed()]) }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.equal(none.control().boardView.open, true);
+  assert.equal(none.control().inboxView.open, false);
+  handState({});
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
@@ -2751,6 +2821,55 @@ test("a chat notification's click, listing the workspace its message waits in an
   assert.equal(tab.control().workspace?.id, ACME.id);
   assert.equal(tab.control().chatView.open, true);
   assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
+});
+
+test("a chat toast's View opens Chat, and the channel its message stands in once a read holds it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  const messageId = "d0d0d0d0-0000-4000-8000-000000000003";
+  const stream = chatStream();
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().chatView.onShow({ kind: CHAT_PLACE.CHANNEL, channelId: "other" }));
+  act(() => tab.control().chatView.onShowMessage(messageId));
+  assert.equal(tab.control().chatView.open, true);
+  assert.deepEqual(
+    tab.control().chatView.place,
+    FOR_YOU,
+    "For you, which lists the message, stands until the read lands, rather than the channel shown before",
+  );
+  stream.push({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
+    channels: [{ id: channelId, kind: CHANNEL_KIND.TOPIC, name: "infra", archived: false }],
+    messages: [
+      {
+        id: messageId,
+        seq: 4,
+        touchedSeq: 4,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [me],
+        postedAt: 1,
+      },
+    ],
+    cursor: "",
+  });
+  await vi.waitFor(async () => {
+    await settle();
+    assert.deepEqual(tab.control().chatView.place, { kind: CHAT_PLACE.CHANNEL, channelId });
+  });
+  assert.equal(tab.control().chatView.listed, false);
 });
 
 test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and never in the column", async () => {

@@ -14,7 +14,7 @@ import { type FakeService, fakeService, LISTED_TASK } from "./support/fake-servi
  * the cookie session, finds none, and the panel draws its own sign-in with
  * the way to the Mac app beside it; and a return to the tab after the cookie
  * changed, another tab having signed in, reads the session again and opens
- * Home on the account's tasks. The next load's frame (app.html's, as
+ * the account's tasks. The next load's frame (app.html's, as
  * `public/app-theme.js` stands it) follows the tab: no sidebar while it
  * reads nobody signed in, though the sidebar was last kept open, and the
  * sidebar once it reads someone. One mount per file, because the panel's
@@ -44,7 +44,7 @@ afterEach(async () => {
   document.documentElement.removeAttribute("data-luke-boot-sidebar");
 });
 
-test("signed out, the panel draws its sign-in; a return after another tab signed in opens Home", async () => {
+test("signed out, the panel draws its sign-in; a return after another tab signed in opens the account's tasks", async () => {
   const service = fakeService({ signedIn: false });
   // An earlier load read someone signed in here, the sidebar open.
   localStorage.setItem("luke.signed-in-here", "true");

@@ -163,7 +163,41 @@ export interface TaskStandingDoor {
   readonly onSet?: ((standing: TaskStanding) => void) | undefined;
 }
 
-/** The task's key, small and monospace, over its title; nothing for a task from a service before keys. */
+/**
+ * A task's key, “ACME-42”, as every place in the window draws it: the task's
+ * page over its title, its hover card and an Inbox row's card at the head,
+ * the Tasks list's row, and the board's card. Plain caption-size words in the
+ * subtle ink, monospace with even figures, never a chip, and never shrunk by
+ * what stands beside it, so a chip there gives way instead. Nothing for a
+ * task from a service before keys, or where the window holds no such
+ * workspace.
+ */
+export function TaskKey({
+  workspaceName,
+  number,
+  decorative = false,
+}: {
+  workspaceName: string | undefined;
+  number: number | undefined;
+  /** Hidden from a screen reader, where the row says the key in words of its own. */
+  decorative?: boolean;
+}): React.JSX.Element | null {
+  if (workspaceName === undefined || number === undefined) return null;
+  return (
+    <span className="task-key" data-task-key="" aria-hidden={decorative ? true : undefined}>
+      <Text
+        variant={TEXT_VARIANT.CAPTION}
+        tone={TEXT_TONE.SUBTLE}
+        font={TEXT_FONT.MONO}
+        as={TEXT_ELEMENT.SPAN}
+      >
+        {taskKey(workspaceName, number)}
+      </Text>
+    </span>
+  );
+}
+
+/** The task's key over its title (`TaskKey`); nothing for a task from a service before keys. */
 export function TaskKeyLine({
   task,
   workspaceName,
@@ -174,14 +208,7 @@ export function TaskKeyLine({
   if (task.number === undefined) return null;
   return (
     <div className="plan-task-key">
-      <Text
-        variant={TEXT_VARIANT.CAPTION}
-        tone={TEXT_TONE.SUBTLE}
-        font={TEXT_FONT.MONO}
-        as={TEXT_ELEMENT.SPAN}
-      >
-        {taskKey(workspaceName, task.number)}
-      </Text>
+      <TaskKey workspaceName={workspaceName} number={task.number} />
     </div>
   );
 }

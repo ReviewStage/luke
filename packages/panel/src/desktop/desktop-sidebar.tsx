@@ -83,7 +83,6 @@ import type { UpdateControl } from "@luke/voice/settings-controls";
 import {
   FactoryIcon,
   FolderPlusIcon,
-  HouseIcon,
   InboxIcon,
   ListTodoIcon,
   MessagesSquareIcon,
@@ -117,6 +116,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { welcomed } from "./desktop-welcome.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
@@ -1087,35 +1087,6 @@ function waitingItems({ waiting, taskless }: SettledWaiting, readerId: string | 
 }
 
 /**
- * The home page's row, between Search and the Inbox and drawn as they are:
- * the house, its name, and its chord at its end while the row is hovered or
- * reached from the keyboard. A press goes to the home page from wherever the
- * window stands, and the row is the place shown while the home page is.
- */
-function SidebarHomeRow({
-  current,
-  disabled,
-  onOpen,
-}: {
-  current: boolean;
-  disabled: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <NavItem
-      icon={<HouseIcon />}
-      current={current ? NAV_CURRENT.PAGE : undefined}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.HOME)}
-      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.HOME].chord} />}
-      disabled={disabled}
-      onClick={onOpen}
-    >
-      Home
-    </NavItem>
-  );
-}
-
-/**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
  * task at its end, the sum of the counts the Inbox's rows show, in even
@@ -1164,7 +1135,8 @@ function waitingMessages(tasks: TasksControl): number {
 /**
  * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
  * how many messages wait on the developer in For you at its end, in the
- * Inbox's even figures but muted, nothing at none. A press opens the window's Chat
+ * Inbox's even figures and its accent, since both count what waits on the
+ * reader, nothing at none. A press opens the window's Chat
  * (`desktop-chat.tsx`), and the row is the place shown while it stands.
  */
 function SidebarChatRow({
@@ -1180,7 +1152,7 @@ function SidebarChatRow({
     <NavItem
       icon={<MessagesSquareIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
-      count={{ value: waiting, noun: "waiting on you" }}
+      count={{ value: waiting, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT }}
       onClick={onOpen}
     >
       Chat
@@ -1444,8 +1416,9 @@ interface DesktopSidebarProps {
  * searches the workspace's Linear issues where Linear is connected
  * (`new-task-dialog.tsx`). While words left in its card wait as the
  * workspace's draft, it wears the Draft pencil at its end, which its chord
- * takes the place of while it is hovered; none while the card or Home,
- * whose composer shows those words, is open, as a task open wears none.
+ * takes the place of while it is hovered; none while the card or a new
+ * account's welcome, whose composer shows those words, is open, as a task
+ * open wears none.
  */
 function NewTaskButton({
   tasks,
@@ -1453,7 +1426,7 @@ function NewTaskButton({
   onNewTask,
 }: {
   tasks: TasksControl;
-  /** Whether New task's words are in sight: its card open, or Home shown. */
+  /** Whether New task's words are in sight: its card open, or a new account's welcome shown. */
   shown: boolean;
   onNewTask: () => void;
 }): React.JSX.Element {
@@ -1478,10 +1451,10 @@ function NewTaskButton({
  * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
  * a new task, Search, which opens the command palette, every task of the
  * workspace chosen, and the account's
- * row, whose menu and gear lead to Settings and the rest. Home's row, the
- * Inbox's, and Factory's follow Search above the rule: Home's goes to the
- * home page, the Inbox's counts what waits on the developer and opens the
- * window's Inbox, and Factory's, while its experiment is on, opens the
+ * row, whose menu and gear lead to Settings and the rest. The Inbox's row
+ * and Factory's follow Search above the rule: the Inbox's counts what waits
+ * on the developer and opens the window's Inbox, which is also where the
+ * window rests with no task open (`resting-page.ts`), and Factory's, while its experiment is on, opens the
  * window's Factory, and the Automations page's likewise opens it; Chat's, where
  * a chat is read, counts what waits on the developer in Chat and opens it. The pinned tasks, and the side panel tabs
  * pinned to the sidebar, stand in the Pinned section while any are pinned,
@@ -1599,13 +1572,11 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.chatView.onOpen();
   };
-  const goHome = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.onGoHome();
-  };
-  // The home page is the place shown while no task is open, the Inbox is not
-  // standing in its place, and no launch is still reopening a task.
-  const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME && !tasks.restoring;
+  // A new account's welcome stands while no task is open, nothing stands in
+  // its place, and no launch is still reopening a task: New task's composer is
+  // on it, so its row draws no Draft pencil for the words shown there.
+  const atWelcome =
+    onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME && !tasks.restoring && welcomed(tasks);
   const newTaskIn = (repository: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onNewTaskIn(repository);
@@ -1844,8 +1815,8 @@ function SidebarColumn({
       <div className="sidebar-places">
         <NewTaskButton
           tasks={tasks}
-          // A person's page stands in Home's place without leaving its page, and draws no composer.
-          shown={tasks.newTask.open || (atHome && tasks.personView.userId === undefined)}
+          // A person's page stands in the welcome's place without leaving its page, and draws no composer.
+          shown={tasks.newTask.open || (atWelcome && tasks.personView.userId === undefined)}
           onNewTask={chosen(newTask)}
         />
         {/* Search is a second door to the command palette, drawn as New task
@@ -1858,7 +1829,6 @@ function SidebarColumn({
         >
           Search
         </NavItem>
-        <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
         {listsInbox ? null : (
           <SidebarInboxRow
             waiting={tasks.signedIn ? waitingItems(settledWaiting, tasks.me) : 0}

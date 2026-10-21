@@ -536,6 +536,32 @@ export function readAgentById(
   );
 }
 
+/** What one agent's transcript pages said of it before its task's list was read: its run, its title, or both. */
+interface HeardOfAgent {
+  readonly run?: AgentRun;
+  readonly title?: string | null;
+}
+
+/** Keeps what a page said of an agent beside what earlier pages said, the latest of each. */
+function heardOf(heard: Map<string, HeardOfAgent>, agentId: string, said: HeardOfAgent): void {
+  heard.set(agentId, { ...heard.get(agentId), ...said });
+}
+
+/** The list's agents with what their pages said before it was read laid over them. */
+function withHeard(
+  agents: readonly CodingAgentSummary[],
+  heard: ReadonlyMap<string, HeardOfAgent>,
+): readonly CodingAgentSummary[] {
+  let laid = agents;
+  for (const [agentId, { run, title }] of heard) {
+    if (run !== undefined) laid = withAgentRun(laid, agentId, run);
+    if (title !== undefined) {
+      laid = laid.map((agent) => (agent.id === agentId ? { ...agent, title } : agent));
+    }
+  }
+  return laid;
+}
+
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return (
@@ -633,6 +659,21 @@ export function useCodingAgents(input: {
   );
   const listFailed = ours(list) && list.failed;
   const listMissing = ours(list) && list.missing === true;
+  // What transcript pages said of their agents before the list was read: a
+  // tab follows its agent from the id alone, so a page may land first, and
+  // it knows the agent's run and title better than the list's answer does,
+  // which is laid under it once a read of it lands (`withHeard`). What was
+  // heard is kept through a read that failed, and is the open task's, or
+  // the page's agent's, alone: another's list lets it go.
+  const subject = taskId ?? agentId;
+  const heardBeforeList = useRef<{ subject: string | undefined; heard: Map<string, HeardOfAgent> }>(
+    { subject, heard: new Map() },
+  );
+  if (heardBeforeList.current.subject !== subject) {
+    heardBeforeList.current = { subject, heard: new Map() };
+  }
+  const listedNow = useRef(false);
+  listedNow.current = held !== undefined;
 
   // Read when the task opens, or the page's agent where no task is, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
@@ -641,6 +682,8 @@ export function useCodingAgents(input: {
     listRead(latest.current.acts.act, taskId, agentId).then(
       (answer) => {
         if (!live) return;
+        const { heard } = heardBeforeList.current;
+        if (!("failure" in answer)) heardBeforeList.current.heard = new Map();
         setList((was) =>
           "failure" in answer
             ? {
@@ -656,7 +699,7 @@ export function useCodingAgents(input: {
             : {
                 taskId,
                 agentId: listOf,
-                agents: answer.agents,
+                agents: withHeard(answer.agents, heard),
                 failed: false,
                 workspaceId: answer.workspaceId,
                 repository: answer.repository,
@@ -1256,6 +1299,7 @@ export function useCodingAgents(input: {
   );
 
   const onTitle = useCallback((agentId: string, title: string | null) => {
+    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { title });
     setList((was) =>
       was.agents === undefined ||
       !was.agents.some((agent) => agent.id === agentId && agent.title !== title)
@@ -1270,6 +1314,7 @@ export function useCodingAgents(input: {
   // Every transcript page says where its agent stands, mostly as it stood:
   // the list is kept as it was then, so the window is not drawn again for it.
   const onStatus = useCallback((agentId: string, run: AgentRun) => {
+    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { run });
     setList((was) => {
       if (was.agents === undefined) return was;
       const agents = withAgentRun(was.agents, agentId, run);

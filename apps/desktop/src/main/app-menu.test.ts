@@ -38,7 +38,6 @@ function labelsOf(template: MenuItemConstructorOptions[], menu: string): readonl
 describe("the menu bar's gate", () => {
   test("every item stands while every command does", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
-      "Home",
       "Inbox",
       "Automations",
       "-",
@@ -57,7 +56,6 @@ describe("the menu bar's gate", () => {
       (command) => command !== APP_COMMAND.INBOX,
     );
     assert.deepEqual(labelsOf(withoutInbox, "Go"), [
-      "Home",
       "Automations",
       "-",
       "Back",
@@ -70,10 +68,7 @@ describe("the menu bar's gate", () => {
     const withoutPlaces = appMenuTemplate(
       "Luke",
       undefined,
-      (command) =>
-        command !== APP_COMMAND.HOME &&
-        command !== APP_COMMAND.INBOX &&
-        command !== APP_COMMAND.AUTOMATIONS,
+      (command) => command !== APP_COMMAND.INBOX && command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), [
       "Back",

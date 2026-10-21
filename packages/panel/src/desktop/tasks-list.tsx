@@ -79,7 +79,7 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { RelativeTime } from "../tasks/relative-time.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
@@ -627,9 +627,7 @@ function TaskListRow({
       )}
       {cell(
         TASK_PROPERTY.KEY,
-        <span className="tasks-list-key" aria-hidden="true">
-          {key}
-        </span>,
+        <TaskKey workspaceName={workspaceName} number={task.number} decorative />,
       )}
       {cell(
         TASK_PROPERTY.STATUS,

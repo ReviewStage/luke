@@ -687,7 +687,7 @@ function standingOf(trail: Trail): HistoryEntry<Place> | undefined {
  * arrival records nothing and the steps ahead are kept. A step it cannot
  * reach is passed over the way the move went, as the window's own step
  * passes over one, and an entry holding no step at all is a page loaded
- * there, which opens on Home. Note that such a move has already happened
+ * there, which opens where the window rests with no task open. Note that such a move has already happened
  * when the window hears it and cannot be refused, so while a page holds
  * unsaved work the adapter is stood back on the window's step first, along
  * the trail or, where the trail no longer holds it, written again after
@@ -769,7 +769,7 @@ function useHistory(input: {
   }, [history, place, address, own]);
 
   useEffect(() => {
-    // An entry holding no step is a page loaded there, which opens on Home; the window already there writes its step on it.
+    // An entry holding no step is a page loaded there, which opens where the window rests; the window already there writes its step on it.
     const arriveNowhere = (was: HistoryEntry<Place>) => {
       const home: Place = { kind: PLACE_KIND.HOME };
       if (sameStep(was.state, home)) own(() => history.push(was));
@@ -928,6 +928,7 @@ export function useWindowHistory(input: {
     | "chatView"
     | "boardView"
     | "restoring"
+    | "resting"
     | "leaveGuard"
     | "sidePanel"
     | "mainTabs"
@@ -947,7 +948,8 @@ export function useWindowHistory(input: {
   const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
-  const chatListed = narrow ? tasks.chatView.listed : undefined;
+  // Chat showing one column, by its own width or a narrow room's, steps between its rail and its place as the Inbox does.
+  const chatListed = narrow || tasks.chatView.single === true ? tasks.chatView.listed : undefined;
   // The place Chat shows, alone in a narrow room or beside its rail in a wide one; none while a narrow room's rail stands.
   const chatShownPlace = chatListed === true ? undefined : tasks.chatView.place;
   const panelOpen = tasks.sidePanel.open;
@@ -1008,6 +1010,8 @@ export function useWindowHistory(input: {
         listed: narrow ? settingsListed : undefined,
       };
     }
+    // The page the window rests on with no task open is where no page stands, so a step to it is a step home.
+    if (tasks.resting) return { kind: PLACE_KIND.HOME };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen };
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
     if (pagePerson !== undefined) {
@@ -1048,6 +1052,7 @@ export function useWindowHistory(input: {
         };
   }, [
     known,
+    tasks.resting,
     tab,
     settingsView,
     settingsListed,

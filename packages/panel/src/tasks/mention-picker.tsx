@@ -24,6 +24,7 @@ import {
   ArrowLeftIcon,
   type ComboboxGroup,
   ComboboxList,
+  comboboxOptionId,
   DocumentIcon,
   IconButton,
   ProviderMark,
@@ -48,7 +49,7 @@ import {
   HashIcon,
   UsersIcon,
 } from "lucide-react";
-import { type RefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
@@ -119,7 +120,13 @@ import { useTaskStatus } from "./use-known-names.js";
  * or their email: a mention of a person names them by their account's id,
  * so it names them still once they rename themselves, and an agent the
  * words go to is handed who they are in the workspace. Nobody is notified
- * of a mention.
+ * of a mention, but where the words are a chat message's
+ * (`chat-composer.tsx`): there the place hands the list the members a
+ * mention tells (`MentionMembers`), the people and agents a post in the
+ * channel reaches, and the list offers those alone for people and agents,
+ * ahead of every other kind, since naming anyone else tells no one. A chat
+ * message's `#` word opens the same list on the channels (`MentionChannels`),
+ * a pick written as the channel's `#name`.
  *
  * Where the words typed read as a date (`@luke/features/date-mention`),
  * `tomorrow 3pm`, `next fri`, `oct 20 to 24`, the list offers that date
@@ -156,6 +163,7 @@ const MENTION_GROUP = {
   PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
   SERVERS: "MCP servers",
+  CHANNELS: "Channels",
   FROM: "Mention from",
 } as const;
 
@@ -190,6 +198,26 @@ interface MentionKind {
   readonly detail: string | undefined;
   /** The word that, typed before a colon after the `@`, narrows the list to it; none for a server past its provider's first. */
   readonly keyword: string | undefined;
+}
+
+/** Which word opened the list: an `@`, which mentions, or a chat message's `#`, which names a channel. */
+const MENTION_WORD = {
+  MENTION: "mention",
+  CHANNEL: "channel",
+} as const;
+
+type MentionWord = (typeof MENTION_WORD)[keyof typeof MENTION_WORD];
+
+/** The word the editor last reported, as the list reads it. */
+interface Said {
+  readonly word: MentionWord;
+  readonly trigger: ComposerTrigger;
+}
+
+/** A word closed with Escape: which word it was, and where it stands. */
+interface Closed {
+  readonly word: MentionWord;
+  readonly start: number;
 }
 
 /** What a page's row says beside its title. */
@@ -304,6 +332,7 @@ type MentionRow = {
   | { readonly skill: string }
   | { readonly from: MentionKind }
   | { readonly picksDate: true }
+  | { readonly channel: MentionableChannel }
 );
 
 interface MentionGroup {
@@ -422,6 +451,11 @@ function counted(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** What the plan's row says of its sections: how many, where it holds any. */
+function sectionCount(count: number): string | undefined {
+  return count === 0 ? undefined : counted(count, "section", "sections");
+}
+
 /** Whether → opens the row: a kind's, which narrows the list, or a folder's, which walks into it. */
 function opens(row: MentionRow): boolean {
   return "from" in row || ("mention" in row && row.mention.kind === MENTION_KIND.FOLDER);
@@ -525,21 +559,50 @@ function agentRows(
   return rows;
 }
 
-/** Each member's row, by their name, wearing their picture, said by their email or as You, found by either. */
-function personRows(
+/** The workspace's members as the list offers them, each wearing their picture. */
+function directoryPeople(
   members: readonly WorkspaceMember[],
   readerId: string | undefined,
+): readonly MentionablePerson[] {
+  return members.map((member) => ({
+    userId: member.userId,
+    name: member.name,
+    email: member.email,
+    actor: memberActor(member, readerId),
+  }));
+}
+
+/** Each person's row, by their name, wearing their picture, said by their email or as You, found by their name or their email. */
+function personRows(
+  people: readonly MentionablePerson[],
+  readerId: string | undefined,
 ): MentionRow[] {
-  return members.map((member) => {
-    const detail = member.userId === readerId ? YOU_DETAIL : member.email;
-    return {
-      mention: { kind: MENTION_KIND.PERSON, userId: member.userId },
-      name: member.name,
-      detail,
-      terms: `${member.name} ${member.email}`,
-      actor: memberActor(member, readerId),
-    };
-  });
+  return people.map((person) => ({
+    mention: { kind: MENTION_KIND.PERSON, userId: person.userId },
+    name: person.name,
+    detail: person.userId === readerId ? YOU_DETAIL : person.email,
+    terms: `${person.name} ${person.email ?? ""}`,
+    actor: person.actor,
+  }));
+}
+
+/** A channel's row, by its name, found by its name and its task's. */
+function channelRow(channel: MentionableChannel): MentionRow {
+  return {
+    channel,
+    name: channel.name,
+    detail: channel.detail,
+    terms: `${channel.name} ${channel.detail ?? ""}`,
+  };
+}
+
+/** What a `#` word lists: the channels its words find, best first, as many as a narrowed list holds. */
+function channelGroups(
+  channels: readonly MentionableChannel[],
+  term: string,
+): readonly MentionGroup[] {
+  const rows = best(channels.map(channelRow), term, PER_KIND);
+  return rows.length === 0 ? [] : [{ label: MENTION_GROUP.CHANNELS, rows }];
 }
 
 /**
@@ -730,7 +793,8 @@ function kindRow(kind: MentionKind): MentionRow {
  * The groups the list offers for the word. Every kind at once: their first
  * few but the files, and a row for each kind, for no words; else each kind's
  * best, the date the words name first, since words that read as a date
- * mean one, then files and folders. One kind: up to fifty of its rows, a
+ * mean one, then files and folders, or, where the members a mention tells
+ * lead, the agents and the people. One kind: up to fifty of its rows, a
  * folder's where one was walked into.
  */
 function groupsFor(
@@ -738,6 +802,7 @@ function groupsFor(
   paths: readonly RepositoryPath[] | undefined,
   rows: KindRows,
   kinds: readonly MentionKind[],
+  membersFirst: boolean,
 ): readonly MentionGroup[] {
   const { kind, term } = scope;
   if (kind !== undefined) {
@@ -747,13 +812,18 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : best(paths.map(pathRow), term, PER_GROUP);
-  return [
-    { label: MENTION_GROUP.DATES, rows: rows.dates },
+  const members = [
+    { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
+    { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
+  ];
+  const place = [
     { label: MENTION_GROUP.FILES, rows: files },
     { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) },
     { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
-    { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
-    { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
+  ];
+  return [
+    { label: MENTION_GROUP.DATES, rows: rows.dates },
+    ...(membersFirst ? [...members, ...place] : [...place, ...members]),
     { label: MENTION_GROUP.PULL_REQUESTS, rows: best(rows.pullRequests, term, PER_GROUP) },
     { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
     { label: MENTION_GROUP.SERVERS, rows: best(rows.servers, term, PER_GROUP) },
@@ -788,7 +858,17 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
 /** A row's glyph, as its chip wears it. */
 function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   const planned = "mention" in row && row.mention.kind === MENTION_KIND.TASK;
-  const taskStatus = useTaskStatus(planned ? row.mention.taskId : undefined);
+  const taskStatus = useTaskStatus(
+    "channel" in row ? row.channel.taskId : planned ? row.mention.taskId : undefined,
+  );
+  // A channel wears its rail row's glyph: its task's, or the hash of one no task holds.
+  if ("channel" in row) {
+    return row.channel.taskId === undefined ? (
+      <HashIcon aria-hidden="true" />
+    ) : (
+      <PlanGlyph status={taskStatus} />
+    );
+  }
   if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
   if ("from" in row) return <KindGlyph kind={row.from} />;
   if ("picksDate" in row) return <CalendarIcon aria-hidden="true" />;
@@ -831,6 +911,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
 /** A row's key, stable while it stands: its skill's name, its kind's narrowing, or its mention. */
 function rowKey(row: MentionRow): string {
   if ("skill" in row) return row.skill;
+  if ("channel" in row) return JSON.stringify({ channel: row.channel.name });
   if ("picksDate" in row) return PICK_DATE_KEY;
   return JSON.stringify("from" in row ? row.from.narrow : row.mention);
 }
@@ -888,6 +969,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
 
 /** The list itself: a narrowed list's crumb, each group's heading and rows, the highlighted one washed, and the keys it hears at its foot. */
 function MentionMenu({
+  id,
   crumb,
   groups,
   at,
@@ -896,6 +978,7 @@ function MentionMenu({
   onHover,
   onChoose,
 }: {
+  id: string;
   crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
   at: number;
@@ -909,6 +992,7 @@ function MentionMenu({
     <div className="menu-surface searchable-menu mention-menu" style={place}>
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
       <ComboboxList
+        id={id}
         label={MENU_LABEL}
         groups={comboboxGroups(groups)}
         active={at}
@@ -937,10 +1021,13 @@ function MentionMenu({
   );
 }
 
-/** What an editor drawing an `@` list wires: the list and the date picker while they stand, the report and keys the editor hands it, and what opens the date picker over a chip. */
+/** What an editor drawing an `@` list wires: the list and the date picker while they stand, the field's ties to the list for assistive technology, the reports and keys the editor hands it, and what opens the date picker over a chip. */
 export interface MentionPicker {
   readonly menu: React.ReactNode;
+  readonly aria: Readonly<Record<string, string | undefined>>;
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  /** The `#` word's report, where the list names channels (`channels`). */
+  readonly onChannelTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly pickDate: (opening: DatePickerOpening) => void;
 }
@@ -969,6 +1056,38 @@ export interface MentionableAgent {
   readonly archived?: boolean | undefined;
 }
 
+/** A person as the list offers them: their account's id, their name, their email where the members read names it, and their picture, which their row wears. */
+interface MentionablePerson {
+  readonly userId: string;
+  readonly name: string;
+  readonly email: string | undefined;
+  readonly actor: Actor;
+}
+
+/**
+ * The members a mention tells, where the words are a chat message's
+ * (`chat-composer.tsx`): the people and the agents a post in its channel
+ * reaches, the reader left out, which the list offers for people and agents
+ * in place of the workspace's, ahead of every other kind.
+ */
+export interface MentionMembers {
+  readonly people: readonly MentionablePerson[];
+  readonly agents: readonly MentionableAgent[];
+}
+
+/** A channel a chat message's `#` word names, as the list offers it: its name, the task whose channel it is, whose glyph its row wears, and what its row says beside its name. */
+export interface MentionableChannel {
+  readonly name: string;
+  readonly taskId: string | undefined;
+  readonly detail: string | undefined;
+}
+
+/** The channels a chat message's `#` word lists, and the pick that writes one as its `#name`. */
+export interface MentionChannels {
+  readonly known: readonly MentionableChannel[];
+  readonly onChoose: (name: string) => void;
+}
+
 /** One of the task's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
 export interface MentionablePullRequest
   extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks"> {
@@ -989,7 +1108,6 @@ export type MentionAgentsReader = (
 const NO_PAGES: readonly MentionablePage[] = [];
 const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
-const NO_MEMBERS: readonly WorkspaceMember[] = [];
 
 /** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_TASK` for a page no task holds, which offers its repository alone. */
 export interface MentionSource {
@@ -1030,7 +1148,8 @@ function treeKey(
  * the window has read them, the pull requests
  * the plan's agents published, the repository's skills where the words go
  * to an agent, dates wherever the list stands, and each connected server, the
- * first of each provider narrowed to by the provider's own word.
+ * first of each provider narrowed to by the provider's own word. Where the
+ * members a mention tells are handed, their agents and people lead.
  */
 function kindsOf(
   source: MentionSource,
@@ -1038,13 +1157,16 @@ function kindsOf(
   skills: MentionSkills | undefined,
   servers: readonly NamedServer[],
   people: number,
+  members: MentionMembers | undefined,
 ): readonly MentionKind[] {
   const { taskId, repository } = source;
   const pages = taskId === NO_TASK ? 0 : (source.pages ?? NO_PAGES).length;
   const pullRequests = taskId === NO_TASK ? 0 : (source.pullRequests ?? NO_PULL_REQUESTS).length;
   const agents =
-    source.readAgents !== undefined ||
-    (taskId !== NO_TASK && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
+    members !== undefined
+      ? members.agents.length > 0
+      : source.readAgents !== undefined ||
+        (taskId !== NO_TASK && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
   const known = skills?.known ?? [];
   const own: MentionKind[] = [
     ...(repository === null || treeKey(taskId, source.workspaceId, repository) === undefined
@@ -1056,7 +1178,8 @@ function kindsOf(
           {
             from: MENTION_FROM.PLAN,
             name: MENTION_GROUP.PLAN,
-            detail: counted(planSections(source.text()).length, "section", "sections"),
+            // A plan whose words the place does not hold, as the window's Chat holds none, says no count it cannot know.
+            detail: sectionCount(planSections(source.text()).length),
           },
         ]),
     ...(pages === 0
@@ -1073,7 +1196,11 @@ function kindsOf(
           {
             from: MENTION_FROM.AGENTS,
             name: MENTION_GROUP.AGENTS,
-            detail: source.workspace || undefined,
+            // The members a mention tells are counted, as the people are; the workspace's agents are its own.
+            detail:
+              members === undefined
+                ? source.workspace || undefined
+                : counted(members.agents.length, "agent", "agents"),
           },
         ]
       : []),
@@ -1106,6 +1233,10 @@ function kindsOf(
         ]),
     { from: MENTION_FROM.DATES, name: MENTION_GROUP.DATES, detail: DATES_DETAIL },
   ].map(({ from, name, detail }) => ({ narrow: { from }, name, detail, keyword: from }));
+  const member = (kind: MentionKind) =>
+    kind.narrow.from === MENTION_FROM.AGENTS || kind.narrow.from === MENTION_FROM.PEOPLE;
+  const ordered =
+    members === undefined ? own : [...own.filter(member), ...own.filter((kind) => !member(kind))];
   const named = new Set<IntegrationProvider>();
   const connected = servers.map(({ provider, connection, name }): MentionKind => {
     const first = !named.has(provider);
@@ -1117,20 +1248,23 @@ function kindsOf(
       keyword: first ? provider : undefined,
     };
   });
-  return [...own, ...connected];
+  return [...ordered, ...connected];
 }
 
 /**
  * The `@` list for an editor on a task's page: its rows read from the
  * plan's words as they stand and the repository's paths, placed by the word
  * in `room`, and a pick handed to `onChoose` as the mention's node; a list
- * that never opens where there is no task to offer.
+ * that never opens where there is no task to offer. Where channels are
+ * handed, a `#` word opens the same list on them.
  */
 export function useMentionPicker({
   source,
   self,
   skills,
   servers = NO_SERVERS,
+  members,
+  channels,
   room,
   side,
   onChoose,
@@ -1142,17 +1276,23 @@ export function useMentionPicker({
   skills?: MentionSkills | undefined;
   /** The account's connected MCP servers, where the words go to an agent; none for the plan's own words. */
   servers?: readonly NamedServer[];
+  /** The members a mention tells, where the words are a chat message's; none elsewhere, where the workspace's people and agents are offered and nobody is told. */
+  members?: MentionMembers | undefined;
+  /** The channels a `#` word names, where the words are a chat message's; none elsewhere, where a `#` opens nothing. */
+  channels?: MentionChannels | undefined;
   /** The element the list is placed in, by the word. */
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
 }): MentionPicker {
   const { act } = useAct();
-  const { members, readerId } = useMemberDirectory();
+  const directory = useMemberDirectory();
+  const { readerId } = directory;
   const now = useMinute();
-  const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
+  const listId = useId();
+  const [said, setSaid] = useState<Said | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
-  const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
+  const [closed, setClosed] = useState<Closed | undefined>(undefined);
   const [narrowing, setNarrowing] = useState<Held | undefined>(undefined);
   const [paths, setPaths] = useState<{
     planId: string;
@@ -1165,13 +1305,28 @@ export function useMentionPicker({
   const workspaceId = source?.workspaceId;
   const repository = source?.repository ?? null;
   const place: MentionPlace = { workspace: source?.workspace ?? "", repository };
-  const open = source !== undefined && trigger !== undefined && closedAt !== trigger.start;
+  // Note that each word reports on its own, so a word leaving clears only a list its own word opened.
+  const reportFor = (word: MentionWord) => (trigger: ComposerTrigger | undefined) =>
+    setSaid((was) =>
+      trigger !== undefined ? { word, trigger } : was?.word === word ? undefined : was,
+    );
+  const trigger = said?.trigger;
+  // A word closed with Escape stays closed only as the word it was: a `#` written over a closed `@` opens its own list.
+  const shut =
+    said !== undefined &&
+    closed !== undefined &&
+    closed.word === said.word &&
+    closed.start === said.trigger.start;
+  const open =
+    source !== undefined && trigger !== undefined && said?.word === MENTION_WORD.MENTION && !shut;
+  const naming =
+    channels !== undefined && trigger !== undefined && said?.word === MENTION_WORD.CHANNEL && !shut;
   // A word closed with Escape stays closed only while the caret is in it.
   const inWord = trigger !== undefined;
   // So does a narrowing a key made.
   useEffect(() => {
     if (inWord) return;
-    setClosedAt(undefined);
+    setClosed(undefined);
     setNarrowing(undefined);
   }, [inWord]);
 
@@ -1214,15 +1369,20 @@ export function useMentionPicker({
     if (askedAt !== undefined) askSkills?.();
   }, [askedAt, askSkills]);
 
+  // The people offered are the members a mention tells where they are handed, else the workspace's as read.
+  const people =
+    members?.people ??
+    (directory.members === undefined ? [] : directoryPeople(directory.members, readerId));
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
-  const kinds = open ? kindsOf(source, self, skills, servers, members?.length ?? 0) : [];
+  const kinds = open ? kindsOf(source, self, skills, servers, people.length, members) : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
   const term = scope?.term ?? "";
 
   // The workspace's newest agents are read as each `@` word opens the list, and once a word is
   // typed the service finds those it names, archived ones among them, however many the workspace
   // holds; each read is kept while its word stands, and the last one shown until the next lands.
-  const readAgents = source?.readAgents;
+  // Note that where the members a mention tells are handed, the workspace's agents are not read, since naming one tells nobody.
+  const readAgents = members === undefined ? source?.readAgents : undefined;
   const wordAt = open ? trigger.start : undefined;
   const words = open && term.trim() !== "" ? term.trim() : undefined;
   const [workspaceAgents, setWorkspaceAgents] = useState<{
@@ -1252,8 +1412,9 @@ export function useMentionPicker({
     (open ? servers : NO_SERVERS).map((server) => server.connection),
   );
   const narrow = scope?.kind?.narrow;
-  const groups =
-    scope === undefined || source === undefined
+  const groups = naming
+    ? channelGroups(channels.known, trigger.query)
+    : scope === undefined || source === undefined
       ? []
       : groupsFor(
           scope,
@@ -1261,16 +1422,18 @@ export function useMentionPicker({
           {
             plan: taskRows(taskId, source.taskName, source.text()),
             pages: pageRows(taskId, source.pages ?? NO_PAGES),
-            agents: [
-              ...agentRows(
-                taskId,
-                source.agents ?? NO_AGENTS,
-                agentsRead?.agents ?? NO_AGENTS,
-                self,
-                term,
-              ),
-            ],
-            people: personRows(members ?? NO_MEMBERS, readerId),
+            // The members a mention tells are each named by their own task, so none is offered as the plan's own.
+            agents:
+              members === undefined
+                ? agentRows(
+                    taskId,
+                    source.agents ?? NO_AGENTS,
+                    agentsRead?.agents ?? NO_AGENTS,
+                    self,
+                    term,
+                  )
+                : agentRows(taskId, NO_AGENTS, members.agents, self, term),
+            people: personRows(people, readerId),
             pullRequests: pullRequestRows(taskId, source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
             dates: dateRows(term, narrow?.from === MENTION_FROM.DATES, now, readerZone()),
@@ -1285,10 +1448,11 @@ export function useMentionPicker({
                 : serverRows(servers, tools, term.trim() !== ""),
           },
           kinds,
+          members !== undefined,
         );
   const rows = groups.flatMap((group) => group.rows);
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
-  const shown = open && (rows.length > 0 || !/\s/u.test(term.trim()));
+  const shown = naming || (open && (rows.length > 0 || !/\s/u.test(term.trim())));
   const held =
     highlight !== undefined &&
     trigger !== undefined &&
@@ -1329,7 +1493,7 @@ export function useMentionPicker({
   const pickNewDate = (word: ComposerTrigger) => {
     // Note that the editor is handed the caret back before a pick is written, because it finds the `@` word only while it has it.
     const editing = document.activeElement;
-    setClosedAt(word.start);
+    setClosed({ word: MENTION_WORD.MENTION, start: word.start });
     datePicker.open({
       at: word.rect,
       date: undefined,
@@ -1347,6 +1511,7 @@ export function useMentionPicker({
   // A skill is written as the `/name` chip its own list writes; a kind's row opens; the picker's row opens the picker; anything else is written as its mention.
   const choose = (row: MentionRow) => {
     if ("from" in row) openRow(row);
+    else if ("channel" in row) channels?.onChoose(row.channel.name);
     else if ("skill" in row) skills?.onChoose(row.skill);
     else if ("picksDate" in row) {
       if (trigger !== undefined) pickNewDate(trigger);
@@ -1355,12 +1520,13 @@ export function useMentionPicker({
 
   // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
   // ⌘Enter writes the highlighted row as a bare Enter does.
+  const activeId = rows.length === 0 ? undefined : comboboxOptionId(listId, at);
   const field = useComboboxField({
     open: shown,
     active: at,
     count: rows.length,
-    controls: undefined,
-    activeId: undefined,
+    controls: listId,
+    activeId,
     onActiveChange: (index) => {
       if (trigger !== undefined)
         setHighlight({ start: trigger.start, query: trigger.query, at: index });
@@ -1374,7 +1540,7 @@ export function useMentionPicker({
       if (row !== undefined) choose(row);
     },
     onEscape: () => {
-      if (trigger !== undefined) setClosedAt(trigger.start);
+      if (said !== undefined) setClosed({ word: said.word, start: said.trigger.start });
     },
   });
 
@@ -1427,6 +1593,7 @@ export function useMentionPicker({
   const list =
     !shown || box === null || placed === undefined ? null : (
       <MentionMenu
+        id={listId}
         crumb={
           scope?.kind === undefined
             ? undefined
@@ -1448,5 +1615,20 @@ export function useMentionPicker({
     </>
   );
 
-  return { menu, onTrigger: setTrigger, onKey, pickDate: datePicker.open };
+  // The field names the list it opened and the row highlighted in it, as any combobox's does.
+  const aria = {
+    "aria-autocomplete": "list",
+    "aria-expanded": String(list !== null),
+    "aria-controls": list === null ? undefined : listId,
+    "aria-activedescendant": list === null ? undefined : activeId,
+  };
+
+  return {
+    menu,
+    aria,
+    onTrigger: reportFor(MENTION_WORD.MENTION),
+    onChannelTrigger: reportFor(MENTION_WORD.CHANNEL),
+    onKey,
+    pickDate: datePicker.open,
+  };
 }

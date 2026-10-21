@@ -572,3 +572,18 @@ test("a push read before Mark as read landed sets the channel's cursor back no f
   await settle();
   assert.deepEqual(tab.control().chat?.reads, [{ channelId: CHANNEL, readSeq: 2 }]);
 });
+
+test("a push carrying no channel's cursor, read before Mark as read landed, keeps the cursor the read put", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  const stale = answered([message(1), message(2)]);
+  service.push("acme", stale);
+  await settle();
+  act(() => tab.control().onRead([CHANNEL]));
+  await settle();
+  service.writes[0]?.settle({ readSeq: 0, reads: [{ channelId: CHANNEL, readSeq: 2 }] });
+  await settle();
+  service.push("acme", stale);
+  await settle();
+  assert.deepEqual(tab.control().chat?.reads, [{ channelId: CHANNEL, readSeq: 2 }]);
+});

@@ -7,6 +7,7 @@ import {
   recordCodingAgentNativeSession,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
+import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import {
   type NativeProjectionRow,
   withNativeProjection,
@@ -305,6 +306,11 @@ function landWrite(
       );
     case NATIVE_WRITE.COMPACTED:
       return recordCodingAgentCompaction(target.userId, applying.agentId, new Date(now));
+    case NATIVE_WRITE.WAKEUPS:
+      return replaceCodingAgentWakeups(
+        applying.agentId,
+        write.wakeups.map(({ at, prompt }) => ({ at: new Date(at), prompt })),
+      );
     case NATIVE_WRITE.PLAN_STATUS: {
       // Note that the plan's row is the starter's, whose plan pays, and an agent a key pays for writes none.
       const row = applying.payer === undefined ? undefined : PLAN_ROW[applying.payer];

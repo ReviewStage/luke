@@ -70,8 +70,16 @@ test("a task's card leads with its key, its status, and its priority, then its n
   const card = drawn(TASK);
   const parts = [...card.children];
   assert.deepEqual(
-    [...(parts[0]?.querySelectorAll(".task-card-chip") ?? [])].map((chip) => chip.textContent),
-    ["ACME-42", "In progress", "High"],
+    [...(parts[0]?.children ?? [])].map((each) => [
+      each.hasAttribute("data-task-key") ? "key" : each.className,
+      each.textContent,
+    ]),
+    [
+      ["key", "ACME-42"],
+      ["task-card-chip", "In progress"],
+      ["task-card-chip", "High"],
+    ],
+    "the key as plain words, as every place draws a key, then the status and priority chips",
   );
   assert.equal(
     parts[1]?.querySelector(".luke-hover-card-name")?.textContent,

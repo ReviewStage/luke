@@ -7,9 +7,12 @@
  * is a page target, reached through a session
  * of its own attached flattened (`Target.attachToTarget`) the first time a
  * sequence acts on it and detached as the sequence ends. Clicks, keys, and
- * scrolls are the browser's own input events, typing is inserted text, an
- * element named by its ref is found by its backend node id, and a page's
- * console is what the browser replays as its console and log are enabled.
+ * scrolls are the browser's own input events, typing is inserted text, a
+ * choice in a native dropdown is set on the element itself with the events
+ * a person's choice fires, since its popup draws outside the page where no
+ * input event reaches, an element named by its ref is found by its backend
+ * node id, and a page's console is what the browser replays as its console
+ * and log are enabled.
  * Nothing a page holds is kept or logged here; it reaches only the caller.
  *
  * Each session asks the page to behave as focused (focus emulation), as
@@ -25,7 +28,7 @@
  * words a model can act on, and answers every step that ran.
  *
  * A caller that draws the agent's pointer passes a cursor
- * (`BrowserCursor`): each click, type, and wheel turn reports its point
+ * (`BrowserCursor`): each click, type, choice, and wheel turn reports its point
  * just before its input is dispatched, and where someone is watching the
  * input waits `BROWSER_CURSOR_BEAT` after it, so a pointer drawn gliding to
  * the point arrives as the action lands. A caller that passes none sends
@@ -117,14 +120,49 @@ const NAVIGATION_GRACE = Duration.millis(500);
 const CAPTURE_RETRY = Duration.millis(250);
 const CAPTURE_RETRIES = 8;
 
-/** The actions that may start a navigation, a key's only by Enter. */
+/** The actions that may start a navigation, a key's only by Enter, and a choice's where the page moves on its change. */
 const NAVIGATING_ACTIONS: ReadonlySet<BrowserAgentActionName> = new Set([
   BROWSER_AGENT_ACTION.NAVIGATE,
   BROWSER_AGENT_ACTION.BACK,
   BROWSER_AGENT_ACTION.FORWARD,
   BROWSER_AGENT_ACTION.CLICK,
+  BROWSER_AGENT_ACTION.SELECT,
   BROWSER_AGENT_ACTION.KEY,
 ]);
+
+/** The class a DOM node of a native dropdown is, as the browser names a node it resolves. */
+const SELECT_CLASS = "HTMLSelectElement";
+
+/** What choosing in a dropdown came to on the page. */
+const CHOICE = {
+  CHOSEN: "chosen",
+  UNMATCHED: "unmatched",
+  DISABLED: "disabled",
+  NOT_SELECT: "not-select",
+} as const;
+
+/**
+ * Chooses an option in the select it is called on, as a person's choice
+ * would: the option whose label is the one wanted, or else whose value is,
+ * selected alone, then an `input` and a `change` that bubble, as
+ * Playwright's `selectOption` fires them. Answers what it came to, and every
+ * option's label where none matched. Note that disabled is read as
+ * `:disabled`, which a disabled fieldset or optgroup around it sets where
+ * the property does not, and that the option reported is the one selected
+ * once the events ran, since a page's handler may have changed it.
+ */
+const CHOOSE_OPTION = `function (wanted) {
+  if (!(this instanceof HTMLSelectElement)) return { kind: ${JSON.stringify(CHOICE.NOT_SELECT)} };
+  const options = Array.from(this.options);
+  const chosen = options.find((option) => option.label === wanted) ?? options.find((option) => option.value === wanted);
+  if (chosen === undefined) return { kind: ${JSON.stringify(CHOICE.UNMATCHED)}, labels: options.map((option) => option.label) };
+  if (this.matches(":disabled") || chosen.matches(":disabled")) return { kind: ${JSON.stringify(CHOICE.DISABLED)} };
+  for (const option of options) option.selected = option === chosen;
+  this.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  this.dispatchEvent(new Event("change", { bubbles: true }));
+  const now = Array.from(this.options).find((option) => option.selected);
+  return { kind: ${JSON.stringify(CHOICE.CHOSEN)}, label: now === undefined ? "" : now.label, value: now === undefined ? "" : now.value };
+}`;
 
 /** The page events that say a frame began or committed a navigation, stopped loading or was removed, or the page loaded. */
 const NAVIGATION_EVENT = {
@@ -200,7 +238,18 @@ const EvaluatedSchema = Schema.Struct({
   result: Schema.Struct({ value: Schema.optional(WireValueSchema) }),
 });
 const CapturedSchema = Schema.Struct({ data: Schema.String });
-const ResolvedSchema = Schema.Struct({ object: Schema.Struct({ objectId: Schema.String }) });
+const ResolvedSchema = Schema.Struct({
+  object: Schema.Struct({ objectId: Schema.String, className: Schema.optional(Schema.String) }),
+});
+const ChoiceSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal(CHOICE.CHOSEN),
+    label: Schema.String,
+    value: Schema.String,
+  }),
+  Schema.Struct({ kind: Schema.Literal(CHOICE.UNMATCHED), labels: Schema.Array(Schema.String) }),
+  Schema.Struct({ kind: Schema.Literals([CHOICE.DISABLED, CHOICE.NOT_SELECT]) }),
+]);
 const PointSchema = Schema.Struct({ x: Schema.Number, y: Schema.Number });
 const ClosedSchema = Schema.Struct({ success: Schema.optional(Schema.Boolean) });
 const ConsoleCallSchema = Schema.Struct({
@@ -228,6 +277,7 @@ const readConsoleCall = readEither(ConsoleCallSchema, { excess: EXCESS_KEYS.DROP
 const readLogEntry = readEither(LogEntrySchema, { excess: EXCESS_KEYS.DROP });
 const readFrameEvent = readEither(FrameEventSchema, { excess: EXCESS_KEYS.DROP });
 const readPoint = readEither(PointSchema, { excess: EXCESS_KEYS.DROP });
+const readChoice = readEither(ChoiceSchema, { excess: EXCESS_KEYS.DROP });
 
 /** The middle of the focused element in CSS pixels of the visible page, or null where the page's body has the focus. */
 const FOCUSED_POINT = `(() => {
@@ -491,6 +541,7 @@ const readMetrics = answerOf(MetricsSchema);
 const readEvaluated = answerOf(EvaluatedSchema);
 const readCaptured = answerOf(CapturedSchema);
 const readClosed = answerOf(ClosedSchema);
+const readResolved = answerOf(ResolvedSchema);
 
 function navigate(page: Page, url: string) {
   return Effect.gen(function* () {
@@ -558,8 +609,6 @@ function clickAt(page: Page, point: { readonly x: number; readonly y: number }) 
     Effect.andThen(mouse("mousePressed", 1), mouse("mouseReleased", 0)),
   );
 }
-
-const readResolved = answerOf(ResolvedSchema);
 
 /**
  * Fails where another element covers a ref's point and would take its
@@ -680,9 +729,9 @@ function pointTo<R>(
 }
 
 /**
- * Where typing lands, for the pointer alone: the middle of the element a
- * ref names, or of the focused one. None where it cannot be told, which
- * leaves the typing to say what went wrong, if anything did.
+ * Where typing or a choice lands, for the pointer alone: the middle of the
+ * element a ref names, or of the focused one. None where it cannot be told,
+ * which leaves the action to say what went wrong, if anything did.
  */
 function typingPointOf(page: Page, ref: string | undefined) {
   const method = "Runtime.evaluate";
@@ -715,6 +764,67 @@ function typeWithCursor<R>(
     const point = yield* typingPointOf(page, ref);
     if (Option.isSome(point)) yield* pointTo(page, cursor, BROWSER_CURSOR_KIND.TYPE, point.value);
     yield* typeText(page, text, ref);
+  });
+}
+
+/** A choice's option text as a result carries it, cut to its cap. */
+const optionWords = (text: string) => cutBrowserText(text, BROWSER_AGENT_LIMITS.OPTION_MAX_CHARS);
+
+/**
+ * Chooses an option in the native dropdown a ref names (`CHOOSE_OPTION`),
+ * the pointer moved to it first where a cursor is drawn: its option's label
+ * and value, or a failure that says why, listing the options' labels where
+ * none matched. Note that a node that is no select is refused as the
+ * browser resolves it, before the pointer moves.
+ */
+function choose<R>(page: Page, cursor: BrowserCursor<R> | undefined, ref: string, wanted: string) {
+  return Effect.gen(function* () {
+    const resolve = "DOM.resolveNode";
+    const { object } = yield* page.send(resolve, { backendNodeId: backendNodeIdOf(ref) }).pipe(
+      Effect.mapError(refusedAs(goneRef(ref))),
+      Effect.flatMap((answer) => readResolved(resolve, answer)),
+    );
+    const notSelect = `${ref} is not a dropdown (a native select); click it, or take a new snapshot for the select's ref`;
+    if (object.className !== SELECT_CLASS) return yield* failed(notSelect);
+    if (cursor !== undefined) {
+      const point = yield* typingPointOf(page, ref);
+      if (Option.isSome(point))
+        yield* pointTo(page, cursor, BROWSER_CURSOR_KIND.CLICK, point.value);
+    }
+    const call = "Runtime.callFunctionOn";
+    const { result } = yield* page
+      .send(call, {
+        objectId: object.objectId,
+        functionDeclaration: CHOOSE_OPTION,
+        arguments: [{ value: wanted }],
+        returnByValue: true,
+      })
+      .pipe(
+        Effect.mapError(refusedAs(goneRef(ref))),
+        Effect.flatMap((answer) => readEvaluated(call, answer)),
+      );
+    const read = readChoice(result.value ?? null);
+    if (Result.isFailure(read))
+      return yield* new CdpFailure({ kind: CDP_FAILURE.MALFORMED, method: call });
+    const choice = read.success;
+    switch (choice.kind) {
+      case CHOICE.CHOSEN:
+        return { label: optionWords(choice.label), value: optionWords(choice.value) };
+      case CHOICE.UNMATCHED: {
+        const labels = choice.labels
+          .map((label) =>
+            JSON.stringify(cutBrowserText(label, BROWSER_AGENT_LIMITS.SNAPSHOT_NAME_MAX_CHARS)),
+          )
+          .join(", ");
+        return yield* failed(
+          `${ref} has no option labelled or valued ${JSON.stringify(wanted)}; its options are ${labels === "" ? "none" : labels}`,
+        );
+      }
+      case CHOICE.DISABLED:
+        return yield* failed(`${ref} or its option ${JSON.stringify(wanted)} is disabled`);
+      case CHOICE.NOT_SELECT:
+        return yield* failed(notSelect);
+    }
   });
 }
 
@@ -1000,6 +1110,11 @@ function onPage<R>(
         typeWithCursor(page, cursor, action.text, action.ref),
         actedOn(action.action, tab),
       );
+    case BROWSER_AGENT_ACTION.SELECT:
+      return Effect.map(choose(page, cursor, action.ref, action.option), (chosen) => ({
+        ...actedOn(BROWSER_AGENT_ACTION.SELECT, tab),
+        ...chosen,
+      }));
     case BROWSER_AGENT_ACTION.KEY:
       return Effect.as(
         pressKey(page, action.key, action.modifiers ?? []),

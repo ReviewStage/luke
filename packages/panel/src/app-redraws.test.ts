@@ -7,7 +7,7 @@
  * each document as main would, a new tree each time. What is drawn again is
  * read through wrappers around four surfaces that draw the real ones:
  * ⌘K, which reads the settings, the sidebar's foot, under the sidebar, the
- * home page, under the Tasks column, and each section of the open plan's
+ * page with no task open, under the Tasks column, and each section of the open plan's
  * words. Synthetic tasks.
  */
 
@@ -75,14 +75,14 @@ vi.mock("./markdown-message.js", async (importOriginal) => {
     },
   };
 });
-vi.mock("./desktop/desktop-home.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./desktop/desktop-home.js")>();
+vi.mock("./desktop/desktop-welcome.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./desktop/desktop-welcome.js")>();
   const { createElement: draw } = await import("react");
   return {
     ...actual,
-    DesktopHome: (props: Parameters<typeof actual.DesktopHome>[0]) => {
+    DesktopWelcome: (props: Parameters<typeof actual.DesktopWelcome>[0]) => {
       draws.set("home", (draws.get("home") ?? 0) + 1);
-      return draw(actual.DesktopHome, props);
+      return draw(actual.DesktopWelcome, props);
     },
   };
 });
@@ -196,7 +196,7 @@ async function drawWindow(first: AppStateSnapshot = FIRST): Promise<void> {
     await settle();
     assert.ok((draws.get("sidebar") ?? 0) > 0, "the sidebar stands");
   });
-  if (first === FIRST) assert.ok((draws.get("home") ?? 0) > 0, "the home page stands");
+  if (first === FIRST) assert.ok((draws.get("home") ?? 0) > 0, "the page with no task open stands");
   draws.clear();
 }
 
@@ -208,7 +208,7 @@ async function deliver(snapshot: AppStateSnapshot): Promise<void> {
   await settle();
 }
 
-test("a delivery that moves only the settings draws ⌘K again and neither the sidebar nor the home page", async () => {
+test("a delivery that moves only the settings draws ⌘K again and neither the sidebar nor the page with no task open", async () => {
   await drawWindow();
   await deliver({
     ...FIRST,
@@ -217,10 +217,10 @@ test("a delivery that moves only the settings draws ⌘K again and neither the s
   });
   assert.ok((draws.get("palette") ?? 0) > 0, "⌘K, which reads the settings, is drawn again");
   assert.equal(draws.get("sidebar") ?? 0, 0, "the sidebar is not drawn again");
-  assert.equal(draws.get("home") ?? 0, 0, "the home page is not drawn again");
+  assert.equal(draws.get("home") ?? 0, 0, "the page with no task open is not drawn again");
 });
 
-test("the window drawn again for a dialog of its own draws neither the sidebar nor the home page", async () => {
+test("the window drawn again for a dialog of its own draws neither the sidebar nor the page with no task open", async () => {
   await drawWindow();
   // Help › Send Feedback opens the window's own dialog, which moves nothing the columns draw.
   act(() => {
@@ -229,14 +229,14 @@ test("the window drawn again for a dialog of its own draws neither the sidebar n
   await settle();
   assert.ok(document.querySelector('[role="dialog"]'), "the feedback dialog stands");
   assert.equal(draws.get("sidebar") ?? 0, 0, "the sidebar is not drawn again");
-  assert.equal(draws.get("home") ?? 0, 0, "the home page is not drawn again");
+  assert.equal(draws.get("home") ?? 0, 0, "the page with no task open is not drawn again");
 });
 
-test("a delivery that moves the tasks draws the sidebar and the home page again", async () => {
+test("a delivery that moves the tasks draws the sidebar and the page with no task open again", async () => {
   await drawWindow();
   await deliver({ ...FIRST, version: 2, tasks: { ...IDLE_TASKS_VIEW, tasks: [INVITES] } });
   assert.ok((draws.get("sidebar") ?? 0) > 0, "the sidebar is drawn again");
-  assert.ok((draws.get("home") ?? 0) > 0, "the home page is drawn again");
+  assert.ok((draws.get("home") ?? 0) > 0, "the page with no task open is drawn again");
 });
 
 test("a call's words growing and its turns changing hands draw neither the sidebar nor the open plan's sections", async () => {

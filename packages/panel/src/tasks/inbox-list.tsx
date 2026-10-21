@@ -9,8 +9,11 @@ import {
   CHIP_LOOK,
   Chip,
   ChipName,
+  ComposeIcon,
   DocumentIcon,
+  EMPTY_STATE_ACTION_LOOK,
   EmptyState,
+  type EmptyStateAction,
   ErrorState,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -90,7 +93,6 @@ import {
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
-import { TaskKeyChip } from "../desktop/task-card.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
@@ -160,6 +162,7 @@ import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
+import { TaskKey } from "./task-standing.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
@@ -542,7 +545,7 @@ const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
 
 /**
  * What holds an item, as its card leads with it, on one line: a task by its
- * key, as the task's own card leads with it (`TaskKeyChip`), and by its chip
+ * key, as the task's own card leads with it (`TaskKey`), and by its chip
  * as a mention of it is drawn (`HolderRef`); an automation, or the agents no
  * automation names, by their chip alone.
  */
@@ -555,7 +558,7 @@ function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
   return (
     <div className="task-card-standing" data-line="one">
       {holder.kind === INBOX_HOLDER.TASK ? (
-        <TaskKeyChip task={holder.task} workspaceName={workspaceName} />
+        <TaskKey workspaceName={workspaceName} number={holder.task.number} />
       ) : null}
       <HolderRef holder={holder} />
     </div>
@@ -1545,6 +1548,26 @@ function noMatch(searched: string): string {
 /** What the list says where a task's read did not answer. */
 const NOT_READ = "Some items could not be read.";
 
+/** The words of the way on from an Inbox with nothing in it. */
+const NEW_TASK_LABEL = "New task";
+
+/**
+ * The way on from an Inbox with nothing in it, where the window rests with
+ * no task open (`resting-page.ts`): New task, opening its dialog, primary
+ * because starting one is all there is to do from an Inbox with nothing to
+ * answer. None where nothing can start.
+ */
+export function newTaskAction(onNewTask: (() => void) | undefined): EmptyStateAction | undefined {
+  return onNewTask === undefined
+    ? undefined
+    : {
+        label: NEW_TASK_LABEL,
+        look: EMPTY_STATE_ACTION_LOOK.PRIMARY,
+        icon: <ComposeIcon />,
+        onClick: onNewTask,
+      };
+}
+
 /** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
 export function InboxListNote({
   failed,
@@ -1556,12 +1579,15 @@ export function InboxListNote({
   onList,
   onRetry,
   searched,
+  onNewTask,
 }: {
   failed: boolean;
   reading: boolean;
   empty: boolean;
   /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
   alone: boolean;
+  /** Opens New task, the way on from the Inbox's empty state where the list stands alone; none where nothing can start. */
+  onNewTask?: (() => void) | undefined;
   /** The scope shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
   filteredOut: InboxViewChoices | undefined;
   /** How many items each scope lists, for the empty state to offer one that lists something. */
@@ -1585,7 +1611,13 @@ export function InboxListNote({
   if (filteredOut !== undefined)
     return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
-  if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
+  if (alone) {
+    return (
+      <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
+        {NEEDS_YOU.NONE}
+      </EmptyState>
+    );
+  }
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
 }
 
