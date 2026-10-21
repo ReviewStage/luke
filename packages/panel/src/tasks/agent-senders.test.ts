@@ -21,7 +21,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import {
   type AnyAct,
@@ -149,12 +149,17 @@ type Seen = readonly [id: string, kind: string, name: string, picture?: string];
 
 let root: Root | undefined;
 
-beforeEach(() => fakeAppPlatform(QUIET_PANEL));
+beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
+  // The log draws only the lines near its view, which jsdom never lays out, so the window is tall enough to show every line.
+  vi.spyOn(window, "innerHeight", "get").mockReturnValue(10_000);
+});
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** The developer's messages as `reader` sees the tab drawn, one element for each of `messages`, every place a press opened kept in `opened`. */

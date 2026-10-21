@@ -164,3 +164,16 @@ test("a log that follows its newest line stays on it as lines are put before the
   draw(root, ["a", "b", "c", "d"], () => undefined);
   assert.deepEqual(layout.writes, [400]);
 });
+
+test("a fold the reader opens on the newest line grows under them without the log following it", () => {
+  const { root, box, layout } = mount(["one", "two"]);
+  draw(root, ["one", "two"]);
+  const fold = document.createElement("details");
+  const summary = fold.appendChild(document.createElement("summary"));
+  box.firstElementChild?.appendChild(fold);
+  act(() => summary.click());
+  layout.writes.splice(0);
+  layout.height = 900;
+  act(() => relayout());
+  assert.deepEqual(layout.writes, [], "the lines above the fold stay where they stood");
+});

@@ -6,10 +6,12 @@ import {
   type ScrollFade,
   type ScrollFadeInset,
 } from "@luke/ui";
+import { VIRTUAL_ROWS_ATTRIBUTE, VirtualRows, type VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import { ArrowDownIcon } from "lucide-react";
 import {
   type ComponentProps,
   createContext,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
   type UIEvent,
@@ -43,7 +45,9 @@ import {
  * a definite height of its own once flexed, so a percentage height anywhere
  * inside a message would resolve against the message rather than fall back
  * to its content; a block child keeps the height it draws, whatever is
- * inside it.
+ * inside it. A long log hands its lines to `ConversationRows`, which draws
+ * only those near the view and keeps the reader's place itself as lines
+ * land before the first, so the log leaves that to it.
  */
 
 /** How far from the bottom, in pixels, the list still counts as following the newest line: a rounding's worth, since any wider snapped a reader scrolling up through it back down on the next render. */
@@ -67,6 +71,8 @@ interface ConversationScroll {
   /** The scroll box, which `ConversationContent` is. */
   readonly list: RefObject<HTMLDivElement | null>;
   readonly onScroll: (event: UIEvent<HTMLDivElement>) => void;
+  /** Hears a press inside the log, a fold's among them. */
+  readonly onFold: (event: MouseEvent<HTMLDivElement>) => void;
 }
 
 const ConversationContext = createContext<ConversationScroll | undefined>(undefined);
@@ -118,6 +124,8 @@ export function Conversation({
     count: number;
     first: HTMLElement | null;
     last: Element | null;
+    /** The rows a virtualized run holds (`VIRTUAL_ROWS_ATTRIBUTE`), where the log's lines are one; none otherwise. */
+    rows: string | null;
   }>(undefined);
   // Where the first line stood from the top of the box as the reader last
   // left it, so lines put before it keep it where it was: measured here
@@ -146,7 +154,10 @@ export function Conversation({
           toEnd(element);
           return;
         }
-        if (!followsNewest(element)) return;
+        if (!followsNewest(element)) {
+          setAtBottom(false);
+          return;
+        }
         following.current = true;
         setAtBottom(true);
       }),
@@ -175,19 +186,27 @@ export function Conversation({
     const count = lines?.childElementCount ?? 0;
     const first = lines?.firstElementChild instanceof HTMLElement ? lines.firstElementChild : null;
     const last = lines?.lastElementChild ?? null;
+    // A virtualized run (`@luke/ui/virtual-rows`) says on its block which rows it holds, and keeps the reader's place itself as rows land before them.
+    const rows = first?.getAttribute(VIRTUAL_ROWS_ATTRIBUTE) ?? null;
     const held = observed.current;
     if (
       held?.box === element &&
       held.count === count &&
       held.first === first &&
-      held.last === last
+      held.last === last &&
+      held.rows === rows
     ) {
       return;
     }
-    observed.current = { box: element, count, first, last };
+    observed.current = { box: element, count, first, last, rows };
     if (following.current) {
       toEnd(element);
-    } else if (held?.box === element && held.first !== first && held.first?.isConnected === true) {
+    } else if (
+      rows === null &&
+      held?.box === element &&
+      held.first !== first &&
+      held.first?.isConnected === true
+    ) {
       // Lines put before the first: the line that was first goes back where the reader left it.
       element.scrollTop = held.first.offsetTop - firstFromTop.current;
       lastTop.current = element.scrollTop;
@@ -223,9 +242,14 @@ export function Conversation({
     },
     [askOlder],
   );
+  // Note that a fold the reader opens or closes takes the log off its newest line, because what they opened grows under them, and following would scroll it, and every line above it, out from under the press.
+  const onFold = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element) || event.target.closest("summary") === null) return;
+    following.current = false;
+  }, []);
   const scroll = useMemo<ConversationScroll>(
-    () => ({ isAtBottom, list, scrollToBottom, onScroll }),
-    [isAtBottom, list, scrollToBottom, onScroll],
+    () => ({ isAtBottom, list, scrollToBottom, onScroll, onFold }),
+    [isAtBottom, list, scrollToBottom, onScroll, onFold],
   );
   return (
     <ConversationContext.Provider value={scroll}>
@@ -253,11 +277,57 @@ export function ConversationContent({
   fadeInset,
   children,
 }: ConversationContentProps): ReactNode {
-  const { list, onScroll } = useConversation();
+  const { list, onScroll, onFold } = useConversation();
   return (
-    <ScrollArea ref={list} role="log" fade={fade} fadeInset={fadeInset} onScroll={onScroll}>
+    <ScrollArea
+      ref={list}
+      role="log"
+      fade={fade}
+      fadeInset={fadeInset}
+      onScroll={onScroll}
+      onClickCapture={onFold}
+    >
       <div className={cn("conversation-log", className)}>{children}</div>
     </ScrollArea>
+  );
+}
+
+/**
+ * A long run of the log's lines drawn only near the view
+ * (`@luke/ui/virtual-rows`), in the log's own scroll box, as one line of
+ * the log: lines after it, a working line's, stand after the run. The log
+ * goes on following its newest line as it does, and the run keeps the
+ * reader's place as lines land before its first.
+ */
+export function ConversationRows({
+  keys,
+  estimate,
+  gap,
+  rowClassName,
+  handle,
+  children,
+}: {
+  keys: readonly string[];
+  /** The height a line is taken to have before it is drawn, in pixels. */
+  estimate: number;
+  /** The room between two lines, in pixels. */
+  gap: number;
+  rowClassName?: string | undefined;
+  handle?: RefObject<VirtualRowsHandle | null> | undefined;
+  children: (index: number) => ReactNode;
+}): ReactNode {
+  const { list } = useConversation();
+  return (
+    <VirtualRows
+      scroller={list}
+      keys={keys}
+      estimate={estimate}
+      gap={gap}
+      rowClassName={rowClassName}
+      handle={handle}
+    >
+      {children}
+    </VirtualRows>
   );
 }
 
