@@ -169,7 +169,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { type ConversationMark, conversationMark, markMoved } from "./conversation-follow.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
+import { LIVE_GONE, type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt } from "./task-code.js";
@@ -913,10 +913,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         },
         sealed,
       );
-      yield* Stream.runForEach(moves, (workspaces) =>
+      // A follow gone mid-way was refused as signed out by a renewal or a poll, which no seal mends either.
+      const gone = yield* Stream.runForEach(moves, (workspaces) =>
         Effect.sync(() => write({ workspaces, workspacesStatus: TASKS_READ.READY })),
-      ).pipe(Effect.ignore);
-      return yield* Effect.fail(WORKSPACE_CALL_FAILURE.UNANSWERED);
+      ).pipe(
+        Effect.as(false),
+        Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
+      );
+      return yield* Effect.fail(gone ? LIVE_SIGNED_OUT.failure : WORKSPACE_CALL_FAILURE.UNANSWERED);
     });
     // A session that is no longer the account's is signed out, which no seal mends.
     const followed = attempt.pipe(
