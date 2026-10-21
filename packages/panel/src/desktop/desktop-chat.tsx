@@ -11,6 +11,7 @@ import {
   ErrorState,
   IconButton,
   LIST_ROW_CURRENT,
+  LIST_ROW_INK,
   LIST_ROW_META,
   ListRow,
   PencilIcon,
@@ -331,6 +332,7 @@ function PlaceRow({
         </span>
       }
       metaAt={LIST_ROW_META.TITLE}
+      ink={LIST_ROW_INK.SIDEBAR}
       current={current ? LIST_ROW_CURRENT.PAGE : undefined}
       unread={unread}
       hint={{ Hint: Tooltip, label: title }}
