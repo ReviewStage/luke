@@ -29,6 +29,8 @@ import { noNetwork } from "@luke/wire/testing";
 import { Effect, Result } from "effect";
 import { vi } from "vitest";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
+import type { LiveClient } from "./live-follow.js";
+import { fakeRealtime } from "./testing/fake-realtime.js";
 
 /**
  * The automations concern: behind a closed gate nothing is asked of the
@@ -107,7 +109,7 @@ const CREATE = {
 };
 
 /** The service as a script that writes down every ask it hears, as the ask runs. */
-function fakeService(options: { replaceRefused?: boolean } = {}) {
+function fakeService(options: { replaceRefused?: boolean; txid?: string } = {}) {
   const asked: unknown[] = [];
   /** What the list's live read answers first; a poll past it holds until the test ends, as nothing moves. */
   const live: {
@@ -126,7 +128,12 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
   const client: AutomationsClient = {
     list: answer("list", { automations: [SUMMARY] }),
     create: answer("create", { automation: SUMMARY }),
-    change: answer("change", { automation: SUMMARY }),
+    change: answer(
+      "change",
+      options.txid === undefined
+        ? { automation: SUMMARY }
+        : { automation: SUMMARY, txid: options.txid },
+    ),
     remove: answer("remove", { deleted: true } as const),
     runNow: answer("run", { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }),
     runs: answer("runs", { runs: [] }),
@@ -158,7 +165,14 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
 }
 
 function subject(
-  options: { signedIn?: boolean; sendsNetwork?: boolean; replaceRefused?: boolean } = {},
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    replaceRefused?: boolean;
+    /** The transaction a change answers it committed in. */
+    txid?: string;
+    openLive?: (url: string) => LiveClient;
+  } = {},
 ) {
   return Effect.gen(function* () {
     const service = fakeService(options);
@@ -173,6 +187,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: () => (options.signedIn === false ? undefined : ACCOUNT_ID),
       client: service.client,
+      ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -359,5 +374,55 @@ it.effect(
         { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
       ]);
       assert.deepEqual(asked, [["runs-live", AUTOMATION_ID, ACCOUNT_ID]], "nothing asks again");
+    }),
+);
+
+it.effect(
+  "a change is answered once its transaction arrives on its workspace's followed list, and at once where nothing follows it",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const { call, live } = yield* subject({ txid: "77", openLive: realtime.open });
+      const change = { automationId: AUTOMATION_ID, change: { name: "Renamed" } };
+
+      // Nothing follows the workspace yet, so the change is answered without waiting.
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, change), {
+        automation: SUMMARY,
+        txid: "77",
+      });
+
+      live.list = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          automations: {
+            capability: "capability-automations",
+            queryFingerprint: "automations",
+            expiresAt: 60_000,
+          },
+        },
+      };
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
+        kind: AUTOMATION_FOLLOW.WORKSPACE,
+        id: WORKSPACE_ID,
+      });
+      yield* settled;
+      realtime.deliver("automations", []);
+      yield* settled;
+
+      let answered = false;
+      yield* Effect.forkChild(
+        Effect.tap(call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, change), () =>
+          Effect.sync(() => {
+            answered = true;
+          }),
+        ),
+      );
+      yield* settled;
+      assert.equal(answered, false, "the change waits for its transaction");
+      assert.deepEqual(realtime.awaitingTxids(), ["77"]);
+
+      realtime.arrive("77");
+      yield* settled;
+      assert.equal(answered, true);
     }),
 );
