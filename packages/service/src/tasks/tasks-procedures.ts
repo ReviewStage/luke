@@ -89,7 +89,7 @@ import {
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
-import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
+import type { SandboxStopReach } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
@@ -567,12 +567,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const archiving = changes.archived === true;
-      // The agents the archive archives with the task, whose sandboxes are stopped once it stands.
-      const archivedWith = archiving
-        ? yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId))
-        : [];
       if (archiving) {
-        const agents = archivedWith;
+        const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
         // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
         const ready = yield* Effect.forEach(agents, stopsForGood);
         if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
@@ -622,7 +618,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      if (archiving) yield* stoppedInBackground(seams, archivedWith);
       const { task: plan, txid } = task.value;
       return txid === undefined ? { plan } : { plan, txid };
     }),

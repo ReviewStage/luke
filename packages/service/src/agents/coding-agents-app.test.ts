@@ -4498,22 +4498,24 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       }),
   );
 
-  it.effect("a task's archive stops the sandboxes of the agents it archives, keeping them", () =>
-    Effect.gen(function* () {
-      const sandboxes = yield* scriptedSessionSandboxes();
-      const { owner, task, ask, sessionId } = yield* startedAgent(
-        fakeEve(),
-        { running: false },
-        sandboxes.layer,
-      );
+  it.effect(
+    "a task's archive, as an older build asks it, archives none of its agents, so it stops no sandbox: an unarchived agent's resumes as it did",
+    () =>
+      Effect.gen(function* () {
+        const sandboxes = yield* scriptedSessionSandboxes();
+        const { owner, task, ask } = yield* startedAgent(
+          fakeEve(),
+          { running: false },
+          sandboxes.layer,
+        );
 
-      const archived = yield* ask(
-        request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } }),
-      );
+        const archived = yield* ask(
+          request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } }),
+        );
 
-      assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
-      assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
-    }),
+        assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(yield* Queue.poll(sandboxes.stops), Option.none());
+      }),
   );
 
   it.effect(
