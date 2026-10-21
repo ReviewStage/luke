@@ -746,6 +746,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
           parts: [
             { type: "text", text: "Building." },
+            // A part of a tool since retired, which every read leaves out, so the parts after it keep their places.
+            {
+              type: "tool-long_retired",
+              toolCallId: "call-retired",
+              state: "output-available",
+              input: {},
+              output: "gone",
+            },
             {
               type: "tool-bash",
               toolCallId: "call-build",
@@ -765,7 +773,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const drawn = yield* windowOf(target);
         assert.ok(drawn.some((message) => message.sentBy?.name === "Invite emails"));
         assert.ok(drawn.some((message) => message.startedAt !== undefined));
-        assert.equal(drawn.at(-1)?.cutParts?.length, 2);
+        assert.deepEqual(
+          drawn.at(-1)?.cutParts?.map((cut) => cut.index),
+          [1, 2],
+        );
         // SAFETY: a page's message is the wire's once serialized, which its JSON parts already are here.
         const said = page.page.messages as unknown as readonly CodingAgentMessage[];
         assert.deepEqual(drawn, said.map(cutMessage));

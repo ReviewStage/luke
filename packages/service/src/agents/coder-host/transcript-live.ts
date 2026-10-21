@@ -17,6 +17,7 @@ import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 import { CUT_END_CHARS, CUT_TOOLS, REASONING_PART_TYPE } from "./part-cut.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * transcript-live.ts -- what a coding agent's transcript is read from, written for Neon Realtime, so a reader hears the moment a page past its cursor would say something new.
@@ -88,6 +89,18 @@ const CUT_TOOL_TYPES = sql.join(
   sql`, `,
 );
 
+/** The tools a transcript's reads hold, as one text a statement splits on spaces, which no tool's name holds. */
+const HELD_TOOLS = Object.keys(CODER_TOOL_SET).join(" ");
+
+/**
+ * Whether the part `element` is a tool part the transcript's reads no longer
+ * hold, which they leave out (`withoutRetiredToolParts`), so the window
+ * leaves it out too and every part after it stands at the index a page and a
+ * whole part's read give it.
+ */
+const retired = (element: SQL) => sql`(${element}->>'type' like 'tool-%'
+  and substr(${element}->>'type', 6) <> all(string_to_array(${HELD_TOOLS}, ' ')))`;
+
 /**
  * The parts of the window's messages, one row a part keyed by its message's
  * id and its index, each cut as a page asked cut cuts it (`part-cut.ts`): a
@@ -104,7 +117,7 @@ function windowPartsOf(target: ConversationTarget, reached: SQL) {
   const element = queryBuilder
     .select({
       value: sql`element.value`.as("value"),
-      index: sql<number>`(element.ordinality - 1)::int`.as("index"),
+      index: sql<number>`(row_number() over (order by element.ordinality) - 1)::int`.as("index"),
       field: sql<string | null>`case
         when element.value->>'type' = ${REASONING_PART_TYPE}
           and jsonb_typeof(element.value->'text') = 'string' then ${PART_CUT_FIELD.TEXT}
@@ -123,6 +136,7 @@ function windowPartsOf(target: ConversationTarget, reached: SQL) {
     .from(
       sql`jsonb_array_elements(${messages.parts}) with ordinality as element(value, ordinality)`,
     )
+    .where(sql`not ${retired(sql`element.value`)}`)
     .as("part");
   const cut = sql`coalesce(length(${element.words}) > ${CODING_AGENT_BOUNDS.MAX_PART_CHARS}, false)`;
   const newest = queryBuilder
@@ -217,7 +231,10 @@ export function transcriptWindowLiveStatements(
         },
       ),
       seq: asNumber(sql`${messages.seq}`).as("seq"),
-      partCount: sql<number>`jsonb_array_length(${messages.parts})::int`.as("partCount"),
+      partCount: sql<number>`(
+        select count(*)::int from jsonb_array_elements(${messages.parts}) as held(value)
+        where not ${retired(sql`held.value`)}
+      )`.as("partCount"),
     })
     .from(messages)
     .innerJoin(
