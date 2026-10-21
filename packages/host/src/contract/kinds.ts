@@ -162,8 +162,6 @@ export const AGENT_ACT_KIND = {
  * window holds what it draws; nothing here does.
  */
 export const AGENT_INBOX_ACT_KIND = {
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /**
    * A task's inbox, or one agent's, followed while the window holds the
    * stream open: what it holds, whole, each time it changes, or why there

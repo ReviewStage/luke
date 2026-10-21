@@ -4,18 +4,16 @@
  * The one check these procedures make is who asked, as for every task act:
  * only a panel draws the Inbox and the chat, so every one refuses the
  * takeover and the hidden voice window, in its own sentence. What the
- * service answers comes back as the panel's own answer. The task's inbox is
- * answered to the panel alone: the notices (`@luke/host/agent-notices`)
- * watch what waits across the account on a read of their own. A
- * workspace's chat is followed while a panel holds its stream open
- * (`CODING_AGENTS_CHAT_FOLLOW`): the host follows it on the first stream of
- * it and lets it go with the last, and every change it tells reaches every
- * stream of it. How many streams stand open of each chat is all else held
- * here.
+ * service answers comes back as the panel's own answer. A task's or an
+ * agent's inbox, and a workspace's chat, are each followed while a panel
+ * holds its stream open: the host follows one on the first stream of it and
+ * lets it go with the last, and every change it tells reaches every stream
+ * of it. How many streams stand open of each is all else held here; the
+ * notices (`@luke/host/agent-notices`) watch what waits across the account
+ * on a read of their own.
  */
 
 import type {
-  CodingAgentAgentInboxParams,
   CodingAgentChatAnswerView,
   CodingAgentChatAttachmentParams,
   CodingAgentChatChanged,
@@ -23,14 +21,12 @@ import type {
   CodingAgentChatWriteAnswerView,
   CodingAgentInboxAnsweredView,
   CodingAgentInboxAnswerParams,
-  CodingAgentInboxAnswerView,
   CodingAgentInboxAttachmentParams,
   CodingAgentInboxAttachmentView,
   CodingAgentInboxChanged,
   CodingAgentInboxCloseParams,
   CodingAgentInboxMessagedView,
   CodingAgentInboxMessageParams,
-  CodingAgentInboxParams,
   CodingAgentInboxReadAllView,
   CodingAgentInboxReadStateParams,
   CodingAgentInboxReadStateView,
@@ -46,10 +42,6 @@ import { followedStream, type OpenFollows } from "./followed-stream.js";
 /** What the Inbox and chat procedures reach: the host's asks of the service. */
 export interface AgentInboxProceduresDependencies {
   host: {
-    codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-    codingAgentAgentInbox(
-      params: CodingAgentAgentInboxParams,
-    ): Effect.Effect<CodingAgentInboxAnswerView>;
     /** A task's or agent's inbox followed at the host, heard through `onInboxChanged`; following again starts over. */
     codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
     codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
@@ -189,18 +181,6 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
     return made;
   };
   return {
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInbox(input);
-    }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_AGENT_INBOX]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_AGENT_INBOX
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentAgentInbox(input);
-    }),
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW
     ].effect(function* ({ input, context, errors }) {

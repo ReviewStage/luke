@@ -540,22 +540,6 @@ export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
 
 export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;
 
-/** One task's inbox past a cursor, as the window asks it: the task, and where the window stands. */
-export const codingAgentInboxParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
-
-/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a task's inbox is. */
-export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
-  agentId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
-
 /** Whose inbox is followed: a plan's, or one agent's. */
 export const INBOX_SCOPE_KIND = {
   PLAN: "plan",

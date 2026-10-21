@@ -1,9 +1,5 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxParams,
-} from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { useCallback, useEffect, useMemo } from "react";
 import { useAct } from "../act.js";
@@ -111,10 +107,6 @@ export function useInboxListing(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  const readInbox = useCallback(
-    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
   const { inboxTasks, tasks: listedTasks, archived: listedArchived } = tasks.listed;
   const holdings = useMemo(
     () => (enabled ? listedHoldings(inboxTasks, listedTasks) : NO_HOLDINGS),
@@ -124,12 +116,11 @@ export function useInboxListing(
     () => (enabled ? listedHoldings(inboxTasks, listedArchived) : NO_HOLDINGS),
     [enabled, inboxTasks, listedArchived],
   );
-  const read = useInboxItems({ holdings, readInbox });
+  const read = useInboxItems({ holdings });
   // Note that the archived tasks' items are read only while Archived is shown, since nothing in them waits on anyone.
   const showArchived = choices.show === INBOX_SHOW.ARCHIVED;
   const archivedRead = useInboxItems({
     holdings: showArchived ? archivedHoldings : NO_HOLDINGS,
-    readInbox,
   });
   const waitingTaskless = enabled ? tasks.inboxTaskless : NO_TASKLESS;
   const tasklessReads = useTasklessInboxItems(waitingTaskless);
@@ -161,17 +152,10 @@ export function useInboxListing(
     onStarted: () => undefined,
     me: tasks.me,
   });
-  const readAgentInbox = useCallback(
-    (after: string) =>
-      chosenAgentId === undefined
-        ? Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const)
-        : act(ACT_KIND.CODING_AGENTS_AGENT_INBOX, { agentId: chosenAgentId, after }),
-    [act, chosenAgentId],
-  );
   // Note that an agent with no task holds its own read, by its id, as a task's is held by the task's.
   const live = useTaskInbox({
     taskId: taskId ?? chosenAgentId,
-    ...(chosenAgentId === undefined ? undefined : { reader: readAgentInbox }),
+    kind: chosenAgentId === undefined ? INBOX_SCOPE_KIND.PLAN : INBOX_SCOPE_KIND.AGENT,
     shown: tasks.shown,
     waiting:
       tasks.inbox.some((each) => each.taskId === taskId) ||
@@ -213,17 +197,8 @@ export function useInboxListing(
           },
         ]
       : [];
-  const { onReread: rereadTasks } = read;
-  const { onReread: rereadTaskless } = taskless;
-  // Note that every item marked read moves nothing main hears of, so the Inbox reads its items again once the service took it.
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: tasks.workspace?.id,
-    onMarkedAll: () => {
-      rereadTasks();
-      rereadTaskless();
-    },
-  });
+  // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
+  const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
   // The archived tasks' items stand under Archived alone, which counts what main says each holds whether or not it is read yet.
   const standing: readonly InboxGroup[] = [

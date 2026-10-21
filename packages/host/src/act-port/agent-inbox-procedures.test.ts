@@ -84,9 +84,6 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX]: "Could not read the task's inbox on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_AGENT_INBOX]:
-    "Could not read the agent's inbox on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]:
     "Could not answer the inbox item on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE]:
@@ -114,16 +111,6 @@ const ACTS: readonly {
   payload: WireBoundaryInput;
   ask: keyof HostAsk;
 }[] = [
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX,
-    payload: { taskId: TASK_ID, after: "0" },
-    ask: "codingAgentInbox",
-  },
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_AGENT_INBOX,
-    payload: { agentId: AGENT_ID, after: "0" },
-    ask: "codingAgentAgentInbox",
-  },
   {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER,
     payload: { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.APPROVED, clientKey: "answer-1" },
@@ -242,10 +229,9 @@ it("a panel's ask reaches the host once with its payload, and the host's answer 
   );
 });
 
-it("a panel reads a task's inbox, answers, closes, and messages on an item, and hears the item as it then stands", async () => {
+it("a panel answers, closes, and messages on an item, and hears the item as it then stands", async () => {
   const { call, asked } = windowPort(PANEL, {
     answers: {
-      codingAgentInbox: () => Effect.succeed({ items: [ITEM], cursor: "7" }),
       codingAgentInboxAnswer: () =>
         Effect.succeed({ item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true }),
       codingAgentInboxClose: () =>
@@ -262,10 +248,6 @@ it("a panel reads a task's inbox, answers, closes, and messages on an item, and 
   const answer = { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.APPROVED, clientKey: "a-1" };
   const close = { itemId: ITEM.id, revision: 2, clientKey: "close-1" };
 
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: "0" }),
-    { answer: { items: [ITEM], cursor: "7" } },
-  );
   assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER, answer), {
     answer: { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true },
   });
@@ -276,7 +258,6 @@ it("a panel reads a task's inbox, answers, closes, and messages on an item, and 
     answer: { item: ITEM },
   });
   assert.deepEqual(asked, [
-    ["codingAgentInbox", { taskId: TASK_ID, after: "0" }],
     ["codingAgentInboxAnswer", answer],
     ["codingAgentInboxClose", close],
     ["codingAgentInboxMessage", message],
@@ -410,8 +391,8 @@ it("an answer's key its kind's view schema does not name is left out of what the
   const { call } = windowPort(PANEL, {
     answers: {
       codingAgentInboxReadAll: () => Effect.succeed({ marked: 3, stray: true }),
-      codingAgentInbox: () =>
-        Effect.succeed({ items: [{ ...ITEM, stray: true }], cursor: "7", stray: true }),
+      codingAgentInboxMessage: () =>
+        Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
     },
   });
 
@@ -419,8 +400,12 @@ it("an answer's key its kind's view schema does not name is left out of what the
     answer: { marked: 3 },
   });
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: "0" }),
-    { answer: { items: [ITEM], cursor: "7" } },
+    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: ITEM.id,
+      text: "Also page on-call.",
+      clientKey: "message-2",
+    }),
+    { answer: { item: ITEM } },
   );
 });
 
@@ -444,10 +429,6 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
 it("a payload its kind's schema refuses, or none where the kind takes one, is refused in the kind's own words, and the host is not asked", async () => {
   const { call, asked } = windowPort(PANEL);
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: "", after: "0" }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX] },
-  );
-  assert.deepEqual(
     await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
       itemId: ITEM.id,
       unread: "yes",
@@ -467,12 +448,16 @@ it("an item carrying a block and a response type this build does not know reache
     response: { type: "signature" },
   };
   const { call } = windowPort(PANEL, {
-    answers: { codingAgentInbox: () => Effect.succeed({ items: [newer], cursor: "7" }) },
+    answers: { codingAgentInboxMessage: () => Effect.succeed({ item: newer }) },
   });
 
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: "0" }),
-    { answer: { items: [newer], cursor: "7" } },
+    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: ITEM.id,
+      text: "Ship it.",
+      clientKey: "message-3",
+    }),
+    { answer: { item: newer } },
   );
 });
 

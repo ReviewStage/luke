@@ -34,7 +34,6 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
-  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
@@ -48,14 +47,12 @@ import {
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxChanged,
   type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
-  type CodingAgentInboxParams,
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
@@ -97,7 +94,6 @@ import {
   codingAgentDefaultAnswerViewSchema,
   codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
   codingAgentInboxChangedSchema,
   codingAgentInboxMessagedViewSchema,
@@ -767,12 +763,6 @@ export interface HostOperator {
   dictationTranscribe(
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
-  /** One task's inbox past a cursor, held by the service while nothing changed; or why there is none. */
-  codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-  /** One agent's inbox past a cursor, an agent with no task as much as one on a task, held as a task's is; or why there is none. */
-  codingAgentAgentInbox(
-    params: CodingAgentAgentInboxParams,
-  ): Effect.Effect<CodingAgentInboxAnswerView>;
   /** One task's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
   codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
   /** One task's or agent's inbox let go: nothing more is heard of it until it is followed again. */
@@ -2165,22 +2155,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           keywords: [...params.keywords],
         }),
         codingAgentAnswer(dictationTranscribeAnswerViewSchema),
-      ),
-    codingAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-          taskId: params.taskId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
-      ),
-    codingAgentAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-          agentId: params.agentId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
       ),
     codingAgentInboxFollow: (scope) =>
       fire(

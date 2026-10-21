@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
@@ -21,9 +21,17 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
-import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeActs,
+} from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -129,11 +137,12 @@ async function inbox(options: {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
     tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: options.workspaces ?? [ACME, GLOBEX] },
   };
-  const inboxOf = (items: readonly InboxItem[]): Promise<FakeActAnswer> =>
-    Promise.resolve({
-      status: FAKE_ANSWER.DONE,
-      value: { items, cursor: "1" } satisfies CodingAgentInboxAnswerView,
-    });
+  // The host pushes the task's inbox, and the sweep agent's, as each is followed.
+  const host = followedInboxes(({ kind }) =>
+    kind === INBOX_SCOPE_KIND.PLAN
+      ? { items: options.taskItems }
+      : { items: options.sweep === undefined ? [] : [options.sweep.item] },
+  );
   fakeActs({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
@@ -150,15 +159,6 @@ async function inbox(options: {
                 : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
           });
         }
-        case ACT_KIND.CODING_AGENTS_INBOX:
-          // A read past the cursor is held open while nothing changes, as the service holds it.
-          return request.payload.after === "0"
-            ? inboxOf(options.taskItems)
-            : new Promise(() => undefined);
-        case ACT_KIND.CODING_AGENTS_AGENT_INBOX:
-          return request.payload.after === "0"
-            ? inboxOf(options.sweep === undefined ? [] : [options.sweep.item])
-            : new Promise(() => undefined);
         case ACT_KIND.CODING_AGENTS_LIST:
           return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [] } });
         default:
@@ -169,6 +169,7 @@ async function inbox(options: {
       }
     },
   });
+  fakeActPort({ ...fakeActPortCalls(), ...host.procedures });
   const sweep = options.sweep;
   // The Inbox's own choice is held as the plans tab holds it, so the item it stands chosen is drawn.
   function Page() {
