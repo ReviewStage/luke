@@ -13,9 +13,9 @@ import {
   shownShortcutGroups,
 } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
-import type { MenuItemConstructorOptions } from "electron";
+import type { BaseWindow, KeyboardEvent, MenuItem, MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
-import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
+import { appMenuTemplate, menuBarDrawer, type PanelMenu, UPDATE_MENU_ACT } from "./app-menu";
 
 /**
  * The menu bar as a gated feature's experiment decides it: an item whose
@@ -204,5 +204,42 @@ describe("the developer tools", () => {
         (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === tools.accelerator,
       ),
     );
+  });
+});
+
+/** A window of Luke's, as the menu is handed the one it was chosen over. */
+function aWindow(): BaseWindow {
+  return {} as BaseWindow;
+}
+
+/** Presses File's New Task as its key does, over the window in front, and answers the commands the panel was brought back on. */
+function pressNewTask(window: BaseWindow | undefined, panelWindow: BaseWindow): readonly string[] {
+  const reopened: string[] = [];
+  const panel: PanelMenu = {
+    isPanel: (candidate) => candidate === panelWindow,
+    onReopen: (command) => reopened.push(command),
+  };
+  let drawn: MenuItemConstructorOptions[] = [];
+  menuBarDrawer({ appName: "Luke", packaged: true }, (template) => {
+    drawn = template;
+  })({ panel });
+  const newTask = everyItem(drawn).find((item) => item.id === APP_COMMAND.NEW_TASK);
+  if (!newTask?.click) return assert.fail("File has no New Task item");
+  newTask.click({} as MenuItem, window, { triggeredByAccelerator: true } as KeyboardEvent);
+  return reopened;
+}
+
+describe("New Task", () => {
+  test("its key brings the closed window back on a new task", () => {
+    assert.deepEqual(pressNewTask(undefined, aWindow()), [APP_COMMAND.NEW_TASK]);
+  });
+
+  test("its key over another of Luke's windows brings the panel forward on a new task", () => {
+    assert.deepEqual(pressNewTask(aWindow(), aWindow()), [APP_COMMAND.NEW_TASK]);
+  });
+
+  test("its key over the panel is left to the panel's own keymap", () => {
+    const panelWindow = aWindow();
+    assert.deepEqual(pressNewTask(panelWindow, panelWindow), []);
   });
 });
