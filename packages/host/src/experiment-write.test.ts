@@ -121,15 +121,19 @@ it.effect("the service's answer is what the store keeps and the settings carry",
   Effect.gen(function* () {
     const store = yield* signedInStore;
     const { client, bodies } = serviceAnswering(async () =>
-      holding({ [EXPERIMENT.FACTORY]: true }),
+      holding({ [EXPERIMENT.CODE_REVIEW]: true }),
     );
 
-    const written = yield* writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.FACTORY, true);
+    const written = yield* writerOver(client, store).write(
+      ACCOUNT.email,
+      EXPERIMENT.CODE_REVIEW,
+      true,
+    );
 
     assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
-    assert.deepEqual(written.settings.experiments, { [EXPERIMENT.FACTORY]: true });
-    assert.deepEqual(bodies, [{ experiments: { [EXPERIMENT.FACTORY]: true } }]);
-    assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.FACTORY]: true });
+    assert.deepEqual(written.settings.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
+    assert.deepEqual(bodies, [{ experiments: { [EXPERIMENT.CODE_REVIEW]: true } }]);
+    assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.CODE_REVIEW]: true });
   }).pipe(onDisk),
 );
 
@@ -148,10 +152,10 @@ it.effect(
       const writer = writerOver(client, store);
 
       const turnedOn = yield* Effect.forkChild(
-        writer.write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
+        writer.write(ACCOUNT.email, EXPERIMENT.CODE_REVIEW, true),
       );
       const turnedOff = yield* Effect.forkChild(
-        writer.write(ACCOUNT.email, EXPERIMENT.FACTORY, false),
+        writer.write(ACCOUNT.email, EXPERIMENT.CODE_REVIEW, false),
       );
       yield* until(() => bodies.length > 0);
       yield* until(() => bodies.length > 1);
@@ -161,10 +165,10 @@ it.effect(
       yield* Fiber.join(turnedOff);
 
       assert.deepEqual(bodies, [
-        { experiments: { [EXPERIMENT.FACTORY]: true } },
-        { experiments: { [EXPERIMENT.FACTORY]: false } },
+        { experiments: { [EXPERIMENT.CODE_REVIEW]: true } },
+        { experiments: { [EXPERIMENT.CODE_REVIEW]: false } },
       ]);
-      assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.FACTORY]: false });
+      assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.CODE_REVIEW]: false });
     }).pipe(onDisk),
 );
 
@@ -173,7 +177,11 @@ it.effect("a write the service did not answer leaves the switch where it stood",
     const store = yield* signedInStore;
     const { client } = serviceAnswering(async () => new Response("unavailable", { status: 503 }));
 
-    const written = yield* writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.FACTORY, true);
+    const written = yield* writerOver(client, store).write(
+      ACCOUNT.email,
+      EXPERIMENT.CODE_REVIEW,
+      true,
+    );
 
     assert.equal(written.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(written.reason, EXPERIMENT_UNANSWERED);
@@ -189,11 +197,11 @@ it.effect(
       const signedOut = gate();
       const { client, bodies } = serviceAnswering(async () => {
         await signedOut.opened;
-        return holding({ [EXPERIMENT.FACTORY]: true });
+        return holding({ [EXPERIMENT.CODE_REVIEW]: true });
       });
 
       const writing = yield* Effect.forkChild(
-        writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
+        writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.CODE_REVIEW, true),
       );
       yield* until(() => bodies.length > 0);
       yield* store.clearAccount();

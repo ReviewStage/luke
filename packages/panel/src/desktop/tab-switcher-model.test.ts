@@ -44,7 +44,7 @@ const screen = (
   fullScreen,
 });
 const inbox: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.INBOX };
-const factoryPage: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.FACTORY };
+const automationsPage: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.AUTOMATIONS };
 
 /** The stops visited in order, the last the most recent. */
 function walked(...stops: Stop[]): readonly Stop[] {
@@ -137,7 +137,7 @@ describe("a move of the window", () => {
 
 describe("⌃Tab", () => {
   const here = screen("a", undefined, SIDE_PANEL_TAB.PLAN);
-  const stops = walked(factoryPage, screen("b", { agent: "y" }), inbox, here);
+  const stops = walked(automationsPage, screen("b", { agent: "y" }), inbox, here);
 
   test("tapped, goes to the screen before this one and shows nothing", () => {
     const state = pressed(stops, here, SWITCH_STEP.ON);
@@ -176,7 +176,7 @@ describe("⌃Tab", () => {
   });
 
   test("with ⇧ steps back, starting from the last card", () => {
-    assert.deepEqual(switcherTarget(pressed(stops, here, SWITCH_STEP.BACK)), factoryPage);
+    assert.deepEqual(switcherTarget(pressed(stops, here, SWITCH_STEP.BACK)), automationsPage);
     assert.deepEqual(
       switcherTarget(pressed(stops, here, SWITCH_STEP.BACK, SWITCH_STEP.BACK)),
       screen("b", { agent: "y" }),
@@ -195,7 +195,7 @@ describe("⌃Tab", () => {
 
   test("a card pointed at is the one chosen", () => {
     const state = switcherChose(pressed(stops, here, SWITCH_STEP.ON), 3);
-    assert.deepEqual(switcherTarget(state), factoryPage);
+    assert.deepEqual(switcherTarget(state), automationsPage);
   });
 
   test("with nothing else to go to, holds nothing", () => {
@@ -214,7 +214,6 @@ describe("what is on screen", () => {
     inbox: false,
     agentId: undefined,
     person: undefined,
-    factory: false,
     board: false,
     automations: false,
     boundFor: "a",

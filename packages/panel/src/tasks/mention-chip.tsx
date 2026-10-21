@@ -41,7 +41,6 @@ import {
   AppWindowIcon,
   BotIcon,
   CalendarIcon,
-  FactoryIcon,
   FileDiffIcon,
   FolderIcon,
   HashIcon,
@@ -857,8 +856,6 @@ function PlaceGlyph({
     case LINK_PLACE.AUTOMATION:
     case LINK_PLACE.AUTOMATION_RUN:
       return <ZapIcon aria-hidden="true" />;
-    case LINK_PLACE.FACTORY:
-      return <FactoryIcon aria-hidden="true" />;
     case LINK_PLACE.SETTINGS:
       return <GearIcon />;
     case LINK_PLACE.PERSON:

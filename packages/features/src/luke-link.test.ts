@@ -97,7 +97,6 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     { kind: LINK_PLACE.AUTOMATION_RUN, automationId: OTHER, runId: AGENT },
     `${HOME}/automation/${OTHER}/run/${AGENT}`,
   ],
-  [{ kind: LINK_PLACE.FACTORY }, `${HOME}/factory`],
   [{ kind: LINK_PLACE.SETTINGS }, `${HOME}/settings`],
   [{ kind: LINK_PLACE.SETTINGS, page: "coding-agents" }, `${HOME}/settings/coding-agents`],
   [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
@@ -237,7 +236,8 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/plan/${TASK}/agent/${AGENT}/page/${OTHER}`,
     `${HOME}/automations/${OTHER}`,
     `${HOME}/automation/${OTHER}/runs/${AGENT}`,
-    `${HOME}/factory/today`,
+    // Factory is gone, and a link to it names nothing.
+    `${HOME}/factory`,
     `${HOME}/settings/Coding%20agents`,
     `${HOME}/person`,
     `${HOME}/people/user_9Fq2-x`,

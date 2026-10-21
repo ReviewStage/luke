@@ -52,10 +52,6 @@ import {
   dictationProcedures,
 } from "../dictation/dictation-procedures.js";
 import { type EventsProcedureSeams, eventsProcedures } from "../events/events-procedures.js";
-import {
-  type FactoryProcedureSeams,
-  factoryProcedures,
-} from "../factory/factory-world-procedures.js";
 import { type GitHubProcedureSeams, githubProcedures } from "../github/github-procedures.js";
 import {
   type GitHubTokenProcedureSeams,
@@ -100,7 +96,6 @@ export type HostedRouterSeams = AccountProcedureSeams &
   AutomationsProcedureSeams &
   DictationProcedureSeams &
   EventsProcedureSeams &
-  FactoryProcedureSeams &
   GitHubProcedureSeams &
   GitHubTokenProcedureSeams &
   InboxProcedureSeams &
@@ -134,7 +129,6 @@ export function hostedRouter(seams: HostedRouterSeams) {
     automations: automationsProcedures(seams),
     dictation: dictationProcedures(seams),
     events: eventsProcedures(seams),
-    factory: factoryProcedures(seams),
     github: githubProcedures(seams),
     githubToken: githubTokenProcedures(seams),
     inbox: inboxProcedures(seams),

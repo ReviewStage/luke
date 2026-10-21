@@ -4,7 +4,7 @@ import { type ComponentType, createElement, type ReactPromise } from "react";
  * lazy-route.ts -- a surface split off the bundle every window parses, imported the first time it is drawn, or earlier where the pointer says it is about to be.
  *
  * A window parses its whole entry as it opens, so a
- * page most launches never open, Factory, a plan's version history, a
+ * page most launches never open, a plan's version history, a
  * person's page, or a side panel's Pull request tab, is a chunk of its own,
  * drawn through `Route` under a `Suspense` whose fallback is the page's own
  * frame. `prefetch` starts the same import from a hover or a hint of intent,

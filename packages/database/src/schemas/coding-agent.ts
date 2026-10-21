@@ -8,7 +8,6 @@ import {
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import type { PullRequestArea } from "@luke/features/pull-request-area";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -180,15 +179,15 @@ export interface StoredArchive {
 /**
  * The pull request from an agent's branch as its row keeps it: what the
  * wire carries of it, and beside that what the service alone reads. The
- * head it was read at, so the next read knows whether its files moved;
- * when it merged, as GitHub reports it, absent until it has; and the lines
- * it changed in each directory (`pullRequestAreasOf`). A row written
- * before these were kept holds none of them.
+ * head it was read at, which a delivery about a commit's checks is matched
+ * against; and when it merged, as GitHub reports it, absent until it has.
+ * A row written before these were kept holds none of them. A row written
+ * while Factory stood may hold `areas` beside them, which nothing reads now
+ * and the next write drops.
  */
 export interface StoredPullRequest extends CodingAgentPullRequest {
   readonly headSha?: string;
   readonly mergedAt?: number;
-  readonly areas?: readonly PullRequestArea[];
 }
 
 export const codingAgent = pgTable(

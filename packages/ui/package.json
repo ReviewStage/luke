@@ -55,10 +55,7 @@
     "./diagram-contract": "./src/diagram-contract.js",
     "./avatar-session": "./src/avatar-session.js",
     "./person-page-model": "./src/person-page-model.js",
-    "./chat-model": "./src/chat-model.js",
-    "./factory-world": "./src/factory-world/factory-world.js",
-    "./factory-campus": "./src/factory-world/campus.js",
-    "./testing": "./src/testing/index.js"
+    "./chat-model": "./src/chat-model.js"
   },
   "types": "./src/index.ts",
   "scripts": {

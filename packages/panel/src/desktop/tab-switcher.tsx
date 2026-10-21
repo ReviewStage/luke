@@ -70,7 +70,6 @@ import {
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import {
-  FactoryIcon,
   type HouseIcon,
   InboxIcon,
   ListTodoIcon,
@@ -146,7 +145,6 @@ const PLACE_LOOK = {
   [SWITCHER_PLACE.CHAT]: { icon: MessagesSquareIcon, label: TAB_WORDS.CHAT },
   [SWITCHER_PLACE.BOARD]: { icon: ListTodoIcon, label: "Tasks" },
   [SWITCHER_PLACE.AUTOMATIONS]: { icon: ZapIcon, label: "Automations" },
-  [SWITCHER_PLACE.FACTORY]: { icon: FactoryIcon, label: "Factory" },
 } as const satisfies Record<SwitcherPlace, { icon: typeof HouseIcon; label: string }>;
 
 /** What a task's card is called where the window lists no name for it. */
@@ -274,7 +272,6 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
       personView.userId === undefined
         ? undefined
         : { userId: personView.userId, name: personView.name, workspaceId: personView.workspaceId },
-    factory: tasks.factoryView.open,
     board: tasks.boardView.open,
     automations: tasks.automationsView.open,
     boundFor: tasks.boundFor,
@@ -750,9 +747,6 @@ function openPlace(tasks: TasksControl, place: SwitcherPlace): void {
       return;
     case SWITCHER_PLACE.AUTOMATIONS:
       tasks.automationsView.onOpen();
-      return;
-    case SWITCHER_PLACE.FACTORY:
-      tasks.factoryView.onOpen();
       return;
   }
 }

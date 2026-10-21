@@ -76,8 +76,6 @@ export const APP_COMMAND = {
   REPLY_TO_SELECTION: "reply-to-selection",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
-  FACTORY: "factory",
-  EXIT_FACTORY: "exit-factory",
   AUTOMATIONS: "automations",
   EXIT_AUTOMATIONS: "exit-automations",
   EXIT_BOARD: "exit-board",
@@ -120,14 +118,13 @@ export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
 
 /**
  * The commands ⌘K alone offers, by the name it gives them: the sidebar's
- * view of its tasks, which its View options menu sets too, and Factory and
- * Chat, which the sidebar's rows open, so no chord or menu bar item spends a
- * key on them. Factory and Chat keep no chord while they are experiments, so
- * ⇧⌘F stays free for a find across everything; ⌘K offers each only while
- * the account has it on, since its command is offered nothing otherwise.
+ * view of its tasks, which its View options menu sets too, and Chat, which
+ * the sidebar's row opens, so no chord or menu bar item spends a key on
+ * them. Chat keeps no chord while it is an experiment, so ⇧⌘F stays free
+ * for a find across everything; ⌘K offers it only while the account has it
+ * on, since its command is offered nothing otherwise.
  */
 const PALETTE_COMMAND_LABELS = {
-  [APP_COMMAND.FACTORY]: "Factory",
   [APP_COMMAND.CHAT]: "Chat",
   [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
   [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
@@ -483,11 +480,6 @@ export const APP_SHORTCUTS = {
     label: "Exit profile",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.EXIT_FACTORY]: {
-    label: "Exit factory",
-    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-    experiment: EXPERIMENT.FACTORY,
-  },
   [APP_COMMAND.AUTOMATIONS]: {
     label: "Automations",
     chord: { key: SHORTCUT_KEY.U, shift: true },
@@ -577,7 +569,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.REPLY_TO_SELECTION,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,
-      APP_COMMAND.EXIT_FACTORY,
       APP_COMMAND.AUTOMATIONS,
       APP_COMMAND.EXIT_AUTOMATIONS,
       APP_COMMAND.EXIT_BOARD,

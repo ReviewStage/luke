@@ -1365,7 +1365,7 @@ over the voice it holds.
 
 `experiments` is the third part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@luke/settings`'s
-`EXPERIMENT`, as `{ "factory": true }`, and `{}` until it chooses one. It is
+`EXPERIMENT`, as `{ "chat": true }`, and `{}` until it chooses one. It is
 the server's to hold rather than the desktop's to sync: a write is a patch
 whose keys are merged over what stood (`jsonb ||` on the `experiments`
 column), so a Mac that knows fewer experiments never erases another's

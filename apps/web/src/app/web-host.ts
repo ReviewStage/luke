@@ -346,7 +346,6 @@ function portDependencies(
     agents: { host, notices },
     automations: { host },
     chapters: { host },
-    factory: { host },
     integrations: { host },
     // Note that nothing is pushed on the tab's port: the tab hears the host
     // through the in-process bridge's own listeners, so its push stream is

@@ -1926,8 +1926,8 @@ function toDo(listed: InboxListed, readerId: string | undefined): boolean {
 }
 
 /**
- * Every open item, whoever's, the latest changed first, as Home, Factory,
- * and a person's page list what waits (`use-waiting-items.ts`).
+ * Every open item, whoever's, the latest changed first, as Home and a
+ * person's page list what waits (`use-waiting-items.ts`).
  */
 export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[] {
   return groups

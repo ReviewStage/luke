@@ -150,11 +150,6 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
-  /**
-   * One workspace's Factory world, read as it stands now, to a member of it
-   * (POST). `factory-world-wire.ts` declares the bodies.
-   */
-  FACTORY_WORLD: "/api/factory/world",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**

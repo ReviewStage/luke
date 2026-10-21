@@ -76,7 +76,7 @@ import { useAutomations } from "./use-automations.js";
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
  *
- * It stands in the task's place beside the sidebar, as Factory does, and
+ * It stands in the task's place beside the sidebar, as the Inbox does, and
  * its sidebar row is marked while it does. Who owns an automation is the
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
@@ -666,7 +666,7 @@ function AutomationsPages({
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
   // A new page filled in from Code review's preset goes back to the list once its experiment is off, here or
-  // on another Mac, as Factory gives the task's place back; the window's leave guard asks first where it was written in.
+  // on another Mac, as Chat gives the task's place back; the window's leave guard asks first where it was written in.
   // Note that the way out is read through a ref, because the window rebuilds it on every render, and a draft
   // kept by Cancel is asked again only when the place or the experiment moves.
   const fromPreset = place.kind === AUTOMATIONS_PAGE.NEW && place.preset !== undefined;

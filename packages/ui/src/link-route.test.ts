@@ -20,7 +20,7 @@ const ACME = {
   github: null,
 };
 
-const WINDOW = { workspaces: [ACME], factoryOn: false, chatOn: false, adminOn: false };
+const WINDOW = { workspaces: [ACME], chatOn: false, adminOn: false };
 
 test("a link to a page of Settings opens it on the workspace its slug names, where the account is in it", () => {
   assert.deepEqual(
@@ -54,12 +54,9 @@ test("a link to Settings with no page, or a page this window does not know, open
   }
 });
 
-test("a place of an experiment the account has off opens nowhere, and an automation, no experiment now, opens on the Plans tab", () => {
+test("an automation, no experiment now, opens on the Plans tab", () => {
   const automation = { kind: LINK_PLACE.AUTOMATION, automationId: "a1" } as const;
 
-  assert.deepEqual(linkRoute({ workspace: "acme", place: { kind: LINK_PLACE.FACTORY } }, WINDOW), {
-    kind: LINK_ROUTE.EXPERIMENT_OFF,
-  });
   assert.deepEqual(linkRoute({ workspace: "acme", place: automation }, WINDOW), {
     kind: LINK_ROUTE.TASKS,
   });

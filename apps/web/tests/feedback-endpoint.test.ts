@@ -43,18 +43,18 @@ function note(body: { readonly experiment: string }): Request {
 
 test("a note about an experiment is mailed under a subject naming it", async () => {
   const { mailed } = mailService();
-  const answered = await POST(note({ experiment: "factory" }));
+  const answered = await POST(note({ experiment: "chat" }));
 
   assert.equal(answered.status, 200);
   assert.deepEqual(
     mailed.map((mail) => mail.subject),
-    ["Luke feedback on the factory experiment"],
+    ["Luke feedback on the chat experiment"],
   );
 });
 
 test("an experiment that is not a key's shape is refused, and nothing is mailed", async () => {
   const { mailed } = mailService();
-  const answered = await POST(note({ experiment: "Factory\nBcc: someone@example.test" }));
+  const answered = await POST(note({ experiment: "Chat\nBcc: someone@example.test" }));
 
   assert.equal(answered.status, 400);
   assert.deepEqual(mailed, []);

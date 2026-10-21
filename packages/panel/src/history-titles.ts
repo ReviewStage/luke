@@ -64,7 +64,6 @@ export type StepTitleTasks = Pick<
   | "inboxView"
   | "agentView"
   | "personView"
-  | "factoryView"
   | "automationsView"
   | "chatView"
   | "boardView"
@@ -95,7 +94,6 @@ export function stepTitle(
   if (tasks.personView.userId !== undefined) {
     return { label: tasks.personView.name ?? "Profile" };
   }
-  if (tasks.factoryView.open) return { label: "Factory" };
   if (tasks.automationsView.open) return { label: "Automations" };
   if (tasks.chatView.open) return { label: "Chat" };
   if (tasks.boardView.open) return { label: "Tasks" };

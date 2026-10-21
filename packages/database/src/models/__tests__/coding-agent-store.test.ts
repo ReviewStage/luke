@@ -9,7 +9,6 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
-  type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { LIVE_SERVER_EVENT } from "@luke/live";
@@ -37,7 +36,7 @@ import {
   CONVERSATION_RUNTIME,
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, leaveWorkspace, linearIssueLink } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, leaveWorkspace } from "../../testing/index.js";
 import { VOICE_DELEGATION_MODE, VOICE_SEGMENT_ROLE } from "../../voice-vocabulary.js";
 import {
   archiveCodingAgent,
@@ -61,7 +60,6 @@ import {
   listTasklessCodingAgents,
   listWorkspaceCodingAgentLines,
   listWorkspaceCodingAgents,
-  listWorldCodingAgents,
   type NewCodingAgent,
   nativeRuntimesOfReached,
   pinCodingAgent,
@@ -953,7 +951,7 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
   };
 
   it.effect(
-    "a merged pull request is read back whole, its head, merge instant, and areas among it, by a member of the agent's workspace, while the list reads only what the wire carries and an outsider reads none",
+    "a merged pull request is read back whole, its head and merge instant among it, by a member of the agent's workspace, while the list reads only what the wire carries and an outsider reads none",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -967,10 +965,6 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
           ...onTheWire,
           headSha: "c0ffee1",
           mergedAt: Date.parse("2026-10-17T09:00:00Z"),
-          areas: [
-            { path: "packages/service/src/agents", additions: 10, deletions: 2 },
-            { path: ".", additions: 2, deletions: 1 },
-          ],
         };
 
         yield* recordCodingAgentPublished(starter, agentId, kept);
@@ -986,7 +980,7 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
   );
 
   it.effect(
-    "a row kept before the merge instant and areas were reads back as it was written, and an agent that published nothing reads none",
+    "a row kept before the head and merge instant were reads back as it was written, and an agent that published nothing reads none",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -1006,6 +1000,33 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
           [onTheWire],
         );
         assert.equal(yield* readCodingAgentPublished(starter, quiet.agentId), null);
+      }),
+  );
+
+  it.effect(
+    "a row Factory wrote, its areas beside the head and merge instant, reads back without its areas",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
+        const mergedAt = Date.parse("2026-10-17T09:00:00Z");
+        const factoryRow = {
+          ...onTheWire,
+          mergedAt,
+          headSha: "c0ffee1",
+          areas: [{ path: ".", additions: 12, deletions: 3 }],
+        };
+        // Written past the store, as a row from while Factory stood keeps them.
+        yield* Effect.flatMap(Database, (db) =>
+          db.update(codingAgent).set({ published: factoryRow }).where(eq(codingAgent.id, agentId)),
+        );
+
+        assert.deepEqual(yield* readCodingAgentPublished(starter, agentId), {
+          ...onTheWire,
+          headSha: "c0ffee1",
+          mergedAt,
+        });
       }),
   );
 });
@@ -1068,92 +1089,6 @@ it.layer(getTestDB())("the coding-agent store's merged pull request on a task", 
         assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), false);
         yield* recordCodingAgentPublished(starter, onToken, pullRequest(true));
         assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), true);
-      }),
-  );
-});
-
-it.layer(getTestDB())("the coding-agent store's agents of a workspace's world", (it) => {
-  /** A pull request as the row keeps it, in the state given, merged at the instant given where it merged. */
-  const keptPullRequest = (number: number, state: PullRequestState, mergedAt?: number) => ({
-    number,
-    title: `Change ${number}`,
-    url: `https://github.com/acme/relay/pull/${number}`,
-    state,
-    checks: CHECK_SUMMARY.PASSING,
-    additions: 4,
-    deletions: 1,
-    changedFiles: 1,
-    areas: [{ path: "packages/api", additions: 4, deletions: 1 }],
-    ...(mergedAt === undefined ? undefined : { mergedAt }),
-  });
-  const since = Date.parse("2026-10-11T00:00:00Z");
-  const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
-
-  it.effect(
-    "a member reads every standing agent first, then of the archived those whose pull request is still open or merged within the window, newest started first, each with its pull request whole and its plan's Linear issue, while an account outside the workspace reads none",
-    () =>
-      Effect.gen(function* () {
-        const starter = yield* openAccount;
-        const teammate = yield* openAccount;
-        const outsider = yield* openAccount;
-        const workspace = yield* openWorkspace(starter);
-        yield* joinWorkspace(workspace, teammate);
-        yield* openWorkspace(outsider);
-        const linked = yield* createTask(starter, {
-          organizationId: workspace,
-          name: "Invite expiry",
-          issueLinks: [
-            linearIssueLink({
-              identifier: "ENG-7",
-              title: "Expire invitations",
-              url: "https://linear.app/acme/issue/ENG-7",
-            }),
-          ],
-        });
-        const archive = (agentId: string) =>
-          Effect.asVoid(archiveCodingAgent(starter, agentId, true));
-        const standing = yield* tasklessAgent(starter, workspace, {
-          taskId: linked.id,
-          createdAt: at(1),
-        });
-        const open = yield* tasklessAgent(starter, workspace, { createdAt: at(2) });
-        yield* recordCodingAgentPublished(
-          starter,
-          open.agentId,
-          keptPullRequest(1, PULL_REQUEST_STATE.OPEN),
-        );
-        yield* archive(open.agentId);
-        const shipped = keptPullRequest(2, PULL_REQUEST_STATE.MERGED, since + 1);
-        const recent = yield* tasklessAgent(starter, workspace, { createdAt: at(3) });
-        yield* recordCodingAgentPublished(starter, recent.agentId, shipped);
-        yield* archive(recent.agentId);
-        const old = yield* tasklessAgent(starter, workspace, { createdAt: at(4) });
-        yield* recordCodingAgentPublished(
-          starter,
-          old.agentId,
-          keptPullRequest(3, PULL_REQUEST_STATE.MERGED, since - 1),
-        );
-        yield* archive(old.agentId);
-        const idle = yield* tasklessAgent(starter, workspace, { createdAt: at(5) });
-        yield* archive(idle.agentId);
-
-        const read = yield* listWorldCodingAgents(teammate, workspace, {
-          mergedSince: since,
-          limit: 10,
-        });
-
-        assert.deepEqual(
-          read.map(({ agent, published, linearIssue }) => [agent.id, published, linearIssue]),
-          [
-            [standing.agentId, null, "ENG-7"],
-            [recent.agentId, shipped, null],
-            [open.agentId, keptPullRequest(1, PULL_REQUEST_STATE.OPEN), null],
-          ],
-        );
-        assert.deepEqual(
-          yield* listWorldCodingAgents(outsider, workspace, { mergedSince: since, limit: 10 }),
-          [],
-        );
       }),
   );
 });

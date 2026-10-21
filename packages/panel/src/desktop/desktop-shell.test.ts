@@ -12,7 +12,6 @@ import {
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   BROWSER_ACT_KIND,
-  FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
@@ -315,7 +314,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Factory, or Settings, and Luke once signed out", () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Automations, or Settings, and Luke once signed out", () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
@@ -347,10 +346,10 @@ test("the window is called by what stands in it: the plan on screen in its own w
   mount(false, false, {
     workspaces: [ACME],
     workspace: ACME,
-    factoryView: { open: true, onOpen: ignore, onClose: ignore },
+    automationsView: { ...tasksControl().automationsView, open: true },
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   });
-  assert.equal(document.title, "Factory — Acme");
+  assert.equal(document.title, "Automations — Acme");
 });
 
 test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
@@ -505,22 +504,6 @@ async function settle(): Promise<void> {
   });
 }
 
-test("Factory's sidebar row and its command stand only while the account has its experiment on", async () => {
-  handState({});
-  const off = mount(false);
-  await settle();
-  assert.equal(placeRow(off, "Factory"), undefined);
-  assert.equal(runAppCommand(APP_COMMAND.FACTORY), false);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState(experimentsOn(EXPERIMENT.FACTORY));
-  const on = mount(false);
-  await settle();
-  assert.ok(placeRow(on, "Factory"));
-  assert.equal(runAppCommand(APP_COMMAND.FACTORY), true);
-});
-
 test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
   handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
   mount(false);
@@ -535,15 +518,14 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
 });
 
-test("a press on Factory's row in a floating sidebar puts the sidebar away, as every row's does", async () => {
-  handState(experimentsOn(EXPERIMENT.FACTORY));
+test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   const told: SidebarCollapse["overlay"][] = [];
   const page = mount(false, false, {}, PANEL_TAB.TASKS, ignore, {
     overlay: SIDEBAR_OVERLAY.OPEN,
     onOverlay: (next) => told.push(next),
   });
   await settle();
-  const row = placeRow(page, "Factory");
+  const row = placeRow(page, "Automations");
   assert.ok(row);
   act(() => row.click());
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
@@ -645,52 +627,6 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.deepEqual(closed, ["closed"]);
 });
 
-test("while Factory's chunk is still loading its frame stands under its title, Escape closes Factory, and the line stands once the chunk lands", async () => {
-  const closed: string[] = [];
-  const factoryView = { open: true, onOpen: ignore, onClose: () => closed.push("closed") };
-  const registry = AtomRegistry.make();
-  handState(experimentsOn(EXPERIMENT.FACTORY));
-  mount(
-    false,
-    false,
-    { workspaces: [ACME], workspace: ACME },
-    PANEL_TAB.TASKS,
-    ignore,
-    {},
-    registry,
-  );
-  await settle();
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  // Note that the window's state has landed in the registry, so Factory opens within one render, before its chunk can.
-  const page = mount(
-    false,
-    false,
-    { workspaces: [ACME], workspace: ACME, factoryView },
-    PANEL_TAB.TASKS,
-    ignore,
-    {},
-    registry,
-  );
-  const loading = page.querySelector("section[aria-label=Factory]");
-  assert.ok(loading, "Factory's frame stands");
-  assert.equal(loading.querySelector("h1")?.textContent, "Factory");
-  assert.equal(loading.querySelector("[role=status]")?.textContent, "Reading tasks…");
-  act(() => {
-    assert.ok(runAppCommand(APP_COMMAND.EXIT_FACTORY), "Factory's way out is offered");
-  });
-  assert.deepEqual(closed, ["closed"]);
-
-  await import("./desktop-factory.js");
-  await settle();
-  assert.equal(
-    page.querySelector("section[aria-label=Factory] [role=status]"),
-    null,
-    "the line stands in the frame's place",
-  );
-});
-
 test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands", async () => {
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
@@ -745,7 +681,6 @@ const PLACE = {
   INBOX: "the Inbox",
   AGENT_PAGE: "an agent's page",
   PERSON_PAGE: "a person's page",
-  FACTORY: "Factory",
   AUTOMATIONS: "the Automations page",
   SIDE_PANEL_FULL_SCREEN: "a side panel filling the window",
   SETTINGS: "Settings",
@@ -761,7 +696,6 @@ const LEFT_COLUMN = {
   [PLACE.INBOX]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.AGENT_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.PERSON_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.FACTORY]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.AUTOMATIONS]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.SIDE_PANEL_FULL_SCREEN]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.SETTINGS]: { selector: 'nav[aria-label="Settings pages"]', folds: false },
@@ -781,7 +715,6 @@ function placed(place: Place) {
     [PLACE.INBOX]: { inboxView: { ...control.inboxView, open: true } },
     [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
     [PLACE.PERSON_PAGE]: { personView: { ...control.personView, userId: "user-charles" } },
-    [PLACE.FACTORY]: { factoryView: { ...control.factoryView, open: true } },
     [PLACE.AUTOMATIONS]: { automationsView: { ...control.automationsView, open: true } },
     [PLACE.SIDE_PANEL_FULL_SCREEN]: {
       ...onTask,
@@ -851,7 +784,6 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...BROWSER_ACT_KIND,
-  ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
@@ -860,19 +792,18 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
 }).filter((kind) => kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN);
 
 /**
- * The bridge as the window meets it, every act written down, with Factory
- * on, and the chunks of Settings and of the pages drawn on demand
+ * The bridge as the window meets it, every act written down, and the chunks
+ * of Settings and of the pages drawn on demand
  * (`pages-on-demand.ts`) already loaded, as each is once it has opened once,
  * so each stands within a settle.
  */
 async function handBridge(): Promise<void> {
   await Promise.all([
     import("./desktop-settings.js"),
-    import("./desktop-factory.js"),
     import("./desktop-version-history.js"),
     import("./person-page.js"),
   ]);
-  handState(experimentsOn(EXPERIMENT.FACTORY));
+  handState({});
   sentActs = [];
   const bridge = appBridge();
   fakeAppBridge({
@@ -880,7 +811,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused.
+    // A read of the account's automations, integrations, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });
@@ -932,7 +863,6 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
     [PLACE.INBOX]: false,
     [PLACE.AGENT_PAGE]: true,
     [PLACE.PERSON_PAGE]: false,
-    [PLACE.FACTORY]: false,
     [PLACE.AUTOMATIONS]: false,
     [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
     [PLACE.SETTINGS]: false,
@@ -968,7 +898,6 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
     [PLACE.AGENT_PAGE]: false,
     [PLACE.PERSON_PAGE]: true,
-    [PLACE.FACTORY]: true,
     [PLACE.AUTOMATIONS]: true,
     // Note that the panel filling the window holds the keys, on its Board, whose canvas no find reads.
     [PLACE.SIDE_PANEL_FULL_SCREEN]: false,

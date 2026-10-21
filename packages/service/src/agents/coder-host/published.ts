@@ -13,7 +13,6 @@ import {
   type CodingAgentPullRequestAnswer,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { type PullRequestArea, pullRequestAreasOf } from "@luke/features/pull-request-area";
 import { Cache, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -27,7 +26,6 @@ import {
   type GitHubPullRequest,
   type PullRequestReadFailure,
   pullRequestByNumber,
-  pullRequestFiles,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
 import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
@@ -54,14 +52,8 @@ import { CODER } from "./bounds.js";
  * pull request's head's checks. Every answer read is written on the
  * agent's row as well, the pull request or none, which is what the task
  * list reads, so the sidebar says what the last read found without asking
- * GitHub itself. The row keeps beside it the head it was read at, when it
- * merged, and its lines by directory, folded from its changed files
- * (`@luke/features/pull-request-area`); the files cost a read of their
- * own, so they are read again only where the pull request, its head,
- * where it stands, or its size moved since the row's, or the row keeps
- * none, and a check's delivery, which moves none of them, reads only the
- * checks; a failed read of them leaves the pull request read and the
- * areas for the next refresh. The answer is kept per
+ * GitHub itself. The row keeps beside it the head it was read at and when
+ * it merged. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
  * a held transcript asks GitHub a few times a minute at most, under a key
  * that says whether the agent had ended, so the first read after a turn
@@ -90,58 +82,6 @@ interface Published {
   readonly merged: boolean;
 }
 
-/**
- * Whether the files the row's areas were folded from may have moved since:
- * another pull request, another head, a move of where it stands, or another
- * size. Note that the size is compared too, because the files are counted
- * against the base, which can move, or be retargeted, under a head that
- * stays.
- */
-function filesMoved(kept: StoredPullRequest, found: GitHubPullRequest): boolean {
-  return (
-    kept.number !== found.number ||
-    kept.headSha !== found.headSha ||
-    kept.state !== found.state ||
-    kept.additions !== found.additions ||
-    kept.deletions !== found.deletions ||
-    kept.changedFiles !== found.changedFiles
-  );
-}
-
-/**
- * The pull request's lines by directory: the row's own where it keeps them
- * and its files cannot have moved, else folded from its files read afresh.
- * Note that the files are read within `pullRequestFiles`' bound, so a pull
- * request past it is placed by the files it reads, while its own size stays
- * GitHub's whole count. A read of the files that failed answers none rather
- * than failing the pull request beside it, and the row then keeps no areas,
- * so the next refresh reads them again.
- */
-function areasOf(
-  token: Redacted.Redacted,
-  agent: WithRepository<CodingAgent>,
-  found: GitHubPullRequest,
-  kept: StoredPullRequest | null,
-): Effect.Effect<readonly PullRequestArea[] | undefined, never, HttpClient.HttpClient> {
-  if (kept?.areas !== undefined && !filesMoved(kept, found)) return Effect.succeed(kept.areas);
-  return pullRequestFiles(token, agent.repository, found).pipe(
-    Effect.map(({ files }) =>
-      pullRequestAreasOf(
-        files.map(({ path, additions, deletions }) => ({ path, additions, deletions })),
-      ),
-    ),
-    // The kind alone: nothing of the repository or the token rides the line.
-    Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning("a pull request's files could not be read; its areas wait", {
-          failure: failure._tag,
-        }),
-        undefined,
-      ),
-    ),
-  );
-}
-
 /** The wire's pull request from GitHub's, with its head's checks as read. */
 function wirePullRequestOf(
   found: GitHubPullRequest,
@@ -159,35 +99,26 @@ function wirePullRequestOf(
   };
 }
 
-/** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its areas beside that. */
+/** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its head and when it merged beside that. */
 function withChecks(
   token: Redacted.Redacted,
   agent: WithRepository<CodingAgent>,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
-  return Effect.map(
-    Effect.all(
-      [checkSummaryOf(token, agent.repository, found.headSha), areasOf(token, agent, found, kept)],
-      {
-        concurrency: "unbounded",
-      },
-    ),
-    ([checks, areas]) => {
-      const pullRequest = wirePullRequestOf(found, checks);
-      const stored: StoredPullRequest = {
-        ...pullRequest,
-        headSha: found.headSha,
-        ...(found.mergedAt === undefined ? undefined : { mergedAt: found.mergedAt }),
-        ...(areas === undefined ? undefined : { areas }),
-      };
-      return {
-        answer: { repository: agent.repository, branch: found.headRef, pullRequest },
-        stored,
-        merged: firstSeenMerged(found, kept),
-      };
-    },
-  );
+  return Effect.map(checkSummaryOf(token, agent.repository, found.headSha), (checks) => {
+    const pullRequest = wirePullRequestOf(found, checks);
+    const stored: StoredPullRequest = {
+      ...pullRequest,
+      headSha: found.headSha,
+      ...(found.mergedAt === undefined ? undefined : { mergedAt: found.mergedAt }),
+    };
+    return {
+      answer: { repository: agent.repository, branch: found.headRef, pullRequest },
+      stored,
+      merged: firstSeenMerged(found, kept),
+    };
+  });
 }
 
 /** Whether the read is the first to find the pull request merged: GitHub says so, and the row kept it unmerged, or kept none. */

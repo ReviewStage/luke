@@ -49,23 +49,23 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       const userId = yield* openAccount;
 
       const turnedOn = yield* writeAccountPreferences(userId, {
-        experiments: { [EXPERIMENT.FACTORY]: true },
+        experiments: { [EXPERIMENT.CODE_REVIEW]: true },
       });
-      assert.deepEqual(turnedOn.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(turnedOn.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
 
       // An empty patch asks nothing of what stood.
       const untouched = yield* writeAccountPreferences(userId, { experiments: {} });
-      assert.deepEqual(untouched.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(untouched.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
 
       yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
       const afterVoice = yield* readAccountPreferences(userId);
-      assert.deepEqual(afterVoice?.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(afterVoice?.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
       assert.deepEqual(afterVoice?.preferences, { voice: "cedar" });
 
       const turnedOff = yield* writeAccountPreferences(userId, {
-        experiments: { [EXPERIMENT.FACTORY]: false },
+        experiments: { [EXPERIMENT.CODE_REVIEW]: false },
       });
-      assert.deepEqual(turnedOff.experiments, { [EXPERIMENT.FACTORY]: false });
+      assert.deepEqual(turnedOff.experiments, { [EXPERIMENT.CODE_REVIEW]: false });
       assert.deepEqual(turnedOff.preferences, { voice: "cedar" });
     }),
   );
@@ -73,18 +73,18 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
   it.effect("a stored key no build lists any more reads as nothing, and the rest still reads", () =>
     Effect.gen(function* () {
       const userId = yield* openAccount;
-      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
       const db = yield* Database;
       yield* db
         .update(accountPreference)
         // A key written by a build that listed an experiment this one no longer does.
         .set({
-          experiments: sql`${JSON.stringify({ [EXPERIMENT.FACTORY]: true, graduated: true })}::jsonb`,
+          experiments: sql`${JSON.stringify({ [EXPERIMENT.CODE_REVIEW]: true, graduated: true })}::jsonb`,
         })
         .where(eq(accountPreference.userId, userId));
 
       const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(read?.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
     }),
   );
 
@@ -92,7 +92,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     Effect.gen(function* () {
       const userId = yield* openAccount;
       const written = yield* writeAccountPreferences(userId, {
-        experiments: { [EXPERIMENT.FACTORY]: true },
+        experiments: { [EXPERIMENT.CODE_REVIEW]: true },
       });
       assert.equal(written.updatedAt, undefined);
       assert.deepEqual(written.preferences, {});
@@ -105,7 +105,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       Effect.gen(function* () {
         const userId = yield* openAccount;
         assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
         assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
         assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), true);
@@ -119,7 +119,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     Effect.gen(function* () {
       const userId = yield* openAccount;
       assert.equal(yield* chatEnabledFor(userId), false);
-      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
       assert.equal(yield* chatEnabledFor(userId), false);
       yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
       assert.equal(yield* chatEnabledFor(userId), true);
@@ -130,12 +130,12 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const other = yield* openAccount;
-      yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.FACTORY]: true } });
+      yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
       yield* writeAccountPreferences(other, { preferences: { voice: "cedar" } });
 
       assert.deepEqual((yield* readAccountPreferences(other))?.experiments, {});
       assert.deepEqual((yield* readAccountPreferences(owner))?.experiments, {
-        [EXPERIMENT.FACTORY]: true,
+        [EXPERIMENT.CODE_REVIEW]: true,
       });
     }),
   );
@@ -170,7 +170,7 @@ it.layer(getTestDB())("the account store's chapters model", (it) => {
         assert.equal(chosen.updatedAt, undefined);
 
         yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
         assert.equal((yield* readAccountPreferences(userId))?.chaptersModel, CHAPTERS_MODEL.OPUS);
 
         const other = yield* openAccount;

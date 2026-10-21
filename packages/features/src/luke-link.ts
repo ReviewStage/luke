@@ -33,7 +33,7 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *   `/agent/<agentId>/inbox/<itemId>`, since the Inbox is read by its holders;
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
- * - Factory, `/factory`, and a page of Settings, `/settings[/<page>]`;
+ * - a page of Settings, `/settings[/<page>]`;
  * - Chat, `/chat`, and one of its channels, `/chat/<channelId>`, a topic,
  *   a task's channel, or a direct message alike;
  * - a person's page in the workspace, `/person/<userId>`, a member or
@@ -45,7 +45,8 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *   `/admin/day/<YYYY-MM-DD>`.
  *
  * An issue's page, `/issue/<issueId>`, is no place now that Luke keeps no
- * issues of its own, so an old link to one reads as a link it does not know.
+ * issues of its own, and Factory's, `/factory`, none now that Factory is
+ * gone, so an old link to either reads as a link it does not know.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
  * is read as its task, and a picture in an Inbox item's words, the item's
@@ -81,7 +82,6 @@ export const LINK_PLACE = {
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   AUTOMATION_RUN: "automation-run",
-  FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
   /** Chat, on For you, or on one of its channels by the id the service mints it. */
@@ -130,7 +130,6 @@ const STEP = {
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   RUN: "run",
-  FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
   CHAT: "chat",
@@ -256,7 +255,6 @@ const linkPlaceSchema = EffectSchema.Union([
     automationId: idSchema,
     runId: idSchema,
   }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.FACTORY) }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.PERSON), userId: idSchema }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.CHAT),
@@ -419,8 +417,6 @@ function placeFields(steps: readonly string[]) {
       return rest.length === 2 && rest[0] === STEP.RUN
         ? { kind: LINK_PLACE.AUTOMATION_RUN, automationId: id, runId: rest[1] }
         : undefined;
-    case STEP.FACTORY:
-      return id === undefined ? { kind: LINK_PLACE.FACTORY } : undefined;
     case STEP.PERSON:
       return id === undefined || rest.length > 0
         ? undefined
@@ -520,8 +516,6 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.AUTOMATION, place.automationId];
     case LINK_PLACE.AUTOMATION_RUN:
       return [STEP.AUTOMATION, place.automationId, STEP.RUN, place.runId];
-    case LINK_PLACE.FACTORY:
-      return [STEP.FACTORY];
     case LINK_PLACE.PERSON:
       return [STEP.PERSON, place.userId];
     case LINK_PLACE.SETTINGS:

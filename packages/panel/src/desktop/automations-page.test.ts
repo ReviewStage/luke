@@ -291,7 +291,7 @@ beforeEach(() => {
   runHeld = false;
   runRefusal = undefined;
   agentsOpened = [];
-  factoryOpens = [];
+  boardOpens = [];
   defaultRefused = false;
   catalogReads = 0;
   changeRefusal = undefined;
@@ -771,11 +771,11 @@ test("with no workspace listed the list and a linked automation stand as quiet b
 /** The workspace the account made first, its personal one, where everything is its own. */
 const PERSONAL: Workspace = { ...WORKSPACE, id: "workspace-personal", name: "Ada" };
 
-/** Each time Factory was opened past the page, as the sidebar's row opens it. */
-let factoryOpens: number[] = [];
+/** Each time the Board was opened past the page, as the sidebar's Tasks row opens it. */
+let boardOpens: number[] = [];
 
-/** Opens Factory as the sidebar's row would, through the window's guarded door. */
-let openFactory: () => void = () => undefined;
+/** Opens the Board as the sidebar's Tasks row would, through the window's guarded door. */
+let openBoard: () => void = () => undefined;
 
 /** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
@@ -812,9 +812,9 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         onOpen: leaveGuard.guard((agentId: string) => agentsOpened.push(agentId)),
         onClose: () => undefined,
       },
-      factoryView: {
+      boardView: {
         open: false,
-        onOpen: leaveGuard.guard(() => factoryOpens.push(1)),
+        onOpen: leaveGuard.guard(() => boardOpens.push(1)),
         onClose: () => undefined,
       },
       workspace: listed,
@@ -831,7 +831,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
       },
     });
     const base = tasks.newTask;
-    openFactory = tasks.factoryView.onOpen;
+    openBoard = tasks.boardView.onOpen;
     return createElement(AutomationsPage, {
       tasks: {
         ...tasks,
@@ -1193,11 +1193,11 @@ test("a new automation with something written asks before any way out leaves it,
   act(() => button("Cancel").click());
   await settle();
 
-  act(() => openFactory());
-  assert.deepEqual(factoryOpens, [], "the sidebar's row waits on the question too");
+  act(() => openBoard());
+  assert.deepEqual(boardOpens, [], "the sidebar's row waits on the question too");
   act(() => button("Leave").click());
   await settle();
-  assert.deepEqual(factoryOpens, [1]);
+  assert.deepEqual(boardOpens, [1]);
 });
 
 test("the shell hears the page's ask only while an edit is unsaved, and asking through it waits on the page's question", async () => {

@@ -937,7 +937,7 @@ test("the first item chosen and the next one reach the reader's own unread updat
   assert.equal(inboxSteps(steps, "mine-followed", () => false)?.previous, undefined);
 });
 
-test("what waits, as Home, Factory, and a person's page list it, is every open item, whoever's, a finished task's among them, the latest first, never a settled one however unread", () => {
+test("what waits, as Home and a person's page list it, is every open item, whoever's, a finished task's among them, the latest first, never a settled one however unread", () => {
   const done = {
     holder: taskHolder({ ...INVITES, id: "done", status: TASK_STATUS.DONE }),
     items: [item({ id: "done-open", updatedAt: 90 })],

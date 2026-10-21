@@ -6,7 +6,7 @@ import { useOpenFeedback } from "./open-feedback.js";
 /**
  * experiment-marks.tsx -- what an experiment's page wears in its toolbar: the Experimental tag after its title, and Send feedback among its actions.
  *
- * Factory, Automations, and an automation's page each say they are an
+ * Automations and an automation's page each say they are an
  * experiment the same way, so the two are drawn here once. The tag reads as
  * a devtool's Beta label rather than a badge that asks for a look: small,
  * neutral, hairlined, and sitting on the title's baseline (`.experiment-tag`

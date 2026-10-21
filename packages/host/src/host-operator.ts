@@ -146,12 +146,6 @@ import {
   planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
-import {
-  FACTORY_WORLD_CALL_FAILURE,
-  type FactoryWorldParams,
-  type FactoryWorldView,
-  factoryWorldViewSchema,
-} from "@luke/features/factory-world-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INTEGRATION_CALL_FAILURE,
@@ -698,8 +692,6 @@ export interface HostOperator {
   automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
   /** A followed list or history as it now stands, each time it moves while followed. */
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
-  /** One workspace's Factory world as it stands now, null where it has no repository to draw; or why there is none. */
-  factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
     params: CodingAgentPullRequestReadParams,
@@ -1001,9 +993,6 @@ const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as
 
 /** A call on a task's linked issues that reached no answer. */
 const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
-
-/** A world call that reached no answer. */
-const FACTORY_WORLD_UNANSWERED = { failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED } as const;
 
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
@@ -2041,16 +2030,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             readEither(automationFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
-      ),
-    factoryWorld: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.FACTORY_WORLD, { workspaceId: params.workspaceId }),
-        (answer) =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(factoryWorldViewSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? FACTORY_WORLD_UNANSWERED,
       ),
     codingAgentPullRequest: (params) =>
       Effect.map(

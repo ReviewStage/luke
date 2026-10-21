@@ -74,7 +74,6 @@
  */
 
 import { linkOf, type ReadLink } from "@luke/features/luke-link";
-import { EXPERIMENT } from "@luke/settings";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { CHAT_PLACE, type ChatPlace } from "@luke/ui/chat-model";
 import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
@@ -103,7 +102,7 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
-import { useAdminAccess, useAdminAccessPending, useExperiment } from "./use-app-state.js";
+import { useAdminAccess, useAdminAccessPending } from "./use-app-state.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {
@@ -119,7 +118,6 @@ const PLACE_KIND = {
   INBOX: "inbox",
   AGENT: "agent",
   PERSON: "person",
-  FACTORY: "factory",
   AUTOMATIONS: "automations",
   CHAT: "chat",
   BOARD: "board",
@@ -173,7 +171,6 @@ type Place =
       /** The workspace the page was the person's in, which it is no place of another's. */
       readonly workspaceId: string | undefined;
     }
-  | { readonly kind: typeof PLACE_KIND.FACTORY }
   | {
       readonly kind: typeof PLACE_KIND.AUTOMATIONS;
       readonly page: AutomationsPlace;
@@ -315,7 +312,7 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Board, or Settings on any page. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, Chat in the same workspace, the same workspace's Board, or Settings on any page. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ADMIN && other.kind === PLACE_KIND.ADMIN) {
@@ -978,7 +975,6 @@ export function useWindowHistory(input: {
     | "agentView"
     | "personView"
     | "workspace"
-    | "factoryView"
     | "automationsView"
     | "chatView"
     | "boardView"
@@ -1032,8 +1028,6 @@ export function useWindowHistory(input: {
   const pagePerson = tasks.personView.userId;
   const personName = tasks.personView.name;
   const listedWorkspace = tasks.workspace?.id;
-  const factoryOpen = tasks.factoryView.open;
-  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOpen = tasks.automationsView.open;
   const automationsPage = tasks.automationsView.place;
   // A narrow room stands an automation's runs alone over its setup, as a step of their own.
@@ -1085,7 +1079,6 @@ export function useWindowHistory(input: {
         workspaceId: listedWorkspace,
       };
     }
-    if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
     if (automationsOpen) {
       return {
         kind: PLACE_KIND.AUTOMATIONS,
@@ -1136,7 +1129,6 @@ export function useWindowHistory(input: {
     pagePerson,
     personName,
     listedWorkspace,
-    factoryOpen,
     automationsOpen,
     automationsPage,
     automationRuns,
@@ -1161,8 +1153,6 @@ export function useWindowHistory(input: {
     return stands(to.column, strips.column) && stands(to.side, strips.side);
   };
   const reachable = (to: Place) => {
-    // Factory is an experiment, so back and forward pass over it while it is off.
-    if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
     // The Admin place is an admin's alone, so back and forward pass over it for an account that is no admin.
     if (to.kind === PLACE_KIND.ADMIN) return adminAccess;
     // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed, and once it is deleted.
@@ -1209,10 +1199,6 @@ export function useWindowHistory(input: {
       tasks.personView.onOpen(to.userId, to.name);
       return;
     }
-    if (to.kind === PLACE_KIND.FACTORY) {
-      tasks.factoryView.onOpen();
-      return;
-    }
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
       // A narrow room's step within the automation standing moves between its setup and its runs, rather than opening it again;
       // one that also marks another run of the same automation, as a run's link does, opens it on that run past the ask,
@@ -1254,11 +1240,10 @@ export function useWindowHistory(input: {
       if (to.listed === true) tasks.adminView.onList();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, Chat, and the Board stand over.
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, the Admin place, the Automations page, Chat, and the Board stand over.
     if (inboxOpen) tasks.inboxView.onClose();
     if (pageAgent !== undefined) tasks.agentView.onClose();
     if (pagePerson !== undefined) tasks.personView.onClose();
-    if (factoryOpen) tasks.factoryView.onClose();
     if (automationsOpen) tasks.automationsView.onClose();
     if (chatOpen) tasks.chatView.onClose();
     if (boardOpen) tasks.boardView.onClose();

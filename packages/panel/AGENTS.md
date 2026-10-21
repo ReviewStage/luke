@@ -5,8 +5,8 @@ mounts `App` from here, and the web will mount the same. It may draw with the
 DOM (`packages/AGENTS.md`), and it reaches no shell: no Electron, no
 `window.luke`, and no alias of the desktop's. What only a shell can do, its root installs before anything is
 drawn: the bridge to the host (`app-bridge.ts`), what its platform answers
-(`app-platform.ts`), and the bundles only it can reach (`shell-bundles.ts`;
-the Factory's scene through `SideBundlesContext`). The panel reads each through
+(`app-platform.ts`), and the bundles only it can reach (`shell-bundles.ts`,
+a call's avatar session). The panel reads each through
 its door, at the moment it calls.
 
 `repository-checks.sh` already fails the build on a `#main/` or `node:` import

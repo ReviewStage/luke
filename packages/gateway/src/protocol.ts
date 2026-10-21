@@ -239,8 +239,6 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_FOLLOW: "automations.follow",
   /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
   AUTOMATIONS_UNFOLLOW: "automations.unfollow",
-  /** A workspace's Factory world, read whole as it stands now. */
-  FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
