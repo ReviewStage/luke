@@ -390,6 +390,37 @@ export const TASK_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
+/**
+ * Who wrote a revision of a plan: the developer, the notetaker on a call
+ * (whom the developer knows as Luke), a coding agent, or, for the one
+ * revision a plan from before history starts with, nobody the service can
+ * name.
+ */
+export const PLAN_ACTOR = {
+  DEVELOPER: "developer",
+  NOTETAKER: "notetaker",
+  AGENT: "agent",
+  EARLIER: "earlier",
+} as const;
+
+export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
+
+/** Who made a task: its member by hand, Luke on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
+export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
+
+/**
+ * Who made a task where its member did not make it by hand: Luke on their
+ * call, or a coding agent acting for them, by the agent's id while its row
+ * stands, which the window reads its title, harness, automation, and task
+ * from among the agents it already lists.
+ */
+const taskOriginSchema = EffectSchema.Struct({
+  actor: EffectSchema.Literals([PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+});
+
+export type TaskOrigin = typeof taskOriginSchema.Type;
+
 const taskSummaryFields = {
   id: wireUuidSchema,
   /** The workspace the task belongs to. */
@@ -426,6 +457,12 @@ const taskSummaryFields = {
    * service before it was sent.
    */
   createdBy: EffectSchema.optionalKey(memberRefSchema),
+  /**
+   * Who made the task for `createdBy`, where they did not make it by hand:
+   * Luke on their call, or a coding agent; absent for a task its member made
+   * by hand, and from a service before it was sent.
+   */
+  origin: EffectSchema.optionalKey(taskOriginSchema),
   /** Where the task stands; absent from a service before tasks had one. */
   status: EffectSchema.optionalKey(taskStatusSchema),
   /**
@@ -555,21 +592,6 @@ const agentEditLineSchema = EffectSchema.Struct({
   /** Epoch milliseconds of the save. */
   at: countedNumber,
 });
-
-/**
- * Who wrote a revision of a plan: the developer, the notetaker on a call
- * (whom the developer knows as Luke), a coding agent, or, for the one
- * revision a plan from before history starts with, nobody the service can
- * name.
- */
-export const PLAN_ACTOR = {
-  DEVELOPER: "developer",
-  NOTETAKER: "notetaker",
-  AGENT: "agent",
-  EARLIER: "earlier",
-} as const;
-
-export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
 
 /**
  * The member a revision names: the developer whose edit or restore it is, or
