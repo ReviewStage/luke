@@ -321,11 +321,11 @@ function HistoryButton({
           onClick={onPress}
           onContextMenu={(event) => {
             event.preventDefault();
-            // Note that a hold that opened the list already is not opened twice, and Android's
+            // Note that a list standing, as a hold opened it, is not opened twice, and Android's
             // own contextmenu, which may come before the hold's timer, spends the hold, so the
             // finger's lift takes no step as well.
-            if (hold.held.current) return;
             if (hold.counting()) hold.claim();
+            if (menu.open !== undefined) return;
             openList();
           }}
         />

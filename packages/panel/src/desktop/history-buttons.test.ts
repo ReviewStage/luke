@@ -210,3 +210,34 @@ test("a touch held on Back opens its list and no hint over it, and Android's own
   assert.equal(end.defaultPrevented, true, "the lift makes no click of its own");
   assert.deepEqual(window.pressed, []);
 });
+
+test("after a mouse hold let go away from Back and its list shut, the keyboard's context-menu key opens the list again", () => {
+  vi.useFakeTimers();
+  const window = mount(BACK);
+  act(() => {
+    window.back.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        pointerType: "mouse",
+        isPrimary: true,
+      }),
+    );
+  });
+  act(() => vi.advanceTimersByTime(1000));
+  act(() => {
+    document.body.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  });
+  const menu = document.querySelector<HTMLElement>('[role="menu"]');
+  assert.ok(menu);
+  act(() => {
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  act(() => vi.advanceTimersByTime(1000));
+  assert.equal(document.querySelector('[role="menu"]'), null, "Escape shut the list");
+
+  act(() => {
+    window.back.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  assert.ok(document.querySelector('[role="menu"]'), "the context-menu key opens it again");
+});
