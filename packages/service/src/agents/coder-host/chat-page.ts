@@ -68,7 +68,6 @@ function memberOnWire(
   return {
     id: row.id,
     kind: row.kind,
-    handle: row.handle,
     ...(name === undefined ? undefined : { name }),
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),

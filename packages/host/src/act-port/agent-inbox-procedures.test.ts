@@ -54,7 +54,7 @@ const PICTURE_ID = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
 const CHAT = {
   self: MEMBER_ID,
   readSeq: 0,
-  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, handle: "ada", left: false }],
+  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, name: "Ada", left: false }],
   channels: [],
   messages: [],
   cursor: "1",

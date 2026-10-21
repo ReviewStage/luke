@@ -756,7 +756,6 @@ export type WorkspaceChatLiveAnswer = typeof workspaceChatLiveAnswerSchema.Type;
 const chatMemberLiveRowSchema = EffectSchema.Struct({
   id: chatMemberSchema.fields.id,
   kind: chatMemberSchema.fields.kind,
-  handle: EffectSchema.String,
   name: EffectSchema.NullOr(EffectSchema.String),
   left: chatMemberSchema.fields.left,
   userId: EffectSchema.NullOr(EffectSchema.String),
@@ -825,7 +824,6 @@ function chatMemberOfLiveRow(row: typeof chatMemberLiveRowSchema.Type): ChatMemb
   return {
     id: row.id,
     kind: row.kind,
-    handle: row.handle,
     ...(row.name === null ? undefined : { name: row.name }),
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),

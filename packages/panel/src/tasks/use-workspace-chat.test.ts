@@ -63,8 +63,8 @@ function answered(messages: readonly ChatMessage[], cursor: string, readSeq = 0)
     self: ME,
     readSeq,
     members: [
-      { id: ME, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false },
-      { id: AGENT, kind: MEMBER_KIND.AGENT, handle: "agent-2", left: false },
+      { id: ME, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false },
+      { id: AGENT, kind: MEMBER_KIND.AGENT, name: "Invite emails", left: false },
     ],
     channels: [{ id: CHANNEL, kind: CHANNEL_KIND.TASK, name: "invites", archived: false }],
     messages,

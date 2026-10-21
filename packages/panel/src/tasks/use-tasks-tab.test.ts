@@ -2756,7 +2756,7 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
   const answer = {
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: [
       { id: channelId, kind: CHANNEL_KIND.TASK, name: "invites", archived: false, planId: TASK.id },
     ],
@@ -2806,7 +2806,7 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   const answerAt = (seq: number) => ({
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: [{ id: channelId, kind: CHANNEL_KIND.GENERAL, name: "general", archived: false }],
     messages: [
       {
@@ -2873,7 +2873,7 @@ test("a channel link the chat held before it was opened does not hold stands unt
   const answerOf = (cursor: number, ids: readonly string[]) => ({
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: ids.map((id) => ({ id, kind: CHANNEL_KIND.TOPIC, name: id, archived: false })),
     messages: [],
     cursor: String(cursor),

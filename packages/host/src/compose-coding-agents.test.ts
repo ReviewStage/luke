@@ -80,7 +80,7 @@ const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
 const CHAT = {
   self: MEMBER_ID,
   readSeq: 0,
-  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, handle: "ada", left: false }],
+  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, name: "Ada", left: false }],
   channels: [],
   messages: [],
   cursor: "1",

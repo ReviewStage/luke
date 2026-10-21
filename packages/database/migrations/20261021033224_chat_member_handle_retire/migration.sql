@@ -1,0 +1,1 @@
+ALTER TABLE "chat_member" ALTER COLUMN "handle" SET DEFAULT gen_random_uuid();

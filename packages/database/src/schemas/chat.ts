@@ -33,12 +33,9 @@ const literal = (value: string) => sql.raw(`'${value}'`);
  * chat.ts -- a workspace's chat: its members and its channels.
  *
  * A member is one person, coding agent, or plan's planner of a workspace,
- * minted once and kept: its handle is written as it joins and never moves,
- * so a message names its author the same way for life. A person's handle is
- * a slug of their name, an agent's `agent-N` by its ordinal among the
- * workspace's agents, and every planner's `luke`, which is why the handle is
- * unique among the workspace's people and agents alone and a planner is told
- * apart by its plan. Exactly one of the three ids stands, by kind: a person
+ * minted once and kept, and named by what it stands for: a person by their
+ * account, an agent by its coding agent, and a planner by its plan, each
+ * written as the app's mention link of it. Exactly one of the three ids stands, by kind: a person
  * goes with their account, while an agent or a plan deleted leaves its
  * member standing with no id, so the messages it wrote still name it.
  * `read_seq` is how far through the workspace's chat sequence the member
@@ -89,8 +86,13 @@ export const chatMember = pgTable(
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
     /** The task, on its Luke's member; null once the task is deleted. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
-    /** The member's handle, without its `@`, minted once. */
-    handle: text("handle").notNull(),
+    /**
+     * Retired: nothing reads or writes a member's handle, since members are
+     * named by their mention links. A new row takes a random default, so a
+     * deployment from before the retirement still reads a string and the
+     * unique index below still holds; a later contract migration drops it.
+     */
+    handle: text("handle").notNull().default(sql`gen_random_uuid()::text`),
     /** The member's place among its workspace's members of its kind, from one: an agent's `N`. */
     ordinal: integer("ordinal").notNull(),
     /** How far through the workspace's chat sequence the member has read in every channel. */
@@ -106,7 +108,7 @@ export const chatMember = pgTable(
     leftAt: timestamptz("left_at"),
   },
   (table) => [
-    // A handle names one person or agent of the workspace; every planner is `luke`.
+    // Retired with the handle, and dropped with it.
     uniqueIndex("chat_member_organization_handle")
       .on(table.organizationId, table.handle)
       .where(sql`${table.kind} <> ${literal(MEMBER_KIND.LUKE)}`),

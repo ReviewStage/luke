@@ -454,7 +454,7 @@ it.effect(
         self,
         readSeq: 0,
         members: [
-          { id: self, kind: MEMBER_KIND.HUMAN, handle: "ada", userId: "user-1", left: false },
+          { id: self, kind: MEMBER_KIND.HUMAN, name: "Ada", userId: "user-1", left: false },
         ],
         channels: [],
         messages: [],
