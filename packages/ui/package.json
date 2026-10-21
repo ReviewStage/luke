@@ -58,6 +58,7 @@
     "./chat-model": "./src/chat-model.js",
     "./factory-world": "./src/factory-world/factory-world.js",
     "./factory-campus": "./src/factory-world/campus.js",
+    "./markdown-document": "./src/markdown-document.js",
     "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",
@@ -74,6 +75,11 @@
     "@luke/wire": "workspace:*",
     "clsx": "2.1.1",
     "effect": "catalog:",
+    "hast-util-to-html": "9.0.5",
+    "mdast-util-from-markdown": "2.0.3",
+    "mdast-util-gfm": "3.1.0",
+    "mdast-util-to-hast": "13.2.1",
+    "micromark-extension-gfm": "3.0.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "recharts": "3.8.0",
@@ -81,6 +87,8 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@types/hast": "3.0.5",
+    "@types/mdast": "4.0.4",
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",

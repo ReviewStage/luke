@@ -11,7 +11,9 @@
  * served at, so both render the same view.
  */
 
-import { Marked, type Token, type Tokens } from "marked";
+import { markdownHtml, markdownText, parseMarkdown } from "@luke/ui/markdown-document";
+import type { Element } from "hast";
+import type { Root } from "mdast";
 import { REPOSITORY_URL } from "./SiteChrome";
 
 export const CHANGELOG_PATH = "/changelog";
@@ -46,9 +48,6 @@ const RELEASE_PATH = /^\/changelog\/(\d+\.\d+\.\d+)$/;
 const PAGE_PATH = /^\/changelog\/page\/(\d+)$/;
 const PUBLIC_PREFIX = "apps/web/public";
 
-const escapeAttribute = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
-
 /* Screenshots are written repository-relative in the markdown so GitHub
    renders them too; here the public prefix comes off, because Vite serves
    that directory at the root. */
@@ -62,26 +61,21 @@ const RELATIVE_LINK = /^(?![a-z][a-z0-9+.-]*:|\/|#)/i;
 const repositoryFile = (href: string) =>
   RELATIVE_LINK.test(href) ? `${REPOSITORY_URL}/blob/main/${href}` : href;
 
-const changelogMarked = new Marked({
-  walkTokens: (token) => {
-    if (token.type === "image") token.href = servedPath(token.href);
-    if (token.type === "link") token.href = repositoryFile(token.href);
-  },
-  /* A screenshot drawn at the column's measure is a preview of the full
-     capture, so it links out to the file itself, the same way GitHub wraps a
-     rendered markdown image. Lazy, because every release adds images above
-     the ones already here. */
-  renderer: {
-    image({ href, title, text }) {
-      const source = escapeAttribute(href);
-      const titleAttribute = title ? ` title="${escapeAttribute(title)}"` : "";
-      return (
-        `<a href="${source}" target="_blank" rel="noreferrer">` +
-        `<img src="${source}" alt="${escapeAttribute(text)}"${titleAttribute} loading="lazy"></a>`
-      );
-    },
-  },
-});
+/** Rewrite resolved links and make each screenshot a lazy, full-size image link. */
+function changelogElement(node: Element): void {
+  if (node.tagName === "a" && typeof node.properties.href === "string") {
+    node.properties.href = repositoryFile(node.properties.href);
+  }
+  if (node.tagName !== "img") return;
+  const src = servedPath(String(node.properties.src ?? ""));
+  const image: Element = {
+    ...node,
+    properties: { ...node.properties, src, loading: "lazy" },
+  };
+  node.tagName = "a";
+  node.properties = { href: src, target: "_blank", rel: ["noreferrer"] };
+  node.children = [image];
+}
 
 interface ReleaseImage {
   /** The image's address on the site, from its root. */
@@ -133,22 +127,6 @@ export interface ChangelogRoute {
   readonly head: PageHead;
 }
 
-/** The plain words of a run of inline tokens: links, emphasis, and code read as their text. */
-function plainText(tokens: readonly Token[] | undefined): string {
-  if (tokens === undefined) return "";
-  return tokens
-    .map((token) => {
-      if (token.type === "image") return "";
-      if (token.type === "codespan" || token.type === "escape") return token.text;
-      if (token.type === "br") return " ";
-      if ("tokens" in token && Array.isArray(token.tokens)) return plainText(token.tokens);
-      return token.raw;
-    })
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 /** A description cut at a word before the limit, with an ellipsis, or whole when it fits. */
 function shortened(text: string): string {
   if (text.length <= DESCRIPTION_LIMIT) return text;
@@ -156,28 +134,20 @@ function shortened(text: string): string {
   return `${cut.slice(0, cut.lastIndexOf(" "))}…`;
 }
 
-/** The headline, summary, and first screenshot a release's notes open on. */
-function releaseHighlights(body: string): Pick<Release, "headline" | "summary" | "image"> {
-  const tokens = changelogMarked.lexer(body);
-  const heading = tokens.find(
-    (token): token is Tokens.Heading => token.type === "heading" && token.depth === 3,
+/** The headline and summary a release's notes open on. */
+function releaseHighlights(document: Root): Pick<Release, "headline" | "summary"> {
+  const heading = document.children.find((node) => node.type === "heading" && node.depth === 3);
+  const title = heading ? markdownText(heading) : undefined;
+  const headline = title !== undefined && !STANDING_SECTIONS.has(title) ? title : undefined;
+  const paragraph = document.children.find(
+    (node) =>
+      node.type === "paragraph" &&
+      !node.children.every((child) => child.type === "image" || child.type === "imageReference"),
   );
-  const headline =
-    heading !== undefined && !STANDING_SECTIONS.has(heading.text) ? heading.text : undefined;
-  const paragraph = tokens.find(
-    (token): token is Tokens.Paragraph =>
-      token.type === "paragraph" &&
-      !(token.tokens ?? []).every((inline) => inline.type === "image"),
-  );
-  const list = tokens.find((token): token is Tokens.List => token.type === "list");
-  const summary = plainText(paragraph?.tokens ?? list?.items[0]?.tokens);
-  let image: ReleaseImage | undefined;
-  changelogMarked.walkTokens(tokens, (token) => {
-    if (image === undefined && token.type === "image") {
-      image = { src: servedPath(token.href), alt: token.text };
-    }
-  });
-  return { headline, summary, image };
+  const list = document.children.find((node) => node.type === "list");
+  const opening = paragraph ?? list?.children[0];
+  const summary = opening ? markdownText(opening).replace(/\s+/g, " ").trim() : "";
+  return { headline, summary };
 }
 
 /** Every release in CHANGELOG.md, newest first, as the file lists them. */
@@ -193,13 +163,18 @@ export function parseReleases(markdown: string): readonly Release[] {
       throw new Error(`CHANGELOG.md release heading must be "## <version> — <date>": ${heading}`);
     }
     const body = headingEnd === -1 ? "" : section.slice(headingEnd + 1);
-    return {
-      version,
-      date,
-      // SAFETY: `async: false` makes marked.parse synchronous; the return is a string, not a Promise.
-      html: changelogMarked.parse(body, { async: false }) as string,
-      ...releaseHighlights(body),
-    };
+    const document = parseMarkdown(body);
+    const media: { image: ReleaseImage | undefined } = { image: undefined };
+    const html = markdownHtml(document, (node) => {
+      if (media.image === undefined && node.tagName === "img") {
+        media.image = {
+          src: servedPath(String(node.properties.src ?? "")),
+          alt: String(node.properties.alt ?? ""),
+        };
+      }
+      changelogElement(node);
+    });
+    return { version, date, html, ...releaseHighlights(document), image: media.image };
   });
 }
 

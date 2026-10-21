@@ -526,9 +526,6 @@ importers:
       lucide-react:
         specifier: 1.53.0
         version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
-      marked:
-        specifier: 18.0.9
-        version: 18.0.9
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -572,6 +569,12 @@ importers:
       '@sentry/vite-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
+      '@types/hast':
+        specifier: 3.0.5
+        version: 3.0.5
+      '@types/mdast':
+        specifier: 4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -1294,6 +1297,21 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
+      hast-util-to-html:
+        specifier: 9.0.5
+        version: 9.0.5
+      mdast-util-from-markdown:
+        specifier: 2.0.3
+        version: 2.0.3
+      mdast-util-gfm:
+        specifier: 3.1.0
+        version: 3.1.0
+      mdast-util-to-hast:
+        specifier: 13.2.1
+        version: 13.2.1
+      micromark-extension-gfm:
+        specifier: 3.0.0
+        version: 3.0.0
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -1310,6 +1328,12 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
+      '@types/hast':
+        specifier: 3.0.5
+        version: 3.0.5
+      '@types/mdast':
+        specifier: 4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -6964,11 +6988,6 @@ packages:
 
   marked@17.0.6:
     resolution: {integrity: sha512-gB0gkNafnonOw0obSTEGZTT86IuhILt2Wfx0mWH/1Au83kybTayroZ/V6nS25mN7u8ASy+5fMhgB3XPNrOZdmA==}
-    engines: {node: '>= 20'}
-    hasBin: true
-
-  marked@18.0.9:
-    resolution: {integrity: sha512-/Sa4qiiHZxf0/FQdBBowr9q4r10krCwMvpK48FUBdXdUXScDxiQGR9zCPrFgRVR5LU3iySOiIjy09ZQvADir1w==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -13620,8 +13639,6 @@ snapshots:
   marked@16.4.2: {}
 
   marked@17.0.6: {}
-
-  marked@18.0.9: {}
 
   marked@18.1.0: {}
 

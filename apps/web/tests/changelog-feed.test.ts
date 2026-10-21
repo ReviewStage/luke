@@ -62,7 +62,8 @@ test("an item carries the release's whole notes, its screenshots and links at th
     description,
     /href="https:\/\/github\.com\/ReviewStage\/luke\/blob\/main\/PRIVACY\.md"/,
   );
-  assert.match(description, /<code>]]&gt;<\/code>/);
+  const body = new DOMParser().parseFromString(description, "text/html");
+  assert.equal(body.querySelector("code")?.textContent, "]]>");
 });
 
 test("the feed is dated by its newest release, not by when it was built", () => {
@@ -72,4 +73,41 @@ test("the feed is dated by its newest release, not by when it was built", () => 
     "Tue, 13 Oct 2026 00:00:00 GMT",
   );
   assert.equal(feed.querySelector("channel > link")?.textContent, "https://tryluke.dev/changelog");
+});
+
+test("reference screenshots stay clickable and lazy with escaped captions and titles in the feed", () => {
+  const feed = parsedFeed(
+    [
+      "# Changelog",
+      "",
+      "## 1.0.0 — 2026-10-01",
+      "",
+      "### Pictures",
+      "",
+      "![A &quot;quote&quot; & more][shot]",
+      "",
+      "Read the [policy][policy].",
+      "",
+      '[shot]: apps/web/public/changelog/1.0.0/shot.png "Full &quot;size&quot;"',
+      "[policy]: PRIVACY.md",
+      "",
+    ].join("\n"),
+  );
+  const page = new DOMParser().parseFromString(
+    feed.querySelector("description:last-child")?.textContent ?? "",
+    "text/html",
+  );
+  const image = page.querySelector("img");
+  assert.ok(image);
+  assert.equal(image.getAttribute("src"), "https://tryluke.dev/changelog/1.0.0/shot.png");
+  assert.equal(image.getAttribute("alt"), 'A "quote" & more');
+  assert.equal(image.getAttribute("title"), 'Full "size"');
+  assert.equal(image.getAttribute("loading"), "lazy");
+  assert.equal(image.parentElement?.getAttribute("href"), image.getAttribute("src"));
+  assert.equal(image.parentElement?.getAttribute("target"), "_blank");
+  assert.equal(image.parentElement?.getAttribute("rel"), "noreferrer");
+  assert.equal(
+    page.querySelector("p:last-child a")?.getAttribute("href"),
+    "https://github.com/ReviewStage/luke/blob/main/PRIVACY.md",
+  );
 });

@@ -156,3 +156,44 @@ test("every route of the real changelog reads back, from its address, the view i
     assert.deepEqual(changelogViewForPath(releases, route.path), route.view, route.path);
   }
 });
+
+test("reference screenshots do not become the share summary and reference links keep their words", () => {
+  const [release] = parseReleases(
+    "# Changelog\n\n" +
+      releaseSection(
+        0,
+        [
+          "### Reference images",
+          "",
+          "![The preview][shot]",
+          "",
+          "Read the **new** [policy][policy] &amp; `code`.",
+          "",
+          "[shot]: apps/web/public/changelog/1.0.0/shot.png",
+          "[policy]: PRIVACY.md",
+        ].join("\n"),
+      ),
+  );
+  assert.equal(release?.summary, "Read the new policy & code.");
+  assert.deepEqual(release?.image, { src: "/changelog/1.0.0/shot.png", alt: "The preview" });
+});
+
+test("a multi-paragraph opening bullet keeps word boundaries without splitting inline words", () => {
+  const routes = changelogRoutes(
+    parseReleases(
+      `# Changelog\n\n${releaseSection(
+        0,
+        [
+          "### Fixes",
+          "",
+          "- First **para**graph.",
+          "",
+          "  Second paragraph.",
+          "",
+          "  - Nested item.",
+        ].join("\n"),
+      )}`,
+    ),
+  );
+  assert.equal(routes[1]?.head.description, "First paragraph. Second paragraph. Nested item.");
+});

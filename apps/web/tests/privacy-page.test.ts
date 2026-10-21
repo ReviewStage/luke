@@ -38,3 +38,16 @@ test("each of the policy's sections is a region named by its heading", () => {
     assert.ok(heading.textContent?.trim(), "a section heading says nothing");
   }
 });
+
+test("the policy keeps the opening copy, emphasis, and external policy link", () => {
+  const main = drawn().querySelector("main");
+  assert.match(main?.querySelector("p")?.textContent ?? "", /^Last updated: \d{1,2} \w+ \d{4}$/);
+  assert.equal(main?.querySelector("strong")?.textContent, "On your Mac.");
+  const google = Array.from(main?.querySelectorAll("a") ?? []).find(
+    (link) => link.textContent === "Google API Services User Data Policy",
+  );
+  assert.equal(
+    google?.getAttribute("href"),
+    "https://developers.google.com/terms/api-services-user-data-policy",
+  );
+});
