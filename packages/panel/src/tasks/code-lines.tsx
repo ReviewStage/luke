@@ -14,7 +14,7 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 
 /**
- * code-lines.tsx -- numbered code lines: a Code card's, and filling their place and scrolling there, the lines Luke showed of a file a File tab cannot read, and a text file opened over the window.
+ * code-lines.tsx -- numbered code lines: a Code card's, and filling their place and scrolling there, and the lines Luke showed of a file a File tab cannot read.
  *
  * Each line is numbered from where it sits in its file, its runs coloured
  * in both appearances, the lines pointed at lit; a Code card draws its rows
@@ -29,9 +29,9 @@ import { useFileViewSettings } from "./file-view-settings.js";
  * by, because the lines themselves are as wide as the longest so a note can
  * stay stuck in view across the whole of them. Whether they wrap and number
  * is the caller's: the lines Luke showed in a File tab follow the File tabs'
- * settings (`useLinesLook`), a text file opened over the window always wraps
- * and numbers. A File tab's file and a page's source are drawn whole by
- * Pierre's diffs instead (`whole-file.tsx`).
+ * settings (`useLinesLook`). A File tab's file, a page's source, and a text
+ * file opened over the window are drawn whole by Pierre's diffs instead
+ * (`whole-file.tsx`).
  */
 
 /**

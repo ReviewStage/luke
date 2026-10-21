@@ -6193,8 +6193,8 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   transition: transform var(--duration-quick) var(--motion-pane);
 }
 
-/* A text file's lines fill the card under its header and scroll there
-   (code-lines.tsx), on the code's ground. */
+/* A text file fills the card under its header and scrolls there, drawn
+   as every code is (whole-file.tsx), on the code's ground. */
 .attachment-viewer-lines {
   display: flex;
   flex-direction: column;
