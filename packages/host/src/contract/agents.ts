@@ -19,6 +19,7 @@ import {
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
+  codingAgentDeleteAnswerViewSchema,
   codingAgentGitHubImageParamsSchema,
   codingAgentGitHubImageViewSchema,
   codingAgentListAnswerViewSchema,
@@ -161,6 +162,9 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
     .input(exactInput(codingAgentPinParamsSchema))
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
+    .input(exactInput(codingAgentStopParamsSchema))
+    .output(EffectSchema.flip(codingAgentDeleteAnswerViewSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: actProcedure(
     "Could not note which agent is shown on this system.",
   )

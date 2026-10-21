@@ -1,7 +1,10 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { StandingSession } from "@luke/database/models/recorded-session";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import {
+  type StandingSession,
+  standingSessionsNamed,
+} from "@luke/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { Duration, Effect, Option, Ref } from "effect";
+import { Duration, Effect, Option, Ref, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { type HostedRefusal, hostedCarriesBearer } from "../http/http-effect.js";
 import {
@@ -14,7 +17,7 @@ import {
 import { type EveReach, eveFor } from "./coder-host/stop.js";
 
 /**
- * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a task's at its delete, an account's at its deletion.
+ * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a task's or an agent's at its delete, an account's at its deletion.
  *
  * A session retired ends its workflow run, a turn under way and the workers
  * it handed out with it, and takes nothing again, so Vercel Workflow can
@@ -140,4 +143,27 @@ export function retireSessions(
       `eve did not retire ${skipped} of ${agents.length} sessions within the delete's budget`,
     );
   });
+}
+
+/**
+ * What a task's or an agent's delete runs under its lock before anything
+ * goes: the sessions its conversations run in, retired while those still
+ * stand, since eve's door admits no one to a cleared conversation's session.
+ * Inside the transaction, since outside it a refused delete would leave a
+ * standing agent's session retired; the retires' own budget bounds how long
+ * they hold the lock.
+ */
+export function retiredBeforeDelete(
+  eveAt: EveAt,
+): (
+  conversationIds: readonly string[],
+) => Effect.Effect<
+  void,
+  QueryError | Schema.SchemaError,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  return (conversationIds) =>
+    Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
+      retireSessions(eveAt, sessions),
+    );
 }

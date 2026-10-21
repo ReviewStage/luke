@@ -53,6 +53,7 @@ import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
+import { stampConversationsDeleted } from "./soft-delete.js";
 import {
   linkTaskIssue,
   listTaskIssues,
@@ -101,7 +102,7 @@ export class TaskArchived extends Data.TaggedError("TaskArchived") {}
 /** The member a task was to be assigned to is no member of its workspace, or of the one it moves to; nothing was written. */
 export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMember") {}
 
-/** A coding agent stands on the task that its delete or its archive was not told was stopped: one started, or handed a message, while the others were stopped. */
+/** A coding agent stands at work that a delete or an archive was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
 /** What a delete that stopped the task's agents first tells it. */
@@ -829,22 +830,6 @@ const removeTask = SqlSchema.findOneOption({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db.delete(task).where(reachableTask(userId, taskId)).returning({ id: task.id, txid: TXID }),
-    ),
-});
-
-const stampConversations = SqlSchema.findAll({
-  Request: Schema.Struct({
-    conversationIds: Schema.Array(Schema.String),
-    now: Schema.Date,
-  }),
-  Result: TaskIdRowSchema,
-  execute: ({ conversationIds, now }) =>
-    Database.use((db) =>
-      db
-        .update(conversations)
-        .set({ deletedAt: now })
-        .where(and(inArray(conversations.id, conversationIds), isNull(conversations.deletedAt)))
-        .returning({ id: conversations.id }),
     ),
 });
 
@@ -1758,10 +1743,7 @@ export function deleteTaskCommitted<R = never>(
         const removed = yield* removeTask({ userId, taskId });
         if (Option.isNone(removed)) return Option.none();
         yield* removeEndedCalls({ userId, taskId });
-        if (conversationIds.length > 0) {
-          const now = yield* DateTime.nowAsDate;
-          yield* stampConversations({ conversationIds, now });
-        }
+        yield* stampConversationsDeleted(conversationIds);
         return Option.some({ txid: removed.value.txid });
       }),
     ),

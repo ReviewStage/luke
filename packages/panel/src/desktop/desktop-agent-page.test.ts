@@ -10,6 +10,7 @@ import {
 } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
   type CodingAgentMessagesAnswerView,
   type CodingAgentPageAnswerView,
 } from "@luke/features/coding-agent-view";
@@ -163,6 +164,10 @@ let answerHeld: () => void = () => undefined;
 let archives: { agentId: string; archived: boolean }[] = [];
 /** Whether an archive or Unarchive is refused, as an unanswered service refuses it. */
 let archiveRefused = false;
+/** Every agent a delete asked for, in order. */
+let deletes: string[] = [];
+/** Why a delete is refused, as the service answers it; none lets it land. */
+let deleteRefused: CodingAgentCallFailure | undefined;
 /** What the agent's workspace's members read answers; none refuses it. */
 let members: readonly WorkspaceMember[] | undefined;
 /** What the agent's transcript is pushed as once its tab follows it, and what a read of it answers once; none refuses it. */
@@ -198,6 +203,8 @@ beforeEach(() => {
   answerHeld = () => undefined;
   archives = [];
   archiveRefused = false;
+  deletes = [];
+  deleteRefused = undefined;
   members = undefined;
   transcript = undefined;
   told = [];
@@ -259,6 +266,12 @@ beforeEach(() => {
         const value = archiveRefused
           ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
           : { agent: answered };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_DELETE) {
+        deletes.push(request.payload.agentId);
+        const value =
+          deleteRefused === undefined ? { deleted: true as const } : { failure: deleteRefused };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_RENAME) {
@@ -1309,7 +1322,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal, Copy link, the transcript's two copies, and Archive agent, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal, Copy link, the transcript's two copies, Archive agent, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1326,6 +1339,7 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
     "Copy concise transcript",
     "Copy full transcript",
     "Archive agent",
+    "Permanently delete",
   ]);
 });
 
@@ -1538,4 +1552,66 @@ test("an @ in the agent's box names an archived agent of an archived task by tha
     ]),
     [["Bill by seat", "Billing · Archived"]],
   );
+});
+
+/** The page's dialog's button with these words, or a failure saying the dialog offers none. */
+function dialogAnswer(words: string): HTMLButtonElement {
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("a dialog asks");
+  return (
+    [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === words,
+    ) ?? assert.fail(`the dialog offers ${words}`)
+  );
+}
+
+test("Permanently delete on the page's ⋯ asks first, naming the agent, and once answered deletes it, says so, and leaves the page", async () => {
+  let closed = 0;
+  const agentView = { agentId: AGENT_ID, onOpen: () => undefined, onClose: () => (closed += 1) };
+  const page = mount(tasksControl({ agentView }));
+  await settle();
+
+  const remove = pageMenuItem(page, "Permanently delete");
+  act(() => remove.click());
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
+  const title = document.getElementById(question.getAttribute("aria-labelledby") ?? "");
+  const body = document.getElementById(question.getAttribute("aria-describedby") ?? "");
+  assert.equal(title?.textContent, "Permanently delete agent?");
+  assert.match(
+    body?.textContent ?? "",
+    /and its transcript will be deleted\. This can’t be undone\. To keep it out of the way instead, archive it\.$/u,
+  );
+  assert.equal(
+    document.activeElement,
+    dialogAnswer("Cancel"),
+    "a key already pressed changes nothing",
+  );
+  assert.deepEqual(deletes, []);
+
+  await act(async () => dialogAnswer("Permanently delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, [AGENT_ID]);
+  assert.equal(newestToastSays(), "Agent deleted");
+  assert.equal(closed, 1, "the page is left");
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+});
+
+test("a delete the service refused for an agent still starting says why in the dialog, which stays, and leaves the page standing", async () => {
+  deleteRefused = CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY;
+  let closed = 0;
+  const agentView = { agentId: AGENT_ID, onOpen: () => undefined, onClose: () => (closed += 1) };
+  const page = mount(tasksControl({ agentView }));
+  await settle();
+
+  const remove = pageMenuItem(page, "Permanently delete");
+  act(() => remove.click());
+  await act(async () => dialogAnswer("Permanently delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, [AGENT_ID]);
+  const reason = document.querySelector('[role="alertdialog"] [role="alert"]');
+  assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
+  assert.equal(closed, 0);
 });

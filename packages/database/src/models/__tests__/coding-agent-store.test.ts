@@ -12,6 +12,7 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+import { LIVE_SERVER_EVENT } from "@luke/live";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
   MESSAGE_AUTHOR,
@@ -30,14 +31,14 @@ import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { asks, conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
-import { voiceSessions } from "../../schemas/voice.js";
+import { voiceSessions, voiceTranscriptSegments } from "../../schemas/voice.js";
 import {
   CONVERSATION_KIND,
   CONVERSATION_RUNTIME,
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, linearIssueLink } from "../../testing/index.js";
-import { VOICE_DELEGATION_MODE } from "../../voice-vocabulary.js";
+import { VOICE_DELEGATION_MODE, VOICE_SEGMENT_ROLE } from "../../voice-vocabulary.js";
 import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
@@ -49,6 +50,7 @@ import {
   continuationsOf,
   createCodingAgent,
   delegationsOf,
+  deleteCodingAgent,
   IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
@@ -86,6 +88,7 @@ import { sentLineId } from "../ids.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";
+import { VOICE_WRITE_REFUSAL, voiceWriter } from "../voice-writer.js";
 import { type LineSender, storeWriter } from "../writer.js";
 
 /**
@@ -104,6 +107,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And how an agent is run: its runtime, its harness's session, its
  * runner's bearer digest, and who pays for it.
  * And the agent a conversation is, one at most, read by its header.
+ * And an agent deleted for good by any member of its workspace, once it stands stopped.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -2135,6 +2139,103 @@ it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
         assert.match(written.success.value.txid ?? "", /^\d+$/u);
         assert.ok(Result.isSuccess(again) && Option.isSome(again.success));
         assert.equal(again.success.value.txid, undefined);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
+  it.effect(
+    "a teammate's delete takes the agent, its pins, and the words said on its calls, keeps the calls, and stamps its conversation deleted; one that no longer stands stopped refuses with nothing written, and an outsider reaches nothing",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const { agentId, conversationId } = yield* tasklessAgent(starter, workspace);
+        yield* pinCodingAgent(starter, agentId, true);
+        const call = randomUUID();
+        yield* Database.use((db) =>
+          db.insert(voiceSessions).values({
+            id: call,
+            userId: starter,
+            agentId,
+            liveSessionId: `live-${call}`,
+            delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+          }),
+        );
+        yield* Database.use((db) =>
+          db.insert(voiceTranscriptSegments).values({
+            voiceSessionId: call,
+            seq: 1,
+            role: VOICE_SEGMENT_ROLE.USER,
+            text: "Ship the flaky test fix.",
+            startMs: 0,
+            endMs: 900,
+          }),
+        );
+        const retired: string[][] = [];
+        const guard = (stopped: boolean) => ({
+          standsStopped: () => Effect.succeed(stopped),
+          beforeDelete: (ids: readonly string[]) => Effect.sync(() => void retired.push([...ids])),
+        });
+
+        assert.ok(Option.isNone(yield* deleteCodingAgent(outsider, agentId, guard(true))));
+        const refused = yield* Effect.result(deleteCodingAgent(teammate, agentId, guard(false)));
+        assert.equal(Result.isFailure(refused) && refused.failure._tag, "TaskAgentUnstopped");
+        assert.ok(Option.isSome(yield* readCodingAgent(starter, agentId)));
+        assert.deepEqual(retired, [], "a refused delete retires nothing");
+
+        const deleted = yield* deleteCodingAgent(teammate, agentId, guard(true));
+        assert.match(Option.getOrThrow(deleted).txid, /^\d+$/u);
+        assert.deepEqual(retired, [[conversationId]]);
+        assert.ok(Option.isNone(yield* readCodingAgent(starter, agentId)));
+        const db = yield* Database;
+        const pins = yield* db
+          .select({ userId: agentPin.userId })
+          .from(agentPin)
+          .where(eq(agentPin.codingAgentId, agentId));
+        const words = yield* db
+          .select({ seq: voiceTranscriptSegments.seq })
+          .from(voiceTranscriptSegments)
+          .where(eq(voiceTranscriptSegments.voiceSessionId, call));
+        const calls = yield* db
+          .select({ agentId: voiceSessions.agentId })
+          .from(voiceSessions)
+          .where(eq(voiceSessions.id, call));
+        const [stamped] = yield* db
+          .select({ deletedAt: conversations.deletedAt })
+          .from(conversations)
+          .where(eq(conversations.id, conversationId));
+        assert.deepEqual(
+          [pins, words, calls, stamped?.deletedAt !== null],
+          [[], [], [{ agentId: null }], true],
+        );
+        assert.ok(Option.isNone(yield* deleteCodingAgent(starter, agentId, guard(true))));
+        // The call is still open, and a word its voice writes after the delete is taken by nothing.
+        const voice = voiceWriter({ store: yield* storeWriter({ tools: {} }) });
+        const late = yield* voice.consume(
+          {
+            userId: starter,
+            liveSessionId: `live-${call}`,
+            conversation: { userId: starter, conversationId },
+          },
+          {
+            type: LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA,
+            event_id: "event_late",
+            delta: " and the release notes",
+            start_ms: 1_000,
+            end_ms: 1_400,
+          },
+        );
+        assert.ok(Result.isFailure(late) && late.failure === VOICE_WRITE_REFUSAL.NO_SESSION);
+        const after = yield* db
+          .select({ seq: voiceTranscriptSegments.seq })
+          .from(voiceTranscriptSegments)
+          .where(eq(voiceTranscriptSegments.voiceSessionId, call));
+        assert.deepEqual(after, []);
       }),
   );
 });

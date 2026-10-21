@@ -49,6 +49,7 @@ import {
   type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentDeleteAnswerView,
   type CodingAgentGitHubImageParams,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
@@ -102,6 +103,7 @@ import {
   codingAgentChatChangedSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
+  codingAgentDeleteAnswerViewSchema,
   codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAttachmentViewSchema,
@@ -669,6 +671,8 @@ export interface HostOperator {
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
+  codingAgentDelete(params: CodingAgentStopParams): Effect.Effect<CodingAgentDeleteAnswerView>;
   codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
@@ -1960,6 +1964,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           archived: params.archived,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentDelete: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentDeleteAnswerViewSchema),
       ),
     codingAgentPin: (params) =>
       Effect.map(

@@ -81,6 +81,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_STOP]: "Could not stop the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: "Could not delete the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: "Could not mark the agent as read on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: "Could not read the agent on this system.",
@@ -182,6 +183,11 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.CODING_AGENTS_PIN,
     payload: { agentId: AGENT_ID, pinned: true },
     ask: "codingAgentPin",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_DELETE,
+    payload: { agentId: AGENT_ID },
+    ask: "codingAgentDelete",
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_SHOWN,
@@ -424,6 +430,28 @@ it("a rename, an archive, or a pin answering an agent with no plan reads the pla
     ["tasksRefresh"],
   ]);
   assert.deepEqual(onTask.asked, [["codingAgentRename", rename]]);
+});
+
+it("a delete that took the agent reads the plan list again, so its sidebar row goes, and one refused does not", async () => {
+  const deleted = windowPort(PANEL, {
+    answers: { codingAgentDelete: () => Effect.succeed({ deleted: true as const }) },
+  });
+  const refused = windowPort(PANEL, {
+    answers: {
+      codingAgentDelete: () =>
+        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY }),
+    },
+  });
+
+  assert.deepEqual(await deleted.call(AGENT_ACT_KIND.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+    answer: { deleted: true },
+  });
+  assert.deepEqual(await refused.call(AGENT_ACT_KIND.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+    answer: { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY },
+  });
+
+  assert.deepEqual(deleted.asked, [["codingAgentDelete", { agentId: AGENT_ID }], ["tasksRefresh"]]);
+  assert.deepEqual(refused.asked, [["codingAgentDelete", { agentId: AGENT_ID }]]);
 });
 
 it("a panel's reads are noted on their way: the models, a task's agents or the task gone, and an agent's title before its status, but a worker's page is no word on the agent", async () => {

@@ -778,6 +778,12 @@ export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
   txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
+/** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
+export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({
+  deleted: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
+
 /**
  * The run of an automation that started an agent, as its page opens on it:
  * the automation's prompt alone, without the lines Luke adds of the firing,

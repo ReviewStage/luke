@@ -46,7 +46,6 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
-import { standingSessionsNamed } from "@luke/database/models/recorded-session";
 import {
   linkTaskIssue,
   listTaskIssues,
@@ -90,7 +89,7 @@ import {
   summaryOf,
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
+import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
 import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
@@ -651,15 +650,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const deleted = yield* hostedStoreOrUnavailable(
         deleteTaskCommitted(userId, taskId, {
           stoppedAgentIds: stopped,
-          // Note that the sessions are retired under the plan's lock and before its conversations are
-          // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
-          // agent started meanwhile refuses retires nothing. They stay inside the transaction, since
-          // outside it a refused delete would leave a standing plan's sessions retired; the retires'
-          // own budget (`retire-sessions.ts`) bounds how long they hold the lock.
-          beforeDelete: (conversationIds) =>
-            Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
-              retireSessions(eveAt, sessions),
-            ),
+          // Note that a delete an agent started meanwhile refuses before it retires anything.
+          beforeDelete: retiredBeforeDelete(eveAt),
         }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
       );
       // An agent started while the others were stopped is one this delete has not stopped yet.

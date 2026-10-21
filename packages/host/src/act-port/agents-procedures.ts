@@ -20,6 +20,7 @@ import {
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentDeleteAnswerView,
   type CodingAgentGitHubImageParams,
   type CodingAgentGitHubImageView,
   type CodingAgentListAnswer,
@@ -92,6 +93,7 @@ export interface AgentProceduresDependencies {
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentDelete(params: CodingAgentStopParams): Effect.Effect<CodingAgentDeleteAnswerView>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
@@ -359,6 +361,15 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return yield* notedAgent(host.codingAgentPin(input));
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_DELETE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        // Note that the plan list is read again, which carries every agent with no plan, so the sidebar's row goes.
+        return yield* Effect.tap(host.codingAgentDelete(input), (answer) =>
+          "deleted" in answer ? host.tasksRefresh() : Effect.void,
+        );
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SHOWN].effect(

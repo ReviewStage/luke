@@ -360,6 +360,8 @@ interface RowContext {
   readonly currentRow: (row: TaskRow) => boolean;
   /** Opens an agent with no plan on its own page. */
   readonly onOpenAgent: (agentId: string) => void;
+  /** What an agent's delete runs once it landed: its page left where it is the one standing. */
+  readonly onDeletedAgent: (agentId: string) => () => void;
   /** Whether a task was saved since the developer last looked at it on this Mac. */
   readonly unread: (task: TaskSummary) => boolean;
   /** Whether an agent's turn ended while the developer was not looking at it. */
@@ -440,6 +442,7 @@ function TaskRows({
             onOpen={() => context.onOpenAgent(row.agent.id)}
             onPin={pinOf(context.tasks, row.agent)}
             section={context.sectionEntry(row.agent)}
+            onDeleted={context.onDeletedAgent(row.agent.id)}
           />
         ),
       )}
@@ -631,6 +634,7 @@ function PinnedRows({
                 onOpen={() => context.onOpenAgent(agent.id)}
                 onPin={pinOf(context.tasks, agent)}
                 section={context.sectionEntry(agent)}
+                onDeleted={context.onDeletedAgent(agent.id)}
               />
             </RowPlaced>
           );
@@ -1702,6 +1706,9 @@ function SidebarColumn({
     onOpen: chosen(openTask),
     currentRow,
     onOpenAgent: chosen(openAgent),
+    onDeletedAgent: (agentId) => () => {
+      if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
+    },
     unread,
     unseenAgent: (agentId) =>
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
@@ -1964,6 +1971,7 @@ function SidebarColumn({
                             onOpen={() => context.onOpenAgent(row.agent.id)}
                             onPin={pinOf(tasks, row.agent)}
                             section={context.sectionEntry(row.agent)}
+                            onDeleted={context.onDeletedAgent(row.agent.id)}
                           />
                         ),
                       onDropRow: dropRow,

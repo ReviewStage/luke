@@ -372,6 +372,11 @@ function fakeService() {
         asked.push(`stop:${agentId}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
       }),
+    delete: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`delete:${agentId}`);
+        return { deleted: true as const, txid: "9102" };
+      }),
     archive: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`archive:${agentId}:${String(request.archived)}`);
@@ -802,6 +807,21 @@ it.effect(
     }),
 );
 
+it.effect("a delete waits for the task list to carry its transaction before it answers", () =>
+  Effect.gen(function* () {
+    const waited: (string | undefined)[] = [];
+    const { call } = yield* subject({
+      listed: (txid) => Effect.sync(() => void waited.push(txid)),
+    });
+
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+      deleted: true,
+      txid: "9102",
+    });
+    assert.deepEqual(waited, ["9102"]);
+  }),
+);
+
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
     const { call, asked, sealTranscript } = yield* subject();
@@ -905,6 +925,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
       { agent: AGENT },
     );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+      deleted: true,
+      txid: "9102",
+    });
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: AGENT_ID }), {
       agent: PAGE,
     });
@@ -1101,6 +1125,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
       `pin:${AGENT_ID}:true`,
+      `delete:${AGENT_ID}`,
       `page:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
