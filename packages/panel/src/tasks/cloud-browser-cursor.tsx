@@ -34,7 +34,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { usePrefersReducedMotion } from "../use-reduced-motion.js";
 
 /** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
-export const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
+const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
 
 /**
  * The arrowhead's outline, a dart along the diagonal like a map's location

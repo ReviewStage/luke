@@ -20,7 +20,7 @@ import { Effect, Equal, Option, Ref } from "effect";
 /** How many transcripts are held at most, the least recently told let go first. */
 export const HELD_TRANSCRIPTS = 8;
 /** How many bytes of JSON every transcript held comes to at most. */
-export const HELD_BYTES = 4 * 1024 * 1024;
+const HELD_BYTES = 4 * 1024 * 1024;
 /** How many bytes one transcript held may come to; one past it is let go rather than crowd the rest out. */
 const HELD_BYTES_EACH = HELD_BYTES / 4;
 

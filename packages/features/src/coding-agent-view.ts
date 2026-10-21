@@ -309,7 +309,7 @@ export const codingAgentAgentAnswerSchema = EffectSchema.Union([
 export type CodingAgentAgentAnswer = typeof codingAgentAgentAnswerSchema.Type;
 
 /** A message handed to an agent, as the host hears the service answer it: the agent, and the transaction that wrote its row where one did; or why there is none. */
-export const codingAgentMessageAnswerViewSchema = EffectSchema.Union([
+const codingAgentMessageAnswerViewSchema = EffectSchema.Union([
   codingAgentMessageAnswerSchema,
   failedReaching,
 ]);
@@ -356,7 +356,7 @@ export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Typ
  * came from the host's own memory of the transcript, not a read. `caughtUp` says the page came
  * back short, so every message written by then is told.
  */
-export const codingAgentTranscriptPageSchema = EffectSchema.Union([
+const codingAgentTranscriptPageSchema = EffectSchema.Union([
   EffectSchema.Struct({
     ...codingAgentMessagesAnswerSchema.fields,
     newest: EffectSchema.optionalKey(EffectSchema.Literal(true)),
@@ -610,7 +610,7 @@ export const codingAgentInboxChangedSchema = EffectSchema.Struct({
 export type CodingAgentInboxChanged = typeof codingAgentInboxChangedSchema.Type;
 
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
-export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
+const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 
 export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
 

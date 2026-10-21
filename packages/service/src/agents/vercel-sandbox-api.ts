@@ -196,7 +196,7 @@ export const LIST_ORDER = { OLDEST_FIRST: "asc", NEWEST_FIRST: "desc" } as const
 export type ListOrder = (typeof LIST_ORDER)[keyof typeof LIST_ORDER];
 
 /** A page of the running sandboxes: the sandboxes, and the cursor of the next page where there is one. */
-export interface RunningPage {
+interface RunningPage {
   readonly sandboxes: readonly ListedSandbox[];
   readonly next: string | undefined;
 }
