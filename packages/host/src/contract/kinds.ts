@@ -125,6 +125,8 @@ export const AGENT_ACT_KIND = {
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PAGE: "codingAgents.page",
+  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
+  CODING_AGENTS_CALLS: "codingAgents.calls",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -295,7 +297,7 @@ export const TASKS_ACT_KIND = {
   ADMIN_OPEN: "admin.open",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
-  /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */
+  /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
   TASKS_TALK: "tasks.talk",
   /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
@@ -390,22 +392,20 @@ export const UPDATE_ACT_KIND = {
 /**
  * The voice window's runtime: a command to it from a panel or the call
  * window; the call card's way back, Luke's window brought forward on the
- * call's own task; the voice window as a GPT Live peer, its SDP offer handed
+ * call's own agent; the voice window as a GPT Live peer, its SDP offer handed
  * to the host, which creates the one session and answers the SDP, the
  * hang-up it asks the host to decide, and the two reports the host reads its
- * transport and its idle from, none carrying a credential; the stop key;
- * Stop Luke, on the task named, else the call's, else the open one; the
- * voice diagnostics; and the microphone's privacy settings opened.
+ * transport and its idle from, none carrying a credential; Escape's stop;
+ * the voice diagnostics; and the microphone's privacy settings opened.
  */
 export const VOICE_RUNTIME_ACT_KIND = {
   VOICE_COMMAND: "voice.command",
-  CALL_SHOW_TASK: "call.showTask",
+  CALL_SHOW_AGENT: "call.showAgent",
   VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
   VOICE_END_LIVE_SESSION: "voice.endLiveSession",
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  LUKE_STOP: "luke.stop",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
 } as const;

@@ -5,7 +5,7 @@ import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
 import { Context, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { VoiceCallTranscriptChange } from "../voice-view.js";
+import type { VoiceCallAbout, VoiceCallTranscriptChange } from "../voice-view.js";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -20,6 +20,16 @@ import {
 } from "./live-voice-orchestrator.js";
 
 const INVITES_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
+/** Two agents of the invites task, either of which a call may speak into. */
+const INVITES_AGENT: VoiceCallAbout = {
+  taskId: INVITES_TASK,
+  agentId: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
+};
+const REVIEW_AGENT: VoiceCallAbout = {
+  taskId: INVITES_TASK,
+  agentId: "6e2a9d4b-1c7f-4a8e-b3d5-2f9c8e1a7b60",
+};
 
 /** A call that records the verbs it was asked and answers for its status. */
 let sessions = 0;
@@ -171,10 +181,8 @@ function fixture(
   orchestrator.surround({ ...SURROUNDINGS, ...surroundings });
   return {
     surround: (next: LiveVoiceSurroundings) => orchestrator.surround(next),
-    beginTalk: (taskId?: string) => orchestrator.beginTalk(taskId),
-    talkAboutTask: (taskId: string) => orchestrator.talkAboutTask(taskId),
+    talkTo: (about: VoiceCallAbout) => orchestrator.talkTo(about),
     toggleMicrophone: () => orchestrator.toggleMicrophone(),
-    endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
     stopCall: () => orchestrator.stopCall(),
     muteSpeaker: (muted: boolean) => orchestrator.muteSpeaker(muted),
@@ -203,37 +211,34 @@ function fixture(
 }
 
 it.effect(
-  "the talk key's press opens a session about the plan when none stands and unmutes it once started; its release mutes once",
+  "calling a second agent while the first one's call stands hangs that call up and opens one into the second, which the view names",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_TASK), {
-        startImmediately: true,
-      });
-      const call = f.latest();
-      assert.ok(call);
-      assert.equal(call.opens, 1);
-      assert.deepEqual(call.openings, [{ taskId: INVITES_TASK }]);
-      assert.equal(call.unmutes, 0);
-      call.started();
-      yield* Fiber.join(pressed);
-      assert.equal(call.unmutes, 1);
-      assert.equal(call.mutes, 0);
-      assert.equal(call.status, LIVE_STATUS.LISTENING);
-      yield* f.endTalk();
-      assert.equal(call.mutes, 1);
-      assert.equal(call.opens, 1);
-      assert.equal(f.calls.length, 1);
-      // A release with no press behind it does nothing.
-      yield* f.endTalk();
-      assert.equal(call.mutes, 1);
-      // The next hold against the standing session, naming no task: no second session, one more unmute, one more mute.
-      yield* f.beginTalk();
-      assert.equal(f.calls.length, 1);
-      assert.equal(call.unmutes, 2);
-      assert.equal(call.mutes, 1);
-      yield* f.endTalk();
-      assert.equal(call.mutes, 2);
+      const first = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), { startImmediately: true });
+      const invites = f.latest();
+      assert.ok(invites);
+      invites.started();
+      yield* Fiber.join(first);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.views.at(-1)?.call, INVITES_AGENT);
+      const second = yield* Effect.forkChild(f.talkTo(REVIEW_AGENT), { startImmediately: true });
+      const review = f.latest();
+      assert.ok(review);
+      assert.notEqual(review, invites);
+      // The first call was closed before the second was offered.
+      assert.equal(invites.closes, 1);
+      assert.deepEqual(review.openings, [REVIEW_AGENT]);
+      review.started();
+      yield* Fiber.join(second);
+      yield* Effect.yieldNow;
+      assert.equal(f.calls.length, 2);
+      assert.equal(review.status, LIVE_STATUS.LISTENING);
+      assert.deepEqual(f.views.at(-1)?.call, REVIEW_AGENT);
+      // The same agent's button again mutes its call rather than opening another.
+      yield* f.talkTo(REVIEW_AGENT);
+      assert.equal(f.calls.length, 2);
+      assert.equal(review.status, LIVE_STATUS.MUTED);
     }),
 );
 
@@ -242,7 +247,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
         startImmediately: true,
       });
       const call = f.latest();
@@ -264,14 +269,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
         startImmediately: true,
       });
       const call = f.latest();
       assert.ok(call);
       call.started();
       yield* Fiber.join(pressed);
-      yield* f.endTalk();
+      // The agent's own button again mutes it before the hang-up.
+      yield* f.talkTo(INVITES_AGENT);
       yield* f.stopCall();
       assert.equal(call.silences, 0);
       assert.equal(call.closes, 1);
@@ -280,11 +286,11 @@ it.effect(
 );
 
 it.effect(
-  "the stop key while Luke speaks still silences him first and then tells the host to stop, leaving the call up",
+  "Escape while Luke speaks still silences him first and then tells the host to stop, leaving the call up",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
         startImmediately: true,
       });
       const call = f.latest();
@@ -316,7 +322,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture({}, yield* Effect.context<never>());
-      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
         startImmediately: true,
       });
       const call = f.latest();

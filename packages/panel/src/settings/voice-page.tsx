@@ -84,11 +84,10 @@ export function VoiceSection({
           to do next rather than a queue of them. */}
       {settings.voiceAvailable && microphoneOffered ? (
         <SettingsSection title="Permissions">
-          {/* Access, not use. The talk key is what opens the microphone, so a
-              button here could only ever repeat what the key already does — the
-              line answers the one question it can: whether Luke is allowed. It
-              lives on this page, under the key it waits on, because the
-              microphone's one use is the voice that key turns on. */}
+          {/* Access, not use. An agent's Call button is what opens the
+              microphone, so the line answers the one question it can: whether
+              Luke is allowed. It lives on this page because the microphone's
+              one use is the voice a call turns on. */}
           {/* Named and marked like a provider, because it is the same question in
               the same words: what Luke has been let at, and whether it is on. The
               check and the attention mark trade the same spot: allowed, or the

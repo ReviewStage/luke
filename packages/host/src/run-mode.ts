@@ -2,7 +2,7 @@
  * What this process is allowed to do, decided once from how it was launched.
  *
  * A fixture run must be deterministic and credential-free; a capture run is
- * that and also unattended — no system keys, no focus, no motion the camera
+ * that and also unattended — no focus, no motion the camera
  * did not ask for. Call sites test a capability rather than re-deriving those
  * two booleans, so a third launch mode cannot silently inherit the wrong half.
  */
@@ -11,8 +11,6 @@ export interface RunMode {
   readonly requiresAccount: boolean;
   /** Watch session providers and the machine's own output. */
   readonly observesProviders: boolean;
-  /** Claim system-wide shortcuts. A capture run drives the panel itself. */
-  readonly registersGlobalKeys: boolean;
   /** Wait for the panel's own collapse before shrinking the window. */
   readonly animates: boolean;
   /** Steal keyboard focus, raise windows, stand on more than the main display. */
@@ -31,7 +29,6 @@ export function runModeFor(input: { capture: boolean; fixture: boolean }): RunMo
   return {
     requiresAccount: !deterministic,
     observesProviders: !deterministic,
-    registersGlobalKeys: interactive,
     animates: interactive,
     takesFocus: interactive,
     sendsNetwork: !deterministic,

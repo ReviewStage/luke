@@ -56,7 +56,7 @@ it.effect("the document is read on request and every change of it reaches a subs
 it.effect("a voice subscription ends cleanly", () =>
   Effect.gen(function* () {
     const { bridge } = yield* bridgeFixture;
-    const unsubscribe = bridge.onVoiceHotkeyPress(() => assert.fail("no talk key in the page"));
+    const unsubscribe = bridge.onTasksTalk(() => assert.fail("no call in the page"));
     unsubscribe();
   }).pipe(Effect.scoped),
 );

@@ -16,11 +16,6 @@ export const NATIVE_HELPERS = [
     frameworks: ["CoreAudio", "IOKit"],
   },
   { source: "OutputVolume.swift", binary: "mac-output-volume", frameworks: ["CoreAudio"] },
-  {
-    source: "TalkKey.swift",
-    binary: "mac-talk-key",
-    frameworks: ["AppKit", "Carbon"],
-  },
 ];
 
 export function packagedAppPath(repoRoot, architecture = PACKAGED_ARCHITECTURE) {

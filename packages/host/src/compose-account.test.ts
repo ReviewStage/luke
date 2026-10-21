@@ -265,7 +265,9 @@ it.effect("a packaged host handed a service origin opens its voice socket on tha
     yield* Effect.orDie(account.voiceCapabilities.apply());
     const sessions = account.voiceCapabilities.liveSessions;
     assert.ok(sessions);
-    yield* Effect.scoped(sessions.create({ sdpOffer: "v=0\r\n", taskId: "task-1" }));
+    yield* Effect.scoped(
+      sessions.create({ sdpOffer: "v=0\r\n", taskId: "task-1", agentId: "agent-1" }),
+    );
 
     assert.equal(script.opens[0]?.url, `wss://preview.example.test${VOICE_SERVICE_PATH.SESSIONS}`);
   }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),

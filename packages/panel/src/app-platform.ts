@@ -53,8 +53,6 @@ export interface AppPlatform {
   assetBase(): string;
   /** Hears each command chosen from the shell's menu, until the returned function is called. */
   onMenuCommand(listener: (command: AppCommand) => void): () => void;
-  /** Says whether a shortcut is being recorded, during which the shell's own keys hold off. */
-  setShortcutCapturing(capturing: boolean): void;
   /** Counts one surface event. */
   recordSurfaceEvent<Name extends ProductSurfaceEventName>(
     name: Name,

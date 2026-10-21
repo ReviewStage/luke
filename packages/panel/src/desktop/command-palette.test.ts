@@ -268,7 +268,7 @@ function press(listed: string): void {
 const SETTINGS_PAGES = [
   "Profile",
   "Workspace",
-  "Coding agents",
+  "Agents",
   "Integrations",
   "Plan template",
   "Voice",
@@ -296,9 +296,9 @@ test("on a platform without voice or Mac commands, the Settings filter lists nei
   chooseFilter("Settings");
 
   assert.deepEqual(rows().slice(0, shown.length), shown);
-  type("Talk to Luke");
+  type("Captions");
   assert.equal(
-    rows().some((row) => row.includes("Talk to Luke")),
+    rows().some((row) => row.includes("Captions")),
     false,
   );
   type("Let agents run commands on this Mac");
@@ -320,8 +320,8 @@ test("a page is found by its name, above every setting the query finds", () => {
     ...SETTINGS_PAGES,
     "Settings · Keyboard shortcuts",
   ]);
-  type("coding");
-  assert.equal(rows()[0], "Coding agents");
+  type("agents");
+  assert.equal(rows()[0], "Agents");
 });
 
 test("choosing a page opens Settings on that page", () => {

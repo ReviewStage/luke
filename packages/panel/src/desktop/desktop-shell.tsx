@@ -18,8 +18,8 @@ import {
   SidebarIcon,
   Skeleton,
 } from "@luke/ui";
+import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -38,7 +38,6 @@ import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-car
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
@@ -47,6 +46,7 @@ import {
 } from "../tasks/use-tasks-tab.js";
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCallingAgent } from "../use-voice-view.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
@@ -410,17 +410,20 @@ function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element 
 }
 
 /**
- * Whether the open task's Transcript is on screen with its words, streaming
- * a call's as they are said. A Call tab standing behind another chosen
- * tab, or under a side panel filling the window, is not on screen, and one
- * still reading, or failed, shows no words.
+ * Whether the tab of the agent the call speaks into is on screen, where its
+ * transcript streams the call's words as they are said and its foot draws
+ * the call bar. A tab standing behind another chosen tab, or under a side
+ * panel filling the window, is not on screen.
  */
-function transcriptStreaming(tasks: TasksControl): boolean {
-  const { mainTabs, sidePanel, transcript } = tasks;
+function callTabShown(tasks: TasksControl, calling: string | undefined): boolean {
+  const { mainTabs, sidePanel } = tasks;
+  const tab = mainTabs.tab;
   return (
+    calling !== undefined &&
     !sidePanel.fullScreen &&
-    mainTabs.tab === MAIN_TAB.CALL &&
-    transcript.region.kind === TRANSCRIPT_REGION.READY
+    tab !== undefined &&
+    isAgentTab(tab) &&
+    tab.agent === calling
   );
 }
 
@@ -608,7 +611,9 @@ export function DesktopShell({
   // the chosen item's task's.
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
-  const speechHidden = taskDrawn && transcriptStreaming(tasks);
+  const calling = useCallingAgent();
+  const callShown = taskDrawn && callTabShown(tasks, calling);
+  const speechHidden = callShown;
   const captionStrip = useMemo(
     () => <CaptionStrip {...captions} speechHidden={speechHidden} />,
     [captions, speechHidden],
@@ -707,9 +712,9 @@ export function DesktopShell({
   const boardOpen = tasks.boardView.open;
   const panelToggle =
     planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
-  // Note that a panel filling the window hides the task's column, call bar
-  // and all, so the captions float in its place then.
-  const captionsInColumn = taskDrawn && !tasks.sidePanel.fullScreen;
+  // Note that the captions ride the call bar at the foot of the call's agent's
+  // tab while that is on screen, and float at the window's foot otherwise.
+  const captionsInColumn = callShown;
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it

@@ -87,7 +87,7 @@ function board(patch: Partial<FactoryInput>) {
   return factoryBoard({
     tasks: [],
     waiting: [],
-    callTaskId: undefined,
+    talkingTaskId: undefined,
     oneOff: [],
     oneOffWaiting: [],
     now: NOW,
@@ -151,7 +151,7 @@ test("the task on this Mac's call stands in Talk however long ago it was saved, 
     3 * LOOKBACK_MS,
     agents([agent(1, CODING_AGENT_STATUS.RUNNING)]),
   );
-  const drawn = board({ tasks: [task(2, "Usage alerts", MINUTE), call], callTaskId: call.id });
+  const drawn = board({ tasks: [task(2, "Usage alerts", MINUTE), call], talkingTaskId: call.id });
   assert.deepEqual(names(drawn.talking.map((each) => ({ task: each }))), ["Factory tab"]);
   assert.deepEqual(work(drawn.working), ["Agent 1 (Factory tab)"]);
 });

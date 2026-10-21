@@ -7,6 +7,7 @@ import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
   agentPromptOf,
+  CALL_LABEL,
   ISSUE_MATCH_LIMIT,
   linearIssuesAskOf,
   MICROPHONE_PRESS,
@@ -33,14 +34,17 @@ function _view(patch: Partial<TasksView>): TasksView {
   };
 }
 
-test("the microphone asks for the permission first, then for a plan, and then talks about it or mutes", () => {
+test("an agent's Call button asks for the permission first, then calls the agent, or mutes and unmutes its own call", () => {
+  const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
+  const otherAgent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const own = { taskId: INVITES, agentId };
   const input = {
     voiceAvailable: true,
     microphoneStatus: MICROPHONE_STATUS.GRANTED,
-    activeTaskId: INVITES,
+    agentId,
     archived: false,
     listening: false,
-    callTaskId: undefined,
+    call: undefined,
     voiceStatus: LIVE_STATUS.IDLE,
   };
   assert.deepEqual(microphoneButton({ ...input, voiceAvailable: false }), {
@@ -56,52 +60,36 @@ test("the microphone asks for the permission first, then for a plan, and then ta
     microphoneButton({ ...input, microphoneStatus: MICROPHONE_STATUS.DENIED }).press,
     MICROPHONE_PRESS.OPEN_SETTINGS,
   );
-  assert.equal(
-    microphoneButton({ ...input, activeTaskId: undefined }).press,
-    MICROPHONE_PRESS.NONE,
-  );
+  assert.equal(microphoneButton({ ...input, archived: true }).press, MICROPHONE_PRESS.NONE);
   assert.deepEqual(microphoneButton(input), {
     press: MICROPHONE_PRESS.TALK,
-    label: "Talk about this task",
+    label: CALL_LABEL,
     muted: false,
   });
   assert.deepEqual(
-    microphoneButton({
-      ...input,
-      listening: true,
-      callTaskId: INVITES,
-      voiceStatus: LIVE_STATUS.LISTENING,
-    }),
+    microphoneButton({ ...input, listening: true, call: own, voiceStatus: LIVE_STATUS.LISTENING }),
     { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
   );
-  // The task's own call standing unheard is muted, Luke speaking over it or not.
+  // The agent's own call standing unheard is muted, Luke speaking over it or not.
   for (const voiceStatus of [LIVE_STATUS.MUTED, LIVE_STATUS.SPEAKING]) {
-    assert.deepEqual(microphoneButton({ ...input, callTaskId: INVITES, voiceStatus }), {
+    assert.deepEqual(microphoneButton({ ...input, call: own, voiceStatus }), {
       press: MICROPHONE_PRESS.TALK,
       label: "Unmute the microphone",
       muted: true,
     });
   }
-  // A call still connecting, or another task's muted call, is not this task muted.
+  // A call still connecting, or another agent's muted call, is not this agent muted.
   assert.equal(
-    microphoneButton({ ...input, callTaskId: INVITES, voiceStatus: LIVE_STATUS.CONNECTING }).muted,
+    microphoneButton({ ...input, call: own, voiceStatus: LIVE_STATUS.CONNECTING }).muted,
     false,
   );
+  const other = { taskId: INVITES, agentId: otherAgent };
   assert.equal(
-    microphoneButton({
-      ...input,
-      callTaskId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-      voiceStatus: LIVE_STATUS.MUTED,
-    }).muted,
+    microphoneButton({ ...input, call: other, voiceStatus: LIVE_STATUS.MUTED }).muted,
     false,
   );
-  // A desk call or another task's call heard is one the press hangs up, not one it mutes.
-  for (const callTaskId of [undefined, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"]) {
-    assert.equal(
-      microphoneButton({ ...input, listening: true, callTaskId }).label,
-      "Talk about this task",
-    );
-  }
+  // Another agent's call heard is one the press hangs up, not one it mutes.
+  assert.equal(microphoneButton({ ...input, listening: true, call: other }).label, CALL_LABEL);
 });
 
 /** A task's row of the list on a repository, last updated at `updatedAt`. */

@@ -406,7 +406,10 @@ export const codingAgentPageAnswerViewSchema = EffectSchema.Union([
 export type CodingAgentPageAnswerView = typeof codingAgentPageAnswerViewSchema.Type;
 
 /** The calls into one agent, as the window hears them: each call's lines and its record, or why there is no answer. */
-const codingAgentCallsAnswerViewSchema = EffectSchema.Union([taskTranscriptAnswerSchema, failed]);
+export const codingAgentCallsAnswerViewSchema = EffectSchema.Union([
+  taskTranscriptAnswerSchema,
+  failed,
+]);
 
 export type CodingAgentCallsAnswerView = typeof codingAgentCallsAnswerViewSchema.Type;
 

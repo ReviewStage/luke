@@ -346,10 +346,10 @@ it("the voice window is not handed back the view it reported, while a panel and 
   publish();
   assert.equal(versionOf(await panel.next()), 1);
   assert.equal(versionOf(await call.next()), 1);
-  pushes.push(voiceWindow.handle, PUSH.SHOW_TASK, { taskId: "task-1" });
+  pushes.push(voiceWindow.handle, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   assert.deepEqual((await voice.next()).value, {
-    push: PUSH.SHOW_TASK,
-    payload: { taskId: "task-1" },
+    push: PUSH.SHOW_AGENT,
+    payload: { taskId: "task-1", agentId: "agent-1" },
   });
 
   // Something it draws moves, and it is told, view and all.

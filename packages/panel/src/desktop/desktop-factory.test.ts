@@ -297,7 +297,7 @@ test("a pull request whose agent the service names opens in that agent's Pull re
 
 test("a question opens the Inbox on its item, an agent its page, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
   const { page, opened } = mount([DRAFT, SEARCH, BILLING, INVITES], {
-    callTaskId: DRAFT.id,
+    talkingTaskId: DRAFT.id,
     inbox: [
       {
         taskId: BILLING.id,
@@ -323,7 +323,7 @@ test("a question opens the Inbox on its item, an agent its page, a pull request 
 
 test("the task on the call stands in Talk however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
   const old = task(5, "Factory tab", 10 * 24 * HOUR);
-  const call = mount([old], { callTaskId: old.id });
+  const call = mount([old], { talkingTaskId: old.id });
   assert.deepEqual(rows(call.page, "talk"), ["Factory tab · On a call with Luke"]);
   act(() => root?.unmount());
 
@@ -340,7 +340,7 @@ test("the task on the call stands in Talk however old, and with nothing standing
 
 test("until the plan list is read the line stands in placeholder blocks, each station named and holding rows to come, saying to a reader that the tasks are being read, with nothing to press and no empty state; once the list lands, the rows stand in their place", () => {
   const { page, redraw } = mount([DRAFT, SEARCH, INVITES], {
-    callTaskId: DRAFT.id,
+    talkingTaskId: DRAFT.id,
     listRead: false,
   });
   const board = page.querySelector<HTMLElement>(".factory-board");
@@ -512,7 +512,7 @@ test("a row wears a teammate's face before its time, whoever started its agent, 
         },
       },
     ],
-    { me: dean.userId, callTaskId: DRAFT.id },
+    { me: dean.userId, talkingTaskId: DRAFT.id },
   );
 
   const face = (words: string) =>
@@ -747,7 +747,7 @@ test("a question main counts after a plan's last read stands while that plan's r
 });
 
 test("↓ from the window reaches the first row and moves on through the stations, and ↑ from the window the last", () => {
-  const { page } = mount([DRAFT, SEARCH, INVITES], { callTaskId: DRAFT.id });
+  const { page } = mount([DRAFT, SEARCH, INVITES], { talkingTaskId: DRAFT.id });
   const press = (key: string) =>
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
@@ -795,7 +795,7 @@ test("a row's right-click offers Copy link, copying what a press on it opens: it
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
-    callTaskId: DRAFT.id,
+    talkingTaskId: DRAFT.id,
     workspace: {
       id: "workspace-personal",
       slug: "acme",

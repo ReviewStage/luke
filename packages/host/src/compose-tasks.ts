@@ -432,7 +432,6 @@ export type TasksClient = Pick<
   | "startComment"
   | "actOnComment"
   | "restore"
-  | "stopWork"
   | "repositories"
   | "setRepository"
   | "setStanding"
@@ -2010,14 +2009,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             return { restored: true };
           }),
         );
-      }),
-    // Stopping Luke reads nothing back: the conversation's follow hears his turn end.
-    [GATEWAY_METHOD.TASKS_STOP_WORK]: (params) =>
-      Effect.gen(function* () {
-        const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("stopping Luke names a task");
-        if (gate()) yield* served(client.stopWork(read.success.taskId));
-        return {};
       }),
     // Leaving the task returns to the list, which was read when the tab
     // showed, and leaves its call standing, as opening another task does.

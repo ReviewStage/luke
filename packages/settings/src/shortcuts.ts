@@ -2,8 +2,8 @@
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
  * Every shortcut but Escape and the Inbox's J and K holds Command, the way a
- * Mac app's own chords do, so none can be the talk or stop key: those take
- * the machine, and Command chords belong to whichever app is frontmost. J
+ * Mac app's own chords do, since Command chords belong to whichever app is
+ * frontmost. J
  * and K are a letter alone, as Linear's and Superhuman's are, and R, which
  * replies to an agent's words selected as GitHub's R quotes them, answered
  * only where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
@@ -796,8 +796,8 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
  * Any chord's glyphs as the window draws them, one per key: the modifiers in
  * the order macOS writes them, ⌃⌥⇧⌘, then the key. It reads Electron's
  * accelerator, the one spelling the window's chords (`shortcutAccelerator`)
- * and the system-wide keys Settings stores share, so the two are drawn by one
- * rule: a key the window's table names takes its glyph, ⏎ for Return and ⌫
+ * share, so every chord is drawn by one rule: a key the window's table names
+ * takes its glyph, ⏎ for Return and ⌫
  * for Delete, and any other, Space or a letter, its name.
  */
 export function shortcutGlyphs(accelerator: string): readonly string[] {
@@ -808,11 +808,6 @@ export function shortcutGlyphs(accelerator: string): readonly string[] {
   const unknown = [...held].filter((glyph) => !MODIFIER_GLYPHS.some((each) => each === glyph));
   const ordered = MODIFIER_GLYPHS.filter((glyph) => held.has(glyph));
   return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key];
-}
-
-/** Any chord as words, its glyphs set tight as a menu prints a key equivalent: ⇧⌘I, ⌥Space, Esc. */
-export function shortcutLabel(accelerator: string): string {
-  return shortcutGlyphs(accelerator).join("");
 }
 
 /** The chord as `aria-keyshortcuts` spells it. */

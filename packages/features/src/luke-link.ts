@@ -17,8 +17,7 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *
  * - a task, `/plan/<id>`, and its section, `#<anchor>`, its version,
  *   `/plan/<id>/version/<seq>`, a page an agent wrote for it,
- *   `/plan/<id>/page/<pageId>`, its Call tab or one call there,
- *   `/plan/<id>/call[/<callId>]`, and a turn of Luke's in its Work,
+ *   `/plan/<id>/page/<pageId>`, and a turn of Luke's own work on it,
  *   `/plan/<id>/work/<at>`;
  * - one of its agents, `/plan/<id>/agent/<agentId>`, and under it a worker,
  *   `/worker/<callId>`, its Changes, `/changes`, one review thread of its
@@ -62,7 +61,6 @@ export const LINK_PLACE = {
   COMMENT: "comment",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   TURN: "turn",
   AGENT: "agent",
   WORKER: "worker",
@@ -99,7 +97,6 @@ const STEP = {
   TASK: "task",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   WORK: "work",
   AGENT: "agent",
   WORKER: "worker",
@@ -170,11 +167,6 @@ const linkPlaceSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(LINK_PLACE.PAGE),
     planId: idSchema,
     pageId: idSchema,
-  }),
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(LINK_PLACE.CALL),
-    planId: idSchema,
-    callId: EffectSchema.optionalKey(idSchema),
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.TURN),
@@ -298,10 +290,9 @@ function namesItemPicture(more: readonly string[]): boolean {
   return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
 }
 
-/** The steps after a task's id: a version, a page, the Call tab or a call, a turn, an agent's, or a worker of Luke's. */
+/** The steps after a task's id: a version, a page, a turn, an agent's, or a worker of Luke's. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
-  if (step === STEP.CALL && id === undefined) return { kind: LINK_PLACE.CALL, planId: taskId };
   if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
   // A picture in an item's words opens the item, and nothing of the picture.
   if (step === STEP.INBOX && id !== undefined && namesItemPicture(more)) {
@@ -315,8 +306,6 @@ function taskFields(taskId: string, rest: readonly string[]) {
         : undefined;
     case STEP.PAGE:
       return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: id };
-    case STEP.CALL:
-      return { kind: LINK_PLACE.CALL, planId: taskId, callId: id };
     case STEP.WORK:
       return WHOLE.test(id) ? { kind: LINK_PLACE.TURN, planId: taskId, at: Number(id) } : undefined;
     case STEP.WORKER:
@@ -433,10 +422,6 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.PLAN, place.planId, STEP.VERSION, String(place.revision)];
     case LINK_PLACE.PAGE:
       return [STEP.PLAN, place.planId, STEP.PAGE, place.pageId];
-    case LINK_PLACE.CALL:
-      return place.callId === undefined
-        ? [STEP.PLAN, place.planId, STEP.CALL]
-        : [STEP.PLAN, place.planId, STEP.CALL, place.callId];
     case LINK_PLACE.TURN:
       return [STEP.PLAN, place.planId, STEP.WORK, String(place.at)];
     case LINK_PLACE.AGENT:

@@ -103,7 +103,7 @@ export function cardVideo(
 export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): CallControls {
   const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
   return {
-    onReturn: () => tell(ACT_KIND.CALL_SHOW_TASK),
+    onReturn: () => tell(ACT_KIND.CALL_SHOW_AGENT),
     onToggleMicrophone: () => command(VOICE_COMMAND.TOGGLE_MICROPHONE),
     onToggleSpeaker: () =>
       command(speakerMuted ? VOICE_COMMAND.UNMUTE_SPEAKER : VOICE_COMMAND.MUTE_SPEAKER),

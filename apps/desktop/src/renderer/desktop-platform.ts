@@ -27,7 +27,6 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   pageFrameUrl,
   assetBase: () => new URL(".", document.baseURI).href,
   onMenuCommand: (listener) => appBridge().onMenuCommand(listener),
-  setShortcutCapturing: (capturing) => appBridge().setShortcutCapturing(capturing),
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),
   openGitHub: (url) => tellAct(ACT_KIND.GITHUB_OPEN, { url }),
   openWeb: (url) => tellAct(ACT_KIND.WEB_OPEN, { url }),

@@ -3,6 +3,7 @@ import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF, type AvatarState } from "@luke/voice/avatar";
 import {
+  callInProgress,
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
   type VoiceCallTranscript,
@@ -167,12 +168,27 @@ export function useVoiceView(): VoiceViewState {
   };
 }
 
+/** The voice as the voice window last reported it, read alone: a surface that draws the call and offers none of its chords. */
+export function useStandingVoiceView(): VoiceView {
+  return useAppSlice(voiceViewAtom);
+}
+
+/** The agent a call is in progress into, which redraws its reader only as it moves; none while no call stands. */
+const callingAgentAtom: Atom.Atom<string | undefined> = Atom.map(voiceViewAtom, (view) =>
+  callInProgress(view) ? view.call?.agentId : undefined,
+);
+
+/** The agent a call is in progress into, whose tab wears the live mark and draws the call; none while no call stands. */
+export function useCallingAgent(): string | undefined {
+  return useAppSlice(callingAgentAtom);
+}
+
 /** Luke's avatar on the standing call, or none, as main holds it for every window. */
 export function useVoiceAvatar(): AvatarState {
   return useAppSlice(voiceAvatarAtom);
 }
 
-/** What was said on the standing call so far, which the Tasks tab's live transcript draws; none for no call. */
+/** What was said on the standing call so far, which its agent's tab's live transcript draws; none for no call. */
 export function useCallTranscript(): VoiceCallTranscript | undefined {
   return useAppSlice(callTranscriptAtom);
 }

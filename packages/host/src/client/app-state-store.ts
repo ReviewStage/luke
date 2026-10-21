@@ -292,7 +292,6 @@ export function initialAppState(
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    hotkeys: { talkHeld: true },
     voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },

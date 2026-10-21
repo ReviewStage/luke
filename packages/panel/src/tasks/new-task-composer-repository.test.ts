@@ -149,9 +149,9 @@ test("a preset on a token repository the picker lists stands chosen once the rea
 });
 
 test("a preset the workspace's GitHub does not reach is not started on while the picker's read is out", async () => {
-  window.localStorage.setItem("luke.new-task-mode", "plan");
   const { container, starts } = await mount(() => new Promise(() => undefined), "alice/private");
-  pressInComposer(container, "Enter");
+  // ⌘Return on the empty box: a bare task, which starts on no repository as on one.
+  pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
   assert.deepEqual(starts, [null]);

@@ -1161,17 +1161,14 @@ only when you press Send.
 ## Who we send it to
 
 - OpenAI, for voice and for Luke's judgment. A voice session is one continuous
-  conversation. While your microphone is on — while you hold the talk key, or
-  from a press of a task's microphone button, the call card's, or the
-  microphone shortcut, or from starting a new task, until you press one of
-  those again or press and let go of the talk key — everything it hears
-  streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
+  conversation. While your microphone is on — from a press of an agent's Call
+  button, the call card's microphone, or the microphone shortcut, or from
+  starting a new voice chat, until you press one of those again — everything
+  it hears streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
   listening and closes the microphone when OpenAI confirms, within five
-  seconds; Luke can still speak while it is closed. Every ask is spoken; there
-  is no way to type to Luke. A call opens only when you press the talk key or
-  a task's microphone, or start a new task, which opens a call about it with
-  the microphone on where macOS already lets Luke use the microphone and no
-  other call is open. Every session goes through our own voice service on your
+  seconds; Luke can still speak while it is closed. A call opens only when you
+  press an agent's Call button or start a new voice chat; starting a task
+  never opens one, and Luke takes no key from the machine to open one. Every session goes through our own voice service on your
   account: nothing on your Mac holds or is handed an OpenAI credential, and it
   never reaches OpenAI on a key of your own. The service creates the session
   on our key; relays the control and transcript events between your Mac and
@@ -1501,21 +1498,18 @@ and error, performance, and agent reports by Sentry.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. What earlier versions left on our service goes with
   your account.
-- What you say to Luke on a call goes to that task's conversation, fixed when
-  the call opens and never moved afterwards.
+- What you say on a call goes to the conversation of the agent you called,
+  fixed when the call opens and never moved afterwards.
 - Luke listens through your microphone only while a call's microphone is on,
   or while a dictation into a message box is recording, which the box shows as
-  a moving waveform with its time. The talk key opens it while held; a task's
-  microphone button, the call card's, or the microphone shortcut opens it
-  until you press one again or press and let go of the talk key, and so does
-  starting a new task, which opens a call about it. macOS's microphone
+  a moving waveform with its time. An agent's Call button, the call card's
+  microphone, or the microphone shortcut opens it until you press one again,
+  and so does starting a new voice chat, which opens a call into its agent.
+  macOS's microphone
   indicator is lit whenever the device is open: from the press, including
   while a new call connects, until OpenAI confirms it has stopped listening,
-  within five seconds of the microphone going off. The stop key closes it too,
-  and is the one key that also tells Luke to stop talking, while letting go of
-  the talk key lets him finish. If Luke's key helper cannot start, the talk
-  key reports presses alone, so one press opens the microphone and the next
-  closes it, and the Keyboard shortcuts page says so.
+  within five seconds of the microphone going off. Escape closes it too, and
+  also tells Luke to stop talking.
 - Delete your account from the Account section in Settings. This erases at
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
