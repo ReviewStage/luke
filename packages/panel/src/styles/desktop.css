@@ -5229,7 +5229,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: auto;
 }
 
-/* The stream's body, inside the `ScrollArea` that scrolls it. */
+/* The stream's body, the block a log's lines stand in (`ConversationContent`). */
 .chat-stream-body {
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5244,7 +5244,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A message is laid out as Slack's is: its author's face in a column of its
    own at a card's 32px, a rounded square for everyone, then their name in
-   bold and the clock time in the caption's muted ink on one line, and the
+   bold and how long ago in the caption's muted ink on one line, and the
    words under it. Rows sit tight and light up while hovered. */
 .chat-message,
 .chat-reply {
@@ -5356,16 +5356,28 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .chat-byline-action {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
   margin-left: auto;
   opacity: 0;
+}
+
+/* The presses show as their row does, so a message's Copy stands with its
+   Reply rather than waiting on a transcript's hover of its own. */
+.chat-byline-action > .message-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .chat-byline-action:focus-within {
   opacity: 1;
 }
 
+/* Note that a root's own byline is reached by children alone, so hovering a
+   reply in its open thread shows that reply's presses and not the root's. */
 @media (hover: hover) {
-  .chat-message:hover .chat-byline-action {
+  :is(.chat-message, .chat-reply):hover > .chat-message-body > .chat-byline > .chat-byline-action {
     opacity: 1;
   }
 }
@@ -5380,6 +5392,26 @@ polygon.factory-campus-edge[data-edge="selected"] {
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-reading-leading);
+}
+
+/* The line before the first message posted since the reader last read the
+   channel, as Slack's "New" line is: a rule in the unread dot's accent with
+   its word at its end, kept a step below the log's top when it opens there. */
+.chat-unread-line {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin-block: var(--luke-space-8);
+  color: var(--luke-color-accent-text);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-bold);
+  scroll-margin-top: var(--luke-space-16);
+}
+
+.chat-unread-line::before {
+  flex: 1;
+  border-top: 1px solid var(--luke-color-accent);
+  content: "";
 }
 
 /* An ask draws as a card in its row (`Card`), a step under the byline. */
