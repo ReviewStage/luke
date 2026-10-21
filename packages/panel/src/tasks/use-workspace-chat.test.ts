@@ -6,7 +6,6 @@ import {
   CHANNEL_KIND,
   CHAT_ASK,
   CHAT_BLOCK,
-  CHAT_CURSOR_START,
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   type ChatAnswer,
@@ -17,16 +16,16 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChatAnswerView,
   type CodingAgentChatAttachmentParams,
-  type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentInboxAttachmentView,
 } from "@luke/features/coding-agent-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import {
   CHAT_NOT_TAKEN,
+  chatFollowerOf,
   useWorkspaceChat,
   type WorkspaceChatControl,
 } from "./use-workspace-chat.js";
@@ -57,8 +56,8 @@ function message(seq: number, more: Partial<ChatMessage> = {}): ChatMessage {
   };
 }
 
-/** The chat a read answers: the roster, the channel, the messages given, and the cursor after them. */
-function answered(messages: readonly ChatMessage[], cursor: string, readSeq = 0): ChatAnswer {
+/** The chat a push carries: the roster, the channel, and the messages given; a pushed chat carries no cursor. */
+function answered(messages: readonly ChatMessage[], readSeq = 0): ChatAnswer {
   return {
     self: ME,
     readSeq,
@@ -68,26 +67,36 @@ function answered(messages: readonly ChatMessage[], cursor: string, readSeq = 0)
     ],
     channels: [{ id: CHANNEL, kind: CHANNEL_KIND.TASK, name: "invites", archived: false }],
     messages,
-    cursor,
+    cursor: "",
   };
 }
 
-/** A service the test answers by hand: each read and write waits until the test settles it. */
+/** The host as the test plays it: the follows held open and let go, a push down one, and each write waiting until the test settles it. */
 function scriptedService() {
-  const reads: {
-    params: CodingAgentChatParams;
-    settle: (answer: CodingAgentChatAnswerView) => void;
-  }[] = [];
+  const asked: string[] = [];
+  const hearers = new Map<string, Set<(chat: CodingAgentChatAnswerView) => void>>();
   const writes: {
     params: CodingAgentChatPostParams;
     settle: (answer: CodingAgentChatWriteAnswerView) => void;
   }[] = [];
   const pictures: CodingAgentChatAttachmentParams[] = [];
   return {
-    reads,
+    asked,
     writes,
-    readChat: (params: CodingAgentChatParams) =>
-      new Promise<CodingAgentChatAnswerView>((settle) => reads.push({ params, settle })),
+    /** A chat pushed down every stream of the workspace's held open. */
+    push: (workspaceId: string, chat: CodingAgentChatAnswerView) => {
+      for (const hear of hearers.get(workspaceId) ?? []) hear(chat);
+    },
+    followChat: (workspaceId: string, hear: (chat: CodingAgentChatAnswerView) => void) => {
+      asked.push(`follow:${workspaceId}`);
+      const standing = hearers.get(workspaceId) ?? new Set();
+      standing.add(hear);
+      hearers.set(workspaceId, standing);
+      return () => {
+        asked.push(`unfollow:${workspaceId}`);
+        standing.delete(hear);
+      };
+    },
     writeChat: (params: CodingAgentChatPostParams) =>
       new Promise<CodingAgentChatWriteAnswerView>((settle) => writes.push({ params, settle })),
     pictures,
@@ -117,7 +126,14 @@ function mount(
   let control: WorkspaceChatControl | undefined;
   let set: ((next: Shown) => void) | undefined;
   function Harness(props: Shown) {
-    control = useWorkspaceChat({ account: "dean@example.com", ...props, active: true, ...service });
+    control = useWorkspaceChat({
+      account: "dean@example.com",
+      ...props,
+      active: true,
+      followChat: service.followChat,
+      writeChat: service.writeChat,
+      readPicture: service.readPicture,
+    });
     return null;
   }
   const container = document.createElement("div");
@@ -142,59 +158,122 @@ async function settle(): Promise<void> {
   });
 }
 
-test("the chat is read from the start and then past each cursor the service hands back, a newer word on a message taking its place and an older one setting nothing back", async () => {
+test("the chat is followed and each push taken in, a newer word on a message taking its place and an older one setting nothing back", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  assert.deepEqual(
-    service.reads.map((read) => read.params),
-    [{ workspaceId: "acme", after: CHAT_CURSOR_START }],
-  );
-  service.reads[0]?.settle(answered([message(1), message(2)], "2"));
+  assert.deepEqual(service.asked, ["follow:acme"]);
+  service.push("acme", answered([message(1), message(2)]));
   await settle();
   assert.deepEqual(
     tab.control().chat?.messages.map((each) => each.id),
     ["m1", "m2"],
   );
-  assert.equal(service.reads[1]?.params.after, "2");
 
   const edited = message(1, {
     touchedSeq: 4,
     blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "edited" }],
   });
-  service.reads[1]?.settle(answered([edited, message(3)], "4"));
+  service.push("acme", answered([edited, message(2), message(3)]));
+  // A push still carrying the message as it first stood never sets it back.
+  service.push("acme", answered([message(1), message(2), message(3)]));
   await settle();
-  // A slower read still carrying the message as it first stood never sets it back.
-  service.reads[2]?.settle(answered([message(1)], "4"));
-  await settle();
-  const held = tab.control().chat?.messages ?? [];
   assert.deepEqual(
-    held.map((each) => [each.id, each.touchedSeq]),
+    (tab.control().chat?.messages ?? []).map((each) => [each.id, each.touchedSeq]),
     [
       ["m1", 4],
       ["m2", 2],
       ["m3", 3],
     ],
   );
-  assert.equal(service.reads[3]?.params.after, "4");
+  // A message the push no longer holds, fallen past a channel's newest, is let go.
+  service.push("acme", answered([edited, message(3)]));
+  await settle();
+  assert.deepEqual(
+    tab.control().chat?.messages.map((each) => each.id),
+    ["m1", "m3"],
+  );
+  assert.deepEqual(service.asked, ["follow:acme"]);
 });
 
-test("a read that did not answer ends the loop and says so, and Try again reads from the start", async () => {
+test("a message the window posted stands through a push read before it landed, and the push that holds it takes over", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  service.reads[0]?.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  service.push("acme", answered([message(1)]));
+  await settle();
+  let said: Promise<string | undefined> | undefined;
+  act(() => {
+    said = tab.control().onPost({ text: "hold the template", to: "#invites" });
+  });
+  const posted = message(2, { authorId: ME });
+  service.writes[0]?.settle({
+    posted,
+    receipt: { told: [], held: [], left: [], unresolved: [] },
+  });
+  await settle();
+  assert.equal(await said, undefined);
+  service.push("acme", answered([message(1)]));
+  await settle();
+  assert.deepEqual(
+    tab.control().chat?.messages.map((each) => each.id),
+    ["m1", "m2"],
+    "the older push sets the post nothing back",
+  );
+  const edited = message(2, { authorId: ME, touchedSeq: 5 });
+  service.push("acme", answered([message(1), edited]));
+  await settle();
+  service.push("acme", answered([message(1), edited]));
+  await settle();
+  assert.equal(tab.control().chat?.messages[1]?.touchedSeq, 5);
+});
+
+test("a chat stream that ends though the window still follows it says it could not be read", async () => {
+  let opened: ((chat: CodingAgentChatAnswerView) => void) | undefined;
+  let end: (() => void) | undefined;
+  // SAFETY: the follower opens one stream through the act it is handed and reads it with for-await alone.
+  const follower = chatFollowerOf(((_kind: unknown) =>
+    Promise.resolve(
+      (async function* () {
+        while (true) {
+          const next = await new Promise<CodingAgentChatAnswerView | undefined>((resolve) => {
+            opened = resolve;
+            end = () => resolve(undefined);
+          });
+          if (next === undefined) return;
+          yield next;
+        }
+      })(),
+    )) as unknown as Parameters<typeof chatFollowerOf>[0]);
+  const heard: CodingAgentChatAnswerView[] = [];
+  const stop = follower("acme", (chat) => heard.push(chat));
+  await settle();
+  opened?.(answered([message(1)]));
+  await settle();
+  end?.();
+  await settle();
+  assert.deepEqual(heard, [
+    answered([message(1)]),
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  ]);
+  stop();
+});
+
+test("a chat that could not be read is let go and says so, and Try again follows it anew", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  service.push("acme", { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
   assert.equal(tab.control().failed, true);
-  assert.equal(service.reads.length, 1);
+  assert.deepEqual(service.asked, ["follow:acme", "unfollow:acme"]);
   act(() => tab.control().onRetry());
   await settle();
   assert.equal(tab.control().failed, false);
-  assert.deepEqual(service.reads[1]?.params, { workspaceId: "acme", after: CHAT_CURSOR_START });
+  assert.deepEqual(service.asked, ["follow:acme", "unfollow:acme", "follow:acme"]);
 });
 
 test("a post sent again after a reply that never came goes under the same key, and the message the service answers stands at once", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  service.reads[0]?.settle(answered([message(1)], "1"));
+  service.push("acme", answered([message(1)]));
   await settle();
   const post = { text: "hold the template", to: "#invites" };
   let said: Promise<string | undefined> | undefined;
@@ -248,7 +327,7 @@ test("an answer the service did not take, its ask changed first, says so and lea
     response: { type: CHAT_ASK.APPROVAL },
     needsReply: true,
   } as const;
-  service.reads[0]?.settle(answered([message(1, { ask: { ...ask, revision: 1 } })], "1"));
+  service.push("acme", answered([message(1, { ask: { ...ask, revision: 1 } })]));
   await settle();
   let said: Promise<string | undefined> | undefined;
   act(() => {
@@ -263,7 +342,7 @@ test("an answer the service did not take, its ask changed first, says so and lea
 test("while a channel is shown the developer has read it to its newest message, told of that channel once per place it moves to; For you moves nothing", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  service.reads[0]?.settle(answered([message(1), message(2)], "2"));
+  service.push("acme", answered([message(1), message(2)]));
   await settle();
   assert.equal(service.writes.length, 0);
   tab.rerender({ workspaceId: "acme", reading: CHANNEL });
@@ -276,7 +355,7 @@ test("while a channel is shown the developer has read it to its newest message, 
   await settle();
   assert.equal(service.writes.length, 1);
   service.writes[0]?.settle({ readSeq: 0, reads: [{ channelId: CHANNEL, readSeq: 2 }] });
-  service.reads[1]?.settle(answered([message(3)], "3"));
+  service.push("acme", answered([message(1), message(2), message(3)]));
   await settle();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
@@ -287,20 +366,17 @@ test("while a channel is shown the developer has read it to its newest message, 
   );
 });
 
-test("another workspace's chat starts from nothing of the last one's", async () => {
+test("another workspace's chat starts from nothing of the last one's, which is let go", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  service.reads[0]?.settle(answered([message(1)], "1"));
+  service.push("acme", answered([message(1)]));
   await settle();
   tab.rerender({ workspaceId: "ledger", reading: undefined });
   await settle();
   assert.equal(tab.control().chat, undefined);
-  assert.deepEqual(service.reads.at(-1)?.params, {
-    workspaceId: "ledger",
-    after: CHAT_CURSOR_START,
-  });
-  // The first workspace's read answering late is kept for nobody.
-  service.reads[1]?.settle(answered([message(9)], "9"));
+  assert.deepEqual(service.asked, ["follow:acme", "unfollow:acme", "follow:ledger"]);
+  // The first workspace's push, arriving late, is kept for nobody.
+  service.push("acme", answered([message(9)]));
   await settle();
   assert.equal(tab.control().chat, undefined);
 });
@@ -308,7 +384,7 @@ test("another workspace's chat starts from nothing of the last one's", async () 
 test("a channel's read the service did not take is told again once the channel is shown again", async () => {
   const service = scriptedService();
   const tab = mount(service, "acme", CHANNEL);
-  service.reads[0]?.settle(answered([message(1), message(2)], "2"));
+  service.push("acme", answered([message(1), message(2)]));
   await settle();
   assert.equal(service.writes.length, 1);
   service.writes[0]?.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
@@ -325,31 +401,27 @@ test("a channel's read the service did not take is told again once the channel i
   );
 });
 
-test("another account signed in to the same workspace starts from nothing of the last account's chat", async () => {
+test("another account signed in to the same workspace starts from nothing of the last account's chat, following it anew as its own", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  service.reads[0]?.settle(answered([message(1)], "1"));
+  service.push("acme", answered([message(1)]));
   await settle();
   assert.ok(tab.control().chat);
   tab.rerender({ workspaceId: "acme", reading: undefined, account: "ada@example.com" });
   await settle();
   assert.equal(tab.control().chat, undefined);
-  assert.deepEqual(service.reads.at(-1)?.params, { workspaceId: "acme", after: CHAT_CURSOR_START });
-  // The last account's read answering late is kept for nobody.
-  service.reads[1]?.settle(answered([message(9)], "9"));
-  await settle();
-  assert.equal(tab.control().chat, undefined);
+  assert.deepEqual(service.asked, ["follow:acme", "unfollow:acme", "follow:acme"]);
 });
 
 test("another account signed in with the same channel shown marks it read as its own, whatever the last account told", async () => {
   const service = scriptedService();
   const tab = mount(service, "acme", CHANNEL);
-  service.reads[0]?.settle(answered([message(1), message(2)], "2"));
+  service.push("acme", answered([message(1), message(2)]));
   await settle();
   service.writes[0]?.settle({ readSeq: 2 });
   tab.rerender({ workspaceId: "acme", reading: CHANNEL, account: "ada@example.com" });
   await settle();
-  service.reads.at(-1)?.settle(answered([message(1), message(2)], "2"));
+  service.push("acme", answered([message(1), message(2)]));
   await settle();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
@@ -360,12 +432,11 @@ test("another account signed in with the same channel shown marks it read as its
   );
 });
 
-test("a channel the window wrote stands through a read that was asked before the write, and the next read is the service's word", async () => {
+test("a channel the window wrote stands through pushes read before the write landed, and is let go once a push holds it or the hold has passed", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  service.reads[0]?.settle(answered([message(1)], "1"));
+  service.push("acme", answered([message(1)]));
   await settle();
-  // The second read is out while the channel is renamed.
   let said: Promise<string | undefined> | undefined;
   act(() => {
     said = tab.control().onChannel({ edit: { channelId: CHANNEL, name: "invites-v2" } });
@@ -374,39 +445,59 @@ test("a channel the window wrote stands through a read that was asked before the
   service.writes[0]?.settle({ channel: renamed });
   await settle();
   assert.equal(await said, undefined);
-  service.reads[1]?.settle(answered([message(1)], "1"));
+  assert.equal(tab.control().chat?.channels[0]?.name, "invites-v2");
+  // Pushes read before the rename landed, however many, set nothing back.
+  service.push("acme", answered([message(1)]));
+  service.push("acme", answered([message(1)]));
   await settle();
   assert.equal(
     tab.control().chat?.channels[0]?.name,
     "invites-v2",
-    "the older read sets nothing back",
+    "the older pushes set nothing back",
   );
-  // A read asked after the write is the service's own word again.
-  service.reads[2]?.settle({
-    ...answered([message(1)], "1"),
+  // Past the hold, a push is the chat's own word again.
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now + 31_000);
+  service.push("acme", {
+    ...answered([message(1)]),
     channels: [{ ...renamed, name: "invites-v3" }],
   });
   await settle();
   assert.equal(tab.control().chat?.channels[0]?.name, "invites-v3");
+  clock.mockRestore();
+
+  // A push that holds the write lets it go at once.
+  act(() => {
+    void tab.control().onChannel({ edit: { channelId: CHANNEL, name: "invites-v4" } });
+  });
+  const again = { ...renamed, name: "invites-v4" };
+  service.writes[1]?.settle({ channel: again });
+  await settle();
+  service.push("acme", { ...answered([message(1)]), channels: [again] });
+  service.push("acme", {
+    ...answered([message(1)]),
+    channels: [{ ...renamed, name: "invites-v5" }],
+  });
+  await settle();
+  assert.equal(tab.control().chat?.channels[0]?.name, "invites-v5");
 });
 
-test("a channel the last account wrote, answered after another account signed in, is laid over nothing of the new account's reads", async () => {
+test("a channel the last account wrote, answered after another account signed in, is laid over nothing of the new account's chat", async () => {
   const service = scriptedService();
   const tab = mount(service);
-  service.reads[0]?.settle(answered([message(1)], "1"));
+  service.push("acme", answered([message(1)]));
   await settle();
   act(() => {
     void tab.control().onChannel({ edit: { channelId: CHANNEL, name: "alpha" } });
   });
   tab.rerender({ workspaceId: "acme", reading: undefined, account: "ada@example.com" });
   await settle();
-  const ada = service.reads.at(-1);
   service.writes[0]?.settle({
     channel: { id: CHANNEL, kind: CHANNEL_KIND.TOPIC, name: "alpha", archived: false },
   });
   await settle();
-  ada?.settle({
-    ...answered([message(1)], "1"),
+  service.push("acme", {
+    ...answered([message(1)]),
     channels: [{ id: CHANNEL, kind: CHANNEL_KIND.TOPIC, name: "beta", archived: false }],
   });
   await settle();
