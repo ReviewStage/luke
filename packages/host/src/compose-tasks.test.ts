@@ -1834,7 +1834,7 @@ it.effect(
         title: "Launch",
         createdAt: 5,
       };
-      service.sections = { sections: [launch], entries: [] };
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
 
       // Before the first refresh nothing follows the sidebar, so a write's transaction is not waited on.
       service.sidebarTxid = "40";
@@ -1852,7 +1852,7 @@ it.effect(
 
       service.sidebarTxid = "41";
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
-      service.sections = { sections: [launch], entries: [placed] };
+      service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
       const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
       const placing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place));
       yield* settled;
@@ -1860,7 +1860,11 @@ it.effect(
       assert.equal(placing.pollUnsafe(), undefined, "the write waits for its transaction");
       service.realtime.arrive("41");
       assert.deepEqual(yield* Fiber.join(placing), { changed: true });
-      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(last()?.taskSections, {
+        sections: [launch],
+        entries: [placed],
+        agentEntries: [],
+      });
 
       service.sidebarTxid = "42";
       const pinning = yield* Effect.forkChild(
