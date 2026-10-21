@@ -3259,6 +3259,19 @@ ul.actor-stack {
   pointer-events: none;
 }
 
+/* A group's room above it counts only the groups still in the layout, so a
+   group stands as it will once the one leaving before it is gone, and its
+   glide ends there rather than a margin short. */
+.inbox-tasks-body > [data-leaving] + .sidebar-repository {
+  margin-top: 0;
+}
+
+.inbox-tasks-body
+  > .sidebar-repository:not([data-leaving])
+  ~ .sidebar-repository:not([data-leaving]) {
+  margin-top: var(--luke-space-8);
+}
+
 /* The inbox-first sidebar's list (`sidebar-inbox.tsx`): the sidebar's own
    section under its places and pins, scrolled by the sidebar's scroller and
    inset as the sidebar's rows are, with no edge of its own. */

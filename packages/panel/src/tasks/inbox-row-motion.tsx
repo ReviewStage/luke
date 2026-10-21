@@ -160,14 +160,54 @@ export function useLeaving<T>(
   return { drawn, leave };
 }
 
+/**
+ * Every mover under `root`: its own children, and each row of a run. Note
+ * that the root's children are read as children rather than by `MOVERS`,
+ * since a selector scoped to the root that names the root's own class is
+ * one jsdom's engine never matches.
+ */
+function moversOf(root: HTMLElement): HTMLElement[] {
+  return [...root.children, ...root.querySelectorAll(".sidebar-tasks > li")].filter(
+    (mover): mover is HTMLElement => mover instanceof HTMLElement,
+  );
+}
+
 /** Where each mover under `root` is drawn, from the root's top, any glide under way included. */
 function placesOf(root: HTMLElement): Map<Element, number> {
   const top = root.getBoundingClientRect().top;
   const places = new Map<Element, number>();
-  for (const mover of root.querySelectorAll(MOVERS)) {
+  for (const mover of moversOf(root)) {
     places.set(mover, mover.getBoundingClientRect().top - top);
   }
   return places;
+}
+
+/** The mover that carries `element` as it glides, the group or run it stands in, or the root where none does. */
+function carrierOf(root: HTMLElement, element: Element): Element {
+  const around = element.parentElement?.closest(MOVERS);
+  return around === null || around === undefined || !root.contains(around) ? root : around;
+}
+
+/**
+ * Where a leaving element stood before the commit, as a top in the box it
+ * is laid out in once it leaves the layout, its run or the root (both
+ * positioned, desktop.css): read from `before` rather than from where the
+ * commit put it, since a row arriving above it in the same change moved it,
+ * and from the mover that carries it, which glides it on from there. Where
+ * nothing was read before, it stands where it is.
+ */
+function standingTop(
+  root: HTMLElement,
+  element: HTMLElement,
+  before: Map<Element, number> | null,
+): number {
+  const box = element.parentElement;
+  const carrier = carrierOf(root, element);
+  const was = before?.get(element);
+  const carrierWas = carrier === root ? 0 : before?.get(carrier);
+  if (box === null || was === undefined || carrierWas === undefined) return element.offsetTop;
+  const boxInCarrier = box.getBoundingClientRect().top - carrier.getBoundingClientRect().top;
+  return was - carrierWas - boxInCarrier - box.clientTop;
 }
 
 /**
@@ -176,7 +216,12 @@ function placesOf(root: HTMLElement): Map<Element, number> {
  * once where there is to be no motion. Note that every place is read
  * before any element leaves, since each that leaves moves the rest.
  */
-function playExits(leavers: readonly Leaver[], exit: KeyframeAnimationOptions | undefined): void {
+function playExits(
+  root: HTMLElement,
+  leavers: readonly Leaver[],
+  before: Map<Element, number> | null,
+  exit: KeyframeAnimationOptions | undefined,
+): void {
   if (exit === undefined) {
     for (const leaver of leavers) leaver.onLeft();
     return;
@@ -185,7 +230,7 @@ function playExits(leavers: readonly Leaver[], exit: KeyframeAnimationOptions | 
     const { element } = leaver;
     return {
       leaver,
-      top: element.offsetTop,
+      top: standingTop(root, element, before),
       left: element.offsetLeft,
       width: element.offsetWidth,
       opacity: getComputedStyle(element).opacity || "1",
@@ -217,12 +262,7 @@ function playMoves(
   travel: KeyframeAnimationOptions,
   arrive: KeyframeAnimationOptions | undefined,
 ): void {
-  const movers = [...root.querySelectorAll<HTMLElement>(MOVERS)].filter(
-    (mover) => !exits.has(mover),
-  );
-  // Note that a glide under way is stopped before anything is read, so each
-  // mover is read where the new layout stands it, and all are read at once.
-  for (const mover of movers) glides.get(mover)?.cancel();
+  const movers = moversOf(root).filter((mover) => !exits.has(mover));
   const now = placesOf(root);
   const movedBy = (mover: Element): number => {
     const was = before.get(mover);
@@ -240,10 +280,8 @@ function playMoves(
       }
       continue;
     }
-    const around = mover.parentElement?.closest(MOVERS);
-    const carried =
-      around !== null && around !== undefined && root.contains(around) ? movedBy(around) : 0;
-    const moved = movedBy(mover) - carried;
+    const carrier = carrierOf(root, mover);
+    const moved = movedBy(mover) - (carrier === root ? 0 : movedBy(carrier));
     if (Math.abs(moved) < STILL) continue;
     const glide = mover.animate([{ transform: `translateY(${moved}px)` }, { transform: "none" }], {
       ...travel,
@@ -328,7 +366,10 @@ export class InboxRowMotion extends Component<
     }
     if (leavers.length > 0) this.holdHeight(root);
     const exit = animates(root) ? tokenTiming(root, "--duration-exit", "--motion-exit") : undefined;
-    playExits(leavers, exit);
+    // Note that a glide under way is stopped before anything is read, so each
+    // element is read where the new layout stands it, and all are read at once.
+    for (const mover of moversOf(root)) glides.get(mover)?.cancel();
+    playExits(root, leavers, before, exit);
     const travel = tokenTiming(root, "--duration-shape", "--spring");
     if (before === null || travel === undefined) return;
     const wait = leavers.length > 0 && exit !== undefined ? Number(exit.duration) : 0;
