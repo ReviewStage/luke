@@ -903,3 +903,50 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "a page that never answers the cursor's measure, or a report that stalls, costs the input nothing past a moment",
+  () =>
+    Effect.gen(function* () {
+      const { peer, sent } = yield* browser(
+        (command) => (command.method === "Page.getLayoutMetrics" ? { silent: true } : undefined),
+        [{ targetId: "page-shop", url: "https://shop.example/", title: "Shop" }],
+      );
+      const pressed = () =>
+        sent.filter(
+          (command) =>
+            command.method === "Input.dispatchMouseEvent" && command.params.type === "mousePressed",
+        ).length;
+      const click = [
+        { action: BROWSER_AGENT_ACTION.CLICK, tab: "page-shop", x: 40, y: 60 },
+      ] as const;
+      const reported: BrowserCursorMove[] = [];
+      const hearing: BrowserCursor = {
+        watched: true,
+        report: (move) => Effect.sync(() => void reported.push(move)),
+      };
+
+      const unmeasured = yield* Effect.forkChild(run(peer, click, hearing));
+      yield* advance(Duration.seconds(2));
+      const measureless = yield* Fiber.join(unmeasured);
+
+      const { peer: answering, sent: answered } = yield* browser(undefined, [
+        { targetId: "page-shop", url: "https://shop.example/", title: "Shop" },
+      ]);
+      const stalled: BrowserCursor = { watched: true, report: () => Effect.never };
+      const stalling = yield* Effect.forkChild(run(answering, click, stalled));
+      yield* advance(Duration.seconds(2));
+      const reportless = yield* Fiber.join(stalling);
+
+      assert.deepEqual(measureless.steps, [{ action: "click", status: "done", tab: "page-shop" }]);
+      assert.equal(pressed(), 1);
+      assert.deepEqual(reported, []);
+      assert.deepEqual(reportless.steps, [{ action: "click", status: "done", tab: "page-shop" }]);
+      assert.ok(
+        answered.some(
+          (command) =>
+            command.method === "Input.dispatchMouseEvent" && command.params.type === "mousePressed",
+        ),
+      );
+    }),
+);

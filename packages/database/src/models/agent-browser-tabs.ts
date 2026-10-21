@@ -229,8 +229,12 @@ const upsertTab = SqlSchema.findOne({
         })
         .onConflictDoUpdate({
           target: [agentBrowserTab.conversationId, agentBrowserTab.targetId],
-          // Who opened it and when stand from its first report; the page and the instant move on.
-          set: { address: tab.address, title: tab.title, lastActedAt: now },
+          // Who opened it and when stand from its first report; the page moves on, and the instant never back.
+          set: {
+            address: tab.address,
+            title: tab.title,
+            lastActedAt: sql`greatest(${agentBrowserTab.lastActedAt}, ${now}::timestamptz)`,
+          },
         })
         .returning(tabColumns),
     ),
@@ -259,12 +263,14 @@ const pointTab = SqlSchema.findAll({
           cursorViewportW: width,
           cursorViewportH: height,
           cursorAt: at,
-          lastActedAt: at,
+          lastActedAt: sql`greatest(${agentBrowserTab.lastActedAt}, ${at}::timestamptz)`,
         })
         .where(
           and(
             eq(agentBrowserTab.conversationId, conversationId),
             eq(agentBrowserTab.targetId, targetId),
+            // Only over an earlier move, so of two writes landing out of order the later move stands.
+            or(isNull(agentBrowserTab.cursorAt), lte(agentBrowserTab.cursorAt, at)),
           ),
         )
         .returning({ id: agentBrowserTab.id }),
@@ -479,7 +485,10 @@ export function retargetBrowserTab(
  * instant it went there standing as the tab's last action, so a member's
  * window draws it gliding there. Answers whether a kept tab took it: a tab
  * no row keeps yet, one this call just opened, is drawn by no window, so
- * its move is dropped. Note that it is one write, with no read before it.
+ * its move is dropped, and a move older than the one the tab holds, a write
+ * that landed late beside another call's, is dropped too, so the pointer
+ * and the tab's last action never go back. Note that it is one write, with
+ * no read before it.
  */
 export function pointBrowserTab(
   conversationId: string,

@@ -82,6 +82,13 @@ const WAIT_POLL = Duration.millis(250);
 export const BROWSER_CURSOR_BEAT = Duration.millis(250);
 
 /**
+ * How long finding and reporting a pointer's move may take before its input
+ * goes on without it: far inside an action's bound, so a page that does not
+ * answer the measure, or a report that stalls, never costs the input itself.
+ */
+const CURSOR_REPORT_TIMEOUT = Duration.seconds(1);
+
+/**
  * Where a run reports the agent's pointer: `report` is told of each move
  * just before its input is dispatched, and `watched` says whether someone
  * is watching the tabs, which holds each input `BROWSER_CURSOR_BEAT` after
@@ -502,7 +509,9 @@ function typeText(page: Page, text: string, ref: string | undefined) {
  * Reports the pointer's move to a point, with the visible page's size, and
  * holds the input after it for the beat where someone watches. Note that a
  * page whose size cannot be read reports nothing, since a point the panel
- * cannot place is no use, and the action goes on as it would have.
+ * cannot place is no use, and the action goes on as it would have; and that
+ * the measure and the report together are bounded by
+ * `CURSOR_REPORT_TIMEOUT`, past which the input goes on unreported.
  */
 function pointTo<R>(
   page: Page,
@@ -510,13 +519,13 @@ function pointTo<R>(
   kind: BrowserCursorKind,
   point: { readonly x: number; readonly y: number },
 ) {
-  return Effect.gen(function* () {
-    if (cursor === undefined) return;
+  if (cursor === undefined) return Effect.void;
+  const reported = Effect.gen(function* () {
     const method = "Page.getLayoutMetrics";
     const metrics = yield* Effect.option(
       Effect.flatMap(page.send(method), (answer) => readMetrics(method, answer)),
     );
-    if (Option.isNone(metrics)) return;
+    if (Option.isNone(metrics)) return false;
     const view = metrics.value.cssVisualViewport;
     yield* cursor.report({
       tab: page.targetId,
@@ -526,7 +535,14 @@ function pointTo<R>(
       viewport: { width: view.clientWidth, height: view.clientHeight },
       at: yield* Clock.currentTimeMillis,
     });
-    if (cursor.watched) yield* Effect.sleep(BROWSER_CURSOR_BEAT);
+    return true;
+  });
+  return Effect.gen(function* () {
+    const made = yield* Effect.timeoutOption(reported, CURSOR_REPORT_TIMEOUT);
+    // Note that the beat is held only for a move the panel heard, since it is the glide's time.
+    if (cursor.watched && Option.getOrElse(made, () => false)) {
+      yield* Effect.sleep(BROWSER_CURSOR_BEAT);
+    }
   });
 }
 
@@ -536,16 +552,21 @@ function pointTo<R>(
  * leaves the typing to say what went wrong, if anything did.
  */
 function typingPointOf(page: Page, ref: string | undefined) {
-  if (ref !== undefined) return Effect.option(pointOfRef(page, ref));
   const method = "Runtime.evaluate";
-  return Effect.option(
-    page.send(method, { expression: FOCUSED_POINT, returnByValue: true }).pipe(
-      Effect.flatMap((answer) => readEvaluated(method, answer)),
-      Effect.flatMap(({ result }) => {
-        const point = readPoint(result.value ?? null);
-        return Result.isSuccess(point) ? Effect.succeed(point.success) : Effect.fail("none");
-      }),
-    ),
+  const found: Effect.Effect<{ readonly x: number; readonly y: number }, unknown> =
+    ref !== undefined
+      ? pointOfRef(page, ref)
+      : page.send(method, { expression: FOCUSED_POINT, returnByValue: true }).pipe(
+          Effect.flatMap((answer) => readEvaluated(method, answer)),
+          Effect.flatMap(({ result }) => {
+            const point = readPoint(result.value ?? null);
+            return Result.isSuccess(point) ? Effect.succeed(point.success) : Effect.fail("none");
+          }),
+        );
+  // Note that a point not found in time is none, as a page that does not answer the measure is.
+  return Effect.map(
+    Effect.timeoutOption(Effect.option(found), CURSOR_REPORT_TIMEOUT),
+    Option.flatten,
   );
 }
 

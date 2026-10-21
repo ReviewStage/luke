@@ -346,6 +346,48 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
       }),
   );
 
+  it.effect(
+    "a move that lands after a later one leaves the later one, and the tab's last action never goes back",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* openTask;
+        yield* upsertBrowserTab(action(agent.conversationId, "target-1", "https://shop.test/"));
+        yield* TestClock.adjust("1 minute");
+        const later = (yield* DateTime.nowAsDate).getTime();
+        const move = {
+          tab: "target-1",
+          kind: BROWSER_CURSOR_KIND.CLICK,
+          viewport: { width: 1280, height: 800 },
+        };
+
+        assert.equal(
+          yield* pointBrowserTab(agent.conversationId, { ...move, x: 2, y: 2, at: later }),
+          true,
+        );
+        assert.equal(
+          yield* pointBrowserTab(agent.conversationId, { ...move, x: 1, y: 1, at: later - 30_000 }),
+          false,
+        );
+        // An action reported before the move, its write landing after it, moves nothing back either.
+        yield* Effect.provide(
+          upsertBrowserTab(action(agent.conversationId, "target-1", "https://shop.test/next")),
+          // A clock of its own, at the epoch, well before the move.
+          TestClock.layer(),
+        );
+        const [kept] = yield* listAgentBrowserTabs(agent.conversationId);
+
+        assert.deepEqual(
+          kept && [
+            kept.cursorX,
+            kept.cursorAt?.getTime(),
+            kept.lastActedAt.getTime(),
+            kept.address,
+          ],
+          [2, later, later, "https://shop.test/next"],
+        );
+      }),
+  );
+
   it.effect("a close deletes the tab from its own agent's browser alone", () =>
     Effect.gen(function* () {
       const { starter, taskId, agent, other } = yield* openTask;
