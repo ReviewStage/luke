@@ -70,6 +70,7 @@ const REFUSAL = {
     "Could not read the workspace's agents on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_START]: "Could not start an agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGES]: "Could not read the agent's transcript on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_PART]: "Could not read the agent's output on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: "Could not message the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_CHOOSE]: "Could not change the agent's model on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_RENAME]: "Could not rename the agent on this system.",
@@ -133,6 +134,11 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.CODING_AGENTS_MESSAGES,
     payload: { agentId: AGENT_ID, after: "0" },
     ask: "codingAgentMessages",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_PART,
+    payload: { agentId: AGENT_ID, messageId: "message-1", index: 1 },
+    ask: "codingAgentPart",
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_MESSAGE,

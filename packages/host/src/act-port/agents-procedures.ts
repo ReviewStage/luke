@@ -33,6 +33,8 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPartParams,
+  type CodingAgentPartView,
   type CodingAgentPinParams,
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
@@ -72,6 +74,7 @@ export interface AgentProceduresDependencies {
       params: CodingAgentMessagesParams,
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
     /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
     transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
     transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
@@ -275,6 +278,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
             notices.observeStatus(input.agentId, answer.status);
           }
         });
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_PART]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PART].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentPart(input);
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actPort[

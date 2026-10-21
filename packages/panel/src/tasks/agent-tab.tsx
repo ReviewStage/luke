@@ -97,8 +97,10 @@ import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice.js";
 import {
   AGENT_PART,
   type AgentPart,
+  type AgentPartCut,
   agentLines,
   agentListCallIds,
+  agentPart,
   agentRows,
   agentStillWriting,
   agentTabLabel,
@@ -194,6 +196,7 @@ import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
+import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
 /**
@@ -453,15 +456,17 @@ function calledAgentActor(
   };
 }
 
-/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it, and a call about an agent naming it by its chip where `cards` or its answer know it. */
+/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it, and a call about an agent naming it by its chip where `cards` or its answer know it; an answer its page carried cut drawn as `cut` says. */
 function ToolCallView({
   part,
   jobs,
   cards,
+  cut,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   jobs?: WorkerJobs | undefined;
   cards?: TranscriptCards | undefined;
+  cut?: CutBody | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
   const known = useKnownNames();
@@ -478,6 +483,7 @@ function ToolCallView({
         input={view.input}
         output={view.output}
         errorText={part.errorText}
+        cut={cut}
       />
       <CallPictures tool={part.tool} input={part.input} output={part.output} />
     </>
@@ -722,6 +728,34 @@ function TargetCallView({
   );
 }
 
+/**
+ * A call whose answer its page carried cut: its row as any call's, its body
+ * reading the answer whole as it opens and then drawing it as the call's own.
+ * Note that both are the one row, so the fold stays open as the answer lands.
+ */
+function CutToolCallView({
+  part,
+  cut,
+  jobs,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  cut: AgentPartCut;
+  jobs: WorkerJobs | undefined;
+}): ReactNode {
+  const read = useWholePart(cut);
+  const whole = "part" in read ? agentPart(read.part) : undefined;
+  if (whole?.kind === AGENT_PART.TOOL) return <ToolCallView part={whole} jobs={jobs} />;
+  return <ToolCallView part={part} jobs={jobs} cut={"body" in read ? read.body : undefined} />;
+}
+
+/** A thought its page carried cut: its line as any thought's, its body reading the words whole as it opens. */
+function CutReasoningView({ cut }: { cut: AgentPartCut }): ReactNode {
+  const read = useWholePart(cut);
+  if ("body" in read) return <TranscriptReasoning text="" cut={read.body} />;
+  const whole = agentPart(read.part);
+  return <TranscriptReasoning text={whole.kind === AGENT_PART.REASONING ? whole.text : ""} />;
+}
+
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
@@ -741,8 +775,16 @@ function AgentPartView({
         </div>
       );
     case AGENT_PART.REASONING:
-      return <TranscriptReasoning text={part.text} />;
+      return part.cut === undefined ? (
+        <TranscriptReasoning text={part.text} />
+      ) : (
+        <CutReasoningView cut={part.cut} />
+      );
     case AGENT_PART.TOOL: {
+      // Only an answer the window draws as words is cut (`part-cut.ts`), so the call draws as any call's row.
+      if (part.cut !== undefined) {
+        return <CutToolCallView part={part} cut={part.cut} jobs={delegation?.jobs} />;
+      }
       // A set of pictures the agent showed, or is showing, is drawn as itself; one refused keeps its row, where its error is read.
       if (part.tool === AGENT_TOOL.SHOW_IMAGE && part.state !== TOOL_STATE.OUTPUT_ERROR) {
         return <ShownPictures input={part.input} output={part.output} />;
@@ -1920,6 +1962,7 @@ function AgentTabView({
   );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
+  const wholeParts = useWholePartDoor(agent.id);
   const { members, former } = useMemberDirectory();
   const tab = useRef<HTMLElement>(null);
   // The door the box hands Reply, which lays a quote in at its caret.
@@ -1963,43 +2006,46 @@ function AgentTabView({
     >
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
-          <MentionedServers value={mentioned}>
-            <UndeliveredLines value={undelivered}>
-              <AgentTranscriptView
-                messages={lines}
-                brief={agent.brief}
-                briefSender={starter === undefined ? undefined : starterActor}
-                origin={origin}
-                readerId={readerId}
-                taskId={agent.planId ?? undefined}
-                replay={replay}
-                delegation={{
-                  models,
-                  own: { model: agent.model, effort: agent.effort },
-                  starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                  onOpen: openSubagent,
-                  onOpenTarget: openTarget,
-                  cards,
-                  standings: transcript.subagents,
-                  chat,
-                  chatOn,
-                }}
-                reading={transcript.reading}
-                failed={transcript.failed}
-                working={working}
-                sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-                startedAt={startedAt}
-                ended={endLineParts(agent.status, transcript.failure, starter, continuable)}
-                endReason={endLineReason(transcript.failure, starter)}
-                onOpenApiKeys={onOpenApiKeys}
-                endPress={endPress}
-                endTrail={endTrail}
-                onRetry={transcript.onRetry}
-                overComposer
-                calls={calls}
-              />
-            </UndeliveredLines>
-          </MentionedServers>
+          <WholePartsProvider value={wholeParts}>
+            <MentionedServers value={mentioned}>
+              <UndeliveredLines value={undelivered}>
+                <AgentTranscriptView
+                  messages={lines}
+                  brief={agent.brief}
+                  briefSender={starter === undefined ? undefined : starterActor}
+                  origin={origin}
+                  readerId={readerId}
+                  taskId={agent.planId ?? undefined}
+                  replay={replay}
+                  delegation={{
+                    models,
+                    own: { model: agent.model, effort: agent.effort },
+                    starts:
+                      delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                    onOpen: openSubagent,
+                    onOpenTarget: openTarget,
+                    cards,
+                    standings: transcript.subagents,
+                    chat,
+                    chatOn,
+                  }}
+                  reading={transcript.reading}
+                  failed={transcript.failed}
+                  working={working}
+                  sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                  startedAt={startedAt}
+                  ended={endLineParts(agent.status, transcript.failure, starter, continuable)}
+                  endReason={endLineReason(transcript.failure, starter)}
+                  onOpenApiKeys={onOpenApiKeys}
+                  endPress={endPress}
+                  endTrail={endTrail}
+                  onRetry={transcript.onRetry}
+                  overComposer
+                  calls={calls}
+                />
+              </UndeliveredLines>
+            </MentionedServers>
+          </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
@@ -2367,6 +2413,7 @@ export function AgentSubagentTab({
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
   const pictures = useAgentPictureDoor(agentId, callId);
+  const wholeParts = useWholePartDoor(agentId, callId);
   const { members, former } = useMemberDirectory();
   const macOwner = useKept(macOwnerOf(owner?.startedBy, members, control.me, former), sameFields);
   // The worker's lines, its task first, and what its rows draw from, kept from draw to draw while none of it moved.
@@ -2384,19 +2431,21 @@ export function AgentSubagentTab({
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
-          <AgentTranscriptView
-            messages={lines}
-            lead={WORKER_LEAD}
-            origin={origin}
-            delegation={delegation}
-            reading={transcript.reading}
-            failed={transcript.failed}
-            working={agentStillWriting(status)}
-            sessionStarting={status === CODING_AGENT_STATUS.STARTING}
-            startedAt={shown ? transcript.runStartedAt : undefined}
-            ended={endLineParts(status, transcript.failure)}
-            onRetry={transcript.onRetry}
-          />
+          <WholePartsProvider value={wholeParts}>
+            <AgentTranscriptView
+              messages={lines}
+              lead={WORKER_LEAD}
+              origin={origin}
+              delegation={delegation}
+              reading={transcript.reading}
+              failed={transcript.failed}
+              working={agentStillWriting(status)}
+              sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+              startedAt={shown ? transcript.runStartedAt : undefined}
+              ended={endLineParts(status, transcript.failure)}
+              onRetry={transcript.onRetry}
+            />
+          </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
     </section>

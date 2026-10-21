@@ -134,8 +134,11 @@ import {
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPartAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  PART_CUT_FIELD,
   PULL_REQUEST_STATE,
+  TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ANSWER_LEAD,
@@ -343,6 +346,9 @@ const TASK_PATH =
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 const CHAT_ATTACHMENT = "/api/workspaces/chat/attachment";
+/** One part of a message of an agent's or a worker's transcript, whole, at its public path on the hosted oRPC router. */
+const TRANSCRIPT_PART_PATH =
+  /^\/api\/agents\/[^/]+\/(?:subagents\/[^/]+\/)?messages\/[^/]+\/parts\/[^/]+$/u;
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -685,7 +691,13 @@ const standing = (
           url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages/newest`;
           return routed(new Request(url, request), webServices);
         }
-        if (pathname === CHAT || pathname === WORKSPACE_AGENTS) return routed(request, webServices);
+        if (
+          pathname === CHAT ||
+          pathname === WORKSPACE_AGENTS ||
+          TRANSCRIPT_PART_PATH.test(pathname)
+        ) {
+          return routed(request, webServices);
+        }
         if (pathname === CHAT_ATTACHMENT) return chatPictures.handler(request);
         return pathname === TASKS || TASK_PATH.test(pathname)
           ? routed(request, webServices)
@@ -717,6 +729,7 @@ function request(
     call?: string;
     wait?: string;
     before?: string;
+    parts?: string;
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
@@ -738,6 +751,7 @@ function request(
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.wait !== undefined) url.searchParams.set("wait", init.wait);
   if (init.before !== undefined) url.searchParams.set("before", init.before);
+  if (init.parts !== undefined) url.searchParams.set("parts", init.parts);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
@@ -1690,6 +1704,92 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a page asked cut carries a 2 MB command output as its two ends, its size, and the part's place, and the part is read whole by its owner and by no other account",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        const output = "built one more file\n".repeat(100_000);
+        const half = CODING_AGENT_BOUNDS.MAX_PART_CHARS / 2;
+        const command = {
+          type: "tool-bash",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { command: "pnpm build" },
+          output,
+        };
+        const thought = "Weigh the build again. ".repeat(500);
+        const thinking = { type: "reasoning", text: thought, state: "done" };
+        // An answer the window reads for what it means is carried whole, however long.
+        const read = {
+          type: "tool-read_agent",
+          toolCallId: "call-2",
+          state: "output-available",
+          input: { agentId: agent.id },
+          output: { agent: { id: agent.id, title: "Builder" }, tail: "x".repeat(10_000) },
+        };
+        const journal = yield* transcriptRow(stored, 1, MESSAGE_ROLE.ASSISTANT, [
+          text("Building."),
+          command,
+          thinking,
+          read,
+        ]);
+
+        const answered = yield* ask(
+          request(AGENT_MESSAGES, owner, { id: agent.id, parts: TRANSCRIPT_PARTS_QUERY.CUT }),
+        );
+        assert.ok(JSON.stringify(answered.body).length < 20_000);
+        const [cutJournal] = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          answered,
+        ).messages;
+        assert.deepEqual(cutJournal?.cutParts, [
+          {
+            index: 1,
+            field: PART_CUT_FIELD.OUTPUT,
+            bytes: 2_000_000,
+            head: output.slice(0, half),
+            tail: output.slice(-half),
+          },
+          {
+            index: 2,
+            field: PART_CUT_FIELD.TEXT,
+            bytes: 11_500,
+            head: thought.slice(0, half),
+            tail: thought.slice(-half),
+          },
+        ]);
+        const { output: _output, ...withoutOutput } = command;
+        const { text: _text, ...withoutText } = thinking;
+        assert.deepEqual(cutJournal?.parts, [text("Building."), withoutOutput, withoutText, read]);
+        // A reader that asks no cut, as a released desktop, is answered the part whole.
+        const [wholeJournal] = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        ).messages;
+        assert.deepEqual(wholeJournal?.parts, [text("Building."), command, thinking, read]);
+        assert.equal(wholeJournal?.cutParts, undefined);
+
+        const part = (bearer: string, index: number) =>
+          ask(request(`/api/agents/${agent.id}/messages/${journal}/parts/${index}`, bearer));
+        assert.deepEqual(
+          readAnswer(codingAgentPartAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* part(owner, 1)),
+          { part: command },
+        );
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(yield* part(other, 1), notFound);
+        assert.deepEqual(yield* part(owner, 4), notFound);
+        assert.deepEqual(
+          yield* ask(request(`/api/agents/${agent.id}/messages/not-an-id/parts/1`, owner)),
+          notFound,
         );
       }),
   );

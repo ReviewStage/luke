@@ -32,6 +32,8 @@ import {
   codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
+  codingAgentPartParamsSchema,
+  codingAgentPartViewSchema,
   codingAgentPinParamsSchema,
   codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
@@ -118,6 +120,11 @@ export const agentActsContract = {
   )
     .input(exactInput(codingAgentTranscriptKeySchema))
     .output(eventIterator(type<CodingAgentMessagesAnswerView>())),
+  [AGENT_ACT_KIND.CODING_AGENTS_PART]: actProcedure(
+    "Could not read the agent's output on this system.",
+  )
+    .input(exactInput(codingAgentPartParamsSchema))
+    .output(EffectSchema.flip(codingAgentPartViewSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actProcedure(
     "Could not message the agent on this system.",
   )

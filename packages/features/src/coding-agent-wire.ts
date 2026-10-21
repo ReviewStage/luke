@@ -85,6 +85,13 @@ export const CODING_AGENT_BOUNDS = {
   MAX_SERVER_CHARS: 64,
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
+  /**
+   * The most characters a tool part's output, as JSON text, or a reasoning
+   * part's words may spell on a transcript page a reader asked cut: past it
+   * the page carries its first and last half alone, with the whole's size,
+   * and the reader fetches the part whole when it opens it.
+   */
+  MAX_PART_CHARS: 4_096,
   /** The most items one to-do list may hold: a long run of work, never a log of every command. */
   MAX_TODOS: 40,
   /** The most characters one to-do may spell: a line of the list, not a paragraph. */
@@ -1711,6 +1718,42 @@ const codingAgentSenderSchema = EffectSchema.Struct({
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
 
+/** Which field of a part a page carries cut: a tool call's output, or a reasoning's words. */
+export const PART_CUT_FIELD = {
+  OUTPUT: "output",
+  TEXT: "text",
+} as const;
+
+export type PartCutField = (typeof PART_CUT_FIELD)[keyof typeof PART_CUT_FIELD];
+
+/** The query a transcript read asks its heavy parts cut by, and the one word it takes. */
+export const TRANSCRIPT_PARTS_QUERY = { PARTS: "parts", CUT: "cut" } as const;
+
+/**
+ * One part a page carries cut: its index among the message's `parts`, the
+ * field left out of that part, the whole field's size in UTF-8 bytes, and
+ * its first and last characters, a tool output as its JSON text, at most
+ * half of `MAX_PART_CHARS` each. The part itself stands in `parts` without
+ * the field, so nothing reads the cut words as the part's own; the message's
+ * id and this index name the part to fetch whole.
+ */
+const codingAgentPartCutSchema = EffectSchema.Struct({
+  index: countedNumber,
+  field: EffectSchema.Literals(Object.values(PART_CUT_FIELD)),
+  bytes: countedNumber,
+  head: EffectSchema.String,
+  tail: EffectSchema.String,
+});
+
+export type CodingAgentPartCut = typeof codingAgentPartCutSchema.Type;
+
+/** One part of a transcript's message whole, as its row holds it: what a reader fetches for a part its page carried cut. */
+export const codingAgentPartAnswerSchema = EffectSchema.Struct({
+  part: storedObjectSchema,
+});
+
+export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
+
 /**
  * One message of an agent's transcript, as the conversation's row holds it:
  * an AI SDK `UIMessage`, its parts as the SDK shapes them (text, reasoning,
@@ -1770,6 +1813,8 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   earlierOmitted: EffectSchema.optionalKey(EffectSchema.Boolean),
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
+  /** The parts carried cut, each standing in `parts` without its field (`codingAgentPartCutSchema`); absent where none is, on a page not asked cut, and from a service older than it. */
+  cutParts: EffectSchema.optionalKey(EffectSchema.Array(codingAgentPartCutSchema)),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),

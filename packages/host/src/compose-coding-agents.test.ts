@@ -518,6 +518,11 @@ function fakeService() {
         asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
+    agentPart: (agentId, messageId, index, callId) =>
+      Effect.sync(() => {
+        asked.push(`part:${agentId}:${messageId}:${index}:${callId ?? ""}`);
+        return { part: { type: "reasoning", text: "Whole." } };
+      }),
     markInboxItemRead: (itemId) =>
       Effect.sync(() => {
         asked.push(`inbox-read:${itemId}`);
@@ -932,6 +937,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PART, {
+        agentId: AGENT_ID,
+        messageId: "message-1",
+        index: 2,
+      }),
+      { part: { type: "reasoning", text: "Whole." } },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
         itemId: ITEM.id,
         revision: 2,
@@ -1053,6 +1066,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request-viewed:${AGENT_ID}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
+      `part:${AGENT_ID}:message-1:2:`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,

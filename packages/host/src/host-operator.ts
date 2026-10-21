@@ -68,6 +68,8 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPartParams,
+  type CodingAgentPartView,
   type CodingAgentPictureParams,
   type CodingAgentPinParams,
   type CodingAgentPullRequestActionParams,
@@ -106,6 +108,7 @@ import {
   codingAgentOverviewConversationAnswerViewSchema,
   codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
+  codingAgentPartViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
@@ -797,6 +800,8 @@ export interface HostOperator {
   codingAgentPicture(
     params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
+  /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
+  codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
   /** A workspace's chat, followed from now until let go or signed out, heard through `onChatChanged`; following again starts over. */
   codingAgentChatFollow(workspaceId: string): Effect.Effect<void>;
   /** A workspace's chat let go: nothing more is heard of it until it is followed again. */
@@ -2238,6 +2243,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+      ),
+    codingAgentPart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PART, params),
+        codingAgentAnswer(codingAgentPartViewSchema),
       ),
     codingAgentChatFollow: (workspaceId) =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),
