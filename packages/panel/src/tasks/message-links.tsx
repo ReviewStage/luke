@@ -121,10 +121,13 @@ export function useMessageReveal(input: {
   const seen = useRef(new Map<number, number>());
   // The ask whose message is being brought into view, which waits for its row rather than ask again.
   const bringing = useRef<number | undefined>(undefined);
+  // The ask answered last, so a draw before the window lets it go answers it no second time.
+  const answered = useRef<number | undefined>(undefined);
   if (asked !== undefined && !seen.current.has(asked.ask)) seen.current.set(asked.ask, pages);
   useEffect(() => {
-    if (asked === undefined || !shown) return;
+    if (asked === undefined || !shown || answered.current === asked.ask) return;
     const lit = (element: HTMLElement) => {
+      answered.current = asked.ask;
       const scroller = scrollerOf(element);
       if (scroller !== undefined) {
         centreWithin(scroller, element);
@@ -151,12 +154,15 @@ export function useMessageReveal(input: {
         return;
       }
     }
+    // A message held but not drawn yet, the log still waiting to draw, is waited for.
+    if (held) return;
     if (!input.whole) {
       // Note that an older read that failed is not asked again here, so a service that does not answer is not asked on every draw; the reader scrolling up asks again.
       if (!input.olderFailed) input.loadOlder();
       return;
     }
     if (caughtUp && (settled || pages > since)) {
+      answered.current = asked.ask;
       input.gone();
       standing?.onRevealed(asked.ask);
     }
