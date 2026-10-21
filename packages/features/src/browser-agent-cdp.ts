@@ -290,17 +290,28 @@ const FOCUSED_POINT = `(() => {
 /**
  * Whether what has the focus takes text: an input that types, a text area,
  * or an editable element, each neither read-only nor disabled, found
- * through open shadow roots. Note that a focused frame counts, since a page
- * cannot see into another origin's frame, and the frame may hold the field.
+ * through open shadow roots and same-origin frames. Note that what the page
+ * cannot see into counts as yes, since the field may be there: another
+ * origin's frame, and a custom element, whose shadow root may be closed.
  */
 const TAKES_TEXT = `(() => {
   let focused = document.activeElement;
-  while (focused !== null && focused.shadowRoot && focused.shadowRoot.activeElement) {
-    focused = focused.shadowRoot.activeElement;
+  for (;;) {
+    if (focused === null) return false;
+    if (focused.shadowRoot && focused.shadowRoot.activeElement) {
+      focused = focused.shadowRoot.activeElement;
+      continue;
+    }
+    if (focused.tagName !== "IFRAME" && focused.tagName !== "FRAME") break;
+    let inner;
+    try { inner = focused.contentDocument; } catch { inner = null; }
+    if (!inner) return true;
+    focused = inner.activeElement;
+    if (focused === null || focused === inner.body) return false;
   }
-  if (focused === null || focused === document.body) return false;
-  if (focused.tagName === "IFRAME" || focused.tagName === "FRAME") return true;
+  if (focused === document.body) return false;
   if (focused.isContentEditable) return true;
+  if (focused.tagName.includes("-") && focused.shadowRoot === null) return true;
   const textless = ["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"];
   if (focused.tagName === "INPUT" && textless.includes(focused.type)) return false;
   if (focused.tagName !== "INPUT" && focused.tagName !== "TEXTAREA") return false;
