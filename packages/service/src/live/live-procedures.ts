@@ -22,6 +22,10 @@
  * address instead (`sealedParts`), so a reader polls it while Realtime
  * fails, behind the same caller and no other route.
  *
+ * `GET /api/live/mac-commands?kinds=` answers the commands of those kinds
+ * no Mac of the account has claimed, as one statement, for the Mac to claim
+ * each by its id (`../agents/mac-commands-procedures.ts`).
+ *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
  * delegation call (`transcript-live.ts`), after the agent is read as the
@@ -35,6 +39,7 @@ import type { LiveStatement } from "@luke/database/core/live-statement";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { childConversationId } from "@luke/database/models/ids";
+import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
@@ -43,6 +48,7 @@ import {
   liveDigestOf,
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
+import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -200,6 +206,12 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statements = taskRecordLiveStatements(context.userId, taskId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
+    }),
+    macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const statement = macCommandsLiveStatement(context.userId, macCommandKindsRead(input.kinds));
+      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts({ commands: statement.value }, input);
     }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

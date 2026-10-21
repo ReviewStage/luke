@@ -16,6 +16,7 @@ import {
   LIVE_POLL_URL,
   LIVE_USER_QUERY,
   liveDigestOf,
+  macCommandsLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
   taskRecordLiveAnswerSchema,
@@ -70,6 +71,10 @@ function readOf(path: string, forUser: string | undefined): URL {
 const ask = (options: {
   readonly bearer?: string;
   readonly method?: string;
+  /** The live read asked; the account inbox where left out. */
+  readonly path?: string;
+  /** The account the read names; the bearer's own where left out. */
+  readonly forUser?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
@@ -84,7 +89,7 @@ const ask = (options: {
     const response = yield* hostedAnswer(
       { live: procedures },
       Layer.succeed(LiveSealing, options.sealing),
-      new Request(readOf(LIVE_INBOX, options.bearer), {
+      new Request(readOf(options.path ?? LIVE_INBOX, options.forUser ?? options.bearer), {
         method: options.method ?? "GET",
         headers: options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` },
       }),
@@ -109,6 +114,38 @@ it.effect("a request without a bearer is refused, and one by another method is n
       },
     );
   }),
+);
+
+it.effect(
+  "the commands no Mac has claimed are sealed for the bearer's own account, of the kinds the read names, and a read naming another account is signed out",
+  () =>
+    Effect.gen(function* () {
+      const dana = yield* ask({
+        bearer: "user-dana",
+        path: "/api/live/mac-commands?kinds=shell,browser",
+        sealing: Option.some(SCRIPTED),
+      });
+
+      assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(macCommandsLiveAnswerSchema)(dana.body);
+      assert.equal(answer.url, REALTIME_URL);
+      const read = answer.queries.commands.capability;
+      assert.ok(read.includes('"user-dana"'), "read for the bearer");
+      assert.ok(read.includes('"browser"'), "of the kinds the read names");
+      assert.deepEqual(
+        yield* ask({
+          bearer: "user-dana",
+          forUser: "user-eli",
+          path: "/api/live/mac-commands",
+          sealing: Option.some(SCRIPTED),
+        }),
+        {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        },
+        "a read naming another account is signed out",
+      );
+    }),
 );
 
 it.effect(
