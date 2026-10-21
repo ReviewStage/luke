@@ -717,8 +717,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /**
      * One revision's content put back as the plan's, a revision of the
-     * developer's naming it, answered with the plan as it now stands. It
-     * names nothing in a body: the plan and the revision are the path's.
+     * developer's naming it, answered with the plan as it now stands and the
+     * transaction its revision was written in, none where it changed
+     * nothing. It names nothing in a body: the plan and the revision are the
+     * path's.
      */
     restore: plans.restore.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.id);
@@ -728,7 +730,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           RESTORE_REFUSAL.get(restored.reason) ?? HOSTED_REFUSAL.UNAVAILABLE,
         );
       }
-      return { plan: restored.task };
+      return {
+        plan: restored.task,
+        ...(restored.txid === undefined ? undefined : { txid: restored.txid }),
+      };
     }),
 
     /**

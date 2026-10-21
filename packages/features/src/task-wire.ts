@@ -646,6 +646,17 @@ export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
 
 /**
+ * A restored revision (POST): the plan as it now stands, and the id of the
+ * transaction the restore's revision was written in, which a reader
+ * following the history over Neon Realtime waits for; none where the
+ * restore changed nothing.
+ */
+export const taskRestoreAnswerSchema = EffectSchema.Struct({
+  ...taskAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+/**
  * Why the agent a start asked for was not started beside the task it made,
  * in the service's own word, as the agent's Start would have refused it.
  * Note that it carries no `unreached`, because the start confirmed the

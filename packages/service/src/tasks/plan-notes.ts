@@ -170,6 +170,8 @@ type LockedSave<T> =
       readonly taken: T;
       /** Whether the change moved the plan's words, which is when the save is a revision. */
       readonly moved: boolean;
+      /** The transaction the revision was written in, where the save is one, which a reader following the history waits for. */
+      readonly txid: string | undefined;
     }
   | PlanNotSaved;
 
@@ -215,8 +217,9 @@ function savedUnderLock<T extends TextTaken, F>(
     const after = taken.text;
     if (after.length > TASK_BOUNDS.MAX_BODY_CHARS) return TOO_LONG_RESULT;
     const moved = after !== before;
+    let txid: string | undefined;
     if (moved) {
-      yield* recordRevision({
+      txid = yield* recordRevision({
         taskId: binding.taskId,
         writer,
         userId: binding.userId,
@@ -238,7 +241,7 @@ function savedUnderLock<T extends TextTaken, F>(
       taken.agentEdits === undefined ? {} : { agentEdits: taken.agentEdits },
     );
     if (Option.isNone(saved)) return NO_TASK_RESULT;
-    return { status: PLAN_SAVE_STATUS.SAVED, task: saved.value, taken, moved };
+    return { status: PLAN_SAVE_STATUS.SAVED, task: saved.value, taken, moved, txid };
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(locked));
 }
@@ -361,7 +364,12 @@ export function saveDeveloperEdit(
 
 /** A restore answered: the plan as it now stands saved, or why it was not. */
 export type TaskRestoreResult =
-  | { readonly status: typeof PLAN_SAVE_STATUS.SAVED; readonly task: Task }
+  | {
+      readonly status: typeof PLAN_SAVE_STATUS.SAVED;
+      readonly task: Task;
+      /** The transaction the restore's revision was written in; none where it changed nothing. */
+      readonly txid: string | undefined;
+    }
   | PlanNotSaved;
 
 /**
@@ -399,7 +407,7 @@ export function restoreRevision(
       take,
     );
     return saved.status === PLAN_SAVE_STATUS.SAVED
-      ? { status: saved.status, task: saved.task }
+      ? { status: saved.status, task: saved.task, txid: saved.txid }
       : saved;
   });
   return reachedStore(restored);
