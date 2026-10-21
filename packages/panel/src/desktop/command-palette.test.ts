@@ -1610,17 +1610,16 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
     updatedAt,
     repository: null,
   });
-  openPalette(
-    tasksControl({
-      tasks: [task("t-1", "Rate limits", 30), task("t-2", "Retry budget", 10)],
-      listedAgents: {
-        standing: [oneOff("a-1", "Triage overnight issues", 20)],
-        archived: [{ ...oneOff("a-2", "Remove stale copy", 40), archivedAt: 41 }],
-      },
-      archived: [{ ...task("t-3", "Old sweep", 5), archivedAt: 6 }],
-      agentView: { agentId: undefined, onOpen: (id) => opened.push(id), onClose: () => undefined },
-    }),
-  );
+  const control = tasksControl({
+    tasks: [task("t-1", "Rate limits", 30), task("t-2", "Retry budget", 10)],
+    listedAgents: {
+      standing: [oneOff("a-1", "Triage overnight issues", 20)],
+      archived: [{ ...oneOff("a-2", "Remove stale copy", 40), archivedAt: 41 }],
+    },
+    archived: [{ ...task("t-3", "Old sweep", 5), archivedAt: 6 }],
+    agentView: { agentId: undefined, onOpen: (id) => opened.push(id), onClose: () => undefined },
+  });
+  openPalette(control);
   chooseFilter("Tasks");
 
   assert.deepEqual(rows(), [
@@ -1632,6 +1631,11 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
   ]);
   press("Triage overnight issues · acme/relay");
   assert.deepEqual(opened, ["a-1"]);
+  // An archived one-off agent is listed nowhere in the sidebar, so ⌘K is its way to its page, whose Unarchive brings it back.
+  openPalette(control);
+  chooseFilter("Tasks");
+  press("Remove stale copy · acme/relay · Archived");
+  assert.deepEqual(opened, ["a-1", "a-2"]);
 });
 
 test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it is pinned, and nothing for an archived agent", () => {
