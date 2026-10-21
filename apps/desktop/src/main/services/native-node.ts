@@ -1,13 +1,15 @@
+import type { MacBrowserParams, MacCommandResult } from "@luke/features/mac-command-wire";
 import type { AppAudioSlice } from "@luke/host/app-state";
 import type { AppStateStore } from "@luke/host/client";
 import type { DesktopService } from "@luke/host/desktop-service";
+import { type MacBrowserTabs, runMacBrowserCommand } from "@luke/host/mac-browser-tabs";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type OutputAudioState,
 } from "@luke/voice/audio";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { systemPreferences } from "electron";
 import { MediaDuckController } from "../native/media-duck";
 import {
@@ -29,7 +31,14 @@ const readMicrophoneStatusWord = Schema.decodeUnknownSync(
 interface NativeNodeCapabilities {
   /** Hands an address to the operating system; a throw is an open that did not land. */
   openExternal: (url: string) => Promise<void>;
+  /** Runs an agent's browser actions on a task's Browser tabs, once the windows serve them. */
+  browserAct: (params: MacBrowserParams) => Effect.Effect<MacCommandResult>;
 }
+
+/** What a browser command answers before the windows serve their Browser tabs. */
+const NOT_SERVING: MacCommandResult = {
+  refused: "Not run: Luke on the developer's Mac is still starting; try again in a moment.",
+};
 
 interface NativeNodeDependencies {
   config: DesktopConfig;
@@ -49,6 +58,8 @@ export interface NativeNode extends DesktopService {
   refreshMicrophoneStatus: () => MicrophoneStatus;
   requestMicrophone: () => Promise<MicrophoneStatus>;
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
+  /** Serves the windows' Browser tabs to agents' browser commands, which the windows hold from their channels' composition on. */
+  serveBrowserTabs: (tabs: MacBrowserTabs) => void;
 }
 
 /**
@@ -62,6 +73,7 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
   const mediaDuck = new MediaDuckController();
   let outputVolumeWatcher: OutputVolumeWatch | undefined;
   let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
+  let browserTabs: MacBrowserTabs | undefined;
 
   /** One write of what this machine's own devices answer, into the one document. */
   function writeAudio(patch: {
@@ -96,6 +108,15 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
     name: "native",
     capabilities: {
       openExternal: config.openExternal,
+      browserAct: (params) =>
+        Effect.suspend(() =>
+          browserTabs === undefined
+            ? Effect.succeed(NOT_SERVING)
+            : runMacBrowserCommand(browserTabs, params),
+        ),
+    },
+    serveBrowserTabs: (tabs) => {
+      browserTabs = tabs;
     },
     mediaDuck,
     setMediaDuckEnabled: (enabled) => mediaDuck.setEnabled(enabled),

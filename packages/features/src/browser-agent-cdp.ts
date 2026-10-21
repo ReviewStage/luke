@@ -1,9 +1,11 @@
 /**
- * browser-actions.ts -- an agent's browser actions run on a DevTools protocol session: each action as the commands it sends, a sequence run in order up to its first failure, and what each step answers.
+ * browser-agent-cdp.ts -- an agent's browser actions run on a DevTools protocol session: each action as the commands it sends, a sequence run in order up to its first failure, and what each step answers.
  *
- * The vocabulary is `@luke/features/browser-agent-actions`; this is its one
- * implementation over CDP, which the browser in an agent's sandbox speaks
- * (`agent-browser.ts`). A tab is a page target, reached through a session
+ * The vocabulary is `browser-agent-actions.ts`; this is its one
+ * implementation over CDP (`browser-cdp.ts`), which the browser in an
+ * agent's sandbox speaks (`packages/service`'s `agent-browser.ts`) and the
+ * Mac's Browser tabs speak through their views' debuggers
+ * (`packages/host`'s `mac-browser-tabs.ts`). A tab is a page target, reached through a session
  * of its own attached flattened (`Target.attachToTarget`) the first time a
  * sequence acts on it and detached as the sequence ends. Clicks, keys, and
  * scrolls are the browser's own input events, typing is inserted text, an
@@ -16,6 +18,9 @@
  * words a model can act on, and answers every step that ran.
  */
 
+import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Data, Duration, Effect, Result, Schedule, Schema, type Scope, Stream } from "effect";
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
@@ -31,18 +36,15 @@ import {
   type BrowserConsoleMessage,
   backendNodeIdOf,
   cutBrowserText,
-} from "@luke/features/browser-agent-actions";
-import { readEither } from "@luke/wire/effect";
-import { Data, Duration, Effect, Result, Schedule, Schema, type Scope, Stream } from "effect";
-import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
+} from "./browser-agent-actions.js";
+import { snapshotTextOf } from "./browser-agent-snapshot.js";
 import {
   CDP_FAILURE,
   type CdpEvent,
   CdpFailure,
   type CdpParams,
   type CdpSession,
-} from "./agent-browser.js";
-import { snapshotTextOf } from "./browser-snapshot.js";
+} from "./browser-cdp.js";
 
 /** How often `wait` asks whether what it waits for has come. */
 const WAIT_POLL = Duration.millis(250);
@@ -154,6 +156,8 @@ function wordsOfCdp(failure: CdpFailure): string {
       return `the browser answered ${failure.method} with something unexpected`;
     case CDP_FAILURE.CLOSED:
       return "the connection to the browser closed; try again";
+    case CDP_FAILURE.DENIED:
+      return failure.detail ?? `${failure.method} was not let run`;
   }
 }
 

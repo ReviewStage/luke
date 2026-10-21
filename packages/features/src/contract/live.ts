@@ -10,7 +10,9 @@
  * pages are read from, and one task's planning worker's transcript, by the
  * task and the call that started the worker, on the same statements; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
- * claimed, as one statement. Each
+ * claimed, as one statement; and
+ * one plan's inbox, or one agent's, named by `?id=`, as its items, their
+ * threads, and their files. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -28,6 +30,7 @@ import {
   LIVE_POLL,
   LIVE_USER_QUERY,
   macCommandsLiveAnswerSchema,
+  scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskConversationLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
@@ -53,6 +56,14 @@ const liveReadSchema = EffectSchema.Struct({
 
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveTaskSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The plan or agent a scope's inbox is followed for; one that is no UUID is answered as not found, so it is read as text here. */
+const liveScopeSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
@@ -116,4 +127,12 @@ export const liveContract = {
     )
     .input(liveTaskWorkerSchema)
     .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
+  taskInbox: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_INBOX }))
+    .input(liveScopeSchema)
+    .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
+  agentInbox: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX }))
+    .input(liveScopeSchema)
+    .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
 };

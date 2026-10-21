@@ -47,7 +47,7 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import type { ChatShown } from "@luke/host/contract";
-import { HOST_CAPABILITY } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
@@ -137,8 +137,9 @@ import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
-import { useCapability } from "../use-app-state.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
 import type { AgentCallDoors } from "./agent-call.js";
+import { useAgentBrowserTabs } from "./browser-pane.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -1592,6 +1593,10 @@ export function useTasksTab(input: {
       : (pageAgents ?? agents.agentIds),
     input.room,
   );
+  // A Browser tab an agent opens or closes in main is held here, whether or not the side panel is drawn now.
+  const browserOn = useExperiment(EXPERIMENT.BROWSER);
+  const browserOffered = useCapability(HOST_CAPABILITY.BROWSER);
+  useAgentBrowserTabs(sidePanel, browserOn && browserOffered);
   // A task whose column shows no tab stands on its plan: the side panel is
   // shown on its Plan tab, once for each task as it comes to show none, so a
   // tab chosen in the panel since is left where it was. Note that this waits

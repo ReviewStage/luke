@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { CDP_FAILURE, type CdpFailure } from "@luke/features/browser-cdp";
 import { Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -19,8 +20,6 @@ import {
   BROWSER_UNREACHABLE,
   type BrowserUnreachable,
   browserSessionOf,
-  CDP_FAILURE,
-  type CdpFailure,
 } from "./agent-browser.js";
 import { BROWSER_START_EXIT } from "./sandbox-browser.js";
 

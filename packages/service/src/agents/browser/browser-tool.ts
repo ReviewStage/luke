@@ -47,14 +47,15 @@ import {
   browserAgentActionsSchema,
   cutBrowserText,
 } from "@luke/features/browser-agent-actions";
+import { runBrowserActions } from "@luke/features/browser-agent-cdp";
+import type { CdpSession, PageTarget } from "@luke/features/browser-cdp";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Clock, Effect, Result, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
-import type { AgentBrowser, CdpSession, PageTarget } from "./agent-browser.js";
-import { runBrowserActions } from "./browser-actions.js";
+import type { AgentBrowser } from "./agent-browser.js";
 import { connectRestoring } from "./restore-tabs.js";
 
 const BROWSER_INPUT = Schema.Struct({

@@ -10,6 +10,7 @@ import {
 } from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
 import { memo } from "react";
+import { Checkpoint } from "../ai-elements/checkpoint.js";
 import {
   Conversation,
   ConversationContent,
@@ -20,6 +21,8 @@ import { Tooltip } from "../tooltip.js";
 import { CallCheckpoint, CallEnded } from "./call-card.js";
 import { CodeSnippet, useSnippetNote } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
+import { callHeading } from "./task-time.js";
+import { WORKED_SEPARATOR } from "./working-time.js";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a task's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
@@ -33,7 +36,9 @@ import { FileRef } from "./file-ref.js";
  * where they sit in the file, with Luke's note on why he showed them under
  * the last of them (`code-snippet.tsx`), so the feed reads as a
  * walkthrough, a step a card. Two
- * snippets of one file are two cards. The cards stand under the call they
+ * snippets of one file are two cards. Code an agent showed on a turn of its
+ * own, typed or spoken, stands under that turn, headed by the agent's name
+ * and when the turn began. The cards stand under the call they
  * were shown on, each call opening at the Checkpoint the Call tab
  * opens it at and, once it has ended, closing on the line the Call tab
  * closes it on, its card on hover, and the feed keeps to its newest card
@@ -49,6 +54,9 @@ const COPY_LABEL = "Copy lines";
 
 /** What a card's button that opens the whole file in a tab is called. */
 const OPEN_FILE_LABEL = "Open file";
+
+/** No agent named, where the pane is drawn with no agents to name. */
+const noAgentLabel = (): undefined => undefined;
 
 /**
  * Scrolls `lines` alone until `target` stands in its middle. Note that this
@@ -173,21 +181,46 @@ const CodeCard = memo(
   (was, now) => was.showing.callId === now.showing.callId && was.taskId === now.taskId,
 );
 
-/** One call's run: the checkpoint it begins at, each code shown on it, and once it has ended, the line it closes with, as the Call tab draws them (`call-card.tsx`). */
+/** The divider an agent's turn begins at: the agent's name and when the turn began, "Invite flow · Today, 3:42 PM". */
+function AgentTurnCheckpoint({
+  agent,
+  startedAt,
+  now,
+}: {
+  agent: string;
+  startedAt: number;
+  now: number;
+}): React.JSX.Element {
+  return <Checkpoint>{`${agent}${WORKED_SEPARATOR}${callHeading(startedAt, now)}`}</Checkpoint>;
+}
+
+/** One call's or one agent's turn's run: the checkpoint it begins at, each code shown on it, and once a call has ended, the line it closes with, as the Call tab draws them (`call-card.tsx`). */
 function CodeFeedRun({
   call,
   now,
   taskId,
+  agentLabel,
   onOpenFile,
 }: {
   call: CodeFeedCall;
   now: number;
   taskId: string | undefined;
+  agentLabel: (agentId: string) => string | undefined;
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
+  const agent = call.agentId === undefined ? undefined : agentLabel(call.agentId);
   return (
     <>
-      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
+      {agent === undefined ? (
+        <CallCheckpoint
+          startedAt={call.startedAt}
+          live={call.live}
+          now={now}
+          caller={call.caller}
+        />
+      ) : (
+        <AgentTurnCheckpoint agent={agent} startedAt={call.startedAt} now={now} />
+      )}
       {call.showings.map((showing) => (
         <CodeCard key={showing.callId} showing={showing} taskId={taskId} onOpenFile={onOpenFile} />
       ))}
@@ -203,6 +236,7 @@ export function CodePane({
   shown,
   calls,
   taskId,
+  agentLabel = noAgentLabel,
   onOpenFile,
 }: {
   shown: readonly TaskCodeShowing[];
@@ -210,6 +244,8 @@ export function CodePane({
   calls: readonly CodeFeedCallSource[];
   /** The task the code was shown on, whose work a note's link names; none offers no link. */
   taskId?: string | undefined;
+  /** An agent on the task as its tab names it, which heads the code its turns showed; none for an agent not listed, whose turn is headed by its time alone. */
+  agentLabel?: ((agentId: string) => string | undefined) | undefined;
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
@@ -224,6 +260,7 @@ export function CodePane({
               call={call}
               now={now}
               taskId={taskId}
+              agentLabel={agentLabel}
               onOpenFile={onOpenFile}
             />
           ))}

@@ -318,6 +318,52 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
   assert.deepEqual(second.control().browsers, []);
 });
 
+test("a Browser tab an agent opened is chosen on the open plan, only held on another, and goes when the agent closes it", () => {
+  fakeActPortAnswering(() => Promise.resolve(undefined));
+  const panel = launch({ task: TASK, taskAgents: [] });
+  const here = { browserId: "agent-tab-here", taskId: TASK, address: "http://localhost:3000/" };
+  const there = {
+    browserId: "agent-tab-there",
+    taskId: OTHER_TASK,
+    address: "https://example.com/",
+  };
+
+  act(() => panel.control().onAgentBrowser(here));
+  act(() => panel.control().onAgentBrowser(there));
+  act(() => panel.control().onAgentBrowser(here));
+
+  assert.deepEqual(panel.control().browsers, [
+    { tab: { browser: here.browserId }, task: TASK, address: here.address },
+  ]);
+  assert.deepEqual(panel.control().tab, { browser: here.browserId }, "chosen on the open plan");
+  assert.equal(panel.control().open, true);
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().browsers, [
+    { tab: { browser: there.browserId }, task: OTHER_TASK, address: there.address },
+  ]);
+
+  act(() => panel.control().onBrowserGone(there.browserId));
+  assert.deepEqual(panel.control().browsers, []);
+});
+
+test("a chosen Browser tab an agent closes gives way to the tab viewed before it, as a tab's own close does", () => {
+  fakeActPortAnswering(() => Promise.resolve(undefined));
+  const panel = launch({ task: TASK, taskAgents: [] });
+  const first = { browserId: "agent-tab-first", taskId: TASK, address: "http://localhost:3000/" };
+  const second = { browserId: "agent-tab-second", taskId: TASK, address: "https://example.com/" };
+  act(() => panel.control().onAgentBrowser(first));
+  act(() => panel.control().onAgentBrowser(second));
+  assert.deepEqual(panel.control().tab, { browser: second.browserId });
+
+  act(() => panel.control().onBrowserGone(second.browserId));
+
+  assert.deepEqual(panel.control().tab, { browser: first.browserId });
+  assert.deepEqual(
+    panel.control().browsers.map((each) => each.tab.browser),
+    [first.browserId],
+  );
+});
+
 test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
   const sent: SentPortAct[] = [];
   // The act port is the window's door to main, the process boundary a closed tab's page is let go across.

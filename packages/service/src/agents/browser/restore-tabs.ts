@@ -17,9 +17,10 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { listAgentBrowserTabs, retargetBrowserTab } from "@luke/database/models/agent-browser-tabs";
+import type { CdpSession } from "@luke/features/browser-cdp";
 import { Effect, type Scope } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
-import { AgentBrowser, type BrowserUnreachable, type CdpSession } from "./agent-browser.js";
+import { AgentBrowser, type BrowserUnreachable } from "./agent-browser.js";
 
 /**
  * Reopens each tab kept for the agent whose conversation is named at its

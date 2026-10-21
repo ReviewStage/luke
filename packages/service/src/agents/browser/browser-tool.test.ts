@@ -13,6 +13,7 @@ import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_AGENT_ACTION, BROWSER_STEP_STATUS } from "@luke/features/browser-agent-actions";
+import type { PageTarget } from "@luke/features/browser-cdp";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Clock, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -26,7 +27,7 @@ import {
   fakeSandboxApi,
   noSandboxBrowserLayer,
 } from "../../testing/agent-browser-fake.js";
-import { AgentBrowser, agentBrowserOver, type PageTarget } from "./agent-browser.js";
+import { AgentBrowser, agentBrowserOver } from "./agent-browser.js";
 import {
   BROWSER_TOOL_REFUSAL,
   BROWSER_TOOL_STATUS,

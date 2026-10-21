@@ -54,6 +54,11 @@ const OpenLinkContext = createContext<((link: ReadLink) => void) | undefined>(un
 /** Hands the window's opener for a place in Luke to everything under it. */
 export const OpenLinkProvider = OpenLinkContext.Provider;
 
+/** The window's opener for a place in Luke as a link reads it, for a place that opens some of them itself before handing them on; nothing outside the window. */
+export function useReadLinkOpener(): ((link: ReadLink) => void) | undefined {
+  return useContext(OpenLinkContext);
+}
+
 /** Opens a link where the place stands, answering whether it did; one it did not is the window's to open. */
 export type OpenHere = (href: string) => boolean;
 
