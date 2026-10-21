@@ -216,6 +216,16 @@ it.effect(
         assert.deepEqual(yield* upgraded(url, { authorization: "Bearer not-ada" }), {
           refused: RELAY_UPGRADE_STATUS.UNAUTHORIZED,
         });
+        assert.deepEqual(
+          yield* upgraded(url, { authorization: "Bearer not-ada", cookie: ADA_COOKIE }),
+          { refused: RELAY_UPGRADE_STATUS.UNAUTHORIZED },
+          "a junk bearer never falls back to the cookie beside it",
+        );
+        assert.deepEqual(
+          read,
+          [{ bearer: ADA_BEARER }, { bearer: "Bearer not-ada" }, { bearer: "Bearer not-ada" }],
+          "no cookie without a page's origin is ever read",
+        );
         assert.equal(
           reached.length,
           1,
