@@ -31,8 +31,9 @@
  * after it, though it opens on the same task, so Back returns to it; only a
  * restore lands on the task as Back would, where the task stands behind.
  *
- * What a page shows within it is a step too, in any room: the tab the
- * task's column shows and the tab its side panel shows while open, the
+ * What a page shows within it is a step too: the tab the task's column
+ * shows, the tab its side panel shows while open (a narrow room's panel
+ * standing over the plan being a step of its own already), the
  * Inbox's item, and Chat's place, so Back goes back to what the window was
  * just showing rather than past it to the page before. Such a choice is a
  * step only where a press or a key led to it: one the window makes by
@@ -144,7 +145,7 @@ type Place =
       readonly panel?: PanelStep | undefined;
       /** The column's tab shown, in any room; none while the column shows no tab or its tabs are not yet the task's. */
       readonly column?: MainTab | undefined;
-      /** The side panel's tab shown while it is open, in any room; none while it is shut or its tabs are not yet the task's. */
+      /** The side panel's tab shown while it is open, in a wide room (a narrow one keeps it in `panel`); none while it is shut or its tabs are not yet the task's. */
       readonly side?: SidePanelTab | undefined;
     }
   | {
@@ -196,6 +197,12 @@ type Place =
       readonly view: SettingsView;
       readonly listed?: boolean | undefined;
     };
+
+/** The tabs a task's strips stood with as the window last stood on it: its column's once its agents were read, and its side panel's. */
+interface KnownStrips {
+  readonly column: ReadonlySet<string> | undefined;
+  readonly side: ReadonlySet<string>;
+}
 
 /** The places the window has stood on, as its history adapter holds them. */
 type Trail = HistorySnapshot<Place>;
@@ -843,17 +850,19 @@ export function useWindowHistory(input: {
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
   // The strips are the open task's, which is the one bound for once it has opened and its agents are read, so a task on its way holds no tab of the one before it.
-  const stripsKnown =
-    boundFor !== undefined &&
-    tasks.activeTaskId === boundFor &&
-    tasks.mainTabs.openAgents !== undefined;
-  const columnTab = stripsKnown ? tasks.mainTabs.tab : undefined;
-  const sideTab = stripsKnown ? panelTab : undefined;
+  const stripsKnown = boundFor !== undefined && tasks.activeTaskId === boundFor;
+  // The column's tabs are known only once the task's agents are read, the side panel's at once.
+  const columnKnown = stripsKnown && tasks.mainTabs.openAgents !== undefined;
+  const columnTab = columnKnown ? tasks.mainTabs.tab : undefined;
+  // A narrow room holds the side panel as a pane of its own over the plan (`panel`), whose tab its step keeps as it always has.
+  const sideTab = stripsKnown && !narrow ? panelTab : undefined;
   // The tabs each task's strips stood with as the window last stood on it, so a step on a tab since closed is passed over.
-  const knownStrips = useRef(new Map<string, ReadonlySet<string>>()).current;
+  const knownStrips = useRef(new Map<string, KnownStrips>()).current;
   if (stripsKnown && !inboxOpen && !historyOpen) {
-    const keys = [...tasks.mainTabs.tabs, ...tasks.sidePanel.strip].map(tabKey);
-    knownStrips.set(boundFor, new Set(keys));
+    knownStrips.set(boundFor, {
+      column: columnKnown ? new Set(tasks.mainTabs.tabs.map(tabKey)) : undefined,
+      side: new Set(tasks.sidePanel.strip.map(tabKey)),
+    });
   }
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
@@ -963,7 +972,9 @@ export function useWindowHistory(input: {
   const tabsStand = (to: Extract<Place, { kind: typeof PLACE_KIND.TASK }>) => {
     const strips = knownStrips.get(to.taskId);
     if (strips === undefined) return true;
-    return [to.column, to.side].every((tab) => tab === undefined || strips.has(tabKey(tab)));
+    const stands = (tab: StripTab | undefined, strip: ReadonlySet<string> | undefined) =>
+      tab === undefined || strip === undefined || strip.has(tabKey(tab));
+    return stands(to.column, strips.column) && stands(to.side, strips.side);
   };
   const reachable = (to: Place) => {
     // Factory is an experiment, so back and forward pass over it while it is off.

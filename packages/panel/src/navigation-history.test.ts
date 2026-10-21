@@ -872,3 +872,18 @@ test("a Chat channel chosen by a press on the desktop's width is a step of its o
   act(() => window.history().onBack());
   assert.deepEqual(shownPlaces, ["channel-1"]);
 });
+
+test("the side panel's tabs are steps though the task's agents are not read, as a task with none never reads them in a fixture run", () => {
+  const shown: string[] = [];
+  const unread = (side: SidePanelTab) => {
+    const tasks = onTabs({ column: undefined, side, shown });
+    return { ...tasks, mainTabs: { ...tasks.mainTabs, tabs: [], openAgents: undefined } };
+  };
+  const window = mount(unread(SIDE_PANEL_TAB.CODE));
+  press();
+  window.stand(unread(SIDE_PANEL_TAB.PLAN));
+  assert.equal(window.addresses().length, 2);
+
+  act(() => window.history().onBack());
+  assert.deepEqual(shown, ["side:code"]);
+});
