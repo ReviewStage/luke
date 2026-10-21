@@ -106,13 +106,14 @@ function cursorInto(sent: FakeCdpCommand[], watched: boolean) {
   return { cursor, moves };
 }
 
-/** The commands sent to pages and to the browser about them, without the listing a step reads along the way. */
+/** The commands sent to pages and to the browser about them, without the listing a step reads along the way, and a script asked of a page by its method alone. */
 function pageCommands(sent: readonly FakeCdpCommand[]) {
   return sent
     .filter((command) => command.method !== "Target.getTargets")
-    .map(({ method, params, sessionId }) =>
-      sessionId === undefined ? { method, params } : { method, params, sessionId },
-    );
+    .map(({ method, params, sessionId }) => {
+      if (method === "Runtime.evaluate") return { method, sessionId };
+      return sessionId === undefined ? { method, params } : { method, params, sessionId };
+    });
 }
 
 function failureOf(step: BrowserAgentStep | undefined): string | undefined {
@@ -153,6 +154,7 @@ it.effect("each action sends the browser's own commands, on the tab's flattened 
     assert.deepEqual(pageCommands(sent), [
       { method: "Target.createTarget", params: { url: "http://localhost:3000/" } },
       { method: "Target.attachToTarget", params: { targetId: "page-1", flatten: true } },
+      { method: "Emulation.setFocusEmulationEnabled", params: { enabled: true }, ...page },
       { method: "Page.navigate", params: { url: "https://example.com/" }, ...page },
       {
         method: "Input.dispatchMouseEvent",
@@ -169,6 +171,7 @@ it.effect("each action sends the browser's own commands, on the tab's flattened 
         params: { type: "mouseReleased", x: 40, y: 60, button: "left", buttons: 0, clickCount: 1 },
         ...page,
       },
+      { method: "Runtime.evaluate", ...page },
       { method: "Input.insertText", params: { text: "héllo" }, ...page },
       {
         method: "Input.dispatchKeyEvent",
@@ -340,9 +343,72 @@ it.effect(
       assert.equal(clicked.steps[0]?.status, BROWSER_STEP_STATUS.DONE);
       assert.match(
         failureOf(clicked.steps[1]) ?? "",
-        /^e99 is not on the page any more; take a new snapshot/u,
+        /^e99 is not on the page any more; take a new snapshot.*\(the browser said: No node with given id found\)$/u,
       );
     }),
+);
+
+it.effect("a ref whose middle another element covers fails before it is clicked", () =>
+  Effect.gen(function* () {
+    const { peer, sent } = yield* browser(
+      (command) => {
+        if (command.method === "DOM.getContentQuads") {
+          return { result: { quads: [[100, 200, 140, 200, 140, 220, 100, 220]] } };
+        }
+        if (command.method === "DOM.resolveNode") {
+          return {
+            result: { object: { objectId: `node-${String(command.params.backendNodeId)}` } },
+          };
+        }
+        if (command.method === "Runtime.callFunctionOn") {
+          // A cookie banner lies over e42; e5 is clear.
+          return {
+            result: { result: { value: command.params.objectId === "node-42" ? "div" : "" } },
+          };
+        }
+        return undefined;
+      },
+      [{ targetId: "page-shop", url: "https://shop.example/", title: "Shop" }],
+    );
+
+    const covered = yield* run(peer, [
+      { action: BROWSER_AGENT_ACTION.CLICK, tab: "page-shop", ref: "e42" },
+    ]);
+    const pressedBefore = sent.filter((command) => command.params.type === "mousePressed").length;
+    const clear = yield* run(peer, [
+      { action: BROWSER_AGENT_ACTION.CLICK, tab: "page-shop", ref: "e5" },
+    ]);
+
+    assert.match(failureOf(covered.steps[0]) ?? "", /^e42 is covered at its middle by a div/u);
+    assert.equal(pressedBefore, 0);
+    assert.deepEqual(clear.steps, [{ action: "click", status: "done", tab: "page-shop" }]);
+    assert.ok(sent.some((command) => command.params.type === "mousePressed"));
+  }),
+);
+
+it.effect("typing where nothing that takes text has the focus fails, and sends no text", () =>
+  Effect.gen(function* () {
+    const { peer, sent } = yield* browser(
+      (command) => {
+        if (command.method !== "Runtime.evaluate") return undefined;
+        // The page's body has the focus, so only the check that asks whether it takes text answers no.
+        const asksTakesText = String(command.params.expression).includes("isContentEditable");
+        return { result: { result: { value: asksTakesText ? false : null } } };
+      },
+      [{ targetId: "page-shop", url: "https://shop.example/", title: "Shop" }],
+    );
+
+    const nowhere = yield* run(peer, [
+      { action: BROWSER_AGENT_ACTION.TYPE, tab: "page-shop", text: "hello" },
+    ]);
+    const button = yield* run(peer, [
+      { action: BROWSER_AGENT_ACTION.TYPE, tab: "page-shop", ref: "e42", text: "hello" },
+    ]);
+
+    assert.match(failureOf(nowhere.steps[0]) ?? "", /^nothing that takes text has the focus/u);
+    assert.equal(failureOf(button.steps[0]), "e42 does not take text; name a text field's ref");
+    assert.ok(!sent.some((command) => command.method === "Input.insertText"));
+  }),
 );
 
 it.effect("a sequence stops at its first failure, says why, and counts what never ran", () =>
