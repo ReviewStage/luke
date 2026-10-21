@@ -297,10 +297,11 @@ export const taskBoardLiveRowsSchema = EffectSchema.Struct({
 export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
 
 /**
- * An open task's pages and calls sealed for following: the address, and one
- * statement a part, each a mark that moves as its rows do and carries none
- * of their words: the pages agents showed (`pages`) and the calls about the
- * task (`calls`). The desktop reads a part again once its mark moves,
+ * An open task's pages, calls, and agents' code sealed for following: the
+ * address, and one statement a part, each a mark that moves as its rows do
+ * and carries none of their words: the pages agents showed (`pages`), the
+ * calls about the task (`calls`), and the `show_code` calls its agents'
+ * journals answered (`code`). The desktop reads a part again once its mark moves,
  * rather than when a call's activity or end suggests it might have; the
  * board is followed on its own (`taskBoardLiveAnswerSchema`). The service
  * answers `not-found` for a task the account does not reach, and
@@ -312,6 +313,7 @@ export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
   queries: EffectSchema.Struct({
     pages: sealedLiveQuerySchema,
     calls: sealedLiveQuerySchema,
+    code: sealedLiveQuerySchema,
   }),
 });
 
@@ -336,10 +338,17 @@ const taskCallLiveRowSchema = EffectSchema.Struct({
   spoken: EffectSchema.Finite,
 });
 
-/** The task's pages and calls as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+/** One journal of an agent on the task as its row delivers it: the ids of the `show_code` calls it answered with lines, as JSON text. */
+const taskCodeLiveRowSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  calls: EffectSchema.String,
+});
+
+/** The task's pages, calls, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
   pages: EffectSchema.Array(taskPageLiveRowSchema),
   calls: EffectSchema.Array(taskCallLiveRowSchema),
+  code: EffectSchema.Array(taskCodeLiveRowSchema),
 });
 
 export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;

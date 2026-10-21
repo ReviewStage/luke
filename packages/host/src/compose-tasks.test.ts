@@ -793,6 +793,13 @@ function fakeService(tasks: Task[]): FakeService {
         service.recordReads.push("transcript");
         return service.transcripts[taskId];
       }),
+    // The code is the newest page of work's, read on its own, as the service answers both from one record.
+    readCode: (taskId) =>
+      Effect.sync(() => {
+        service.recordReads.push("code");
+        const code = service.works[taskId]?.code;
+        return code === undefined ? undefined : { code };
+      }),
     readWork: (taskId, before) =>
       Effect.sync(() => {
         service.workReads.push(before === undefined ? taskId : `${taskId}:${before}`);
@@ -3733,7 +3740,7 @@ function sealedRecord(round: number): TaskRecordLiveAnswer {
   });
   return {
     url: "wss://realtime.example/v1",
-    queries: { pages: query("pages"), calls: query("calls") },
+    queries: { pages: query("pages"), calls: query("calls"), code: query("code") },
   };
 }
 
@@ -3762,7 +3769,7 @@ it.effect(
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed().toSorted(), ["calls-0", "pages-0"]);
+      assert.deepEqual(realtime.subscribed().toSorted(), ["calls-0", "code-0", "pages-0"]);
       const taken = () => service.recordReads.splice(0).toSorted();
       const worked = () => service.workReads.splice(0);
       taken();
@@ -3772,6 +3779,7 @@ it.effect(
           Effect.sync(() => {
             realtime.deliver("pages-0", pages);
             realtime.deliver("calls-0", calls);
+            realtime.deliver("code-0", []);
           }),
           boardSettled,
         );
@@ -3779,7 +3787,7 @@ it.effect(
 
       // The first delivery reads every part, since the reads the task opened with may have missed it.
       yield* deliver([page(1)], []);
-      assert.deepEqual(taken(), ["pages", "transcript"]);
+      assert.deepEqual(taken(), ["code", "pages", "transcript"]);
       assert.deepEqual(worked(), []);
 
       yield* deliver([page(2)], []);
@@ -3815,6 +3823,83 @@ it.effect(
       // Leaving the task lets the subscriptions go.
       yield* call(GATEWAY_METHOD.TASKS_CLOSE);
       assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "an agent's code shown on a typed turn is drawn once its mark moves, a call's code told live and read back is drawn once under the record's agent, and a later step of the same journal reads nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.works[INVITES] = { turns: [] };
+      service.recordSeals[INVITES] = sealedRecord(0);
+      const realtime = fakeBoardRealtime();
+      const { call, tasks, viewLands } = yield* subject(service, {
+        openLive: () => realtime.client,
+      });
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* boardSettled;
+      const deliver = (code: readonly unknown[]) =>
+        Effect.andThen(
+          Effect.sync(() => {
+            realtime.deliver("pages-0", []);
+            realtime.deliver("calls-0", []);
+            realtime.deliver("code-0", code);
+          }),
+          boardSettled,
+        );
+      yield* deliver([]);
+      const shown = (callId: string, turnId: string, shownAt: number) => ({
+        callId,
+        turnId,
+        shownAt,
+        code: {
+          ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
+          repository: "acme/api",
+          firstLine: 1,
+          lineCount: 1,
+          lines: ["export const TTL = 7;"],
+        },
+      });
+
+      // A call into the agent tells its code live, which names no agent.
+      const told = yield* viewLands((view) =>
+        (view.shownCode ?? []).some((code) => code.callId === "call-1"),
+      );
+      tasks.showCode(INVITES, shown("call-1", "turn-1", 10));
+      yield* told;
+      service.recordReads.splice(0);
+
+      // The record lands with that call's copy and a typed turn's code, each under the agent.
+      service.works[INVITES] = {
+        turns: [],
+        code: [
+          { ...shown("call-1", "turn-1", 10), agentId: "agent-1" },
+          { ...shown("call-2", "turn-2", 20), agentId: "agent-1" },
+        ],
+      };
+      const read = yield* viewLands((view) =>
+        (view.shownCode ?? []).some((code) => code.callId === "call-2"),
+      );
+      const journals = [
+        { id: "journal-1", calls: '["call-1"]' },
+        { id: "journal-2", calls: '["call-2"]' },
+      ];
+      yield* deliver(journals);
+      const showing = (yield* read).shownCode ?? [];
+      assert.deepEqual(
+        showing.map((code) => [code.callId, code.agentId]),
+        [
+          ["call-1", "agent-1"],
+          ["call-2", "agent-1"],
+        ],
+      );
+      assert.deepEqual(service.recordReads.splice(0), ["code"]);
+
+      // A later step of the same turn rewrites its journal and leaves its calls as they stood.
+      yield* deliver(journals);
+      assert.deepEqual(service.recordReads.splice(0), []);
     }),
 );
 
