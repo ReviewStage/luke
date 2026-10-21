@@ -362,3 +362,29 @@ test("a tab closed on its task's page stays let go once the Inbox stands in the 
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
   letGo();
 });
+
+test("a task opened before its row reaches the list stays a stop, and one gone from the list once left does not", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  const inbox = { ...tasksControl().inboxView, open: true };
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { tasks: [] }));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox }));
+
+  tab();
+  letGo();
+  assert.deepEqual(told.panelTabs, [[TASK, SIDE_PANEL_TAB.PLAN]]);
+
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inbox, activeTaskId: undefined, tasks: [] }),
+  );
+  tab();
+  letGo();
+  assert.deepEqual(
+    told.panelTabs,
+    [[TASK, SIDE_PANEL_TAB.PLAN]],
+    "a task deleted since is no stop",
+  );
+});
