@@ -397,6 +397,19 @@ test("a check suite or check run completed, whatever its conclusion, or a commit
     ...finished,
     by: "vercel[bot]",
   });
+  // A run whose suite names no branch is placed by the pull requests it names.
+  const placedByPull = {
+    ...run("completed", null),
+    check_run: {
+      ...run("completed", null).check_run,
+      check_suite: {},
+      pull_requests: [{ number: 41, head: { ref } }],
+    },
+  };
+  assert.deepEqual(checksCompletedWakeOf("check_run", unparsedWire(placedByPull), 0), {
+    ...finished,
+    by: "vercel[bot]",
+  });
   assert.deepEqual(
     checksCompletedWakeOf("status", unparsedWire(status("success", ["main", ref])), 0),
     { ...finished, pullRequest: undefined, by: "buildkite[bot]" },
@@ -689,7 +702,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         const { owner, agent, ref } = yield* openAgent;
         yield* runningTurn(owner, agent.conversationId);
         yield* publishedAt(owner, agent.id, HEAD);
-        const held = {
+        const held: { checkRuns: object[]; statuses: object[] } = {
           checkRuns: [checkRun("success", MADE_AT), checkRun(null, MADE_AT)],
           statuses: [{ state: "pending", updated_at: new Date(MADE_AT).toISOString() }],
         };
@@ -717,18 +730,31 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         // Two suites finishing together are two deliveries reading the same checks.
         const finished = yield* deliver;
         const together = yield* deliver;
+        // One more check registered and finished in the same second the others did.
+        held.statuses = [
+          ...held.statuses,
+          {
+            context: "vercel",
+            state: "success",
+            updated_at: new Date(MADE_AT + 30_000).toISOString(),
+          },
+        ];
+        const another = yield* deliver;
         held.checkRuns = [checkRun("success", MADE_AT), checkRun("failure", MADE_AT + 120_000)];
         const rerun = yield* deliver;
 
-        assert.deepEqual([running, pending, finished, together, rerun], [0, 0, 1, 1, 1]);
+        assert.deepEqual(
+          [running, pending, finished, together, another, rerun],
+          [0, 0, 1, 1, 1, 1],
+        );
         const texts = eve.sent.map((sent) => sentText(sent.message.message));
-        assert.equal(texts.length, 2, "suites finishing together tell once");
+        assert.equal(texts.length, 3, "suites finishing together tell once, one more check again");
         assert.equal(
           texts[0],
           `Every check finished on \`0123abc\`, the head of your pull request [@#41](https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks).\n\nNone failed.`,
         );
         assert.ok(
-          texts[1]?.endsWith("At least one failed: read why with `gh`, fix the cause, and push."),
+          texts[2]?.endsWith("At least one failed: read why with `gh`, fix the cause, and push."),
         );
       }),
   );

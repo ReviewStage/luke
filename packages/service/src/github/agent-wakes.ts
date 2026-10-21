@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
@@ -87,9 +88,9 @@ import {
  * still to finish and there is at least one. Only an agent whose row keeps
  * that commit as its pull request's head is told, so checks finishing on a
  * commit it has pushed past end no wait. It is told under a key of the
- * repository, the commit, and the instant its newest check finished, rather
- * than the delivery's id: two suites that finish together read the same
- * checks and tell once, and a check run again tells again.
+ * repository, the commit, and every check's outcome, rather than the
+ * delivery's id: two suites that finish together read the same checks and
+ * tell once, and a check run again, or one more check finished, tells again.
  */
 
 /** What a delivery tells an agent of. */
@@ -244,7 +245,12 @@ const CheckRunDeliverySchema = Schema.Struct({
     check_suite: Schema.optionalKey(
       Schema.Struct({ head_branch: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
     ),
-    pull_requests: Schema.Array(Schema.Struct({ number: Schema.Int })),
+    pull_requests: Schema.Array(
+      Schema.Struct({
+        number: Schema.Int,
+        head: Schema.optionalKey(Schema.Struct({ ref: Schema.String })),
+      }),
+    ),
   }),
 });
 
@@ -420,7 +426,13 @@ export function checksCompletedWakeOf(
       const { repository, check_run: run } = read.success;
       return checksMovedWake(
         repository,
-        agentBranchesOf([run.check_suite?.head_branch]),
+        // The suite's branch, else the branches of the pull requests the run names, as the webhook reads them.
+        agentBranchesOf([
+          ...new Set([
+            run.check_suite?.head_branch,
+            ...run.pull_requests.map((pr) => pr.head?.ref),
+          ]),
+        ]),
         run.head_sha,
         run.pull_requests[0]?.number,
         `${run.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`,
@@ -661,9 +673,15 @@ const standsOnHead = (wake: AgentWake, { userId, agent }: OwnedCodingAgent) =>
     (published) => published?.headSha !== undefined && published.headSha === wake.sha,
   );
 
-/** The key every check finished is told under: the repository, the commit, and the instant its newest check finished, so a delivery read again tells once and a check run again tells again. */
+/**
+ * The key every check finished is told under: the repository, the commit,
+ * and a digest of every check's outcome, so a delivery read again tells
+ * once, while a check run again, or one more check registered and finished,
+ * tells again however close in time it finished.
+ */
 function checksCompletedKey(wake: AgentWake, checks: HeadChecks): string {
-  return JSON.stringify([AGENT_WAKE.CHECKS_COMPLETED, wake.repository, wake.sha, checks.settledAt]);
+  const outcomes = createHash("sha256").update(JSON.stringify(checks.outcomes)).digest("hex");
+  return JSON.stringify([AGENT_WAKE.CHECKS_COMPLETED, wake.repository, wake.sha, outcomes]);
 }
 
 /** The agents a delivery is about: those on its branches, or, for a comment, those whose pull request it is. */
