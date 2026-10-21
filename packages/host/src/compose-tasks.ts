@@ -2371,6 +2371,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return yield* invalid("saving a board names a task and its scene");
         const { taskId, elements, appliedDrawing, image } = read.success;
         if (!gate() || view.activeTaskId !== taskId) return { saved: false };
+        const sentUnder = boardWait?.taskId === taskId ? boardWait.wait : undefined;
         const saved = yield* serial(
           Effect.gen(function* () {
             const answer = yield* served(client.saveBoard(taskId, elements, appliedDrawing, image));
@@ -2380,8 +2381,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
         if (saved === undefined) return { saved: false };
-        // Note that the save is answered once the board's follow has seen its transaction, outside `serial` so the wait holds up nothing else.
-        yield* confirmWrite(boardWait?.taskId === taskId ? boardWait.wait : undefined, saved.txid);
+        // Note that the save waits only on the follow that stood as it was sent, and only while that one still stands, since a replacement may never see a transaction the one before it already did; it runs outside `serial` so the wait holds up nothing else.
+        const still =
+          boardWait?.taskId === taskId && boardWait.wait === sentUnder ? sentUnder : undefined;
+        yield* confirmWrite(still, saved.txid);
         return { saved: true };
       }),
   };
