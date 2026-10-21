@@ -633,7 +633,11 @@ export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
  * Note that it carries no `unreached`, because the start confirmed the
  * repository reachable as it made the task.
  */
-const taskAgentRefusalSchema = EffectSchema.Struct({ error: EffectSchema.String });
+/** Why the agent a start asked for was refused, and when a plan's reached limit resets where that is why and the provider said. */
+const taskAgentRefusalSchema = EffectSchema.Struct({
+  error: EffectSchema.String,
+  resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+});
 
 export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
 

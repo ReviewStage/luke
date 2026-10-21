@@ -370,7 +370,11 @@ const startedAgentOn = (
         yield* Effect.logWarning(
           `the agent a task's start asked for was refused: ${refusal.error}`,
         );
-        return { plan: task, agentRefusal: { error: refusal.error } } satisfies TaskStartAnswer;
+        const agentRefusal = {
+          error: refusal.error,
+          ...(refusal.resetsAt === undefined ? undefined : { resetsAt: refusal.resetsAt }),
+        };
+        return { plan: task, agentRefusal } satisfies TaskStartAnswer;
       }),
     ),
   );

@@ -84,17 +84,13 @@ function effortOf(effort: string): Effort | undefined {
 function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
   const { userId } = options;
 
-  /** The CLI's credential and the variable it is read from: the test key, or the account's plan token opened. */
-  const credential = Effect.gen(function* () {
-    if (options.testApiKey !== undefined) {
-      return { env: { [RUNNER_ENV.API_KEY]: Redacted.value(options.testApiKey) } };
-    }
-    const environment = yield* HostedEnvironment;
-    const ring = environment.providerKeyEncryptionKeys;
-    const parsed = ring === undefined ? undefined : parseKeyRing(ring);
-    if (parsed === undefined || Result.isFailure(parsed)) {
-      return yield* Effect.fail(new LaunchRefused({ reason: "no key ring" }));
-    }
+  /**
+   * The account's setup-token's row, where its plan may pay: refused in the
+   * plan's words where it is gone, refused, or at a limit whose named reset
+   * is still ahead. A launch and every message to a live runner ask it, so a
+   * plan another agent's turn found refused stops this agent's too.
+   */
+  const standingPlan = Effect.gen(function* () {
     const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
     const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
     if (row === undefined) {
@@ -122,6 +118,21 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         planResetsAt: row.limitResetsAt.getTime(),
       });
     }
+    return row;
+  });
+
+  /** The CLI's credential and the variable it is read from: the test key, or the account's plan token opened. */
+  const credential = Effect.gen(function* () {
+    if (options.testApiKey !== undefined) {
+      return { env: { [RUNNER_ENV.API_KEY]: Redacted.value(options.testApiKey) } };
+    }
+    const environment = yield* HostedEnvironment;
+    const ring = environment.providerKeyEncryptionKeys;
+    const parsed = ring === undefined ? undefined : parseKeyRing(ring);
+    if (parsed === undefined || Result.isFailure(parsed)) {
+      return yield* Effect.fail(new LaunchRefused({ reason: "no key ring" }));
+    }
+    const row = yield* standingPlan;
     const opened = openProviderKey(
       parsed.success,
       {
@@ -162,10 +173,12 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
     });
 
   // The agent's model and effort as they stand go ahead of every message, which a change since the launch takes effect from.
+  // Note that the plan is asked first, so a message to a live runner on a refused or limited plan is refused as a launch would be.
   const ahead = (agent: CodingAgent) => {
     const effort = effortOf(agent.effort);
     const model = providerModelOf(agent.model);
-    return Effect.succeed({
+    const asked = options.testApiKey === undefined ? Effect.asVoid(standingPlan) : Effect.void;
+    return Effect.as(asked, {
       lines: [
         {
           type: INPUT_LINE.MODEL,
