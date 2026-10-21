@@ -39,6 +39,7 @@
  * attributes its search lands on.
  */
 
+import { keepIdentity } from "@luke/wire";
 import {
   type ButtonHTMLAttributes,
   type ComponentType,
@@ -209,7 +210,7 @@ function placeThumb(bar: HTMLElement, slide: boolean): void {
 /**
  * The ref the bar's own element takes and the one each option takes, which
  * keep its thumb under the chosen option: sliding to it after a render that
- * chose another, or that changed which options stand (`stands`), and placed
+ * chose another, or that changed which options stand (`placed`), and placed
  * at once when the bar or an option resizes (a narrow bar dropping its
  * names, a count growing, a hidden panel shown). Note that each element is
  * watched by an observer of its own, let go with `disconnect`, the one way
@@ -217,12 +218,12 @@ function placeThumb(bar: HTMLElement, slide: boolean): void {
  * alone, because reading where an option stands lays out the whole window,
  * and a bar is drawn again with everything around it.
  */
-function useThumb(chosen: string | undefined, stands: string) {
+function useThumb(chosen: string | undefined, placed: OptionsPlaced) {
   const bar = useRef<HTMLDivElement | null>(null);
   // Note that the thumb is placed again only when the choice or the options standing change; a resize is the observers'.
   useLayoutEffect(() => {
     if (bar.current !== null) placeThumb(bar.current, true);
-  }, [chosen, stands]);
+  }, [chosen, placed]);
   const optionRef = useCallback((element: HTMLElement | null) => {
     if (element === null || !("ResizeObserver" in globalThis)) return undefined;
     const resized = new ResizeObserver(() => {
@@ -282,14 +283,14 @@ const UNFOLD_SLACK = 2;
  * a folded name read by its own width (`foldedNames`), so a change that makes them fit, a tighter step's
  * padding among them, unfolds the bar at once. It is measured before the
  * frame is painted as it first draws and whenever the options' names or the
- * bar's look change (`drawn`), and whenever the bar or an option resizes.
+ * bar's look change (`named`), and whenever the bar or an option resizes.
  * Note that a draw changing neither reads nothing, because measuring lays out
  * the whole window, and a bar is drawn again with everything around it.
  */
 function useFoldTogether(
   on: boolean,
   bar: React.RefObject<HTMLDivElement | null>,
-  drawn: string,
+  named: OptionsNamed | undefined,
 ): boolean {
   const [folded, setFolded] = useState(false);
   const measure = useCallback(() => {
@@ -298,7 +299,7 @@ function useFoldTogether(
     const named = optionsWidth(element) + (folded ? foldedNames(element) : 0);
     setFolded(folded ? named > element.clientWidth - UNFOLD_SLACK : named > element.clientWidth);
   }, [on, bar, folded]);
-  useLayoutEffect(measure, [measure, drawn]);
+  useLayoutEffect(measure, [measure, named]);
   // Note that the options are found afresh as they change, so one that joined is watched too.
   useLayoutEffect(() => {
     const element = bar.current;
@@ -307,7 +308,7 @@ function useFoldTogether(
     resized.observe(element);
     for (const option of element.children) resized.observe(option);
     return () => resized.disconnect();
-  }, [on, bar, measure, drawn]);
+  }, [on, bar, measure, named]);
   return on && folded;
 }
 
@@ -421,33 +422,41 @@ function countOf(count: ChoiceItem<string>["count"]): ReactNode {
   return <CountParts parts={isParts(count) ? count : [{ text: count }]} />;
 }
 
-/** Which options stand, in order, and how the bar draws them: what moves the thumb without resizing what it watches. */
-function standing(
-  items: readonly ChoiceItem<string>[],
-  look: ChoiceBarLook,
-  size: ChoiceBarSize,
-  inset: ChoiceBarInset,
-): string {
-  return [look, size, inset, ...items.map((item) => item.value)].join("\n");
+/** How the bar draws its options and which stand, in order: what moves the thumb without resizing what it watches. */
+interface OptionsPlaced {
+  readonly look: ChoiceBarLook;
+  readonly size: ChoiceBarSize;
+  readonly inset: ChoiceBarInset;
+  readonly values: readonly string[];
 }
 
-/** What a bar folding together is measured by: the options standing, their glyphs, names, and counts, and how the bar draws them; a change in any may fold or unfold it without resizing the bar. */
-function namesDrawn(
-  items: readonly ChoiceItem<string>[],
-  look: ChoiceBarLook,
-  size: ChoiceBarSize,
-  inset: ChoiceBarInset,
-): string {
-  const words = (count: ChoiceItem<string>["count"]) => {
-    if (count === undefined) return "";
-    return isParts(count)
-      ? count.map((part) => `${part.glyph ?? ""}${part.text}`).join(" ")
-      : count;
-  };
-  const named = items.map((item) =>
-    [item.value, item.icon === undefined ? "" : "glyph", item.label, words(item.count)].join("\t"),
-  );
-  return [look, size, inset, ...named].join("\n");
+/** One option as a bar folding together is measured by: its glyph, name, and count. */
+interface OptionNamed {
+  readonly value: string;
+  readonly glyph: boolean;
+  readonly label: string;
+  readonly count: string | readonly CountPart[] | null;
+}
+
+/** What a bar folding together is measured by: how it draws its options, and each option's glyph, name, and count; a change in any may fold or unfold it without resizing the bar. */
+interface OptionsNamed {
+  readonly look: ChoiceBarLook;
+  readonly size: ChoiceBarSize;
+  readonly inset: ChoiceBarInset;
+  readonly options: readonly OptionNamed[];
+}
+
+/**
+ * `next`, or the value held from an earlier draw where the two are equal in
+ * every part (`keepIdentity`), so a value built afresh on every draw changes
+ * identity only when what it says changes, and an effect listing it runs
+ * only then.
+ */
+function useKept<Value>(next: Value): Value {
+  const [held, setHeld] = useState(next);
+  const kept = keepIdentity(held, next);
+  if (kept !== held) setHeld(kept);
+  return kept;
 }
 
 /** The bar over `items`, `value` chosen. */
@@ -468,13 +477,30 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     onChange: __,
     ...appAttributes
   } = props;
-  const thumb = useThumb(value, standing(items, look, size, inset));
+  const placed = useKept<OptionsPlaced>({
+    look,
+    size,
+    inset,
+    values: items.map((item) => item.value),
+  });
+  const thumb = useThumb(value, placed);
   const together = fold === CHOICE_BAR_FOLD.TOGETHER;
-  const folded = useFoldTogether(
-    together,
-    thumb.bar,
-    together ? namesDrawn(items, look, size, inset) : "",
+  const named = useKept<OptionsNamed | undefined>(
+    together
+      ? {
+          look,
+          size,
+          inset,
+          options: items.map((item) => ({
+            value: item.value,
+            glyph: item.icon !== undefined,
+            label: item.label,
+            count: item.count ?? null,
+          })),
+        }
+      : undefined,
   );
+  const folded = useFoldTogether(together, thumb.bar, named);
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
