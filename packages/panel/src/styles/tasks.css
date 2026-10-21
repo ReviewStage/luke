@@ -1128,21 +1128,28 @@
 
 /* A divider across a log (../ai-elements/checkpoint.tsx): its words at the
    left in the muted ink, a hairline running on from them, and what the
-   caller puts at the right, stuck to the log's top on the well's own ground
-   so nothing shows through. A standing call's "Live" stands at the right in
-   the developer's colour beside the voice mark (../tasks/call-card.tsx). */
+   caller puts at the right, on no ground of its own, so in an agent's
+   transcript a call's divider is the plain rule the transcript's other
+   lines are drawn on. A standing call's "Live" stands at the right in the
+   developer's colour beside the voice mark (../tasks/call-card.tsx). */
 .checkpoint {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-12) 0 var(--luke-space-8);
-  background: var(--luke-color-well);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
+}
+
+/* In the Code tab's feed, a divider sticks to the log's top as its cards
+   scroll under it, on the well's own ground, which is the feed's, so
+   nothing shows through. */
+.checkpoint-log .checkpoint {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--luke-color-well);
 }
 
 .checkpoint-rule {

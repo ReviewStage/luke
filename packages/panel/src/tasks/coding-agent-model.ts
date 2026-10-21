@@ -1589,6 +1589,63 @@ export function placedMessages(messages: readonly CodingAgentMessage[]): readonl
   });
 }
 
+/**
+ * What a line the voice said on a call into the agent names of the turn it
+ * read aloud: the turn's journal, by its message id (`read_from`), which the
+ * service writes on a reply said within moments of the turn settling.
+ */
+const ReadAloudSchema = Schema.Struct({
+  author: Schema.Literal(MESSAGE_AUTHOR.VOICE_MODEL),
+  channel: Schema.Literal(MESSAGE_CHANNEL.VOICE),
+  read_from: Schema.String,
+});
+
+const readAloud = Schema.decodeUnknownOption(ReadAloudSchema);
+
+/** The journal of the turn a line the voice said read aloud; none for any other row. */
+function readFromOf(message: CodingAgentMessage): string | undefined {
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+  return Option.getOrUndefined(Option.map(readAloud(message.metadata), (said) => said.read_from));
+}
+
+/** A row the voice read nothing aloud of. */
+const NOTHING_SAID: readonly CodingAgentMessage[] = [];
+
+/** One of a transcript's rows as the tab draws it, with what the voice said of it on a call. */
+export interface SpokenMessage extends PlacedMessage {
+  /** The lines the voice said on a call reading this turn aloud, in the order the transcript holds them, which the tab draws ahead of the turn, its work folded behind them; none on any other row. */
+  readonly said: readonly CodingAgentMessage[];
+}
+
+/**
+ * A transcript's rows with each line the voice said reading a turn aloud
+ * moved to that turn, so on a call the tab reads as a conversation: what
+ * was said, then the work behind it folded under it, rather than the
+ * turn's own answer and then the voice saying it again. A line whose turn
+ * is not among the rows, and a line the service names no turn for, stand
+ * where the order puts them, so a transcript with no call reads as it did.
+ */
+export function spokenMessages(placed: readonly PlacedMessage[]): readonly SpokenMessage[] {
+  const turns = new Set(
+    placed.flatMap(({ message }) =>
+      message.role === MESSAGE_ROLE.ASSISTANT && readFromOf(message) === undefined
+        ? [message.id]
+        : [],
+    ),
+  );
+  const said = new Map<string, CodingAgentMessage[]>();
+  for (const { message } of placed) {
+    const turn = readFromOf(message);
+    if (turn === undefined || !turns.has(turn)) continue;
+    said.set(turn, [...(said.get(turn) ?? []), message]);
+  }
+  return placed.flatMap((row) => {
+    const turn = readFromOf(row.message);
+    if (turn !== undefined && turns.has(turn)) return [];
+    return [{ ...row, said: said.get(row.message.id) ?? NOTHING_SAID }];
+  });
+}
+
 /** A stretch of a turn's rows as the tab draws it: the turn's own rows, or a line that reached it while it ran, which stands between them as the developer's own message. */
 export type TurnStretch =
   | { readonly line: CodingAgentMessage; readonly rows?: undefined }
