@@ -38,6 +38,7 @@ import {
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
+import type { SkillOption } from "@luke/ui/skill-mention";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MailOpenIcon, MessagesSquareIcon } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -56,6 +57,7 @@ import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { RelativeTime } from "../tasks/relative-time.js";
+import { keptSkills } from "../tasks/repository-skills.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
@@ -124,12 +126,13 @@ const OPEN_NOTHING = (): void => undefined;
  * The doors of each task the window lists, by its id, that its channel's
  * messages read through: its code read through the task and opened in it,
  * as the window's Inbox opens an item's (`desktop-inbox.tsx`), and, where
- * `mentions` asks, its mentions, so a file's chip opens the file in its
- * task and a GitHub link is read against its repository. Note that the
+ * `mentions` asks, its mentions and skills, so a file's chip and a
+ * person's `/skill` open the file in its task and a GitHub link is read
+ * against its repository. Note that the
  * mentions name no task, as a page no task holds does (`tasklessMentions`),
  * because the window holds no text of the plan here, and a section of it
- * would otherwise be drawn gone. The plan's Chat tab asks no mentions,
- * since the task's page it stands on hands its own.
+ * would otherwise be drawn gone. The plan's Chat tab asks neither, since
+ * the task's page it stands on hands its own.
  */
 function useTaskDoors(
   tasks: TasksControl,
@@ -162,9 +165,18 @@ function useTaskDoors(
         lines === undefined
           ? showFile({ path }, undefined)
           : showFile({ path, startLine: lines.startLine, endLine: lines.endLine }, lines.commit);
+      // A skill's file opens in its task, as the task's page opens it.
+      const skills =
+        repository === null
+          ? undefined
+          : {
+              source: keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: task.id })),
+              onOpen: (skill: SkillOption) => showFile({ path: skill.path }, undefined),
+            };
       held.set(task.id, {
         code,
         mentions: { ...taskless, taskName: task.name, doors: { ...taskless.doors, onOpenFile } },
+        skills,
       });
     }
     return held;
