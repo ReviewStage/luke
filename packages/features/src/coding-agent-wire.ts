@@ -1637,7 +1637,7 @@ export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary
  * and not this wire's to spell. The node shown for it says only that much.
  */
-const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
+export const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
 });
@@ -1694,6 +1694,23 @@ const turnRecordFields = {
 const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 
 export type TurnRecord = typeof turnRecordSchema.Type;
+
+/**
+ * What sent one of the developer's lines to a coding agent: a member, from
+ * the message box or an Inbox answer; Luke, from a call; an automation's
+ * run, on its creator's behalf; GitHub, telling the agent of a review, a
+ * comment, or a failed check on its pull request, by who caused it there;
+ * or another coding agent of the workspace, through its `message_agent` tool.
+ */
+export const MESSAGE_SENDER = {
+  MEMBER: "member",
+  LUKE: "luke",
+  AUTOMATION: "automation",
+  GITHUB: "github",
+  AGENT: "agent",
+} as const;
+
+export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
 
 /** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const CODING_AGENT_SENDER = {

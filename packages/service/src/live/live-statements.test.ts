@@ -15,7 +15,11 @@ import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
-import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
+import {
+  agentFollowedBy,
+  transcriptLiveStatements,
+  transcriptWindowLiveStatements,
+} from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   memberAgentInboxLiveStatements,
@@ -91,6 +95,16 @@ function liveStatements() {
     ),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(
+        Option.getOrThrow(
+          transcriptWindowLiveStatements(
+            { userId: USER_ID, conversationId: parent },
+            agentFollowedBy(USER_ID, parent, USER_ID),
+          ),
+        ),
+      ).map(([part, query]) => [`transcript.${part}`, query]),
     ),
     ...Object.fromEntries(Object.entries(chat).map(([part, query]) => [`chat.${part}`, query])),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
