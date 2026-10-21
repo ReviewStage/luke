@@ -317,8 +317,19 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         const now = yield* DateTime.nowAsDate;
         yield* takeOverBrowserTab(tab.id, teammate, new Date(now.getTime() + MINUTE_MS), now);
 
-        assert.equal(yield* retargetBrowserTab(other.conversationId, tab.id, "target-9"), false);
-        assert.equal(yield* retargetBrowserTab(agent.conversationId, tab.id, "target-2"), true);
+        assert.equal(
+          yield* retargetBrowserTab(other.conversationId, tab.id, "target-1", "target-9"),
+          false,
+        );
+        assert.equal(
+          yield* retargetBrowserTab(agent.conversationId, tab.id, "target-1", "target-2"),
+          true,
+        );
+        // A second reopening that read the tab on its old target finds it moved, and moves nothing.
+        assert.equal(
+          yield* retargetBrowserTab(agent.conversationId, tab.id, "target-1", "target-3"),
+          false,
+        );
         const [moved] = yield* listAgentBrowserTabs(agent.conversationId);
 
         assert.ok(moved);
