@@ -137,6 +137,9 @@ const ENDED_WORD = {
   [CODING_AGENT_STATUS.FAILED]: "failed",
 } as const;
 
+/** How many pushes of the followed list in a row may leave out an agent only a Start answered before the ledger lets it go. */
+const UNNAMED_PUSHES_KEPT = 2;
+
 /** What kind of event a notice tells of. */
 export const NOTICE_KIND = {
   AGENT_END: "agent-end",
@@ -351,7 +354,7 @@ export interface AgentNotices {
   observeModels(models: readonly CatalogModel[]): void;
   /** A task the host no longer holds: its agents are forgotten. */
   observeTaskGone(taskId: string): void;
-  /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan is forgotten. */
+  /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan, or one of a held plan the list no longer names, as one archived, is forgotten. */
   observeFollowed(agents: readonly CodingAgentSummary[], taskIds: readonly string[]): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
@@ -617,6 +620,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
     const tasklessSubjects = new Map<string, string>();
     const unseen = new Set<string>();
+    /** The agents on plans the followed list last named, so one it stops naming is known to have left it rather than not reached it yet. */
+    let followedAgents = new Set<string>();
+    /** How many pushes in a row have left out each agent the list has not named yet, as one only a Start answered. */
+    const unnamedPushes = new Map<string, number>();
     const ends = yield* Queue.unbounded<TurnEnd>();
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
@@ -1088,7 +1095,24 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeTaskGone: (taskId) => forget((agent) => agent.taskId !== taskId),
       observeFollowed: (agents, taskIds) => {
         const held = new Set(taskIds);
-        forget((agent) => agent.taskId === null || held.has(agent.taskId));
+        // The list names every agent on its plans but the archived, so one it named and no longer
+        // does takes its dot with it. One only a Start answered is kept through a push or two that
+        // leave it out, since a push of the plans may carry agents from before that Start, and let go
+        // after that, as one archived before the list ever named it.
+        const named = new Set(agents.map((agent) => agent.id));
+        forget((agent, agentId) => {
+          if (agent.taskId === null) return true;
+          if (!held.has(agent.taskId)) return false;
+          if (named.has(agentId)) return true;
+          if (followedAgents.has(agentId)) return false;
+          const pushes = (unnamedPushes.get(agentId) ?? 0) + 1;
+          unnamedPushes.set(agentId, pushes);
+          return pushes <= UNNAMED_PUSHES_KEPT;
+        });
+        for (const agentId of unnamedPushes.keys()) {
+          if (named.has(agentId) || !ledger.has(agentId)) unnamedPushes.delete(agentId);
+        }
+        followedAgents = named;
         notices.observeAgents(agents);
       },
       shown: (agentId) => {
