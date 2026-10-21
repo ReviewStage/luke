@@ -126,14 +126,6 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
     members: [
       { id: ME, kind: MEMBER_KIND.HUMAN, name: "Dean", userId: "user-dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, agentId: AGENT_ID, left: false },
-      {
-        id: HELPER,
-        kind: MEMBER_KIND.AGENT,
-        name: "Fix the flaky test",
-        agentId: "00000000-0000-4000-8000-0000000000b3",
-        planId: TASK_ID,
-        left: false,
-      },
       { id: MARIA, kind: MEMBER_KIND.HUMAN, name: "Maria Chen", userId: "user-maria", left: false },
     ],
     channels: [WITH_AGENT, TOPIC, OLD, TASK_CHANNEL, WITH_MARIA, GENERAL],
@@ -269,6 +261,14 @@ test("a line names an agent by its title, or by the name the read gave it, with 
     ...chatOf(0, []),
     members: [
       ...chatOf(0, []).members,
+      {
+        id: HELPER,
+        kind: MEMBER_KIND.AGENT,
+        name: "Fix the flaky test",
+        agentId: "00000000-0000-4000-8000-0000000000b3",
+        planId: TASK_ID,
+        left: false,
+      },
       { id: "gone-agent", kind: MEMBER_KIND.AGENT, left: true },
       { id: "gone-person", kind: MEMBER_KIND.HUMAN, left: true },
     ],
@@ -348,7 +348,7 @@ test("a dictation in the chat listens for every person still here by name, each 
   assert.equal(new Set(words).size, words.length, "each word once");
 });
 
-test("every member is offered by name as the link their chip writes, an agent under its task, a task's former Luke never, and none before the workspace is known", () => {
+test("every member is offered by name as the link their chip writes, an agent under its task, and none before the workspace is known", () => {
   const chat = {
     ...chatOf(0, []),
     members: chatOf(0, []).members.map((member) =>
