@@ -483,6 +483,12 @@ export const WORKSPACE_ACT_KIND = {
    * each time they move, or why there are none.
    */
   WORKSPACE_PEOPLE: "workspace.people",
+  /**
+   * A workspace's pending invitations, followed for an owner or an admin
+   * while the window holds the stream open: as they first stand, then each
+   * time they move, or why there are none.
+   */
+  WORKSPACE_INVITATIONS: "workspace.invitations",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",

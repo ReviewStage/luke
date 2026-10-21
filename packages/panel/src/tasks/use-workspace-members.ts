@@ -3,6 +3,7 @@ import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/wo
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { actPort } from "../app-bridge.js";
 
 /**
@@ -54,30 +55,6 @@ interface FollowedList<Row> {
 }
 
 /**
- * The workspace's people streamed from the host (`workspace.people`) until
- * the returned stop, each word handed to `take`. Note that a stream the
- * window could not open, or that broke, hands nothing more: the place keeps
- * what it last held.
- */
-function streamPeople(
-  workspaceId: string,
-  take: (view: TasksWorkspaceMembersAnswer) => void,
-): () => void {
-  let stopped = false;
-  let stream: AsyncIteratorObject<TasksWorkspaceMembersAnswer, unknown, unknown> | undefined;
-  const read = async () => {
-    stream = await actPort()[ACT_KIND.WORKSPACE_PEOPLE]({ workspaceId });
-    if (stopped) return;
-    for await (const view of stream) take(view);
-  };
-  read().catch(() => undefined);
-  return () => {
-    stopped = true;
-    stream?.return?.(undefined).catch(() => undefined);
-  };
-}
-
-/**
  * One list of the workspace's people, read once with `read`, which must be
  * stable, and then followed for as long as the place stands: the host
  * streams the workspace's people, and each word is picked by `pick` and
@@ -98,11 +75,14 @@ function useFollowedList<Row>(
     const keep = (rows: readonly Row[], refused: boolean) => {
       if (live) setHeld({ workspaceId, asked, rows, refused });
     };
-    const stop = streamPeople(workspaceId, (view) => {
-      pushed = true;
-      const rows = pick(view);
-      keep(rows ?? [], rows === undefined);
-    });
+    const stop = streamFrom(
+      () => actPort()[ACT_KIND.WORKSPACE_PEOPLE]({ workspaceId }),
+      (view) => {
+        pushed = true;
+        const rows = pick(view);
+        keep(rows ?? [], rows === undefined);
+      },
+    );
     read(workspaceId).then(
       (rows) => {
         if (!pushed) keep(rows, false);

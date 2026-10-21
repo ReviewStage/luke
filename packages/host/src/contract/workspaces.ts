@@ -4,6 +4,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
+  type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
   tasksGitHubIssuesParamsSchema,
   tasksLinearIssuesParamsSchema,
@@ -116,6 +117,11 @@ export const workspaceActsContract = {
   )
     .input(exactInput(workspacePeopleFollowSchema))
     .output(eventIterator(type<TasksWorkspaceMembersAnswer>())),
+  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS]: actProcedure(
+    "Could not follow that workspace's invitations on this system.",
+  )
+    .input(exactInput(workspacePeopleFollowSchema))
+    .output(eventIterator(type<TasksWorkspaceInvitationsAnswer>())),
   [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: actProcedure(
     "Could not read who left that workspace on this system.",
   )

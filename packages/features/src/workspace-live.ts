@@ -224,6 +224,8 @@ export const workspaceInvitationsLiveAnswerSchema = EffectSchema.Struct({
   queries: EffectSchema.Struct({ invitations: sealedLiveQuerySchema }),
 });
 
+export type WorkspaceInvitationsLiveAnswer = typeof workspaceInvitationsLiveAnswerSchema.Type;
+
 /** A workspace's pending invitations as their rows deliver them, expired ones among them. */
 export const workspaceInvitationsLiveRowsSchema = EffectSchema.Struct({
   invitations: EffectSchema.Array(

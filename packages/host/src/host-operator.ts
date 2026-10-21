@@ -298,8 +298,10 @@ import {
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
+  type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
   type WorkspacePeopleFollowed,
+  workspaceInvitationsFollowedSchema,
   workspacePeopleFollowedSchema,
 } from "@luke/features/tasks-view";
 import {
@@ -578,6 +580,14 @@ export interface HostOperator {
   workspacePeopleUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
   /** A followed workspace's people as they now stand, each time they move while followed. */
   onWorkspacePeopleChanged(listener: (followed: WorkspacePeopleFollowed) => void): () => void;
+  /** A workspace's pending invitations followed from now until let go, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
+  workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's invitations let go. */
+  workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
+  onWorkspaceInvitationsChanged(
+    listener: (followed: WorkspaceInvitationsFollowed) => void,
+  ): () => void;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
   /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
@@ -1642,6 +1652,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           Result.getOrUndefined(
             readEither(workspacePeopleFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    workspaceInvitationsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, scope)),
+    workspaceInvitationsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, scope)),
+    onWorkspaceInvitationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(workspaceInvitationsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

@@ -1,7 +1,13 @@
-import type { TasksWorkspaceMembersAnswer } from "@luke/features/tasks-view";
+import type {
+  TasksWorkspaceInvitationsAnswer,
+  TasksWorkspaceMembersAnswer,
+} from "@luke/features/tasks-view";
 import {
+  type WorkspaceInvitationsLiveAnswer,
   type WorkspaceMembersLiveAnswer,
   type WorkspacesLiveAnswer,
+  workspaceInvitationsLiveRowsSchema,
+  workspaceInvitationsOfLiveRows,
   workspaceMembersLiveRowsSchema,
   workspaceMembersOfLiveRows,
   workspacesLiveRowsSchema,
@@ -12,7 +18,7 @@ import { Effect, Option, Schema, Stream } from "effect";
 import { LiveBroken, type LiveClient, liveRows, type SealedRead } from "./live-follow.js";
 
 /**
- * workspaces-follow.ts -- the account's workspaces, and one workspace's people, followed by the host over Neon Realtime subscriptions.
+ * workspaces-follow.ts -- the account's workspaces, and one workspace's people and pending invitations, followed by the host over Neon Realtime subscriptions.
  *
  * The service seals each read's statements (`workspacesLiveStatements` in
  * the database's workspace store, `workspaceMembersLiveStatements` in the
@@ -80,4 +86,20 @@ export function peopleMoves(
   first: WorkspaceMembersLiveAnswer,
 ): Stream.Stream<TasksWorkspaceMembersAnswer, LiveBroken> {
   return liveMoves(dependencies, first, workspaceMembersLiveRowsSchema, workspaceMembersOfLiveRows);
+}
+
+/**
+ * One workspace's pending invitations each time their rows change, as the
+ * held read would answer them at the host's own `now`, each accept link on
+ * the origin the service sealed them with. Note that an invitation past its
+ * expiry is left out as each change lands, since the statement keeps no
+ * clock.
+ */
+export function invitationsMoves(
+  dependencies: LiveReadDependencies<WorkspaceInvitationsLiveAnswer>,
+  first: WorkspaceInvitationsLiveAnswer,
+): Stream.Stream<TasksWorkspaceInvitationsAnswer, LiveBroken> {
+  return liveMoves(dependencies, first, workspaceInvitationsLiveRowsSchema, (rows) => ({
+    invitations: workspaceInvitationsOfLiveRows(rows, first.origin, dependencies.now()),
+  }));
 }

@@ -140,6 +140,15 @@ export const GATEWAY_METHOD = {
   WORKSPACES_PEOPLE_FOLLOW: "workspaces.peopleFollow",
   /** A followed workspace's people let go: no more `WORKSPACE_PEOPLE_CHANGED` events of it until it is followed again. */
   WORKSPACES_PEOPLE_UNFOLLOW: "workspaces.peopleUnfollow",
+  /**
+   * A workspace's pending invitations, followed by an owner or an admin from
+   * now until let go, over Neon Realtime: heard as
+   * `WORKSPACE_INVITATIONS_CHANGED` events, never answered; following again
+   * starts over.
+   */
+  WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
+  /** A followed workspace's invitations let go: no more `WORKSPACE_INVITATIONS_CHANGED` events of it until it is followed again. */
+  WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   WORKSPACES_PHOTO: "workspaces.photo",
   /** The repositories members added to one workspace on their own GitHub tokens, read from the service now; answered to the caller, never held in the view. */
@@ -678,6 +687,8 @@ export const GATEWAY_EVENT = {
   AUTOMATIONS_CHANGED: "automations.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
+  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
+  WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
