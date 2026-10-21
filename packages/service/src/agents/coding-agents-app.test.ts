@@ -9883,7 +9883,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             },
           ],
         );
-        yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, kept);
+        const url = kept.flatMap((part) => (part.type === "file" ? [part.url] : []))[0] ?? "";
+        yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, [
+          text("Match this screen."),
+          {
+            type: "file",
+            mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+            filename: "screen.png",
+            url,
+          },
+        ]);
 
         yield* ask(
           startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
