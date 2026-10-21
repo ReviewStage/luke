@@ -179,6 +179,8 @@ function Shell({
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
       onLeaveVersionHistory: ignore,
     },
     sidebar,

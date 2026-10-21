@@ -358,6 +358,18 @@ export const repositoryPinsAnswerSchema = EffectSchema.Struct({
   pins: EffectSchema.Array(repositoryPinSchema),
 });
 
+/**
+ * A pin's answer (PUT): the pins as they then stand, and the transaction
+ * that wrote them, which a follower of the sidebar waits for before it draws
+ * the pin as done; absent where the pin changed no row.
+ */
+export const repositoryPinsWrittenSchema = EffectSchema.Struct({
+  ...repositoryPinsAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type RepositoryPinsWritten = typeof repositoryPinsWrittenSchema.Type;
+
 /** Pinning a repository, or unpinning it (PUT): asking twice for either moves nothing, and a pin keeps the instant it was first made. */
 export const repositoryPinRequestSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
@@ -377,6 +389,37 @@ export const TASK_LIST_QUERY = {
 export const TASK_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
+
+/**
+ * Who wrote a revision of a plan: the developer, the notetaker on a call
+ * (whom the developer knows as Luke), a coding agent, or, for the one
+ * revision a plan from before history starts with, nobody the service can
+ * name.
+ */
+export const PLAN_ACTOR = {
+  DEVELOPER: "developer",
+  NOTETAKER: "notetaker",
+  AGENT: "agent",
+  EARLIER: "earlier",
+} as const;
+
+export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
+
+/** Who made a task: its member by hand, Luke on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
+export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
+
+/**
+ * Who made a task where its member did not make it by hand: Luke on their
+ * call, or a coding agent acting for them, by the agent's id while its row
+ * stands, which the window reads its title, harness, automation, and task
+ * from among the agents it already lists.
+ */
+const taskOriginSchema = EffectSchema.Struct({
+  actor: EffectSchema.Literals([PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+});
+
+export type TaskOrigin = typeof taskOriginSchema.Type;
 
 const taskSummaryFields = {
   id: wireUuidSchema,
@@ -414,6 +457,12 @@ const taskSummaryFields = {
    * service before it was sent.
    */
   createdBy: EffectSchema.optionalKey(memberRefSchema),
+  /**
+   * Who made the task for `createdBy`, where they did not make it by hand:
+   * Luke on their call, or a coding agent; absent for a task its member made
+   * by hand, and from a service before it was sent.
+   */
+  origin: EffectSchema.optionalKey(taskOriginSchema),
   /** Where the task stands; absent from a service before tasks had one. */
   status: EffectSchema.optionalKey(taskStatusSchema),
   /**
@@ -545,21 +594,6 @@ const agentEditLineSchema = EffectSchema.Struct({
 });
 
 /**
- * Who wrote a revision of a plan: the developer, the notetaker on a call
- * (whom the developer knows as Luke), a coding agent, or, for the one
- * revision a plan from before history starts with, nobody the service can
- * name.
- */
-export const PLAN_ACTOR = {
-  DEVELOPER: "developer",
-  NOTETAKER: "notetaker",
-  AGENT: "agent",
-  EARLIER: "earlier",
-} as const;
-
-export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
-
-/**
  * The member a revision names: the developer whose edit or restore it is, or
  * the one whose call the notetaker wrote it on, by their account's id and the
  * name it holds now, a member who has since left the workspace among them.
@@ -642,8 +676,30 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
-/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved. */
-export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
+/**
+ * The id of the transaction a write committed in, as Postgres counts it, in
+ * decimal: present where the write changed a row, so the desktop following
+ * the task list waits for it to arrive before it confirms the write, and
+ * absent where nothing changed, as Neon's mutations guide says.
+ */
+const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved, and the transaction a write committed in. */
+export const taskAnswerSchema = EffectSchema.Struct({
+  plan: taskSchema,
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
+
+/**
+ * A restored revision (POST): the plan as it now stands, and the id of the
+ * transaction the restore's revision was written in, which a reader
+ * following the history over Neon Realtime waits for; none where the
+ * restore changed nothing.
+ */
+export const taskRestoreAnswerSchema = EffectSchema.Struct({
+  ...taskAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
 
 /**
  * Why the agent a start asked for was not started beside the task it made,
@@ -669,12 +725,16 @@ export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   agent: EffectSchema.optionalKey(codingAgentSummarySchema),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
 });
 
 export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
-export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
+export const taskDeleteAnswerSchema = EffectSchema.Struct({
+  deleted: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
 
 /** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
 export const UNKNOWN_AGENT_LABEL = "a coding agent";

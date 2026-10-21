@@ -23,10 +23,12 @@ import { sealedLiveQuerySchema } from "./live-wire.js";
 import { countedNumber } from "./service-wire.js";
 import { type TaskIssueTag, taskIssueTagSchema } from "./task-issue-wire.js";
 import {
+  PLAN_ACTOR,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
   type TaskAgentsSummary,
   type TaskListAnswer,
+  type TaskOrigin,
   type TaskPullRequestLine,
   type TaskSummary,
   taskPrioritySchema,
@@ -86,6 +88,12 @@ const taskLiveRowSchema = EffectSchema.Struct({
   priority: taskPrioritySchema,
   /** The task's number in its workspace, from 1, as the list says it. */
   number: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  /** Who made the task for its owner (`PLAN_ACTOR`); absent from a service before it was sent, read as made by hand. */
+  creatorActor: EffectSchema.optionalKey(
+    EffectSchema.Literals([PLAN_ACTOR.DEVELOPER, PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+  ),
+  /** The coding agent that made the task; null for any other maker and once its row is gone. */
+  creatorAgentId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
 });
 
 /** Who archived an agent as its row holds it. */
@@ -301,6 +309,16 @@ function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgents
 }
 
 /** One plan as the list's row says it, its agents in brief where it has any. */
+/** Who made a task for its owner, as the summary names them: nothing for a task made by hand. */
+function originOf(row: TaskLiveRow): { readonly origin?: TaskOrigin } {
+  const actor = row.creatorActor;
+  if (actor === undefined || actor === PLAN_ACTOR.DEVELOPER) return {};
+  const agentId = row.creatorAgentId;
+  return {
+    origin: { actor, ...(agentId === undefined || agentId === null ? undefined : { agentId }) },
+  };
+}
+
 function taskSummaryOf(
   row: TaskLiveRow,
   agents: readonly AgentLiveRow[] | undefined,
@@ -319,6 +337,7 @@ function taskSummaryOf(
     ...(row.ownerName === null
       ? undefined
       : { createdBy: { userId: row.ownerId, name: row.ownerName } }),
+    ...originOf(row),
     ...(row.pinnedAt === null ? undefined : { pinnedAt: row.pinnedAt }),
     ...(row.pinnedAt === null || row.pinPosition === null
       ? undefined

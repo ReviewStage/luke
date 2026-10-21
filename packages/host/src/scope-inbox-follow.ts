@@ -22,6 +22,7 @@ import {
   SubscriptionRef,
 } from "effect";
 import { Hex } from "effect/encoding";
+import type { InboxTxWaits } from "./inbox-tx-waits.js";
 import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /**
@@ -98,6 +99,8 @@ export interface ScopeInboxDependencies {
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
+  /** Where each scope's wait for a write's transaction stands while it is subscribed, which the inbox's writes wait on. */
+  readonly txWaits: InboxTxWaits;
 }
 
 /** The subscriptions the windows' reads share, each held while read and a while after. */
@@ -133,6 +136,7 @@ export function scopeInboxes(
             reseal: () => seal(false),
             poll: (after) => seal(true, after),
             now: dependencies.now,
+            onTxWait: dependencies.txWaits.hook(),
           },
           first,
         );

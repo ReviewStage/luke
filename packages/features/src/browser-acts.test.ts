@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { browserAddressOf, isBrowserAddress } from "./browser-acts.js";
+import { browserAddressOf, chordIsWindows, isBrowserAddress } from "./browser-acts.js";
 
 /**
  * What a line typed into a Browser tab's bar opens, as a browser's address
- * bar reads it.
+ * bar reads it, and which chords pressed over its page the window answers.
  */
 
 test("an http or https address opens as written", () => {
@@ -54,4 +54,21 @@ test("only an absolute http or https address the bar can hold is loaded", () => 
   assert.equal(isBrowserAddress("javascript:alert(1)"), false);
   assert.equal(isBrowserAddress("example.com"), false);
   assert.equal(isBrowserAddress(`https://example.com/${"a".repeat(2_048)}`), false);
+});
+
+test("over a page the window answers its Command chords and ⌃Tab, and the page keeps its edits and its own Control keys", () => {
+  const chord = (key: string, held: { meta?: true; shift?: true; control?: true; alt?: true }) => ({
+    key,
+    meta: held.meta === true,
+    shift: held.shift === true,
+    alt: held.alt === true,
+    control: held.control === true,
+  });
+  assert.equal(chordIsWindows(chord("k", { meta: true })), true);
+  assert.equal(chordIsWindows(chord("c", { meta: true })), false);
+  assert.equal(chordIsWindows(chord("Tab", { control: true })), true);
+  assert.equal(chordIsWindows(chord("Tab", { control: true, shift: true })), true);
+  assert.equal(chordIsWindows(chord("Tab", {})), false);
+  assert.equal(chordIsWindows(chord("a", { control: true })), false);
+  assert.equal(chordIsWindows(chord("Tab", { control: true, alt: true })), false);
 });

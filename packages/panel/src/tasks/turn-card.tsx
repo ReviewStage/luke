@@ -16,7 +16,7 @@ import { spanText } from "./task-time.js";
  *
  * The line says how long a turn worked and when it ended; the card says
  * the rest a developer reaches for once they wonder what a turn cost or
- * ran on, as Conductor's and Codex's turn footers do. Its head is the
+ * ran on, as Codex's turn footers do. Its head is the
  * model and effort the turn ran on as every place draws the pair
  * (`model-label.tsx`), wearing its provider's mark as read from the
  * model's id, as a subagent's row and an agent's tab do, with when the

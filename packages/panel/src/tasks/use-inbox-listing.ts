@@ -1,7 +1,8 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
-import { useCallback, useEffect, useMemo } from "react";
+import { searchTokens } from "@luke/ui/search-tokens";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useInboxTaskFolds, useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
@@ -42,6 +43,10 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * two never read or choose apart. Note that the list's reads stand as long
  * as it is read, so a sidebar that lists it reads every task holding items
  * while it is on screen, where the page read them only while it stood.
+ *
+ * Its search, the words typed in the list's head, is held here too, so the
+ * page's list and the sidebar's narrow alike, the item the pane shows
+ * keeping its place among the steps, as it does under any scope (`inboxList`).
  */
 
 /**
@@ -206,6 +211,9 @@ export function useInboxListing(
     ...tasklessGroups([...waitingTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
   const entries = showArchived ? archivedEntries : standing;
+  // The list's search, which narrows what it lists, never what it counts.
+  const [query, setQuery] = useState("");
+  const search = searchTokens(query);
   const archivedCount = archivedHoldings.reduce((total, holding) => total + holding.items, 0);
   const counts = {
     ...inboxCounts(standing, tasks.me, choices.whose),
@@ -221,6 +229,7 @@ export function useInboxListing(
     show: choices.show,
     sort: choices.sort,
     whose: showArchived ? EVERYONES : choices.whose,
+    search,
     readerId: tasks.me,
   };
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
@@ -236,7 +245,9 @@ export function useInboxListing(
   // archived tasks' items among what another scope would list.
   const holdsItems = (groups: readonly InboxGroup[]) =>
     groups.some(({ items }) => items.length > 0);
+  const searched = search.length > 0 ? query : undefined;
   const filteredOut =
+    searched === undefined &&
     listedItems(list).length === 0 &&
     (showArchived
       ? holdsItems(standing)
@@ -332,6 +343,8 @@ export function useInboxListing(
     steps,
     chosen,
     filteredOut,
+    search: { query, onQuery: setQuery },
+    searched,
     missing,
     reading,
     choose,

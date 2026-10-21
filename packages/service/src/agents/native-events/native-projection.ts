@@ -108,6 +108,8 @@ const NativeProjectionSchema = Schema.Struct({
   rateLimitResetsAt: Schema.optionalKey(Schema.Number),
   /** The running total a harness that reports one (Codex) last reported, which the next report is metered against. */
   metered: Schema.optionalKey(UsageSchema),
+  /** When a batch last kept the runner's sandbox alive (`../sandbox-keep-alive.ts`), in epoch milliseconds. */
+  keptAliveAt: Schema.optionalKey(Schema.Number),
 });
 export type NativeProjection = typeof NativeProjectionSchema.Type;
 

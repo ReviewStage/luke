@@ -17,8 +17,8 @@
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
  * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,
- * and Browser tabs with the still of a page they draw and a cloud Browser
- * tab's live view, among others. The whiteboard, a Terminal tab, and a cloud
+ * Browser tabs with the still of a page they draw and a cloud Browser
+ * tab's live view, and ⌃Tab's previews, each a still of a tab, among others. The whiteboard, a Terminal tab, and a cloud
  * Browser tab's live view are the surfaces that draw
  * their words on a canvas, which the text masking cannot reach, so their
  * block is their only line, and canvas recording is held off by name rather

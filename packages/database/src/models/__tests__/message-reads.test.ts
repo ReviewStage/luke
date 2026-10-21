@@ -26,6 +26,7 @@ import {
   messageCursorNow,
   messageSeqOf,
   newestAwaitingLineAt,
+  readMessageById,
   runningChildTurns,
   turnStoppedUnderReached,
 } from "../message-reads.js";
@@ -239,6 +240,30 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
           yield* messageSeqOf(other, conversation, second.id, MESSAGE_ROLE.USER),
           Option.none(),
         );
+      }),
+  );
+
+  it.effect(
+    "a message is read by its id, and not in another conversation or another account's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const conversation = yield* openConversation(owner);
+        const elsewhere = yield* openConversation(owner);
+        yield* writeLine(owner, conversation, 1);
+        yield* writeLine(owner, conversation, 2);
+        const read = yield* listMessagesPast(owner, conversation, {}, { seq: 0, revision: 0 });
+        const second = read.read.ok ? read.read.value[1] : assert.fail("the page read");
+        assert.ok(second !== undefined);
+        const partsOf = (page: Effect.Success<ReturnType<typeof readMessageById>>) =>
+          page.ok ? page.value.map((record) => record.message.parts) : assert.fail("the row read");
+
+        assert.deepEqual(partsOf(yield* readMessageById(owner, conversation, {}, second.id)), [
+          [{ type: "text", text: "Line 2" }],
+        ]);
+        assert.deepEqual(partsOf(yield* readMessageById(owner, elsewhere, {}, second.id)), []);
+        assert.deepEqual(partsOf(yield* readMessageById(other, conversation, {}, second.id)), []);
       }),
   );
 

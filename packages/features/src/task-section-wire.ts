@@ -166,6 +166,18 @@ export const taskSectionsAnswerSchema = EffectSchema.Struct({
 export type TaskSections = typeof taskSectionsAnswerSchema.Type;
 
 /**
+ * A write's answer (PUT): the sections as they then stand, and the
+ * transaction that wrote them, which a follower of the sidebar waits for
+ * before it draws the write as done; absent where the write changed no row.
+ */
+export const taskSectionsWrittenSchema = EffectSchema.Struct({
+  ...taskSectionsAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type TaskSectionsWritten = typeof taskSectionsWrittenSchema.Type;
+
+/**
  * One write (PUT): make a section under the id given, in a workspace the
  * account is a member of; give one a new title and icon, null for none;
  * stand one at a place among the others; delete one, which puts its tasks

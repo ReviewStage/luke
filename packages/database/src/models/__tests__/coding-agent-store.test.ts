@@ -2083,7 +2083,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
 
 it.layer(getTestDB())("the coding-agent store's human names", (it) => {
   it.effect(
-    "every agent started on a task is given a human name whose first name no other agent of the task wears, and a Start that names one keeps it",
+    "every agent started on a task is given a first name alone that no other agent of the task wears, and a Start that names one keeps it",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -2103,12 +2103,38 @@ it.layer(getTestDB())("the coding-agent store's human names", (it) => {
         const names: string[] = [];
         for (let started = 0; started < 12; started += 1) {
           const agent = yield* start();
-          assert.match(agent.personaName ?? "", /^\S+ \S+$/u);
+          assert.match(agent.personaName ?? "", /^\S+$/u);
           names.push(agent.personaName ?? "");
         }
-        const firsts = names.map((name) => name.split(" ")[0]);
-        assert.equal(new Set(firsts).size, firsts.length);
+        assert.equal(new Set(names).size, names.length);
         assert.equal((yield* start("Maya Chen")).personaName, "Maya Chen");
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
+  it.effect(
+    "a line written answers the transaction that wrote it, and one already standing under its key answers none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const line = {
+          text: "Use seven days.",
+          clientKey: "send-1",
+          sender: { kind: MESSAGE_SENDER.LUKE },
+        };
+        const written = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+        const again = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        assert.match(written.success.value.txid ?? "", /^\d+$/u);
+        assert.ok(Result.isSuccess(again) && Option.isSome(again.success));
+        assert.equal(again.success.value.txid, undefined);
       }),
   );
 });

@@ -205,7 +205,7 @@ test("a blank tab asks for an address, and opens a dev server on the Mac over pl
 
   assert.deepEqual(doors.sent[0], {
     kind: ACT_KIND.BROWSER_OPEN,
-    payload: { browserId: tab.browserId, address: "http://localhost:3000/", taskId: "task" },
+    payload: { browserId: tab.browserId, address: "http://localhost:3000/" },
   });
   assert.deepEqual(tab.opened, ["http://localhost:3000/"]);
   assert.equal(tab.field().value, "http://localhost:3000/");
@@ -251,19 +251,22 @@ test("the bar's steps follow how main says the page stands, and a typed line mov
   ]);
 });
 
-test("a chord pressed over the page answers on the window, and ⌘L takes the address", async () => {
+test("a chord pressed over the page answers on the window as pressed, and ⌘L takes the address", async () => {
   const doors = main();
   const tab = mount("https://example.com/");
   await act(async () => undefined);
   const heard: string[] = [];
   window.addEventListener("keydown", (event) => {
-    heard.push(`${event.metaKey ? "⌘" : ""}${event.shiftKey ? "⇧" : ""}${event.key}`);
+    heard.push(
+      `${event.ctrlKey ? "⌃" : ""}${event.metaKey ? "⌘" : ""}${event.shiftKey ? "⇧" : ""}${event.key}`,
+    );
   });
 
   doors.hands({
     browserId: tab.browserId,
     key: "k",
     code: "KeyK",
+    meta: true,
     shift: false,
     alt: false,
     control: false,
@@ -272,6 +275,7 @@ test("a chord pressed over the page answers on the window, and ⌘L takes the ad
     browserId: OTHER_TAB,
     key: "w",
     code: "KeyW",
+    meta: true,
     shift: false,
     alt: false,
     control: false,
@@ -280,31 +284,25 @@ test("a chord pressed over the page answers on the window, and ⌘L takes the ad
     browserId: tab.browserId,
     key: "l",
     code: "KeyL",
+    meta: true,
     shift: false,
     alt: false,
     control: false,
   });
 
-  assert.deepEqual(heard, ["⌘k", "⌘l"]);
-  assert.equal(document.activeElement, tab.field());
-});
-
-test("while an agent drives the page the bar says so, and its Stop tells main, until main says the agent let go", async () => {
-  const doors = main();
-  const tab = mount("http://localhost:4000/");
-  await act(async () => undefined);
-  assert.doesNotMatch(tab.container.textContent ?? "", /An agent is using this tab/u);
-
-  doors.says(pageAt(tab.browserId, "http://localhost:4000/", { agent: true }));
-  assert.match(tab.container.textContent ?? "", /An agent is using this tab/u);
-  await tab.press("Stop agent");
-  assert.deepEqual(doors.sent.at(-1), {
-    kind: ACT_KIND.BROWSER_STOP,
-    payload: { browserId: tab.browserId },
+  // ⌃Tab, the tab switcher's, is handed back with no Command, as it was pressed.
+  doors.hands({
+    browserId: tab.browserId,
+    key: "Tab",
+    code: "Tab",
+    meta: false,
+    shift: true,
+    alt: false,
+    control: true,
   });
 
-  doors.says(pageAt(tab.browserId, "http://localhost:4000/"));
-  assert.doesNotMatch(tab.container.textContent ?? "", /An agent is using this tab/u);
+  assert.deepEqual(heard, ["⌘k", "⌘l", "⌃⇧Tab"]);
+  assert.equal(document.activeElement, tab.field());
 });
 
 test("a page that failed to load says why, and its retry reloads it", async () => {

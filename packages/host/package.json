@@ -16,7 +16,6 @@
     "./bridge": "./src/bridge.js",
     "./contract": "./src/contract/index.js",
     "./panel-avatar": "./src/panel-avatar.js",
-    "./mac-browser-tabs": "./src/mac-browser-tabs.js",
     "./agent-notices": "./src/agent-notices.js",
     "./app-identity": "./src/app-identity.js",
     "./desktop-service": "./src/desktop-service.js",

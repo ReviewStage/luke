@@ -7,11 +7,24 @@ import {
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxChanged,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/coding-agent-view";
+import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
+import {
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_REPLY,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
+import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -38,12 +51,18 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
@@ -448,7 +467,7 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
   key(BACK);
   key(BACK);
   assert.equal(chosenFilter(), "Settings");
-  assert.equal(bar.scrollLeft, 250);
+  assert.equal(bar.scrollLeft, 300);
   key(FORWARD);
   assert.equal(chosenFilter(), "All");
   assert.equal(bar.scrollLeft, 0);
@@ -1099,6 +1118,47 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
 });
 
+test("a task Luke or a coding agent made wears their square at its row's end, the reader's own too, says who in its detail, and is found by it", () => {
+  const dean = { userId: "user-dean", name: "Dean Stratakos" };
+  const task = (id: string, origin?: TaskSummary["origin"]) => ({
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/relay",
+    ownerId: dean.userId,
+    createdBy: dean,
+    ...(origin === undefined ? undefined : { origin }),
+  });
+  openPalette(
+    tasksControl({
+      me: dean.userId,
+      tasks: [
+        task("Invite emails", { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" }),
+        task("Audit log export", { actor: PLAN_ACTOR.NOTETAKER }),
+        task("Rate limits"),
+      ],
+    }),
+  );
+  chooseFilter("Tasks");
+  const marks = () =>
+    [...document.querySelectorAll('[role="option"]')].map(
+      (row) =>
+        row.querySelector(".luke-combobox-option-hint .actor-mark")?.getAttribute("data-kind") ??
+        null,
+    );
+
+  assert.deepEqual(rows(), [
+    "Invite emails · acme/relay · by Coding agent",
+    "Audit log export · acme/relay · by Luke",
+    "Rate limits · acme/relay",
+  ]);
+  assert.deepEqual(marks(), ["agent", "luke", null]);
+  type("coding agent");
+  assert.deepEqual(rows(), ["Invite emails · acme/relay · by Coding agent"]);
+});
+
 /** Offers ⌘K's own Show my tasks, as the sidebar does while it would change the list, and records each run. */
 function OffersMyTasks({ ran }: { ran: string[] }): null {
   useAppCommand(APP_COMMAND.SHOW_MY_TASKS, () => ran.push("show my tasks"));
@@ -1620,6 +1680,52 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
 });
 
+test("on a one-off agent's page, ⌘K marks the agent unread and then read, and offers no mark while no agent's page stands", () => {
+  const agent = {
+    id: "agent-8",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Triage overnight issues",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: "acme/relay",
+    activityAt: 2,
+  };
+  const seen: string[] = [];
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_SEEN]: ({ agentId }) => {
+      seen.push(agentId);
+      return Promise.resolve(undefined);
+    },
+  });
+  const draw = (agentId: string | undefined) => {
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    document.body.innerHTML = "";
+    openPalette(
+      tasksControl({
+        agentView: { agentId, onOpen: () => undefined, onClose: () => undefined },
+        listedAgents: { standing: [agent], archived: [] },
+      }),
+    );
+    type("mark");
+    return rows().filter((row) => row.startsWith("Mark as"));
+  };
+
+  assert.deepEqual(draw(undefined), []);
+  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
+  press("Mark as unread");
+  assert.deepEqual(draw(agent.id), ["Mark as read"]);
+  press("Mark as read");
+  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
+  assert.deepEqual(seen, [agent.id]);
+});
+
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
 function PinnableTask(): React.JSX.Element {
   const [listed, setListed] = useState<Task>(DOCUMENT_TASK);
@@ -1770,6 +1876,184 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "Agents", "People", "Files", "Actions", "Settings"],
+    ["All", "Tasks", "Agents", "Inbox", "People", "Files", "Actions", "Settings"],
   );
+});
+
+/** The agent asking the Inbox's questions below, as its task's list sums it up. */
+const ASKER = {
+  id: "5b0e1d2c-0000-4000-8000-0000000000a1",
+  title: "Rotate secrets",
+  model: "anthropic/claude-opus-4.5",
+  effort: "high",
+  status: CODING_AGENT_STATUS.RUNNING,
+} as const;
+
+/** A task holding Inbox items, its agent summed up so each item's tile names it. */
+const ROTATION: TaskSummary = {
+  id: "7e4f0a9b-0000-4000-8000-0000000000b2",
+  workspaceId: "workspace-personal",
+  name: "Billing usage alerts",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
+  agents: { total: 1, working: 1, agents: [ASKER], pullRequestTotal: 0, pullRequests: [] },
+};
+
+/** An open item of the agent's, asking a choice, its thread one message of the agent's words. */
+function askedItem(id: string, title: string, said: string, updatedAt: number): InboxItem {
+  return {
+    id,
+    agentId: ASKER.id,
+    key: id.slice(-4),
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title,
+    blocks: [],
+    response: { type: INBOX_RESPONSE.APPROVAL },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    thread: [
+      {
+        id: `${id.slice(0, -4)}ffff`,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: said,
+        createdAt: updatedAt,
+      },
+    ],
+    postedAt: updatedAt,
+    updatedAt,
+  };
+}
+
+const ROTATE = askedItem(
+  "a1b2c3d4-0000-4000-8000-000000000011",
+  "Which webhook secret should rotate?",
+  "Rotate the Stripe signing secret today.",
+  3_000,
+);
+
+/** An item settled after the open one was asked, so it is the newer of the two. */
+const PREVIEWS: InboxItem = {
+  ...askedItem(
+    "a1b2c3d4-0000-4000-8000-000000000012",
+    "Use acme.dev for previews?",
+    "Previews would move off the vercel.app domain.",
+    9_000,
+  ),
+  status: INBOX_STATUS.ANSWERED,
+  settledAt: 9_000,
+};
+
+/** The palette over a window whose listed workspace's task holds the items main pushes as `inbox` says, main's word of it last changed at `changed`, every Inbox item it opens recorded. */
+function paletteOverInbox(inbox: () => CodingAgentInboxChanged["inbox"], changed = 9_000) {
+  const main = followedInboxes((scope) =>
+    scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === ROTATION.id ? inbox() : undefined,
+  );
+  fakeActPort({ ...fakeActPortCalls(), ...main.procedures });
+  const opened: InboxChoice[] = [];
+  const tasks = tasksControl({
+    tasks: [ROTATION],
+    inboxTasks: [{ taskId: ROTATION.id, items: 2, updatedAt: changed }],
+  });
+  openPalette({
+    ...tasks,
+    inboxView: { ...tasks.inboxView, onOpenItem: (choice) => opened.push(choice) },
+  });
+  return { main, opened };
+}
+
+test("the Inbox is followed only once it is searched, and then lists what needs you first, each item beside its task", async () => {
+  const { main } = paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  await settle();
+  assert.deepEqual(main.asked, [], "opening the palette follows no inbox");
+
+  chooseFilter("Inbox");
+  await settle();
+
+  assert.deepEqual(main.asked, [`${INBOX_SCOPE_KIND.PLAN}:${ROTATION.id}`]);
+  assert.deepEqual(rows(), [
+    "Which webhook secret should rotate? · Billing usage alerts",
+    "Use acme.dev for previews? · Billing usage alerts",
+  ]);
+});
+
+test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {
+  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+
+  type("stripe");
+  await settle();
+
+  assert.deepEqual(rows(), [
+    "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
+  ]);
+});
+
+test("choosing an Inbox item opens it in the Inbox, as a notification's would", async () => {
+  const { opened } = paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  chooseFilter("Inbox");
+  await settle();
+
+  press("Use acme.dev for previews? · Billing usage alerts");
+
+  assert.deepEqual(opened, [{ taskId: ROTATION.id, itemId: PREVIEWS.id, opened: true }]);
+  assert.equal(document.querySelector('[role="option"]'), null, "the palette closed");
+});
+
+test("an Inbox that could not be read says so, rather than that nothing matches", async () => {
+  paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  chooseFilter("Inbox");
+  await settle();
+
+  assert.equal(emptyLine()?.startsWith("Your inbox could not be read."), true);
+});
+
+test("a query its title half answers says the thread's words that answer the rest, never the title again", async () => {
+  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  chooseFilter("Inbox");
+
+  type("rotate stripe");
+  await settle();
+
+  assert.deepEqual(rows(), [
+    "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
+  ]);
+});
+
+test("an Inbox item is found by a form's field and the value it was answered with", async () => {
+  const PORT: InboxItem = {
+    ...askedItem(
+      "a1b2c3d4-0000-4000-8000-000000000013",
+      "Which mail server?",
+      "Fill in the relay.",
+      4_000,
+    ),
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.ANSWERED, values: [{ label: "SMTP port", value: 587 }] },
+    settledAt: 4_000,
+  };
+  paletteOverInbox(() => ({ items: [PORT] }));
+  chooseFilter("Inbox");
+
+  type("587");
+  await settle();
+  assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · 587"]);
+  type("smtp");
+  assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · SMTP port"]);
+});
+
+test("while main says a task's inbox changed later than its push, a query it does not answer says the inbox is still being read", async () => {
+  const { main } = paletteOverInbox(() => ({ items: [PREVIEWS] }), 12_000);
+  chooseFilter("Inbox");
+
+  type("webhook");
+  await settle();
+  assert.equal(emptyLine(), "Reading your inbox…");
+
+  const fresh = { ...ROTATE, updatedAt: 12_000 };
+  act(() =>
+    main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: ROTATION.id }, { items: [PREVIEWS, fresh] }),
+  );
+  await settle();
+  assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]);
 });

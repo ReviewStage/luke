@@ -331,7 +331,12 @@ function mount(
     at: () => standing,
     /** Moves the window as a door other than the history would. */
     move: (to: (held: Standing) => Standing) => act(() => restand?.(to)),
-    press: (press: () => void) => act(press),
+    /** Presses through the shell, as a press of the pointer lands before the door it opens. */
+    press: (press: () => void) =>
+      act(() => {
+        window.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        press();
+      }),
     /** The address of every step held, oldest first, and the one standing. */
     addresses: () => held.current().entries.map((entry) => entry.address),
     standingAddress: () => held.current().entries[held.current().at]?.address,
@@ -623,7 +628,7 @@ test("on a narrow stage a Settings page a link opened has no list behind it, so 
   assert.equal(window.at().tab, PANEL_TAB.TASKS, "Back leaves Settings for the task");
 });
 
-test("on the desktop's width none of a narrow room's panes is a step: the side panel, an Inbox item, a Settings page, a version, and a Chat place", () => {
+test("on the desktop's width none of a narrow room's panes is a step: the side panel opened, the Inbox's first item, a Settings page, and a version", () => {
   const moves: readonly [Standing, (window: Window) => void][] = [
     [
       ON_TASK,
@@ -648,10 +653,6 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
     [
       { ...ON_TASK, versions: { open: true, revision: undefined, listed: true } },
       (window) => window.press(() => window.shown().history.onSelect(2)),
-    ],
-    [
-      { ...ON_TASK, chat: { open: true, place: FOR_YOU, listed: true } },
-      (window) => window.press(() => window.shown().chatView.onChoose(CHANNEL)),
     ],
   ];
   for (const [start, open] of moves) {
@@ -818,4 +819,14 @@ test("on a narrow stage Back from an automation with unsaved work to another aut
   window.moveHistory(-1);
   assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "and a browser's Back too");
   assert.equal(window.held.current().at, 1, "the history stands back on it");
+});
+
+test("on a narrow stage another tab chosen in the side panel standing over the plan is a step of its own, which Back shows again", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));
+  assert.equal(window.addresses().length, 3, "the plan, the page's tab, then the plan's tab");
+
+  act(() => window.history().onBack());
+  assert.deepEqual(window.at().panel, { open: true, tab: PAGE_TAB });
 });

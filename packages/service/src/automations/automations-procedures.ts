@@ -6,13 +6,13 @@ import {
   type AutomationChanges,
   type AutomationRunInHistory,
   automationRunByKey,
-  createAutomation,
-  deleteAutomation,
+  createAutomationCommitted,
+  deleteAutomationCommitted,
   listAutomationRuns,
   listAutomations,
   readAutomation,
   recordAutomationRun,
-  updateAutomation,
+  updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { readTaskHeader } from "@luke/database/models/task-store";
@@ -465,7 +465,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       const webhook =
         made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
       const created = yield* hostedStoreOrUnavailable(
-        createAutomation(userId, {
+        createAutomationCommitted(userId, {
           taskId: standing.taskId,
           organizationId: standing.organizationId,
           repositories: standing.repositories,
@@ -484,10 +484,11 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
         trigger_kind: made.trigger.kind,
       });
-      const automation = yield* summaryOf(userId, created.value);
+      const automation = yield* summaryOf(userId, created.value.automation);
       return {
         automation,
         ...(webhook === undefined ? undefined : { webhookSecret: webhook.secret }),
+        txid: created.value.txid,
       };
     }),
 
@@ -513,12 +514,13 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
         ? AUTOMATION_ACCESS.TOGGLE
         : AUTOMATION_ACCESS.CHANGE;
       const written = yield* hostedStoreOrUnavailable(
-        updateAutomation(userId, id, changes, access),
+        updateAutomationCommitted(userId, id, changes, access),
       );
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
       return {
-        automation: yield* summaryOf(userId, written.value),
+        automation: yield* summaryOf(userId, written.value.automation),
         ...(webhookSecret === undefined ? undefined : { webhookSecret }),
+        txid: written.value.txid,
       };
     }),
 
@@ -527,9 +529,9 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       const id = yield* idOf(input.id);
       const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const deleted = yield* hostedStoreOrUnavailable(deleteAutomation(userId, id));
-      if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      return {};
+      const deleted = yield* hostedStoreOrUnavailable(deleteAutomationCommitted(userId, id));
+      if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+      return { txid: deleted.value.txid };
     }),
 
     /** The automation run now, under the client's key: 201 with the run this call made, 200 with the one the key already made. */
@@ -567,7 +569,9 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       if (summary === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return {
         status: Option.isSome(recorded) ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
-        body: { run: summary },
+        body: Option.isSome(recorded)
+          ? { run: summary, txid: recorded.value.txid }
+          : { run: summary },
       };
     }),
 

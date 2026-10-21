@@ -66,7 +66,7 @@ test("a transcript page landing while the read is out leaves its answer standing
       messages,
       read,
       now: () => 1_000,
-    });
+    }).published;
     return null;
   }
   const container = document.body.appendChild(document.createElement("div"));
@@ -95,7 +95,7 @@ test("a tab put out of sight drops the read it had out, and asks afresh when sho
       messages: page("first"),
       read,
       now: () => 1_000,
-    });
+    }).published;
     return null;
   }
   const container = document.body.appendChild(document.createElement("div"));

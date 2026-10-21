@@ -435,7 +435,13 @@ test("an agent on a task is offered edit_plan, show_page, the comment tools, and
     CODER_TOOL.RESOLVE_THREAD,
   ];
   const board = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD];
-  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments, ...board].sort();
+  const all = [
+    CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.SHOW_PAGE,
+    CODER_TOOL.LOOK_AT_PICTURE,
+    ...comments,
+    ...board,
+  ].sort();
   const handedItsTask = { taskId: "plan-1", prompt: null };
   const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
   const automation = { taskId: null, prompt: "Sweep the flaky tests." };
@@ -753,6 +759,9 @@ test("with Chat on the session keeps the developer's inbox for what it needs of 
     assert.ok(instructions.includes("Never put one question in both places."), brief);
     // The voice: posts read as a person typing in Slack, not as an AI writing a report.
     assert.ok(instructions.includes("No AI tells:"), brief);
+    // Posts are for what the team, its manager among them, would want to know, never filler.
+    assert.ok(instructions.includes("Never post filler:"), brief);
+    assert.ok(instructions.includes("their engineering manager among them"), brief);
     assert.ok(
       instructions.includes("- In bursts. A person fires off two or three quick posts"),
       brief,

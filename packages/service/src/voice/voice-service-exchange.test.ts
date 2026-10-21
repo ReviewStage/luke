@@ -8,6 +8,7 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { conversations } from "@luke/database/schemas/storage";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
   insertMessage,
@@ -21,6 +22,7 @@ import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
 import {
   callOpeningHistory,
   LIVE_CLIENT_EVENT,
+  LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
   type LiveClientEvent,
@@ -192,6 +194,24 @@ async function startAgent(userId: string, taskId: string, runtime?: Conversation
       effort: "high",
       repository: null,
       runtime,
+    }),
+  );
+  return Option.getOrThrow(started).agent;
+}
+
+/** An agent with no task, as an automation's run starts one in the workspace, handed a prompt since there is no plan. */
+async function startTasklessAgent(userId: string) {
+  const { workspaceId } = await database.run(startTask(userId, { name: "Workspace anchor" }));
+  const started = await database.run(
+    createCodingAgent(userId, {
+      taskId: null,
+      organizationId: workspaceId,
+      planSnapshot: null,
+      prompt: "Triage the overnight failures.",
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: null,
     }),
   );
   return Option.getOrThrow(started).agent;
@@ -376,9 +396,9 @@ async function stand(offer: Offer): Promise<Stand> {
   };
 }
 
-/** The desktop's opening frame for a call about the task named, into the agent named, in the time zone named where a desktop names one. */
+/** The desktop's opening frame for a call into the agent named, about the task named where one is, in the time zone named where a desktop names one. */
 function createFrame(
-  taskId: string,
+  taskId: string | undefined,
   agentId: string,
   input: readonly WireRecord[] = [],
   timeZone?: string,
@@ -388,10 +408,38 @@ function createFrame(
     sdp: SDP_OFFER,
     voice: LIVE_VOICE.MARIN,
     input: [...input],
-    planId: taskId,
+    ...(taskId === undefined ? undefined : { planId: taskId }),
     agentId,
     ...(timeZone === undefined ? undefined : { timeZone }),
   };
+}
+
+/** A signed-in desktop through to a standing session opened with the frame given. */
+async function openSessionWith(context: Stand, frame: WireRecord) {
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, frame);
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  const created = record(await desktop.next());
+  return { desktop, upstream, attach, created };
+}
+
+/** The refusal a signed-in desktop is answered for the opening frame given. */
+async function refusalFor(context: Stand, frame: WireRecord): Promise<unknown> {
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, frame);
+  return record(await opened.reader.next()).error;
+}
+
+/** The next of the service's own frames about the call the desktop is sent, past the relayed ones. */
+async function ownFrame(reader: SocketReader): Promise<WireRecord> {
+  for (;;) {
+    const frame = record(await reader.next(5_000));
+    if (TASK_FRAMES.includes(frame.type)) return frame;
+  }
 }
 
 /** A signed-in desktop through to a standing session: the created frame read, and OpenAI's end of the sideband. */
@@ -912,6 +960,179 @@ it.effect(
         texts.some((text) => text.includes("Nothing in its plan is answered yet.")),
         false,
       );
+      assert.deepEqual(input.at(-1), callOpeningHistory());
+
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call naming no task into an agent with none opens on the agent's own work and no plan, writes no task on its row, lands its ask in the agent's conversation, names the agent and no task on the service's own frames, and is taken back by a re-attach",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const userId = context.target.userId;
+      const agent = await startTasklessAgent(userId);
+      const typed = "Which nightly jobs failed?";
+      const at = new Date(NOW);
+      await insertMessage(database.run, {
+        userId,
+        conversationId: agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: typed }],
+        metadata: { author: "developer", channel: "typed" },
+        createdAt: at,
+        finishedAt: at,
+      });
+
+      const session = await openSessionWith(context, createFrame(undefined, agent.id));
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      const input = create.body.session.input;
+      assert.ok(Array.isArray(input));
+      const texts = input.map((item) => JSON.stringify(item));
+      assert.ok(
+        texts.some((text) => text.includes(typed)),
+        texts.join("\n"),
+      );
+      assert.equal(
+        texts.some((text) => text.includes("[task]")),
+        false,
+      );
+      assert.deepEqual(input.at(-1), callOpeningHistory());
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      const row = await database.run(sessionRecord.owned({ userId, sessionId }));
+      assert.equal(row?.agentId, agent.id);
+      assert.equal(row?.taskId, undefined);
+      assert.deepEqual(context.accounts.spent, [userId]);
+
+      await speak(session.attach.socket, sessionId);
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => message.conversationId),
+        [agent.conversationId],
+      );
+      const activity = await ownFrame(session.desktop);
+      assert.equal(activity.agentId, agent.id);
+      assert.equal("planId" in activity, false);
+
+      const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in again);
+      await send(again.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
+      const reattach = await context.openAi.nextAttach();
+      const reattachUpstream = readSocket(reattach.socket);
+      assert.equal(record(await again.reader.next()).type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
+      assert.deepEqual(
+        context.offered.map((offered) => [offered.taskId, offered.agentId]),
+        [
+          [undefined, agent.id],
+          [undefined, agent.id],
+        ],
+      );
+
+      await hangUpConnection(again.reader, reattach, reattachUpstream);
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () => `both connections to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call naming no task into an agent on one is bound to that task, and refused once it is archived; a call naming a task into an agent with none is refused as not found; each refusal before anything is counted",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const userId = context.target.userId;
+      const session = await openSessionWith(context, createFrame(undefined, context.agentId));
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      assert.equal(
+        (await database.run(sessionRecord.owned({ userId, sessionId })))?.taskId,
+        context.taskId,
+      );
+      assert.deepEqual(
+        context.offered.map((offered) => offered.taskId),
+        [context.taskId],
+      );
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+
+      const taskless = await startTasklessAgent(userId);
+      assert.equal(
+        await refusalFor(context, createFrame(context.taskId, taskless.id)),
+        HOSTED_API_ERROR.NOT_FOUND,
+      );
+      await database.run(
+        Database.use((db) =>
+          db
+            .update(taskTable)
+            .set({ archivedAt: new Date(NOW) })
+            .where(eq(taskTable.id, context.taskId)),
+        ),
+      );
+      assert.equal(
+        await refusalFor(context, createFrame(undefined, context.agentId)),
+        HOSTED_API_ERROR.TASK_ARCHIVED,
+      );
+      assert.equal(context.openAi.creates.length, 1);
+      assert.deepEqual(context.accounts.spent, [userId]);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into an agent with no task keeps the agent's work in a startup input the device fills to all but two messages, since no plan's seed takes a message",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const userId = context.target.userId;
+      const agent = await startTasklessAgent(userId);
+      const typed = "Which nightly jobs failed?";
+      const at = new Date(NOW);
+      await insertMessage(database.run, {
+        userId,
+        conversationId: agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: typed }],
+        metadata: { author: "developer", channel: "typed" },
+        createdAt: at,
+        finishedAt: at,
+      });
+      const filled = Array.from({ length: LIVE_INPUT_BOUNDS.MESSAGES - 2 }, (_, index) => ({
+        type: SEED_ITEM_TYPE,
+        role: SEED_ROLE.USER,
+        content: [{ type: SEED_CONTENT_TYPE.INPUT_TEXT, text: `line ${index}` }],
+      }));
+
+      const session = await openSessionWith(context, createFrame(undefined, agent.id, filled));
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      const input = create.body.session.input;
+      assert.ok(Array.isArray(input));
+      assert.equal(input.length, LIVE_INPUT_BOUNDS.MESSAGES);
+      assert.ok(JSON.stringify(input[0]).includes(typed));
       assert.deepEqual(input.at(-1), callOpeningHistory());
 
       await hangUpConnection(session.desktop, session.attach, session.upstream);

@@ -12,6 +12,7 @@ import { HOSTED_API_ERROR } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
+import { sessionSandboxesLayer } from "../agents/session-sandboxes.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
@@ -21,6 +22,7 @@ import {
   openTokenMember,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
+import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
 /**
@@ -65,6 +67,8 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
         eveOrigin: () => undefined,
+        sessionSandboxes: sessionSandboxesLayer,
+        keepAwake: keepAwakeDetached,
         workspaces: yield* fakeWorkspaceSeams,
       }),
     });

@@ -85,6 +85,13 @@ export const CODING_AGENT_BOUNDS = {
   MAX_SERVER_CHARS: 64,
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
+  /**
+   * The most characters a tool part's output, as JSON text, or a reasoning
+   * part's words may spell on a transcript page a reader asked cut: past it
+   * the page carries its first and last half alone, with the whole's size,
+   * and the reader fetches the part whole when it opens it.
+   */
+  MAX_PART_CHARS: 4_096,
   /** The most items one to-do list may hold: a long run of work, never a log of every command. */
   MAX_TODOS: 40,
   /** The most characters one to-do may spell: a line of the list, not a paragraph. */
@@ -434,11 +441,7 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
  * draft's composer: it runs on eve whatever the account's routing would
- * choose, as a blank one does, since a call reaches eve alone. A `payer` is who the developer picked to pay for this one agent,
- * where Start offered the choice: its plan, which runs the provider's own
- * harness, or the API key or Luke's key, which run on eve; with none the
- * account's default decides, and the service honours a pick only where
- * the account could have been offered it.
+ * choose, as a blank one does, since a call reaches eve alone.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -452,7 +455,6 @@ export const codingAgentStartRequestFields = {
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
-  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -751,7 +753,30 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 
 /** A started, stopped, or changed agent (POST, PATCH). */
-export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
+/**
+ * The id of the transaction a write on the agent committed in, as Postgres
+ * counts it, in decimal: present where a Start, a rename, an archive, or a
+ * pin changed a row, so the desktop following the task list waits for it to
+ * arrive before it confirms the write, as Neon's mutations guide says.
+ */
+const codingAgentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+export const codingAgentAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
+
+/**
+ * A message handed to an agent, as the service answers it: the agent as it
+ * then stands, and the transaction that wrote the message's row, where this
+ * send wrote one, which the host waits to see on the transcript's live
+ * subscription before it confirms the send. Absent from a send that wrote
+ * nothing, and from a service older than it.
+ */
+export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
 
 /**
  * The run of an automation that started an agent, as its page opens on it:
@@ -1607,7 +1632,7 @@ export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary
  * and not this wire's to spell. The node shown for it says only that much.
  */
-const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
+export const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
 });
@@ -1665,6 +1690,23 @@ const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 
 export type TurnRecord = typeof turnRecordSchema.Type;
 
+/**
+ * What sent one of the developer's lines to a coding agent: a member, from
+ * the message box or an Inbox answer; Luke, from a call; an automation's
+ * run, on its creator's behalf; GitHub, telling the agent of a review, a
+ * comment, or a failed check on its pull request, by who caused it there;
+ * or another coding agent of the workspace, through its `message_agent` tool.
+ */
+export const MESSAGE_SENDER = {
+  MEMBER: "member",
+  LUKE: "luke",
+  AUTOMATION: "automation",
+  GITHUB: "github",
+  AGENT: "agent",
+} as const;
+
+export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
+
 /** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const CODING_AGENT_SENDER = {
   MEMBER: "member",
@@ -1712,6 +1754,42 @@ const codingAgentSenderSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
+
+/** Which field of a part a page carries cut: a tool call's output, or a reasoning's words. */
+export const PART_CUT_FIELD = {
+  OUTPUT: "output",
+  TEXT: "text",
+} as const;
+
+export type PartCutField = (typeof PART_CUT_FIELD)[keyof typeof PART_CUT_FIELD];
+
+/** The query a transcript read asks its heavy parts cut by, and the one word it takes. */
+export const TRANSCRIPT_PARTS_QUERY = { PARTS: "parts", CUT: "cut" } as const;
+
+/**
+ * One part a page carries cut: its index among the message's `parts`, the
+ * field left out of that part, the whole field's size in UTF-8 bytes, and
+ * its first and last characters, a tool output as its JSON text, at most
+ * half of `MAX_PART_CHARS` each. The part itself stands in `parts` without
+ * the field, so nothing reads the cut words as the part's own; the message's
+ * id and this index name the part to fetch whole.
+ */
+const codingAgentPartCutSchema = EffectSchema.Struct({
+  index: countedNumber,
+  field: EffectSchema.Literals(Object.values(PART_CUT_FIELD)),
+  bytes: countedNumber,
+  head: EffectSchema.String,
+  tail: EffectSchema.String,
+});
+
+export type CodingAgentPartCut = typeof codingAgentPartCutSchema.Type;
+
+/** One part of a transcript's message whole, as its row holds it: what a reader fetches for a part its page carried cut. */
+export const codingAgentPartAnswerSchema = EffectSchema.Struct({
+  part: storedObjectSchema,
+});
+
+export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
 
 /**
  * One message of an agent's transcript, as the conversation's row holds it:
@@ -1772,6 +1850,8 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   earlierOmitted: EffectSchema.optionalKey(EffectSchema.Boolean),
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
+  /** The parts carried cut, each standing in `parts` without its field (`codingAgentPartCutSchema`); absent where none is, on a page not asked cut, and from a service older than it. */
+  cutParts: EffectSchema.optionalKey(EffectSchema.Array(codingAgentPartCutSchema)),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),

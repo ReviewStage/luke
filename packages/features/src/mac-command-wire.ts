@@ -1,15 +1,11 @@
-import { Effect, Schema as EffectSchema, Result } from "effect";
-import { Base64 } from "effect/encoding";
-import { browserAgentActionsSchema } from "./browser-agent-actions.js";
-import { sniffImageType } from "./image-signature.js";
-import { PICTURE_TYPE } from "./picture-wire.js";
+import { Effect, Schema as EffectSchema } from "effect";
 import { wireUuidSchema } from "./service-wire.js";
 
 /**
  * mac-command-wire.ts -- a command an agent asked to run on the developer's Mac, as the Mac takes it from the service and hands back what it came to.
  *
- * A command is of a kind (`MAC_COMMAND_KIND`): a shell command, or an act
- * on a Browser tab. An agent's `run_on_mac` call is queued on the service under the account
+ * A command is of a kind (`MAC_COMMAND_KIND`), a shell command alone for
+ * now. An agent's `run_on_mac` call is queued on the service under the account
  * (`packages/service/src/agents/mac-command.ts`). A signed-in Mac with the
  * setting on holds `GET /api/mac-commands` open, naming in its `kinds`
  * query the kinds it runs beyond `shell`, and is answered with every
@@ -18,12 +14,6 @@ import { wireUuidSchema } from "./service-wire.js";
  * posts what it printed (POST), or posts a refusal for a command of a kind
  * it cannot run. Nothing is asked of the developer first. Every request
  * refuses a key it does not name, as every request frame on this wire does.
- *
- * A browser command's result is JSON and at most one image, such as a
- * screenshot of the tab, and is posted to a route of its own
- * (`POST /api/mac-commands/browser`), whose body cap fits the image; the
- * service keeps the image beside the command's row, never in its JSON
- * result, until the call that queued it reads it and withdraws the row.
  */
 
 export const MAC_COMMAND_BOUNDS = {
@@ -39,21 +29,7 @@ export const MAC_COMMAND_BOUNDS = {
   MAX_COMMAND_CHARS: 100_000,
   /** The most characters of stdout or stderr a result carries; the Mac cuts each to this. */
   MAX_OUTPUT_CHARS: 20_000,
-  /** The most characters of a browser command's params, written as JSON, the service queues. */
-  MAX_BROWSER_PARAMS_CHARS: 100_000,
-  /** The most characters of a browser command's output, written as JSON, its result carries. */
-  MAX_BROWSER_OUTPUT_CHARS: 100_000,
-  /**
-   * The most bytes a browser command's image may hold, decoded: a picture's
-   * own bound (`PICTURE_BOUNDS`), which a Retina capture downscaled on the
-   * Mac sits well under.
-   */
-  MAX_IMAGE_BYTES: 1_500_000,
 } as const;
-
-/** The most base64 characters an image of `MAX_IMAGE_BYTES` is spelled in. */
-export const MAC_COMMAND_MAX_IMAGE_BASE64_CHARS =
-  Math.ceil(MAC_COMMAND_BOUNDS.MAX_IMAGE_BYTES / 3) * 4;
 
 /**
  * What a command asks the Mac to do. Every Mac that reads runs `shell`, an
@@ -63,8 +39,6 @@ export const MAC_COMMAND_MAX_IMAGE_BASE64_CHARS =
 export const MAC_COMMAND_KIND = {
   /** A shell command, run in the login shell from the home folder (`run_on_mac`). */
   SHELL: "shell",
-  /** An act on one of the desktop's Browser tabs; what it carries is opaque here. */
-  BROWSER: "browser",
 } as const;
 
 export type MacCommandKind = (typeof MAC_COMMAND_KIND)[keyof typeof MAC_COMMAND_KIND];
@@ -111,49 +85,8 @@ const macShellCommandSchema = EffectSchema.Struct({
 
 export type MacShellCommand = typeof macShellCommandSchema.Type;
 
-/** Any JSON whose text is at most the characters given. */
-function boundedJson(maxChars: number) {
-  return EffectSchema.Json.check(
-    EffectSchema.makeFilter((value) => JSON.stringify(value).length <= maxChars),
-  );
-}
-
-/**
- * One browser command waiting for the Mac: its id, what it asks of a
- * Browser tab, and how long it may take. Note that the params are any JSON
- * within a bound here, and read as `macBrowserParamsSchema` by the Mac that
- * runs them, so a Mac refuses in words params it cannot read rather than
- * spoiling the whole read.
- */
-const macBrowserCommandSchema = EffectSchema.Struct({
-  id: wireUuidSchema,
-  kind: EffectSchema.Literal(MAC_COMMAND_KIND.BROWSER),
-  params: boundedJson(MAC_COMMAND_BOUNDS.MAX_BROWSER_PARAMS_CHARS),
-  timeoutSeconds: commandTimeout,
-});
-
-/**
- * What a browser command's params say: the task whose Browser tabs it acts
- * on, and the actions to take on them, in order, in the vocabulary an
- * agent's browser speaks wherever it runs (`browser-agent-actions.ts`). An
- * action reaches only a Browser tab opened on that task; `open` opens one
- * on it. The service queues these as the command's `params`, and the Mac
- * reads them back the same way.
- */
-export const macBrowserParamsSchema = EffectSchema.Struct({
-  taskId: wireUuidSchema,
-  actions: browserAgentActionsSchema,
-});
-
-export type MacBrowserParams = typeof macBrowserParamsSchema.Type;
-
-export type MacBrowserCommand = typeof macBrowserCommandSchema.Type;
-
 /** One command waiting for the Mac, of a kind the service queues. */
-export const macCommandSchema = EffectSchema.Union([
-  macShellCommandSchema,
-  macBrowserCommandSchema,
-]);
+export const macCommandSchema = EffectSchema.Union([macShellCommandSchema]);
 
 export type MacCommand = typeof macCommandSchema.Type;
 
@@ -182,7 +115,6 @@ const macShellCommandReadSchema = macShellCommandSchema.mapFields((fields) => ({
 /** A command as the Mac reads one: one of a kind this build knows, or the id and kind alone of one it does not. */
 const macCommandReadSchema = EffectSchema.Union([
   macShellCommandReadSchema,
-  macBrowserCommandSchema,
   EffectSchema.Struct({ id: wireUuidSchema, kind: unknownMacCommandKindSchema }),
 ]);
 
@@ -195,11 +127,6 @@ export type MacCommandRead = typeof macCommandReadSchema.Type;
  */
 export function isMacShellCommand(command: MacCommandRead): command is MacShellCommand {
   return command.kind === MAC_COMMAND_KIND.SHELL;
-}
-
-/** Whether a command the Mac read is a browser command, read off its kind as `isMacShellCommand` is. */
-export function isMacBrowserCommand(command: MacCommandRead): command is MacBrowserCommand {
-  return command.kind === MAC_COMMAND_KIND.BROWSER;
 }
 
 /** The commands claimed for this Mac (GET), none where nothing came while the read was held. */
@@ -236,81 +163,18 @@ const macCommandRefusalSchema = EffectSchema.Struct({
 
 export type MacCommandRefusal = typeof macCommandRefusalSchema.Type;
 
-/** The image types a browser command's result may carry: a screenshot as the Mac encoded it. */
-export const MAC_COMMAND_IMAGE_TYPE = {
-  JPEG: PICTURE_TYPE.JPEG,
-  PNG: PICTURE_TYPE.PNG,
-} as const;
-
-/** Whether an image's base64 reads as at most `MAX_IMAGE_BYTES` of the type it names. */
-function holdsImage(image: { readonly mediaType: string; readonly data: string }): boolean {
-  const bytes = Base64.decode(image.data);
-  if (Result.isFailure(bytes)) return false;
-  return (
-    bytes.success.length <= MAC_COMMAND_BOUNDS.MAX_IMAGE_BYTES &&
-    sniffImageType(bytes.success) === image.mediaType
-  );
-}
-
-/**
- * An image a browser command's result carries: its type, and its bytes in
- * base64. Note that the bytes are read as they cross, because every reader
- * draws them as the image the type names, the model among them.
- */
-const macCommandImageSchema = EffectSchema.Struct({
-  mediaType: EffectSchema.Literals(Object.values(MAC_COMMAND_IMAGE_TYPE)),
-  data: EffectSchema.String.check(
-    EffectSchema.isMinLength(1),
-    EffectSchema.isMaxLength(MAC_COMMAND_MAX_IMAGE_BASE64_CHARS),
-  ),
-}).check(EffectSchema.makeFilter(holdsImage));
-
-export type MacCommandImage = typeof macCommandImageSchema.Type;
-
-/**
- * What a browser command did: what its acts answered, such as a tab's
- * address, title, or a text snapshot of its page, as JSON within a bound,
- * and at most one image, such as a screenshot of the tab.
- */
-const macBrowserResultSchema = EffectSchema.Struct({
-  output: boundedJson(MAC_COMMAND_BOUNDS.MAX_BROWSER_OUTPUT_CHARS),
-  image: EffectSchema.optionalKey(macCommandImageSchema),
-});
-
-export type MacBrowserResult = typeof macBrowserResultSchema.Type;
-
-/** What a result posted to the commands' own route may be: what a shell command did, or why the Mac ran nothing. */
-const macCommandSettleResultSchema = EffectSchema.Union([
+/** What a command came to: what a shell command did, or why the Mac ran nothing. */
+export const macCommandResultSchema = EffectSchema.Union([
   macShellResultSchema,
   macCommandRefusalSchema,
 ]);
 
-/** What a command came to: what a shell or a browser command did, or why the Mac ran nothing. */
-export const macCommandResultSchema = EffectSchema.Union([
-  ...macCommandSettleResultSchema.members,
-  macBrowserResultSchema,
-]);
-
 export type MacCommandResult = typeof macCommandResultSchema.Type;
 
-/** A result the commands' own route takes: any but a browser command's. */
-export type MacCommandSettleResult = typeof macCommandSettleResultSchema.Type;
-
-/** Whether a command's result is a browser command's, which is posted to its own route. */
-export function isMacBrowserResult(result: MacCommandResult): result is MacBrowserResult {
-  return "output" in result;
-}
-
-/** One command's result, posted by the Mac that claimed it (POST); a browser command's goes to its own route. */
+/** One command's result, posted by the Mac that claimed it (POST). */
 export const macCommandSettleRequestSchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  result: macCommandSettleResultSchema,
-});
-
-/** One browser command's result, image and all, posted by the Mac that claimed it (POST `/browser`). */
-export const macBrowserSettleRequestSchema = EffectSchema.Struct({
-  id: wireUuidSchema,
-  result: macBrowserResultSchema,
+  result: macCommandResultSchema,
 });
 
 /** A result the service kept (POST). */

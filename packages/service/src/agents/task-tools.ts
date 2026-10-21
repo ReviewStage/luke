@@ -10,6 +10,7 @@ import {
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
+  type TaskOrigin,
   taskPrioritySchema,
   taskStatusSchema,
 } from "@luke/features/task-wire";
@@ -249,6 +250,13 @@ function revisionWriterOf(call: CodingAgentCall): RevisionWriter {
     : { actor: PLAN_ACTOR.NOTETAKER };
 }
 
+/** Who made a task for the caller's member: the coding agent by its id, or Luke on their call. */
+function originOf(call: CodingAgentCall): TaskOrigin {
+  return call.caller.kind === AGENT_CALLER.AGENT
+    ? { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id }
+    : { actor: PLAN_ACTOR.NOTETAKER };
+}
+
 /** Who a revision is written by, as the history keeps it. */
 type RevisionWriter = Parameters<typeof recordRevision>[0]["writer"];
 
@@ -321,6 +329,7 @@ export function runCreateTask(
               ...(status === undefined ? undefined : { status }),
               ...(priority === undefined ? undefined : { priority }),
               ...(assigneeId === undefined ? undefined : { assigneeId }),
+              origin: originOf(call),
             });
             if (Option.isSome(once)) {
               for (const link of read.success) {

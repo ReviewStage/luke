@@ -177,9 +177,6 @@ const MAC_COMMAND_NOT_RUN = "not-run";
 /** The status `browser` answers with when it ran nothing. */
 const BROWSER_NOT_RUN = "not-run";
 
-/** Where a `browser` call says it acts when it acts on the developer's own Mac. */
-const BROWSER_ON_MAC = "mac";
-
 /** The actions a browser call named, by name, in the order its input lists them. */
 function browserActions(input: WireValue | undefined): readonly string[] {
   const actions = isRecord(input) && Array.isArray(input.actions) ? input.actions : [];
@@ -618,7 +615,7 @@ function knownToolView(
       const tab = browserTabName(input, output);
       const words = browserCallWords(browserActions(input), tab !== undefined);
       return {
-        kind: stringAt(input, "on") === BROWSER_ON_MAC ? CALL_KIND.MAC_BROWSER : CALL_KIND.BROWSER,
+        kind: CALL_KIND.BROWSER,
         subject: words === undefined ? "" : (tab ?? ""),
         ...(words === undefined ? undefined : { description: words }),
         input: input === undefined ? textBlock("") : jsonBlock(input),

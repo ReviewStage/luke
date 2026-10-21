@@ -394,7 +394,9 @@ export function callPlaces(
       const drawn = rowsOf.get(call) ?? [];
       if (drawn.at(-1) !== row.id) drawn.push(row.id);
       rowsOf.set(call, drawn);
-      wordsHeld.set(call, [...(wordsHeld.get(call) ?? []), wordsOf(lineText(line))]);
+      const held = wordsHeld.get(call) ?? [];
+      held.push(wordsOf(lineText(line)));
+      wordsHeld.set(call, held);
     }
   }
   const opens = new Map<string, TranscriptCallRow[]>();

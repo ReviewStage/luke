@@ -51,6 +51,7 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
+import { SESSION_TAG } from "../vercel-sandbox-api.js";
 import {
   type ClaudeCodeSessionsOptions,
   claudeCodeSessions,
@@ -431,7 +432,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(api.commands.length, 1);
       assert.deepEqual(linesOf(api.commands[0]).slice(2), [
         // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
-        { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
+        { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", fast: false, effort: "low" },
         {
           type: INPUT_LINE.MESSAGE,
           uuid: lineId,
@@ -444,7 +445,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a change of model and effort reaches the running runner as a model line alone, and a session with no runner takes nothing",
+    "a change of model and effort reaches the running runner as a model line alone, a fast version as its base model with fast mode on, and a session with no runner takes nothing",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -456,7 +457,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         yield* updateCodingAgentChoice(userId, agent.id, {
-          model: "anthropic/claude-sonnet-5.5",
+          model: "anthropic/claude-opus-5.5-fast",
           effort: "low",
         });
 
@@ -469,7 +470,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual([retuned, elsewhere], [RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE]);
         assert.equal(api.commands.length, 1);
         assert.deepEqual(linesOf(api.commands[0]).slice(2), [
-          { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
+          { type: INPUT_LINE.MODEL, model: "claude-opus-5-5", fast: true, effort: "low" },
         ]);
       }),
   );
@@ -550,6 +551,92 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox, a new checkout with no CLI session to resume",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        sequence.next = 42;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 41,
+        }).pipe(Effect.provide(api.layer));
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(expired.deleted, true);
+        const fresh = api.sandboxes[1];
+        assert.ok(fresh !== undefined);
+        assert.equal(fresh.status, "running");
+        assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
+        const relaunch = api.commands[1];
+        assert.equal(relaunch?.sandboxSessionId, fresh.currentSessionId);
+        const [config, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, undefined);
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(line.content, [{ type: "text", text: "Now the emails." }]);
+        // The session is found again by its tag, in the new sandbox alone.
+        const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+        assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a replacement for an expired sandbox that could not launch leaves the session standing for the next message",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        sequence.next = 42;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 41,
+        }).pipe(Effect.provide(api.layer));
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+        const preparing = yield* sessionsFor(userId, sequence).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(api),
+              Layer.succeed(AgentSandboxImage, { snapshotId: Effect.fail(new ImagePreparing()) }),
+            ),
+          ),
+        );
+
+        const refused = yield* preparing.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.deepEqual(refused, {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: IMAGE_PREPARING_STATUS,
+        });
+        assert.equal(expired.deleted, false);
+        const retried = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(expired.deleted, true);
+        assert.equal(api.sandboxes.at(-1)?.status, "running");
       }),
   );
 

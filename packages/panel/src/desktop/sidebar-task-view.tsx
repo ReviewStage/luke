@@ -74,9 +74,16 @@ const STATUS_FILTER = "Show statuses";
 /** The menu the status filter's button and the hidden tasks' line both open. */
 type StatusFilterMenu = ReturnType<typeof useMenu>;
 
-/** A section's head: its name, which folds the section where it may be folded, and what stands at its end. */
+/**
+ * A section's head: its name, which folds the section where it may be
+ * folded, and what stands at its end. A field the head opened, such as a
+ * search, stands in the name's place while it is given (`field`), the end's
+ * buttons kept as they stood, so a press on one is not lost to the head
+ * drawn anew as the field gives way.
+ */
 export function SidebarSectionHead({
   name,
+  field,
   folded,
   count,
   noun,
@@ -84,6 +91,8 @@ export function SidebarSectionHead({
   children,
 }: {
   name: string;
+  /** What stands in the name's place while the head holds it, such as a search it opened. */
+  field?: ReactNode;
   /** Whether the section is folded, where its head folds it. */
   folded?: boolean;
   /** How many rows a folded section holds, shown after its name while folded. */
@@ -96,7 +105,9 @@ export function SidebarSectionHead({
 }): React.JSX.Element {
   return (
     <div className="sidebar-section-head">
-      {onToggle === undefined ? (
+      {field !== undefined && field !== null ? (
+        field
+      ) : onToggle === undefined ? (
         <span className="sidebar-section-head-name">{name}</span>
       ) : (
         <NavItem

@@ -51,6 +51,8 @@ import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { keepAliveDue } from "../sandbox-keep-alive.js";
+import { keepSessionSandboxAlive } from "../session-sandboxes.js";
 import { claudeCodeMoments } from "./claude-code-moments.js";
 import { codexMoments } from "./codex-moments.js";
 import type { NativeHeld, NativeMoment } from "./native-moments.js";
@@ -80,7 +82,11 @@ import {
  * racing, write nothing twice. A write the writer refuses is said in the
  * log and passed over, as eve's relay passes one over, since the runner
  * posting the batch again would be refused again. The answer names the last
- * event applied, which a relaunch numbers its events after.
+ * event applied, which a relaunch numbers its events after. A runner posting
+ * is a run under way, so a batch that applied events keeps its sandbox alive
+ * past its short timeout, at most every keep-alive interval
+ * (`../sandbox-keep-alive.ts`), stamped in the projection under the same
+ * lock, unless the batch ends the launch, whose sandbox is stopped instead.
  */
 
 /** The path a runner posts its events to. */
@@ -144,6 +150,12 @@ interface Applied {
   readonly sequence: number | null;
 }
 
+/** A run whose sandbox a batch keeps alive: the conversation, and the session its sandbox is tagged with. */
+export interface RunnerAlive {
+  readonly target: ConversationTarget;
+  readonly sessionId: string | undefined;
+}
+
 /** A launch's end the batch applied: the conversation, the session it ran under, and the number of its END event. */
 export interface RunnerEnded {
   readonly target: ConversationTarget;
@@ -161,6 +173,22 @@ export interface RunnerEventsOptions {
    * stops nothing for a launch since replaced. Nothing where left out.
    */
   readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
+  /**
+   * Told once a batch due a keep-alive has landed, after its transaction:
+   * the run's sandbox kept alive (`sandboxKeptAlive`). Nothing where left out.
+   */
+  readonly alive?: (alive: RunnerAlive) => Effect.Effect<void, never, DatabaseServices>;
+}
+
+/**
+ * A run's sandbox kept alive as a batch of its runner's events lands
+ * (`../session-sandboxes.ts`'s `keepSessionSandboxAlive`), which logs a
+ * keep-alive Vercel did not confirm, since the next due batch tries again.
+ */
+export function sandboxKeptAlive(alive: RunnerAlive): Effect.Effect<void> {
+  const { sessionId } = alive;
+  if (sessionId === undefined) return Effect.void;
+  return keepSessionSandboxAlive(sessionId).pipe(Effect.provide(FetchHttpClient.layer));
 }
 
 /**
@@ -360,10 +388,16 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
     yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
+    const ends = endsOf(batch, held.sequence);
+    // A batch that ends the launch keeps nothing alive: its sandbox is stopped once it lands.
+    const keepsAlive =
+      last !== undefined && ends.length === 0 && keepAliveDue(state.keptAliveAt, now);
+    if (keepsAlive) state = { ...state, keptAliveAt: now };
     const result = {
       applied: { applied: events.length, sequence: last ?? held.sequence } satisfies Applied,
-      ends: endsOf(batch, held.sequence),
+      ends,
       turns: turnsMovedBy(writes),
+      keepsAlive,
     };
     return last === undefined
       ? { result }
@@ -375,6 +409,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
 const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* (
   read: NativeReader | undefined,
   ended: RunnerEventsOptions["ended"],
+  alive: RunnerEventsOptions["alive"],
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
@@ -430,6 +465,9 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   if (taskId !== null && applied.value.turns.ended) {
     yield* settleTaskIfFinished(target.userId, taskId);
   }
+  if (alive !== undefined && applied.value.keepsAlive) {
+    yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
+  }
   if (ended !== undefined) {
     for (const sequence of applied.value.ends) {
       yield* ended({ target, sessionId: admitted.value.runtimeSessionId, sequence });
@@ -440,7 +478,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
 
 /** The group: the one events path, read as the conversation's harness's unless told otherwise, and the hosted vocabulary's own refusal for any other. */
 export function runnerEventsApp(options: RunnerEventsOptions = {}): WebRoutes<DatabaseServices> {
-  const endpoint = runnerEventsEndpoint(options.read, options.ended);
+  const endpoint = runnerEventsEndpoint(options.read, options.ended, options.alive);
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, RUNNER_EVENTS_PATH, hostedRefusing(endpoint)),
     hostedNotFoundRoute,
