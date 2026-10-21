@@ -1366,13 +1366,13 @@ function fakeRealtime() {
     fail: Effect.map(subscribed("capability-mark"), (listener) =>
       listener({ status: "error", data: [] }),
     ),
-    /** Waits for both parts of the task list to be subscribed, as the follow forked from a refresh subscribes them. */
+    /** Waits for every part of the task list to be subscribed, as the follow forked from a refresh subscribes them. */
     listSubscribed: Effect.gen(function* () {
       for (let turn = 0; turn < 100; turn += 1) {
-        if (listeners.has("plans") && listeners.has("agents")) return;
+        if (listeners.has("plans") && listeners.has("agents") && listeners.has("issues")) return;
         yield* Effect.yieldNow;
       }
-      assert.fail("both parts of the list are subscribed");
+      assert.fail("every part of the list is subscribed");
     }),
     /** One part of the task list's rows delivered, as Realtime's snapshot carries them. */
     deliverPart: (part: string, data: readonly unknown[]) => {
@@ -1551,6 +1551,7 @@ function subject(
         yield* realtime.listSubscribed;
         realtime.deliverPart("plans", service.tasks.map(rowOfTask));
         realtime.deliverPart("agents", agents);
+        realtime.deliverPart("issues", []);
         yield* realtime.settled;
       });
     /** The host's own fibers given their turn, so what Realtime told is drawn. */
@@ -2317,6 +2318,7 @@ it.effect(
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", service.tasks.map(rowOfTask));
       realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
@@ -2358,6 +2360,7 @@ it.effect(
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", service.tasks.map(rowOfTask));
       realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
@@ -3749,15 +3752,21 @@ it.effect(
 );
 
 it.effect(
-  "a link made, related, and unlinked on a task's page lands on its row of the list in place, as the Board's tags, and nothing is read again",
+  "a link made, related, and unlinked on a task's page lands on its row of the list in place, as the Board's tags, before Realtime delivers it and with nothing read again",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
       service.issueLinks[INVITES] = [];
-      const { call, last } = yield* subject(service);
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      const reads = service.reads.length;
+      yield* realtime.listSubscribed;
+      realtime.deliverPart("plans", [rowOfTask(invites)]);
+      realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
+      yield* realtime.settled;
+      const reads = [service.reads.length, service.liveListReads];
       const tagsOf = () => last()?.tasks.find((each) => each.id === INVITES)?.issues;
 
       yield* call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
@@ -3792,7 +3801,11 @@ it.effect(
       );
       yield* call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, { taskId: INVITES, linkId: second.id });
       assert.equal(tagsOf(), undefined, "a task left linking nothing names no tags");
-      assert.equal(service.reads.length, reads, "the list is not read again");
+      assert.deepEqual(
+        [service.reads.length, service.liveListReads],
+        reads,
+        "the list is not read again",
+      );
     }),
 );
 
@@ -3844,6 +3857,7 @@ it.effect(
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", [rowOfTask(invites)]);
       realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
 
@@ -4579,6 +4593,7 @@ const SEALED_LIST: TaskListLiveAnswer = {
   queries: {
     plans: { capability: "plans", queryFingerprint: "plans", expiresAt: LIVE_NOW + 60_000 },
     agents: { capability: "agents", queryFingerprint: "agents", expiresAt: LIVE_NOW + 60_000 },
+    issues: { capability: "issues", queryFingerprint: "issues", expiresAt: LIVE_NOW + 60_000 },
   },
 };
 
@@ -4672,6 +4687,7 @@ it.effect(
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
       realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.listStatus, TASKS_READ.READY);
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
@@ -4704,6 +4720,7 @@ it.effect(
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
       realtime.deliverPart("agents", [agentRow(INVITES, 60_000)]);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       const drawn = last()?.tasks[0];
       assert.equal(drawn?.name, "Teammate invitations, live");
@@ -4756,6 +4773,7 @@ it.effect(
           awaitingLineAt: LIVE_NOW - 60_000,
         },
       ]);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
       assert.deepEqual(
@@ -4791,6 +4809,7 @@ it.effect(
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
       realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
       assert.deepEqual(last()?.taskAgents, []);
@@ -4801,6 +4820,7 @@ it.effect(
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, again")]);
       realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
     }),

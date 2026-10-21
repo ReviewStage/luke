@@ -1,3 +1,5 @@
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { TASK_ISSUE_PROVIDER, type TaskIssueProvider } from "@luke/features/task-issue-wire";
 import {
   TASK_BOUNDS,
   TASK_PRIORITY,
@@ -7,8 +9,6 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { TASK_ISSUE_PROVIDER, type TaskIssueProvider } from "@luke/features/task-issue-wire";
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -62,8 +62,8 @@ import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { issueTagWords } from "../tasks/task-issue-links-model.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";

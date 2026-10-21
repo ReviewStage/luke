@@ -10,7 +10,7 @@ import {
   agentSeenBy,
   taskReachableBy,
 } from "@luke/database/models/workspace-store";
-import { agentPin, taskPin } from "@luke/database/schemas";
+import { agentPin, taskIssue, taskPin } from "@luke/database/schemas";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { task } from "@luke/database/schemas/task";
@@ -21,16 +21,17 @@ import { Option } from "effect";
 import { awaitingLineAtIn, latestTurnOf, sessionEndedOf } from "../live/agent-standing.js";
 
 /**
- * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, and every agent of them and with no plan, with what the list reads each agent's status from.
+ * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, every agent of them and with no plan, with what the list reads each agent's status from, and the issues the plans link.
  *
- * Two statements, each the same rows and rule of who may read them as the
+ * Three statements, each the same rows and rule of who may read them as the
  * held read (`tasks-app.ts`'s collection, through `listTasks`,
  * `withTaskAgents`, and `listTasklessAgents`), with every archived plan
  * and agent among them, as the desktop asks for them: the plans with the
  * reader's own pin and the owner's name, and the agents with their newest
  * turn, when the newest line of the developer's awaiting its turn was
  * written and whether that turn's session ended, what each last
- * published, and the names of the members each names. Every column stands
+ * published, and the names of the members each names; and the issues the
+ * plans link, as their tags name them. Every column stands
  * under the key `@luke/features/task-list-live` reads it by and every
  * instant as epoch milliseconds. Nothing here reads the clock: an agent's
  * status, which turns on it, is the reader's to read, and so is the order,
@@ -45,6 +46,7 @@ const assignee = alias(user, "assignee");
 export interface TaskListLiveStatements {
   readonly plans: LiveStatement;
   readonly agents: LiveStatement;
+  readonly issues: LiveStatement;
 }
 
 /** The plans the account reaches, archived ones among them, each with the reader's own pin and its owner's name. */
@@ -78,6 +80,33 @@ function tasksStatement(userId: string) {
     .leftJoin(taskPin, and(eq(taskPin.taskId, task.id), eq(taskPin.userId, userId)))
     .leftJoin(user, eq(user.id, task.userId))
     .leftJoin(assignee, eq(assignee.id, task.assigneeId))
+    .where(taskReachableBy(userId));
+}
+
+/**
+ * The issues every plan the account reaches links, archived plans' among
+ * them, each as a card's tag names it, with when it was linked, which the
+ * reader orders a plan's tags by. Note that it is a statement of its own
+ * rather than an aggregate on each plan's row, because `jsonb_agg` is only
+ * stable and Realtime refuses any function that is not immutable.
+ */
+function issuesStatement(userId: string) {
+  return queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: taskIssue.id,
+          planId: taskIssue.taskId,
+          provider: taskIssue.provider,
+          key: taskIssue.key,
+          url: taskIssue.url,
+          relation: taskIssue.relation,
+        },
+        { createdAt: taskIssue.createdAt },
+      ),
+    )
+    .from(taskIssue)
+    .innerJoin(task, eq(task.id, taskIssue.taskId))
     .where(taskReachableBy(userId));
 }
 
@@ -150,5 +179,6 @@ export function taskListLiveStatements(userId: string): Option.Option<TaskListLi
   return Option.all({
     plans: liveStatementOf(tasksStatement(userId)),
     agents: liveStatementOf(agentsStatement(userId)),
+    issues: liveStatementOf(issuesStatement(userId)),
   });
 }
