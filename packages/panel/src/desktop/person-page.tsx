@@ -56,7 +56,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
-import { RecentRow } from "./desktop-home.js";
+import { RecentRow } from "./recent-row.js";
 import { useArchivedView, useTaskListView } from "./task-list-view.js";
 import { useAutomations } from "./use-automations.js";
 
@@ -67,7 +67,7 @@ import { useAutomations } from "./use-automations.js";
  * wherever the window names a member, the reader among them, or someone
  * who left. Its head is their face at the page's size, their name, and
  * their role and email as the members read lists them, or that they left.
- * Under it, in Home's own voice, stand their agents at work, the Inbox
+ * Under it stand their agents at work, the Inbox
  * items their agents wait on, the tasks they created, and their other
  * agents, each from the listed workspace's task list and Inbox
  * (`@luke/ui/person-page-model`), and the workspace's automations they
@@ -79,7 +79,7 @@ import { useAutomations } from "./use-automations.js";
  * Nothing on it is read for it: it shows a teammate only what the sidebar,
  * the Inbox, and an agent's card already show any member, never their
  * personal workspace, their answers, or another workspace's. A press on a
- * row opens what it names, as Home's do, and Escape leaves the page.
+ * row opens what it names, and Escape leaves the page.
  */
 
 /** How wide a placeholder section's name stands, as a short section name does. */
@@ -121,7 +121,7 @@ function headName(person: Actor): string {
   return person.kind === ACTOR_KIND.PERSON ? person.name : actorName(person);
 }
 
-/** A section in Home's voice: its name and count, then its rows. */
+/** A section: its name and count, then its rows. */
 function PersonSection({
   title,
   count,
