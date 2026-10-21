@@ -242,6 +242,8 @@ function seat(target: ConversationTarget): SessionAuth {
 
 interface StartedAgent extends ConversationTarget {
   readonly id: string;
+  /** The human name the store gave the agent, which names it in every answer and mention. */
+  readonly personaName: string;
   readonly sessionId: string;
 }
 
@@ -278,7 +280,12 @@ async function claimed(
   const target = { userId, conversationId: started.value.agent.conversationId };
   const session = sessionId();
   assert.equal(await database.run(claimRuntimeSession(target, session, new Date(NOW))), true);
-  return { ...target, id: started.value.agent.id, sessionId: session };
+  return {
+    ...target,
+    id: started.value.agent.id,
+    personaName: started.value.agent.personaName ?? "",
+    sessionId: session,
+  };
 }
 
 /**
@@ -610,24 +617,26 @@ test("list_agents names every other agent of the caller's workspace, on any task
   const archived = {
     ...reading,
     id: agents.archived.id,
+    name: agents.archived.personaName,
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
     task: { id: tasks.invitations, name: "Teammate invitations", archived: false },
     onYourTask: true,
     archived: true,
-    mention: `[@${OPUS}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
+    mention: `[@${agents.archived.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
   };
   const teammates = {
     ...reading,
     id: agents.teammates.id,
+    name: agents.teammates.personaName,
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
     task: { id: tasks.billing, name: "Billing", archived: false },
     onYourTask: false,
     archived: false,
-    mention: `[@${OPUS}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
+    mention: `[@${agents.teammates.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
   };
 
   const listed = await call(CODER_TOOL.LIST_AGENTS, {});
@@ -725,6 +734,7 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
     delivery: STEER_OUTCOME.SENT,
     agent: {
       id: teammates.id,
+      name: teammates.personaName,
       title: OPUS,
       model: OPUS,
       status: CODING_AGENT_STATUS.RUNNING,
@@ -740,7 +750,7 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
   // The words open with the sending agent, named and by the id it is answered by, then its own.
   const message: string = JSON.parse(request?.body ?? "").message;
   assert.ok(message.startsWith("A message from another coding agent"), message);
-  assert.ok(message.includes(`"${CALLER_TITLE}"`) && message.includes(caller.id), message);
+  assert.ok(message.includes(`"${caller.personaName}"`) && message.includes(caller.id), message);
   assert.ok(message.includes("not the developer's or Luke's"), message);
   assert.ok(message.endsWith(`\n\n${NOTE}`), message);
   // The line stands in the teammate's agent's conversation, under its starter, named for the agent that sent it.
@@ -753,7 +763,7 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
   // And by the model the sending agent runs on, which the window draws its harness by, and the agent itself on its task, which a reader opens.
   assert.deepEqual(await database.run(lineSenderUnder(teammates, "call-1")), {
     kind: MESSAGE_SENDER.AGENT,
-    name: CALLER_TITLE,
+    name: caller.personaName,
     model: OPUS,
     agent: { id: caller.id, taskId: tasks.invitations },
   });
@@ -856,10 +866,11 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, tasks.invitations);
-  // The agent is answered with the mention its starter names it by, its title the model's until one is written.
+  // The agent is answered with the mention its starter names it by, the human name it was given.
+  assert.equal(started.agent.name, stored.personaName);
   assert.equal(
     started.agent.mention,
-    `[@${OPUS}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${stored.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
@@ -870,7 +881,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const message: string = JSON.parse(opening?.body ?? "").message;
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
-  assert.ok(message.includes(`"${CALLER_TITLE}"`) && message.includes(caller.id), message);
+  assert.ok(message.includes(`"${caller.personaName}"`) && message.includes(caller.id), message);
   // The developer's inbox is the starter's: what the agent would post there goes to it instead.
   assert.ok(message.includes("The developer's inbox is that agent's to keep"), message);
   // An agent's own pick of a model is no member's new default.
@@ -958,9 +969,12 @@ test("start_agent with a title names the agent by it from the start, and a title
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   const startedId = started.agent.id;
+  // The agent goes by the human name it was given, its title standing beside it as what it works on.
+  const named = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
+  assert.equal(named.title, title);
   assert.equal(
     started.agent.mention,
-    `[@${title}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${named.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
 
   // The title generated as the agent's words arrive is filled only where none stands.
@@ -1987,7 +2001,7 @@ test("update_agent archives a teammate's idle agent on another task for the call
     by: CODING_AGENT_ARCHIVER.AGENT,
     userId: agents.caller.userId,
     agentId: agents.caller.id,
-    agentName: CALLER_TITLE,
+    agentName: agents.caller.personaName,
     reason,
   };
   assert.ok((await row()).archivedAt !== null);
@@ -2568,6 +2582,7 @@ test("message_agent and stop_agent reach a teammate's Claude Code agent through 
     userId: agents.teammates.userId,
     conversationId: started.value.agent.conversationId,
     id: started.value.agent.id,
+    personaName: started.value.agent.personaName ?? "",
     sessionId: `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`,
   };
   assert.equal(
@@ -2608,6 +2623,7 @@ test("stop_agent stops a teammate's running agent on another task by eve's cance
     status: ACTION_RESULT_STATUS.ACCEPTED,
     agent: {
       id: agents.teammates.id,
+      name: agents.teammates.personaName,
       title: OPUS,
       task: { id: tasks.billing, name: "Billing", archived: false },
       onYourTask: false,
@@ -2647,6 +2663,7 @@ test("stop_agent answers an idle agent as idle and changes nothing, refuses one 
     status: ACTION_RESULT_STATUS.ACCEPTED,
     agent: {
       id: agents.teammates.id,
+      name: agents.teammates.personaName,
       title: OPUS,
       task: { id: tasks.billing, name: "Billing", archived: false },
       onYourTask: false,

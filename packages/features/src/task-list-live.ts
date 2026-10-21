@@ -105,6 +105,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   contextWindow: EffectSchema.NullOr(EffectSchema.String),
   title: EffectSchema.NullOr(EffectSchema.String),
+  /** The human name the agent was given; null for one from before names were given, absent from a statement before them. */
+  personaName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF)),
@@ -222,6 +224,13 @@ function newestStarted(a: AgentLiveRow, b: AgentLiveRow): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** The human name a row carries, as a line's or a summary's key, where it carries one. */
+function personaOf(row: AgentLiveRow): { personaName?: string } {
+  return row.personaName === undefined || row.personaName === null
+    ? {}
+    : { personaName: row.personaName };
+}
+
 /** One agent as its plan's row names it, its status read at `now`. */
 function agentLine(row: AgentLiveRow, now: number): TaskAgentLine {
   const status = statusOf(row, now);
@@ -233,6 +242,7 @@ function agentLine(row: AgentLiveRow, now: number): TaskAgentLine {
   return {
     id: row.id,
     title: row.title,
+    ...personaOf(row),
     model: row.model,
     effort: row.effort,
     status,
@@ -370,6 +380,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
       ? { contextWindow: CONTEXT_WINDOW.STANDARD }
       : undefined),
     title: row.title,
+    ...personaOf(row),
     createdAt: row.createdAt,
     status: statusOf(row, now),
     turnId: row.turnId,

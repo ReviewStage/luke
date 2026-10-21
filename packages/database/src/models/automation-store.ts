@@ -549,7 +549,8 @@ function historyOf(userId: string, automationId: string): SQL {
 const HISTORY_COLUMNS = {
   ...RUN_COLUMNS,
   agentConversationId: codingAgent.conversationId,
-  agentTitle: codingAgent.title,
+  // The name the agent goes by: its human name, else its title.
+  agentTitle: sql<string | null>`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
   agentCreatedAt: codingAgent.createdAt,
   agentUserId: codingAgent.userId,
 };

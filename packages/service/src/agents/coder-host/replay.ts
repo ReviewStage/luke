@@ -478,9 +478,9 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** An agent as the preamble names it: its title, or its model where it has none, and its id. */
+/** An agent as the preamble names it: its human name, else its title, or its model where it has none, and its id. */
 function agentName(agent: CodingAgent): string {
-  return `"${agent.title ?? agent.model}" (agent id ${agent.id})`;
+  return `"${agent.personaName ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
 }
 
 /** A pull request as it follows the branch it is from; nothing where there is none. */

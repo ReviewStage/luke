@@ -364,6 +364,8 @@ interface HeldAgent {
   model: string;
   /** The agent's title, said in the model's place where it has one. */
   title: string | null;
+  /** The human name the agent was given, said ahead of its title (`agentTabLabel`); none for one from before names were given. */
+  personaName?: string | undefined;
   /** The automation whose run started it, which an untitled agent goes by (`agentTabLabel`). */
   automationName?: string | undefined;
   status: CodingAgentStatus;
@@ -414,6 +416,7 @@ function noticeText(input: {
   subject: string | undefined;
   model: string;
   title: string | null;
+  personaName?: string | undefined;
   automationName?: string | undefined;
   status: CodingAgentStatus;
   models: readonly CatalogModel[] | undefined;
@@ -692,6 +695,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             : taskName(end.agent.taskId),
         model: end.agent.model,
         title: end.agent.title,
+        personaName: end.agent.personaName,
         automationName: end.agent.automationName,
         status: end.agent.status,
         models,
@@ -1004,13 +1008,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function heldOf(
       agent: Pick<
         CodingAgentSummary,
-        "planId" | "model" | "title" | "automationName" | "status" | "turnId"
+        "planId" | "model" | "title" | "personaName" | "automationName" | "status" | "turnId"
       >,
     ): HeldAgent {
       return {
         taskId: agent.planId,
         model: agent.model,
         title: agent.title,
+        personaName: agent.personaName,
         automationName: agent.automationName,
         status: agent.status,
         turnId: agent.turnId,

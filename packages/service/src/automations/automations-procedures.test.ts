@@ -864,7 +864,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
         );
         assert.deepEqual(history.runs[0]?.agent, {
           id: agent.id,
-          title: null,
+          // The run names its agent as the agent goes by: its human name.
+          title: agent.personaName,
           status: CODING_AGENT_STATUS.FAILED,
           ownKey: true,
           failureReason: CODING_AGENT_FAILURE.ABANDONED,

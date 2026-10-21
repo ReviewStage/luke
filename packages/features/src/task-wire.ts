@@ -441,6 +441,8 @@ const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
+  /** The human name the agent was given, which names it ahead of its title; absent for an agent from before names were given, and from a service before them. */
+  personaName: EffectSchema.optionalKey(EffectSchema.String),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,

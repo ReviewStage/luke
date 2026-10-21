@@ -44,7 +44,8 @@ function runAgentSelection(userId: string, latest: ReturnType<typeof latestTurnO
   return liveSelection(
     {
       agentId: codingAgent.id,
-      agentTitle: codingAgent.title,
+      // The name the agent goes by: its human name, else its title.
+      agentTitle: sql<string | null>`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
       ownKey: eq(codingAgent.userId, userId),
       turnId: latest.id,
       turnStatus: latest.status,

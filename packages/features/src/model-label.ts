@@ -68,8 +68,10 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
   );
 }
 
-/** What names an agent: its title, the automation whose run started it, and the model it runs on. */
+/** What names an agent: the human name it was given, its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
+  /** The human name the agent was given as it was created (`agent-persona.ts`); none for an agent from before names were given. */
+  readonly personaName?: string | null | undefined;
   readonly title: string | null;
   readonly model: string;
   /** The name of the automation whose run started the agent, as the run started it; none for one started by hand. */
@@ -78,9 +80,12 @@ interface NamedAgent {
 
 /**
  * An agent as every place names it, its tab, a sidebar row, a card, a
- * notification: its title, or until it has one the name of the automation
+ * notification: the human name it was given, or for an agent from before
+ * names were given its title, or until it has one the name of the automation
  * whose run started it, or else its model's name (`modelLabel`).
  */
 export function agentTabLabel(agent: NamedAgent, models?: readonly CatalogModel[]): string {
-  return agent.title ?? agent.automationName ?? modelLabel(agent.model, models);
+  return (
+    agent.personaName ?? agent.title ?? agent.automationName ?? modelLabel(agent.model, models)
+  );
 }

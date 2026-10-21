@@ -71,7 +71,7 @@ const readAgents = (userId: string, workspaceId: string, named: readonly string[
       const task = agent.taskId === null ? undefined : tasks.get(agent.taskId);
       found.set(agent.id, {
         id: agent.id,
-        name: agent.title ?? agent.model,
+        name: agent.personaName ?? agent.title ?? agent.model,
         task:
           agent.taskId === null || task === undefined
             ? null
