@@ -52,6 +52,7 @@ import {
   DOCUMENT_REGION,
   PIN_MOVE_FAILED_NOTE,
   SETTLED_STATUS,
+  TASK_MARK,
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -72,6 +73,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
+import { usePublishSidebarWalk } from "../desktop/sidebar-walk.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -3653,3 +3655,96 @@ it.effect(
 
 /** A list's payload, read back as the act's own schema admits it. */
 const readListed = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
+
+/** Four tasks of one workspace, listed newest first. */
+const FOUR: TasksView = {
+  ...IDLE_TASKS_VIEW,
+  listStatus: TASKS_READ.READY,
+  workspaces: [PERSONAL],
+  tasks: [row("first", 4), row("second", 3), row("third", 2), row("fourth", 1)],
+};
+
+/** Main's answers: every open, leave, and archive or unarchive lands. */
+const ARCHIVES = {
+  ...OPENS,
+  [ACT_KIND.TASKS_ARCHIVE]: () => Promise.resolve(true),
+};
+
+/** A sidebar drawing `walk`'s tasks, top to bottom, as the window's own publishes them. */
+function SidebarDrawing({ walk }: { walk: readonly string[] }) {
+  usePublishSidebarWalk(walk);
+  return null;
+}
+
+/** The tab mounted with `open` open, beside a sidebar drawing `walk` in the same window. */
+function mountBesideSidebar(
+  walk: readonly string[],
+  open: string,
+  answers: Parameters<typeof mount>[1] = ARCHIVES,
+) {
+  const registry = AtomRegistryModule.make();
+  const tab = mount({ shown: true, tasks: { ...FOUR, activeTaskId: open } }, answers, registry);
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(registry, createElement(SidebarDrawing, { walk }))));
+  return tab;
+}
+
+test("archiving the open task opens the task the sidebar draws after it once the archive lands, and Undo opens the archived one again", async () => {
+  const tab = mountBesideSidebar(["first", "second", "third", "fourth"], "second");
+
+  act(() => tab.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  const atPress = opensAsked(tab.payloads);
+  await settle();
+  const opened = opensAsked(tab.payloads);
+  tab.stand({ tasks: { ...FOUR, activeTaskId: "third" } });
+  act(() => _undoButton().click());
+  await settle();
+
+  assert.deepEqual(atPress, [], "nothing opens before the archive is answered");
+  assert.deepEqual(opened, ["third"]);
+  assert.deepEqual(opensAsked(tab.payloads), ["third", "second"]);
+  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE), "the task is never left for no task");
+});
+
+test("archiving the open task the sidebar draws last opens the one drawn before it", async () => {
+  const tab = mountBesideSidebar(["first", "second", "third", "fourth"], "fourth");
+
+  act(() => tab.control().onMarkTask("fourth", TASK_MARK.ARCHIVE));
+  await settle();
+
+  assert.deepEqual(opensAsked(tab.payloads), ["third"]);
+  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE));
+});
+
+test("archiving the only task the sidebar draws, or with no sidebar drawn, leaves the task as before", async () => {
+  const only = mountBesideSidebar(["second"], "second");
+  act(() => only.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  await settle();
+  const undrawn = mount({ shown: true, tasks: { ...FOUR, activeTaskId: "second" } }, ARCHIVES);
+  act(() => undrawn.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  await settle();
+
+  assert.deepEqual(
+    [opensAsked(only.payloads), only.told.includes(ACT_KIND.TASKS_CLOSE)],
+    [[], true],
+  );
+  assert.deepEqual(
+    [opensAsked(undrawn.payloads), undrawn.told.includes(ACT_KIND.TASKS_CLOSE)],
+    [[], true],
+  );
+});
+
+test("an archive of the open task the service refuses opens nothing and leaves nothing", async () => {
+  const tab = mountBesideSidebar(["first", "second", "third"], "second", {
+    ...OPENS,
+    [ACT_KIND.TASKS_ARCHIVE]: () => Promise.resolve(false),
+  });
+
+  act(() => tab.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  await settle();
+
+  assert.deepEqual(opensAsked(tab.payloads), []);
+  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE));
+  assert.equal(_toast(), "The task could not be archived. Try again.");
+});

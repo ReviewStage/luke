@@ -145,6 +145,7 @@ import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { useSidebarWalkNow, walkSuccessor } from "../desktop/sidebar-walk.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -2022,6 +2023,21 @@ export function useTasksTab(input: {
   // another than the one open when it was pressed.
   const openNow = useRef(openTaskId);
   openNow.current = openTaskId;
+  // The tasks as they stand when an archive is answered, and the sidebar's
+  // walk, read at the press, since the archive's row is gone by the answer.
+  const tasksAnswered = useRef(tasksNow);
+  tasksAnswered.current = tasksNow;
+  const walkNow = useSidebarWalkNow();
+  // The open task archived opens the task the sidebar drew after it as the
+  // archive was pressed, or else the nearest before it, passing over any
+  // archived or gone since; with none, the window leaves the task.
+  const leaveArchived = (walk: readonly string[], taskId: string) => {
+    const standing = (each: string) =>
+      tasksAnswered.current.some((task) => task.id === each && task.archivedAt === undefined);
+    const next = walkSuccessor(walk, taskId, (each) => each === taskId || !standing(each));
+    if (next === undefined) leaveTask();
+    else selectNow.current(next);
+  };
 
   // A fixture's tasks are marked nowhere, as they are read from nowhere. A
   // refusal puts back the mark it drew only while no later press replaced it,
@@ -2029,10 +2045,11 @@ export function useTasksTab(input: {
   // that landed, or an unarchive, says so with an Undo, which marks the task
   // back and opens it again if the archive had left it; an undoing says
   // nothing of its own unless it is refused. Note that the open task is left
-  // only once its archive is answered, because leaving ends its call, which a
-  // refusal could not give back, nor can an Undo.
+  // for the next one only once its archive is answered, because leaving ends
+  // its call, which a refusal could not give back, nor can an Undo.
   const markTask = (taskId: string, mark: TaskMark, undoing?: { reopen: boolean }) => {
     if (fixture !== undefined) return;
+    const walk = walkNow();
     const next = { ...marks.get(taskId), ...pendingMark(mark, Date.now()) };
     setMarks((held) => new Map(held).set(taskId, next));
     const pinning = mark === TASK_MARK.PIN || mark === TASK_MARK.UNPIN;
@@ -2056,7 +2073,7 @@ export function useTasksTab(input: {
           return;
         }
         const left = mark === TASK_MARK.ARCHIVE && openNow.current === taskId;
-        if (left) leaveTask();
+        if (left) leaveArchived(walk, taskId);
         if (undoing?.reopen) selectNow.current(taskId);
         if (pinning || undoing !== undefined) return;
         const { note, undo } = MARK_UNDOS[mark];
