@@ -7241,6 +7241,19 @@ test("a replaced ask draws no card: its controls as it offered them, dimmed, not
 
   act(() => root?.unmount());
   root = undefined;
+  const titled = await mountThread(
+    threadItem([
+      askingMessage({ type: INBOX_ASK.DO, steps: [] }, { status: INBOX_ASK_STATUS.REPLACED }),
+    ]),
+  );
+  assert.equal(
+    titled.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-replaced]`),
+    null,
+    "a replaced to-do naming no steps keeps no controls, since the title it drew as its step may have been renamed since",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
   const words = await mountThread(
     threadItem([askingMessage({ type: INBOX_ASK.ANSWER }, { status: INBOX_ASK_STATUS.REPLACED })]),
   );

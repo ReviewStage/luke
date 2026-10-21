@@ -2047,7 +2047,9 @@ function AnsweredMarker(): React.JSX.Element {
  * pill as an answered ask's, in the muted ink alone, saying what replaced
  * it, a newer question where a later message of the agent's on the thread
  * asks one and a newer message otherwise. An `answer` of words alone, which
- * has no controls, ends with the pill alone.
+ * has no controls, ends with the pill alone, as does a to-do naming no
+ * steps, whose one step was the item's title as it stood then, which a
+ * later post may have renamed.
  */
 function ReplacedAsk({
   ask,
@@ -2070,7 +2072,8 @@ function ReplacedAsk({
       {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
     </span>
   );
-  if (!hasControls(ask)) return marker;
+  // A to-do naming no steps draws the item's title as its one step, and a later post may have renamed the item since, so the title it drew then is not known.
+  if (!hasControls(ask) || (ask.type === INBOX_ASK.DO && ask.steps.length === 0)) return marker;
   return (
     <div className="inbox-ask-replaced" data-inbox-replaced="">
       <div className="inbox-ask-replaced-controls" aria-disabled="true">
