@@ -42,7 +42,8 @@ import {
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
-import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -2409,6 +2410,55 @@ test("an item's card says whom an open item waits on, the reader as Needs you an
   assert.match(
     hoveredCard(rowNamed(page, "Expire after 7 days?"), "[data-inbox-row-card]") ?? "",
     /Waiting on Charles Pan/u,
+  );
+});
+
+test("an item's card names its task as the window names a task everywhere: the key in the task card's own key chip, then the task's mention pill wearing its status's mark, its whole name in the task's card it hangs", async () => {
+  const LONG = "Billing usage alerts, with a name long enough to be cut short in the card";
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [
+          { id: BILLING.workspaceId, name: "Stage", role: WORKSPACE_ROLE.OWNER, github: null },
+        ],
+      },
+    },
+  );
+  const { page } = mount([], {
+    standing: [{ ...BILLING, name: LONG, number: 182, status: TASK_STATUS.IN_PROGRESS }, INVITES],
+  });
+  await settle();
+  hoveredCard(rowNamed(page, THRESHOLD.title), "[data-inbox-row-card]");
+  const card =
+    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+    assert.fail("the row's card is hung");
+  const head = card.querySelector('.task-card-standing[data-line="one"]');
+  assert.deepEqual(
+    [...(head?.children ?? [])].map((each) => [each.className, each.textContent]),
+    [
+      ["task-card-chip task-card-key", "STAG-182"],
+      ["luke-inline-ref", LONG],
+    ],
+    "the key chip, then the task's chip, on one line",
+  );
+  const chip =
+    head?.querySelector<HTMLElement>('.luke-inline-ref[data-look="pill"][data-holder-ref]') ??
+    assert.fail("the task is named by the mention pill");
+  assert.ok(
+    chip.querySelector('.luke-inline-ref-glyph .luke-task-status-mark[data-status="in-progress"]'),
+    "the pill wears the task's status's mark",
+  );
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const cards = [...document.querySelectorAll(".luke-tooltip-card")];
+  assert.ok(
+    cards.some(
+      (each) => each !== card.closest(".luke-tooltip-card") && each.textContent?.includes(LONG),
+    ),
+    "the pill hangs a card naming the task whole",
   );
 });
 
@@ -7719,9 +7769,11 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
   hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-row-card]");
   assert.deepEqual(
-    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map((step) =>
-      step.getAttribute("data-done"),
-    ),
+    [
+      ...document.querySelectorAll(
+        '.luke-tooltip-card [data-inbox-row-card] ul[aria-label="Steps"] > li',
+      ),
+    ].map((step) => step.getAttribute("data-done")),
     ["true", "true", "true"],
   );
 });
@@ -7735,9 +7787,11 @@ test("an item's card shows a to-do naming no steps of its own its title as its o
   await settle();
   hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-row-card]");
   assert.deepEqual(
-    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map(
-      (step) => step.textContent,
-    ),
+    [
+      ...document.querySelectorAll(
+        '.luke-tooltip-card [data-inbox-row-card] ul[aria-label="Steps"] > li',
+      ),
+    ].map((step) => step.textContent),
     ["Rotate the deployment key"],
   );
 });
