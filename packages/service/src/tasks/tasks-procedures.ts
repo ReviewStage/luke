@@ -357,7 +357,10 @@ const startedAgentOn = (
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),
-        (plan): TaskStartAnswer => ({ plan, agent: started.agent }),
+        (plan): TaskStartAnswer =>
+          started.txid === undefined
+            ? { plan, agent: started.agent }
+            : { plan, agent: started.agent, txid: started.txid },
       ),
     ),
     Effect.catch((refusal) =>
@@ -493,9 +496,11 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         agent === undefined
           ? { plan: task }
           : yield* startedAgentOn(seams, request, userId, task, agent);
+      // An agent's Start commits after the task's insert, so its transaction, where it has one, is the later.
+      const committed = answer.txid ?? txid;
       return {
         status: TASK_START_STATUS.CREATED,
-        body: txid === undefined ? answer : { ...answer, txid },
+        body: committed === undefined ? answer : { ...answer, txid: committed },
       };
     }),
 
