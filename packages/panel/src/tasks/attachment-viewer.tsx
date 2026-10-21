@@ -16,7 +16,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useId } from "react";
 import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
 import { CodeLinesView, type LinesLook } from "./code-lines.js";
@@ -119,18 +119,14 @@ function CopyTextButton({ text }: { text: string }): React.JSX.Element {
  * while the files are walked and a copy may land after the next is shown.
  */
 function CopyImageButton({ url }: { url: string }): React.JSX.Element {
-  const { state: copyState, copyImage } = useCopyFeedback();
-  const [copied, setCopied] = useState<string | undefined>();
-  const state: CopyState = copied === url ? copyState : "idle";
+  const { state: copyState, answeredImage, copyImage } = useCopyFeedback();
+  const state: CopyState = answeredImage === url ? copyState : "idle";
   return (
     <Tooltip label={copyHint(state, VIEWER_LABEL.COPY_IMAGE)}>
       <IconButton
         icon={<CopyGlyph state={state} />}
         label={VIEWER_LABEL.COPY_IMAGE}
-        onClick={() => {
-          setCopied(url);
-          copyImage(url);
-        }}
+        onClick={() => copyImage(url)}
       />
     </Tooltip>
   );

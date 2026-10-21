@@ -368,9 +368,11 @@ test("the zoom buttons name the bare keys that do the same", () => {
 
 test("Copy image puts the picture shown on the clipboard as its PNG, and its check stands beside that picture alone", async () => {
   const copied: string[] = [];
+  let answer = Promise.resolve();
   fakeAppPlatform({
     copyImage: async (png) => {
       copied.push(await png);
+      await answer;
     },
   });
   const viewer = opened();
@@ -387,4 +389,16 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its che
   assert.equal(glyph(), "idle", "the picture walked to was not the one copied");
   viewer.key("ArrowRight");
   assert.equal(glyph(), "copied", "back on the copied picture, the check stands again");
+  const refused = Promise.withResolvers<void>();
+  answer = refused.promise;
+  viewer.key("ArrowLeft");
+  viewer.press("Copy image");
+  await act(async () => undefined);
+  assert.equal(
+    glyph(),
+    "idle",
+    "a copy still asked for answers nothing yet, the last one's check included",
+  );
+  await act(async () => refused.reject(new Error("refused")));
+  assert.equal(glyph(), "failed", "its own answer lands beside it");
 });
