@@ -946,7 +946,7 @@ test("a task's Chat tab in the side panel shows its task channel at reading size
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
   assert.ok(tab, "the task's Chat tab");
-  assert.equal(tab.querySelector(".chat-head h2")?.textContent, "# teammate-invitations");
+  assert.equal(tab.querySelector(".chat-head h1")?.textContent, "teammate-invitations");
   assert.match(
     tab.querySelector(".chat-composer")?.textContent ?? "",
     /Message #teammate-invitations/u,
