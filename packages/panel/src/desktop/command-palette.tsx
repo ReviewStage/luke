@@ -87,7 +87,15 @@ import {
   Text,
   UnpinIcon,
 } from "@luke/ui";
-import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
+import {
+  ACTOR_KIND,
+  type Actor,
+  actorName,
+  creatorActor,
+  memberActor,
+  ROLE_WORDS,
+  teammateCreator,
+} from "@luke/ui/actor-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import {
   agentRow,
@@ -143,6 +151,7 @@ import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
+import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useWorkspaceMembersRead,
@@ -545,6 +554,13 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
 }
 
 /** A task's muted words: its repository, and whether it is archived. */
+/** The word a task Luke or an agent made is also found by, beside its maker's name. */
+const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
+  [ACTOR_KIND.LUKE]: "luke",
+  [ACTOR_KIND.AGENT]: "agent",
+  [ACTOR_KIND.AUTOMATION]: "automation",
+};
+
 function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
   const words = [task.repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
@@ -565,14 +581,14 @@ function taskRows(
   members: readonly WorkspaceMember[] | undefined,
   open: (taskId: string) => void,
   openAgent: (agentId: string) => void,
+  originOf: (task: TaskSummary) => Actor | undefined,
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
   // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
+  const listedMembers = (task: TaskSummary) =>
+    task.workspaceId === listedId ? members : undefined;
   const creatorOf = (task: TaskSummary) =>
-    teammateCreator(task, {
-      members: task.workspaceId === listedId ? members : undefined,
-      readerId: tasks.me,
-    });
+    teammateCreator(task, { members: listedMembers(task), readerId: tasks.me });
   const elsewhereOf = (task: TaskSummary): Workspace | undefined =>
     listedId === undefined || task.workspaceId === listedId
       ? undefined
@@ -581,21 +597,46 @@ function taskRows(
     const elsewhere = elsewhereOf(task);
     const creator = creatorOf(task);
     const createdBy = task.createdBy?.name ?? null;
+    // Note that a task Luke or an agent made wears its maker on the reader's own task too, and says them in its detail, so it is found by them.
+    const origin = originOf(task);
+    const madeBy = origin === undefined ? null : actorName(origin);
+    const detail = taskDetail(task, archived);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
-      detail: taskDetail(task, archived),
+      detail:
+        madeBy === null
+          ? detail
+          : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
       endMark:
-        creator === undefined ? undefined : (
+        origin !== undefined ? (
+          <>
+            <ActorMark
+              actor={origin}
+              size={ACTOR_SIZE.MARK}
+              forWhom={creatorActor(
+                task,
+                { members: listedMembers(task), readerId: tasks.me },
+                undefined,
+              )}
+            />
+            <CreatorHeard actor={origin} />
+          </>
+        ) : creator === undefined ? undefined : (
           <>
             <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
             <CreatorHeard actor={creator} />
           </>
         ),
       creator: createdBy ?? undefined,
-      terms: [task.name, task.repository, elsewhere?.name ?? null, createdBy].filter(
-        (term) => term !== null,
-      ),
+      terms: [
+        task.name,
+        task.repository,
+        elsewhere?.name ?? null,
+        createdBy,
+        madeBy,
+        origin === undefined ? null : MADE_BY_WORDS[origin.kind],
+      ].filter((term) => term !== null && term !== undefined),
       onChoose: () => open(task.id),
     };
   };
@@ -1325,6 +1366,7 @@ export function CommandPalette({
   const tokens = searchTokens(query);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
+  const originOf = useTaskOrigin();
   const { members } = membersRead;
   const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
@@ -1386,6 +1428,7 @@ export function CommandPalette({
             members,
             (id) => onTasks(() => tasks.onSelect(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
+            originOf,
           )
         : [],
     ],

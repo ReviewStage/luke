@@ -289,11 +289,18 @@ export function ActorMark({
   actor,
   size = ACTOR_SIZE.INLINE,
   tiled = false,
+  forWhom,
 }: {
   actor: Actor;
   size?: ActorSize;
   /** Whether a square stands on its solid tile rather than bare, as a facepile's overlapping faces do. */
   tiled?: boolean;
+  /**
+   * The member Luke, an agent, or an automation acted for, as a task one of
+   * them made for that member wears them: their face, small, on the square's
+   * corner, as GitHub draws an App acting for someone. None for anyone else.
+   */
+  forWhom?: Actor | undefined;
 }): React.JSX.Element {
   return (
     <span
@@ -306,6 +313,11 @@ export function ActorMark({
       aria-hidden="true"
     >
       <Face actor={actor} size={size} tiled={tiled} />
+      {forWhom === undefined ? null : (
+        <span className="actor-mark-for" data-kind={forWhom.kind}>
+          <Face actor={forWhom} size={ACTOR_SIZE.MARK} tiled={false} />
+        </span>
+      )}
     </span>
   );
 }

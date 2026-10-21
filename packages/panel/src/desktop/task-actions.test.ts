@@ -358,6 +358,40 @@ test("a sidebar task someone else created wears its creator's face before its ti
   assert.deepEqual(faces(OTHER), [[], undefined]);
 });
 
+test("a sidebar task Luke or a coding agent made wears their square with its member's face on the corner, the reader's own task too, and its ⋯ says who made it for whom", () => {
+  /** Each mark the row wears, by its kind, and the kind of the face on its corner. */
+  const marks = (task: TaskSummary) => {
+    const { tasks, asked } = openTab();
+    const container = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: sidebarTask(tasks, task, asked),
+      }),
+    );
+    const worn = [...container.querySelectorAll(".sidebar-task-time > .actor-mark")].map((mark) => [
+      mark.getAttribute("data-kind"),
+      mark.querySelector(".actor-mark-for")?.getAttribute("data-kind") ?? null,
+    ]);
+    unmountAll();
+    return worn;
+  };
+  const deans = { ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN };
+  const byAgent = { ...deans, origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" } } as const;
+  assert.deepEqual(marks(byAgent), [["agent", "person"]]);
+  assert.deepEqual(marks({ ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } }), [
+    ["luke", "person"],
+  ]);
+  // A task the reader made by hand still wears nothing.
+  assert.deepEqual(marks(deans), []);
+
+  const { asked } = openTab();
+  const listed = tasksControl({ me: DEAN.userId, tasks: [byAgent] });
+  rightClick(mountSidebarTask(listed, byAgent, asked), 40, 60);
+  assert.equal(menuFooter()[0], "Created by Coding agent for you");
+  unmountAll();
+});
+
 test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows, its plan's or its Chat's", () => {
   const drawn = (tab: MainTab | undefined) => {
     const container = mount(
@@ -519,6 +553,14 @@ test("a task's card says who created it where others share its workspace, the re
   assert.deepEqual(details(charles, PERSONAL), []);
   // A service that names no creator leaves the card as it was.
   assert.deepEqual(details(OTHER, STAGE), []);
+  // A task an agent made for the reader says so in a workspace of one too.
+  const byAgent = {
+    ...charles,
+    ownerId: DEAN.userId,
+    createdBy: DEAN,
+    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+  } as const;
+  assert.deepEqual(details(byAgent, PERSONAL), ["Created by Coding agent for you"]);
 });
 
 test("a task's card's creator line opens the creator's page in the window, and is words outside it", () => {

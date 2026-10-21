@@ -30,6 +30,7 @@ import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { WorkspaceRef } from "./workspace-ref.js";
@@ -129,7 +130,10 @@ export function RepositoryDetail({
 
 /**
  * Who created the task, under its repository: their face and "Created by
- * Charles Pan · 3d ago", "Created by you", or a member who left saying so,
+ * Charles Pan · 3d ago", "Created by you", or a member who left saying so;
+ * or, for a task Luke or an agent made, its square with the member's face on
+ * its corner and "Created by Invite emails for you · from Teammate
+ * invitations",
  * read against the members of the directory around the card, a press
  * opening their page where the window offers one.
  */
@@ -143,15 +147,25 @@ function CreatorDetail({
   now: number;
 }): React.JSX.Element {
   const creator = useCreator(task, readerId);
-  const door = useActorDoor(creator);
+  const maker = useTaskMaker(task);
+  const door = useActorDoor(maker?.actor ?? creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
+  const by = `${actorName(creator, { sentence: true })}${left ? ", who left" : ""}`;
   return (
     <HoverCardRow
       look={HOVER_CARD_ROW_LOOK.DETAIL}
-      glyph={<ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
+      glyph={
+        <ActorMark
+          actor={maker?.actor ?? creator}
+          size={ACTOR_SIZE.MARK}
+          forWhom={maker === undefined ? undefined : creator}
+        />
+      }
       label={
         <>
-          {`Created by ${actorName(creator, { sentence: true })}${left ? ", who left" : ""} · `}
+          {maker === undefined
+            ? `Created by ${by} · `
+            : `Created by ${actorName(maker.actor)} for ${by}${maker.fromTask === undefined ? "" : ` · from ${maker.fromTask}`} · `}
           <RelativeTime at={task.createdAt} now={now} hint={false} ago />
         </>
       }
@@ -272,8 +286,9 @@ export function TaskCard({
   const { members } = useMemberDirectory();
   const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
   const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
+  // Note that a task Luke or an agent made says so in a workspace of one too, where its member's own needs no saying.
   const creatorShown =
-    (shared ?? (members !== undefined && members.length > 1)) &&
+    (task.origin !== undefined || (shared ?? (members !== undefined && members.length > 1))) &&
     (task.createdBy !== undefined || task.ownerId !== undefined);
   return (
     <HoverCard data-task-card="">

@@ -250,6 +250,11 @@ export function subagentActor(model: string | undefined, state: GlyphState, name
   };
 }
 
+/** Where an agent's work stands, as its tile wears it, read off its status. */
+export function agentActorState(status: CodingAgentStatus): ActorState {
+  return ACTOR_STATE_OF_GLYPH[agentGlyphState(status)];
+}
+
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
 export function agentActor(
   agent: { readonly model: string; readonly status: CodingAgentStatus },

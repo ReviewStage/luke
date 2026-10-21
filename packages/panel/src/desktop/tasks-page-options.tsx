@@ -13,7 +13,15 @@ import {
   TextButton,
   useMenu,
 } from "@luke/ui";
-import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
+import {
+  ACTOR_KIND,
+  ACTOR_STATE,
+  type Actor,
+  actorName,
+  creatorActor,
+  LUKE_ACTOR,
+  memberActor,
+} from "@luke/ui/actor-model";
 import {
   BOARD_GROUPINGS,
   BOARD_PROPERTIES,
@@ -23,11 +31,14 @@ import {
   clearedField,
   filteredFields,
   filterValues,
+  TASK_MAKER,
+  TASK_MAKER_ORDER,
   TASK_PROPERTY,
   TASK_PROPERTY_ORDER,
   TASKS_FILTER_FIELD,
   TASKS_GROUPING,
   TASKS_ORDER,
+  type TaskMaker,
   type TaskProperty,
   type TasksDisplay,
   type TasksFilter,
@@ -40,6 +51,7 @@ import {
 import {
   ArrowDownAZIcon,
   ArrowDownNarrowWideIcon,
+  BotIcon,
   CalendarPlusIcon,
   CircleCheckIcon,
   CircleDotIcon,
@@ -105,6 +117,7 @@ const FIELD_WORDS = {
   [TASKS_FILTER_FIELD.STATUS]: "Status",
   [TASKS_FILTER_FIELD.PRIORITY]: "Priority",
   [TASKS_FILTER_FIELD.CREATOR]: "Creator",
+  [TASKS_FILTER_FIELD.MADE_BY]: "Made by",
   [TASKS_FILTER_FIELD.REPOSITORY]: "Repository",
 } as const satisfies Record<TasksFilterField, string>;
 
@@ -113,6 +126,7 @@ const FIELD_ICON = {
   [TASKS_FILTER_FIELD.STATUS]: <CircleDotIcon />,
   [TASKS_FILTER_FIELD.PRIORITY]: <SignalHighIcon />,
   [TASKS_FILTER_FIELD.CREATOR]: <UserIcon />,
+  [TASKS_FILTER_FIELD.MADE_BY]: <BotIcon />,
   [TASKS_FILTER_FIELD.REPOSITORY]: <FolderGitIcon />,
 } as const satisfies Record<TasksFilterField, React.JSX.Element>;
 
@@ -123,6 +137,23 @@ const COMPLETED_WORDS = {
   [COMPLETED_WINDOW.PAST_MONTH]: "Past month",
   [COMPLETED_WINDOW.ALL]: "All",
 } as const satisfies Record<CompletedWindow, string>;
+
+/** What each maker is called in Made by, and the mark it wears there: a person's glyph, a coding agent's square on no harness, and Luke's face. */
+const MAKER_WORDS = {
+  [TASK_MAKER.PERSON]: "People",
+  [TASK_MAKER.AGENT]: "Agents",
+  [TASK_MAKER.LUKE]: "Luke",
+} as const satisfies Record<TaskMaker, string>;
+
+const MAKER_ACTOR = {
+  [TASK_MAKER.AGENT]: {
+    kind: ACTOR_KIND.AGENT,
+    name: MAKER_WORDS[TASK_MAKER.AGENT],
+    provider: undefined,
+    state: ACTOR_STATE.REST,
+  },
+  [TASK_MAKER.LUKE]: LUKE_ACTOR,
+} as const satisfies Record<Exclude<TaskMaker, typeof TASK_MAKER.PERSON>, Actor>;
 
 /** What a grouping is called. */
 const GROUPING_WORDS = {
@@ -255,6 +286,17 @@ function fieldValues(
         ...(held.has(null) ? [{ value: null, words: NO_CREATOR, icon: <UserXIcon /> }] : []),
       ];
     }
+    case TASKS_FILTER_FIELD.MADE_BY:
+      return TASK_MAKER_ORDER.map((maker) => ({
+        value: maker,
+        words: MAKER_WORDS[maker],
+        icon:
+          maker === TASK_MAKER.PERSON ? (
+            <UserIcon />
+          ) : (
+            <ActorMark actor={MAKER_ACTOR[maker]} size={ACTOR_SIZE.INLINE} />
+          ),
+      }));
     case TASKS_FILTER_FIELD.REPOSITORY:
       return [
         ...[...held]

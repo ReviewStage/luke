@@ -1,4 +1,5 @@
 import {
+  PLAN_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
@@ -13,6 +14,7 @@ import {
   DEFAULT_LIST_DISPLAY,
   keptTasksDisplay,
   NO_TASKS_FILTER,
+  TASK_MAKER,
   TASKS_FILTER_FIELD,
   TASKS_GROUP,
   TASKS_GROUPING,
@@ -421,4 +423,24 @@ test("a display kept before the completed window reads its Done and Canceled swi
     keptTasksDisplay({ completed: COMPLETED_WINDOW.ALL, done: false }, DEFAULT_LIST_DISPLAY)
       .completed,
   ).toBe(COMPLETED_WINDOW.ALL);
+});
+test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Luke made on a call, a task from before origins as made by hand", () => {
+  const tasks = [
+    task("By hand"),
+    { ...task("By an agent"), origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-1" } },
+    { ...task("On a call"), origin: { actor: PLAN_ACTOR.NOTETAKER } },
+  ];
+  const byAgents = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.MADE_BY, TASK_MAKER.AGENT);
+  expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, byAgents)).toEqual([
+    [["all"], ["By an agent"]],
+  ]);
+  const byPeople = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.MADE_BY, TASK_MAKER.PERSON);
+  expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, byPeople)).toEqual([
+    [["all"], ["By hand"]],
+  ]);
+  expect([...valueCounts(tasks, TASKS_FILTER_FIELD.MADE_BY)]).toEqual([
+    [TASK_MAKER.PERSON, 1],
+    [TASK_MAKER.AGENT, 1],
+    [TASK_MAKER.LUKE, 1],
+  ]);
 });

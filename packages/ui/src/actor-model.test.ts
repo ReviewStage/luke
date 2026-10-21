@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PLAN_ACTOR, type PlanSectionEdit } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { test } from "vitest";
@@ -20,6 +21,7 @@ import {
   identityLetter,
   LUKE_ACTOR,
   latestActivity,
+  originActor,
   personActor,
   SOMEONE_REASON,
   teammateCreator,
@@ -371,4 +373,36 @@ test("a linked GitHub login who left keeps their picture and their account's nam
       pictureUrl: "https://avatars.githubusercontent.com/u/7",
     },
   );
+});
+
+test("a task Luke or an agent made names them, the automation whose run started the agent in its place, and an agent the window does not hold as a coding agent; a task made by hand names nobody", () => {
+  assert.equal(originActor(undefined, undefined), undefined);
+  assert.equal(originActor({ actor: PLAN_ACTOR.NOTETAKER }, undefined), LUKE_ACTOR);
+  const held = {
+    name: "Teammate invitations",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    state: ACTOR_STATE.WORKING,
+    taskId: "task-invitations",
+  };
+  assert.deepEqual(originActor({ actor: PLAN_ACTOR.AGENT, agentId: "agent-1" }, held), {
+    kind: ACTOR_KIND.AGENT,
+    agentId: "agent-1",
+    taskId: "task-invitations",
+    name: "Teammate invitations",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    state: ACTOR_STATE.WORKING,
+  });
+  assert.deepEqual(
+    originActor(
+      { actor: PLAN_ACTOR.AGENT, agentId: "agent-2" },
+      { ...held, automationName: "Weekly dependency bump" },
+    ),
+    { kind: ACTOR_KIND.AUTOMATION, name: "Weekly dependency bump", state: ACTOR_STATE.REST },
+  );
+  assert.deepEqual(originActor({ actor: PLAN_ACTOR.AGENT }, undefined), {
+    kind: ACTOR_KIND.AGENT,
+    name: "Coding agent",
+    provider: undefined,
+    state: ACTOR_STATE.REST,
+  });
 });

@@ -1,4 +1,5 @@
 import {
+  PLAN_ACTOR,
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
@@ -40,6 +41,7 @@ export const TASKS_FILTER_FIELD = {
   STATUS: "status",
   PRIORITY: "priority",
   CREATOR: "creator",
+  MADE_BY: "madeBy",
   REPOSITORY: "repository",
 } as const;
 
@@ -54,8 +56,21 @@ export interface TasksFilter {
   readonly status?: readonly TaskStatus[];
   readonly priority?: readonly TaskPriority[];
   readonly creator?: readonly (string | null)[];
+  readonly madeBy?: readonly TaskMaker[];
   readonly repository?: readonly (string | null)[];
 }
+
+/** Who made a task, as the filter's Made by tells them apart: a person by hand, a coding agent, or Luke on a call. */
+export const TASK_MAKER = {
+  PERSON: "person",
+  AGENT: "agent",
+  LUKE: "luke",
+} as const;
+
+export type TaskMaker = (typeof TASK_MAKER)[keyof typeof TASK_MAKER];
+
+/** Every maker, in the order the filter offers them. */
+export const TASK_MAKER_ORDER: readonly TaskMaker[] = Object.values(TASK_MAKER);
 
 /** No filter: every task stands. */
 export const NO_TASKS_FILTER: TasksFilter = {};
@@ -258,6 +273,18 @@ function creatorOf(task: TaskSummary): string | null {
   return task.createdBy?.userId ?? task.ownerId ?? null;
 }
 
+/** Who made a task: a person by hand, read so for a task from a service before origins; a coding agent; or Luke on a call. */
+function makerOf(task: Pick<TaskSummary, "origin">): TaskMaker {
+  switch (task.origin?.actor) {
+    case undefined:
+      return TASK_MAKER.PERSON;
+    case PLAN_ACTOR.AGENT:
+      return TASK_MAKER.AGENT;
+    case PLAN_ACTOR.NOTETAKER:
+      return TASK_MAKER.LUKE;
+  }
+}
+
 /** A field's value on one task. */
 function fieldValue(task: TaskSummary, field: TasksFilterField): string | null {
   switch (field) {
@@ -267,6 +294,8 @@ function fieldValue(task: TaskSummary, field: TasksFilterField): string | null {
       return priorityOf(task);
     case TASKS_FILTER_FIELD.CREATOR:
       return creatorOf(task);
+    case TASKS_FILTER_FIELD.MADE_BY:
+      return makerOf(task);
     case TASKS_FILTER_FIELD.REPOSITORY:
       return task.repository;
   }
