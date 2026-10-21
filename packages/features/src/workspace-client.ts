@@ -55,7 +55,6 @@ import {
   type Workspace,
   type WorkspaceMember,
   type WorkspacePhotoType,
-  type WorkspacesAnswer,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -187,14 +186,6 @@ export class HostedWorkspaceClient {
       credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-  }
-
-  /** Every workspace the account is a member of, its first one first; nothing where the service refused or did not answer. */
-  list(): Effect.Effect<WorkspacesAnswer | undefined, never, HttpClient.HttpClient> {
-    return Effect.orElseSucceed(
-      askHosted(this.#hosted.workspaces.list, undefined),
-      () => undefined,
-    );
   }
 
   /**

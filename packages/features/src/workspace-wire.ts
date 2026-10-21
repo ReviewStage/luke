@@ -279,8 +279,6 @@ export const workspacesAnswerSchema = EffectSchema.Struct({
   workspaces: EffectSchema.Array(workspaceSchema),
 });
 
-export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
-
 /** One workspace: the one created, renamed, or given a photo. */
 export const workspaceAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
 
