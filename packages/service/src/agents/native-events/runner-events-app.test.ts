@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
 import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import {
   createCodingAgent,
+  readCodingAgent,
   readCodingAgentContext,
   readCodingAgentRouting,
   recordCodingAgentRunnerToken,
@@ -23,7 +25,9 @@ import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
+import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
@@ -79,36 +83,58 @@ const standingWith = (options: RunnerEventsOptions) =>
 
 const standing = standingWith({});
 
-/** A Claude Code agent on a task, a runner's bearer recorded for it, and the developer's line awaiting its turn. */
-const agentWithBearer = Effect.gen(function* () {
-  const db = yield* Database;
-  const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
-    taskId: task.id,
-    idempotencyKey: randomUUID(),
+/** What each harness's agent is started on. */
+const HARNESS = {
+  CLAUDE_CODE: {
     model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
-    prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  },
+  CODEX: {
+    model: "openai/gpt-5.5",
+    runtime: CONVERSATION_RUNTIME.CODEX,
+    payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  },
+} as const;
+
+/** A coding agent on the harness given, a runner's bearer recorded for it, and the developer's lines awaiting their turns. */
+const agentOn = (harness: (typeof HARNESS)[keyof typeof HARNESS], lines: readonly string[]) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: randomUUID(),
+      model: harness.model,
+      effort: "high",
+      repository: "acme/relay",
+      planSnapshot: "# Teammate invitations\n",
+      prompt: null,
+      runtime: harness.runtime,
+      payer: harness.payer,
+    });
+    const agent = Option.getOrThrow(started).agent;
+    const bearer = randomBytes(32).toString("base64url");
+    yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+    const target = { userId, conversationId: agent.conversationId };
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const lineIds: string[] = [];
+    for (const text of lines) {
+      const clientKey = randomUUID();
+      yield* writer.writeAwaitingLine(
+        target,
+        { text, clientKey, sender: { kind: MESSAGE_SENDER.MEMBER, userId } },
+        Effect.succeed(true),
+      );
+      lineIds.push(sentLineId(clientKey));
+    }
+    const [lineId = ""] = lineIds;
+    return { userId, agentId: agent.id, target, bearer, lineId, lineIds };
   });
-  const agent = Option.getOrThrow(started).agent;
-  const bearer = randomBytes(32).toString("base64url");
-  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
-  const target = { userId, conversationId: agent.conversationId };
-  const clientKey = randomUUID();
-  const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-  yield* writer.writeAwaitingLine(
-    target,
-    { text: "Run the probe.", clientKey, sender: { kind: MESSAGE_SENDER.MEMBER, userId } },
-    Effect.succeed(true),
-  );
-  return { userId, agentId: agent.id, target, bearer, lineId: sentLineId(clientKey) };
-});
+
+const agentWithBearer = agentOn(HARNESS.CLAUDE_CODE, ["Run the probe."]);
 
 /** The SDK messages of P00's workflow turn, in the pinned SDK's shapes, as the runner numbers and posts them. */
 function workflowTurn(lineId: string): readonly RunnerEvent[] {
@@ -299,6 +325,32 @@ it.layer(getTestDB())("the runner events route", (it) => {
       assert.deepEqual(overlapping.body, { applied: 0, sequence: 11 });
       assert.deepEqual(twice, once);
     }),
+  );
+
+  it.effect(
+    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        yield* post(agent.bearer, workflowTurn(agent.lineId));
+        const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+
+        const page = yield* transcriptPast(
+          agent.target,
+          CODER_TOOL_SET,
+          CURSOR_START,
+          row,
+          row,
+        ).pipe(Effect.provide(modelCatalogOf([])));
+
+        assert.deepEqual(page.usage, {
+          inputTokens: 228,
+          outputTokens: 9,
+          cachedInputTokens: 200,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+      }),
   );
 
   it.effect("a wrong bearer, none, and one retired from the conversation are refused", () =>
@@ -552,6 +604,355 @@ it.layer(getTestDB())("the runner events route", (it) => {
           .from(conversations)
           .where(eq(conversations.id, agent.target.conversationId));
         assert.equal(row?.sequence, 3);
+      }),
+  );
+});
+
+/** P16's hermetic recording of app-server's stdio, as the runner's own tests play it (`tools/codex-probe/fixtures/hermetic/`). */
+const CODEX_RECORDING = new URL(
+  "../../../../../tools/codex-probe/fixtures/hermetic/app-server.jsonl",
+  import.meta.url,
+);
+const THREAD = "00000000-0000-4000-8000-000000000002";
+
+/** One line of the recording: which phase of the probe, which way it went, and what it said. */
+interface RecordedLine {
+  readonly phase: string;
+  readonly direction: "client" | "server";
+  readonly message: WireRecord;
+}
+
+/**
+ * P16's recording cut into the launches P20's runner makes of it, each as
+ * the events it posts: the notifications app-server sent, an ACCEPTED for
+ * each of Luke's lines where the runner's `turn/start` or `turn/steer` hands
+ * one over, and the launch's END. The first launch runs the workflow turn
+ * (steered once), the second the `sleep 600` turn it stops, and the third,
+ * after a restart, the resumed thread's turn.
+ */
+function codexLaunches(lineIds: readonly string[]): readonly (readonly RunnerEvent[])[] {
+  // SAFETY: each line of P16's recording is one object of this shape (the runner's `fake-app-server.ts` decodes it so).
+  const recorded = readFileSync(CODEX_RECORDING, "utf8")
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as RecordedLine);
+  const launches: WireValue[][] = [[], [], []];
+  const lines = [...lineIds];
+  let launch = 0;
+  let turnsStarted = 0;
+  for (const { phase, direction, message } of recorded) {
+    if (phase === "resumed") launch = 2;
+    const posted = launches[launch];
+    if (posted === undefined) continue;
+    if (direction === "client") {
+      if (message.method === "turn/start" && phase === "first" && ++turnsStarted === 2) {
+        launch = 1;
+      }
+      const into = launches[launch];
+      if (
+        (message.method === "turn/start" || message.method === "turn/steer") &&
+        into !== undefined
+      ) {
+        into.push({ type: RUNNER_EVENT.ACCEPTED, uuid: lines.shift() ?? "" });
+      }
+      continue;
+    }
+    if (message.method !== undefined) posted.push(message);
+  }
+  const ends = [RUNNER_END.TURN_ENDED, RUNNER_END.STOPPED, RUNNER_END.TURN_ENDED];
+  let sequence = 0;
+  return launches.map((messagesOfLaunch, index) =>
+    [...messagesOfLaunch, { type: RUNNER_EVENT.END, reason: ends[index] ?? RUNNER_END.FAILED }].map(
+      // SAFETY: each message is one app-server or the runner emits, as P16 recorded it.
+      (message) => ({ sequence: sequence++, message }) as RunnerEvent,
+    ),
+  );
+}
+
+/** The usage the record keeps of a Codex turn: its counts, on the model the agent ran on. */
+function codexUsage(inputTokens: number, outputTokens: number) {
+  const counts = {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
+    cacheWriteTokens: 0,
+  };
+  return { ...counts, byModel: [{ model: HARNESS.CODEX.model, ...counts }] };
+}
+
+/** One notification app-server sends on the session's thread, as the runner posts it. */
+function notification(method: string, params: WireRecord): WireRecord {
+  return { method, params: { threadId: THREAD, turnId: "turn-1", ...params } };
+}
+
+it.layer(getTestDB())("the runner events route, on Codex", (it) => {
+  it.effect(
+    "P16's recorded launches land as three turns: each line taken, each call settled, the words, and the meter",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CODEX, [
+          "The probe's first turn.",
+          "Also append the steered line.",
+          "Run sleep 600.",
+          "What exact line did you first write?",
+        ]);
+        const launches = codexLaunches(agent.lineIds);
+        for (const events of launches) {
+          // Each launch is posted in two batches, as the runner may split it.
+          const half = Math.floor(events.length / 2);
+          yield* post(agent.bearer, events.slice(0, half));
+          yield* post(agent.bearer, events.slice(half));
+        }
+        const { rows, turns: settled } = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(
+          rows.map((row) => row.role),
+          ["user", "user", "user", "user", "assistant", "assistant", "assistant"],
+        );
+        // Each line joins the turn that took it, the steered one beside the line that opened the first.
+        const turnOf = rows.map((row) => row.turnId);
+        assert.deepEqual(turnOf.slice(0, 4), [turnOf[4], turnOf[4], turnOf[5], turnOf[6]]);
+        assert.equal(new Set(turnOf).size, 3);
+        assert.deepEqual(rows[4]?.parts.map(drawn), [
+          ["step-start"],
+          ["tool-fileChange", "output-available", { status: "completed" }],
+          ["step-start"],
+          [
+            "tool-commandExecution",
+            "output-available",
+            {
+              output:
+                'LUKE_PROBE_SCAN {"uid":1001,"user":"vercel-sandbox","capEff":"0000000000000000","ownEnvHasAccessToken":false,"environsReadable":2,"environsDenied":14,"processesWithAccessToken":[],"filesScanned":0,"filesDenied":0,"jwtSha256":[]}\n',
+              exitCode: 0,
+            },
+          ],
+          ["step-start"],
+          [
+            "tool-mcpToolCall",
+            "output-available",
+            "luke-probe-echo:luke-probe-hermetic access_token_in_env=false",
+          ],
+          ["step-start"],
+          [
+            "tool-commandExecution",
+            "output-available",
+            {
+              output: "checks pending (0s)\nall checks passed: luke-probe-hermetic-ci\n",
+              exitCode: 0,
+            },
+          ],
+          ["step-start"],
+          ["tool-fileChange", "output-available", { status: "completed" }],
+          ["step-start"],
+          ["text", "all checks passed: luke-probe-hermetic-ci"],
+        ]);
+        assert.deepEqual(rows[5]?.parts.map(drawn), [
+          ["step-start"],
+          ["tool-commandExecution", "output-available", UNANSWERED.CANCELLED],
+        ]);
+        assert.deepEqual(rows[6]?.parts.map(drawn), [
+          ["step-start"],
+          ["text", "luke-probe-hermetic"],
+        ]);
+        // The resumed thread reports its total again before its turn: that meters nothing.
+        assert.deepEqual(
+          settled
+            .map((turn) => [turn.status, turn.usage, turn.failureDetail])
+            .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+          [
+            [TURN_STATUS.CANCELLED, codexUsage(100, 20), null],
+            [TURN_STATUS.SETTLED, codexUsage(100, 20), null],
+            [TURN_STATUS.SETTLED, codexUsage(800, 160), null],
+          ],
+        );
+        const routing = yield* readCodingAgentRouting(agent.userId, agent.agentId);
+        assert.equal(Option.getOrThrow(routing).nativeSession, THREAD);
+      }),
+  );
+
+  it.effect("a Codex batch posted again changes nothing, and its END is told once", () =>
+    Effect.gen(function* () {
+      const told: RunnerEnded[] = [];
+      const post = yield* standingWith({
+        ended: (ended) => Effect.sync(() => void told.push(ended)),
+      });
+      const agent = yield* agentOn(HARNESS.CODEX, ["The probe's first turn.", "Also append."]);
+      const [events = []] = codexLaunches(agent.lineIds);
+      yield* post(agent.bearer, events);
+      const once = yield* transcriptOf(agent.target.conversationId);
+
+      const again = yield* post(agent.bearer, events);
+      const overlapping = yield* post(agent.bearer, events.slice(5, 20));
+      const twice = yield* transcriptOf(agent.target.conversationId);
+
+      assert.deepEqual(again.body, { applied: 0, sequence: events.length - 1 });
+      assert.deepEqual(overlapping.body, { applied: 0, sequence: events.length - 1 });
+      assert.deepEqual(twice, once);
+      assert.deepEqual(
+        told.map((end) => end.sequence),
+        [events.length - 1],
+      );
+    }),
+  );
+
+  it.effect("a retired bearer writes nothing of a Codex batch", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["The probe's first turn."]);
+      const [events = []] = codexLaunches(agent.lineIds);
+      yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, null);
+      const retired = yield* post(agent.bearer, events);
+      const { rows, turns: written } = yield* transcriptOf(agent.target.conversationId);
+
+      assert.equal(retired.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+      assert.deepEqual(
+        rows.map((row) => row.turnId),
+        [null],
+      );
+      assert.deepEqual(written, []);
+    }),
+  );
+
+  it.effect(
+    "a Luke tool keeps its own name without its pictures, a subagent's thread folds under its interrupted call, and a plan's usage limit fails the turn saying so",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CODEX, ["Look at the inbox."]);
+        const inbox = {
+          type: "mcpToolCall",
+          id: "mcp_inbox",
+          server: "luke",
+          tool: "read_inbox",
+          status: "inProgress",
+          arguments: {},
+          result: null,
+          error: null,
+        };
+        const spawn = {
+          type: "collabAgentToolCall",
+          id: "call_spawn",
+          tool: "spawnAgent",
+          status: "inProgress",
+          senderThreadId: THREAD,
+          receiverThreadIds: ["thread-sub"],
+          prompt: "Find the queue.",
+          model: "gpt-5.5",
+          agentsStates: {},
+        };
+        const messagesOfTurn: WireValue[] = [
+          {
+            method: "thread/started",
+            params: { thread: { id: THREAD, parentThreadId: null } },
+          },
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          notification("turn/started", { turn: { id: "turn-1" } }),
+          notification("item/completed", {
+            item: {
+              type: "reasoning",
+              id: "rs_1",
+              summary: ["Reading the inbox first."],
+              content: [],
+            },
+          }),
+          notification("item/started", { item: inbox }),
+          notification("item/completed", {
+            item: {
+              ...inbox,
+              status: "completed",
+              result: {
+                content: [
+                  { type: "text", text: '{"status":"accepted","inbox":[]}' },
+                  { type: "image", data: "iVBORw0K", mimeType: "image/png" },
+                ],
+                structuredContent: null,
+                _meta: null,
+              },
+            },
+          }),
+          notification("turn/plan/updated", {
+            explanation: null,
+            plan: [{ step: "Read the inbox", status: "completed" }],
+          }),
+          notification("item/started", { item: spawn }),
+          {
+            method: "thread/started",
+            params: { thread: { id: "thread-sub", parentThreadId: THREAD } },
+          },
+          {
+            method: "item/started",
+            params: {
+              threadId: "thread-sub",
+              turnId: "turn-sub",
+              item: {
+                type: "commandExecution",
+                id: "call_sub",
+                command: "rg queue",
+                cwd: "/",
+                status: "inProgress",
+              },
+            },
+          },
+          notification("item/completed", {
+            item: {
+              ...spawn,
+              status: "interrupted",
+              agentsStates: { "thread-sub": { status: "interrupted" } },
+            },
+          }),
+          notification("item/completed", { item: { type: "contextCompaction", id: "cc_1" } }),
+          notification("turn/completed", {
+            turn: {
+              id: "turn-1",
+              status: "failed",
+              error: {
+                message:
+                  'unexpected status 429: {"error":{"code":"subscription_sharing_usage_limit_exceeded"}}',
+                codexErrorInfo: "usageLimitExceeded",
+                additionalDetails: null,
+              },
+            },
+          }),
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.FAILED, detail: "the plan's limit" },
+        ];
+        // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+        const events = messagesOfTurn.map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+        yield* post(agent.bearer, events);
+        const { rows, turns: ended } = yield* transcriptOf(agent.target.conversationId);
+        const context = yield* readCodingAgentContext(agent.userId, agent.agentId);
+
+        assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
+          ["step-start"],
+          ["reasoning", "Reading the inbox first."],
+          ["tool-read_inbox", "output-available", { status: "accepted", inbox: [] }],
+          ["step-start"],
+          [
+            "tool-todoList",
+            "output-available",
+            { explanation: null, plan: [{ step: "Read the inbox", status: "completed" }] },
+          ],
+          ["step-start"],
+          [
+            "tool-collabAgentToolCall",
+            // An interrupted subagent did not do its work: its call settles as an error.
+            "output-error",
+          ],
+        ]);
+        assert.ok(!JSON.stringify(rows).includes("iVBORw0K"));
+        assert.deepEqual(
+          ended.map((turn) => [turn.status, turn.failureDetail]),
+          [
+            [
+              TURN_STATUS.FAILED,
+              "failed the plan's limit; usageLimitExceeded subscription_sharing_usage_limit_exceeded",
+            ],
+          ],
+        );
+        assert.notEqual(Option.getOrThrow(context).compactedAt, null);
       }),
   );
 });

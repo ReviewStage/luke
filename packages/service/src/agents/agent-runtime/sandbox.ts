@@ -7,7 +7,7 @@
  * of pull requests, the runtimes a repository's checks are likely
  * to need, which the base image carries or `prepare` installs, and
  * Playwright with its Chromium, which an agent screenshots what it built
- * with, and GTK 3, the one library an Electron app needs beyond Chromium's,
+ * with and which the agent's own browser runs headful, and GTK 3, the one library an Electron app needs beyond Chromium's,
  * so an agent runs a desktop app under Xvfb the same way. Node is the
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words

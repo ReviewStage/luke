@@ -189,7 +189,7 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
 }
 
 /** The tags a sandbox Luke opens carries beside its session's: its agent, and the runner it runs, so a later call finds both. */
-const RUNNER_TAG = {
+export const RUNNER_TAG = {
   AGENT: "lukeAgent",
   SANDBOX_SESSION: "lukeRunnerSession",
   COMMAND: "lukeRunnerCommand",
@@ -204,8 +204,8 @@ const RUNNER_TAG = {
 /** What sets a launch's stamp apart from its first event number in its tag. */
 const LAUNCH_STAMP_SEPARATOR = "-";
 
-/** What a sandbox Luke opens is named as, beside a fresh UUID. */
-const SANDBOX_NAME = "luke-agent-";
+/** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
+export const SANDBOX_NAME = "luke-agent-";
 
 /**
  * Where the launch stands in the sandbox: the bundle as the file API uploads
@@ -372,7 +372,7 @@ function launchTag(firstSequence: number, stamp: string | undefined): string {
 }
 
 /** The runner a sandbox's tags name, where the sandbox runs the session it was started in. */
-interface TaggedRunner {
+export interface TaggedRunner {
   readonly sandboxSessionId: string;
   readonly commandId: string;
   readonly firstSequence: number;
@@ -390,7 +390,7 @@ function taggedLaunch(
   return { firstSequence, stamp: at < 0 ? undefined : launch.slice(at + 1) };
 }
 
-function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
+export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   const tags = sandbox.tags ?? {};
   const sandboxSessionId = tags[RUNNER_TAG.SANDBOX_SESSION];
   const commandId = tags[RUNNER_TAG.COMMAND];

@@ -19,7 +19,6 @@ import {
   type InboxGroup,
   type InboxListed,
   inboxCounts,
-  inboxList,
   listedItems,
   type TasklessInboxAgent,
   taskHolder,
@@ -27,6 +26,7 @@ import {
 } from "./inbox-model.js";
 import { useSettledReads } from "./inbox-settling.js";
 import { useCodingAgents } from "./use-coding-agents.js";
+import { useHeldInboxList } from "./use-held-inbox-list.js";
 import { useInboxItems } from "./use-inbox-items.js";
 import { useInboxReadMarks } from "./use-inbox-read-marks.js";
 import { useTaskInbox } from "./use-task-inbox.js";
@@ -90,11 +90,17 @@ const NO_TASKLESS: TasksControl["inboxTaskless"] = [];
 
 /**
  * The window's Inbox as it is read and listed, and its chosen item; see the
- * module's head. Where it is not `enabled` it reads nothing, lists nothing,
+ * module's head, its list held still while it is shown (`use-held-inbox-list.ts`).
+ * Where it is not `enabled` it reads nothing, lists nothing,
  * and chooses nothing, so a shell that always calls it costs nothing while
  * the inbox-first sidebar is off.
  */
-export function useInboxListing(tasks: TasksControl, enabled = true) {
+export function useInboxListing(
+  tasks: TasksControl,
+  enabled = true,
+  /** Whether the list is in sight, where it is drawn apart from the Inbox's page, as the inbox-first sidebar draws it; none reads it as the page's. */
+  listShown?: boolean,
+) {
   const view = tasks.inboxView;
   const { act } = useAct();
   const choices = useInboxViewChoices();
@@ -242,9 +248,14 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     whose: showArchived ? EVERYONES : choices.whose,
     readerId: tasks.me,
   };
-  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
-  const list = inboxList(entries, { ...filter, chosen: undefined });
-  const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
+  // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
+  // both held still while the list is shown: the page's while it stands, else what the caller says.
+  const { list, steps } = useHeldInboxList(
+    entries,
+    filter,
+    asked?.itemId,
+    enabled && (listShown ?? (view.open && tasks.shown)),
+  );
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
   // Note that a scope leaving out every item listed is said apart from an Inbox holding none, the
   // archived tasks' items among what another scope would list.

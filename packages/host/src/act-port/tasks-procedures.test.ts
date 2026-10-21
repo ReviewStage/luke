@@ -756,13 +756,13 @@ it("a fenced block is coloured for a panel, its lines answered as the highlighte
   assert.ok(line.some((run) => run.color !== undefined));
 });
 
-it("a page's source is read through the host and coloured as HTML for a panel, plain past the bound, and its silence answered", async () => {
+it("a page's source is read through the host for a panel, line by line and plain, since the panel colours it, and its silence answered", async () => {
   const { client, asked, script } = windowPort(PANEL);
   const source = () => settled(client, TASKS_ACT_KIND.TASKS_PAGE_SOURCE, PAGE);
   const long = `<p>${"a".repeat(70_000)}</p>`;
 
   const unanswered = await source();
-  script.pageHtml = "<h1>Invites</h1>\n<p>sent</p>";
+  script.pageHtml = "<h1>Invites</h1>\n\n<p>sent</p>";
   const read = await source();
   script.pageHtml = long;
   const plain = await source();
@@ -771,12 +771,7 @@ it("a page's source is read through the host and coloured as HTML for a panel, p
   // SAFETY: the page-source procedure answers a page source, which the assertion below reads.
   const answer = ("answer" in read ? read.answer : undefined) as TasksPageSourceAnswer | undefined;
   assert.ok(answer !== undefined && "lines" in answer);
-  const { lines } = answer;
-  assert.deepEqual(
-    lines.map((line) => line.map((run) => run.text).join("")),
-    ["<h1>Invites</h1>", "<p>sent</p>"],
-  );
-  assert.ok(lines[0]?.some((run) => run.color !== undefined));
+  assert.deepEqual(answer.lines, [[{ text: "<h1>Invites</h1>" }], [], [{ text: "<p>sent</p>" }]]);
   assert.deepEqual(plain, { answer: { lines: [[{ text: long }]] } });
   assert.deepEqual(asked, ["page:page-funnel:2", "page:page-funnel:2", "page:page-funnel:2"]);
 });

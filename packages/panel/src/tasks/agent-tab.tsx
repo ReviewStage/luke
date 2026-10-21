@@ -15,6 +15,7 @@ import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/
 import { inboxLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
+import type { TaskStatus } from "@luke/features/task-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -25,6 +26,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   INLINE_REF_LOOK,
+  TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
@@ -136,6 +138,7 @@ import { MentionedServers, SentToAgent } from "./server-card.js";
 import { SentWords, useSkill } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
+import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
 import {
@@ -173,7 +176,7 @@ import { useAgentPullRequest } from "./use-agent-pull-request.js";
 import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useKnownNames } from "./use-known-names.js";
+import { useKnownNames, useTaskStatus } from "./use-known-names.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
 /**
@@ -245,6 +248,8 @@ interface TranscriptLead {
   /** The word before the card's title. */
   label: string;
   icon: ReactNode;
+  /** Whether the card is its task's plan, which wears the task's status's mark in place of `icon` where the window lists the task. */
+  plan?: true;
   /** What the tab says before the first message lands; a turn that ended before one says how instead. */
   startingLine: string;
 }
@@ -253,6 +258,7 @@ interface TranscriptLead {
 export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: <DocumentIcon />,
+  plan: true,
   startingLine: "The agent is starting.",
 };
 
@@ -299,9 +305,10 @@ export interface TranscriptOrigin {
   readonly body?: string | undefined;
 }
 
-/** The task an agent's plan is the plan of, as its card's sender line names it: its name, and the card its sidebar row hangs. */
+/** The task an agent's plan is the plan of, as its card's sender line names it: its name, its status, whose mark it wears, and the card its sidebar row hangs. */
 export interface BriefTask {
   readonly name: string;
+  readonly status: TaskStatus | undefined;
   readonly card: ReactNode;
 }
 
@@ -813,11 +820,17 @@ function PlanCard({
 }): ReactNode {
   const named = sender != null;
   const words = <TranscriptWords text={text} />;
+  // The task's status as the list holds it, else as the window hands the open task live (`LiveDoors`), as its sender reads it.
+  const listed = useTaskStatus(lead.plan ? taskId : undefined);
+  const handed = useContext(LiveDoors)?.cards?.task?.status;
+  const status = lead.plan ? (listed ?? handed) : undefined;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
       <Plan data-task-card="" aria-label={lead.label}>
         <PlanHeader>
-          <PlanIcon>{lead.icon}</PlanIcon>
+          <PlanIcon>
+            {status === undefined ? lead.icon : <TaskStatusMark status={status} />}
+          </PlanIcon>
           <PlanTitle label={lead.label}>{title}</PlanTitle>
         </PlanHeader>
         <PlanContent>
@@ -841,14 +854,14 @@ function PlanCard({
   );
 }
 
-/** A task named as the sender of its plan: its document glyph and its name as one target, hanging its card and opening its plan where the place can. */
+/** A task named as the sender of its plan: its status's mark and its name as one target, hanging its card and opening its plan where the place can. */
 function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | undefined }) {
   return (
     <InlineRef
       look={INLINE_REF_LOOK.WASH}
       glyph={
         <span className="agent-origin-glyph">
-          <DocumentIcon />
+          <PlanGlyph status={task.status} />
         </span>
       }
       label={task.name}

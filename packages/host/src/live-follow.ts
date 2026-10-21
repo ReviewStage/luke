@@ -1,4 +1,9 @@
-import { LIVE_POLL_URL, liveDigestOf, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import {
+  LIVE_POLL_URL,
+  LIVE_SIGNED_OUT,
+  liveDigestOf,
+  type SealedLiveQueryWire,
+} from "@luke/features/live-wire";
 import { Cause, Data, Duration, Effect, Fiber, Queue, Schedule, Stream } from "effect";
 
 /**
@@ -34,7 +39,16 @@ const LIVE_POLL_FLOOR = Duration.millis(500);
 const POLL_BACKOFF = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]);
 /** How often Realtime is subscribed to again while a read is polled. */
 const RESUBSCRIBE_EVERY = Duration.seconds(15);
-/** Why a read stopped for good: it names nothing the account reaches any more. */
+/**
+ * Whether a failed seal ends the read for good: it names nothing the account
+ * reaches any more, or the service refused the session as signed out, which
+ * Neon's guide says is never asked again ("When the session changes").
+ */
+function ended(failed: { readonly failure: string; readonly gone?: boolean }): boolean {
+  return failed.gone === true || failed.failure === LIVE_SIGNED_OUT.failure;
+}
+
+/** Why a read stopped for good: it names nothing the account reaches any more, or its session signed out. */
 const GONE = "the read is gone";
 /** What a go at Realtime leaves to do: subscribe again later, or stay polled, the service answering polled. */
 const AGAIN = "again";
@@ -172,7 +186,7 @@ function realtimeRows<Part extends string>(
         yield* Effect.sleep(Duration.millis(Math.max(0, wait)));
         let next = yield* dependencies.reseal();
         while ("failure" in next) {
-          if (next.gone === true) {
+          if (ended(next)) {
             return yield* Effect.fail(new LiveBroken({ reason: GONE }));
           }
           yield* Effect.sleep(RENEW_RETRY);
@@ -243,7 +257,7 @@ export function liveRows<Part extends string>(
       const pollOnce = Effect.gen(function* () {
         const read = yield* dependencies.poll(seen);
         if ("failure" in read) {
-          if (read.gone === true) {
+          if (ended(read)) {
             gone();
             return yield* Effect.never;
           }
@@ -286,7 +300,7 @@ export function liveRows<Part extends string>(
        * nor where the service answered it polled, Realtime being off.
        */
       const attempt = Effect.gen(function* () {
-        if ("failure" in sealed) return sealed.gone === true ? GONE : AGAIN;
+        if ("failure" in sealed) return ended(sealed) ? GONE : AGAIN;
         if (sealed.url === LIVE_POLL_URL) {
           const rows = rowsOf(parts, sealed);
           if (rows !== undefined) emit(rows);

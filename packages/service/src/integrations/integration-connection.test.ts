@@ -42,17 +42,17 @@ import {
   vercelConnector,
   WorkspaceLinearConnect,
 } from "./integration-connect.js";
-import {
-  type IntegrationAdmission,
-  integrationAccessToken,
-  integrationConnection,
-  integrationUnavailable,
-} from "./integration-connection.js";
+import { integrationConnection } from "./integration-connection.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
   deleteIntegrationConnection,
 } from "./integration-store.js";
+import {
+  type IntegrationAdmission,
+  integrationAccessToken,
+  integrationUnavailable,
+} from "./integration-token.js";
 import {
   beginWorkspaceIntegrationSignIn,
   completeWorkspaceIntegrationSignIn,

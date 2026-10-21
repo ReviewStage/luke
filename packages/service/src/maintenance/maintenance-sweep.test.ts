@@ -7,6 +7,7 @@ import { HOSTED_API_ERROR } from "../http/http.js";
 import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep, type MaintenanceSweepOptions } from "./maintenance-sweep.js";
+import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
@@ -16,6 +17,8 @@ const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed
 const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
 /** What the sweep over the lapsed terminal leases answers. */
 const TERMINALS: TerminalLeaseSweepOutcome = { stopped: 2, released: 1, pending: 0 };
+/** What the sweep over the running native sandboxes answers. */
+const NATIVE: NativeSandboxSweepOutcome = { stopped: 1, held: 1, failed: 0, deferred: 0 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(
@@ -36,6 +39,7 @@ interface Recorded {
   voiced: number[];
   sandboxed: number[];
   terminals: number[];
+  native: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
@@ -50,6 +54,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     voiced: [],
     sandboxed: [],
     terminals: [],
+    native: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
@@ -88,6 +93,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.terminals.push(now);
         return TERMINALS;
+      }),
+    sweepNativeSandboxes: (now) =>
+      Effect.sync(() => {
+        recorded.native.push(now);
+        return NATIVE;
       }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
@@ -135,6 +145,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       voiced: [],
       sandboxed: [],
       terminals: [],
+      native: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -160,6 +171,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       voiced: [],
       sandboxed: [],
       terminals: [],
+      native: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -172,6 +184,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       voiced: [],
       sandboxed: [],
       terminals: [],
+      native: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -189,6 +202,7 @@ it.effect(
 
       assert.equal(answer.status, 200);
       assert.deepEqual(answer.body.terminals, TERMINALS);
+      assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
@@ -202,6 +216,7 @@ it.effect(
         voiced: [instant],
         sandboxed: [instant],
         terminals: [instant],
+        native: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],

@@ -14,7 +14,8 @@
  * `GET /api/live/task-board?id=` answers one task's whiteboard the same way,
  * as one statement that marks where it stands, after the task is read as
  * the account, so one it does not reach is not found, as its board read
- * answers.
+ * answers; and `GET /api/live/task-record?id=` its pages and calls, one
+ * statement a part (`task-record-live.ts`), on the same terms.
  *
  * Either read asked with `?poll=true`, or one Realtime is off for or could
  * not seal, is answered with each statement's rows inline at the poll
@@ -36,7 +37,12 @@ import { boardLiveStatement } from "@luke/database/models/board-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTask } from "@luke/database/models/task-store";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
-import { LIVE_POLL, liveDigestOf, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import {
+  LIVE_POLL,
+  LIVE_USER_QUERY,
+  liveDigestOf,
+  type SealedLiveQueryWire,
+} from "@luke/features/live-wire";
 import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -52,6 +58,7 @@ import {
 } from "../http/http-effect.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
 
 export interface LiveProcedureSeams {
@@ -153,11 +160,21 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** The live reads, each to a signed-in caller. */
+/**
+ * The caller, where they are the account the read names; refused as signed
+ * out otherwise, with the same 401 as no session, as Neon's guide says
+ * ("When the session changes"), so a seal, a renewal or a held poll from a
+ * page left open under another account's session reads nothing of theirs.
+ */
+const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string }, userId: string) =>
+  input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+
+/** The live reads, each to a signed-in caller who is the account it names. */
 export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
       const statements = Option.zipWith(
         accountInboxLiveStatements(context.userId),
         ownFailedRunsLiveStatement(context.userId),
@@ -167,6 +184,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       return yield* sealedParts(statements.value, input);
     }),
     taskBoard: signedIn.taskBoard.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
       const taskId = yield* rowIdOf(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -174,7 +192,17 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts({ board: statement.value }, input);
     }),
+    taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const taskId = yield* rowIdOf(input.id);
+      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = taskRecordLiveStatements(context.userId, taskId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
       const { target } = yield* reachedAgentById(context.userId, input.id);
       const read =

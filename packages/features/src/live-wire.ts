@@ -44,6 +44,17 @@ export const LIVE_POLL_URL = "luke-poll:";
 export const LIVE_POLL = { QUERY: "poll", ON: "true", AFTER: "after" } as const;
 
 /**
+ * The query every live read names the account it was started for under, as
+ * Neon's guide says a page sends its user ("When the session changes"): the
+ * service answers a session of anyone else, or a read naming none, as
+ * signed out.
+ */
+export const LIVE_USER_QUERY = "userId";
+
+/** A live read the service refused as signed out: no session, or one of another account than the read names. */
+export const LIVE_SIGNED_OUT = { failure: "signed-out" } as const;
+
+/**
  * Where a polled read's rows stand as one value: each part's digest, in
  * the parts' name order. A reader sends the one it last saw as `after`, and
  * the service holds the poll until the rows move past it.
@@ -269,6 +280,54 @@ export const taskBoardLiveRowsSchema = EffectSchema.Struct({
 });
 
 export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
+
+/**
+ * An open task's pages and calls sealed for following: the address, and one
+ * statement a part, each a mark that moves as its rows do and carries none
+ * of their words: the pages agents showed (`pages`) and the calls about the
+ * task (`calls`). The desktop reads a part again once its mark moves,
+ * rather than when a call's activity or end suggests it might have; the
+ * board is followed on its own (`taskBoardLiveAnswerSchema`). The service
+ * answers `not-found` for a task the account does not reach, and
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
+ */
+export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    pages: sealedLiveQuerySchema,
+    calls: sealedLiveQuerySchema,
+  }),
+});
+
+export type TaskRecordLiveAnswer = typeof taskRecordLiveAnswerSchema.Type;
+
+/** One page shown on the task as its row delivers it: its newest version's number. */
+const taskPageLiveRowSchema = EffectSchema.Struct({
+  pageId: EffectSchema.String,
+  version: EffectSchema.Finite,
+});
+
+/** One call about the task as its row delivers it: when and how it ended, null while it stands; what it metered and its model; its last fragment; and how many rows the voice wrote for it. */
+const taskCallLiveRowSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  closedAt: EffectSchema.NullOr(EffectSchema.Finite),
+  closeReason: EffectSchema.NullOr(EffectSchema.String),
+  usage: EffectSchema.NullOr(
+    EffectSchema.Struct({ seconds: EffectSchema.Finite, confirmed: EffectSchema.Boolean }),
+  ),
+  model: EffectSchema.NullOr(EffectSchema.String),
+  lastSegment: EffectSchema.Finite,
+  spoken: EffectSchema.Finite,
+});
+
+/** The task's pages and calls as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+export const taskRecordLiveRowsSchema = EffectSchema.Struct({
+  pages: EffectSchema.Array(taskPageLiveRowSchema),
+  calls: EffectSchema.Array(taskCallLiveRowSchema),
+});
+
+export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
 
 /**
  * A coding agent's transcript, or one of its workers', sealed for

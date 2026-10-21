@@ -3376,11 +3376,15 @@ ul.actor-stack {
 }
 
 /* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
-   its writer's face in a column of its own, a list row's 20px, then its
-   name and when on one line and its words under it, and a line down from
-   the face to the next comment's, as an issue's timeline joins them. */
+   its writer's chip, their face and name as one target, and when on one
+   line, and its words under it, indented past a gutter a list row's 20px
+   wide. The chip stands out into the gutter, its 16px face centred on the
+   line that runs down through every comment's face, as an issue's
+   timeline joins them, so the face is the gutter's and is drawn once. */
 .inbox-thread {
   --inbox-face: 20px;
+  /* The chip's face, an actor's in a line (`ACTOR_SIZE.INLINE`). */
+  --inbox-mark: 16px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -3390,9 +3394,10 @@ ul.actor-stack {
 
 .inbox-comment {
   position: relative;
-  display: grid;
-  grid-template-columns: var(--inbox-face) minmax(0, 1fr);
-  column-gap: var(--luke-space-12);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-4);
   padding-bottom: var(--luke-space-20);
 }
 
@@ -3400,20 +3405,22 @@ ul.actor-stack {
   padding-bottom: 0;
 }
 
+/* The line runs from the comment's face down to the next one's, under it,
+   since each face's head stands over the line in a ring of the ground that
+   cuts the line short of the face. */
 .inbox-comment:not(:last-child)::before {
   position: absolute;
-  top: calc(var(--inbox-face) + var(--luke-space-6));
-  bottom: var(--luke-space-6);
+  top: calc(var(--inbox-face) / 2);
+  bottom: calc(var(--inbox-face) / -2);
   left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
-  border-radius: 1px;
   background: var(--luke-color-border);
   content: "";
 }
 
 /* Where a thread read is cut to its latest messages, a muted line in the
    comments' column says the earlier ones stand in the agent's tab, the line
-   down from the faces running on past it. */
+   down through the faces running on past it. */
 .inbox-thread-earlier {
   position: relative;
   padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-space-12));
@@ -3424,60 +3431,90 @@ ul.actor-stack {
 .inbox-thread-earlier::before {
   position: absolute;
   top: 0;
-  bottom: var(--luke-space-6);
-  left: 9px;
+  bottom: calc(var(--inbox-face) / -2);
+  left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
-  border-radius: 1px;
   background: var(--luke-color-border);
   content: "";
 }
 
-.inbox-comment-face {
-  display: flex;
-  height: var(--inbox-face);
-}
-
-.inbox-comment-main {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-}
-
+/* The head starts where its chip's face stands centred on the gutter's
+   line, and stands over the line the comment before draws into it. It
+   keeps to one row, so nothing after the chip wraps under it onto the
+   line: a narrow pane cuts the writer's name short first, and what is said
+   of when wraps beside the chip only once the name can give no more. */
 .inbox-comment-head {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   min-height: var(--inbox-face);
-  flex-wrap: wrap;
   align-items: center;
   column-gap: var(--luke-space-6);
+  margin-left: calc((var(--inbox-face) - var(--inbox-mark)) / 2);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
-/* The writer is named by name alone in the thread's own ink, since their
-   face already stands in the column beside it. */
+/* The writer is named by their chip in the thread's own ink, cut short
+   rather than run past a narrow pane. */
 .inbox-comment-name {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   color: var(--luke-color-text);
   font-size: var(--luke-type-label-size);
   font-weight: var(--luke-weight-medium);
 }
 
+/* The chip's face masks the line running through it with a ring of the
+   ground, as a facepile's faces are cut from it, so the line reads as
+   joining the faces. A bare square, or someone's outline, is filled with
+   the ground too, so the line never shows through its glyph; a member who
+   left keeps their own tile. */
+.inbox-comment-name .actor-mark {
+  box-shadow: 0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+.inbox-comment-name .actor-mark:not([data-left="true"]) {
+  background: var(--luke-color-ground);
+}
+
+.inbox-comment-name .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+/* Under the pointer the chip's wash runs on over the face's ring, so the
+   ring reads as the wash's own rather than a halo of the ground in it. */
+.inbox-comment-name .luke-inline-ref:hover .actor-mark {
+  box-shadow:
+    0 0 0 3px var(--luke-color-fill-hover),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+.inbox-comment-name .luke-inline-ref:hover .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 3px var(--luke-color-fill-hover),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
 .inbox-comment-when {
   display: inline-flex;
-  min-width: 0;
+  min-width: min-content;
   flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--luke-space-4);
 }
 
-/* A comment's words are set as a message's are, and clip what runs past
-   them as a message does, though not the keyboard's ring on an option laid
-   edge to edge in them. */
+/* A comment's words are set as a message's are, indented past the gutter
+   under the chip's name, and clip what runs past them as a message does,
+   though not the keyboard's ring on an option laid edge to edge in them. */
 .inbox-comment-body {
   display: flex;
+  margin-left: calc(var(--inbox-face) + var(--luke-space-12));
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-8);
@@ -3808,16 +3845,15 @@ ul.actor-stack {
   padding: 0;
 }
 
-/* The open question's controls at the top of the draft's card, over its
-   note, with no head of their own, since the agent's message says what it
-   asks; a hairline between them and the note. */
+/* The open question's controls as the draft's card's body, over its foot,
+   with no card, border, or head of their own, since the agent's message
+   says what it asks. */
 .inbox-draft-ask {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-4);
 }
 
 /* Put away with its task, the question stands in the agent's message as a
@@ -3826,14 +3862,6 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-overlay);
-}
-
-/* A thread's Reply names its chord after its words, in its own ink a step
-   quieter, since the button's fill is the text's own colour. */
-.inbox-answer-actions .luke-button .shortcut {
-  margin-left: var(--luke-space-6);
-
-  --shortcut-ink: color-mix(in srgb, currentColor 60%, transparent);
 }
 
 /* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
@@ -5171,7 +5199,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   list-style: none;
 }
 
-/* A message is laid out as an Inbox comment is (`.inbox-comment`): its
+/* A message is laid out as a comment thread is: its
    author's face in a column of its own at a list row's 20px, then their
    name and when on one line in the caption's muted ink, and the words under
    it at the reading measure's leading. */
@@ -5212,7 +5240,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* The author is named by name alone in the stream's own ink, their face
-   already standing beside it, as an Inbox comment's writer is. */
+   already standing beside it. */
 .chat-byline-name {
   display: flex;
   min-width: 0;

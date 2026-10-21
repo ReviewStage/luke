@@ -8,15 +8,12 @@ import {
   type FileContents,
   type FileDiffMetadata,
   type FileDiffOptions,
-  getFiletypeFromFileName,
-  getSharedHighlighter,
   getSingularPatch,
   type LineAnnotation,
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
   parsePatchFiles,
-  renderFileWithHighlighter,
   type SelectedLineRange,
 } from "@pierre/diffs";
 import { FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
@@ -26,10 +23,7 @@ import {
   ANNOTATION_BAND_ATTRIBUTE,
   markAnnotationBands,
 } from "./annotation-bands.js";
-import { colouredFrom } from "./colour-lines.js";
 import {
-  type ColouredLines,
-  type ColourRequest,
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
   type DiffLineRange,
@@ -60,7 +54,7 @@ import {
 } from "./contract.js";
 import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
-import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
+import { type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
@@ -1338,52 +1332,4 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
   };
 }
 
-/**
- * A run of a file's lines coloured in the look's syntax themes, as a list's
- * files are: in the kept pool's workers once they hold the look, or on the
- * window's own thread where the pool settled there; none where the file's
- * name names no grammar Pierre carries, or the colouring failed.
- */
-async function colourLines(request: ColourRequest): Promise<ColouredLines | undefined> {
-  colouringsAsked += 1;
-  const file = {
-    name: request.name,
-    contents: request.lines.join("\n"),
-    cacheKey: String(colouringsAsked),
-  };
-  if (getFiletypeFromFileName(file.name) === PLAIN_TEXT) return undefined;
-  const highlighting = listHighlighting(request.look);
-  const { pool } = highlighting;
-  try {
-    if ((await highlighting.settled) === HIGHLIGHT_MODE.POOL && pool !== undefined) {
-      await highlighting.follow(request.look);
-      await pool.primeFileHighlightCache(file);
-      const cached = pool.getFileResultCache(file)?.result;
-      // Its key is never asked for again, so the result is let go once read.
-      pool.evictFileFromCache(file.cacheKey);
-      return cached === undefined ? undefined : colouredFrom(cached, request.lines.length);
-    }
-    const { dark, light } = request.look.themes;
-    const highlighter = await getSharedHighlighter({
-      themes: [dark, light],
-      langs: [getFiletypeFromFileName(file.name)],
-      preferredHighlighter: "shiki-js",
-    });
-    const drawn = renderFileWithHighlighter(file, highlighter, {
-      theme: request.look.themes,
-      useTokenTransformer: false,
-      tokenizeMaxLineLength: MAX_LINE_DIFF_LENGTH,
-    });
-    return colouredFrom(drawn, request.lines.length);
-  } catch {
-    return undefined;
-  }
-}
-
-/** How many colourings were asked for, which names each in the pool's cache, as `patchesRead` names a list's reads. */
-let colouringsAsked = 0;
-
-/** The name Pierre gives a file whose name names no grammar. */
-const PLAIN_TEXT = "text";
-
-export const diffView: DiffViewModule = { mount, mountList, mountFile, colourLines };
+export const diffView: DiffViewModule = { mount, mountList, mountFile };

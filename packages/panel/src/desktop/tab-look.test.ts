@@ -9,7 +9,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
-import type { Task, TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -31,8 +31,9 @@ import { DesktopTasks } from "./desktop-tasks.js";
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
  * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, the task's own tab hangs the task's card, and
- * a page's tab hangs a card previewing the page.
+ * that strip's "+" menu wears, the Plan tab is the task's own name and
+ * status, the task's own tab hangs the task's card, and a page's tab hangs a
+ * card previewing the page.
  */
 
 const TASK: Task = {
@@ -52,6 +53,7 @@ const SUMMARY: TaskSummary = {
   createdAt: TASK.createdAt,
   updatedAt: TASK.updatedAt,
   repository: TASK.repository,
+  status: TASK_STATUS.IN_PROGRESS,
   agents: {
     total: 1,
     working: 1,
@@ -274,6 +276,21 @@ test("the side panel's + offers a working subagent and an agent's Pull request i
     /data-pull-request-state="open"/u,
     "the Pull request tab wears its pull request's mark for where it stands",
   );
+});
+
+test("the side panel's Plan tab is named for the task and wears its status's mark, and its + offers it in that look", async () => {
+  const panel = (await mount()).querySelector(".side-panel-tabs");
+  assert.ok(panel, "the side panel's strip");
+  const tabs = tabLooks(panel);
+  const rows = rowLooks(panel);
+  assert.ok(!tabs.has("Plan"), "no tab says Plan");
+  assert.ok(tabs.has(TASK.name), "the strip has a tab named for the task");
+  assert.match(
+    tabs.get(TASK.name)?.glyph ?? "",
+    /data-status="in-progress"/u,
+    "the Plan tab wears the task's status as the list holds it",
+  );
+  assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name), "the Plan looks the same in the +");
 });
 
 test("the Call's tab hangs the task's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", async () => {

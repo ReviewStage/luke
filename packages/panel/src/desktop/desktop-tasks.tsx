@@ -53,7 +53,6 @@ import {
   INBOX_SHOW,
   type InboxListed,
   inboxCounts,
-  inboxList,
   listedItems,
   NEEDS_YOU,
   taskHolder,
@@ -77,6 +76,7 @@ import { useMinute } from "../tasks/task-time.js";
 import { CallBar } from "../tasks/tasks-parts.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
@@ -257,9 +257,11 @@ function TaskInboxTab({
     show: show.show,
     readerId: tasks.me,
   };
-  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
-  const list = inboxList(groups, { ...filter, chosen: undefined });
-  const steps = inboxList(groups, { ...filter, chosen: asked });
+  // Note that the tab stands in the side panel, so it is on screen while the panel is.
+  const shown = tasks.shown && tasks.sidePanel.open;
+  // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its
+  // place, both held still while the tab is shown (`use-held-inbox-list.ts`).
+  const { list, steps } = useHeldInboxList(groups, filter, asked, shown);
   const listed = listedItems(list);
   const chosen = listedItems(steps).find(({ item }) => item.id === asked) ?? firstChoice(list);
   // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
@@ -267,8 +269,6 @@ function TaskInboxTab({
   const filteredOut = show.show !== INBOX_SHOW.ALL && listed.length === 0 && items.length > 0;
   // Note that the way back counts every item, filtered out or not, since the list holds the view's menu.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
-  // Note that the tab stands in the side panel, so it is on screen while the panel is.
-  const shown = tasks.shown && tasks.sidePanel.open;
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
@@ -710,7 +710,11 @@ function PlanDocument({
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
             shownCode: shownCode ?? [],
-            task: { name: listedCard.name, card: taskCardOf(tasks, listedCard, now) },
+            task: {
+              name: listedCard.name,
+              status: listedCard.status,
+              card: taskCardOf(tasks, listedCard, now),
+            },
           }),
     [agents, conversation, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
   );
@@ -1103,6 +1107,7 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         plan={documentBody}
+                        task={{ name: task.name, status: listed.status }}
                         inbox={{
                           body: inboxBody,
                           waiting: inbox.board.open.length,

@@ -430,6 +430,17 @@
   pointer-events: none;
 }
 
+/* The room a date picker opened from words at rest hangs in
+   (`words-dates.tsx`): laid over the words whole, so the picker is placed
+   from the room's own box wherever it stands, and only the picker takes
+   the pointer. */
+.words-date-room {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
 .date-picker-anchor > * {
   pointer-events: auto;
 }
@@ -1191,8 +1202,8 @@
   margin-left: auto;
 }
 
-/* A File tab: the file's heading over its lines, which fill the tab and
-   scroll, with a row above and below them that reads more of the file. */
+/* A File tab: its file, or the lines Luke showed of it under why the file
+   is not shown, filling the tab. */
 .file-tab {
   display: flex;
   min-height: 0;
@@ -1209,22 +1220,6 @@
    the place, which a note between them measures itself by. */
 .code-lines-frame {
   container: code-lines / inline-size;
-}
-
-/* Lines in a syntax theme other than the window's own (themed-lines.tsx)
-   stand on the theme's ground, as a diff in that theme does; every run
-   coloured in the theme names its own ink. */
-.code-lines-ground {
-  --code-ground: light-dark(
-    var(--theme-ground-light, var(--luke-color-ground)),
-    var(--theme-ground-dark, var(--luke-color-ground))
-  );
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 0%;
-  flex-direction: column;
-  background: var(--code-ground);
 }
 
 .code-lines[data-wrap="false"] {
@@ -4272,11 +4267,38 @@
   font-size: var(--luke-type-caption-size);
 }
 
-.file-tab-edge {
-  padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
-  color: var(--luke-color-text-subtle);
-  -webkit-user-select: none;
-  user-select: none;
+/* A whole file drawn by Pierre (whole-file.tsx), a File tab's or a page's
+   source: its scroll area fills the place, Pierre drawing into it as the
+   scroller it virtualizes over, with the ring standing over it while the
+   diff bundle loads. */
+.whole-file {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.whole-file > .luke-spinner-region {
+  position: absolute;
+  inset: 0;
+}
+
+/* A note under a line of a whole file, its card or its chip: Pierre stands
+   it at the code's column, sticky in view while unwrapped lines scroll
+   sideways, so it keeps only the room between it and the lines, and none
+   while it is a chip alone, which floats over the end of its line. */
+.whole-file-note {
+  padding: var(--luke-space-6) var(--luke-space-12) var(--luke-space-6) 0;
+  white-space: normal;
+}
+
+.whole-file-note:has(> .diff-thread-chip-row:only-child:not([open])) {
+  padding-block: 0;
+}
+
+.whole-file-note .file-note {
+  margin: 0;
 }
 
 /* Luke's note under the lines it is on, in a File tab (file-note.tsx): the
@@ -5756,74 +5778,52 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 }
 
 /* The Inbox's answer box draws the same card and field
-   (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
-   box's does, and its quiet line beside it is cut short before its
-   microphone and Send are, and goes once the card is too narrow for
-   both, when the microphone goes too. */
-.inbox-answer-tools {
-  flex: 1 1 0;
+   (`inbox-answer-box.tsx`), but its foot is one row and its field is in it:
+   the +, the note line, one line that grows as it is written, the
+   microphone, and Send, each press standing at the line's last row. While
+   a dictation holds the line, its strip stands under it in the presses'
+   place. */
+.inbox-answer-foot {
+  align-items: flex-end;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6) var(--luke-space-8) var(--luke-space-8);
 }
 
-.inbox-answer-quiet {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-  padding-inline: var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+.inbox-answer-foot[data-dictating] {
+  flex-wrap: wrap;
 }
 
+.inbox-answer-tools,
 .inbox-answer-actions {
   display: flex;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: none;
   align-items: center;
   gap: var(--luke-space-4);
 }
 
-.inbox-answer-quiet [data-inbox-quiet] {
+.inbox-answer-foot > .agent-composer-field {
+  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  --agent-composer-field-block: calc(2 * var(--luke-space-6));
 }
 
-/* What a send found the answer lacking reads in the attention ink, as the
-   item's own mark does, until it is filled. */
-.inbox-answer-quiet [data-wanting] {
-  color: var(--luke-color-attention);
+.inbox-answer-foot[data-dictating] > .agent-composer-field {
+  flex-basis: 100%;
 }
 
-/* A box answered in words alone holds its round Send at the field's end
-   once the card is narrow, so the field keeps to one line and the thread
-   above it keeps its room. */
-.inbox-answer {
-  position: relative;
+.inbox-answer-foot .agent-composer-input {
+  padding: var(--luke-space-6) var(--luke-space-4);
 }
 
-@container composer (max-width: 299px) {
-  .inbox-answer-foot .inbox-answer-quiet,
-  .inbox-answer .dictate-button,
-  .inbox-answer:not([data-named-send]) .inbox-answer-tools {
+.inbox-answer-foot .agent-composer-placeholder {
+  padding: var(--luke-space-6) var(--luke-space-4) 0;
+}
+
+/* Only on the narrowest card does the microphone go, so the line keeps its
+   room beside the + and Send. */
+@container composer (max-width: 239px) {
+  .inbox-answer .dictate-button {
     display: none;
-  }
-
-  .inbox-answer:not([data-named-send]) .agent-composer-input {
-    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
-      var(--luke-space-12) var(--luke-space-12);
-  }
-
-  .inbox-answer:not([data-named-send]) .agent-composer-placeholder {
-    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
-      var(--luke-space-12);
-  }
-
-  .inbox-answer:not([data-named-send]) > .inbox-answer-foot {
-    position: absolute;
-    right: var(--luke-space-6);
-    bottom: var(--luke-space-6);
-    padding: 0;
   }
 }
 
@@ -6193,8 +6193,8 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   transition: transform var(--duration-quick) var(--motion-pane);
 }
 
-/* A text file's lines fill the card under its header and scroll there
-   (code-lines.tsx), on the code's ground. */
+/* A text file fills the card under its header and scrolls there, drawn
+   as every code is (whole-file.tsx), on the code's ground. */
 .attachment-viewer-lines {
   display: flex;
   flex-direction: column;
@@ -7934,6 +7934,7 @@ button.picture-frame {
    its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,
    which holds the list's own padded element). */
 .comments-tab {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
