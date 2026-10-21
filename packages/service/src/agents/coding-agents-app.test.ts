@@ -129,6 +129,8 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentNewestAnswerSchema,
+  codingAgentOlderAnswerSchema,
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
@@ -314,6 +316,8 @@ const ORIGIN = "https://luke.test";
 const TASK_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
+const AGENT_NEWEST = "/api/agents/messages-newest";
+const SUBAGENT_NEWEST = "/api/agents/subagent-messages-newest";
 const AGENT_STARTS = "/api/agents/agents";
 const AGENT = "/api/agents/agent";
 const AGENT_CALLS = "/api/agents/calls";
@@ -558,6 +562,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
   ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
+  ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
@@ -676,6 +681,10 @@ const standing = (
           url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
           return routed(new Request(url, request), webServices);
         }
+        if (pathname === SUBAGENT_NEWEST && id !== null && call !== null) {
+          url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages/newest`;
+          return routed(new Request(url, request), webServices);
+        }
         if (pathname === CHAT || pathname === WORKSPACE_AGENTS) return routed(request, webServices);
         if (pathname === CHAT_ATTACHMENT) return chatPictures.handler(request);
         return pathname === TASKS || TASK_PATH.test(pathname)
@@ -707,6 +716,7 @@ function request(
     after?: string;
     call?: string;
     wait?: string;
+    before?: string;
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
@@ -727,6 +737,7 @@ function request(
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.wait !== undefined) url.searchParams.set("wait", init.wait);
+  if (init.before !== undefined) url.searchParams.set("before", init.before);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
@@ -7037,6 +7048,121 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id, wait: "none" })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "a transcript read back from its end answers its newest page first, each page below it in turn with no row missed or repeated, and the cursor a follow from it hears the next row by; another account's agent answers nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        const PAGE = CODING_AGENT_BOUNDS.MESSAGES_PAGE;
+        // Two pages and some, so the oldest page is the short one that ends the read.
+        const total = 2 * PAGE + 37;
+        const said = Array.from({ length: total }, (_, at) => `Step ${at}.`);
+        yield* Database.use((db) =>
+          db.insert(messages).values(
+            said.map((words, at) => ({
+              userId: stored.userId,
+              conversationId: stored.conversationId,
+              seq: at + 1,
+              clientId: randomUUID(),
+              role: MESSAGE_ROLE.ASSISTANT,
+              // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+              parts: [text(words)] as never,
+              metadata: { author: MESSAGE_AUTHOR.BRAIN },
+              placedAt: new Date(),
+            })),
+          ),
+        );
+        const wordsOf = (page: { readonly messages: readonly CodingAgentMessage[] }) =>
+          page.messages.map((message) =>
+            message.parts.map((part) => ("text" in part ? part.text : "")).join(""),
+          );
+
+        const newest = readAnswer(
+          codingAgentNewestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_NEWEST, owner, { id: agent.id })),
+        );
+        assert.deepEqual(wordsOf(newest), said.slice(-PAGE), "the newest page, oldest first");
+        assert.equal(newest.status, CODING_AGENT_STATUS.STARTING);
+        assert.notEqual(newest.before, undefined, "a full page says more stands below it");
+
+        const read = [...wordsOf(newest)];
+        let before = newest.before;
+        let pages = 1;
+        while (before !== undefined) {
+          const older = readAnswer(
+            codingAgentOlderAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(AGENT_NEWEST, owner, { id: agent.id, before })),
+          );
+          read.unshift(...wordsOf(older));
+          before = older.before;
+          pages += 1;
+        }
+        assert.deepEqual(read, said, "every row once, in order");
+        assert.equal(pages, 3);
+
+        // A row written after the newest page was read is heard by the follow from its cursor, and nothing before it.
+        yield* transcriptRow(stored, total + 1, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
+        const followed = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT_MESSAGES, owner, { id: agent.id, after: newest.cursor, wait: "none" }),
+          ),
+        );
+        assert.deepEqual(wordsOf(followed), ["Done."]);
+
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(yield* ask(request(AGENT_NEWEST, other, { id: agent.id })), notFound);
+        assert.deepEqual(
+          yield* ask(request(AGENT_NEWEST, other, { id: agent.id, before: "100" })),
+          notFound,
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_NEWEST, owner, { id: agent.id, before: "-1" })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a short transcript read back from its end is its newest page alone, and a worker's whose call is not recorded yet is an empty page of a starting worker",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text("Expire invitations.")]);
+        const newest = readAnswer(
+          codingAgentNewestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_NEWEST, owner, { id: agent.id })),
+        );
+        assert.equal(newest.messages.length, 1);
+        assert.equal(newest.before, undefined, "nothing older stands");
+
+        const worker = readAnswer(
+          codingAgentNewestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(SUBAGENT_NEWEST, owner, { id: agent.id, call: "call-7" })),
+        );
+        assert.deepEqual(worker.messages, []);
+        assert.equal(worker.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(worker.before, undefined);
       }),
   );
 });
