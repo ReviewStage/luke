@@ -5827,7 +5827,14 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             ["CSV or JSON?", second.id, secondAgent.id, secondAgent.model],
           ].sort(),
         );
-        assert.ok(all.items.every((item) => item.agentTitle === null));
+        // Each item names its agent as the agent goes by, the human name it was given.
+        assert.deepEqual(
+          all.items.map((item) => [item.title, item.agentTitle]).sort(),
+          [
+            [QUESTION.title, agent.personaName ?? null],
+            ["CSV or JSON?", secondAgent.personaName ?? null],
+          ].sort(),
+        );
 
         yield* updateTask(owner, second.id, { archived: true });
         assert.deepEqual(
