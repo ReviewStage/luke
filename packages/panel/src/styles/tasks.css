@@ -8061,3 +8061,11 @@ button.picture-frame {
 .agent-plan-label[data-state="attention"] {
   color: var(--luke-color-attention);
 }
+
+/* One of an agent's log's rows (`agent-tab.tsx`, drawn only near the view
+   by `ConversationRows`): a message with what stands with it, a call's
+   divider, the lines said ahead of it, a replay's card, a step apart as the
+   log's own lines are. */
+.agent-log-row > :not(:last-child) {
+  margin-block-end: var(--luke-space-12);
+}

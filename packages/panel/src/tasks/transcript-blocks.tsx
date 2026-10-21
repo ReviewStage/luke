@@ -657,12 +657,46 @@ export interface TranscriptElement {
   readonly components: Components;
 }
 
-/** A turn's words as markdown, with an element of the transcript's own written in where one is given. */
+/** How Streamdown reads words: block by block as they still stream in, an unclosed fence or emphasis drawn as written so far, or as a whole once settled. */
+const WORDS_MODE = {
+  STREAMING: "streaming",
+  STATIC: "static",
+} as const;
+
+/** The components and tags an element of the transcript's own is drawn with beside the transcript's own, the same objects while the element names the same. */
+function useElementDraw(element: TranscriptElement | undefined): {
+  components: Components;
+  allowedTags: Record<string, string[]>;
+  literal: string[] | undefined;
+} {
+  const extra = element?.components;
+  const tag = element?.tag;
+  const attributes = element?.attributes.join(" ");
+  return useMemo(
+    () =>
+      extra === undefined || tag === undefined || attributes === undefined
+        ? { components: TRANSCRIPT_COMPONENTS, allowedTags: MENTION_TAGS, literal: undefined }
+        : {
+            components: { ...TRANSCRIPT_COMPONENTS, ...extra },
+            allowedTags: { ...MENTION_TAGS, [tag]: attributes === "" ? [] : attributes.split(" ") },
+            literal: [tag],
+          },
+    [extra, tag, attributes],
+  );
+}
+
+/**
+ * A turn's words as markdown, with an element of the transcript's own
+ * written in where one is given. Words still being written are read as
+ * they stream (`streaming`), so each block already drawn is not parsed
+ * again as the next lands; settled words are read once, whole.
+ */
 export function TranscriptWords({
   text,
   element,
   typed = false,
   asDocument = false,
+  streaming = false,
 }: {
   text: string;
   element?: TranscriptElement | undefined;
@@ -670,33 +704,22 @@ export function TranscriptWords({
   typed?: boolean | undefined;
   /** Whether the words are drawn as a document, as an Inbox item's are: pictures written next to each other side by side, and a link alone in its paragraph as its card (`lone-link-card.tsx`). */
   asDocument?: boolean | undefined;
+  /** Whether the words are still being written, as a running turn's newest are. */
+  streaming?: boolean | undefined;
 }): ReactNode {
   const remarkPlugins = remarkPluginsFor(typed, asDocument);
-  if (element === undefined) {
-    return (
-      <TranscriptMarkdownSource markdown={text}>
-        <MessageResponse
-          mode="static"
-          components={TRANSCRIPT_COMPONENTS}
-          remarkPlugins={remarkPlugins}
-          allowedTags={MENTION_TAGS}
-        >
-          {text}
-        </MessageResponse>
-      </TranscriptMarkdownSource>
-    );
-  }
+  const { components, allowedTags, literal } = useElementDraw(element);
   // Note that the source stays the words as written, because a code block's copy reads it.
   return (
     <TranscriptMarkdownSource markdown={text}>
       <MessageResponse
-        mode="static"
-        components={{ ...TRANSCRIPT_COMPONENTS, ...element.components }}
+        mode={streaming ? WORDS_MODE.STREAMING : WORDS_MODE.STATIC}
+        components={components}
         remarkPlugins={remarkPlugins}
-        allowedTags={{ ...MENTION_TAGS, [element.tag]: [...element.attributes] }}
-        literalTagContent={[element.tag]}
+        allowedTags={allowedTags}
+        {...(literal === undefined ? {} : { literalTagContent: literal })}
       >
-        {element.markdown}
+        {element === undefined ? text : element.markdown}
       </MessageResponse>
     </TranscriptMarkdownSource>
   );
