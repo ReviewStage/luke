@@ -1164,7 +1164,8 @@ function waitingMessages(tasks: TasksControl): number {
 /**
  * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
  * how many messages wait on the developer in For you at its end, in the
- * Inbox's even figures but muted, nothing at none. A press opens the window's Chat
+ * Inbox's even figures and its accent, since both count what waits on the
+ * reader, nothing at none. A press opens the window's Chat
  * (`desktop-chat.tsx`), and the row is the place shown while it stands.
  */
 function SidebarChatRow({
@@ -1180,7 +1181,7 @@ function SidebarChatRow({
     <NavItem
       icon={<MessagesSquareIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
-      count={{ value: waiting, noun: "waiting on you" }}
+      count={{ value: waiting, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT }}
       onClick={onOpen}
     >
       Chat

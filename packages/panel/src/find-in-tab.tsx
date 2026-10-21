@@ -77,6 +77,7 @@ export interface FindTally {
 export const FIND_PAGE = {
   HOME: "home",
   INBOX: "inbox",
+  CHAT: "chat",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
   BOARD: "board",

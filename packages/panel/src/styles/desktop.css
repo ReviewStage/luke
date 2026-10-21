@@ -165,21 +165,22 @@ body,
 
 /* A narrow room shows a screen's list or the item chosen in it, one at a
    time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
-   list or its page, a version history's versions or the version, each the
-   shell's one column, and Chat's rail or its place, the view's one column.
-   The one shown stands alone, so no edge parts it from the other. */
+   list or its page and a version history's versions or the version, each the
+   shell's one column. Chat does the same by its own width as well as a
+   narrow room's (`column-split.ts`), its rail or its place the view's one
+   column. The one shown stands alone, so no edge parts it from the other. */
 .desktop-shell[data-room="narrow"]:not([data-sidebar-collapsed]),
-.desktop-shell[data-room="narrow"] .chat-view {
+.chat-view[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.desktop-shell[data-room="narrow"]
-  :is(.desktop-settings, .desktop-version-history, .chat-view)
-  > [hidden] {
+.desktop-shell[data-room="narrow"] :is(.desktop-settings, .desktop-version-history) > [hidden],
+.chat-view[data-single="true"] > [hidden] {
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log, .chat-rail) {
+.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log),
+.chat-view[data-single="true"] > .chat-rail {
   border-right: 0;
 }
 
@@ -3162,7 +3163,11 @@ ul.actor-stack {
   > .page-find
   > .inbox-view
   .inbox-tasks-bar,
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main > .chat-view .chat-rail-bar {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .chat-view
+  .chat-rail-bar {
   display: grid;
   grid-template-columns:
     minmax(
@@ -3183,6 +3188,7 @@ ul.actor-stack {
   .desktop-toolbar-heading,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .chat-view
   .chat-rail-bar
   .desktop-toolbar-heading {
@@ -3198,6 +3204,7 @@ ul.actor-stack {
   .desktop-toolbar-actions,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .chat-view
   .chat-rail-bar
   .desktop-toolbar-actions {

@@ -947,7 +947,8 @@ export function useWindowHistory(input: {
   const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
-  const chatListed = narrow ? tasks.chatView.listed : undefined;
+  // Chat showing one column, by its own width or a narrow room's, steps between its rail and its place as the Inbox does.
+  const chatListed = narrow || tasks.chatView.single === true ? tasks.chatView.listed : undefined;
   // The place Chat shows, alone in a narrow room or beside its rail in a wide one; none while a narrow room's rail stands.
   const chatShownPlace = chatListed === true ? undefined : tasks.chatView.place;
   const panelOpen = tasks.sidePanel.open;

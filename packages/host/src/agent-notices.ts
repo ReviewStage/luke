@@ -749,6 +749,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         taskless: waitingTaskless(listed),
         automations: answer.automations ?? [],
         failedRuns: answer.failedRuns ?? [],
+        chat: chatOf(answer).map((entry) => entry.messageId),
       };
     }
 

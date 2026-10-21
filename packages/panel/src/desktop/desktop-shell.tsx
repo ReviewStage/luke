@@ -356,6 +356,17 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // Chat is an experiment as Factory is, so ⌘K offers it only on the terms its sidebar row stands on.
+  const chatOn = useChatOn();
+  useAppCommand(
+    APP_COMMAND.CHAT,
+    pastGate && tasks.signedIn && chatOn && tasks.chatView.available
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.chatView.onOpen();
+        }
+      : undefined,
+  );
   useAppCommand(
     APP_COMMAND.AUTOMATIONS,
     pastGate && tasks.signedIn
@@ -747,11 +758,15 @@ export function DesktopShell({
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
             {chatOpen ? (
-              <DesktopChat
-                tasks={tasks}
-                room={room}
-                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-              />
+              <PageFind page={FIND_PAGE.CHAT} active={tasks.shown}>
+                <DesktopChat
+                  tasks={tasks}
+                  room={room}
+                  accountName={
+                    account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined
+                  }
+                />
+              </PageFind>
             ) : inboxOpen ? (
               <DesktopInbox tasks={tasks} listing={sharedListing} />
             ) : pageAgent !== undefined ? (

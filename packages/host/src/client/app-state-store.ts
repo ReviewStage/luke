@@ -271,7 +271,7 @@ export function initialAppState(
     voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },

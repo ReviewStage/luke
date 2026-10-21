@@ -11,6 +11,7 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import type { ChatShown } from "@luke/host/contract";
 import {
   APP_SETTING_SCHEMA,
   EXPERIMENT,
@@ -97,6 +98,7 @@ const NO_UNSEEN_AGENTS: readonly string[] = [];
 
 /** Nothing waits on the developer, as the document reads before main has answered. */
 const NOTHING_WAITING: readonly AppInboxTask[] = [];
+const NO_CHAT_WAITING: readonly string[] = [];
 
 /** No task holds an inbox item, as the document reads before main has answered. */
 const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
@@ -139,6 +141,12 @@ const ZOOM = Atom.map(APP_SETTINGS_VIEW, (settings) => settings?.zoom);
 const INBOX_WAITING: Atom.Atom<readonly AppInboxTask[]> = Atom.map(
   APP_SLICE.INBOX,
   (inbox) => inbox?.waiting ?? NOTHING_WAITING,
+);
+
+/** The chat messages that wait on the developer across the account's workspaces, by id. */
+const CHAT_WAITING: Atom.Atom<readonly string[]> = Atom.map(
+  APP_SLICE.INBOX,
+  (inbox) => inbox?.chat ?? NO_CHAT_WAITING,
 );
 
 /** The version of main's document the window holds, which moves with every delivery. */
@@ -210,6 +218,18 @@ function InboxToasts({
   shownInbox: string | null;
 }): null {
   useInboxToasts(onView, useAppSlice(INBOX_WAITING), useAppSlice(APP_STATE_VERSION), shownInbox);
+  return null;
+}
+
+/** The toasts of chat messages that wait on the developer, withdrawn as they stop waiting, on the same terms as {@link InboxToasts}. */
+function ChatToasts({
+  onView,
+  shown,
+}: {
+  onView: (workspaceId: string, messageId: string) => void;
+  shown: ChatShown | null;
+}): null {
+  useChatToasts(onView, useAppSlice(CHAT_WAITING), useAppSlice(APP_STATE_VERSION), shown);
   return null;
 }
 
@@ -528,19 +548,20 @@ function AppWindow(): React.JSX.Element {
     [changeTab, guardLeave],
   );
   // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the Chat of
-  // the workspace the message waits in, listing that workspace first where another is listed.
+  // the workspace the message waits in, listing that workspace first where another is listed, and
+  // from a toast on the channel the message stands in, as an inbox item's toast opens the item.
   const openChat = useCallback(
-    (workspaceId: string) =>
+    (workspaceId: string, messageId?: string) =>
       guardLeave(() => {
         const doors = inboxDoors.current;
         changeTab(PANEL_TAB.TASKS);
         if (doors.workspace?.id !== workspaceId) doors.onChooseWorkspace(workspaceId);
-        doors.chatView.onOpen();
+        if (messageId === undefined) doors.chatView.onOpen();
+        else doors.chatView.onShowMessage(messageId);
       })(),
     [changeTab, guardLeave],
   );
   useEffect(() => appBridge().onShowChat(({ workspaceId }) => openChat(workspaceId)), [openChat]);
-  useChatToasts(openChat, tasks.chatShown);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
@@ -627,8 +648,8 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.INBOX_LIST) || tasks.inboxView.open) return;
-      // Chat is the Inbox's like: Escape stops at it rather than reaching the plan beneath.
-      if (tasks.chatView.open) return;
+      // Chat is the Inbox's like: a place standing alone steps back to the rail, and there the press stops rather than reaching the plan beneath.
+      if (runAppCommand(APP_COMMAND.CHAT_LIST) || tasks.chatView.open) return;
       if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
@@ -812,6 +833,7 @@ function AppWindow(): React.JSX.Element {
                           <LinkMenu />
                           <UpdatedToast />
                           <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
+                          <ChatToasts onView={openChat} shown={tasks.chatShown} />
                           {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}

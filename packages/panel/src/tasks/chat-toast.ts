@@ -1,15 +1,18 @@
 /**
- * chat-toast.ts -- says in the window's toast that a chat message came to wait on the developer while the window was focused away from the Chat it is read in, with a View that opens its workspace's Chat.
+ * chat-toast.ts -- says in the window's toast that a chat message came to wait on the developer while the window was focused away from the Chat it is read in, with a View that opens the message's channel, until the message no longer waits or its Chat is shown.
  *
  * Main decides which messages the window hears (`@luke/host/agent-notices`):
  * one for each ask, direct message, or mention that comes to wait, and only
  * while the window is focused, the OS's notification saying it while the
  * window is behind. The toast says what the notification would, who and
  * why, the plan's name on its second line, and its View does what the
- * notification's click does. It stands as an opened inbox item's does,
- * leaving by itself, and goes at once where the Chat the message is read in
- * comes on screen: its workspace's Chat, or its task's Chat tab where it
- * waits in the plan's channel. Chat elsewhere leaves it standing. Several
+ * notification's click does, and more: it opens the channel the message
+ * stands in, as an inbox item's toast opens the item. It stands as an
+ * opened inbox item's does, leaving by itself, and goes sooner once the
+ * message no longer waits, answered or read here or elsewhere, or at once
+ * where the Chat the message is read in comes on screen: its workspace's
+ * Chat, or its task's Chat tab where it waits in the plan's channel. Chat
+ * elsewhere leaves it standing. Several
  * may come in one read, so each waits for room rather than pushing out an
  * earlier one.
  */
@@ -18,8 +21,9 @@ import type { ChatShown } from "@luke/host/contract";
 import { useEffect, useRef } from "react";
 import { appBridge } from "../app-bridge.js";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast.js";
+import { appStateNow } from "../use-app-state.js";
 
-/** What a waiting message's toast offers, to open Chat. */
+/** What a waiting message's toast offers, to open the message's channel. */
 const VIEW_LABEL = "View";
 
 /**
@@ -31,14 +35,26 @@ const VIEW_LABEL = "View";
  */
 const TOLD_BOUND = 100;
 
-/** Where a message waits: its workspace, and its plan where it waits in a plan's channel. */
+/** Where a message waits: its workspace, its plan where it waits in a plan's channel, and the version of main's document the window held as its toast arrived. */
 interface WaitsIn {
   readonly workspaceId: string;
   readonly taskId: string | null;
+  readonly heard: number;
 }
 
-/** Says each message main hands the window, `view` opening its workspace's Chat, and withdraws each once the Chat it is read in is on screen. */
-export function useChatToasts(view: (workspaceId: string) => void, shown: ChatShown | null): void {
+/**
+ * Says each message main hands the window, `view` opening its channel in
+ * its workspace's Chat, and withdraws each once `waiting`, main's word on
+ * the messages that wait, no longer holds it, or the Chat it is read in is
+ * on screen.
+ */
+export function useChatToasts(
+  view: (workspaceId: string, messageId: string) => void,
+  waiting: readonly string[],
+  /** The version of main's document `waiting` was read from. */
+  version: number,
+  shown: ChatShown | null,
+): void {
   const toast = useToast();
   const withdraw = useWithdrawToast();
   // Read through a ref, because the caller hands a new closure each render
@@ -50,7 +66,7 @@ export function useChatToasts(view: (workspaceId: string) => void, shown: ChatSh
   useEffect(
     () =>
       appBridge().onChatMessageWaiting(({ messageId, workspaceId, taskId, words, detail }) => {
-        told.current.set(messageId, { workspaceId, taskId });
+        told.current.set(messageId, { workspaceId, taskId, heard: appStateNow()?.version ?? -1 });
         const oldest = told.current.keys().next().value;
         if (told.current.size > TOLD_BOUND && oldest !== undefined) told.current.delete(oldest);
         toast({
@@ -60,20 +76,25 @@ export function useChatToasts(view: (workspaceId: string) => void, shown: ChatSh
           hold: TOAST_HOLD.NEWS,
           subject: messageId,
           tone: TOAST_TONE.ASK,
-          action: { label: VIEW_LABEL, onPress: () => viewing.current(workspaceId) },
+          action: { label: VIEW_LABEL, onPress: () => viewing.current(workspaceId, messageId) },
         });
       }),
     [toast],
   );
   const shownWorkspace = shown?.workspaceId;
   const shownTask = shown?.taskId ?? null;
+  // Note that what waits withdraws a toast only from a version of main's document newer than the one
+  // held as the toast arrived, as an inbox item's (`inbox-toast.ts`), because main writes the message
+  // into what waits before it hands the window the toast, so an older word may lack it still.
   useEffect(() => {
-    if (shownWorkspace === undefined) return;
+    const now = new Set(waiting);
     for (const [messageId, waits] of told.current) {
-      if (waits.workspaceId !== shownWorkspace) continue;
-      if (shownTask !== null && waits.taskId !== shownTask) continue;
+      const gone = version > waits.heard && !now.has(messageId);
+      const onScreen =
+        waits.workspaceId === shownWorkspace && (shownTask === null || waits.taskId === shownTask);
+      if (!gone && !onScreen) continue;
       withdraw(messageId);
       told.current.delete(messageId);
     }
-  }, [shownWorkspace, shownTask, withdraw]);
+  }, [waiting, version, shownWorkspace, shownTask, withdraw]);
 }
