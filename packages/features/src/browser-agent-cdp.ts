@@ -86,11 +86,12 @@ const NAVIGATING_ACTIONS: ReadonlySet<BrowserAgentActionName> = new Set([
   BROWSER_AGENT_ACTION.KEY,
 ]);
 
-/** The page events that say a frame began or committed a navigation, stopped loading, or the page loaded. */
+/** The page events that say a frame began or committed a navigation, stopped loading or was removed, or the page loaded. */
 const NAVIGATION_EVENT = {
   STARTED: "Page.frameStartedLoading",
   NAVIGATED: "Page.frameNavigated",
   STOPPED: "Page.frameStoppedLoading",
+  DETACHED: "Page.frameDetached",
   LOADED: "Page.loadEventFired",
 } as const;
 
@@ -175,7 +176,7 @@ const ConsoleCallSchema = Schema.Struct({
 const LogEntrySchema = Schema.Struct({
   entry: Schema.Struct({ level: Schema.String, text: Schema.String, timestamp: Schema.Number }),
 });
-/** A frame event: `frameId` on a load's start and stop, `frame.id` on a commit. */
+/** A frame event: `frameId` on a load's start, stop, and removal, `frame.id` on a commit. */
 const FrameEventSchema = Schema.Struct({
   frameId: Schema.optional(Schema.String),
   frame: Schema.optional(Schema.Struct({ id: Schema.String })),
@@ -251,8 +252,9 @@ const readAttached = answerOf(AttachedSchema);
 
 /**
  * Hears one navigation event: a frame that starts loading or commits marks
- * the navigation started and is loading until it stops; once none is, or the
- * page fires its load, the navigation is settled. Note that a stop or a load
+ * the navigation started and is loading until it stops or is removed, as an
+ * iframe taken off the page mid-load is; once none is, or the page fires its
+ * load, the navigation is settled. Note that a stop or a load
  * before anything started is the end of an earlier load, so it settles
  * nothing.
  */
@@ -268,8 +270,9 @@ function hearNavigation(event: CdpEvent, watched: Watched, loading: Set<string>)
       return;
     }
     if (!(yield* Deferred.isDone(watched.started))) return;
-    const stopped =
-      event.method === NAVIGATION_EVENT.STOPPED && frame !== undefined && loading.delete(frame);
+    const ended =
+      event.method === NAVIGATION_EVENT.STOPPED || event.method === NAVIGATION_EVENT.DETACHED;
+    const stopped = ended && frame !== undefined && loading.delete(frame);
     if (event.method === NAVIGATION_EVENT.LOADED || (stopped && loading.size === 0)) {
       yield* Deferred.succeed(watched.settled, undefined);
     }

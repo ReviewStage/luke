@@ -665,6 +665,33 @@ it.effect(
     }),
 );
 
+it.effect("a wait after a click is let go by a loading iframe the page removes mid-load", () =>
+  Effect.gen(function* () {
+    const { peer } = yield* browser((command) => {
+      if (command.method === "Page.enable") return { result: {} };
+      return command.method === "Runtime.evaluate"
+        ? { result: { result: { value: "complete" } } }
+        : undefined;
+    });
+    const tab = "page-blank";
+
+    const running = yield* Effect.forkChild(
+      run(peer, [
+        { action: BROWSER_AGENT_ACTION.CLICK, tab, x: 40, y: 60 },
+        { action: BROWSER_AGENT_ACTION.WAIT, timeoutMs: 2_000 },
+      ]),
+    );
+    yield* advance(Duration.millis(100));
+    yield* peer.emit(frameEvent("Page.frameStartedLoading", "auth-frame"));
+    yield* advance(Duration.millis(100));
+    yield* peer.emit(frameEvent("Page.frameDetached", "auth-frame"));
+    yield* advance(Duration.seconds(3));
+    const ran = yield* Fiber.join(running);
+
+    assert.deepEqual(ran.steps.at(-1), { action: "wait", status: "done", tab });
+  }),
+);
+
 it.effect(
   "a wait after a click that navigates nowhere answers after the grace, and one after typing at once",
   () =>
