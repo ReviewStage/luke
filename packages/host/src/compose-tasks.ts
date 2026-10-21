@@ -158,7 +158,7 @@ import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
-import { codeExcerpt, highlightFile } from "./task-code.js";
+import { codeExcerpt } from "./task-code.js";
 import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
 
 /**
@@ -1659,9 +1659,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (answer === undefined) {
           return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        return carried<TasksFileAnswer>(
-          "file" in answer ? { file: yield* highlightFile(answer.file) } : answer,
-        );
+        return carried<TasksFileAnswer>(answer);
       }),
     // A folder's listing is answered to the tree that asked and held nowhere:
     // the tree keeps the folders it has opened.

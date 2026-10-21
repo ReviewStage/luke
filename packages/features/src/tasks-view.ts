@@ -59,6 +59,7 @@ import {
   taskFileRefusalSchema,
   taskFileRequestSchema,
   taskFileTextSchema,
+  taskFileWindowSchema,
   taskPrioritySchema,
   taskRenameRequestSchema,
   taskSchema,
@@ -702,22 +703,9 @@ export const tasksFileParamsSchema = EffectSchema.Struct({
 
 export type TasksFileParams = typeof tasksFileParamsSchema.Type;
 
-/** A window of a file as the File tab draws it: its place, the branch it was read on and the commit where the service named it, how long the whole file is, and its lines as this Mac coloured them. */
-const taskFileShownSchema = EffectSchema.Struct({
-  path: EffectSchema.String,
-  repository: EffectSchema.String,
-  branch: EffectSchema.String,
-  commit: EffectSchema.optionalKey(EffectSchema.String),
-  firstLine: EffectSchema.Int,
-  lineCount: EffectSchema.Int,
-  lines: codeLinesSchema,
-});
-
-export type TaskFileShown = typeof taskFileShownSchema.Type;
-
-/** The File tab's read, as the window hears it: the window coloured, the whole text read raw, why the file is not shown, or that the service did not answer. */
+/** The File tab's read, as the window hears it: the window as the service read it, the whole text read raw, why the file is not shown, or that the service did not answer. */
 export const tasksFileAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ file: taskFileShownSchema }),
+  EffectSchema.Struct({ file: taskFileWindowSchema }),
   EffectSchema.Struct({ text: taskFileTextSchema }),
   taskFileRefusalSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
