@@ -3,6 +3,11 @@ import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
 import {
+  type AutomationRunsLiveAnswer,
+  type AutomationsLiveAnswer,
+  withWebhookUrl,
+} from "./automation-live.js";
+import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
   type AutomationChangeParams,
@@ -18,15 +23,16 @@ import {
   automationChangeParamsSchema,
   automationCreateParamsSchema,
 } from "./automation-view.js";
+import type { automationAnswerSchema, automationChangeRequestSchema } from "./automation-wire.js";
 import {
-  AUTOMATION_TRIGGER,
-  type AutomationSummary,
-  type automationAnswerSchema,
-  type automationChangeRequestSchema,
-} from "./automation-wire.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+  askHosted,
+  askLive,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import type { RepositoryUnreached } from "./repository-reach-wire.js";
-import { automationWebhookPath } from "./service-paths.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
 /**
@@ -103,10 +109,17 @@ function summaryOnly(
     : { automation, webhookSecret: read.webhookSecret };
 }
 
-/** A webhook automation with the address its caller posts to, on the service this client reaches; any other as it came. */
-function withWebhookUrl(serviceBaseUrl: string, automation: AutomationSummary): AutomationSummary {
-  if (automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) return automation;
-  return { ...automation, webhookUrl: `${serviceBaseUrl}${automationWebhookPath(automation.id)}` };
+/** A live read's seal, or why there is none: signed out where the session is not the account it names. */
+function liveAnswered<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<Answer | Failed | typeof LIVE_SIGNED_OUT, never, HttpClient.HttpClient> {
+  return Effect.catch(asked, (failed) =>
+    Effect.succeed(
+      failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
+        ? LIVE_SIGNED_OUT
+        : failedAs(failed, REFUSALS),
+    ),
+  );
 }
 
 /** The window's reads and writes of the account's automations. */
@@ -218,6 +231,53 @@ export class HostedAutomationClient {
         askHosted(this.#hosted.automations.change, { params: { id: automationId }, body: change }),
       ),
       (read) => summaryOnly(this.#serviceBaseUrl, read),
+    );
+  }
+
+  /**
+   * A workspace's automations sealed for following over Neon Realtime for
+   * the account `userId` names, or with `poll` their rows inline: signed
+   * out where the session is another account's, and why there is none
+   * otherwise.
+   */
+  listLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AutomationsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveAnswered(
+      askLive(
+        this.#hosted.live.automations,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+    );
+  }
+
+  /** One automation's runs sealed for following over Neon Realtime, on the terms the list is: not found where the account does not read it. */
+  runsLive(
+    automationId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AutomationRunsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveAnswered(
+      askLive(
+        this.#hosted.live.automationRuns,
+        { id: automationId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
     );
   }
 }

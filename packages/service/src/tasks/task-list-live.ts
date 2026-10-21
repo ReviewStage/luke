@@ -4,7 +4,6 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import { newestAwaitingLineAt } from "@luke/database/models/message-reads";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
@@ -14,13 +13,12 @@ import {
 import { agentPin, taskPin } from "@luke/database/schemas";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { turns } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { and, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
-import { BRAIN_REQUEST_FAILURE } from "../core.js";
+import { awaitingLineAtIn, latestTurnOf, sessionEndedOf } from "../live/agent-standing.js";
 
 /**
  * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, and every agent of them and with no plan, with what the list reads each agent's status from.
@@ -89,21 +87,7 @@ function tasksStatement(userId: string) {
  * the order turns were queued, as `findLatestTurns` reads it.
  */
 function agentsStatement(userId: string) {
-  const latest = queryBuilder
-    .select({
-      id: turns.id,
-      status: turns.status,
-      cancelRequestedAt: turns.cancelRequestedAt,
-      queuedAt: turns.queuedAt,
-      startedAt: turns.startedAt,
-      settledAt: turns.settledAt,
-      failure: turns.failure,
-    })
-    .from(turns)
-    .where(eq(turns.conversationId, codingAgent.conversationId))
-    .orderBy(desc(turns.queuedAt), desc(turns.id))
-    .limit(1)
-    .as("latest_turn");
+  const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
   return queryBuilder
     .select(
       liveSelection(
@@ -130,9 +114,7 @@ function agentsStatement(userId: string) {
           turnId: latest.id,
           turnStatus: latest.status,
           cancelRequested: isNotNull(latest.cancelRequestedAt),
-          turnSessionEnded: sql<
-            boolean | null
-          >`${latest.failure} = ${BRAIN_REQUEST_FAILURE.SESSION_ENDED}`,
+          turnSessionEnded: sessionEndedOf(latest),
         },
         {
           archivedAt: codingAgent.archivedAt,
@@ -141,7 +123,7 @@ function agentsStatement(userId: string) {
           queuedAt: latest.queuedAt,
           startedAt: latest.startedAt,
           settledAt: latest.settledAt,
-          awaitingLineAt: newestAwaitingLineAt(codingAgent.conversationId),
+          awaitingLineAt: awaitingLineAtIn(codingAgent.conversationId),
         },
       ),
     )

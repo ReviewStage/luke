@@ -52,7 +52,7 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
@@ -78,6 +78,10 @@ import {
   transcriptLiveStatements,
 } from "../agents/coder-host/transcript-live.js";
 import { chatAccount, workspaceOf } from "../agents/workspace-chat.js";
+import {
+  automationRunsLiveStatements,
+  automationsLiveStatements,
+} from "../automations/automation-live.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -228,6 +232,24 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const statements = taskListLiveStatements(context.userId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    automations: signedIn.automations.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      const statements = automationsLiveStatements(context.userId, input.workspaceId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    automationRuns: signedIn.automationRuns.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const automationId = yield* rowIdOf(input.id);
+      const automation = yield* hostedStoreOrUnavailable(
+        readAutomation(context.userId, automationId),
+      );
+      if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = automationRunsLiveStatements(context.userId, automationId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),
