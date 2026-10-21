@@ -579,7 +579,13 @@ test("an approval's Approve is held until Send sends it, a note with no decision
   await settle();
   assert.equal(rail(page)[0], "▸ For you (4)", "an approval takes a decision");
   assert.equal(document.activeElement, pressNamed(card, "Approve"));
+  // A number key picks one of the two presses and takes the keyboard to it, wherever in the card it stood.
+  act(() => sendOf(card).focus());
+  pressKey(sendOf(card), "2");
+  assert.equal(pressNamed(card, "Decline").getAttribute("aria-pressed"), "true");
+  assert.equal(document.activeElement, pressNamed(card, "Decline"));
   act(() => pressNamed(card, "Approve").click());
+  assert.equal(pressNamed(card, "Decline").getAttribute("aria-pressed"), "false");
   assert.equal(pressNamed(card, "Approve").getAttribute("aria-pressed"), "true");
   assert.equal(rail(page)[0], "▸ For you (4)", "Approve sends nothing on its own");
   act(() => sendOf(card).click());
@@ -662,6 +668,32 @@ test("a form's text field is the composer's own field, its answer stands in its 
       ?.click(),
   );
   assert.match(words(page).join("\n"), /↳ Filled in the form\.\s*Region: US\s*Seats: 12/u);
+});
+
+test("a form none of whose fields must be filled may be sent empty", async () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      messages: chat.answer.messages.map((message) =>
+        message.seq === 51 && message.ask !== undefined
+          ? {
+              ...message,
+              ask: {
+                ...message.ask,
+                title: "Anything to add?",
+                response: { type: CHAT_ASK.FORM, fields: [{ type: "number", label: "Seats" }] },
+              },
+            }
+          : message,
+      ),
+    },
+  }));
+  const card = openAsk(page, "Anything to add?");
+  assert.equal(sendOf(card).disabled, false);
+  act(() => sendOf(card).click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (3)");
 });
 
 test("an ask its poster resolved says it was withdrawn and why, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {

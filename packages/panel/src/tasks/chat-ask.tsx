@@ -223,7 +223,7 @@ function Answer({
         />
       </DraftQuestion>
     );
-  // The number keys pick an option while the keyboard is in the card but in a field, as the Inbox's do anywhere in it.
+  // The number keys pick an option while the keyboard is in the card but in a field, as the Inbox's do anywhere in it, and take the keyboard to it: a row of the list, or one of two presses.
   const onNumber = (event: React.KeyboardEvent) => {
     if (asked === undefined || sending || !OPTION_NUMBER.test(event.key)) return;
     if (!bareKey(event) || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -233,7 +233,13 @@ function Answer({
     if (picked === undefined) return;
     event.preventDefault();
     setDraft(picked);
-    if (box.current !== null) optionRows(box.current)[number - 1]?.focus();
+    if (box.current === null) return;
+    const rows = optionRows(box.current);
+    const options =
+      rows.length > 0
+        ? rows
+        : [...box.current.querySelectorAll<HTMLButtonElement>(".inbox-ask-presses button")];
+    options[number - 1]?.focus();
   };
   const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
@@ -252,7 +258,8 @@ function Answer({
         nod={nod}
         sending={sending}
         held={sending}
-        sendable={nod || chatAskHolds(draft)}
+        // Note that a form of fields none of which must be filled is answered empty, so it holds an answer before anything is in it.
+        sendable={nod || chatAskHolds(draft) || chatAskReply(response, draft) !== undefined}
         onSubmit={send}
       />
       {note === undefined ? null : (
