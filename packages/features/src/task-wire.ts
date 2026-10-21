@@ -834,7 +834,7 @@ export function isSecretFile(path: string): boolean {
   return SECRET_FILE.test(path);
 }
 
-export const TASK_FILE_BOUNDS = {
+const TASK_FILE_BOUNDS = {
   /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
   WINDOW_LINES: 500,
   /** The longest text a raw read carries: the service reads a file of a megabyte at most, and its text, a character to a byte at least, is no longer. */

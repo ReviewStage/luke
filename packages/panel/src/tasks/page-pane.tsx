@@ -8,7 +8,7 @@ import {
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton, SCROLL_FADE } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
 import {
@@ -18,7 +18,7 @@ import {
   CodeXmlIcon,
   RotateCwIcon,
 } from "lucide-react";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import {
@@ -31,10 +31,9 @@ import {
 } from "../find-in-tab.js";
 import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
-import { useLinesLook } from "./code-lines.js";
 import { BarMenu } from "./file-menu.js";
-import { type RunRead, ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
+import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
  * page-pane.tsx -- one page an agent wrote for the task, in the side panel: the page itself, drawn at the version chosen, and a bar to step between its versions and reload it.
@@ -277,7 +276,10 @@ function usePageSources(readSource: ReadPageSource) {
 /** The name a page's source is coloured under: an HTML document's. */
 const PAGE_SOURCE_NAME = "page.html";
 
-/** The version's source in the frame's place: its lines as a File tab draws them, or why they are not. */
+/** No notes on a page's source. */
+const NO_NOTES: readonly WholeFileNote[] = [];
+
+/** The version's source in the frame's place: its text drawn as a File tab draws a file, or why it is not. */
 function PageSource({
   title,
   version,
@@ -285,12 +287,15 @@ function PageSource({
   onRetry,
 }: {
   title: string;
-  /** The page and the version whose source this is, which its colouring is kept under. */
-  version: RunRead;
+  /** The page and the version whose source this is, which its colours are kept under. */
+  version: string;
   read: SourceRead;
   onRetry: () => void;
 }): React.JSX.Element {
-  const look = useLinesLook();
+  const text = useMemo(
+    () => (read.kind === SOURCE_READ.READY ? sourceText(read.lines) : ""),
+    [read],
+  );
   if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
@@ -301,14 +306,13 @@ function PageSource({
   }
   return (
     <section className="file-tab" aria-label={`${title} source`}>
-      <ThemedCodeLinesView
+      <WholeFile
         name={PAGE_SOURCE_NAME}
-        read={version}
-        look={look}
-        fade={SCROLL_FADE.START}
-        firstLine={1}
-        lines={read.lines}
-        pointed={{ path: title }}
+        text={text}
+        revision={version}
+        lit={undefined}
+        notes={NO_NOTES}
+        findFrom={1}
       />
     </section>
   );
@@ -429,17 +433,16 @@ export function PagePane({
             </Tooltip>
             {showingSource ? (
               <>
-                <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
+                <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: false }} />
                 <SourceMenu read={source} />
               </>
             ) : null}
           </div>
         </header>
-        {showingSource ? <ThemeWarmer name={PAGE_SOURCE_NAME} /> : null}
         {showingSource ? (
           <PageSource
             title={page.title}
-            version={{ source: page.id, revision: String(version) }}
+            version={`${page.id}@${version}`}
             read={source ?? { kind: SOURCE_READ.READING }}
             onRetry={() => ask(version)}
           />

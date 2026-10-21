@@ -1202,8 +1202,8 @@
   margin-left: auto;
 }
 
-/* A File tab: the file's heading over its lines, which fill the tab and
-   scroll, with a row above and below them that reads more of the file. */
+/* A File tab: its file, or the lines Luke showed of it under why the file
+   is not shown, filling the tab. */
 .file-tab {
   display: flex;
   min-height: 0;
@@ -1220,22 +1220,6 @@
    the place, which a note between them measures itself by. */
 .code-lines-frame {
   container: code-lines / inline-size;
-}
-
-/* Lines in a syntax theme other than the window's own (themed-lines.tsx)
-   stand on the theme's ground, as a diff in that theme does; every run
-   coloured in the theme names its own ink. */
-.code-lines-ground {
-  --code-ground: light-dark(
-    var(--theme-ground-light, var(--luke-color-ground)),
-    var(--theme-ground-dark, var(--luke-color-ground))
-  );
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 0%;
-  flex-direction: column;
-  background: var(--code-ground);
 }
 
 .code-lines[data-wrap="false"] {
@@ -4283,11 +4267,38 @@
   font-size: var(--luke-type-caption-size);
 }
 
-.file-tab-edge {
-  padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
-  color: var(--luke-color-text-subtle);
-  -webkit-user-select: none;
-  user-select: none;
+/* A whole file drawn by Pierre (whole-file.tsx), a File tab's or a page's
+   source: its scroll area fills the place, Pierre drawing into it as the
+   scroller it virtualizes over, with the ring standing over it while the
+   diff bundle loads. */
+.whole-file {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.whole-file > .luke-spinner-region {
+  position: absolute;
+  inset: 0;
+}
+
+/* A note under a line of a whole file, its card or its chip: Pierre stands
+   it at the code's column, sticky in view while unwrapped lines scroll
+   sideways, so it keeps only the room between it and the lines, and none
+   while it is a chip alone, which floats over the end of its line. */
+.whole-file-note {
+  padding: var(--luke-space-6) var(--luke-space-12) var(--luke-space-6) 0;
+  white-space: normal;
+}
+
+.whole-file-note:has(> .diff-thread-chip-row:only-child:not([open])) {
+  padding-block: 0;
+}
+
+.whole-file-note .file-note {
+  margin: 0;
 }
 
 /* Luke's note under the lines it is on, in a File tab (file-note.tsx): the
