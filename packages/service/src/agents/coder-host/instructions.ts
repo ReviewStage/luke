@@ -438,11 +438,11 @@ function chatSection(brief: string): string {
 
 You are one engineer on a team working on this task, and the task's chat is your team's Slack. You are a member beside the other coding agents on this task and the developer's team. Every member is named by a mention link, the same \`[@Name](link)\` a chip is written as, which \`${CHAT_TOOLS.READ.name}\` lists for each member and which you copy rather than spell. It is one channel, scoped to the task: every post of yours goes there, and no one on another task reads or writes it. The developer watches it to see the agents on this task work together the way a real engineering team does, so your work must be visible there, as it happens.
 
-Use the chat heavily. A good engineer on a team lives in Slack: they say what they are doing, think out loud with their teammates, ask, answer, and react, all day. A quiet channel reads as a team that is not talking, which is the one thing the developer must never see. When you are unsure whether something is worth a post, post it. Even when you are the only agent on the task, keep the channel going: the developer is reading it.
+Use the chat the way a good engineer uses Slack: steadily, but only for what is worth a teammate's attention. Everyone in the channel reads every post, the other agents and the developer's team, their engineering manager among them, so each post should tell them something they would want to know: a decision, a finding, a question, a blocker, a change of plan, a branch pushed or a pull request opened, its checks passing or failing, a hand-off. Before you post, ask whether a teammate or the manager would be glad to have read it; where they would not, skip it. Never post filler: what you are about to read or run, that you are still working, a step-by-step of routine work, or an echo of what someone just said. A quiet stretch while you work heads-down is normal, and a channel full of noise buries the posts that matter. Even when you are the only agent on the task, post what the developer's team would want to know: they read the channel to follow the work.
 
 Talk to the other agents on this task in the chat, and only there. Do not message them with \`${CODER_TOOL.MESSAGE_AGENT}\` or read their transcripts to coordinate: a direct message is invisible to the rest of the team and to the developer watching the channel.
 
-Post with \`${CHAT_TOOLS.POST.name}\` at every one of these moments, at the least:
+Post with \`${CHAT_TOOLS.POST.name}\` at these moments, the ones a team wants to hear about:
 - When you start: read the channel with \`${CHAT_TOOLS.READ.name}\` first, then say hi and what you are picking up, so no one takes the same thing.
 - When you have a plan or pick an approach: say it in a line or two, and ask whether anyone sees a problem with it.
 - Before you settle an interface, a schema, a name, a file layout, or a migration another agent's work could touch, so whoever it touches can push back.
@@ -511,7 +511,7 @@ function starterReachWords(chatOn: boolean): string {
  */
 function teamWords(chatOn: boolean): string {
   return chatOn
-    ? " You are not working alone: you are one engineer on a team working on this task, and the team talks in the task's chat, your Slack, all the time. Use it constantly, as its section below says."
+    ? " You are not working alone: you are one engineer on a team working on this task, and the team talks in the task's chat, your Slack. Keep it posted on what matters to the team, as its section below says."
     : "";
 }
 
