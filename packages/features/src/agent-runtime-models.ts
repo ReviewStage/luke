@@ -58,7 +58,7 @@ const FAST_ID_SUFFIX = "-fast";
 const CATALOG_ID_SEPARATOR = "/";
 
 /** Why a change was refused for the runtime the agent runs on. */
-export const RUNTIME_CHOICE_REFUSAL = {
+const RUNTIME_CHOICE_REFUSAL = {
   PROVIDER: "provider",
   FAST: "fast",
   CONTEXT_WINDOW: "context_window",

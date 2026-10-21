@@ -620,7 +620,7 @@ const ANSWER_FIELDS = {
 };
 
 /** What a message asks of its reader, one of three: decide among options, do steps, or answer. */
-export const inboxAskSchema = EffectSchema.Union([
+const inboxAskSchema = EffectSchema.Union([
   EffectSchema.Struct(DECIDE_FIELDS),
   EffectSchema.Struct(DO_FIELDS),
   EffectSchema.Struct(ANSWER_FIELDS),

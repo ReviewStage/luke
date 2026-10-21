@@ -1589,7 +1589,7 @@ function sameMessageDraw(a: AgentMessageProps, b: AgentMessageProps): boolean {
 const SteadyAgentMessage = memo(AgentMessage, sameMessageDraw);
 
 /** The door that brings a message whose row is not drawn into view, handing its row to `then` once drawn; false where no row draws it. */
-export type MessageBringer = (messageId: string, then: (row: HTMLElement) => void) => boolean;
+type MessageBringer = (messageId: string, then: (row: HTMLElement) => void) => boolean;
 
 /** A row placed in a transcript: its message, the lines that reached it, and the voice's lines drawn ahead of it. */
 type PlacedRow = SpokenMessage;

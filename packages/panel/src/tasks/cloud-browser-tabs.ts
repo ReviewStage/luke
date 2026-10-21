@@ -20,7 +20,7 @@ import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 
 /** How often a task's tabs are read again while it is open. */
-export const CLOUD_BROWSER_TABS_EVERY = Duration.seconds(5);
+const CLOUD_BROWSER_TABS_EVERY = Duration.seconds(5);
 
 /** How long after its agent last acted on a tab the tab says the agent is using it. */
 export const CLOUD_BROWSER_AGENT_RECENT = Duration.seconds(15);

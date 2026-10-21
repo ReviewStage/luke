@@ -673,7 +673,7 @@ export function withDoPress(
  * Answer, whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
  */
-export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
+function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
   const { ask } = asking;
   if (!knownAsk(ask)) return undefined;
   const id = asking.message.id;

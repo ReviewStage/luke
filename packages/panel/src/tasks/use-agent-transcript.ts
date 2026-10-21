@@ -67,7 +67,7 @@ export type TranscriptOlderReader = (
 ) => Promise<CodingAgentTranscriptOlderAnswer>;
 
 /** The window's own older read, through the act door. */
-export const windowTranscriptOlder: TranscriptOlderReader = (params) =>
+const windowTranscriptOlder: TranscriptOlderReader = (params) =>
   askAct(ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER, params);
 
 /** The window's own follower: the transcript's stream, opened through the act door. */

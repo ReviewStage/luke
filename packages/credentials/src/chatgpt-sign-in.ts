@@ -116,12 +116,12 @@ interface Attempt<Saved extends object> {
  * Hands the validated credentials to the service, answering what it kept or
  * why not. The one place a token leaves the exchange. Never fails.
  */
-export type ChatGptSave<Saved extends object> = (
+type ChatGptSave<Saved extends object> = (
   credentials: ChatGptCredentialsSaveRequest,
 ) => Effect.Effect<LoopbackConsentOutcome<Saved>>;
 
 /** One sign-in as a press asks it: the host it names, and where what it validates is kept. */
-export interface ChatGptSignInRequest<Saved extends object> {
+interface ChatGptSignInRequest<Saved extends object> {
   readonly extAgentHostId: string;
   /** Bound to the press, so what is validated is kept for the account that pressed and no other. */
   readonly save: ChatGptSave<Saved>;

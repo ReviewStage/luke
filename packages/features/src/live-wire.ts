@@ -978,8 +978,6 @@ export const taskBrowserTabsLiveAnswerSchema = EffectSchema.Struct({
   queries: EffectSchema.Struct({ tabs: sealedLiveQuerySchema }),
 });
 
-export type TaskBrowserTabsLiveAnswer = typeof taskBrowserTabsLiveAnswerSchema.Type;
-
 /** A task's tabs as Realtime delivers them, each as the service keeps it: none for a task the account no longer reaches. */
 export const taskBrowserTabsLiveRowsSchema = EffectSchema.Struct({
   tabs: EffectSchema.Array(agentBrowserTabLineSchema),

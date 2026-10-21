@@ -24,7 +24,7 @@ import { isFastModelId, providerOf } from "./coding-agent-model.js";
  */
 
 /** One payer the field offers, and its words. */
-export interface PayerOption {
+interface PayerOption {
   readonly payer: CodingAgentPayer;
   readonly label: string;
 }

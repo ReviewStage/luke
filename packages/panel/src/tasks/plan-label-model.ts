@@ -65,7 +65,7 @@ export function chatGptPlanLabel(keys: ProviderKeysAnswer | undefined): PlanLabe
   }
 }
 
-export const CLAUDE_PLAN_LABEL_WORDS = {
+const CLAUDE_PLAN_LABEL_WORDS = {
   USING: "Using your Claude plan",
   UNVERIFIED: "Using your Claude plan · Not yet checked",
   LIMIT_REACHED: "Claude plan limit reached",

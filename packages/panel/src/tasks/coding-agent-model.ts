@@ -595,7 +595,7 @@ export function planPayerOf(runtime: CodingAgentRuntime | undefined): CodingAgen
 }
 
 /** What a message refused by the Claude plan that pays for its agent says. */
-export const CLAUDE_PLAN_REFUSAL = {
+const CLAUDE_PLAN_REFUSAL = {
   SIGNED_OUT: "Your Claude plan needs reconnecting in Settings.",
   LIMIT_REACHED: "Your Claude plan has reached its usage limit. It waits until the limit resets.",
 } as const;
@@ -1712,7 +1712,7 @@ export function placedMessages(messages: readonly CodingAgentMessage[]): readonl
 }
 
 /** How much of a turn the voice read aloud on a call, which folds that much of it once it has finished. */
-export const TURN_READ = {
+const TURN_READ = {
   /** All of it, answering an ask that was the whole turn's: the voice's lines stand ahead of the turn. */
   WHOLE: "whole",
   /** The work after a call's ask joined the turn under way: the voice's lines stand where the ask arrived, the work before it as it was. */

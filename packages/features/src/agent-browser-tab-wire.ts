@@ -67,7 +67,7 @@ const agentBrowserTabCursorSchema = EffectSchema.Struct({
   at: countedNumber,
 });
 
-export type AgentBrowserTabCursor = typeof agentBrowserTabCursorSchema.Type;
+type AgentBrowserTabCursor = typeof agentBrowserTabCursorSchema.Type;
 
 /** One tab open in one of a task's agents' browsers. */
 const agentBrowserTabSchema = EffectSchema.Struct({
