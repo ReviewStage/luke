@@ -77,8 +77,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     );
   };
   const notices = yield* createAgentNotices({
-    listAgents: (taskId) => host.codingAgentList({ taskId: taskId }),
-    readAgent: (agentId) => host.codingAgentPage({ agentId }),
     readPullRequest: (agentId) => host.codingAgentPullRequest({ agentId }),
     taskName: (taskId) => noticeTaskTitle(state.snapshot().tasks, taskId),
     ...presenter,
@@ -94,10 +92,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     },
     onAccountChanged: (listener) =>
       host.onAccountChanged((account) => listener(accountKey(account))),
-    // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
-    onTaskAgentsMoved: () => {
-      forkReported(host.tasksRefresh(), "the task list refresh");
-    },
     readAccountInbox: (after) => host.codingAgentAccountInbox({ after }),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
@@ -119,6 +113,28 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
             Effect.sync(() =>
               report(
                 `the agents with no task could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+              ),
+            ),
+        ),
+    ),
+  );
+  // Every agent on a task, while the list is followed live, is the notices'
+  // to hold in place of the watch's own reads, and a task the list no longer
+  // holds takes its agents with it.
+  yield* Effect.forkScoped(
+    Stream.runForEach(
+      Stream.changes(Stream.map(state.changes, (document) => document.tasks.taskAgents)),
+      (agents) =>
+        Effect.catchDefect(
+          Effect.sync(() => {
+            if (agents === undefined) return;
+            const taskIds = state.snapshot().tasks.tasks.map((each) => each.id);
+            notices.observeFollowed(agents, taskIds);
+          }),
+          (defect) =>
+            Effect.sync(() =>
+              report(
+                `the agents on tasks could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
               ),
             ),
         ),

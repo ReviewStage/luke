@@ -1,6 +1,8 @@
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   type TaskListLiveAnswer,
   type TaskListLiveRows,
+  taskAgentsOfLiveRows,
   taskListGraceEdge,
   taskListLiveRowsSchema,
   taskListOfLiveRows,
@@ -34,6 +36,11 @@ const LIVE_RESTART = Duration.seconds(5);
 
 /** A seal as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none, `gone` where it never will again. */
 type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: boolean };
+/** The list as the live rows make it at one instant, and every agent on a plan beside it. */
+interface LiveTaskList {
+  readonly list: TaskListAnswer;
+  readonly taskAgents: readonly CodingAgentSummary[];
+}
 
 export interface TaskListFollowDependencies {
   /** The sealed statements, or with `poll` their rows inline, fetched from the service. */
@@ -41,17 +48,20 @@ export interface TaskListFollowDependencies {
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
-  /** The list, each time its rows or the clock move it. */
-  readonly publish: (list: TaskListAnswer) => void;
+  /** The list, and every agent on a task as its task's own list names it, each time the rows or the clock move them. */
+  readonly publish: (read: LiveTaskList) => void;
   /** That the list could not be read, each time a seal goes unanswered; the list already drawn stands. */
   readonly failed: () => void;
 }
 
 /** The list the rows make now, and again at each instant the clock alone moves it, until the rows move. */
-function listsOf(rows: TaskListLiveRows): Stream.Stream<TaskListAnswer> {
+function listsOf(rows: TaskListLiveRows): Stream.Stream<LiveTaskList> {
   return Stream.unwrap(
     Effect.map(Clock.currentTimeMillis, (at) => {
-      const now = Stream.succeed(taskListOfLiveRows(rows, at));
+      const now = Stream.succeed({
+        list: taskListOfLiveRows(rows, at),
+        taskAgents: taskAgentsOfLiveRows(rows, at),
+      });
       const edge = taskListGraceEdge(rows, at);
       if (edge === undefined) return now;
       const later = Stream.fromEffect(Effect.sleep(Duration.millis(edge - at)));
@@ -67,7 +77,7 @@ function listsOf(rows: TaskListLiveRows): Stream.Stream<TaskListAnswer> {
 function liveLists(
   dependencies: TaskListFollowDependencies,
   first: TaskListLiveAnswer,
-): Stream.Stream<TaskListAnswer, LiveBroken> {
+): Stream.Stream<LiveTaskList, LiveBroken> {
   const decode = Schema.decodeUnknownOption(taskListLiveRowsSchema);
   const rows = liveRows(
     {
@@ -99,8 +109,8 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
       return true;
     }
     // A read the service refused for good, as one under another session, ends the follow rather than starting it again.
-    const gone = yield* Stream.runForEach(liveLists(dependencies, sealed), (list) =>
-      Effect.sync(() => dependencies.publish(list)),
+    const gone = yield* Stream.runForEach(liveLists(dependencies, sealed), (read) =>
+      Effect.sync(() => dependencies.publish(read)),
     ).pipe(
       Effect.as(false),
       Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
