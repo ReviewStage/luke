@@ -3427,10 +3427,13 @@ it.effect(
       service.boardSaveTxid = undefined;
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
 
-      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once.
+      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once,
+      // while a save queued behind it goes out under the follow standing then, and waits on that one.
       service.boardSaveTxid = "44";
       service.boardSaveHeld = yield* Deferred.make<void>();
       const inFlight = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
+      yield* boardSettled;
+      const queued = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
       yield* boardSettled;
       realtime.fail("board");
       yield* TestClock.adjust(Duration.seconds(15));
@@ -3442,7 +3445,15 @@ it.effect(
       yield* Deferred.succeed(service.boardSaveHeld, undefined);
       service.boardSaveHeld = undefined;
       assert.deepEqual(yield* Fiber.join(inFlight), { saved: true });
-      assert.deepEqual(realtime.awaitingTxids(), []);
+      yield* boardSettled;
+      assert.deepEqual(realtime.awaitingTxids(), ["44"]);
+      assert.equal(
+        queued.pollUnsafe(),
+        undefined,
+        "the queued save waits on the follow it went out under",
+      );
+      realtime.arrive("44");
+      assert.deepEqual(yield* Fiber.join(queued), { saved: true });
 
       // A follow Realtime stopped is polled, which hands out no wait, so a save answers at once.
       delete service.boardSeals[INVITES];
