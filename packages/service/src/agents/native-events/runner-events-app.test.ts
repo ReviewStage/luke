@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
 import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import {
   createCodingAgent,
   readCodingAgent,
@@ -24,6 +25,7 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { ASK_ORIGIN } from "@luke/features";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_PAYER,
@@ -289,6 +291,59 @@ function drawn(part: StoredUIMessage["parts"][number]): readonly WireValue[] {
 }
 
 it.layer(getTestDB())("the runner events route", (it) => {
+  it.effect(
+    "a call's ask whose line a native runner takes is bound to the turn that took it, as its whole turn where it opened it and from the step it joined at where it joined one under way, so the call follows that turn",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, []);
+        const asks = askRecord();
+        const delivered = (clientId: string) =>
+          Effect.gen(function* () {
+            const ask = yield* asks.record({
+              userId: agent.userId,
+              conversationId: agent.target.conversationId,
+              clientId,
+              origin: ASK_ORIGIN.SPOKEN,
+              createdAt: new Date(yield* Clock.currentTimeMillis),
+            });
+            // The ask stands on its own line, as `acceptAsk` records one a native session took.
+            yield* asks.dispatchOnce(agent.target, ask.id, () =>
+              Effect.succeed({ sessionId: `${SESSION}-luke`, deliveryId: ask.id }),
+            );
+            return ask.id;
+          });
+        const opening = yield* delivered("dl_1");
+        const joining = yield* delivered("dl_2");
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const step = (text: string) => ({
+          type: "assistant",
+          message: { content: [{ type: "text", text }] },
+          ...envelope,
+        });
+        const batch = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: opening },
+          { type: "system", subtype: "init", ...envelope },
+          step("Looking."),
+          { type: RUNNER_EVENT.ACCEPTED, uuid: joining },
+          step("Found it."),
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        yield* post(
+          agent.bearer,
+          batch.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+
+        const [turn] = (yield* transcriptOf(agent.target.conversationId)).turns;
+        assert.ok(turn !== undefined);
+        const opened = yield* asks.named(agent.userId, opening);
+        const joined = yield* asks.named(agent.userId, joining);
+        assert.ok(opened?.turnId !== undefined);
+        assert.equal(joined?.turnId, opened.turnId);
+        assert.deepEqual([opened.joinedAfterStep, joined?.joinedAfterStep], [undefined, 1]);
+      }),
+  );
+
   it.effect(
     "P00's workflow turn lands as one turn: the line it took, each call settled, the words, and its cost",
     () =>

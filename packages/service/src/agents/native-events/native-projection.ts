@@ -155,7 +155,7 @@ export const NATIVE_WRITE = {
   ENQUEUE: "enqueue",
   /** Hand the writer one event of the turn. */
   EVENT: "event",
-  /** Take the awaiting line written under the client id into the turn. */
+  /** Take the awaiting line written under the client id into the turn, and bind the ask delivered under it, a call's, to the turn. */
   TAKE_LINE: "take_line",
   /** Record the harness's session id on the conversation. */
   SESSION: "session",
@@ -176,6 +176,8 @@ export type NativeWrite =
       readonly kind: typeof NATIVE_WRITE.TAKE_LINE;
       readonly turnId: string;
       readonly clientId: string;
+      /** How many steps of the turn had begun where the line joined one under way; none where it opened the turn. */
+      readonly joinedAfterStep?: number;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
   | { readonly kind: typeof NATIVE_WRITE.WAKEUPS; readonly wakeups: readonly NativeWakeup[] }
@@ -458,11 +460,15 @@ class Fold {
   fold(moment: NativeMoment): void {
     switch (moment.kind) {
       case NATIVE_MOMENT.LINE_ACCEPTED: {
+        // Note that a line taken into a turn whose steps have begun joined it there, which is where a
+        // call's ask that joined it is told from, as eve's relay binds one (`brain-host/relay.ts`).
+        const joined = this.state.turn?.steps;
         const turn = this.turn();
         this.writes.push({
           kind: NATIVE_WRITE.TAKE_LINE,
           turnId: turn.id,
           clientId: moment.clientId,
+          ...(joined === undefined || joined === 0 ? undefined : { joinedAfterStep: joined }),
         });
         return;
       }
