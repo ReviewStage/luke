@@ -27,6 +27,7 @@ import { TestClock } from "effect/testing";
 import { sweepAutomations } from "../../automations/automation-sweep.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -104,6 +105,8 @@ const services = Layer.mergeAll(
 /** An account with the operator experiment on. */
 const openMember = Effect.gen(function* () {
   const userId = yield* openGithubUser();
+  // The operator runs on its member's own keys, as every coding agent does now that Luke's pays for none.
+  yield* connectAgentApiKeys(userId);
   yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.OPERATOR]: true } });
   return userId;
 });
