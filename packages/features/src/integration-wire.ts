@@ -115,7 +115,7 @@ const INTEGRATION_HOSTS = {
   [INTEGRATION_PROVIDER.LINEAR]: ["linear.app"],
   [INTEGRATION_PROVIDER.MERCURY]: ["mercury.com"],
   [INTEGRATION_PROVIDER.NEON]: ["neon.tech"],
-  [INTEGRATION_PROVIDER.NOTION]: ["notion.so", "notion.site"],
+  [INTEGRATION_PROVIDER.NOTION]: ["notion.com", "notion.so", "notion.site"],
   [INTEGRATION_PROVIDER.POSTHOG]: ["posthog.com"],
   [INTEGRATION_PROVIDER.SENTRY]: ["sentry.io"],
   [INTEGRATION_PROVIDER.SLACK]: ["slack.com"],

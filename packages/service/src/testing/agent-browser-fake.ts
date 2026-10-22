@@ -30,9 +30,17 @@ import {
   BROWSER_START_OUTPUT,
   SANDBOX_BROWSER,
 } from "../agents/browser/sandbox-browser.js";
+import {
+  RECORDER_SOURCE,
+  RECORDING_READ_EXIT,
+  RECORDING_SCRIPT_NAME,
+  RECORDING_START_OUTPUT,
+  SANDBOX_RECORDING,
+} from "../agents/browser/sandbox-recorder.js";
 import type { SandboxPtyService } from "../agents/sandbox-pty.js";
 import {
   type CommandAsk,
+  type CommandRun,
   type ListedSandbox,
   SandboxUnavailable,
 } from "../agents/vercel-sandbox-api.js";
@@ -254,6 +262,12 @@ export interface FakeSandboxScenario {
   readonly unavailable?: number;
   /** Whether every resume is unavailable, as Vercel answering the status given. */
   readonly resumeUnavailable?: number;
+  /** What the recording's commands answer: the start's output (`started` where none is named), the stop's JSON (none recorded where none is named), and the video the stop leaves behind. */
+  readonly recording?: {
+    readonly start?: CommandRun;
+    readonly stop?: string;
+    readonly video?: Uint8Array;
+  };
 }
 
 export const FAKE_SANDBOX = {
@@ -300,6 +314,26 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
       refused() ??
       Effect.sync(() => {
         ran.push({ sandboxSessionId, ask });
+        if (ask.args.includes(RECORDER_SOURCE)) {
+          return (
+            scenario.recording?.start ?? {
+              exitCode: 0,
+              stdout: `${RECORDING_START_OUTPUT.STARTED}\n`,
+              stderr: "",
+            }
+          );
+        }
+        if (ask.args.includes(SANDBOX_RECORDING.VIDEO)) {
+          const video = scenario.recording?.video;
+          return video === undefined
+            ? { exitCode: RECORDING_READ_EXIT.NO_VIDEO, stdout: "", stderr: "" }
+            : { exitCode: 0, stdout: Buffer.from(video).toString("base64"), stderr: "" };
+        }
+        // The stop is the recording's other script, named as the start is.
+        if (ask.args.includes(RECORDING_SCRIPT_NAME)) {
+          const stop = scenario.recording?.stop ?? `{"ok":false,"reason":"none"}`;
+          return { exitCode: 0, stdout: `${stop}\n`, stderr: "" };
+        }
         const exitCode = scenario.startExit ?? 0;
         if (exitCode !== 0) return { exitCode, stdout: "", stderr: "Chromium did not start\n" };
         const stdout = browserUp ? BROWSER_START_OUTPUT.ATTACHED : BROWSER_START_OUTPUT.STARTED;
@@ -334,5 +368,9 @@ export function agentBrowserTestLayer(
  */
 export const noSandboxBrowserLayer: Layer.Layer<AgentBrowser> = Layer.succeed(AgentBrowser, {
   ensure: () => Effect.fail(new BrowserUnreachable({ reason: BROWSER_UNREACHABLE.NOT_OPENED })),
+  startRecording: () =>
+    Effect.fail(new BrowserUnreachable({ reason: BROWSER_UNREACHABLE.NOT_OPENED })),
+  stopRecording: () =>
+    Effect.fail(new BrowserUnreachable({ reason: BROWSER_UNREACHABLE.NOT_OPENED })),
   connect: () => Effect.fail(new BrowserUnreachable({ reason: BROWSER_UNREACHABLE.NOT_OPENED })),
 });

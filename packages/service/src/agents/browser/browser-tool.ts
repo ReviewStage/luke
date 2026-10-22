@@ -68,22 +68,31 @@ import {
   browserAgentActionsSchema,
   cutBrowserText,
 } from "@luke/features/browser-agent-actions";
-import { type BrowserCursor, runBrowserActions } from "@luke/features/browser-agent-cdp";
+import {
+  type BrowserCursor,
+  type BrowserRecorder,
+  isRecordingAction,
+  runBrowserActions,
+} from "@luke/features/browser-agent-cdp";
 import type { CdpSession, PageTarget } from "@luke/features/browser-cdp";
 import {
+  CONVERSATION_MEDIA_TYPE,
+  CONVERSATION_PICTURE_BOUNDS,
   type KeptPicture,
   PICTURE_OMISSION,
   type PictureOmission,
 } from "@luke/features/conversation-picture-wire";
 import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
+import { webmDimensions } from "@luke/features/video-signature";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
-import type { AgentBrowser } from "./agent-browser.js";
+import { AgentBrowser, type BrowserUnreachable } from "./agent-browser.js";
 import { connectRestoring } from "./restore-tabs.js";
+import { RECORDING_FAILURE, RECORDING_START_EXIT } from "./sandbox-recorder.js";
 
 const BROWSER_INPUT = Schema.Struct({
   actions: describeWire(
@@ -104,7 +113,11 @@ export const BROWSER_TOOL = {
     `${BROWSER_AGENT_LIMITS.MAX_ACTIONS} actions, run in order: list the tabs, open one at an ` +
     "address, navigate, go back or forward, click, type, choose an option in a dropdown, press " +
     "a key, scroll, wait, take a screenshot to see the page, take a snapshot to read it as " +
-    "text with a ref beside each element, read its console, or close it. Take a snapshot for " +
+    "text with a ref beside each element, read its console, or close it. To show the developer " +
+    "a flow you built or tested, record it: record starts a video of whatever the browser shows, " +
+    `up to ${BROWSER_AGENT_LIMITS.RECORDING_MAX_SECONDS} seconds and across calls, and ` +
+    "stop_recording, with a caption, stops it and keeps it in your transcript, where it plays; " +
+    "stop it before your turn ends, or it is lost. Take a snapshot for " +
     "the refs before you click or type on an element. Choose in a native dropdown, a select " +
     "the snapshot shows as a combobox or listbox, with select on its ref and the option's " +
     "label, rather than clicking it or its options, whose popup no click reaches. An action that leaves out its tab acts on the tab the action before " +
@@ -230,7 +243,7 @@ function firstDriven(
   // Note that `null` is a tab this call opened, whose id is not known until it runs.
   let tab: string | null | undefined;
   for (const [index, action] of actions.entries()) {
-    if (action.action === BROWSER_AGENT_ACTION.LIST) continue;
+    if (action.action === BROWSER_AGENT_ACTION.LIST || isRecordingAction(action)) continue;
     if (action.action === BROWSER_AGENT_ACTION.OPEN) {
       tab = null;
       continue;
@@ -444,6 +457,83 @@ function storedCursor(conversationId: string, now: Date) {
   });
 }
 
+/** Why a recording did not start or stop, in words the model can act on. */
+const RECORDING_REFUSAL = {
+  RUNNING: "a recording already runs: stop it with stop_recording first",
+  NO_ENCODER: "your sandbox carries no video encoder, so the browser cannot be recorded",
+  NOT_STARTED: "the recorder could not reach the browser; try record again",
+  [RECORDING_FAILURE.NONE]: "no recording runs: start one with record",
+  [RECORDING_FAILURE.EMPTY]: "the browser drew nothing while it was recorded",
+  [RECORDING_FAILURE.ENCODER]: "the recording could not be encoded",
+  [RECORDING_FAILURE.UNREACHABLE]: "the recorder could not reach the browser",
+  [RECORDING_FAILURE.TOO_LARGE]: `the recording would not fit in ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB even made small; record a shorter flow`,
+  [RECORDING_FAILURE.SLOW]: "the recording is still being encoded; call stop_recording again",
+  UNKEPT: "the recording could not be kept just now; call stop_recording again",
+} as const;
+
+/**
+ * The run's recorder: a recording of the browser in the agent's sandbox
+ * (`sandbox-recorder.ts`), kept as a video beside the transcript the call is
+ * written to, as its screenshots are, under a picture's bounds.
+ */
+function sandboxRecorder(call: BrowserCall): BrowserRecorder<AgentBrowser | DatabaseServices> {
+  const unreachable = (failure: BrowserUnreachable) => failure.message;
+  return {
+    start: Effect.gen(function* () {
+      const browser = yield* AgentBrowser;
+      const started = yield* browser
+        .startRecording(
+          call.browserSession,
+          BROWSER_AGENT_LIMITS.RECORDING_MAX_SECONDS,
+          CONVERSATION_PICTURE_BOUNDS.MAX_BYTES,
+        )
+        .pipe(Effect.mapError(unreachable));
+      if (!started.ok) {
+        return yield* Effect.fail(
+          started.exitCode === RECORDING_START_EXIT.NO_ENCODER
+            ? RECORDING_REFUSAL.NO_ENCODER
+            : RECORDING_REFUSAL.NOT_STARTED,
+        );
+      }
+      if (started.running) return yield* Effect.fail(RECORDING_REFUSAL.RUNNING);
+      return BROWSER_AGENT_LIMITS.RECORDING_MAX_SECONDS;
+    }),
+    stop: (caption) =>
+      Effect.gen(function* () {
+        const browser = yield* AgentBrowser;
+        const read = yield* browser
+          .stopRecording(call.browserSession, CONVERSATION_PICTURE_BOUNDS.MAX_BYTES)
+          .pipe(Effect.mapError(unreachable));
+        if (!read.ok) return yield* Effect.fail(RECORDING_REFUSAL[read.reason]);
+        const captioned = caption === undefined ? {} : { caption };
+        const dimensions = webmDimensions(read.bytes);
+        if (dimensions === undefined)
+          return yield* Effect.fail(RECORDING_REFUSAL[RECORDING_FAILURE.ENCODER]);
+        const kept = yield* keepConversationPicture(call.transcript, {
+          bytes: read.bytes,
+          contentType: CONVERSATION_MEDIA_TYPE.WEBM,
+          ...dimensions,
+        }).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.mapError(() => RECORDING_REFUSAL.UNKEPT),
+        );
+        if (Option.isNone(kept)) {
+          return {
+            seconds: read.seconds,
+            ...captioned,
+            omitted: PICTURE_OMISSION.LIMIT,
+            byteCount: read.bytes.byteLength,
+          };
+        }
+        return {
+          seconds: read.seconds,
+          ...captioned,
+          picture: { ...kept.value, mediaType: CONVERSATION_MEDIA_TYPE.WEBM },
+        };
+      }),
+  };
+}
+
 /** Runs the actions on the browser, the store kept in step after; a failure to keep it is logged and leaves the run as it ran. */
 function runOn(
   cdp: CdpSession,
@@ -453,7 +543,8 @@ function runOn(
 ) {
   return Effect.gen(function* () {
     const cursor = yield* storedCursor(call.conversationId, now);
-    const run = yield* runBrowserActions(cdp, actions, { cursor, keepScreenshots: true });
+    const recorder = sandboxRecorder(call);
+    const run = yield* runBrowserActions(cdp, actions, { cursor, keepScreenshots: true, recorder });
     yield* settleTitles(cdp, run.steps);
     const pages = yield* Effect.result(cdp.pages);
     const held = Result.isSuccess(pages) ? pages.success : [];

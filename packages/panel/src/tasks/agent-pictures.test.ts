@@ -440,6 +440,67 @@ test("a WebM the agent showed plays in its own player, left out of the replay, b
   }
 });
 
+test("a recording a finished browser call kept plays under its row, out of the turn's fold, its caption under it", async () => {
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = () => "blob:recording-1";
+  URL.revokeObjectURL = () => undefined;
+  try {
+    const video = { ...picture(1278, 598), mediaType: CONVERSATION_MEDIA_TYPE.WEBM };
+    const { container, read } = await drawn(
+      finished([
+        toolPart(
+          "browser",
+          "call-record",
+          { actions: [{ action: "record" }] },
+          {
+            status: "ran",
+            steps: [{ action: "record", status: "done", maxSeconds: 120 }],
+            skipped: 0,
+            tabs: [],
+          },
+        ),
+        toolPart(
+          "browser",
+          "call-stop",
+          { actions: [{ action: "stop_recording", caption: "Inviting a member" }] },
+          {
+            status: "ran",
+            steps: [
+              {
+                action: "stop_recording",
+                status: "done",
+                seconds: 8.3,
+                caption: "Inviting a member",
+                picture: video,
+              },
+            ],
+            skipped: 0,
+            tabs: [],
+          },
+        ),
+        text("Invites can be sent from the members page."),
+      ]),
+      false,
+      () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
+    );
+
+    const player = container.querySelector("video");
+    assert.ok(player, "the recording plays though the work before it folded");
+    assert.equal(player.getAttribute("src"), "blob:recording-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member");
+    assert.ok(player.closest(".ph-no-capture"));
+    assert.equal(
+      player.closest(".picture-block")?.querySelector(".picture-caption")?.textContent,
+      "Inviting a member",
+    );
+    assert.deepEqual(read, [video.id]);
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
+});
+
 test("an image a line's row names by the picture it was kept as is read through the door and drawn as its chip, and one an older row keeps the bytes of is drawn from them with no read", async () => {
   const kept = picture(2, 1);
   const { container, read } = await drawn({

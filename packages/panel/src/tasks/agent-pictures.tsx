@@ -1,6 +1,7 @@
 import {
   type CalledPicture,
   calledPicturesOf,
+  recordedVideosOf,
   type ShownPicture,
   shownPicturesOf,
 } from "@luke/features/agent-pictures-model";
@@ -566,11 +567,17 @@ export function CallPictures({
   const door = useContext(AgentPicturesContext);
   const { open, viewer } = useViewer(door);
   const called = calledPicturesOf(tool, input, output);
-  if (door === undefined || called.length === 0) return null;
+  const recorded = recordedVideosOf(tool, output);
+  if (door === undefined || (called.length === 0 && recorded.length === 0)) return null;
+  const videos = recorded.map((each, index) => (
+    // Note that a recording's place among its call's is its identity: an answer never reorders.
+    <ShownVideo key={index} door={door} shown={each} />
+  ));
+  if (called.length === 0) return <>{videos}</>;
   const kept = called.flatMap((each) =>
     each.kept ? [{ picture: each.picture, words: each.name }] : [],
   );
-  return (
+  const list = (
     <ul
       className="attached-files call-pictures ph-no-capture"
       aria-label="Pictures the call answered"
@@ -598,6 +605,12 @@ export function CallPictures({
       )}
       {viewer}
     </ul>
+  );
+  return (
+    <>
+      {list}
+      {videos}
+    </>
   );
 }
 
