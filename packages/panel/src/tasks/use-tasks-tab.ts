@@ -73,6 +73,7 @@ import {
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  isTranscriptTab,
   pullRequestLabelOf,
   type StripTab,
   sameTab,
@@ -1773,12 +1774,24 @@ export function useTasksTab(input: {
     : undefined;
   if (tabChannel !== tabReading) setTabReading(tabChannel);
   // An agent's page stands in the task's place, showing its agent as its tab would.
+  // An agent's transcript beside the Inbox shows its agent the same way, while the panel stands open on it.
+  const inboxTranscript =
+    shown &&
+    fixture === undefined &&
+    inboxView !== undefined &&
+    sidePanel.open &&
+    sidePanel.tab !== undefined &&
+    isTranscriptTab(sidePanel.tab)
+      ? sidePanel.tab.transcript
+      : undefined;
   const shownAgent =
     shown && fixture === undefined && agentView !== undefined
       ? agentView.agentId
-      : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
-        ? mainTabs.tab.agent
-        : null;
+      : inboxTranscript !== undefined
+        ? inboxTranscript
+        : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
+          ? mainTabs.tab.agent
+          : null;
   // The task's Inbox is the side panel's, on screen while the panel shows it beside the task.
   const panelShown =
     shown &&

@@ -123,10 +123,16 @@ export interface CloudBrowserStripTab {
   readonly cloudBrowser: string;
 }
 
+/** One coding agent's transcript and composer in the side panel, named by the agent, as an agent mention pressed beside the Inbox opens it. */
+export interface TranscriptStripTab {
+  readonly transcript: string;
+}
+
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
   | AgentStripTab
+  | TranscriptStripTab
   | DraftStripTab
   | SubagentStripTab
   | FileStripTab
@@ -163,6 +169,11 @@ export function isFileTab(tab: StripTab): tab is FileStripTab {
 /** Whether a tab is one agent's changes. */
 export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
   return tab instanceof Object && "changes" in tab;
+}
+
+/** Whether a tab is one agent's transcript in the side panel. */
+export function isTranscriptTab(tab: StripTab): tab is TranscriptStripTab {
+  return tab instanceof Object && "transcript" in tab;
 }
 
 /** Whether a tab is one agent's terminal. */
@@ -226,6 +237,7 @@ export function agentOfTab(tab: StripTab | undefined): string | undefined {
 export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boolean {
   if (a === undefined || b === undefined) return false;
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
+  if (isTranscriptTab(a)) return isTranscriptTab(b) && a.transcript === b.transcript;
   if (isSubagentTab(a)) {
     return (
       isSubagentTab(b) && a.subagent === b.subagent && a.delegation?.agent === b.delegation?.agent
@@ -254,6 +266,17 @@ function terminalKey(agentId: string): string {
   if (held !== undefined) return held;
   const made = crypto.randomUUID();
   terminalKeys.set(agentId, made);
+  return made;
+}
+
+/** The key each agent's transcript tab in the side panel is drawn under, by agent, made the first time it is asked for, apart from its Changes tab's and its Terminal tab's. */
+const transcriptKeys = new Map<string, string>();
+
+function transcriptKey(agentId: string): string {
+  const held = transcriptKeys.get(agentId);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  transcriptKeys.set(agentId, made);
   return made;
 }
 
@@ -287,6 +310,7 @@ function numberedKey(agentId: string, number: number): string {
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
+  if (isTranscriptTab(tab)) return transcriptKey(tab.transcript);
   if (isTerminalTab(tab)) return terminalKey(tab.terminal);
   if (isMacTerminalTab(tab)) return terminalKey(`mac:${tab.macTerminal}`);
   if (isDraftTab(tab)) return tab.draft;

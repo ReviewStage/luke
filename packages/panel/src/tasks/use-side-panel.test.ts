@@ -692,3 +692,40 @@ test("a preview browsed on to another file stays the preview on that file, so th
     "the browsed preview gave way",
   );
 });
+
+test("an agent's transcript stands in a panel beside the Inbox alone, once the task's agents hold it, and as the panel's preview like any link's tab", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ bare }: { bare: boolean }) {
+    control = useSidePanel(
+      undefined,
+      bare ? { id: TASK, holds: {}, bare: true } : usedTask(TASK),
+      [],
+      [],
+      [],
+      [],
+      [AGENT, OTHER_AGENT],
+    );
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (bare: boolean) => act(() => root.render(createElement(Probe, { bare })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(true);
+  act(() => panel().onPreview({ transcript: AGENT }));
+  assert.deepEqual(panel().strip, [{ transcript: AGENT }]);
+  assert.deepEqual(panel().preview, { transcript: AGENT });
+  act(() => panel().onPreview({ transcript: OTHER_AGENT }));
+  assert.deepEqual(panel().strip, [{ transcript: OTHER_AGENT }], "the next link took its place");
+
+  render(false);
+  assert.ok(
+    !panel().strip.some((tab) => typeof tab === "object" && "transcript" in tab),
+    "a task's own page draws its agents in its column, never beside",
+  );
+});

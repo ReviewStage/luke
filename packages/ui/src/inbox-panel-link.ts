@@ -17,8 +17,8 @@ import {
 
 /**
  * What the panel beside an Inbox item opens of a link pressed on the item:
- * a file of the task's repository, a page of the task, an agent's Pull
- * request tab as a Luke link names it, or that tab on its conversation as
+ * a file of the task's repository, a page of the task, an agent of the
+ * task's transcript, an agent's Pull request tab as a Luke link names it, or that tab on its conversation as
  * the pull request's own page on GitHub names it, by its number where it is
  * another pull request of the task's repository.
  */
@@ -27,6 +27,8 @@ export const INBOX_PANEL_TARGET = {
   PAGE: "page",
   CHANGES: "changes",
   PULL_REQUEST: "pull-request",
+  /** An agent of the item's task, whose transcript reads beside the item. */
+  AGENT: "agent",
 } as const;
 
 export type InboxPanelTarget =
@@ -37,6 +39,7 @@ export type InboxPanelTarget =
     }
   | { readonly kind: typeof INBOX_PANEL_TARGET.PAGE; readonly pageId: string }
   | { readonly kind: typeof INBOX_PANEL_TARGET.CHANGES; readonly agentId: string }
+  | { readonly kind: typeof INBOX_PANEL_TARGET.AGENT; readonly agentId: string }
   | {
       readonly kind: typeof INBOX_PANEL_TARGET.PULL_REQUEST;
       readonly agentId: string;
@@ -73,6 +76,10 @@ export function inboxPanelTarget(
     }
     if (at.kind === LINK_PLACE.CHANGES && at.planId === place.taskId) {
       return { kind: INBOX_PANEL_TARGET.CHANGES, agentId: at.agentId };
+    }
+    // An agent of the item's own task reads beside it; one on no task, or another task's, is the window's to open.
+    if (at.kind === LINK_PLACE.AGENT && at.planId !== undefined && at.planId === place.taskId) {
+      return { kind: INBOX_PANEL_TARGET.AGENT, agentId: at.agentId };
     }
     return undefined;
   }

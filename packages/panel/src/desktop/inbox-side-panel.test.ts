@@ -113,12 +113,13 @@ const FUNNEL: PageLine = {
   at: 1_500,
 };
 
-/** The item's words, naming a pull request, a page of its plan, a file of its repository, and a page of another plan. */
+/** The item's words, naming a pull request, a page of its plan, a file of its repository, a page of another plan, and an agent of its plan. */
 const WORDS = [
   `Opened [@relay#42](${PULL}).`,
   `See [@Invite funnel](https://tryluke.dev/acme/plan/${TASK.id}/page/${FUNNEL.id}).`,
   "The change is in [@invites.ts](https://github.com/acme/relay/blob/HEAD/src/invites.ts).",
   `Compare [@Old funnel](https://tryluke.dev/acme/plan/${OTHER_TASK}/page/${FUNNEL.id}).`,
+  `Ask [@Batch the invitations](https://tryluke.dev/acme/plan/${TASK.id}/agent/${AGENT.id}).`,
 ].join(" ");
 
 const ITEM: InboxItem = {
@@ -276,6 +277,7 @@ async function inbox(
           sidePanel,
           onShowTask: (taskId) => left.tasks.push(taskId),
           onShowPanelTab: (taskId, tab) => left.went.push(`${taskId} ${JSON.stringify(tab)}`),
+          onShowAgent: (taskId, agentId) => left.went.push(`${taskId} agent ${agentId}`),
         }),
       }),
     );
@@ -480,6 +482,41 @@ test("a pull request and a file the item names pressed with ⌘ ask to go to the
     assert.equal(left.went.length, 2, left.went.join("\n"));
     assert.match(left.went[0] ?? "", /"changes"/);
     assert.match(left.went[1] ?? "", /"file"/);
+  } finally {
+    stop();
+  }
+});
+
+test("an agent the item names reads beside the Inbox as the panel's preview, its transcript in the panel, and pressed with ⌘ asks to go to its task on its tab", async () => {
+  const { container, left } = await inbox();
+  await pressChip(container, "Batch the invitations");
+  const tabs = panelTabs(container);
+  assert.ok(tabs, "the panel stands beside the Inbox");
+  assert.equal(tabs.length, 1);
+  assert.match(tabs[0] ?? "", /^▸ Batch the invitations/);
+  assert.equal(previewTabs(container), 1, "as the panel's preview");
+  assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
+  assert.ok(
+    container.querySelector('aside[aria-label="Panel"] .desktop-agent'),
+    "the agent's transcript stands in the panel",
+  );
+  assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
+
+  const stop = installPressIntent(window);
+  try {
+    const chip = [
+      ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+    ].find((each) =>
+      each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Batch the invitations"),
+    );
+    assert.ok(chip);
+    act(() => {
+      chip.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+      );
+    });
+    await settle();
+    assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`]);
   } finally {
     stop();
   }
