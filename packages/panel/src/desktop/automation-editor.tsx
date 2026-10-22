@@ -18,6 +18,7 @@ import {
   draftProblems,
   draftRepositories,
   draftTrigger,
+  filterValuesOf,
   type GitHubTriggerSettings,
   presetDraft,
   repositoryHeld,
@@ -26,6 +27,8 @@ import {
   type ScheduleKind,
   sameDraft,
   withGithubEvent,
+  withIntegrationEvent,
+  withIntegrationFilters,
   withRepository,
 } from "@luke/features/automation-draft-model";
 import { automationTriggerText } from "@luke/features/automation-list-model";
@@ -39,6 +42,7 @@ import {
   type AutomationView,
 } from "@luke/features/automation-view";
 import {
+  AUTOMATION_BOUNDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
@@ -50,6 +54,7 @@ import {
   GITHUB_TRIGGER_EVENT,
   type GitHubSender,
   type GitHubTriggerEvent,
+  type IntegrationTriggerFilters,
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "@luke/features/automation-wire";
@@ -62,6 +67,13 @@ import {
 } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
+import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+import {
+  SENTRY_LEVEL,
+  SENTRY_TRIGGER_EVENT,
+  type SentryLevel,
+  type SentryTriggerEvent,
+} from "@luke/features/trigger-catalog";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -72,8 +84,11 @@ import {
   Button,
   CHIP_LOOK,
   CHIP_WIDTH,
+  CHOICE_LOOK,
+  CHOICE_SELECT,
   Chip,
   ChipName,
+  ChoiceList,
   ConfirmDialog,
   DetailPage,
   EllipsisIcon,
@@ -156,11 +171,51 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
  * picker writes one, every hour, every day, on weekdays, or on one day of
  * the week, at a time in a zone, and a cron the picker did not write stands
  * as custom, kept as it was; its next two runs are said under it. What
- * stops a draft saving is said at its field once a save is pressed, and a
+ * stops a draft saving is said at its field once a save is pressed. A
+ * Sentry trigger picks its event, keeps to the projects, environments, and
+ * levels named, and waits so many hours before the same issue runs again;
+ * where the workspace has no Sentry installed, an Install Sentry prompt
+ * stands in its rows' place. A
  * save the service refuses says why in one line under the name. A save
  * sends only what moved (`automation-draft-model.ts`), so the model and the
  * target it runs on stand as they were.
  */
+
+/**
+ * The workspace's Sentry as the editor offers it: the read, nothing while
+ * it is out or where it failed, and the install, with whether one is under
+ * way and why the last was refused.
+ */
+export interface SentryOffer {
+  readonly read: WorkspaceSentry | undefined;
+  readonly installing: boolean;
+  readonly refusal: string | undefined;
+  readonly onInstall: () => void;
+}
+
+/**
+ * Whether a draft fires on Sentry where the deployment holds no Sentry
+ * integration and the automation did not already: a choice made before the
+ * read said so, which is held back from saving rather than written as a
+ * trigger nothing can fire. One saved on Sentry stays as it was.
+ */
+function sentryWithheld(
+  sentry: SentryOffer,
+  automation: AutomationSummary | undefined,
+  draft: AutomationDraft,
+): boolean {
+  return (
+    sentry.read?.configured === false &&
+    draft.triggerKind === AUTOMATION_TRIGGER.INTEGRATION &&
+    automation?.trigger.kind !== AUTOMATION_TRIGGER.INTEGRATION
+  );
+}
+
+/** Why Sentry cannot be picked where the deployment holds no Sentry integration, as the Type menu says it. */
+const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
+
+/** What the page says where a Sentry trigger is held back from saving. */
+const SENTRY_WITHHELD = "Luke can't receive Sentry events here. Choose another trigger.";
 
 /** The writes the editor makes, as the list's hook answers them (`use-automations.ts`). */
 export interface AutomationWrites {
@@ -188,6 +243,29 @@ const TRIGGERS: readonly { value: AutomationTriggerKind; label: string }[] = [
   { value: AUTOMATION_TRIGGER.SCHEDULE, label: "Schedule" },
   { value: AUTOMATION_TRIGGER.GITHUB, label: "GitHub event" },
   { value: AUTOMATION_TRIGGER.WEBHOOK, label: "Webhook" },
+  { value: AUTOMATION_TRIGGER.INTEGRATION, label: "Sentry" },
+];
+
+/** The Sentry events the event menu offers, the recommended one first. */
+const SENTRY_EVENTS: readonly { value: SentryTriggerEvent; label: string }[] = [
+  { value: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED, label: "Alert triggered (recommended)" },
+  { value: SENTRY_TRIGGER_EVENT.ISSUE_CREATED, label: "New issue" },
+];
+
+/** What each Sentry event's row says under its name: how it reaches Luke. */
+const SENTRY_EVENT_DETAIL = {
+  [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]:
+    "Set the alert rule's action to send a notification to the Luke integration.",
+  [SENTRY_TRIGGER_EVENT.ISSUE_CREATED]: "Every new issue in the installed organization's projects.",
+} as const satisfies Record<SentryTriggerEvent, string>;
+
+/** Sentry's levels as the level pills name them, least severe first. */
+const SENTRY_LEVELS: readonly { value: SentryLevel; label: string }[] = [
+  { value: SENTRY_LEVEL.DEBUG, label: "Debug" },
+  { value: SENTRY_LEVEL.INFO, label: "Info" },
+  { value: SENTRY_LEVEL.WARNING, label: "Warning" },
+  { value: SENTRY_LEVEL.ERROR, label: "Error" },
+  { value: SENTRY_LEVEL.FATAL, label: "Fatal" },
 ];
 
 /** The GitHub events the event menu offers, in its order. */
@@ -911,6 +989,168 @@ function GitHubSettingsRows({
   );
 }
 
+/**
+ * One filter's field: its values written comma-separated, read back into
+ * the draft as they are typed. Note that the words typed stand in the row's
+ * own state, so a comma still to be followed by a value is not taken away.
+ */
+function FilterRow({
+  label,
+  detail,
+  values,
+  onValues,
+}: {
+  label: string;
+  detail: string;
+  values: readonly string[];
+  onValues: (values: readonly string[]) => void;
+}): React.JSX.Element {
+  // The field's Escape lets go of the caret and keeps the press, as every field's here does.
+  const field = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState(() => values.join(", "));
+  return (
+    <SettingsRow label={label} description={detail}>
+      {(control) => (
+        <span className="automation-field">
+          <TextField
+            ref={field}
+            label={label}
+            describedBy={control["aria-describedby"]}
+            spellCheck={false}
+            placeholder="All"
+            value={text}
+            onEscape={() => field.current?.blur()}
+            onChange={(typed) => {
+              setText(typed);
+              onValues(filterValuesOf(typed));
+            }}
+          />
+        </span>
+      )}
+    </SettingsRow>
+  );
+}
+
+/** The parse the Sentry event picker reads its event back with. */
+const sentryEventOf = optionValue(SENTRY_EVENTS);
+
+/**
+ * A Sentry trigger's rows, in the Trigger card: its event, the projects,
+ * environments, and levels it keeps to, and the hours before the same
+ * issue may start another run. Where the workspace has no Sentry installed
+ * a row saying so stands in their place, its button going to where it is
+ * installed.
+ */
+function SentryRows({
+  draft,
+  sentry,
+  withheld,
+  problem,
+  onDraft,
+}: {
+  draft: AutomationDraft;
+  /** The workspace's Sentry, through whose installation its events arrive. */
+  sentry: SentryOffer;
+  /** Whether the deployment holds no Sentry integration for this new choice of it (`sentryWithheld`). */
+  withheld: boolean;
+  /** What stops a save in the cooldown, said under its row. */
+  problem: string | undefined;
+  onDraft: (patch: Partial<AutomationDraft>) => void;
+}): React.JSX.Element {
+  // The cooldown's Escape lets go of the caret and keeps the press, as every field's here does.
+  const hours = useRef<HTMLInputElement>(null);
+  if (withheld) {
+    return (
+      <SettingsRow label="Sentry isn't available" description={SENTRY_WITHHELD}>
+        {() => null}
+      </SettingsRow>
+    );
+  }
+  // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable.
+  if (sentry.read !== undefined && sentry.read.installations.length === 0) {
+    return (
+      <SettingsRow
+        label="Sentry isn't installed"
+        description="Install Luke's Sentry integration on this workspace so its alerts and issues can start runs."
+        error={sentry.refusal}
+      >
+        {() => (
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            busy={sentry.installing}
+            busyLabel="Opening Sentry"
+            onClick={sentry.onInstall}
+          >
+            Install Sentry
+          </Button>
+        )}
+      </SettingsRow>
+    );
+  }
+  const trigger = draft.integrationTrigger;
+  const filter = (filters: IntegrationTriggerFilters) =>
+    onDraft(withIntegrationFilters(draft, filters));
+  return (
+    <>
+      <SelectRow
+        width={CHIP_WIDTH.MIN_FIELD}
+        label="Event"
+        detail={SENTRY_EVENT_DETAIL[trigger.event]}
+        value={trigger.event}
+        options={SENTRY_EVENTS}
+        parse={sentryEventOf}
+        onChange={(event) => onDraft(withIntegrationEvent(draft, event))}
+      />
+      <FilterRow
+        label="Projects"
+        detail="Project slugs, comma-separated. Empty for every project."
+        values={trigger.filters?.project ?? []}
+        onValues={(project) => filter({ project })}
+      />
+      <FilterRow
+        label="Environments"
+        detail="Comma-separated. Empty for every environment."
+        values={trigger.filters?.environment ?? []}
+        onValues={(environment) => filter({ environment })}
+      />
+      <SettingsRow
+        label="Levels"
+        description="None picked for every level."
+        below={() => (
+          <ChoiceList
+            legend="Levels"
+            select={CHOICE_SELECT.MANY}
+            look={CHOICE_LOOK.PILL}
+            options={SENTRY_LEVELS}
+            value={trigger.filters?.level ?? []}
+            onChange={(level) => filter({ level })}
+          />
+        )}
+      />
+      <SettingsRow
+        label="Same issue again after"
+        description={`Hours before one Sentry issue can start another run, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
+        error={problem}
+      >
+        {(control) => (
+          <span className="automation-field">
+            <TextField
+              ref={hours}
+              type={TEXT_FIELD_TYPE.NUMBER}
+              label="Hours before the same issue runs again"
+              describedBy={control["aria-describedby"]}
+              invalid={control["aria-invalid"]}
+              value={draft.subjectCooldownHours}
+              onEscape={() => hours.current?.blur()}
+              onChange={(subjectCooldownHours) => onDraft({ subjectCooldownHours })}
+            />
+          </span>
+        )}
+      </SettingsRow>
+    </>
+  );
+}
+
 /** The most findings a review may be set to post, as its picker offers them. */
 const MOST_FINDINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((most) => ({
   value: most,
@@ -1468,6 +1708,7 @@ function EditorForm({
   onSecret,
   savedAgentId,
   codeReviewOn,
+  sentry,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -1484,8 +1725,19 @@ function EditorForm({
   savedAgentId: string | null;
   /** Whether the account has Code review's experiment on, without which no code review's settings stand apart from its prompt. */
   codeReviewOn: boolean;
+  /** The workspace's Sentry, whose trigger is offered only where this deployment holds the integration. */
+  sentry: SentryOffer;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
+  // Note that Sentry stays listed where the deployment holds no integration, unpickable and saying why, so it can be found.
+  const triggers =
+    sentry.read?.configured === false && draft.triggerKind !== AUTOMATION_TRIGGER.INTEGRATION
+      ? TRIGGERS.map((trigger) =>
+          trigger.value === AUTOMATION_TRIGGER.INTEGRATION
+            ? { ...trigger, disabled: SENTRY_NOT_SET_UP }
+            : trigger,
+        )
+      : TRIGGERS;
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
   const review = codeReviewOn ? readCodeReviewSettings(draft.prompt) : undefined;
   // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
@@ -1514,12 +1766,12 @@ function EditorForm({
           label="Type"
           detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
           value={draft.triggerKind}
-          options={TRIGGERS}
+          options={triggers}
           parse={triggerKindOf}
           error={
             draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
               ? undefined
-              : problems[DRAFT_FIELD.SCHEDULE]
+              : (problems[DRAFT_FIELD.SCHEDULE] ?? problems[DRAFT_FIELD.FILTERS])
           }
           onChange={(triggerKind) => onDraft({ triggerKind })}
         />
@@ -1547,6 +1799,14 @@ function EditorForm({
               onSettings={(githubSettings) => onDraft({ githubSettings })}
             />
           </>
+        ) : draft.triggerKind === AUTOMATION_TRIGGER.INTEGRATION ? (
+          <SentryRows
+            draft={draft}
+            sentry={sentry}
+            withheld={sentryWithheld(sentry, automation, draft)}
+            problem={problems[DRAFT_FIELD.COOLDOWN]}
+            onDraft={onDraft}
+          />
         ) : (
           <WebhookRows
             automation={automation}
@@ -1628,6 +1888,7 @@ export function AutomationEditor({
   room,
   runsShown,
   onRuns,
+  sentry,
 }: {
   automation: AutomationSummary | undefined;
   /** The preset a new automation starts filled in from, as the list's suggestion it was opened from names it; none for a blank one. */
@@ -1657,6 +1918,8 @@ export function AutomationEditor({
   runsShown: boolean;
   /** Stands the runs' screen, or the setup again, through the window's history. */
   onRuns: (shown: boolean) => void;
+  /** The workspace's Sentry: a Sentry trigger offers its install in place of its rows where none is installed. */
+  sentry: SentryOffer;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
   const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
@@ -1736,6 +1999,10 @@ export function AutomationEditor({
     if (automation === undefined) leaveGuard.pass(() => onCreated(answer.automation.id));
   };
   const save = () => {
+    if (sentryWithheld(sentry, automation, draft)) {
+      setRefusal(SENTRY_WITHHELD);
+      return;
+    }
     if (Object.keys(problems).length > 0) {
       setShownProblems(true);
       return;
@@ -1861,6 +2128,7 @@ export function AutomationEditor({
                 onSecret={setShownSecret}
                 savedAgentId={savedAgentId}
                 codeReviewOn={codeReviewOn}
+                sentry={sentry}
                 onDraft={editDraft}
               />
             </div>
