@@ -65,6 +65,7 @@ import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
 import { TIMES_EXAMPLE } from "./examples/times";
+import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
@@ -122,6 +123,7 @@ export const EXAMPLES: readonly Example[] = [
   TEXT_FIELDS_EXAMPLE,
   TEXT_LINKS_EXAMPLE,
   LINE_BUTTONS_EXAMPLE,
+  TOASTS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   TIMES_EXAMPLE,
   SHORTCUTS_EXAMPLE,

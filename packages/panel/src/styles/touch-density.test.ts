@@ -227,8 +227,8 @@ function closes(): ReadonlyMap<string, Element> {
   const close = drawn(compact("Close Plan"), "luke-tab-close");
   tab.append(close);
   const toast = document.body.appendChild(document.createElement("li"));
-  toast.className = "toast";
-  const dismiss = drawn(compact("Dismiss"), "toast-dismiss");
+  toast.className = "luke-toast";
+  const dismiss = drawn(compact("Dismiss"), "luke-toast-dismiss");
   toast.append(dismiss);
   return new Map([
     ["the tab's ×", buttonIn(close)],

@@ -24,7 +24,7 @@ function cardSpan(card: Element | null): DOMRect {
 }
 
 /** The length the dock's height is written in. */
-const COLUMN_DOCK = "--column-dock";
+const COLUMN_DOCK = "--luke-column-dock";
 
 /** The card that floats over the column while the sidebar is folded. */
 const FLOATING_CARD = '.call-card[data-surface="floating"]';
@@ -65,7 +65,7 @@ function dockHeight(column: Element, docked: string, card: DOMRect | undefined):
 
 /**
  * Keeps two lengths for the folded sidebar's call card: the dock of the
- * column it stands over (`--column-dock`), which it stands just above, and
+ * column it stands over (`--luke-column-dock`), which it stands just above, and
  * its own height (`--floating-card`), which the transcript under it keeps
  * clear. The dock is written on the document's root, because the toasts,
  * which a phone stands above it too, are portalled out of the shell; the

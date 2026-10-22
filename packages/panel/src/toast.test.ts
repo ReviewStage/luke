@@ -69,7 +69,7 @@ function persisting(words: string): ToastNotice {
 
 /** What each toast standing says, oldest first, leaving out those on their way out. */
 function standing(): string[] {
-  return [...document.querySelectorAll(".toast:not([data-leaving]) .toast-words")].map(
+  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
@@ -124,9 +124,9 @@ test("a toast with an action carries a Dismiss button the keyboard reaches, and 
   act(() => show?.(persisting("Retry the webhook finished")));
   act(() => show?.(persisting("Nightly upgrade couldn't start")));
   const dismissButtons = () =>
-    [...document.querySelectorAll<HTMLButtonElement>(".toast:not([data-leaving]) button")].filter(
-      (button) => button.getAttribute("aria-label") === "Dismiss",
-    );
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(".luke-toast:not([data-leaving]) button"),
+    ].filter((button) => button.getAttribute("aria-label") === "Dismiss");
 
   const [first, second] = dismissButtons();
   assert.ok(first && second);

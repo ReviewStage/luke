@@ -912,3 +912,14 @@ body {
   height: 160px;
   border-right: 1px solid var(--luke-color-border);
 }
+
+/* The room a toast stack stands in: its transform makes it the containing
+   block of the stack's fixed corner, so the stack stands in the box rather
+   than the window. */
+.catalog-toast-stage {
+  position: relative;
+  height: 340px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  transform: translateZ(0);
+}
