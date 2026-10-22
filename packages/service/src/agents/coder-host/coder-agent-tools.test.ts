@@ -883,14 +883,14 @@ async function keptPicture(agent: ConversationTarget, bytes: Uint8Array): Promis
   return Option.getOrThrow(kept).id;
 }
 
-/** A chat message carrying one picture, posted by the member into the channel as the account given; answers the picture's attachment id. */
+/** A chat message carrying one picture, posted by the member into the channel as the account given; answers the picture's attachment id and the message's id. */
 async function chatPicture(
   as: string,
   workspaceId: string,
   author: { readonly id: string },
   channelId: string,
   bytes: Uint8Array,
-): Promise<string> {
+): Promise<{ readonly attachmentId: string; readonly messageId: string }> {
   const attachmentId = randomUUID();
   const posted = await database.run(
     postMessage(as, workspaceId, {
@@ -907,7 +907,7 @@ async function chatPicture(
     ]),
   );
   assert.equal(kept, true);
-  return attachmentId;
+  return { attachmentId, messageId: message.id };
 }
 
 /** The file parts a message eve was sent carries, each as eve is handed it. */
@@ -948,11 +948,12 @@ test("start_agent on the plan with a note hands the agent the pictures images na
   const inChannel = pngOf(64, 2);
   const inDm = pngOf(64, 3);
   const shownId = await keptPicture(caller, shown);
-  const channelId = await chatPicture(caller.userId, workspaceId, person, channel.id, inChannel);
+  const posted = await chatPicture(caller.userId, workspaceId, person, channel.id, inChannel);
+  const channelId = posted.attachmentId;
   const dm = Option.getOrThrow(
     await database.run(findOrMakeDm(caller.userId, workspaceId, self.id, person.id)),
   );
-  const dmId = await chatPicture(caller.userId, workspaceId, person, dm.id, inDm);
+  const { attachmentId: dmId } = await chatPicture(caller.userId, workspaceId, person, dm.id, inDm);
 
   const started = await call(
     CODER_TOOL.START_AGENT,
@@ -970,6 +971,19 @@ test("start_agent on the plan with a note hands the agent the pictures images na
     forwardedPng(channelId, inChannel),
     forwardedPng(dmId, inDm),
   ]);
+
+  // The same call run again answers the agent it made, though a picture it named is gone since.
+  await database.run(
+    attachMessageImages(caller.userId, workspaceId, person.id, posted.messageId, []),
+  );
+  const again = await call(
+    CODER_TOOL.START_AGENT,
+    { note: NOTE, images: [shownId, channelId, dmId] },
+    "call-images",
+  );
+  assert.ok(isRecord(started.agent) && isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, started.agent.id);
+  assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
 });
 
 /** The JSON Schema goldens of this package, where a tool's input a model is shown is recorded. */
@@ -992,7 +1006,13 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
   const dm = Option.getOrThrow(
     await database.run(findOrMakeDm(teammate, workspaceId, bobAgent.id, bob.id)),
   );
-  const notTheirs = await chatPicture(teammate, workspaceId, bob, dm.id, pngOf(64, 5));
+  const { attachmentId: notTheirs } = await chatPicture(
+    teammate,
+    workspaceId,
+    bob,
+    dm.id,
+    pngOf(64, 5),
+  );
   const tooLarge = pngOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES + 1, 6);
   const tooLargeId = await keptPicture(caller, tooLarge);
   const together = await Promise.all(

@@ -1704,9 +1704,10 @@ export function runStartAgent(
     Effect.gen(function* () {
       // Another task, or another agent's, is started on only where it is of the caller's
       // own workspace; a call run again after its start landed answers what it made
-      // (`startedBefore`), before a source is read, which its own continue has since stopped.
+      // (`startedBefore`), before a source is read, which its own continue has since stopped,
+      // or the pictures it named, which may be gone since.
       const elsewhere = from !== undefined || (named !== undefined && named !== ownTask);
-      if (elsewhere) {
+      if (elsewhere || asked.success.images !== undefined) {
         const before = yield* startedBefore(call);
         if (Option.isSome(before)) return before.value;
       }
