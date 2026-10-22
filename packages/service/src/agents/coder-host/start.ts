@@ -891,6 +891,22 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * Whether a Start of the account's on the model would find a credential to
+ * pay for it, refused by name where none does, as the Start itself would be
+ * (`agentRuntimeChoice`): what a caller checks before it undoes anything a
+ * refused Start could not put back, as an operator's Reset archives its
+ * standing operator.
+ */
+export const startCredentialStands = (userId: string, model: string) =>
+  Effect.asVoid(
+    Effect.catch(agentRuntimeChoice(userId, model), (failure) =>
+      failure instanceof AgentCredentialMissing
+        ? Effect.fail(credentialMissing(failure.provider))
+        : hostedStoreOrUnavailable(Effect.fail(failure)),
+    ),
+  );
+
+/**
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
  * chose, a blank Start, a continue and a fork alike. A Start a Call opens a

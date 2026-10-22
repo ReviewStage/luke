@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   deleteAutomation,
@@ -11,6 +12,7 @@ import {
   listWorkspaceCodingAgentLines,
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
+import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   AUTOMATION_FIRING,
@@ -22,6 +24,7 @@ import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { agentTabLabel } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Result, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { sweepAutomations } from "../../automations/automation-sweep.js";
@@ -278,6 +281,30 @@ it.layer(getTestDB())("the member's operator", (it) => {
 
         assert.deepEqual(unstoppable, Result.fail(HOSTED_REFUSAL.AGENT_NOT_READY));
         assert.deepEqual(refusedChoice, Result.fail(HOSTED_REFUSAL.INVALID_REQUEST));
+        assert.deepEqual(
+          (yield* operatorsOf(member, workspaceId)).map((operator) => [
+            operator.id,
+            operator.archivedAt,
+          ]),
+          [[standing.agent.id, null]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a Reset by a member who removed the credential that paid for their operator is refused by name before it archives anything, so the standing operator stays",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        const standing = yield* ensure(member, workspaceId);
+        const db = yield* Database;
+        yield* db.delete(accountProviderKey).where(eq(accountProviderKey.userId, member));
+
+        const refused = yield* Effect.result(ensure(member, workspaceId, true));
+
+        assert.ok(Result.isFailure(refused));
+        assert.equal(refused.failure.error, HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING.error);
         assert.deepEqual(
           (yield* operatorsOf(member, workspaceId)).map((operator) => [
             operator.id,
