@@ -95,14 +95,16 @@ function currentOf(page: SitePage, place: SitePlace | undefined): TextLinkCurren
 export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   return (
     <nav aria-label="Site" className="flex items-center justify-between">
-      <a
-        className={`inline-flex min-h-11 items-center gap-2 no-underline ${WORDMARK}`}
+      <TextLink
         href={SITE_PAGE.HOME}
-        aria-current={currentOf(SITE_PAGE.HOME, current)}
+        height={TEXT_LINK_HEIGHT.CONTROL}
+        current={currentOf(SITE_PAGE.HOME, current)}
       >
-        <LukeMark />
-        Luke
-      </a>
+        <span className={`inline-flex items-center gap-2 text-(--luke-color-text) ${WORDMARK}`}>
+          <LukeMark />
+          Luke
+        </span>
+      </TextLink>
       <div className="flex items-center gap-4">
         <TextLink
           href={SITE_PAGE.ABOUT}
