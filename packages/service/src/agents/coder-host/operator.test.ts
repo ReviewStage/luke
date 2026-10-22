@@ -11,7 +11,7 @@ import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Layer, Option, Result } from "effect";
-import { HOSTED_REFUSAL } from "../../http/http-effect.js";
+import { HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { ensureOperator } from "./operator.js";
@@ -22,7 +22,9 @@ import { type StartAsk, startCodingAgent } from "./start.js";
  *
  * Two ensures that race make one operator; each member of a workspace has
  * their own, and a member has one in each of their workspaces; a Reset
- * leaves the old one archived beside a fresh one standing; an account
+ * leaves the old one archived beside a fresh one standing, and one that
+ * could not stop the old one's turn or whose fresh one the catalog would
+ * refuse leaves the old one standing; an account
  * outside the workspace, or one with the experiment off, ensures none. No
  * ensure opens a session. A blank Start with no task that is no operator's
  * is still refused, as is an operator's that is not blank or names a
@@ -53,9 +55,19 @@ const openMember = Effect.gen(function* () {
   return userId;
 });
 
-/** The member's operator in the workspace, ensured, or reset and ensured. */
-const ensure = (userId: string, workspaceId: string, reset = false) =>
-  ensureOperator(unreachedEve, userId, workspaceId, { reset }).pipe(Effect.provide(services));
+/** A standing operator's turn stopped before a Reset archives it: none runs in these tests, so nothing to stop. */
+const nothingToStop = () => Effect.void;
+
+/** The member's operator in the workspace, ensured, or reset and ensured, its stop refused where `stop` says. */
+const ensure = (
+  userId: string,
+  workspaceId: string,
+  reset = false,
+  stopStanding: () => Effect.Effect<void, HostedRefusal> = nothingToStop,
+) =>
+  ensureOperator(unreachedEve, userId, workspaceId, { reset, stopStanding }).pipe(
+    Effect.provide(services),
+  );
 
 /** The member's operators in the workspace, archived ones included, newest first. */
 const operatorsOf = (userId: string, workspaceId: string) =>
@@ -139,6 +151,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
         const reset = yield* ensure(member, workspaceId, true);
         const after = yield* ensure(member, workspaceId);
 
+        assert.equal(reset.retired?.id, before.agent.id);
         assert.notEqual(reset.agent.id, before.agent.id);
         assert.equal(reset.created, true);
         assert.equal(after.agent.id, reset.agent.id);
@@ -151,6 +164,34 @@ it.layer(getTestDB())("the member's operator", (it) => {
         );
         const archived = Option.getOrThrow(yield* readCodingAgent(member, before.agent.id));
         assert.equal(archived.conversationId, before.agent.conversationId);
+      }),
+  );
+
+  it.effect(
+    "a Reset whose fresh operator the catalog would refuse, or whose standing operator's turn cannot be stopped, keeps the standing one",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        const standing = yield* ensure(member, workspaceId);
+
+        const unstoppable = yield* Effect.result(
+          ensure(member, workspaceId, true, () => Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)),
+        );
+        yield* writeAccountPreferences(member, {
+          codingAgent: { model: "retired/model", effort: "high" },
+        });
+        const refusedChoice = yield* Effect.result(ensure(member, workspaceId, true));
+
+        assert.deepEqual(unstoppable, Result.fail(HOSTED_REFUSAL.AGENT_NOT_READY));
+        assert.deepEqual(refusedChoice, Result.fail(HOSTED_REFUSAL.INVALID_REQUEST));
+        assert.deepEqual(
+          (yield* operatorsOf(member, workspaceId)).map((operator) => [
+            operator.id,
+            operator.archivedAt,
+          ]),
+          [[standing.agent.id, null]],
+        );
       }),
   );
 

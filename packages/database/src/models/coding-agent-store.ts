@@ -36,6 +36,8 @@ import {
   isNotNull,
   isNull,
   lte,
+  ne,
+  not,
   or,
   type SQL,
   sql,
@@ -657,8 +659,50 @@ const findLiveOperator = SqlSchema.findOneOption({
       db
         .select(CODING_AGENT_COLUMNS)
         .from(codingAgent)
-        .where(liveOperatorOf(userId, organizationId))
+        .where(
+          and(
+            liveOperatorOf(userId, organizationId),
+            workspaceReachableBy(userId, codingAgent.organizationId),
+          ),
+        )
         .limit(1),
+    ),
+});
+
+/**
+ * Whether bringing the agent back would stand a second operator of its
+ * member in its workspace: it is an operator, and another of that member's
+ * stands there, as after a Reset. Every unarchive is held to this
+ * (`operatorReplaced`), since the partial unique index would refuse it.
+ */
+function replacedOperator(): SQL {
+  const standing = alias(codingAgent, "standing_operator");
+  const another = exists(
+    queryBuilder
+      .select({ id: standing.id })
+      .from(standing)
+      .where(
+        and(
+          eq(standing.organizationId, codingAgent.organizationId),
+          eq(standing.userId, codingAgent.userId),
+          eq(standing.kind, CODING_AGENT_KIND.OPERATOR),
+          isNull(standing.archivedAt),
+          ne(standing.id, codingAgent.id),
+        ),
+      ),
+  );
+  return sql`(${eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR)} and ${another})`;
+}
+
+const findReplacedOperator = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(and(reachableAgent(userId, agentId), replacedOperator())),
     ),
 });
 
@@ -927,7 +971,11 @@ const updateAgentArchived = SqlSchema.findOneOption({
       db
         .update(codingAgent)
         .set({ archivedAt, archivedBy })
-        .where(reachableAgent(userId, agentId))
+        .where(
+          archivedAt === null
+            ? and(reachableAgent(userId, agentId), not(replacedOperator()))
+            : reachableAgent(userId, agentId),
+        )
         .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
@@ -2341,6 +2389,24 @@ const updateLiveOperatorArchived = SqlSchema.findAll({
     ),
 });
 
+/** The member's operator standing in the workspace; none where none stands or the member is no member of it. */
+export function readStandingOperator(
+  userId: string,
+  organizationId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return findLiveOperator({ userId, organizationId });
+}
+
+/**
+ * Whether the agent is an operator another of its member's has replaced in
+ * its workspace, which no unarchive brings back while that one stands: the
+ * archive by hand and the agent tool refuse it by this, and their writes
+ * change nothing where it holds.
+ */
+export function operatorReplaced(userId: string, agentId: string): CodingAgentStoreEffect<boolean> {
+  return Effect.map(findReplacedOperator({ userId, agentId }), (rows) => rows.length > 0);
+}
+
 /**
  * The member's operator standing in the workspace archived by the member,
  * its conversation kept, as a Reset does before it ensures a fresh one;
@@ -2473,7 +2539,13 @@ const unarchiveIfStamped = SqlSchema.findAll({
       db
         .update(codingAgent)
         .set({ archivedAt: null, archivedBy: null })
-        .where(and(reachableAgent(userId, agentId), eq(codingAgent.archivedAt, archivedAt)))
+        .where(
+          and(
+            reachableAgent(userId, agentId),
+            eq(codingAgent.archivedAt, archivedAt),
+            not(replacedOperator()),
+          ),
+        )
         .returning({ id: codingAgent.id }),
     ),
 });

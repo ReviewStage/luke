@@ -64,6 +64,7 @@ import {
   listWorkspaceCodingAgents,
   type NewCodingAgent,
   nativeRuntimesOfReached,
+  operatorReplaced,
   pinCodingAgent,
   readCodingAgent,
   readCodingAgentHeaderOfConversation,
@@ -2345,6 +2346,41 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
           CODING_AGENT_KIND.CODER,
           "a row written without a kind reads as a coder",
         );
+      }),
+  );
+
+  it.effect(
+    "an operator a fresh one replaced is not brought back while that one stands, by either unarchive, and is once it is archived",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openAccount;
+        const workspace = yield* openWorkspace(member);
+        const coder = yield* tasklessAgent(member, workspace);
+        const old = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        yield* archiveOperatorAgent(member, workspace);
+        const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const archivedAt = Option.getOrThrow(
+          yield* readCodingAgent(member, old.agent.id),
+        ).archivedAt;
+        assert.ok(archivedAt !== null);
+        yield* archiveCodingAgent(member, coder.agentId, true);
+
+        const replaced = yield* operatorReplaced(member, old.agent.id);
+        const byHand = yield* archiveCodingAgent(member, old.agent.id, false);
+        const byTool = yield* unarchiveCodingAgentFrom(member, old.agent.id, archivedAt);
+        const coderBack = yield* archiveCodingAgent(member, coder.agentId, false);
+
+        assert.deepEqual([replaced, Option.isNone(byHand), byTool], [true, true, false]);
+        assert.notEqual(
+          Option.getOrThrow(yield* readCodingAgent(member, old.agent.id)).archivedAt,
+          null,
+        );
+        assert.equal(Option.getOrThrow(coderBack).archivedAt, null, "a coder comes back as before");
+        assert.equal(yield* operatorReplaced(member, fresh.agent.id), false);
+
+        yield* archiveOperatorAgent(member, workspace);
+        const back = yield* archiveCodingAgent(member, old.agent.id, false);
+        assert.equal(Option.getOrThrow(back).archivedAt, null);
       }),
   );
 

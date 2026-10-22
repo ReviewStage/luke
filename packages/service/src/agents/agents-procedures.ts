@@ -48,6 +48,7 @@ import {
   listCodingAgentLines,
   listWorkspaceCodingAgentLines,
   nativeRuntimesOfReached,
+  operatorReplaced,
   pinCodingAgentCommitted,
   renameCodingAgentCommitted,
   updateCodingAgentChoice,
@@ -411,12 +412,18 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * where the body asks for a Reset (`coder-host/operator.ts`).
      */
     ensureOperator: signedIn.ensureOperator.effect(function* ({ input, context }) {
-      const { agent, txid } = yield* ensureOperator(
+      const { agent, txid, retired } = yield* ensureOperator(
         eveFor<EveTypedTurn>(seams, context.request, context.userId),
         context.userId,
         input.params.id,
-        { reset: input.body.reset === true },
+        {
+          reset: input.body.reset === true,
+          stopStanding: (standing) =>
+            stoppedForGood(seams, writer, context.request, context.userId, standing),
+        },
       );
+      // The operator a Reset archived has its sandbox stopped, as an archive by hand stops one.
+      if (retired !== undefined) yield* stoppedInBackground(seams, [retired]);
       return txid === undefined ? { agentId: agent.id } : { agentId: agent.id, txid };
     }),
     /** The agent as its own page, an agent with no task as much as one on a task. */
@@ -482,6 +489,9 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         if (body.archived) {
           // An archived agent works on unseen, so a turn still running is stopped before the stamp.
           yield* stoppedForGood(seams, writer, context.request, userId, agent);
+        } else if (yield* hostedStoreOrUnavailable(operatorReplaced(userId, agent.id))) {
+          // An operator a Reset replaced stays archived while the fresh one stands.
+          return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
         }
         const archived = yield* hostedStoreOrUnavailable(
           archiveCodingAgentCommitted(userId, agent.id, body.archived),
