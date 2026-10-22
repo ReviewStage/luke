@@ -15,7 +15,11 @@
  * and they are offered on a task with no repository too. A name an earlier
  * source holds is left out of a later one, repository then workspace then
  * personal, as an agent's session merges them, so the list offers what a
- * `/name` loads. A skill whose `SKILL.md` says the model alone loads it is
+ * `/name` loads. A desktop from before installed skills asks for none
+ * (`TASK_SKILLS_INSTALLED`), and is answered the repository's alone, and a
+ * task with no repository as refused, as it always was, since it reads an
+ * installed skill's missing file as no answer at all. A skill whose
+ * `SKILL.md` says the model alone loads it is
  * left out, as is an installed skill turned off, and what is answered of
  * each is its name, its description, its source, and, for a repository's,
  * where its `SKILL.md` stands, which the File tab opens, never its body.
@@ -117,6 +121,7 @@ const readRepository = /* @__PURE__ */ Effect.fn("web/taskSkillsRead")(function*
 export function readTaskSkills(
   userId: string,
   taskId: string,
+  installed: boolean,
 ): Effect.Effect<
   Option.Option<TaskSkillsAnswer>,
   TaskStoreFailure,
@@ -126,7 +131,12 @@ export function readTaskSkills(
     const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
     return Option.some(
-      yield* readWorkspaceSkills(stored.value.workspaceId, stored.value.repository, userId),
+      yield* readWorkspaceSkills(
+        stored.value.workspaceId,
+        stored.value.repository,
+        userId,
+        installed,
+      ),
     );
   });
 }
@@ -143,12 +153,14 @@ export function readWorkspaceSkills(
   workspaceId: string,
   repository: string | null,
   member: string,
+  installed: boolean,
 ): Effect.Effect<
   TaskSkillsAnswer,
   TaskStoreFailure,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
+    if (repository === null && !installed) return refused(TASK_FILE_REFUSAL.NO_REPOSITORY);
     const read =
       repository === null
         ? { branch: null, skills: [] }
@@ -158,9 +170,9 @@ export function readWorkspaceSkills(
             ),
           );
     if ("refusal" in read) return read;
-    const installed = yield* listInstalledSkills(member, workspaceId);
+    const offered = installed ? yield* listInstalledSkills(member, workspaceId) : [];
     return {
-      skills: { repository, branch: read.branch, skills: mergedSkills(read.skills, installed) },
+      skills: { repository, branch: read.branch, skills: mergedSkills(read.skills, offered) },
     } satisfies TaskSkillsAnswer;
   });
 }

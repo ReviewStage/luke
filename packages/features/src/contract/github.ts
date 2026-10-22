@@ -43,6 +43,7 @@ import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
   CODE_PATH_MAX_CHARS,
   taskSkillsAnswerSchema,
+  taskSkillsQueryFields,
   taskTreeAnswerSchema,
   workspaceIdSchema,
 } from "../task-wire.js";
@@ -135,6 +136,7 @@ export const githubContract = {
         [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: EffectSchema.optionalKey(
           githubRepositoryFullNameSchema,
         ),
+        ...taskSkillsQueryFields,
       }),
     )
     .output(EffectSchema.flip(taskSkillsAnswerSchema)),

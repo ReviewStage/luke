@@ -43,11 +43,12 @@ import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_SKILL_SOURCE,
+  TASK_SKILLS_INSTALLED,
   TASK_TREE_ENTRY,
   taskSkillsAnswerSchema,
   taskTreeAnswerSchema,
 } from "@luke/features/task-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { recordingHttpClient } from "@luke/wire/testing";
 import {
@@ -59,7 +60,7 @@ import {
   Logger,
   Option,
   Result,
-  type Schema,
+  Schema,
 } from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -320,6 +321,24 @@ const openAccounts = (github: FakeGitHub) =>
   });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
+
+/** `acme/relay` keeping one skill, `release`, in `.agents/skills`, as GitHub answers its folder and its `SKILL.md`; nothing for any other read. */
+function releaseSkillRead(sent: { readonly url: string }): Response | undefined {
+  const text = "---\nname: release\ndescription: Cut a release.\n---\n# Release\n";
+  const path = new URL(sent.url).pathname;
+  if (path === "/repos/acme/relay/git/trees/main%3A.agents%2Fskills") {
+    return Response.json({ tree: [{ path: "release", type: "tree" }], truncated: false });
+  }
+  if (path === "/repos/acme/relay/contents/.agents/skills/release/SKILL.md") {
+    return Response.json({
+      type: "file",
+      size: text.length,
+      encoding: "base64",
+      content: Buffer.from(text).toString("base64"),
+    });
+  }
+  return undefined;
+}
 
 /** One repository's read answered, as the wire declares it, failing the test where it is not one. */
 function readOf<S extends Schema.ConstraintDecoder<unknown>>(
@@ -637,29 +656,11 @@ it.layer(getTestDB())("the repositories route", (it) => {
     "the skills a member may choose are the repository's, then the workspace's installed ones, then their own, a name an earlier source holds left out, as are an installed skill turned off or the model's alone; with no repository named, the installed ones alone",
     () =>
       Effect.gen(function* () {
-        const releaseSkill = "---\nname: release\ndescription: Cut a release.\n---\n# Release\n";
         const github = githubReaching(
           [{ id: 7651, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
           undefined,
           {},
-          (sent) => {
-            const path = new URL(sent.url).pathname;
-            if (path === "/repos/acme/relay/git/trees/main%3A.agents%2Fskills") {
-              return Response.json({
-                tree: [{ path: "release", type: "tree" }],
-                truncated: false,
-              });
-            }
-            if (path === "/repos/acme/relay/contents/.agents/skills/release/SKILL.md") {
-              return Response.json({
-                type: "file",
-                size: releaseSkill.length,
-                encoding: "base64",
-                content: Buffer.from(releaseSkill).toString("base64"),
-              });
-            }
-            return undefined;
-          },
+          releaseSkillRead,
         );
         const { owner, other, read } = yield* openAccounts(github);
         const workspace = yield* openInstallationWorkspace(owner, {
@@ -710,6 +711,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               ...(repository === undefined
                 ? []
                 : [[GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository] as const]),
+              ["installed", TASK_SKILLS_INSTALLED],
             ]),
             (answered) => readOf(taskSkillsAnswerSchema, answered),
           );
@@ -769,6 +771,92 @@ it.layer(getTestDB())("the repositories route", (it) => {
           "skills" in teammate ? teammate.skills.skills.map((skill) => skill.name) : teammate,
           ["release", "triage"],
         );
+      }),
+  );
+
+  it.effect(
+    "a desktop from before installed skills, which asks for none, is answered the repository's skills alone in the shape it reads, whatever the member installed",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7661, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          releaseSkillRead,
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7661,
+          accountId: 9661,
+          accountLogin: "acme",
+        });
+        yield* installSkill(owner, {
+          owner: { scope: INSTALLED_SKILL_SCOPE.PERSONAL },
+          name: "pr-style",
+          description: "Installed pr-style.",
+          userInvocable: true,
+          source: { type: INSTALLED_SKILL_SOURCE.TEXT },
+          files: [
+            {
+              path: "SKILL.md",
+              bytes: new TextEncoder().encode(
+                "---\nname: pr-style\ndescription: Installed pr-style.\n---\n# PR style\n",
+              ),
+            },
+          ],
+        });
+        // The answer as a desktop through 0.19.0 declares it: a repository, a branch, and each skill's file.
+        const olderSkillsAnswer = Schema.Union([
+          Schema.Struct({
+            skills: Schema.Struct({
+              repository: Schema.String,
+              branch: Schema.String,
+              skills: Schema.Array(
+                Schema.Struct({
+                  name: Schema.String,
+                  description: Schema.String,
+                  path: Schema.String,
+                }),
+              ),
+            }),
+          }),
+          Schema.Struct({ refusal: Schema.String }),
+        ]);
+
+        const withRepository = yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+          [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+        ]);
+        const withNone = yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+        ]);
+
+        // Note that a desktop drops a key a newer service added, as every wire read of an answer does.
+        const asOlder = (answered: Answer) => {
+          assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+          const decoded = readEither(olderSkillsAnswer, { excess: EXCESS_KEYS.DROP })(
+            unparsedWire(answered.body),
+          );
+          if (Result.isFailure(decoded)) return assert.fail(decoded.failure.refusal);
+          return decoded.success;
+        };
+
+        assert.deepEqual(asOlder(withRepository), {
+          skills: {
+            repository: "acme/relay",
+            branch: "main",
+            skills: [
+              {
+                name: "release",
+                description: "Cut a release.",
+                path: ".agents/skills/release/SKILL.md",
+              },
+            ],
+          },
+        });
+        assert.deepEqual(asOlder(withNone), {
+          refusal: TASK_FILE_REFUSAL.NO_REPOSITORY,
+        });
       }),
   );
 
@@ -1762,7 +1850,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
             `GET /api/github/repositories?workspaceId=${workspace}`,
             `GET /api/github/repositories/tree?workspaceId=${workspace}&repository=acme%2Frelay&path=src`,
             `GET /api/github/repositories/tree?workspaceId=${workspace}&repository=acme%2Fledger`,
-            `GET /api/github/repositories/skills?workspaceId=${workspace}&repository=acme%2Frelay`,
+            `GET /api/github/repositories/skills?workspaceId=${workspace}&repository=acme%2Frelay&installed=1`,
           ],
         );
       }),

@@ -1157,6 +1157,19 @@ export const taskSkillsSchema = EffectSchema.Struct({
 
 export type TaskSkills = typeof taskSkillsSchema.Type;
 
+/**
+ * The query a skills read carries to ask for the member's installed skills
+ * beside the repository's (`installed=1`). A desktop from before installed
+ * skills sends none and reads every skill as naming its file and every
+ * answer as naming its repository, so without it the service answers the
+ * repository's skills alone, and a task with no repository as refused.
+ */
+export const TASK_SKILLS_INSTALLED = "1";
+
+export const taskSkillsQueryFields = {
+  installed: EffectSchema.optionalKey(EffectSchema.Literal(TASK_SKILLS_INSTALLED)),
+};
+
 export type TaskSkill = TaskSkills["skills"][number];
 
 /** The read of the skills answered: the skills, or why the repository's are not read, in the File tab's own refusals. */

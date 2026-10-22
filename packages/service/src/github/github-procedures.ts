@@ -494,7 +494,12 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* hostedStoreOrUnavailable(
-        readWorkspaceSkills(input.workspaceId, input.repository ?? null, context.userId),
+        readWorkspaceSkills(
+          input.workspaceId,
+          input.repository ?? null,
+          context.userId,
+          input.installed !== undefined,
+        ),
       );
     }),
     repositoryPullRequest: signedIn.repositoryPullRequest.effect(function* ({ context, input }) {

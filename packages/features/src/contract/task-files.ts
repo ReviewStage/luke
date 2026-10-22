@@ -28,6 +28,7 @@ import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
   taskFileAnswerSchema,
   taskSkillsAnswerSchema,
+  taskSkillsQueryFields,
   taskTreeAnswerSchema,
 } from "../task-wire.js";
 import { taskCodeAnswerSchema } from "../tasks-view.js";
@@ -84,7 +85,7 @@ export const taskFilesContract = {
     .output(EffectSchema.flip(taskTreeAnswerSchema)),
   skills: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/skills` }))
-    .input(taskInputSchema)
+    .input(EffectSchema.Struct({ ...taskInputSchema.fields, ...taskSkillsQueryFields }))
     .output(EffectSchema.flip(taskSkillsAnswerSchema)),
   keepPicture: hostedProcedure
     .meta(bodyCap(PICTURE_BODY_BYTES))
