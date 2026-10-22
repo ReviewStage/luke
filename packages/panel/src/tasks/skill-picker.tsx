@@ -3,6 +3,8 @@ import {
   ComboboxList,
   comboboxOptionId,
   GAP,
+  MENU_SURFACE_INSET,
+  MenuSurface,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -164,7 +166,11 @@ function SkillMenu({
     detail: skill.description,
   }));
   return (
-    <div className="menu-surface searchable-menu skill-menu" style={place}>
+    <MenuSurface
+      className="searchable-menu skill-menu"
+      inset={MENU_SURFACE_INSET.NONE}
+      style={place}
+    >
       <ComboboxList
         id={id}
         label={SKILL_MENU_LABEL}
@@ -177,7 +183,7 @@ function SkillMenu({
         }}
         note={rows.length === 0 ? <MenuNote read={read} /> : undefined}
       />
-    </div>
+    </MenuSurface>
   );
 }
 

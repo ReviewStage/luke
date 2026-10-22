@@ -471,22 +471,6 @@
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
-/* The crumb's glyph stands in a row glyph's column, muted beside its words. */
-.mention-menu-crumb-glyph {
-  display: inline-flex;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.mention-menu-crumb-glyph svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-}
-
 /* A folder's path too long for the crumb is cut short. */
 .mention-menu-crumb-title {
   min-width: 0;
@@ -6093,7 +6077,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .reply-to-selection {
   position: fixed;
   z-index: var(--luke-z-menu);
-  padding: var(--luke-space-2);
   translate: -50% -100%;
 }
 
