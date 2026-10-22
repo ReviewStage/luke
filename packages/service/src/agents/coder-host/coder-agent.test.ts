@@ -317,6 +317,35 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
   }
 });
 
+test("a Claude Code or Codex agent is told of its browser, which Luke's MCP server serves it, with Playwright run from its own shell", () => {
+  const BROWSER = `\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox`;
+  const SHELL_OF = [
+    [CODER_HARNESS.CLAUDE_CODE, "on Playwright from Bash,"],
+    [CODER_HARNESS.CODEX, "on Playwright from your shell,"],
+  ] as const;
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const repository of ["Acme/Relay", null]) {
+      for (const [harness, shell] of SHELL_OF) {
+        const words = coderInstructions(
+          repository,
+          brief,
+          true,
+          TASK_ADDRESS,
+          undefined,
+          true,
+          null,
+          false,
+          harness,
+        );
+        const label = `${harness} ${brief} ${repository ?? "no repository"}`;
+        assert.ok(words.includes("## Your browser"), label);
+        assert.ok(words.includes(BROWSER), label);
+        assert.ok(words.includes(shell), label);
+      }
+    }
+  }
+});
+
 test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
   // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [

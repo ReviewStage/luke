@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
 import { writeDrawing, writeScene } from "@luke/database/models/board-store";
 import {
   createCodingAgent,
@@ -10,9 +11,11 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { user } from "@luke/database/schemas/auth";
+import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
@@ -23,6 +26,7 @@ import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@l
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { Base64 } from "effect/encoding";
 import { type HttpClient, HttpRouter } from "effect/http";
@@ -40,6 +44,11 @@ import {
 } from "../../integrations/integration-store.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
+import {
+  agentBrowserTestLayer,
+  fakeCdpPeer,
+  noSandboxBrowserLayer,
+} from "../../testing/agent-browser-fake.js";
 import { NO_GITHUB } from "../../testing/github-app-fake.js";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -52,6 +61,7 @@ import {
   linearTokenOf,
 } from "../../testing/integration-mcp-fake.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
+import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
   type AgentToolCall,
@@ -70,7 +80,12 @@ import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
-import { LUKE_MCP_PATH, LUKE_MCP_PROTOCOL_VERSIONS, lukeMcpApp } from "./app.js";
+import {
+  LUKE_MCP_PATH,
+  LUKE_MCP_PROTOCOL_VERSIONS,
+  type LukeMcpBrowser,
+  lukeMcpApp,
+} from "./app.js";
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
 import { lukeMcpDoorSeams } from "./door-seams.js";
 import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js";
@@ -160,16 +175,17 @@ const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox
 const NO_CHECKOUT: RepositorySandboxDoor = () =>
   Promise.reject(new Error("the checkout was opened"));
 
-/** The server's group over the test's database, the sandbox door given, and any services that stand in for the ones given, as a fetch a client is handed. */
+/** The server's group over the test's database, the sandbox door and the browser given, and any services that stand in for the ones given, as a fetch a client is handed. */
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
   instead?: Layer.Layer<IntegrationConnect | WorkspaceLinearConnect | HttpClient.HttpClient>,
+  browser: LukeMcpBrowser = noSandboxBrowserLayer,
 ) =>
   Effect.gen(function* () {
     const base = yield* doorServices;
     const services = instead === undefined ? base : Layer.merge(base, instead);
     const web = HttpRouter.toWebHandler(
-      lukeMcpApp(() => ({ files: sandbox, repository: NO_CHECKOUT })).pipe(
+      lukeMcpApp({ sandbox: () => ({ files: sandbox, repository: NO_CHECKOUT }), browser }).pipe(
         HttpRouter.provideRequest(services),
       ),
       { disableLogger: true },
@@ -202,6 +218,38 @@ const agentWithBearer = Effect.gen(function* () {
   const bearer = randomBytes(32).toString("base64url");
   yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
   return { userId, taskId: task.id, agentId: agent.id, bearer };
+});
+
+/** What a fake Chromium's page answers beside its targets, as Chrome does for a screenshot of it. */
+const PAGE_ANSWERS: Readonly<Record<string, { readonly result: unknown }>> = {
+  "Target.attachToTarget": { result: { sessionId: "session-tab-1" } },
+  "Target.detachFromTarget": { result: {} },
+  "Target.activateTarget": { result: {} },
+  "Page.getLayoutMetrics": {
+    result: {
+      cssLayoutViewport: { clientWidth: 1280, clientHeight: 800 },
+      cssVisualViewport: { pageX: 0, pageY: 0, clientWidth: 1280, clientHeight: 800 },
+    },
+  },
+  "Runtime.evaluate": { result: { result: { value: "complete" } } },
+  "Page.captureScreenshot": { result: { data: "/9j/AAAA" } },
+};
+
+/** The session a native agent's sandbox is tagged with, as its conversation records it. */
+const SESSION = "runner_session_fixture";
+
+/** An agent with a bearer whose conversation records its runner's session, as one whose runner started does; its conversation's id beside. */
+const agentInSandbox = Effect.gen(function* () {
+  const agent = yield* agentWithBearer;
+  const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
+  const { conversationId } = admitted.target;
+  yield* Database.use((db) =>
+    db
+      .update(conversations)
+      .set({ runtimeSessionId: SESSION })
+      .where(eq(conversations.id, conversationId)),
+  );
+  return { ...agent, conversationId };
 });
 
 /** An SDK client connected to the server under the bearer. */
@@ -276,6 +324,7 @@ const SERVED_TOOLS = [
   "resolve_thread",
   "reopen_thread",
   "run_on_mac",
+  "browser",
   "connection_search",
   "connection_execute",
 ] as const;
@@ -304,7 +353,7 @@ const commentTool =
  * a tool is to be this one's, so a tool routed to any other door, or to
  * none, answers otherwise.
  */
-const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac">, DirectCall>> = {
+const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
   post_to_inbox: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_inbox: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
@@ -747,5 +796,79 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           ["notion", true],
         );
       }),
+  );
+  it.effect(
+    "browser drives the Chromium in the agent's sandbox, a screenshot coming back as image content and the tab kept under the agent's conversation",
+    () =>
+      Effect.gen(function* () {
+        const peer = yield* fakeCdpPeer({
+          pages: [{ targetId: "tab-1", url: "https://shop.test/", title: "Shop" }],
+          answer: (command) => PAGE_ANSWERS[command.method],
+        });
+        const fetch = yield* standingOver(
+          NO_SANDBOX,
+          undefined,
+          agentBrowserTestLayer(peer, SESSION),
+        );
+        const agent = yield* agentInSandbox;
+        const client = yield* connected(fetch, agent.bearer);
+
+        const called = yield* Effect.promise(() =>
+          client.callTool({
+            name: "browser",
+            arguments: {
+              actions: [
+                { action: BROWSER_AGENT_ACTION.LIST },
+                { action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "tab-1" },
+              ],
+            },
+          }),
+        );
+        yield* Effect.promise(() => client.close());
+
+        assert.equal(called.isError, false);
+        // SAFETY: the server answers a browser call with text and image blocks (`tools.ts`'s `browserContent`).
+        const content = called.content as readonly {
+          type: string;
+          text?: string;
+          data?: string;
+          mimeType?: string;
+        }[];
+        assert.deepEqual(content.at(-1), {
+          type: "image",
+          data: "/9j/AAAA",
+          mimeType: "image/jpeg",
+        });
+        assert.ok(
+          content.every((block) => block.text === undefined || !block.text.includes("/9j/AAAA")),
+        );
+        assert.equal(firstJson(called).status, "ran");
+        assert.deepEqual(
+          (yield* listAgentBrowserTabs(agent.conversationId)).map((row) => row.targetId),
+          ["tab-1"],
+        );
+      }),
+  );
+
+  it.effect("browser runs nothing for an agent whose conversation records no session", () =>
+    Effect.gen(function* () {
+      const fetch = yield* standing;
+      const agent = yield* agentWithBearer;
+      const client = yield* connected(fetch, agent.bearer);
+
+      const called = yield* Effect.promise(() =>
+        client.callTool({
+          name: "browser",
+          arguments: { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] },
+        }),
+      );
+      yield* Effect.promise(() => client.close());
+
+      assert.equal(called.isError, true);
+      assert.deepEqual(firstJson(called), {
+        status: "not-run",
+        reason: BROWSER_TOOL_REFUSAL.NO_SANDBOX,
+      });
+    }),
   );
 });

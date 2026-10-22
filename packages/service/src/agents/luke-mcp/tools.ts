@@ -13,6 +13,11 @@
  * server does not bundle. The registry maps a tool's name to those three,
  * and, for the one tool whose answer is a picture, how it is shown.
  *
+ * `browser` drives the Chromium in the agent's own sandbox, found by the
+ * session the sandbox is tagged with (`admitted.runtimeSessionId`), as eve's
+ * tool finds it, its tabs kept under the agent's own conversation; its
+ * screenshots reach the agent as images, which the transcript leaves out.
+ *
  * Left out, beside the harness's own shell, files, todos, waiting,
  * subagents, skills, and web reads: the spoken-turn tools
  * (`queue_question`, `withdraw_question`, `end_call`), which only a spoken
@@ -37,11 +42,12 @@ import {
   ACTION_RESULT_STATUS,
   isRecord,
   type UnparsedWireValue,
+  unparsedWire,
   type WireValue,
   WireValueSchema,
 } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { type Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -69,6 +75,14 @@ import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { AgentBrowser } from "../browser/agent-browser.js";
+import {
+  BROWSER_TOOL,
+  BROWSER_TOOL_REFUSAL,
+  browserModelOutput,
+  browserNotRun,
+  runBrowserTool,
+} from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
   type AgentToolCall,
@@ -121,6 +135,9 @@ export type LukeMcpServices =
   | IntegrationConnect
   | HostedEnvironment;
 
+/** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
+export type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
+
 /** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; a fresh id of its own; and the seams the doors that reach eve or the store's writer read. */
 interface LukeMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
@@ -144,7 +161,7 @@ export interface LukeMcpTool {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
     context: LukeMcpCallContext,
-  ) => Effect.Effect<LukeMcpToolResult, unknown, LukeMcpServices>;
+  ) => Effect.Effect<LukeMcpToolResult, unknown, LukeMcpToolServices>;
   /** How a result is shown to the agent, where it is more than its JSON: a picture as an image. */
   readonly content?: (result: LukeMcpToolResult) => readonly McpContent[];
 }
@@ -283,6 +300,40 @@ function executedContent(result: LukeMcpToolResult): readonly McpContent[] {
   return [{ type: "text", text: typeof output === "string" ? output : JSON.stringify(output) }];
 }
 
+/**
+ * What the agent is shown of a browser call: what eve's model is shown of
+ * it (`browserModelOutput`), its JSON with each screenshot beside it as an
+ * image, in MCP's blocks.
+ */
+function browserContent(result: LukeMcpToolResult): readonly McpContent[] {
+  const shown = browserModelOutput(unparsedWire(result));
+  if (shown.type !== "content") return [{ type: "text", text: JSON.stringify(result) }];
+  return shown.value.flatMap((part): readonly McpContent[] => {
+    if (part.type === "text") return [{ type: "text", text: part.text }];
+    if (part.type === "file" && part.data.type === "data" && typeof part.data.data === "string") {
+      return [{ type: "image", data: part.data.data, mimeType: part.mediaType }];
+    }
+    return [];
+  });
+}
+
+/**
+ * One `browser` call on the Chromium in the agent's own sandbox: the
+ * sandbox tagged with the conversation's session, which is up, since the
+ * agent calling runs in it. A conversation that records no session has no
+ * sandbox to find, and runs nothing.
+ */
+function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValue) {
+  const session = admitted.runtimeSessionId;
+  if (session === undefined) return Effect.succeed(browserNotRun(BROWSER_TOOL_REFUSAL.NO_SANDBOX));
+  const call = {
+    browserSession: session,
+    conversationId: admitted.target.conversationId,
+    openSandbox: () => Promise.resolve(),
+  };
+  return runBrowserTool(call, input);
+}
+
 /** The tools served, by name, in the order `tools/list` names them. */
 export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, LukeMcpTool>([
   // The inbox.
@@ -365,6 +416,8 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   commentTool(REOPEN_THREAD_TOOL),
   // The developer's Mac.
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target.userId, input)),
+  // The agent's browser.
+  entry(BROWSER_TOOL, runAgentBrowser, browserContent),
   // The integrations.
   entryOf(
     CONNECTION_SEARCH_TOOL.name,

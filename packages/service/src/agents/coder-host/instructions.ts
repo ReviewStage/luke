@@ -161,7 +161,7 @@ interface ToolWords {
   readonly searchWeb: string;
   /** How a skill the developer names is loaded. */
   readonly skills: string;
-  /** What it is told of a browser the developer can watch, a tool of Luke's that only eve's agents are offered yet; none for one not offered it. */
+  /** What it is told of a browser the developer can watch, a tool of Luke's every harness is offered. */
   readonly browser: string;
   /** How the agent keeps its to-dos. */
   readonly todos: string;
@@ -176,13 +176,17 @@ interface ToolWords {
  * What a coding agent is told of `browser`, the Chromium in its own sandbox
  * whose tabs the developer watches and may take over: for what the
  * developer should see or help with, while a throwaway check of its own
- * work stays on the sandbox's Playwright, which leaves no tab behind.
+ * work stays on the sandbox's Playwright, run from the harness's own shell
+ * (`shell`), which leaves no tab behind. eve's agent and a native one are
+ * offered the same tool, a native one over Luke's MCP server.
  */
-const BROWSER_WORDS = `## Your browser
+function browserWords(shell: string): string {
+  return `## Your browser
 
-\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from \`bash\`, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from ${shell}, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
 
 `;
+}
 
 /**
  * Each harness's words. eve's are Luke's own tools. Claude Code owns the
@@ -206,7 +210,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     glob: "`glob`",
     searchWeb: `Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page it found with \`${CODER_TOOL.READ_WEB_PAGE}\``,
     skills: `A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.`,
-    browser: BROWSER_WORDS,
+    browser: browserWords("`bash`"),
     todos: `For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.`,
     checks: { readable: CHECKS_WORDS.readable, rest: CHECKS_WORDS.rest },
     worker: ({ reads, readOnly }) =>
@@ -222,7 +226,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     searchWeb: "Search the public web with WebSearch and read a page with WebFetch",
     skills:
       "A word like `/name` in the developer's message names one of the repository's skills: load it with Claude Code's Skill tool before anything else, and follow what it answers. Where it knows no such skill, read the skill's `SKILL.md` from `.agents/skills/<name>/` or `.claude/skills/<name>/` on the default branch, and follow that instead.",
-    browser: "",
+    browser: browserWords("Bash"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with TodoWrite, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
     checks: {
@@ -242,7 +246,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     searchWeb: "Search the public web with Codex's own web search",
     skills:
       "A word like `/name` in the developer's message names one of the repository's skills, which Codex finds under `.agents/skills`: read that skill's `SKILL.md` before anything else, and follow what it says. Where the checkout has no such skill, read `.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md` on the default branch, and follow that instead.",
-    browser: "",
+    browser: browserWords("your shell"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with Codex's plan tool (`update_plan`), which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
     checks: {
