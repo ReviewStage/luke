@@ -474,7 +474,7 @@ test("a turn its plan's limit failed says when the limit resets and that a messa
   const words = limited.container.querySelector("[data-ended] .agent-end-words")?.textContent;
   assert.match(
     words ?? "",
-    /^Plan limit reached, resets \d{1,2}:\d{2}\s?[AP]M\. Send a message to go on\.$/,
+    /^Plan limit reached, resets ([A-Z][a-z]{2} \d{1,2}, )?\d{1,2}:\d{2}\s?[AP]M\. Send a message to go on\.$/,
   );
   assert.equal(limited.buttons(limited.container).length, 0, "a new agent meets the same limit");
 
@@ -489,7 +489,7 @@ test("a turn its plan's limit failed says when the limit resets and that a messa
   );
 });
 
-test("a plan limit's end line names the reset by its time within the day ahead and with its day past it, and says only to send a message where no reset was named", () => {
+test("a plan limit's end line names the reset by its time later today and with its day on any later day, and says only to send a message where no reset was named", () => {
   const now = new Date(2026, 9, 22, 20, 0).getTime();
   const words = (resetsAt: number | undefined) =>
     endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PLAN_LIMIT, undefined, false, {
@@ -504,6 +504,11 @@ test("a plan limit's end line names the reset by its time within the day ahead a
   assert.match(
     words(new Date(2026, 9, 26, 9, 0).getTime())?.words ?? "",
     /resets Oct 26, 9:00\sAM\./,
+  );
+  // Past midnight, even within the day ahead, the reset names its day.
+  assert.match(
+    words(new Date(2026, 9, 23, 1, 0).getTime())?.words ?? "",
+    /resets Oct 23, 1:00\sAM\./,
   );
   assert.deepEqual(words(undefined), {
     words: "Plan limit reached. Send a message once it resets.",
