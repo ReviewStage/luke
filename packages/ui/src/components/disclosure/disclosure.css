@@ -58,6 +58,12 @@
     flex: none;
   }
 
+  /* A control's seat in a summary (`DisclosureAction`), which keeps its
+     presses and draws no box, so the control is laid out as the summary's. */
+  .luke-disclosure-action {
+    display: contents;
+  }
+
   .luke-disclosure-turn {
     display: flex;
     flex: none;

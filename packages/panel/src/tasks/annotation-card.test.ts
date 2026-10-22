@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { DisclosureAction } from "@luke/ui";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -55,11 +56,13 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
     open,
     onOpenChange: setOpen,
     face: createElement("span", { className: "face" }, "C"),
-    name: createElement(
-      "button",
-      { type: "button", onClick: () => pressed.push("name") },
-      "charlespan",
-    ),
+    name: createElement(DisclosureAction, {
+      children: createElement(
+        "button",
+        { type: "button", onClick: () => pressed.push("name") },
+        "charlespan",
+      ),
+    }),
     time: createElement("span", { className: "annotation-card-time" }, "2h"),
     states: [{ word: "Outdated", tone: ANNOTATION_TONE.NEUTRAL }],
     count: 2,

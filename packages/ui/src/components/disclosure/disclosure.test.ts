@@ -2,15 +2,23 @@
 
 import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
+import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { Disclosure, DisclosureBody, DisclosureFind, DisclosureSummary } from "./disclosure.js";
+import {
+  Disclosure,
+  DisclosureAction,
+  DisclosureBody,
+  DisclosureFind,
+  DisclosureSummary,
+} from "./disclosure.js";
 
 /**
  * disclosure.test.ts -- a fold draws its body only once its summary is
  * pressed, says whether it is open on the summary, starts open when asked,
  * follows the element's own toggle (a find's), and draws a closed body,
- * still closed, while a find looks through it.
+ * still closed, while a find looks through it; and a control in its
+ * summary's action slot is pressed without folding it.
  */
 
 declare global {
@@ -114,4 +122,85 @@ test("a fold its holder keeps tells the holder of a press and stays as the holde
   assert.ok(container.textContent?.includes("Why these lines"));
   act(() => summaryOf(container).click());
   assert.deepEqual(heard, [true, false]);
+});
+
+/** A fold whose summary holds a ⋯ and a box in its action slot, and a menu the ⋯ draws elsewhere. */
+function foldWithActions(pressed: string[], menuHost: HTMLElement): ReactElement {
+  return createElement(Disclosure, {
+    children: [
+      createElement(DisclosureSummary, {
+        key: "summary",
+        children: [
+          createElement("span", { key: "words", className: "words" }, "Review thread"),
+          createElement(DisclosureAction, {
+            key: "action",
+            children: createElement(
+              "span",
+              { className: "ground" },
+              createElement(
+                "button",
+                { type: "button", className: "more", onClick: () => pressed.push("more") },
+                "⋯",
+              ),
+              createElement("input", {
+                type: "checkbox",
+                className: "box",
+                "aria-label": "Viewed",
+              }),
+              createPortal(
+                createElement(
+                  "button",
+                  { type: "button", className: "item", onClick: () => pressed.push("item") },
+                  "Copy link",
+                ),
+                menuHost,
+              ),
+            ),
+          }),
+        ],
+      }),
+      createElement(DisclosureBody, { key: "body", children: "The thread's comments" }),
+    ],
+  });
+}
+
+function drawWithActions(pressed: string[]): HTMLElement {
+  const menuHost = document.body.appendChild(document.createElement("div"));
+  const container = render(foldWithActions(pressed, menuHost));
+  return container;
+}
+
+function find<T extends HTMLElement>(selector: string): T {
+  return document.querySelector<T>(selector) ?? assert.fail(selector);
+}
+
+test("a press on a control in the summary's action slot acts on the control and leaves the fold as it stood", () => {
+  const pressed: string[] = [];
+  const container = drawWithActions(pressed);
+  act(() => find(".more").click());
+  assert.deepEqual(pressed, ["more"]);
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
+  assert.ok(!container.textContent?.includes("The thread's comments"));
+
+  act(() => find(".words").click());
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "true", "the words still fold");
+});
+
+test("a press inside a menu the slot's control drew elsewhere leaves the fold as it stood", () => {
+  const pressed: string[] = [];
+  const container = drawWithActions(pressed);
+  act(() => find(".item").click());
+  assert.deepEqual(pressed, ["item"]);
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
+});
+
+test("a box in the slot still checks, and a press on the slot's bare ground folds nothing", () => {
+  const container = drawWithActions([]);
+  const box = find<HTMLInputElement>(".box");
+  act(() => box.click());
+  assert.equal(box.checked, true);
+  const ground = new MouseEvent("click", { bubbles: true, cancelable: true });
+  act(() => find(".ground").dispatchEvent(ground));
+  assert.equal(ground.defaultPrevented, true, "the element's own toggle is stopped too");
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
 });

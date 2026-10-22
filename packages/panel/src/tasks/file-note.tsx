@@ -1,8 +1,7 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import { IconButton, useMenu, WingFace } from "@luke/ui";
+import { DisclosureAction, IconButton, useMenu, WingFace } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
-import type { MouseEvent } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -69,12 +68,6 @@ export interface FileNotes {
   readonly onLight?: ((lines: NoteLines | undefined) => void) | undefined;
 }
 
-/** A press in a card's head that keeps it for itself, rather than folding the card. */
-function keptInHead(event: MouseEvent<HTMLElement>): void {
-  event.preventDefault();
-  event.stopPropagation();
-}
-
 /** A note's ⋯: View in conversation, the agent's turn that showed its lines, and Copy link, that turn's link; nothing where neither stands. */
 function NoteMenu({ place }: { place: LinkPlace | undefined }): React.JSX.Element | null {
   const menu = useMenu(true);
@@ -95,21 +88,21 @@ function NoteMenu({ place }: { place: LinkPlace | undefined }): React.JSX.Elemen
   ];
   if (actions.length === 0) return null;
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the ⋯'s press from folding the card whose head it stands in; the button inside is the control.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: a key on the button inside reaches it as a click, which the wrapper keeps the same way.
-    <span className="file-note-menu" onClick={keptInHead}>
-      <Tooltip label={NOTE_WORDS.MENU}>
-        <IconButton icon={<EllipsisIcon />} label={NOTE_WORDS.MENU} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={NOTE_WORDS.MENU}
-          menu={menu.drawn}
-          groups={[actions]}
-          onClose={menu.close}
-        />
-      )}
-    </span>
+    <DisclosureAction>
+      <span className="file-note-menu">
+        <Tooltip label={NOTE_WORDS.MENU}>
+          <IconButton icon={<EllipsisIcon />} label={NOTE_WORDS.MENU} {...menu.trigger()} />
+        </Tooltip>
+        {menu.drawn === undefined ? null : (
+          <ActionMenu
+            label={NOTE_WORDS.MENU}
+            menu={menu.drawn}
+            groups={[actions]}
+            onClose={menu.close}
+          />
+        )}
+      </span>
+    </DisclosureAction>
   );
 }
 
