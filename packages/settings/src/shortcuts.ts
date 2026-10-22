@@ -76,6 +76,7 @@ export const APP_COMMAND = {
   REPLY_TO_SELECTION: "reply-to-selection",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
+  ASK_LUKE: "ask-luke",
   AUTOMATIONS: "automations",
   EXIT_AUTOMATIONS: "exit-automations",
   EXIT_BOARD: "exit-board",
@@ -484,6 +485,12 @@ export const APP_SHORTCUTS = {
     label: "Exit profile",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  // Note that Luke takes ⇧⌘K beside the palette's ⌘K, whose first entry is Ask Luke, rather than ⇧⌘L, which macOS gives its Search With Google service.
+  [APP_COMMAND.ASK_LUKE]: {
+    label: "Ask Luke",
+    chord: { key: SHORTCUT_KEY.K, shift: true },
+    experiment: EXPERIMENT.OPERATOR,
+  },
   [APP_COMMAND.AUTOMATIONS]: {
     label: "Automations",
     chord: { key: SHORTCUT_KEY.U, shift: true },
@@ -561,6 +568,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.MARK_TASK_DONE,
       APP_COMMAND.DELETE_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
+      APP_COMMAND.ASK_LUKE,
       APP_COMMAND.INBOX,
       APP_COMMAND.INBOX_LIST,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,

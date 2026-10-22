@@ -81,6 +81,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_STOP]: "Could not stop the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR]: "Could not reach Luke on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: "Could not delete the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: "Could not mark the agent as read on this system.",
@@ -183,6 +184,11 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.CODING_AGENTS_PIN,
     payload: { agentId: AGENT_ID, pinned: true },
     ask: "codingAgentPin",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR,
+    payload: { workspaceId: WORKSPACE_ID },
+    ask: "codingAgentEnsureOperator",
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_DELETE,
@@ -452,6 +458,26 @@ it("a delete that took the agent reads the plan list again, so its sidebar row g
 
   assert.deepEqual(deleted.asked, [["codingAgentDelete", { agentId: AGENT_ID }], ["tasksRefresh"]]);
   assert.deepEqual(refused.asked, [["codingAgentDelete", { agentId: AGENT_ID }]]);
+});
+
+it("an ensure of the operator that made one reads the plan list again, so its sidebar row stands, and one that found it standing does not", async () => {
+  const made = windowPort(PANEL, {
+    answers: {
+      codingAgentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID, txid: "9103" }),
+    },
+  });
+  const standing = windowPort(PANEL, {
+    answers: { codingAgentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID }) },
+  });
+  const ensure = { workspaceId: WORKSPACE_ID, reset: true };
+
+  assert.deepEqual(await made.call(AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR, ensure), {
+    answer: { agentId: AGENT_ID, txid: "9103" },
+  });
+  await standing.call(AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR, { workspaceId: WORKSPACE_ID });
+
+  assert.deepEqual(made.asked, [["codingAgentEnsureOperator", ensure], ["tasksRefresh"]]);
+  assert.deepEqual(standing.asked, [["codingAgentEnsureOperator", { workspaceId: WORKSPACE_ID }]]);
 });
 
 it("a panel's reads are noted on their way: the models, a task's agents or the task gone, and an agent's title before its status, but a worker's page is no word on the agent", async () => {

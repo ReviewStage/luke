@@ -53,9 +53,11 @@ import { useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   fakeActPort,
+  fakeActPortAnswering,
   fakeActPortCalls,
   fakeAppBridge,
   refusedOnPort,
+  type SentPortAct,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
@@ -1892,6 +1894,75 @@ test("⌘K offers the open task's Chat tab only while the account has Chat on", 
   await paletteUnderState(tasks);
   chooseFilter("Agents");
   assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
+});
+
+/** Answers Luke's ensure with his id, every other act with nothing, and keeps every act sent. */
+function servingLuke(agentId: string): SentPortAct[] {
+  const sent: SentPortAct[] = [];
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(
+      request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
+    );
+  });
+  return sent;
+}
+
+test("⌘K's first entry is Ask Luke while the account has the operator on, which opens his page, and he is not listed again", async () => {
+  const lukeId = "6a1f0c2e-0000-4000-8000-0000000000a1";
+  servingLuke(lukeId);
+  const opened: string[] = [];
+  const tasks = tasksControl({
+    workspace: ACME,
+    workspaces: [ACME],
+    listedAgents: {
+      standing: [
+        {
+          id: lukeId,
+          planId: null,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          title: null,
+          personaName: "Orla",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          workspaceId: ACME.id,
+          repository: null,
+          activityAt: 2,
+        },
+      ],
+      archived: [],
+    },
+  });
+  handState(experimentsOn(EXPERIMENT.OPERATOR));
+  await paletteUnderState({
+    ...tasks,
+    agentView: { ...tasks.agentView, onOpen: (agentId) => void opened.push(agentId) },
+  });
+  await settle();
+
+  assert.equal(rows()[0], "Ask Luke");
+  assert.ok(
+    !rows().some((row) => row.startsWith("Orla")),
+    "Luke is not listed again by his agent's name",
+  );
+  press("Ask Luke");
+  await settle();
+  assert.deepEqual(opened, [lukeId]);
+});
+
+test("⌘K offers no Ask Luke and ensures nothing while the account has the operator off", async () => {
+  const sent = servingLuke("6a1f0c2e-0000-4000-8000-0000000000a1");
+  handState({});
+  await paletteUnderState(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+
+  assert.ok(!rows().includes("Ask Luke"));
+  assert.deepEqual(
+    sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR),
+    [],
+  );
 });
 
 test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no issues of its own", async () => {

@@ -70,6 +70,8 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentOperatorEnsureAnswerView,
+  type CodingAgentOperatorEnsureParams,
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
@@ -114,6 +116,7 @@ import {
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentOperatorEnsureAnswerViewSchema,
   codingAgentOverviewChecksAnswerViewSchema,
   codingAgentOverviewConversationAnswerViewSchema,
   codingAgentOverviewPullRequestAnswerViewSchema,
@@ -665,6 +668,10 @@ export interface HostOperator {
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
   codingAgentDelete(params: CodingAgentStopParams): Effect.Effect<CodingAgentDeleteAnswerView>;
   codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** The account's operator in a workspace, Luke, ensured, or reset and ensured afresh: its id, or why there is none. */
+  codingAgentEnsureOperator(
+    params: CodingAgentOperatorEnsureParams,
+  ): Effect.Effect<CodingAgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
   /** The calls into one agent, each with its lines and its record; or why there is no answer. */
@@ -1963,6 +1970,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.position === undefined ? undefined : { position: params.position }),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentEnsureOperator: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, {
+          workspaceId: params.workspaceId,
+          ...(params.reset === undefined ? undefined : { reset: params.reset }),
+        }),
+        codingAgentAnswer(codingAgentOperatorEnsureAnswerViewSchema),
       ),
     codingAgentPage: (params) =>
       Effect.map(

@@ -61,6 +61,7 @@ import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
+import { useLukeOperator } from "./luke-operator.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
@@ -376,6 +377,22 @@ function usePlaceCommands(
           tasks.chatView.onOpen();
         }
       : undefined,
+  );
+  // Luke's chord opens his page in the listed workspace, or asks his ensure again where it failed; while the account has him off it is no chord at all.
+  const operator = useLukeOperator(pastGate && tasks.signedIn ? tasks.workspace?.id : undefined);
+  const lukeId = operator?.agentId;
+  useAppCommand(
+    APP_COMMAND.ASK_LUKE,
+    operator === undefined
+      ? undefined
+      : () => {
+          if (lukeId === undefined) {
+            operator.retry();
+            return;
+          }
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.agentView.onOpen(lukeId);
+        },
   );
   useAppCommand(
     APP_COMMAND.AUTOMATIONS,

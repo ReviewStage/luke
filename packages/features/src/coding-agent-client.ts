@@ -41,6 +41,7 @@ import {
   type CodingAgentMessageAnswerView,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentOperatorEnsureAnswerView,
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
@@ -84,6 +85,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
+  type OperatorEnsureRequest,
   TRANSCRIPT_PARTS_QUERY,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
@@ -920,6 +922,17 @@ export class HostedCodingAgentClient {
   }
 
   /** One change of an agent, answering it as it then stands. */
+  /** Ensures the account's operator in a workspace, Luke, or with `reset` archives the one standing and makes a fresh one: its id, or why there is none. */
+  ensureOperator(
+    workspaceId: string,
+    request: OperatorEnsureRequest,
+  ): Effect.Effect<CodingAgentOperatorEnsureAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.agents.ensureOperator, { params: { id: workspaceId }, body: request }),
+      START_REFUSALS,
+    );
+  }
+
   #change(
     agentId: string,
     body: CodingAgentChangeRequest,

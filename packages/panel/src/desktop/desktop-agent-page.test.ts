@@ -34,8 +34,9 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
+import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -317,6 +318,10 @@ beforeEach(() => {
           agent: { ...PAGE, id: STARTED_ID, status: CODING_AGENT_STATUS.STARTING },
         };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      // Note that the page's agent is the account's operator, Luke, wherever the account has him on.
+      if (request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agentId: AGENT_ID } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
@@ -1470,6 +1475,23 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
     "Archive agent",
     "Permanently delete",
   ]);
+});
+
+test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete", async () => {
+  handState(experimentsOn(EXPERIMENT.OPERATOR), {
+    run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
+  });
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
+  assert.ok(more);
+  act(() => more.click());
+
+  assert.equal(page.querySelector("h1")?.textContent, "Luke");
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
+    ["Open terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+  );
 });
 
 /** What a side panel is asked to show. */

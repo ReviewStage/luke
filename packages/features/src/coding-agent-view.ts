@@ -26,6 +26,8 @@ import {
   codingAgentServersRequestSchema,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
+  operatorEnsureAnswerSchema,
+  operatorEnsureRequestSchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
@@ -323,6 +325,15 @@ export const codingAgentDeleteAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentDeleteAnswerView = typeof codingAgentDeleteAnswerViewSchema.Type;
 
+/** The account's operator in a workspace ensured, as the window hears it: its id, or why there is none. */
+export const codingAgentOperatorEnsureAnswerViewSchema = EffectSchema.Union([
+  operatorEnsureAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOperatorEnsureAnswerView =
+  typeof codingAgentOperatorEnsureAnswerViewSchema.Type;
+
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const codingAgentMessagesParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -448,6 +459,14 @@ export const codingAgentPinParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPinParams = typeof codingAgentPinParamsSchema.Type;
+
+/** The account's operator in a workspace ensured, as the window asks it: the workspace, and whether a fresh one replaces the one standing. */
+export const codingAgentOperatorEnsureParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  ...operatorEnsureRequestSchema.fields,
+});
+
+export type CodingAgentOperatorEnsureParams = typeof codingAgentOperatorEnsureParamsSchema.Type;
 
 /** One agent, as the window names it to stop or to delete. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({
