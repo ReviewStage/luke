@@ -349,7 +349,10 @@ function fakeService() {
       }),
     message: (agentId, request) =>
       Effect.sync(() => {
-        asked.push(`message:${agentId}:${request.clientKey}:${request.text}`);
+        const files = (request.attachments ?? []).map((file) => file.name).join(",");
+        asked.push(
+          `message:${agentId}:${request.clientKey}:${request.text}${files === "" ? "" : `:files ${files}`}`,
+        );
         return sentTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: sentTxid };
       }),
     choose: (agentId, choice) =>
@@ -1996,7 +1999,7 @@ it.effect(
       assert.deepEqual(typed, ["Expire them after a week."]);
       assert.deepEqual(asked, [
         `message:${AGENT_ID}:send-1:Expire them after a week.`,
-        `message:${other}:send-2:`,
+        `message:${other}:send-2::files pager.txt`,
       ]);
 
       const { call: callWithNoCalls, asked: steered } = yield* subject();
@@ -2006,6 +2009,33 @@ it.effect(
         clientKey: "send-3",
       });
       assert.deepEqual(steered, [`message:${AGENT_ID}:send-3:Expire them after a week.`]);
+    }),
+);
+
+it.effect(
+  "a line with files typed while this Mac's call is up on the agent steers with its files, and the call is offered none of it",
+  () =>
+    Effect.gen(function* () {
+      const typed: string[] = [];
+      const { call, asked } = yield* subject({
+        typeIntoCall: (agentId, text) => {
+          typed.push(text);
+          return agentId === AGENT_ID;
+        },
+      });
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: AGENT_ID,
+          text: "What does this pager say?",
+          clientKey: "send-1",
+          attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
+        }),
+        { agent: AGENT },
+      );
+      assert.deepEqual(typed, []);
+      assert.deepEqual(asked, [
+        `message:${AGENT_ID}:send-1:What does this pager say?:files pager.txt`,
+      ]);
     }),
 );
 
