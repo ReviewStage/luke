@@ -25,6 +25,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@luke/wire";
@@ -49,10 +51,12 @@ import { lukeMcpDoorSeams } from "./door-seams.js";
 import type { AgentSandboxDoors } from "./sandbox-door.js";
 import {
   LUKE_MCP_TOOLS,
+  type LukeMcpOfferedTo,
   type LukeMcpServices,
   type LukeMcpTool,
   type LukeMcpToolResult,
   type McpContent,
+  offeredLukeMcpTool,
   refusedByDoor,
 } from "./tools.js";
 
@@ -92,6 +96,7 @@ const JSON_RPC_ERROR = {
   INVALID_REQUEST: -32600,
   METHOD_NOT_FOUND: -32601,
   INVALID_PARAMS: -32602,
+  INTERNAL_ERROR: -32603,
 } as const;
 
 const MCP_METHOD = {
@@ -188,6 +193,13 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
   };
 }
 
+/** What an agent whose row is gone is offered by: no task, no repository, and no operator's tools. */
+const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
+  taskId: null,
+  repository: null,
+  kind: CODING_AGENT_KIND.CODER,
+};
+
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
   content: [{ type: "text", text: DOOR_FAILED }],
@@ -243,6 +255,37 @@ function callTool(
   );
 }
 
+/**
+ * The tools listed to the admitted agent: those eve offers it, by its task,
+ * its repository, and its kind (`offeredLukeMcpTool`); those eve offers
+ * every agent where its row is gone, since no narrowed tool's door would
+ * carry out a call for an agent that no longer stands.
+ */
+function listTools(
+  admitted: AdmittedConversation,
+): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
+  const { userId, conversationId } = admitted.target;
+  return readCodingAgentOfConversation(userId, conversationId).pipe(
+    Effect.map((found) => {
+      const offered = offeredLukeMcpTool(Option.getOrElse(found, () => NO_AGENT_OFFERED));
+      const tools = [...LUKE_MCP_TOOLS]
+        .filter(([name]) => offered(name))
+        .map(([name, tool]) => ({
+          name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        }));
+      return Result.succeed({ tools });
+    }),
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning(`Luke MCP tools/list failed: ${failureKind(cause)}`),
+        rpcFailure(JSON_RPC_ERROR.INTERNAL_ERROR, "Luke could not list its tools just now"),
+      ),
+    ),
+  );
+}
+
 /** One request's answer, by its method. */
 function answerRequest(
   doors: LukeMcpDoors,
@@ -269,15 +312,7 @@ function answerRequest(
     case MCP_METHOD.PING:
       return Effect.succeed(Result.succeed({}));
     case MCP_METHOD.TOOLS_LIST:
-      return Effect.succeed(
-        Result.succeed({
-          tools: [...LUKE_MCP_TOOLS].map(([name, tool]) => ({
-            name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-          })),
-        }),
-      );
+      return listTools(admitted);
     case MCP_METHOD.TOOLS_CALL:
       return callTool(doors, admitted, params);
     default:

@@ -21,13 +21,22 @@ function requested(toolName: string, input: WireRecord): Parameters<typeof opens
   );
 }
 
-test("a chat post opens the sandbox only where it carries a picture, which is read from a file there", () => {
+test("a chat post opens the sandbox only where it carries a picture by its path, which is read from a file there, and not for one handed on by its attachment's id", () => {
   const picture = { type: CHAT_BLOCK.IMAGE, path: "shot.png", alt: "The form." };
   assert.equal(
     opensSandbox(requested(CODER_TOOL.POST_CHAT, { text: "See.", blocks: [picture] })),
     true,
   );
   assert.equal(opensSandbox(requested(CODER_TOOL.POST_CHAT, { text: "Words alone." })), false);
+  const handedOn = {
+    type: CHAT_BLOCK.IMAGE,
+    attachmentId: "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f",
+    alt: "The form.",
+  };
+  assert.equal(
+    opensSandbox(requested(CODER_TOOL.POST_CHAT, { text: "See.", blocks: [handedOn] })),
+    false,
+  );
   assert.equal(
     opensSandbox(
       requested(CODER_TOOL.POST_CHAT, {

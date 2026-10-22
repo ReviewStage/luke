@@ -18,7 +18,6 @@ import {
   inboxFormValuesSchema,
   inboxKeySchema,
   inboxOptionSchema,
-  inboxPostBlocksSchema,
   inboxReplyRefusal,
   inboxWordBlockSchema,
 } from "./inbox-wire.js";
@@ -54,8 +53,6 @@ export {
   /** @public */
   type InboxImageType as ChatImageType,
   /** @public */
-  type InboxPostBlock as ChatPostBlock,
-  /** @public */
   type InboxReplyKind as ChatReplyKind,
   /** @public */
   type InboxStatus as AskStatus,
@@ -63,8 +60,6 @@ export {
   inboxBlockSchema as chatBlockSchema,
   /** @public */
   inboxImageTypeSchema as chatImageTypeSchema,
-  /** @public */
-  inboxPostBlocksSchema as chatPostBlocksSchema,
 } from "./inbox-wire.js";
 
 /**
@@ -483,11 +478,40 @@ function askKeyed(post: { readonly key?: string; readonly ask?: unknown }): bool
   return post.ask === undefined || post.key !== undefined;
 }
 
+/** An image block names its picture one way: by a file in the poster's sandbox, or by an attachment it was told. */
+function onePicture(block: { readonly path?: string; readonly attachmentId?: string }): boolean {
+  return (block.path === undefined) !== (block.attachmentId === undefined);
+}
+
+/**
+ * One block as an agent posts it in chat: the word blocks as they are
+ * kept, or an image by exactly one of the path of its file in the agent's
+ * sandbox, which the service reads, and the id of an attachment the agent
+ * was told, a picture it was sent or one of a chat message it read, which
+ * the service copies; either is kept beside the message.
+ */
+const chatPostBlockSchema = EffectSchema.Union([
+  ...inboxWordBlockSchema.members,
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
+    path: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_PATH_CHARS)),
+    attachmentId: EffectSchema.optionalKey(wireUuidSchema),
+    alt: filledText(CHAT_BOUNDS.MAX_ALT_CHARS),
+  }).check(EffectSchema.makeFilter(onePicture)),
+]);
+
+export type ChatPostBlock = typeof chatPostBlockSchema.Type;
+
+/** A post's blocks under its words, in order, few. */
+export const chatPostBlocksSchema = EffectSchema.Array(chatPostBlockSchema).check(
+  EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_BLOCKS),
+);
+
 /**
  * A post that may carry an ask: a post's fields, the ask under the poster's
  * key, which it must name and re-posted under which it updates in place,
  * and the blocks under the words, an image among them by its path in the
- * sandbox.
+ * sandbox or by an attachment's id.
  */
 export const postChatAskInputSchema = EffectSchema.Struct({
   ...postFields,
@@ -495,7 +519,7 @@ export const postChatAskInputSchema = EffectSchema.Struct({
   purpose: EffectSchema.optionalKey(chatPurposeSchema),
   key: EffectSchema.optionalKey(inboxKeySchema),
   ask: EffectSchema.optionalKey(chatAskSchema),
-  blocks: EffectSchema.optionalKey(inboxPostBlocksSchema),
+  blocks: EffectSchema.optionalKey(chatPostBlocksSchema),
 }).check(EffectSchema.makeFilter(askKeyed), EffectSchema.makeFilter(oneDestination));
 
 /**

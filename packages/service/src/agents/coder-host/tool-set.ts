@@ -262,9 +262,13 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.BROWSER,
 ]);
 
-/** What a chat post's input is read for here: the types of its blocks, an image's among them. */
+/** What a chat post's input is read for here: the types of its blocks, and an image's path, which names a file in the sandbox where an attachment's id names none. */
 const readPostedBlocks = Schema.decodeUnknownOption(
-  Schema.Struct({ blocks: Schema.Array(Schema.Struct({ type: Schema.String })) }),
+  Schema.Struct({
+    blocks: Schema.Array(
+      Schema.Struct({ type: Schema.String, path: Schema.optionalKey(Schema.Unknown) }),
+    ),
+  }),
 );
 
 /** What an inbox post's input is read for here: its body, whose pictures name files in the sandbox. */
@@ -274,7 +278,7 @@ const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.S
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
  * edit of the plan adding a picture read from one, for a chat post with a
- * picture, or for an inbox post whose body draws one by a path naming no
+ * picture by its path, or for an inbox post whose body draws one by a path naming no
  * scheme, each read from a file in the sandbox, or a message
  * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
@@ -292,7 +296,7 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
               action.input.pictures.length > 0) ||
             (action.toolName === CODER_TOOL.POST_CHAT &&
               Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
-                blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),
+                blocks.some((block) => block.type === CHAT_BLOCK.IMAGE && block.path !== undefined),
               )) ||
             (action.toolName === CODER_TOOL.POST_TO_INBOX &&
               Option.exists(
