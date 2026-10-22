@@ -91,7 +91,7 @@ export function awayBack(away: AwayStep | undefined, onLeave: () => void): TaskH
 }
 
 /** The task's name being edited in the title's place, as the ⋯'s Rename asks. */
-export interface TaskHeadRename {
+interface TaskHeadRename {
   readonly editing: boolean;
   readonly onEnd: (end: InlineEditEnd) => void;
 }

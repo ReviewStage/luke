@@ -70,7 +70,10 @@
  * same, so shutting a panel opened over the plan steps back to the plan
  * rather than adding a step that Back would open the panel again from. A
  * step between two such panes of one page leaves no page, so it never asks
- * first, as leaving an automation with unsaved changes does.
+ * first, as leaving an automation with unsaved changes does. A phone's way
+ * out of a task goes back past all of the task's own steps at once, to the
+ * nearest step on another page, the list it was opened from, and is named
+ * as that step is (`WindowHistory`'s `away` and `onLeave`).
  */
 
 import { linkOf, type ReadLink } from "@luke/features/luke-link";
