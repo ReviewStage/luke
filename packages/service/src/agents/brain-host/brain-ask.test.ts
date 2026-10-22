@@ -22,6 +22,7 @@ import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, PartitionedSemaphore, Result, Schema, Stream } from "effect";
 import { afterAll, test } from "vitest";
+import { NATIVE_SESSION_PREFIX } from "../coder-host/native-runtime.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { ASK_REFUSAL, type AskInput, acceptAsk, STOP_REFUSAL, stopAsk } from "./brain-ask.js";
@@ -159,7 +160,8 @@ interface FakeEve extends AgentSessions {
   beforeCancel: () => Promise<void>;
 }
 
-function fakeEve(): FakeEve {
+/** eve, or a native harness where `nativeSession` names the session it opens, which answers a follow-up by its line's own id as `runner-sessions.ts` does. */
+function fakeEve(nativeSession?: string): FakeEve {
   const eve: FakeEve = {
     calls: [],
     retired: new Set(),
@@ -175,7 +177,7 @@ function fakeEve(): FakeEve {
           eve.failNext = undefined;
           return { outcome: EVE_SEND_OUTCOME.FAILED, status };
         }
-        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintSession() };
+        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: nativeSession ?? mintSession() };
       }),
     send: (sessionId, message) =>
       Effect.sync(() => {
@@ -184,7 +186,8 @@ function fakeEve(): FakeEve {
         return {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
           sessionId,
-          deliveryId: `delivery-${eve.calls.length}`,
+          deliveryId:
+            nativeSession === undefined ? `delivery-${eve.calls.length}` : (message.lineId ?? ""),
         };
       }),
     // eve's own cancel, as its route documents it: a cancel naming a turn ends that turn only
@@ -216,9 +219,9 @@ interface Harness {
   ask(input: AskInput): Promise<Effect.Success<ReturnType<typeof acceptAsk>>>;
 }
 
-function harness(): Harness {
+function harness(nativeSession?: string): Harness {
   const asks = memoryAsks();
-  const eve = fakeEve();
+  const eve = fakeEve(nativeSession);
   return { asks, eve, ask: (input) => database.run(acceptAsk({ asks, eve }, input)) };
 }
 
@@ -344,6 +347,7 @@ test("the first ask opens the conversation's session and its turn is the session
     conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
     message: "what changed?",
+    lineId: accepted.id,
   });
   const recorded = h.asks.rows.get(accepted.id);
   assert.ok(recorded?.sessionId);
@@ -365,6 +369,32 @@ test("the first ask opens the conversation's session and its turn is the session
   assert.equal(followed?.sessionId, recorded.sessionId);
   assert.equal(followed?.deliveryId, "delivery-2");
   assert.equal(followed?.turnId, undefined);
+});
+
+test("an ask a native harness's session takes stands on its own line, which the runner names back as it takes it, for both the ask that opens the session and one that follows up", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const nativeSession = `${NATIVE_SESSION_PREFIX.claude_code}${randomUUID()}`;
+  const h = harness(nativeSession);
+
+  const first = await h.ask(askIn(userId, conversationId, { origin: ASK_ORIGIN.SPOKEN }));
+  assert.ok(Result.isSuccess(first));
+  const opened = h.asks.rows.get(first.success.id);
+  assert.deepEqual(
+    [opened?.sessionId, opened?.deliveryId, opened?.turnId],
+    [nativeSession, first.success.id, undefined],
+  );
+
+  await setConversationRuntimeSessionId(conversationId, nativeSession);
+  const second = await h.ask(
+    askIn(userId, conversationId, { clientId: randomUUID(), origin: ASK_ORIGIN.SPOKEN }),
+  );
+  assert.ok(Result.isSuccess(second));
+  const [, send] = h.eve.calls;
+  assert.ok(send && send.kind === "send");
+  assert.equal(send.message.lineId, second.success.id);
+  const followed = h.asks.rows.get(second.success.id);
+  assert.deepEqual([followed?.deliveryId, followed?.turnId], [second.success.id, undefined]);
 });
 
 test("a Stop on another account's id is refused as not found, and one on a turn whose conversation records no session as not running, leaving the row unstamped", async () => {
