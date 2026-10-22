@@ -1,5 +1,6 @@
 import type { ChatAnswer, ChatChannel } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
+import { agentGivenName } from "@luke/features/model-label";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Actor } from "@luke/ui/actor-model";
 import { type ChatNames, chatMentionables, toldPastBound } from "@luke/ui/chat-model";
@@ -44,7 +45,8 @@ function summaryPullRequests(
         url: line.url,
         state: line.state,
         checks: line.checks,
-        agent: agent?.personaName ?? agent?.title ?? undefined,
+        agent:
+          agent === undefined ? undefined : (agentGivenName(agent) ?? agent.title ?? undefined),
       },
     ];
   });
