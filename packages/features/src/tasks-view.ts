@@ -562,10 +562,13 @@ export const tasksTreeAnswerSchema = EffectSchema.Union([
 
 export type TasksTreeAnswer = typeof tasksTreeAnswerSchema.Type;
 
-/** The skills a developer may choose of a repository, as the window asks the host for them: the plan whose repository it is, or the workspace and the repository where no plan names it. */
+/** The skills a developer may choose, as the window asks the host for them: the plan they are chosen on, or the workspace and the repository where no plan names it, or the workspace alone for an agent with no repository, which is offered its installed skills alone. */
 export const tasksSkillsParamsSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.NonEmptyString }),
-  EffectSchema.Struct(repositoryPlaceFields),
+  EffectSchema.Struct({
+    workspaceId: repositoryPlaceFields.workspaceId,
+    repository: EffectSchema.optionalKey(repositoryPlaceFields.repository),
+  }),
 ]);
 
 export type TasksSkillsParams = typeof tasksSkillsParamsSchema.Type;

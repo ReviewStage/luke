@@ -179,7 +179,7 @@ function videoHeight(page: HTMLElement): string | undefined {
 /** One of the video's top-corner handles, which it must have. */
 function corner(page: HTMLElement, side: "left" | "right"): HTMLElement {
   const handle = videoRoom(page)?.querySelector<HTMLElement>(
-    `.agent-call-video-corner[data-corner="${side}"]`,
+    `.luke-resize-corner[data-corner="${side}"]`,
   );
   assert.ok(handle, `the video has a ${side} corner handle`);
   return handle;
@@ -352,7 +352,7 @@ test("hovering the video brings out its resize controls, each named and reached 
   const laid = layContainersAt({});
   try {
     const controls = () =>
-      [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner")]
+      [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")]
         .map((each) => getComputedStyle(each).opacity)
         .join(" ");
     assert.equal(room.dataset.reveal, "false");
@@ -373,7 +373,7 @@ test("hovering the video brings out its resize controls, each named and reached 
   }
   const touch = layContainersAt({}, { touch: true });
   try {
-    const controls = [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner")].map(
+    const controls = [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")].map(
       (each) => getComputedStyle(each).opacity,
     );
     assert.deepEqual(controls, ["1", "1"], "a touch screen, which has no hover, always shows them");

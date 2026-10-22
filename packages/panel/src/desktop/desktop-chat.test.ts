@@ -22,6 +22,7 @@ import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
+  TASK_SKILL_SOURCE,
   TASK_TREE_ENTRY,
   type TaskAgentLine,
   type TaskSummary,
@@ -2199,6 +2200,7 @@ test("in the window's Chat, a person's /skill in a task's channel is drawn as it
             {
               name: "release",
               description: "Cut a release.",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
               path: ".agents/skills/release/SKILL.md",
             },
           ],
@@ -2248,7 +2250,14 @@ test("a task's skills are read once while the listed tasks change around it, rat
         skills: {
           repository: "acme/relay",
           branch: "main",
-          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release.",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
+              path: "SKILL.md",
+            },
+          ],
         },
       });
     },
@@ -2289,7 +2298,7 @@ test("a task's skills are read once while the listed tasks change around it, rat
   assert.equal(reads, 1, "the skills are not read again");
 });
 
-test("a task whose repository is let go and chosen again reads its skills afresh", async () => {
+test("a task whose repository is let go reads its installed skills alone, and chosen again reads its skills afresh", async () => {
   let reads = 0;
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
@@ -2301,7 +2310,14 @@ test("a task whose repository is let go and chosen again reads its skills afresh
         skills: {
           repository: "acme/relay",
           branch: "main",
-          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release.",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
+              path: "SKILL.md",
+            },
+          ],
         },
       });
     },
@@ -2338,7 +2354,8 @@ test("a task whose repository is let go and chosen again reads its skills afresh
   await post("dropping the repository");
   repository = INVITES_TASK.repository;
   await post("and choosing it again");
-  assert.equal(reads, 2);
+  // One read for the repository, one for the installed skills while it has none, and one once it is chosen again.
+  assert.equal(reads, 3);
 });
 
 /** Where an agent's face in the channel shown stands, by the name its first message is bylined with: working, failed, or at rest. */

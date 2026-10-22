@@ -27,7 +27,7 @@ import {
   type MentionPlace,
   mentionMarkdown,
 } from "@luke/features/mention-link";
-import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -591,6 +591,7 @@ test("an @ in the box offers the repository's skills, a pick written as the /nam
         {
           name: "release",
           description: "Use to cut a release.",
+          source: TASK_SKILL_SOURCE.REPOSITORY,
           path: ".agents/skills/release/SKILL.md",
         },
       ],
@@ -628,6 +629,7 @@ test("skills that could not be read for one @ list are asked for again by the ne
               {
                 name: "release",
                 description: "Use to cut a release.",
+                source: TASK_SKILL_SOURCE.REPOSITORY,
                 path: ".agents/skills/release/SKILL.md",
               },
             ],

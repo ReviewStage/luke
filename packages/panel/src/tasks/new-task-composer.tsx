@@ -24,7 +24,6 @@ import {
   Text,
   Tooltip,
 } from "@luke/ui";
-import type { SkillOption } from "@luke/ui/skill-mention";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -51,6 +50,7 @@ import {
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { SkillFiles } from "./skill-chip.js";
+import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
@@ -362,13 +362,18 @@ export function NewTaskComposer({
   );
   const skills = useMemo(
     () =>
-      workspaceId === undefined || repository === null
+      workspaceId === undefined
         ? undefined
-        : keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { workspaceId, repository })),
+        : keptSkills(() =>
+            act(
+              ACT_KIND.TASKS_SKILLS,
+              repository === null ? { workspaceId } : { workspaceId, repository },
+            ),
+          ),
     [act, workspaceId, repository],
   );
   // A skill's chip opens its `SKILL.md` on GitHub, as on an agent's page no task holds, since no File tab stands here.
-  const openSkill = (skill: SkillOption) => {
+  const openSkill = (skill: SkillWithFile) => {
     if (mentions === undefined || repository === null) return;
     appPlatform().openGitHub(
       encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, mentions.doors.place),

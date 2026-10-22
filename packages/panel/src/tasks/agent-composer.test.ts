@@ -10,6 +10,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -49,9 +50,15 @@ const SKILLS: readonly SkillOption[] = [
   {
     name: "release",
     description: "Use to cut a release.",
+    source: TASK_SKILL_SOURCE.REPOSITORY,
     path: ".agents/skills/release/SKILL.md",
   },
-  { name: "deploy", description: "Use to deploy the web.", path: ".agents/skills/deploy/SKILL.md" },
+  {
+    name: "deploy",
+    description: "Use to deploy the web.",
+    source: TASK_SKILL_SOURCE.REPOSITORY,
+    path: ".agents/skills/deploy/SKILL.md",
+  },
 ];
 
 const reading: SkillSource = () => Promise.resolve({ skills: SKILLS });

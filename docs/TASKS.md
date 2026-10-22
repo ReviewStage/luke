@@ -548,6 +548,44 @@ a model chosen from Start's chevron, an agent's chip, a draft, a fork, or by
 another agent runs that agent alone. A first-time
 account starts on Claude Opus 5.5 at high.
 
+### Settings › Skills
+
+Beside the skills a task's repository keeps in `.agents/skills` or
+`.claude/skills`, which an agent reads from GitHub as its session starts, a
+member installs skills into Luke itself on the Skills page of Settings. Add
+skill is one paste box: an `npx skills add …` command (or `pnpx`, `pnpm dlx`,
+`bunx`, `yarn dlx`, or a bare `skills add`) naming a GitHub repository, a
+folder of one, `owner/repo@skill`, or a skills.sh link, with `--skill` picking
+which of its skills to install; or a skill's own text, frontmatter and all.
+Luke never runs the command. The service reads the named folders from GitHub,
+on the workspace's GitHub App, the member's own token, or anonymously for a
+public repository, shows what it found before anything is installed, and pins
+the files to the commit it read; a later commit on the source is offered as
+Update available, never taken on its own. A pasted skill is held to the same
+rules as a repository's, and a file shaped like a credential is refused.
+Only GitHub sources are read for now.
+
+A skill is installed for one of two scopes. A personal skill is its
+installer's alone and follows them into every workspace they belong to. A
+workspace skill reaches every member's agents on that workspace's tasks. Any
+member installs one; its installer, while still a member, and the
+workspace's owners and admins update, turn off, or remove it; a personal
+workspace has no workspace skills. Each skill has a switch,
+and one turned off is offered to no agent.
+
+Where two skills share a name, the repository's wins, then the workspace's,
+then the member's own, and the one shadowed is not offered. An agent with no
+repository is offered the installed skills alone. An agent's skills are read
+once, as its session starts, so a skill installed, updated, turned off, or
+removed reaches only agents started after it; an agent already running keeps
+the skills it started with.
+
+The `/` list in an agent's box offers the same merged skills, each with a
+Repo, Workspace, or Personal badge, and the chip and its card say the same.
+A repository's skill opens its `SKILL.md` in a File tab; an installed one has
+no file of the repository's to open. Where there is no skill yet, the list
+points to Settings › Skills.
+
 ### Transcript
 
 What is said on a call is drawn in the transcript of the agent the call

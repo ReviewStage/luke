@@ -46,7 +46,6 @@ import {
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
-import type { SkillOption } from "@luke/ui/skill-mention";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import {
   AtSignIcon,
@@ -75,6 +74,7 @@ import { InboxListSkeleton, markAllEntries } from "../tasks/inbox-list.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { keptSkills } from "../tasks/repository-skills.js";
 import type { SkillSource } from "../tasks/skill-picker.js";
+import type { SkillWithFile } from "../tasks/skill-ref.js";
 import { agentEndMark, PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
@@ -237,13 +237,13 @@ function useTaskDoors(
   const { tasks: listed } = tasks;
   // Note that each task's skills are read once and kept while its repository and workspace stand, because a source made anew, as a change to any listed task would make it, reads them again and draws its chips as words until it lands.
   const skillSources = useRef(
-    new Map<string, { repository: string; workspaceId: string; source: SkillSource }>(),
+    new Map<string, { repository: string | null; workspaceId: string; source: SkillSource }>(),
   );
   const doors = useMemo(() => {
     const held = new Map<string, ChatTaskDoors>();
     const kept = skillSources.current;
     const reading = new Set<string>();
-    const skillSourceOf = (taskId: string, repository: string, workspaceId: string) => {
+    const skillSourceOf = (taskId: string, repository: string | null, workspaceId: string) => {
       reading.add(taskId);
       const standing = kept.get(taskId);
       if (standing?.repository === repository && standing.workspaceId === workspaceId) {
@@ -271,21 +271,18 @@ function useTaskDoors(
         lines === undefined
           ? showFile({ path }, undefined)
           : showFile({ path, startLine: lines.startLine, endLine: lines.endLine }, lines.commit);
-      // A skill's file opens in its task, as the task's page opens it.
-      const skills =
-        repository === null
-          ? undefined
-          : {
-              source: skillSourceOf(task.id, repository, workspaceId),
-              onOpen: (skill: SkillOption) => showFile({ path: skill.path }, undefined),
-            };
+      // A skill's file opens in its task, as the task's page opens it; a task with no repository offers its member's installed skills alone.
+      const skills = {
+        source: skillSourceOf(task.id, repository, workspaceId),
+        onOpen: (skill: SkillWithFile) => showFile({ path: skill.path }, undefined),
+      };
       held.set(task.id, {
         code,
         mentions: { ...taskless, taskName: task.name, doors: { ...taskless.doors, onOpenFile } },
         skills,
       });
     }
-    // A task no longer listed, or listed with no repository, lets its skills go, so a repository chosen again is read afresh.
+    // A task no longer listed lets its skills go, so a task listed again is read afresh.
     for (const taskId of kept.keys()) if (!reading.has(taskId)) kept.delete(taskId);
     return held;
   }, [listed, act, openTask, workspace, mentions]);

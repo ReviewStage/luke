@@ -38,6 +38,7 @@ import {
   useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
+import { skillWord } from "@luke/ui/skill-mention";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import {
   callEndedLine,
@@ -696,7 +697,7 @@ function LoadedSkillView({
   return (
     <OpeningCallView
       part={part}
-      hint={subject.skill.path}
+      hint={subject.skill.path ?? skillWord(subject.skill.name)}
       card={<SkillCard subject={subject} />}
       onOpen={subject.onOpen}
     />
