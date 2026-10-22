@@ -131,10 +131,10 @@ import {
   type InboxLineKind,
   type InboxListed,
   type InboxListView,
+  type InboxPerson,
   type InboxPersonGroup,
   type InboxShow,
   type InboxSort,
-  type InboxStarter,
   type InboxStatusGroup,
   type InboxStatusGroupKind,
   type InboxWhose,
@@ -145,6 +145,7 @@ import {
   inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
+  inboxWaitsOn,
   isDone,
   isUnread,
   listedItems,
@@ -776,7 +777,7 @@ export function InboxItemRow({
   const drafted = useInboxItemDrafted(item) && !open;
   const starter = readersItem(item, reader)
     ? undefined
-    : personActor(item.startedBy, directory.members, reader, directory.former);
+    : personActor(inboxWaitsOn(item), directory.members, reader, directory.former);
   const ticked = inboxShownTicks(item, useInboxItemDraft(item));
   const lineKind = inboxLineKind(item);
   const nameOf = (member: Parameters<typeof personActor>[0]) =>
@@ -1086,13 +1087,13 @@ function StatusHeader({
  * heads its groups. A press folds the group, as every group header's does.
  */
 function PersonHeader({
-  starter,
+  person,
   readerId,
   folded,
   count,
   onToggle,
 }: {
-  starter: InboxStarter | undefined;
+  person: InboxPerson | undefined;
   readerId: string | undefined;
   folded: boolean;
   count: number;
@@ -1102,8 +1103,8 @@ function PersonHeader({
   const reader = known ?? readerId;
   const you = members?.find((each) => each.userId === reader);
   const actor: Actor =
-    starter !== undefined
-      ? personActor(starter, members, reader, former)
+    person !== undefined
+      ? personActor(person, members, reader, former)
       : you !== undefined
         ? memberActor(you, reader)
         : { kind: ACTOR_KIND.PERSON, userId: reader ?? "", name: "", you: true };
@@ -1844,14 +1845,14 @@ export function InboxList({
     );
   };
   const personSection = (
-    { key, starter, items }: InboxPersonGroup,
+    { key, person, items }: InboxPersonGroup,
     leave: React.RefCallback<HTMLElement> | undefined,
   ) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
       <div key={key} ref={leave} className="sidebar-repository">
         <PersonHeader
-          starter={starter}
+          person={person}
           readerId={readerId}
           folded={folded}
           count={needingYou(items)}

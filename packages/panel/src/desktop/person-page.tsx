@@ -49,7 +49,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
 import { lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
-import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model.js";
+import { holderName, INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -441,10 +441,11 @@ function PersonColumn({
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
-  // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.
+  // An item on a task is theirs where it waits on them (`inboxWaitsOn`), its task's assignee or else its agent's starter, by the task's row from a service that names neither.
   const waiting = read.items.filter(
     ({ holder, item }) =>
-      holder.kind === INBOX_HOLDER.TASK && agentStarter(holder.task, item.agentId) === userId,
+      holder.kind === INBOX_HOLDER.TASK &&
+      (inboxWaitsOn(item)?.userId ?? agentStarter(holder.task, item.agentId)) === userId,
   );
   const { inboxView } = tasks;
   const openItem = ({ holder, item }: InboxListed) => {
