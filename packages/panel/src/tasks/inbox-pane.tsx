@@ -1325,37 +1325,24 @@ function AnsweredMarker(): React.JSX.Element {
 }
 
 /**
- * What ends an agent's message whose ask was replaced: its controls as it
- * offered them (`HeldControls`), dimmed, nothing picked and taking nothing,
- * so what it used to ask still reads in the thread, then the same small
- * pill as an answered ask's, in the muted ink alone, saying what replaced
- * it, a newer question where a later message of the agent's on the thread
- * asks one and a newer message otherwise. An `answer` of words alone, which
- * has no controls, ends with the pill alone, as does a to-do naming no
- * steps, whose one step was the item's title as it stood then, which a
- * later post may have renamed.
+ * What ends an agent's message whose ask was replaced or withdrawn: its
+ * controls as it offered them (`HeldControls`), dimmed, nothing picked and
+ * taking nothing, so what it used to ask still reads in the thread, then
+ * `marker`, the small pill saying what became of it. An `answer` of words
+ * alone, which has no controls, ends with the pill alone, as does a to-do
+ * naming no steps, whose one step was the item's title as it stood then,
+ * which a later post may have renamed.
  */
-function ReplacedAsk({
+function HeldAsk({
   ask,
   title,
-  message,
-  thread,
+  marker,
 }: {
   ask: InboxKnownAsk;
   /** The item's title, which stands as the one step of a to-do that names none. */
   title: string;
-  message: InboxMessage;
-  thread: readonly InboxMessage[];
+  marker: React.JSX.Element;
 }): React.JSX.Element {
-  const at = thread.findIndex((said) => said.id === message.id);
-  const asked = thread
-    .slice(at + 1)
-    .some((said) => said.author === INBOX_MESSAGE_AUTHOR.AGENT && said.ask !== undefined);
-  const marker = (
-    <span className="inbox-ask-settled" data-inbox-settled="replaced">
-      {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
-    </span>
-  );
   // A to-do naming no steps draws the item's title as its one step, and a later post may have renamed the item since, so the title it drew then is not known.
   if (!hasControls(ask) || (ask.type === INBOX_ASK.DO && ask.steps.length === 0)) return marker;
   return (
@@ -1368,8 +1355,31 @@ function ReplacedAsk({
   );
 }
 
-/** How a withdrawn ask's line reads: why its agent took it back, or who closed the item without answering, while the close stands. */
-function WithdrawnLine({
+/**
+ * The pill ending a replaced ask's message: a newer question replaced it
+ * where a later message of the agent's on the thread asks one, and a newer
+ * message otherwise.
+ */
+function ReplacedMarker({
+  message,
+  thread,
+}: {
+  message: InboxMessage;
+  thread: readonly InboxMessage[];
+}): React.JSX.Element {
+  const at = thread.findIndex((said) => said.id === message.id);
+  const asked = thread
+    .slice(at + 1)
+    .some((said) => said.author === INBOX_MESSAGE_AUTHOR.AGENT && said.ask !== undefined);
+  return (
+    <span className="inbox-ask-settled" data-inbox-settled="replaced">
+      {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
+    </span>
+  );
+}
+
+/** The pill ending a withdrawn ask's message: why its agent took it back, or who closed the item without answering, while the close stands. */
+function WithdrawnMarker({
   item,
   reason,
 }: {
@@ -1378,7 +1388,9 @@ function WithdrawnLine({
 }): React.JSX.Element {
   const closer = usePerson(item.closedBy);
   return (
-    <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+    <span className="inbox-ask-settled" data-inbox-settled="withdrawn">
+      <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+    </span>
   );
 }
 
@@ -1404,9 +1416,9 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * "Answered" alone where the thread read no longer carries that reply; for
  * a replaced ask, no card, its controls as it offered them, dimmed, over a
  * small marker saying a newer question, or message, replaced it
- * (`ReplacedAsk`); a withdrawn one's card with
- * why, or who closed the item; and an ask this build does not know a card
- * naming a newer Luke.
+ * (`HeldAsk`); for a withdrawn one the same, over a marker saying why, or
+ * who closed the item; and an ask this build does not know a card naming a
+ * newer Luke.
  */
 function AskBox({
   item,
@@ -1434,7 +1446,20 @@ function AskBox({
   }
   if (ask.status === INBOX_ASK_STATUS.REPLACED) {
     return (
-      <ReplacedAsk ask={ask} title={cardTitle(item.title)} message={message} thread={thread} />
+      <HeldAsk
+        ask={ask}
+        title={cardTitle(item.title)}
+        marker={<ReplacedMarker message={message} thread={thread} />}
+      />
+    );
+  }
+  if (ask.status === INBOX_ASK_STATUS.WITHDRAWN) {
+    return (
+      <HeldAsk
+        ask={ask}
+        title={cardTitle(item.title)}
+        marker={<WithdrawnMarker item={item} reason={ask.withdrawnReason} />}
+      />
     );
   }
   if (ask.status === INBOX_ASK_STATUS.OPEN) {
@@ -1446,19 +1471,11 @@ function AskBox({
     // An answer of words alone draws no card, so its marker says here that it was answered.
     return ask.type === INBOX_ASK.ANSWER && ask.fields === undefined ? <AnsweredMarker /> : null;
   }
-  const standing = (() => {
-    switch (ask.status) {
-      case INBOX_ASK_STATUS.ANSWERED:
-        return <span className="inbox-ask-standing">{ANSWERED}</span>;
-      case INBOX_ASK_STATUS.WITHDRAWN:
-        return <WithdrawnLine item={item} reason={ask.withdrawnReason} />;
-    }
-  })();
   return (
     <div className="inbox-ask" data-inbox-ask={ask.status}>
       <div className="inbox-ask-head">
         <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
-        {standing}
+        <span className="inbox-ask-standing">{ANSWERED}</span>
       </div>
     </div>
   );

@@ -3808,8 +3808,7 @@ ul.actor-stack {
 /* The ask closing the message that asks it, once it no longer waits: a
    bordered card, its head the ask's kind and where it stands. Once
    answered, its controls alone head the reply that answered it, as the
-   answer left them, with no card around them. A withdrawn ask is its head
-   alone. */
+   answer left them, with no card around them. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3856,10 +3855,10 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-4);
 }
 
-/* A replaced ask keeps its controls in the agent's message as it offered
-   them, nothing picked and taking nothing, dimmed so they read as what it
-   used to ask rather than something to answer, over the pill saying what
-   replaced it. */
+/* A replaced or withdrawn ask keeps its controls in the agent's message as
+   it offered them, nothing picked and taking nothing, dimmed so they read
+   as what it used to ask rather than something to answer, over the pill
+   saying what replaced it, or why it was withdrawn. */
 .inbox-ask-replaced {
   display: flex;
   min-width: 0;
@@ -3877,8 +3876,8 @@ ul.actor-stack {
 
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
-   complete ink; a replaced ask with the same pill saying so, in the muted
-   ink alone. */
+   complete ink; a replaced or withdrawn ask with the same pill saying so,
+   in the muted ink alone. */
 .inbox-ask-settled {
   display: inline-flex;
   max-width: 100%;
