@@ -27,6 +27,7 @@ import {
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_CURSOR_START,
+  type ChatWriteRequest,
   chatAnswerSchema,
   chatJoinAnswerSchema,
   MEMBER_KIND,
@@ -54,7 +55,9 @@ import {
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME } from "../github/github-installations.js";
+import { keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -66,10 +69,11 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
+import { queryRecorder } from "../testing/query-recording.js";
 import { BRAIN_HOST_HEADER } from "./brain-host/bounds.js";
 import { CODER } from "./coder-host/bounds.js";
 import { messagesProcedures } from "./messages-procedures.js";
-import { writeWorkspaceChat } from "./workspace-chat.js";
+import { joinWorkspaceChatAsPerson, writeWorkspaceChat } from "./workspace-chat.js";
 
 /**
  * The window's read of a workspace's chat, answered by the hosted oRPC
@@ -471,6 +475,38 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
   );
 
   it.effect(
+    "a read receipt takes no lock on the workspace: only a join that makes the person's member does",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const { general, message } = yield* room.post("Morning.");
+        const recorder = yield* queryRecorder;
+        const locks = () =>
+          recorder.queries.filter((query) => /"organization".*for update/isu.test(query));
+        const join = recorder.record(joinWorkspaceChatAsPerson(room.owner, room.workspace));
+        const read = (write: ChatWriteRequest) =>
+          recorder
+            .record(
+              writeWorkspaceChat({ eveOrigin: () => undefined }, room.owner, room.workspace, write),
+            )
+            .pipe(
+              Effect.provide(
+                Layer.merge(githubReaching([]).layer, Layer.succeed(HostedEnvironment, NO_KEYS)),
+              ),
+            );
+
+        yield* join;
+        assert.equal(locks().length, 1, "a join that makes the member locks the workspace");
+        recorder.queries.length = 0;
+        assert.ok("readSeq" in (yield* read({ readTo: message.seq, channelId: general.id })));
+        assert.ok("readSeq" in (yield* read({ readTo: message.seq })));
+        yield* join;
+        assert.ok(recorder.queries.length > 0, "the statements were seen");
+        assert.deepEqual(locks(), []);
+      }),
+  );
+
+  it.effect(
     "the live statements deliver the chat the held read answers from the start, each channel's newest messages alone, to a member, and nothing to an outsider or a member with Chat off",
     () =>
       Effect.gen(function* () {
@@ -602,7 +638,7 @@ const BOTH_SECRETS: HostedEnvironmentValues = {
 
 it.layer(getTestDB())("a person's chat post told to an agent through eve", (it) => {
   it.effect(
-    "with no eve handed in, a teammate's message to an agent reaches eve as the deployment acting for the agent's starter, under the deployment's own secret and never the cron's",
+    "with no eve handed in, a teammate's message to an agent from a window that reads no receipt is answered once committed and then reaches eve once, as the deployment acting for the agent's starter, under the deployment's own secret and never the cron's",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -646,24 +682,47 @@ it.layer(getTestDB())("a person's chat post told to an agent through eve", (it) 
             ? Response.json({ sessionId, deliveryId: "delivery-1" }, { status: 202 })
             : undefined,
         );
-        const answer = yield* writeWorkspaceChat({ eveOrigin: () => ORIGIN }, teammate, workspace, {
+        const after = keptAfterResponse();
+        const analytics = recordingProductAnalytics();
+        const clientKey = randomUUID();
+        const post = writeWorkspaceChat({ eveOrigin: () => ORIGIN }, teammate, workspace, {
           text: "The invite table is yours.",
           channelId: dm.id,
-          clientKey: randomUUID(),
+          clientKey,
+          receipt: false,
         }).pipe(
-          Effect.provide(Layer.merge(github.layer, Layer.succeed(HostedEnvironment, BOTH_SECRETS))),
+          Effect.provide(
+            Layer.mergeAll(
+              github.layer,
+              Layer.succeed(HostedEnvironment, BOTH_SECRETS),
+              after.layer,
+              analytics.layer,
+            ),
+          ),
         );
+        const steers = () => github.sent.filter((sent) => sent.url.startsWith(eveAt));
 
-        assert.ok("receipt" in answer);
-        assert.deepEqual([answer.receipt.told.length, answer.receipt.held], [1, []]);
+        // The post answers once it is committed, before eve is told or the event is counted.
+        const answer = yield* post;
+        assert.ok("posted" in answer && !("receipt" in answer));
+        assert.deepEqual([steers().length, analytics.recorded.length], [0, 0]);
+        yield* after.run;
         assert.deepEqual(
-          github.sent
-            .filter((sent) => sent.url.startsWith(eveAt))
-            .map(({ url, headers }) => ({
-              url,
-              authorization: headers.get("authorization"),
-              account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
-            })),
+          analytics.recorded.map((event) => event.name),
+          [SERVER_EVENT.CHAT_MESSAGE_SEND],
+        );
+        // The same post sent again answers the same message, and steers no one twice.
+        const again = yield* post;
+        assert.ok("posted" in again);
+        assert.equal(again.posted.id, answer.posted.id);
+        yield* after.run;
+        assert.equal(analytics.recorded.length, 1);
+        assert.deepEqual(
+          steers().map(({ url, headers }) => ({
+            url,
+            authorization: headers.get("authorization"),
+            account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+          })),
           [
             {
               url: `${eveAt}${sessionId}`,
