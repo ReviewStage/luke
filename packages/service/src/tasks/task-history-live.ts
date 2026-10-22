@@ -4,6 +4,7 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
+import { agentGivenNameSql } from "@luke/database/models/agent-name";
 import { taskSeenBy } from "@luke/database/models/workspace-store";
 import { member, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
@@ -57,10 +58,10 @@ function revisionsStatement(userId: string, taskId: string) {
             liveSessionId: planRevision.liveSessionId,
             agentId: planRevision.agentId,
             agentModel: codingAgent.model,
-            // The name the agent goes by: its human name, else its title.
+            // The name the agent goes by: Luke for an operator, its human name, else its title.
             agentTitle: sql<
               string | null
-            >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+            >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
             callId: voiceSessions.id,
             changes: planRevision.changes,
             restoredFrom: planRevision.restoredFrom,

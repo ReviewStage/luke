@@ -434,6 +434,8 @@ function withMessage(
     readonly channelId: string;
     readonly parentId: string | undefined;
     readonly blocks: ChatMessage["blocks"];
+    /** The key the developer's post went under, which the service hands back to its author alone. */
+    readonly clientKey?: string | undefined;
   },
   touched: (seq: number) => readonly ChatMessage[],
 ): ChatAnswer {
@@ -460,6 +462,7 @@ function withMessage(
     blocks: message.blocks,
     mentions,
     postedAt: at,
+    ...(message.clientKey === undefined ? undefined : { clientKey: message.clientKey }),
   };
   // A root carries no parent at all, as the service answers one.
   const placed =
@@ -472,7 +475,12 @@ function withMessage(
 }
 
 /** The fixture's chat with the developer's post in it, or why it was refused. */
-export function stagedPost(read: FixtureChat, post: ChatPost, at: number): Staged {
+export function stagedPost(
+  read: FixtureChat,
+  post: ChatPost,
+  at: number,
+  clientKey?: string,
+): Staged {
   const chat = read.answer;
   const channel = placeOf(chat, post);
   if (channel === undefined) return { refused: STAGED_REFUSAL.NO_PLACE };
@@ -489,7 +497,7 @@ export function stagedPost(read: FixtureChat, post: ChatPost, at: number): Stage
   const answer = withMessage(
     chat,
     at,
-    { channelId: channel.id, blocks, parentId },
+    { channelId: channel.id, blocks, parentId, clientKey },
     () => chat.messages,
   );
   return { chat: { ...read, answer } };

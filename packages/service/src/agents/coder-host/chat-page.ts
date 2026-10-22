@@ -11,6 +11,8 @@ import {
   chatPast,
   ensureGeneral,
   ensureMember,
+  joinedMemberOf,
+  memberIn,
   roster,
 } from "@luke/database/models/chat-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
@@ -25,6 +27,9 @@ import {
 } from "@luke/features/chat-wire";
 import { Effect, Option, Schedule } from "effect";
 import { CODER } from "./bounds.js";
+
+/** How many of an answer's independent reads run at once: under the web pool's five connections, so one held read leaves room for the rest of its instance. */
+const READ_CONCURRENCY = 3;
 
 /**
  * chat-page.ts -- a workspace's chat as the window reads it: everything a person sees of it past their cursor, held open while nothing moved.
@@ -121,8 +126,12 @@ function askOnWire(row: ChatMessageRow): Pick<ChatMessage, "ask"> | undefined {
   };
 }
 
-/** A message as the window reads one. */
-export function messageOnWire(row: ChatMessageRow): ChatMessage {
+/**
+ * A message as the window of the member `readerId` reads one: the key it was
+ * posted under on a message of the reader's own alone, so the window that
+ * posted it knows it however it lands, and no member reads another's key.
+ */
+export function messageOnWire(row: ChatMessageRow, readerId: string): ChatMessage {
   return {
     id: row.id,
     seq: row.seq,
@@ -133,6 +142,7 @@ export function messageOnWire(row: ChatMessageRow): ChatMessage {
     blocks: row.blocks,
     mentions: row.mentions,
     postedAt: row.createdAt.getTime(),
+    ...(row.authorMemberId === readerId ? { clientKey: row.clientKey } : undefined),
     ...askOnWire(row),
   };
 }
@@ -176,9 +186,14 @@ export function readsOf(
   memberId: string,
 ): ChatStoreEffect<Pick<ChatAnswer, "readSeq" | "reads">> {
   return Effect.gen(function* () {
-    const members = yield* roster(userId, organizationId);
-    const floor = members.find((member) => member.id === memberId)?.readSeq ?? 0;
-    const reads = yield* channelReads(userId, organizationId, memberId);
+    const { member, reads } = yield* Effect.all(
+      {
+        member: memberIn(userId, organizationId, memberId),
+        reads: channelReads(userId, organizationId, memberId),
+      },
+      { concurrency: READ_CONCURRENCY },
+    );
+    const floor = Option.match(member, { onNone: () => 0, onSome: (row) => row.readSeq });
     return { readSeq: floor, ...readsPast(floor, reads) };
   });
 }
@@ -206,11 +221,7 @@ export function joinedMember(
   userId: string,
   organizationId: string,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
-  return Effect.map(roster(userId, organizationId), (members) =>
-    Option.fromNullishOr(
-      members.find((member) => member.kind === MEMBER_KIND.HUMAN && member.userId === userId),
-    ),
-  );
+  return joinedMemberOf(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
 }
 
 /**
@@ -231,21 +242,27 @@ export function workspaceChatPast(
     yield* heldUntilMoved(userId, organizationId, after);
     const past = yield* chatPast(userId, organizationId, self.value.id, after);
     if (Option.isNone(past)) return Option.none();
-    const members = yield* roster(userId, organizationId);
-    const agents = yield* agentMembersOf(userId, organizationId);
+    const { members, agents, channels, reads } = yield* Effect.all(
+      {
+        members: roster(userId, organizationId),
+        agents: agentMembersOf(userId, organizationId),
+        channels: channelsOf(userId, organizationId),
+        reads: channelReads(userId, organizationId, self.value.id),
+      },
+      { concurrency: READ_CONCURRENCY },
+    );
     const people = yield* readAccountNames(
       members.flatMap((member) => (member.userId === null ? [] : [member.userId])),
     );
-    const channels = yield* channelsOf(userId, organizationId);
+    // The roster read after the hold carries the reader's cursor as it now stands.
     const reader = members.find((member) => member.id === self.value.id) ?? self.value;
-    const reads = yield* channelReads(userId, organizationId, reader.id);
     return Option.some({
       self: reader.id,
       readSeq: reader.readSeq,
       ...readsPast(reader.readSeq, reads),
       members: members.map((member) => memberOnWire(member, agents, people)),
       channels: channels.map(channelOnWire),
-      messages: past.value.messages.map(messageOnWire),
+      messages: past.value.messages.map((message) => messageOnWire(message, reader.id)),
       cursor: chatCursorOf(past.value.cursor),
     });
   });

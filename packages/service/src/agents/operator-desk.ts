@@ -53,6 +53,7 @@ import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/st
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { agentGivenName } from "@luke/features/model-label";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
@@ -130,8 +131,8 @@ const NOTICE_WORDS = {
 } as const satisfies Record<OperatorNoticeKind, string>;
 
 /** The agent as a row names it: its human name, its title, or its model. */
-function agentName(agent: Pick<CodingAgent, "personaName" | "title" | "model">): string {
-  return agent.personaName ?? agent.title ?? agent.model;
+function agentName(agent: Pick<CodingAgent, "kind" | "personaName" | "title" | "model">): string {
+  return agentGivenName(agent) ?? agent.title ?? agent.model;
 }
 
 /** An agent's mention under the workspace's step, under its task where it has one. */

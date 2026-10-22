@@ -6,7 +6,12 @@ import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { writeDrawing } from "@luke/database/models/board-store";
-import { ensureMember } from "@luke/database/models/chat-store";
+import {
+  ensureGeneral,
+  ensureMember,
+  postMessage,
+  workspaceChatLiveStatements,
+} from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { writePage } from "@luke/database/models/plan-pages";
@@ -15,7 +20,7 @@ import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/databa
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
+import { CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
@@ -45,11 +50,13 @@ import {
 } from "@luke/features/workspace-live";
 import { EXPERIMENT } from "@luke/settings";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Queue, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { driven, forkClockDriven } from "../testing/clock-driven.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
+import { queryRecorder } from "../testing/query-recording.js";
 import { liveProcedures } from "./live-procedures.js";
 import { type LiveSealer, LiveSealing, pollSealer, SealRefused } from "./realtime.js";
 
@@ -1095,6 +1102,8 @@ const askChat = (options: {
   readonly bearer: string;
   readonly forUser?: string;
   readonly workspaceId?: string;
+  /** The digest the reader last saw, which holds the poll until the rows move past it. */
+  readonly after?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
@@ -1102,12 +1111,15 @@ const askChat = (options: {
       Layer.succeed(LiveSealing, options.sealing),
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
+      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
     const url = readOf("/api/live/workspace-chat", options.forUser ?? options.bearer);
     if (options.workspaceId !== undefined) url.searchParams.set("workspaceId", options.workspaceId);
+    if (options.after !== undefined) url.searchParams.set(LIVE_POLL.AFTER, options.after);
     const response = yield* hostedAnswer(
       { live: procedures },
       services,
@@ -1170,6 +1182,60 @@ it.layer(getTestDB())("the workspace chat's live read", (it) => {
         );
         yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CHAT]: false } });
         assert.deepEqual(yield* chat(owner), notFound);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the workspace chat's held poll", (it) => {
+  it.effect(
+    "a poll past the digest the reader saw reads only the chat's stamp while it stands, and the chat's statements again once a post moves it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const workspace = yield* openWorkspace(owner);
+        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CHAT]: true } });
+        const ada = Option.getOrThrow(
+          yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId: owner }),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(owner, workspace));
+        const say = (text: string) =>
+          postMessage(owner, workspace, {
+            authorMemberId: ada.id,
+            to: { channelId: general.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            clientKey: randomUUID(),
+          });
+        yield* say("Morning.");
+        const chat = (after?: string) =>
+          askChat({
+            bearer: owner,
+            workspaceId: workspace,
+            sealing: Option.none(),
+            ...(after === undefined ? undefined : { after }),
+          });
+        const first = Schema.decodeUnknownSync(workspaceChatLiveAnswerSchema)((yield* chat()).body);
+        const digest = liveDigestOf(first.queries);
+        assert.ok(digest !== undefined);
+        const { messages } = Option.getOrThrow(workspaceChatLiveStatements(owner, ada));
+        const recorder = yield* queryRecorder;
+        const messageReads = () =>
+          recorder.queries.filter((query) => query === messages.sql).length;
+
+        // Each wait the poll makes is announced, and the clock moved a look on only once it is asleep.
+        const held = yield* forkClockDriven(recorder.record(chat(digest)));
+        for (const _ of Array.from({ length: 6 })) {
+          yield* Queue.take(held.asleep);
+          yield* TestClock.adjust(Duration.seconds(1));
+        }
+        yield* Queue.take(held.asleep);
+        assert.equal(held.fiber.pollUnsafe(), undefined, "still held");
+        assert.equal(messageReads(), 1, "read once, then only the stamp each look");
+        yield* say("Lunch?");
+        const answer = Schema.decodeUnknownSync(workspaceChatLiveAnswerSchema)(
+          (yield* driven(held, Duration.seconds(1))).body,
+        );
+        assert.equal(messageReads(), 2);
+        assert.notEqual(liveDigestOf(answer.queries), digest);
       }),
   );
 });

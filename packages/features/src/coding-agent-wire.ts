@@ -923,6 +923,8 @@ export const codingAgentPullRequestSchema = EffectSchema.Struct({
   additions: countedNumber,
   deletions: countedNumber,
   changedFiles: countedNumber,
+  /** True where the pull request is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
@@ -970,6 +972,7 @@ export const tasklessAgentSchema = EffectSchema.Struct({
       url: codingAgentPullRequestSchema.fields.url,
       state: codingAgentPullRequestSchema.fields.state,
       checks: codingAgentPullRequestSchema.fields.checks,
+      queued: codingAgentPullRequestSchema.fields.queued,
     }),
   ),
 });
@@ -1920,6 +1923,16 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
+  /**
+   * The id one of the developer's lines was written under, which a line a
+   * window sent is its send key's (`sentLineId` of `@luke/wire/host-ids`), so
+   * the window that sent it knows the row as it lands and draws it in the
+   * place of the line it drew at once; absent on every other row, and from a
+   * service older than it.
+   */
+  clientId: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_LINE_ID_CHARS)),
+  ),
   /**
    * Epoch milliseconds one of the developer's lines was sent, which the tab
    * names under its bubble, or a line said on a call into the agent began,

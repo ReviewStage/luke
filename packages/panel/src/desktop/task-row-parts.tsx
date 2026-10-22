@@ -24,7 +24,7 @@ import {
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
-import { PullRequestMark } from "../tasks/pull-request-mark.js";
+import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
@@ -245,7 +245,7 @@ export function TaskWorkMarks({
         <span
           key={pullRequest.url ?? pullRequest.number}
           className="task-work-pull-request"
-          data-pull-request-state={pullRequest.state}
+          data-pull-request-state={pullRequestMarkState(pullRequest)}
         >
           <PullRequestMark pullRequest={pullRequest} className="task-mark-glyph" />
           <span aria-hidden="true">{pullRequestNumberLabel(pullRequest)}</span>

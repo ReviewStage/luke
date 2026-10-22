@@ -683,7 +683,7 @@ test("an inbox card's answer and a draft agent's first message mark their tabs w
   }
 });
 
-test("a draft agent's tab holding no words, and an Inbox whose only draft answers an item since changed, wear no Draft pencil", async () => {
+test("a draft agent's tab holding no words, and an Inbox whose only draft is a pick on an item since changed, wear no Draft pencil", async () => {
   window.localStorage.setItem(
     "luke.composerDrafts",
     JSON.stringify([
@@ -696,7 +696,8 @@ test("a draft agent's tab holding no words, and an Inbox whose only draft answer
           itemId: "a1b2c3d4-0000-4000-8000-000000000001",
           revision: 0,
         },
-        text: "Only for teammates",
+        text: "",
+        choices: ["Approve"],
       },
     ]),
   );
@@ -811,7 +812,7 @@ async function inboxOn(item: InboxItem) {
   };
 }
 
-test("an inbox card's note outlasts a reload, its task's row marked meanwhile, and is let go once the agent changes the item", async () => {
+test("an inbox card's note outlasts a reload, its task's row marked meanwhile, and the agent posting on the item again", async () => {
   const before = await inboxOn(approval(1));
   await before.type("Only for teammates, not guests");
   assert.equal(before.drafted(), true);
@@ -823,8 +824,12 @@ test("an inbox card's note outlasts a reload, its task's row marked meanwhile, a
   after.reload();
 
   const changed = await inboxOn(approval(2));
-  assert.equal(changed.note(), "", "the agent's change starts the card afresh");
-  assert.equal(changed.drafted(), false, "and the draft it outdated is let go");
+  assert.equal(
+    changed.note(),
+    "Only for teammates, not guests",
+    "the agent's post never takes the words being written",
+  );
+  assert.equal(changed.drafted(), true);
 });
 
 /** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
@@ -860,21 +865,54 @@ async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
   return control ?? assert.fail("the inbox is held");
 }
 
-test("an agent with no plan lets go of its own outdated answers as its inbox is read, and never another agent's", async () => {
+test("an agent with no plan carries its own outdated answers' words to the item as it now stands, and never touches another agent's", async () => {
   const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
   const theirs = tasklessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
   const first = await tasklessInbox(INVITES.agent.id, [mine]);
   act(() =>
-    first.onDraft(mine, { choices: [], values: [], note: "Only teammates", attachments: [] }),
+    first.onDraft(mine, {
+      choices: ["Approve"],
+      values: [],
+      note: "Only teammates",
+      attachments: [],
+    }),
   );
   const other = await tasklessInbox(BILLING.agent.id, [theirs]);
   act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly", attachments: [] }));
 
-  await tasklessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
-  const reread = await tasklessInbox(INVITES.agent.id, [mine]);
-  assert.equal(reread.draftOf(mine).note, "", "the answer its agent outdated is let go");
+  const reposted = { ...mine, revision: 2 };
+  const reread = await tasklessInbox(INVITES.agent.id, [reposted]);
+  assert.equal(reread.draftOf(reposted).note, "Only teammates", "the words outlast the post");
+  assert.deepEqual(reread.draftOf(reposted).choices, [], "the outdated ask's pick is let go");
+  assert.equal(reread.draftOf(mine).note, "", "and nothing stands at the outdated revision");
   const kept = await tasklessInbox(BILLING.agent.id, [theirs]);
   assert.equal(kept.draftOf(theirs).note, "Weekly");
+});
+
+test("a reader still holding an item's older revision leaves the answer carried to its newer one", async () => {
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const reposted = { ...mine, revision: 2 };
+  const ahead = await tasklessInbox(INVITES.agent.id, [reposted]);
+  act(() =>
+    ahead.onDraft(reposted, { choices: [], values: [], note: "Check guests", attachments: [] }),
+  );
+
+  await tasklessInbox(INVITES.agent.id, [mine]);
+  const caughtUp = await tasklessInbox(INVITES.agent.id, [reposted]);
+  assert.equal(caughtUp.draftOf(reposted).note, "Check guests");
+});
+
+test("another item landing in the inbox leaves the answer being written on one as it was", async () => {
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const first = await tasklessInbox(INVITES.agent.id, [mine]);
+  act(() =>
+    first.onDraft(mine, { choices: [], values: [], note: "Only teammates", attachments: [] }),
+  );
+
+  const landed = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000003", 1);
+  const reread = await tasklessInbox(INVITES.agent.id, [landed, mine]);
+  assert.equal(reread.draftOf(mine).note, "Only teammates");
+  assert.equal(reread.draftOf(landed).note, "");
 });
 
 test("words another panel's window writes for a box reach this window's box as they are written", async () => {

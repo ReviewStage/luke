@@ -25,11 +25,9 @@
  * (`sandbox-capabilities.ts`). The harness's credential and the bearer are
  * in that command's environment and nowhere else: never in its argv, its
  * config line, a file, or a tag. The config line and the first message are
- * written to its stdin. The command, the sandbox session it runs in, the
- * first event number of the launch, and the stamp of the credential it was
- * started with (a non-secret mark such as an expiry) are kept as the
- * sandbox's tags, which is how a later call finds the runner it writes to
- * and tells whether its credential was since renewed.
+ * written to its stdin. The command, the sandbox session it runs in, and the
+ * first event number of the launch are kept as the sandbox's tags, which is
+ * how a later call finds the runner it writes to.
  *
  * `send` writes the harness's lines and then a message line to that runner
  * while it runs. Where the sandbox stopped or the runner ended, it resumes
@@ -175,14 +173,11 @@ export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
 interface HarnessLaunch {
   /** The variables beside the bearer: the harness's credential, and whatever else it reads. Never written anywhere but the command's environment. */
   readonly env: Readonly<Record<string, string>>;
-  /** A mark of the credential the launch holds, never the credential itself, kept as a tag so a later message tells it was renewed. */
-  readonly stamp?: string | undefined;
 }
 
-/** The lines a message to a running runner goes behind, and the stamp of the credential the runner holds once they are written. */
+/** The lines a message to a running runner goes behind. */
 interface HarnessAhead {
   readonly lines: readonly InputLine[];
-  readonly stamp?: string | undefined;
 }
 
 /**
@@ -205,10 +200,9 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
     resume: string | undefined,
     firstSequence: number,
   ) => Effect.Effect<RunnerConfig, LaunchRefused>;
-  /** What goes ahead of a message to a runner already running, given the stamp of the credential it was last handed. */
+  /** What goes ahead of a message to a runner already running. */
   readonly ahead: (
     agent: CodingAgent,
-    stamp: string | undefined,
   ) => Effect.Effect<HarnessAhead, E | LaunchRefused, RunnerServices>;
 }
 
@@ -217,16 +211,9 @@ export const RUNNER_TAG = {
   AGENT: "lukeAgent",
   SANDBOX_SESSION: "lukeRunnerSession",
   COMMAND: "lukeRunnerCommand",
-  /**
-   * The launch's first event number, and after a `-` the stamp of the
-   * credential its runner holds where the harness keeps one: one tag for
-   * both, since Vercel keeps at most five.
-   */
+  /** The launch's first event number. */
   LAUNCH: "lukeRunnerLaunch",
 } as const;
-
-/** What sets a launch's stamp apart from its first event number in its tag. */
-const LAUNCH_STAMP_SEPARATOR = "-";
 
 /** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
 export const SANDBOX_NAME = "luke-agent-";
@@ -394,30 +381,21 @@ function repositorySandboxOver(
   };
 }
 
-/** The launch tag's value: the first event number, and the credential's stamp where there is one. */
-function launchTag(firstSequence: number, stamp: string | undefined): string {
-  return stamp === undefined
-    ? String(firstSequence)
-    : `${firstSequence}${LAUNCH_STAMP_SEPARATOR}${stamp}`;
-}
-
 /** The runner a sandbox's tags name, where the sandbox runs the session it was started in. */
 export interface TaggedRunner {
   readonly sandboxSessionId: string;
   readonly commandId: string;
   readonly firstSequence: number;
-  readonly stamp: string | undefined;
 }
 
-/** The launch tag read: its first event number and its stamp; none where the tag is missing or unreadable. */
+/** The launch tag read: its first event number; none where the tag is missing or unreadable. */
 function taggedLaunch(
   tags: Readonly<Record<string, string>>,
-): { readonly firstSequence: number; readonly stamp: string | undefined } | undefined {
+): { readonly firstSequence: number } | undefined {
   const launch = tags[RUNNER_TAG.LAUNCH] ?? "";
-  const at = launch.indexOf(LAUNCH_STAMP_SEPARATOR);
-  const firstSequence = Number(at < 0 ? launch : launch.slice(0, at));
+  const firstSequence = Number(launch);
   if (launch === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return { firstSequence, stamp: at < 0 ? undefined : launch.slice(at + 1) };
+  return { firstSequence };
 }
 
 export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
@@ -438,7 +416,7 @@ function runnerTags(sessionId: string, agentId: string, runner: TaggedRunner) {
     [RUNNER_TAG.AGENT]: agentId,
     [RUNNER_TAG.SANDBOX_SESSION]: runner.sandboxSessionId,
     [RUNNER_TAG.COMMAND]: runner.commandId,
-    [RUNNER_TAG.LAUNCH]: launchTag(runner.firstSequence, runner.stamp),
+    [RUNNER_TAG.LAUNCH]: String(runner.firstSequence),
   };
 }
 
@@ -619,7 +597,7 @@ export const runnerSessions = <
         const launching = {
           [SESSION_TAG]: sessionId,
           [RUNNER_TAG.AGENT]: agent.id,
-          [RUNNER_TAG.LAUNCH]: launchTag(firstSequence, credential.stamp),
+          [RUNNER_TAG.LAUNCH]: String(firstSequence),
         };
         yield* api.updateTags(sandbox.name, launching);
         const commandId = yield* api.start(sandbox.running, {
@@ -638,7 +616,6 @@ export const runnerSessions = <
               sandboxSessionId: sandbox.running,
               commandId,
               firstSequence,
-              stamp: credential.stamp,
             }),
           );
           const config = yield* harness.config(agent, resume, firstSequence);
@@ -776,25 +753,17 @@ export const runnerSessions = <
         const live = yield* liveRunner(api, found.value);
         if (live !== undefined) {
           // The installation token lives an hour, so each message sets a fresh one; and the
-          // harness's lines (the agent's model and effort as they stand, a renewed credential)
-          // go ahead of the message, which a change since the launch takes effect from.
+          // harness's lines (the agent's model and effort as they stand) go ahead of the message, which a change since the launch takes effect from.
           yield* renewCredential(target, agent, live.sandboxSessionId);
           // The choice read above stands until the write: a change of it is handed to the runner
           // by `retune`, which holds the same lease, so it is written after this line, never
           // undone by it.
-          const ahead = yield* harness.ahead(agent, live.stamp);
+          const ahead = yield* harness.ahead(agent);
           yield* api.writeStdin(
             live.sandboxSessionId,
             live.commandId,
             [...ahead.lines, sent].map(line).join(""),
           );
-          // The runner holds the renewed credential now; a tag not updated only sends it again.
-          if (ahead.stamp !== live.stamp) {
-            yield* api.updateTags(
-              found.value.name,
-              runnerTags(sessionId, agent.id, { ...live, stamp: ahead.stamp }),
-            );
-          }
           return accepted;
         }
         // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
@@ -865,7 +834,7 @@ export const runnerSessions = <
         if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) return RUNNER_CHOICE.NOT_LIVE;
         const live = yield* liveRunner(api, found.value);
         if (live === undefined) return RUNNER_CHOICE.NOT_LIVE;
-        const ahead = yield* harness.ahead(agent, live.stamp);
+        const ahead = yield* harness.ahead(agent);
         const model = ahead.lines.filter((each) => each.type === INPUT_LINE.MODEL);
         if (model.length === 0) return RUNNER_CHOICE.NOT_LIVE;
         yield* api.writeStdin(live.sandboxSessionId, live.commandId, model.map(line).join(""));

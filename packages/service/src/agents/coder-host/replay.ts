@@ -1,10 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { keptImageOf } from "@luke/database/models/attached-file-parts";
 import {
   type CodingAgent,
   type LineSent,
   lineSendersOf,
   listPublishedCodingAgentsById,
 } from "@luke/database/models/coding-agent-store";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import {
   listMessagesBefore,
   listMessagesPast,
@@ -36,8 +38,9 @@ import {
   type CodingAgentStartFrom,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { agentGivenName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { isFileUIPart, isTextUIPart } from "ai";
+import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import {
   isRecord,
@@ -77,7 +80,8 @@ import { CURSOR_START } from "./transcript.js";
  * the press stays out of it. The source's first
  * message is its brief and is not replayed: the new agent is handed the
  * plan as it stands now, or the source's prompt with the text files
- * attached to it, an automation run's prompt as it was handed, without the
+ * attached to it and the images kept beside its conversation (`filesOf`),
+ * an automation run's prompt as it was handed, without the
  * replay or note the source's own first message carried. A note the source
  * was handed behind its marker, or after a replay, is its first step
  * instead. A source that was itself started
@@ -371,37 +375,60 @@ function filesBytes(files: readonly CodingAgentAttachment[]): number {
 }
 
 /**
- * The files the source's first message carried: those whose bytes stand
- * and that fit beside the note's own files within one message's bounds,
- * attached again, and the names of the rest. Note that the note's files
- * are kept first, because they are what the developer attached now.
+ * A file of the source's first message as a Start attaches it again: its
+ * bytes where the row keeps them, or else the picture it was kept as beside
+ * the source's conversation, which a first message eve's receipt wrote
+ * names by id with no bytes; nothing where neither stands.
  */
-function filesOf(
+const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
+  Effect.gen(function* () {
+    const inline = attachmentOf(file.url, file.mediaType, name);
+    const kept = keptImageOf(file);
+    if (inline !== undefined || kept === undefined || !("id" in kept)) return inline;
+    const picture = yield* readConversationPicture(source.conversationId, kept.id);
+    if (Option.isNone(picture)) return undefined;
+    return {
+      name,
+      mediaType: picture.value.contentType,
+      data: Buffer.from(picture.value.bytes).toString("base64"),
+    } satisfies CodingAgentAttachment;
+  });
+
+/**
+ * The files the source's first message carried: those whose bytes stand,
+ * in the row or kept beside the source's conversation, and that fit beside
+ * the note's own files within one message's bounds, attached again, and the
+ * names of the rest. Note that the note's files are kept first, because
+ * they are what the developer attached now.
+ */
+const filesOf = (
+  source: CodingAgent,
   first: StoredMessageRecord | undefined,
   noteFiles: readonly CodingAgentAttachment[],
-): SourceFiles {
-  const files = (first?.message.parts ?? []).filter(isFileUIPart);
-  const attachments: CodingAgentAttachment[] = [];
-  const unkept: string[] = [];
-  let count = noteFiles.length;
-  let bytes = filesBytes(noteFiles);
-  for (const file of files) {
-    const name = file.filename ?? file.mediaType;
-    const attached = attachmentOf(file.url, file.mediaType, name);
-    const size = attached === undefined ? 0 : base64Bytes(attached.data);
-    const fits =
-      count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
-      bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
-    if (attached === undefined || !fits) {
-      unkept.push(name);
-    } else {
-      attachments.push(attached);
-      count += 1;
-      bytes += size;
+) =>
+  Effect.gen(function* () {
+    const files = (first?.message.parts ?? []).filter(isFileUIPart);
+    const attachments: CodingAgentAttachment[] = [];
+    const unkept: string[] = [];
+    let count = noteFiles.length;
+    let bytes = filesBytes(noteFiles);
+    for (const file of files) {
+      const name = file.filename ?? file.mediaType;
+      const attached = yield* sourceFileOf(source, file, name);
+      const size = attached === undefined ? 0 : base64Bytes(attached.data);
+      const fits =
+        count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
+        bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
+      if (attached === undefined || !fits) {
+        unkept.push(name);
+      } else {
+        attachments.push(attached);
+        count += 1;
+        bytes += size;
+      }
     }
-  }
-  return { attachments, unkept };
-}
+    return { attachments, unkept } satisfies SourceFiles;
+  });
 
 /** The source's rows a replay reads: its brief and the newest rows at or before the cut, oldest first, and the cut's sequence for a fork. */
 interface SourceRecords {
@@ -478,9 +505,9 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** An agent as the preamble names it: its human name, else its title, or its model where it has none, and its id. */
+/** An agent as the preamble names it: Luke for an operator, its human name, else its title, or its model where it has none, and its id. */
 function agentName(agent: CodingAgent): string {
-  return `"${agent.personaName ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
+  return `"${agentGivenName(agent) ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
 }
 
 /** A pull request as it follows the branch it is from; nothing where there is none. */
@@ -1029,7 +1056,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
   // A source handed the plan carries files only where its own note did, so its first message is read either way.
-  const files = filesOf(records[0], noteFiles);
+  const files = yield* hostedStoreOrUnavailable(filesOf(source, records[0], noteFiles));
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);

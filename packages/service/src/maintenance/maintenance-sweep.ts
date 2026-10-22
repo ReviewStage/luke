@@ -16,6 +16,7 @@ import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
 import type { OperatorWakeSweepOutcome } from "./operator-wake-sweep.js";
+import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js";
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
@@ -44,7 +45,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The fourteen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The fifteen sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -62,6 +63,8 @@ interface MaintenanceSweeps {
   sweepNativeSandboxes: (now: number) => SweepRead<NativeSandboxSweepOutcome>;
   /** Stops the running eve agents' sandboxes whose turn ended and no terminal holds, a sweep's worth. */
   sweepEveSandboxes: (now: number) => SweepRead<EveSandboxSweepOutcome>;
+  /** Bounds the snapshot retention of the stopped agents' sandboxes opened before it was bounded, a bucket's worth. */
+  sweepSandboxRetention: (now: number) => SweepRead<SandboxRetentionSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from Luke. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
   /** Wakes the operators whose member's agents failed with no wake in the hour before, a sweep's worth. */
@@ -72,12 +75,12 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
-  /** Moves the native agents' image template on, building it where some account connected a plan, and deletes older images' templates. */
+  /** Moves the native agents' image template on, building it where it is missing, and deletes older images' templates. */
   sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the fourteen sweeps once
+ * How a run is told to the sweep's cron monitor: around the fifteen sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -110,6 +113,8 @@ interface MaintenanceSweepAnswer {
   nativeSandboxes: NativeSandboxSweepOutcome;
   /** What the sweep over the running eve sandboxes did. */
   eveSandboxes: EveSandboxSweepOutcome;
+  /** What the bound on the stopped sandboxes' snapshot retention did. */
+  sandboxRetention: SandboxRetentionSweepOutcome;
   /** What the delivery of the native agents' wakeups due did. */
   nativeWakeups: NativeWakeupSweepOutcome;
   /** What the wake of the operators whose member's agents failed did. */
@@ -124,7 +129,7 @@ interface MaintenanceSweepAnswer {
   imageTemplates: TemplateSweepOutcome;
 }
 
-/** The fourteen sweeps in turn, each handed the same instant. */
+/** The fifteen sweeps in turn, each handed the same instant. */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -138,6 +143,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     terminals: yield* sweeps.sweepTerminalLeases(now),
     nativeSandboxes: yield* sweeps.sweepNativeSandboxes(now),
     eveSandboxes: yield* sweeps.sweepEveSandboxes(now),
+    sandboxRetention: yield* sweeps.sweepSandboxRetention(now),
     nativeWakeups: yield* sweeps.sweepNativeWakeups(now),
     operatorWakes: yield* sweeps.sweepOperatorWakes(now),
     automations: yield* sweeps.sweepAutomations(now),

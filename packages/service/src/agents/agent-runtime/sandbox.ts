@@ -20,13 +20,15 @@
  * and socat for Claude Code's own command sandbox, and `agent`, the
  * unprivileged user it runs as, with a home no other user reads; and the
  * pinned Codex a coding agent on Codex runs on, as the same user, with its
- * `CODEX_HOME` in that home. And the image holds no sudo at runtime:
- * everything that needs root is installed here, and the default user's
- * sudoers entry is dropped as the last step, so neither a Terminal's shell
- * nor an agent's command reaches root through it. A package an agent needs is added here, never installed at runtime.
- * Those shells and commands also run with every capability dropped
- * (`sandbox-capabilities.ts`), since the sandbox hands its default user the
- * whole set without sudo; the preparation checks that the drop holds.
+ * `CODEX_HOME` in that home. What keeps that user's tokens from a teammate
+ * is not sudo: the sandbox hands its default user the whole capability set,
+ * with which it reaches root without sudo, so the default user keeps its
+ * sudoers entry, which the sandbox's API runs a root command through (the
+ * runner's launch among them). The boundary is the capability drop
+ * (`sandbox-capabilities.ts`) every Terminal's shell, agent's command, and
+ * runner starts under, which also leaves sudo unable to reach root, and
+ * `agent`'s home, which only it reads; the preparation checks that the drop
+ * holds. A package an agent needs is added here, never installed at runtime.
  *
  * Each root's `sandbox.ts` exports this one environment object, which is
  * safe because each eve project bundles its own copy of this module and

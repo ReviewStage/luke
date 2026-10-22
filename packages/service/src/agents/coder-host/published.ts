@@ -21,6 +21,7 @@ import {
   type GitHubRepositoryToken,
   type GitHubWorkspaceReadFailure,
 } from "../../github/github-app.js";
+import { pullRequestQueued } from "../../github/pull-request-merging.js";
 import {
   branchStands,
   checkSummaryOf,
@@ -51,7 +52,9 @@ import { CODER } from "./bounds.js";
  * still on the repository's default branch, as an agent that only read
  * leaves it, published nothing either; otherwise the newest pull request
  * from the branch, else whether the branch was pushed at all, with the
- * pull request's head's checks. Every answer read is written on the
+ * pull request's head's checks and, for an open one, whether GitHub's merge
+ * queue holds it (`pull-request-merging.ts`'s `pullRequestQueued`), which the
+ * REST pull request does not say. Every answer read is written on the
  * agent's row as well, the pull request or none, which is what the task
  * list reads, so the sidebar says what the last read found without asking
  * GitHub itself. The row keeps beside it the head it was read at and when
@@ -89,10 +92,11 @@ interface Published {
   readonly ended: PullRequestEnd | undefined;
 }
 
-/** The wire's pull request from GitHub's, with its head's checks as read. */
+/** The wire's pull request from GitHub's, with its head's checks as read and whether the merge queue holds it. */
 function wirePullRequestOf(
   found: GitHubPullRequest,
   checks: CodingAgentPullRequest["checks"],
+  queued: boolean,
 ): CodingAgentPullRequest {
   return {
     number: found.number,
@@ -103,7 +107,28 @@ function wirePullRequestOf(
     additions: found.additions,
     deletions: found.deletions,
     changedFiles: found.changedFiles,
+    ...(queued && found.state === PULL_REQUEST_STATE.OPEN ? { queued: true } : undefined),
   };
+}
+
+/**
+ * Whether GitHub's merge queue holds the pull request, asked only of an open
+ * one, since a draft, a merged, and a closed one stand in no queue. Note
+ * that a read that fails keeps what the row kept of that same pull request,
+ * so a queue read GitHub could not answer neither fails the read it rides
+ * with nor drops a queued mark the last read saw.
+ */
+function queuedOf(
+  token: Redacted.Redacted,
+  agent: WithRepository<CodingAgent>,
+  found: GitHubPullRequest,
+  kept: StoredPullRequest | null,
+): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+  if (found.state !== PULL_REQUEST_STATE.OPEN) return Effect.succeed(false);
+  const keptQueued = kept !== null && kept.number === found.number && kept.queued === true;
+  return pullRequestQueued(token, agent.repository, found.number).pipe(
+    Effect.catch(() => Effect.succeed(keptQueued)),
+  );
 }
 
 /** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its head and when it merged beside that. */
@@ -113,8 +138,12 @@ function withChecks(
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
-  return Effect.map(checkSummaryOf(token, agent.repository, found.headSha), (checks) => {
-    const pullRequest = wirePullRequestOf(found, checks);
+  const read = Effect.all([
+    checkSummaryOf(token, agent.repository, found.headSha),
+    queuedOf(token, agent, found, kept),
+  ]);
+  return Effect.map(read, ([checks, queued]) => {
+    const pullRequest = wirePullRequestOf(found, checks, queued);
     const stored: StoredPullRequest = {
       ...pullRequest,
       headSha: found.headSha,
@@ -247,10 +276,11 @@ export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPull
     const found = yield* pullRequestByNumber(token, agent.repository, number);
     if (Option.isNone(found)) return nothing(agent).answer;
     const checks = yield* checkSummaryOf(token, agent.repository, found.value.headSha);
+    const queued = yield* queuedOf(token, agent, found.value, null);
     return {
       repository: agent.repository,
       branch: found.value.headRef,
-      pullRequest: wirePullRequestOf(found.value, checks),
+      pullRequest: wirePullRequestOf(found.value, checks, queued),
     };
   },
 );

@@ -2461,7 +2461,7 @@ test("an item's card says whom an open item waits on, the reader as Needs you an
   );
 });
 
-test("an item's card names its task as the window names a task everywhere: the key as plain words, as every place draws a key, then the task's mention pill wearing its status's mark, its whole name in the task's card it hangs, then its status in words", async () => {
+test("an item's card names its task as the window names a task everywhere: the key as plain words, as every place draws a key, then the task's mention pill wearing its status's mark, its whole name in the task's card it hangs, and no status in words, which the pill's mark already says", async () => {
   const LONG = "Billing usage alerts, with a name long enough to be cut short in the card";
   handState(
     {},
@@ -2488,9 +2488,8 @@ test("an item's card names its task as the window names a task everywhere: the k
     [
       ["task-key", "STAG-182"],
       ["luke-inline-ref", LONG],
-      ["inbox-card-task-status", "In progress"],
     ],
-    "the key, then the task's chip, then its status, on one line",
+    "the key, then the task's chip, on one line, with no status in words",
   );
   assert.ok(head?.querySelector("[data-task-key] .luke-text"), "the key is the shared key's words");
   assert.equal(head?.querySelector(".task-card-chip"), null, "the key is no chip");
@@ -2734,7 +2733,7 @@ test("a fresh profile opens the Inbox on To do, grouped by task, its head naming
   ]);
 });
 
-test("a task done or canceled keeps its items listed and counted as any other's, each row wearing its task's status, its card saying it in words, and a row of an agent with no task wearing none; no scope offers an archive", async () => {
+test("a task done or canceled keeps its items listed and counted as any other's, each row wearing its task's status, its card's task chip wearing it too, and a row of an agent with no task wearing none; no scope offers an archive", async () => {
   window.localStorage.clear();
   agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
   const { page } = mount(
@@ -2780,7 +2779,10 @@ test("a task done or canceled keeps its items listed and counted as any other's,
 
   restOn(rowNamed(page, "Alert at 80%?"));
   const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
-  assert.equal(card?.querySelector(".inbox-card-task-status")?.textContent, "Done");
+  assert.ok(
+    card?.querySelector('[data-holder-ref] .luke-task-status-mark[data-status="done"]'),
+    "the card's task chip wears the task's status",
+  );
 });
 
 test("a tab kept before the scopes opens the Inbox on the scope that lists what it did, Needs you and Unread on To do and All open and Everything on All, and the Needs you press kept before the tabs on To do where pressed and All where not; a scope chosen since is kept in its place", async () => {

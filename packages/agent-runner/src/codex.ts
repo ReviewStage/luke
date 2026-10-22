@@ -33,24 +33,18 @@
  * with none, while one running is let finish. App-server exiting, or Luke
  * refusing the events, ends it as `failed`.
  *
- * Tokens. Where the config names a `tokenUrl` (a launch on the ChatGPT
- * plan), app-server takes its token from a command, Codex's provider `auth`:
- * the runner's own bundle as `codex-token` (`codex-token.ts`), which asks
- * Luke for it under the runner's bearer. Codex keeps what the command printed
- * for the refresh interval, and runs it again past that and after a 401, so a
- * turn outlives any one token, and no token sits in app-server's
- * environment. Where it names none (test mode's API key), app-server reads
- * `ACCESS_TOKEN` from its environment once, as it starts, so a refreshed
- * token (a token line) is taken by restarting app-server with it and
- * resuming the thread, which OpenAI documents as the renewal; the restart
- * happens only between turns, just before the next `turn/start`. Every token
- * the launch is handed is withheld from every event it posts; one the
- * command prints reaches app-server alone.
+ * Tokens. App-server takes its token from a command, Codex's provider
+ * `auth`: the runner's own bundle as `codex-token` (`codex-token.ts`), which
+ * asks Luke at the config's `tokenUrl` under the runner's bearer. Codex keeps
+ * what the command printed for the refresh interval, and runs it again past
+ * that and after a 401, so a turn outlives any one token, and no token sits
+ * in app-server's environment; what the command prints reaches app-server
+ * alone.
  */
 
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { Effect, Exit, Option, Queue, Redacted, Schema, Scope, Stream } from "effect";
+import { Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
   type AppServer,
@@ -191,14 +185,8 @@ interface TokenCommand {
   readonly tokenUrl: string;
 }
 
-/**
- * How the provider is handed its token: from the runner's token command,
- * where there is one, or read from `ACCESS_TOKEN` (the documented `env_key`)
- * otherwise. Codex takes one or the other, never both.
- */
-function providerAuth(provider: string, command: TokenCommand | undefined) {
-  if (command === undefined)
-    return [[`${provider}.env_key`, toml(RUNNER_ENV.CODEX_TOKEN)]] as const;
+/** How the provider is handed its token: from the runner's token command. */
+function providerAuth(provider: string, command: TokenCommand) {
   const args = [command.self.script, CODEX_TOKEN_COMMAND, command.tokenUrl].map(toml).join(", ");
   return [
     [`${provider}.auth.command`, toml(command.self.executable)],
@@ -210,12 +198,12 @@ function providerAuth(provider: string, command: TokenCommand | undefined) {
 
 /**
  * App-server's argv: the documented ChatGPT-plan provider, its token from the
- * runner's token command or `ACCESS_TOKEN` (`providerAuth`), the Luke MCP
+ * runner's token command (`providerAuth`), the Luke MCP
  * server with its bearer read from the environment and its tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
  * every MCP call, as P16 found), the sandbox with network on and the
  * checkout's `.git` writable, and commands inheriting the core variables
- * without the token or the bearer. Nothing in argv is secret.
+ * without the bearer. Nothing in argv is secret.
  *
  * Note that workspace-write keeps `.git` read-only under every writable root
  * (openai/codex#15505), and with `never` nothing escalates, so without its
@@ -223,7 +211,7 @@ function providerAuth(provider: string, command: TokenCommand | undefined) {
  * the sandbox on: commands still never see the token, and app-server's own
  * git calls run with hooks and fsmonitor disabled.
  */
-function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): string[] {
+function appServerArgs(config: CodexConfig, command: TokenCommand): string[] {
   const provider = `model_providers.${CHATGPT_PROVIDER.ID}`;
   const mcp = `mcp_servers.${MCP_SERVER}`;
   const overrides: (readonly [string, string])[] = [
@@ -243,10 +231,7 @@ function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): 
     ["sandbox_workspace_write.writable_roots", `[${toml(join(config.cwd, ".git"))}]`],
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
-    [
-      "shell_environment_policy.exclude",
-      `[${toml(RUNNER_ENV.CODEX_TOKEN)}, ${toml(RUNNER_ENV.BEARER)}]`,
-    ],
+    ["shell_environment_policy.exclude", `[${toml(RUNNER_ENV.BEARER)}]`],
   ];
   return [
     "app-server",
@@ -297,10 +282,8 @@ interface CodexLaunch {
   waiting: Outgoing[];
   /** Luke's lines this launch has said app-server took, each said once. */
   readonly accepted: Set<string>;
-  /** The token command app-server runs, where it takes no token from its environment. */
-  readonly tokenCommand: TokenCommand | undefined;
-  /** A refreshed token, taken by a restart before the next turn starts, where app-server reads `ACCESS_TOKEN`. */
-  nextToken: string | undefined;
+  /** The token command app-server runs. */
+  readonly tokenCommand: TokenCommand;
   model: string;
   effort: CodexEffort | undefined;
   stopping: boolean;
@@ -354,7 +337,6 @@ function listenerFor(seen: ThreadSeen): AppServerListener {
  */
 const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   launch: Pick<CodexLaunch, "context" | "signals" | "model" | "tokenCommand">,
-  token: string | undefined,
   threadId: string | undefined,
 ) {
   const { config, env } = launch.context;
@@ -367,9 +349,8 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       executable: config.executable,
       args: appServerArgs(config, launch.tokenCommand),
       cwd: config.cwd,
-      // Note that Claude Code's token, were it set, is no business of Codex's,
-      // and that with a token command no token is in app-server's environment.
-      env: { ...env, [RUNNER_ENV.CLAUDE_TOKEN]: undefined, [RUNNER_ENV.CODEX_TOKEN]: token },
+      // Note that Claude Code's token, were it set, is no business of Codex's.
+      env: { ...env, [RUNNER_ENV.CLAUDE_TOKEN]: undefined },
     },
     listenerFor(seen),
   ).pipe(Scope.provide(serverScope));
@@ -403,15 +384,6 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   return { server, serverScope, threadId: openedThread };
 });
 
-/** Restarts app-server with the refreshed token and resumes the thread, between turns. */
-const restart = Effect.fn("agent-runner/restart")(function* (launch: CodexLaunch, token: string) {
-  yield* Scope.close(launch.serverScope, Exit.void);
-  const reopened = yield* openAppServer(launch, token, launch.threadId);
-  launch.server = reopened.server;
-  launch.serverScope = reopened.serverScope;
-  launch.nextToken = undefined;
-});
-
 /**
  * Says each of Luke's lines a message carries was taken by app-server, as
  * Claude Code's launch says a line was handed to the SDK, so Luke ties the
@@ -429,12 +401,11 @@ const accepted = Effect.fn("agent-runner/codex/accepted")(function* (
   }
 });
 
-/** Starts the next turn with the messages given, merged into one, restarting first for a refreshed token. */
+/** Starts the next turn with the messages given, merged into one. */
 const startTurn = Effect.fn("agent-runner/startTurn")(function* (
   launch: CodexLaunch,
   messages: readonly Outgoing[],
 ) {
-  if (launch.nextToken !== undefined) yield* restart(launch, launch.nextToken);
   const outgoing: Outgoing =
     messages.length === 1 && messages[0] !== undefined
       ? messages[0]
@@ -531,12 +502,6 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
       }
       return undefined;
     }
-    case INPUT_LINE.TOKEN: {
-      yield* launch.context.sink.withhold(Redacted.make(value.accessToken));
-      // A launch on the token command renews through it, and restarts for nothing.
-      if (launch.tokenCommand === undefined) launch.nextToken = value.accessToken;
-      return undefined;
-    }
   }
 });
 
@@ -603,11 +568,11 @@ function takeSignal(
   }
 }
 
-/** The token command a launch's app-server runs: where the config names a token URL and the runner knows its own bundle. */
+/** The token command a launch's app-server runs: where the runner knows its own bundle. */
 function commandOf(context: LaunchContext<CodexConfig>): TokenCommand | undefined {
-  const { tokenUrl } = context.config;
-  if (tokenUrl === undefined || context.self === undefined) return undefined;
-  return { self: context.self, tokenUrl };
+  return context.self === undefined
+    ? undefined
+    : { self: context.self, tokenUrl: context.config.tokenUrl };
 }
 
 /**
@@ -619,14 +584,9 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
 ) {
   const { config, sink } = context;
   const tokenCommand = commandOf(context);
-  if (config.tokenUrl !== undefined && tokenCommand === undefined) {
+  if (tokenCommand === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }
-  const envToken = context.env[RUNNER_ENV.CODEX_TOKEN];
-  if (tokenCommand === undefined && (envToken === undefined || envToken === "")) {
-    return ended(RUNNER_END.FAILED, `${RUNNER_ENV.CODEX_TOKEN} is not set`);
-  }
-  const token = tokenCommand === undefined ? envToken : undefined;
   const signals = yield* Queue.unbounded<Signal>();
   yield* sink.undelivered.pipe(
     Effect.andThen(Queue.offer(signals, { kind: SIGNAL.UNDELIVERED })),
@@ -634,7 +594,6 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   );
   const opened = yield* openAppServer(
     { context, signals, model: config.model, tokenCommand },
-    token,
     config.threadId,
   ).pipe(Effect.result);
   if (opened._tag === "Failure") {
@@ -649,7 +608,6 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     waiting: [],
     accepted: new Set(),
     tokenCommand,
-    nextToken: undefined,
     model: config.model,
     effort: config.effort,
     stopping: false,

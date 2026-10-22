@@ -141,3 +141,52 @@ export const pullRequestMerging = /* @__PURE__ */ Effect.fn("web/pullRequestMerg
       rollup === undefined ? CHECK_SUMMARY.NONE : (GITHUB_ROLLUP.get(rollup) ?? CHECK_SUMMARY.NONE),
   });
 });
+
+/** The operation's name, which tells this read apart from the merge box's own. */
+export const PULL_REQUEST_QUEUED_OPERATION = "PullRequestQueued";
+
+const QUEUED_QUERY = `query ${PULL_REQUEST_QUEUED_OPERATION}($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      mergeQueueEntry { position }
+    }
+  }
+}`;
+
+const QueuedAnswerSchema = Schema.Struct({
+  data: Schema.Struct({
+    repository: Schema.NullOr(
+      Schema.Struct({
+        pullRequest: Schema.NullOr(
+          Schema.Struct({
+            mergeQueueEntry: Schema.NullOr(Schema.Struct({ position: Schema.Number })),
+          }),
+        ),
+      }),
+    ),
+  }),
+});
+
+/**
+ * Whether GitHub holds the pull request in its base's merge queue now, read
+ * on the token on its own, which the REST pull request does not say: what
+ * the row an agent's pull request is kept on carries beside where it stands,
+ * so every mark of it, the sidebar's among them, says queued as its Pull
+ * request tab does. A repository or pull request reading as none is not
+ * queued.
+ */
+export const pullRequestQueued = /* @__PURE__ */ Effect.fn("web/pullRequestQueued")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.fn.Return<boolean, GitHubUnavailable, HttpClient.HttpClient> {
+  const [owner = "", name = ""] = fullName.split("/");
+  const request = githubPost("/graphql", token, {
+    query: QUEUED_QUERY,
+    variables: { owner, name, number },
+  });
+  const answer = yield* Effect.scoped(
+    Effect.flatMap(send(request), (response) => readBody(response, QueuedAnswerSchema)),
+  );
+  return (answer.data.repository?.pullRequest?.mergeQueueEntry ?? null) !== null;
+});

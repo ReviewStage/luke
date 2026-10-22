@@ -1,9 +1,15 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
+
+// A `*.postgres.test.ts` shows what only a real Postgres can, two connections
+// contending for one lock, which PGlite's one connection cannot hold apart;
+// it runs where `LUKE_STORE_TEST_DATABASE_URL` names one, CI's Postgres job.
+const POSTGRES_ONLY = process.env.LUKE_STORE_TEST_DATABASE_URL ? [] : ["src/**/*.postgres.test.ts"];
 
 export default defineConfig({
   test: {
     name: "database",
     include: ["src/**/*.test.ts"],
+    exclude: [...configDefaults.exclude, ...POSTGRES_ONLY],
     // A store test's `it.layer(getTestDB())` hook opens the file's one PGlite
     // and runs every migration before its first test, about 4 s on an idle
     // machine; vitest's 10 s hook default was missed under the full suite's

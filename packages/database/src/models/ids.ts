@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { brainHostId } from "@luke/wire/host-ids";
 
 /**
  * The ids the host mints for what eve's stream names only relatively. A turn
@@ -7,38 +7,9 @@ import { createHash } from "node:crypto";
  * message by a client id unique in its conversation. Each id here is the
  * same function of the same coordinates, so a retried step that re-emits an
  * event under a new event id lands on the row the first attempt opened
- * rather than beside it. The ids are name-based uuids in RFC 9562's custom
- * version 8 shape, the coordinates digested with SHA-256: nothing about them
- * is secret, and the digest is only what makes the same name the same id.
+ * rather than beside it. The function is `@luke/wire`'s (`host-ids.ts`), so a
+ * window derives the id a line it sent is written under (`sentLineId`).
  */
-
-/** The one namespace every host-minted id hashes under; a fixed uuid, never derived from data. */
-const BRAIN_HOST_ID_NAMESPACE = "3c9b1f8e-4a52-4d6b-9e0f-7b2c5a1d8e43";
-
-const UUID_VERSION_8 = 0x80;
-const UUID_VARIANT_RFC_4122 = 0x80;
-
-function uuidBytes(uuid: string): Buffer {
-  return Buffer.from(uuid.replaceAll("-", ""), "hex");
-}
-
-/** A name-based uuid: the SHA-256 of the namespace and the name, its first sixteen bytes laid out as a version 8 uuid. */
-function nameBasedUuid(namespace: string, name: string): string {
-  const digest = createHash("sha256")
-    .update(uuidBytes(namespace))
-    .update(name, "utf8")
-    .digest()
-    .subarray(0, 16);
-  digest[6] = ((digest[6] ?? 0) & 0x0f) | UUID_VERSION_8;
-  digest[8] = ((digest[8] ?? 0) & 0x3f) | UUID_VARIANT_RFC_4122;
-  const hex = digest.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-/** The parts of a coordinate, joined so no part can run into the next. */
-function coordinate(parts: readonly string[]): string {
-  return JSON.stringify(parts);
-}
 
 const ID_KIND = {
   CHILD: "child",
@@ -46,7 +17,6 @@ const ID_KIND = {
   RECEIVED: "received",
   ANSWER: "answer",
   REASONING: "reasoning",
-  SENT: "sent",
   CHAT_NOTICE: "chat-notice",
   CHAT_ATTACHMENT: "chat-attachment",
   NATIVE_TURN: "native-turn",
@@ -58,27 +28,19 @@ const ID_KIND = {
  * its subagent's record.
  */
 export function childConversationId(parentConversationId: string, callId: string): string {
-  return nameBasedUuid(
-    BRAIN_HOST_ID_NAMESPACE,
-    coordinate([ID_KIND.CHILD, parentConversationId, callId]),
-  );
+  return brainHostId([ID_KIND.CHILD, parentConversationId, callId]);
 }
 
 /** The store's id for one turn of one eve session. */
 export function hostTurnId(sessionId: string, eveTurnId: string): string {
-  return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate([ID_KIND.TURN, sessionId, eveTurnId]));
+  return brainHostId([ID_KIND.TURN, sessionId, eveTurnId]);
 }
 
 /** The developer's line a turn opened with and, under its ordinal from one, each line that joined the turn under way; the first keeps the coordinate it always had. */
 export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal = 0): string {
   const parts = [ID_KIND.RECEIVED, sessionId, eveTurnId];
   if (ordinal > 0) parts.push(String(ordinal));
-  return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate(parts));
-}
-
-/** The developer's line sent to a coding agent, under the key the client made for the send, which is how a send repeated after a lost answer finds the row it already wrote. */
-export function sentLineId(clientKey: string): string {
-  return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate([ID_KIND.SENT, clientKey]));
+  return brainHostId(parts);
 }
 
 /**
@@ -87,15 +49,12 @@ export function sentLineId(clientKey: string): string {
  * conversation shares, so a batch posted again opens the same turn.
  */
 export function nativeTurnId(conversationId: string, openingSequence: number): string {
-  return nameBasedUuid(
-    BRAIN_HOST_ID_NAMESPACE,
-    coordinate([ID_KIND.NATIVE_TURN, conversationId, String(openingSequence)]),
-  );
+  return brainHostId([ID_KIND.NATIVE_TURN, conversationId, String(openingSequence)]);
 }
 
 /** The client id of the assistant message a turn completes; the turn's id is its journal's client id already, so this is another. */
 export function answerMessageId(sessionId: string, eveTurnId: string): string {
-  return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate([ID_KIND.ANSWER, sessionId, eveTurnId]));
+  return brainHostId([ID_KIND.ANSWER, sessionId, eveTurnId]);
 }
 
 /** The id a reasoning item stands under, since eve's stream carries none of the provider's. */
@@ -105,10 +64,7 @@ export function reasoningItemId(
   stepIndex: number,
   ordinal: number,
 ): string {
-  return nameBasedUuid(
-    BRAIN_HOST_ID_NAMESPACE,
-    coordinate([ID_KIND.REASONING, sessionId, eveTurnId, String(stepIndex), String(ordinal)]),
-  );
+  return brainHostId([ID_KIND.REASONING, sessionId, eveTurnId, String(stepIndex), String(ordinal)]);
 }
 
 /**
@@ -118,16 +74,10 @@ export function reasoningItemId(
  * again under its key is told again.
  */
 export function chatNoticeKey(messageId: string, revision: number, memberId: string): string {
-  return nameBasedUuid(
-    BRAIN_HOST_ID_NAMESPACE,
-    coordinate([ID_KIND.CHAT_NOTICE, messageId, String(revision), memberId]),
-  );
+  return brainHostId([ID_KIND.CHAT_NOTICE, messageId, String(revision), memberId]);
 }
 
 /** The id a picture a post read from the poster's sandbox is kept under: one per post and path, so a post sent again keeps the picture it kept. */
 export function chatAttachmentId(clientKey: string, path: string): string {
-  return nameBasedUuid(
-    BRAIN_HOST_ID_NAMESPACE,
-    coordinate([ID_KIND.CHAT_ATTACHMENT, clientKey, path]),
-  );
+  return brainHostId([ID_KIND.CHAT_ATTACHMENT, clientKey, path]);
 }

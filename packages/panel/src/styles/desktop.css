@@ -3319,15 +3319,9 @@ ul.actor-stack {
 }
 
 /* An Inbox item's task's status, its mark alone at the time's size before
-   it (`inbox-list.tsx`'s `TaskStatusChip`), and in words at the end of its
-   card's first line, kept whole while the task's chip gives way. */
+   it (`inbox-list.tsx`'s `TaskStatusChip`). */
 .inbox-row-task-status {
   display: inline-flex;
-}
-
-.inbox-card-task-status {
-  flex: none;
-  color: var(--luke-color-text-muted);
 }
 
 /* A task's card leads with where it stands (`task-card.tsx`): its key, its
@@ -4713,6 +4707,13 @@ ul.actor-stack {
   margin: 0 calc(-1 * var(--luke-space-8));
   border-radius: var(--luke-menu-row-radius);
   transition: background-color var(--duration-hover) ease;
+}
+
+/* A post of the reader's on its way reads quieter until the chat holds it,
+   and one refused stays as quiet over its red mark. */
+:is(.chat-message, .chat-reply)[data-pending] > .chat-message-body > .chat-words,
+:is(.chat-message, .chat-reply)[data-unsent] > .chat-message-body > .chat-words {
+  opacity: 0.6;
 }
 
 /* A message continuing its author's run sits right under the one before. */

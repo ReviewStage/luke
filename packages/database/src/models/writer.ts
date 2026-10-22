@@ -13,7 +13,6 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "@luke/features/brain";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import {
   type AssistantMessageMetadata,
@@ -35,6 +34,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -53,8 +53,20 @@ import {
 } from "ai";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
+import {
+  Cause,
+  Data,
+  DateTime,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { isSqlError } from "effect/sql/SqlError";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
@@ -64,14 +76,14 @@ import {
   OPERATOR_NOTICE_KIND,
   type OperatorNoticeKind,
 } from "../storage-vocabulary.js";
-import { lineParts, receivedPartsOf } from "./attached-file-parts.js";
+import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
   InstantColumnSchema,
   nullable,
   TurnUsageColumnSchema,
 } from "./columns.js";
-import { sentLineId } from "./ids.js";
+import { holdConversationDispatch, waitOutConversationDispatch } from "./dispatch-lock.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 import { writeOperatorNotice } from "./operator-notices.js";
 
@@ -190,6 +202,7 @@ export const STORE_WRITE_REFUSAL = {
   NO_CALL: "no_call",
   FINISHED: "finished",
   MESSAGE_REFUSED: "message_refused",
+  BUSY: "busy",
 } as const;
 
 type StoreWriteRefusal = (typeof STORE_WRITE_REFUSAL)[keyof typeof STORE_WRITE_REFUSAL];
@@ -209,6 +222,11 @@ const NO_CONVERSATION: Refused<typeof STORE_WRITE_REFUSAL.NO_CONVERSATION> = {
 
 const NO_TURN: Refused<typeof STORE_WRITE_REFUSAL.NO_TURN> = {
   refusal: STORE_WRITE_REFUSAL.NO_TURN,
+};
+
+/** The conversation's lock stayed held by another write past the bound this write waits for it; nothing was written. */
+const CONVERSATION_BUSY: Refused<typeof STORE_WRITE_REFUSAL.BUSY> = {
+  refusal: STORE_WRITE_REFUSAL.BUSY,
 };
 
 /** What a write did, or why it did not land: the effect, or the refusal with what is known of it. */
@@ -360,15 +378,15 @@ function senderNameOf(sender: LineSender | undefined): string | null {
 
 /**
  * The line to a coding agent as the message route and the queue's drain
- * write it: its words, the files attached to it, the client's key for the
- * send, what sent it, and who the row says wrote it, the developer's typed
- * ask where it names no one else, or a chat notice steered on a member's
- * behalf.
+ * write it: its words, the files attached to it, each image with what was
+ * kept of it, the client's key for the send, what sent it, and who the row
+ * says wrote it, the developer's typed ask where it names no one else, or a
+ * chat notice steered on a member's behalf.
  */
 interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
-  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly attachments?: readonly HandedFile[] | undefined;
   /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
   readonly mentioned?: string | undefined;
   readonly sender: LineSender;
@@ -392,7 +410,7 @@ type AwaitingLineWritten = Result.Result<
     /** The transaction that wrote the row, where this write wrote it. */
     readonly txid?: string;
   }>,
-  typeof NO_CONVERSATION | MessageRefused
+  typeof NO_CONVERSATION | typeof CONVERSATION_BUSY | MessageRefused
 >;
 
 /**
@@ -416,6 +434,22 @@ type AwaitingLineTake =
  * figure for the same reason.
  */
 const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
+
+/**
+ * The longest an awaiting line's write waits for the conversation's dispatch
+ * lock (`dispatch-lock.ts`) before it is refused as busy, with nothing written
+ * and eve told nothing, which its caller answers as an outage the same key
+ * may retry. A write that hands eve something holds that lock for as long as
+ * eve takes, up to thirty seconds, and a busy agent's conversation queues several, so with
+ * no bound a send waited out the whole queue, or a holder that never let
+ * go, until its function was killed at three hundred seconds. Five seconds
+ * and the dispatch's thirty are what the client's send deadline outlasts
+ * (`HOSTED_DEADLINE.STEER`).
+ */
+const AWAITING_LINE_LOCK_WAIT = Duration.seconds(5);
+
+/** A wait for the conversation's lock as long as this is logged, so a slow send names what it waited on. */
+const LOCK_WAIT_LOGGED = Duration.seconds(1);
 
 /** The rows the turn took, by id, oldest first; none where no run of lines with those words awaited; or the turn does not stand. */
 type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION | typeof NO_TURN>;
@@ -500,11 +534,13 @@ export interface StoreWriter {
   latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
   /**
    * Writes the developer's line to a coding agent as a row awaiting its
-   * turn, under the conversation's lock and only once the dispatch handed in
-   * has answered that eve took it: the dispatch is the hand-over to eve,
-   * run inside the lock so the turn eve opens on the line finds the row
-   * standing when its own first write takes the lock, and a dispatch that
-   * answers nothing writes nothing. The row stands under the client's key
+   * turn, only once the dispatch handed in has answered that eve took it:
+   * the dispatch is the hand-over to eve, run under the conversation's
+   * dispatch lock, which the take of the line into the turn eve opens on it
+   * waits out, so that take finds the row standing; and a dispatch that
+   * answers nothing writes nothing. The row lock is held only for the row's
+   * insert after the hand-over, so the journal of a turn under way never
+   * waits on eve (`locked`). The row stands under the client's key
    * for the send (`sentLineId`), and a line already standing under that key
    * is answered as repeated without the dispatch being run, so two sends
    * carrying one key, however they race, hand eve the words once. The whole
@@ -695,6 +731,16 @@ const MessageInsertSchema = Schema.Struct({
   senderAgentId: Schema.NullOr(Schema.String),
 });
 
+/** The conversation's lock was not had within the bound the write waits for it. */
+class LockWaitRanOut extends Data.TaggedError("LockWaitRanOut")<Record<never, never>> {}
+
+/** Whether a statement failed because Postgres gave up waiting on a lock (`lock_timeout`, 55P03), beneath Drizzle's error where it wraps one. */
+function lockWaitRanOut(failure: WriteFailure): boolean {
+  const inner = failure._tag === "EffectDrizzleQueryError" ? failure.cause : failure;
+  const beneath = Cause.isCause(inner) ? Cause.squash(inner) : inner;
+  return isSqlError(beneath) && beneath.reason._tag === "LockTimeoutError";
+}
+
 const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
   Result: Schema.Struct({
@@ -714,6 +760,69 @@ const lockConversation = SqlSchema.findOneOption({
           ),
         )
         .for("update"),
+    ),
+});
+
+/**
+ * The conversation's dispatch lock held alone (`dispatch-lock.ts`), as a
+ * line's hand-over takes it, waiting for it no longer than the bound: Postgres gives up the wait at `lock_timeout`, which
+ * is set for this transaction alone and put back as soon as the lock is had,
+ * so no later statement of the write, eve's hand-over among them, is held to
+ * it. A wait that ran out fails as `LockWaitRanOut`, and the transaction,
+ * aborted by Postgres, is the caller's to roll back. How long the wait took
+ * is logged where it was long, by the conversation's id alone.
+ */
+const holdDispatchWithin = /* @__PURE__ */ Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  bound: Duration.Duration,
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`select set_config('lock_timeout', ${String(Duration.toMillis(bound))}, true)`;
+  const [waited] = yield* Effect.timed(
+    holdConversationDispatch(target.conversationId).pipe(
+      Effect.catchIf(lockWaitRanOut, () =>
+        Effect.andThen(
+          Effect.logWarning("a send gave up waiting for its conversation's dispatch lock", {
+            conversationId: target.conversationId,
+            waitedMs: Duration.toMillis(bound),
+          }),
+          Effect.fail(new LockWaitRanOut()),
+        ),
+      ),
+    ),
+  );
+  yield* sql`set local lock_timeout to default`;
+  if (Duration.isGreaterThanOrEqualTo(waited, LOCK_WAIT_LOGGED)) {
+    yield* Effect.logInfo("a send waited for its conversation's dispatch lock", {
+      conversationId: target.conversationId,
+      waitedMs: Duration.toMillis(waited),
+    });
+  }
+});
+
+/**
+ * The conversation as `lockConversation` reads it, without its row lock: what
+ * a line's hand-over to eve reads under the dispatch lock alone, so the
+ * journal is never kept waiting on eve (`dispatch-lock.ts`).
+ */
+const readConversation = SqlSchema.findOneOption({
+  Request: ConversationTargetSchema,
+  Result: Schema.Struct({
+    id: Schema.String,
+    kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
+  }),
+  execute: (target) =>
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id, kind: conversations.kind })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, target.conversationId),
+            eq(conversations.userId, target.userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
     ),
 });
 
@@ -2386,10 +2495,18 @@ function dispatchedWithinDeadline(dispatch: Effect.Effect<boolean>): Effect.Effe
   });
 }
 
+/**
+ * The line's hand-over and its row, from inside the dispatch lock: the
+ * context is the conversation as read under that lock alone, and `land`
+ * writes the admitted row under the row lock once eve took the line.
+ */
 const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   line: AwaitingLineWrite,
   dispatch: Effect.Effect<boolean>,
+  land: (
+    message: StoredUIMessage,
+  ) => Write<Result.Result<{ readonly id: string; readonly txid: string }, typeof NO_CONVERSATION>>,
 ): Effect.fn.Return<AwaitingLineWritten, WriteFailure, DatabaseServices> {
   const clientId = sentLineId(line.clientKey);
   // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
@@ -2407,14 +2524,29 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);
   if (!(yield* dispatchedWithinDeadline(dispatch))) return Result.succeed(Option.none());
+  const landed = yield* land(read.success);
+  if (Result.isFailure(landed)) return Result.fail(landed.failure);
+  return Result.succeed(Option.some({ ...landed.success, effect: STORE_WRITE_EFFECT.WRITTEN }));
+});
+
+/** Writes the line eve took as the row awaiting its turn, under the row lock. */
+const landAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  message: StoredUIMessage,
+  sender: LineSender,
+): Effect.fn.Return<
+  Result.Result<{ readonly id: string; readonly txid: string }, never>,
+  WriteFailure,
+  DatabaseServices
+> {
   const { id, txid } = yield* insertMessage(context, {
-    clientId: read.success.id,
+    clientId: message.id,
     turnId: undefined,
-    message: read.success,
+    message,
     finishedAt: context.now,
-    sender: line.sender,
+    sender,
   });
-  return Result.succeed(Option.some({ id, effect: STORE_WRITE_EFFECT.WRITTEN, txid }));
+  return Result.succeed({ id, txid });
 });
 
 const writeTypedCallLine = /* @__PURE__ */ Effect.fn("web/writeTypedCallLine")(function* (
@@ -2653,40 +2785,110 @@ function noticesAfterSettle(
  * exist over such a catalog rather than writing one.
  */
 export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreWriter> {
+  /** The context one write runs in, its instant read from the clock as the conversation is read. */
+  function contextOf(
+    target: ConversationTarget,
+    kind: WriterContext["kind"],
+    notices: WriterContext["notices"],
+  ): Effect.Effect<WriterContext> {
+    return Effect.map(DateTime.nowAsDate, (now) => ({
+      tools,
+      now,
+      target,
+      kind,
+      journals: new Map(),
+      notices,
+    }));
+  }
+
   /**
    * Runs one write under the conversation's row lock, or answers that no such
    * conversation stands for this account: none by that id, or one Clear
    * already stamped, which is read by nothing and so written by nothing. The
    * write's instant is read from the clock once the lock is held, so every
    * row one write stamps carries the same one.
+   *
+   * Two locks guard a conversation, always taken in this order: its dispatch
+   * lock (`dispatch-lock.ts`), then its row lock. A hand-over to eve holds the
+   * dispatch lock alone for as long as eve takes to answer, and the row lock
+   * only for the short write of what eve answered after it. Every write here
+   * first waits out such a hand-over, holding the dispatch lock shared, so
+   * the turn eve opens on a line finds the line's row standing when it takes
+   * the line in, as it did when the hand-over ran under the row lock; the run
+   * stream's journal alone (`journal`) skips that wait, since it never reads
+   * a line awaiting its turn and writes four times a second.
    */
   function locked<A>(
     target: ConversationTarget,
     write: (context: WriterContext) => Write<A>,
     absent: () => A,
+    journal = false,
   ): Write<A> {
     return Effect.flatMap(SqlClient.SqlClient, (client) => {
       const notices: WriterContext["notices"] = [];
       return client
         .withTransaction(
           Effect.gen(function* () {
+            if (!journal) yield* waitOutConversationDispatch(target.conversationId);
             const row = yield* lockConversation(target);
-            if (Option.isNone(row)) return absent();
-            const now = yield* DateTime.nowAsDate;
-            const context: WriterContext = {
-              tools,
-              now,
-              target,
-              kind: row.value.kind,
-              journals: new Map(),
-              notices,
-            };
-            const written = yield* write(context);
-            yield* landJournals(context);
-            return written;
+            return yield* lockedWrite(target, row, notices, write, absent);
           }),
         )
         .pipe(Effect.tap(() => noticesAfterSettle(client, target, notices)));
+    });
+  }
+
+  /**
+   * Hands the line to eve under the conversation's dispatch lock alone, and
+   * writes its row under the row lock only once eve took it, so the journal
+   * of the turn under way keeps landing while eve answers. The repeat check
+   * and the line's admission run under the dispatch lock, which every other
+   * send to the conversation takes too, so two sends under one key still
+   * hand eve the words once, and sends reach eve in the order their rows are
+   * numbered. Note that a conversation Clear stamped while eve answered is
+   * answered as gone, though eve took the words, as it would be a moment later.
+   */
+  function dispatchedLine(
+    target: ConversationTarget,
+    line: AwaitingLineWrite,
+    dispatch: Effect.Effect<boolean>,
+  ): Write<AwaitingLineWritten> {
+    return Effect.flatMap(SqlClient.SqlClient, (client) =>
+      client
+        .withTransaction(
+          Effect.gen(function* () {
+            yield* holdDispatchWithin(target, AWAITING_LINE_LOCK_WAIT);
+            const row = yield* readConversation(target);
+            if (Option.isNone(row)) return Result.fail(NO_CONVERSATION);
+            // Note that the hand-over settles no turn, so it leaves no notice; the row's insert keeps its own.
+            const context = yield* contextOf(target, row.value.kind, []);
+            return yield* writeAwaitingLine(context, line, dispatch, (message) =>
+              underConversation(target, (held) => landAwaitingLine(held, message, line.sender)),
+            );
+          }),
+        )
+        .pipe(
+          Effect.catchTag("LockWaitRanOut", () =>
+            Effect.succeed<AwaitingLineWritten>(Result.fail(CONVERSATION_BUSY)),
+          ),
+        ),
+    );
+  }
+
+  /** The write itself, once the conversation's row is locked or found absent: its instant read once, its journals landed after it. */
+  function lockedWrite<A>(
+    target: ConversationTarget,
+    row: Option.Option<{ readonly kind: WriterContext["kind"] }>,
+    notices: WriterContext["notices"],
+    write: (context: WriterContext) => Write<A>,
+    absent: () => A,
+  ): Write<A> {
+    return Effect.gen(function* () {
+      if (Option.isNone(row)) return absent();
+      const context = yield* contextOf(target, row.value.kind, notices);
+      const written = yield* write(context);
+      yield* landJournals(context);
+      return written;
     });
   }
 
@@ -2700,12 +2902,19 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
   }
 
   const writer: StoreWriter = {
-    consume: (target, event) => underConversation(target, (context) => consume(context, event)),
+    consume: (target, event) =>
+      locked<StoreWriteResult>(
+        target,
+        (context) => consume(context, event),
+        () => Result.fail(NO_CONVERSATION),
+        true,
+      ),
     consumeAll: (target, events) =>
       locked<readonly StoreWriteResult[]>(
         target,
         (context) => Effect.forEach(events, (event) => consume(context, event)),
         () => events.map(() => Result.fail(NO_CONVERSATION)),
+        true,
       ),
     enqueueTurn: (target, enqueue) =>
       underConversation(target, (context) => enqueueTurn(context, enqueue)),
@@ -2722,9 +2931,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     latestSpokenLine: (target, query) =>
       underConversation(target, (context) => latestSpokenLine(context, query)),
     writeAwaitingLine: (target, line, dispatch) =>
-      Effect.uninterruptible(
-        underConversation(target, (context) => writeAwaitingLine(context, line, dispatch)),
-      ),
+      Effect.uninterruptible(dispatchedLine(target, line, dispatch)),
     takeAwaitingLine: (target, take) =>
       underConversation(target, (context) => takeAwaitingLine(context, take)),
   };
