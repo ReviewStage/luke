@@ -15,9 +15,11 @@ import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay"
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Redacted } from "effect";
 import { BRAIN_TURN_TRIGGER, userMetadataOf } from "../../core.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
+import { titleNativeAgent } from "../native-events/native-title.js";
 import { titleCodingAgent } from "./title.js";
 
 /**
@@ -37,6 +39,21 @@ const PROMPT = `Find the flakiest test in CI this week and fix it. ${"Read every
 
 /** What the agent was handed: the prompt, then what Luke adds of the firing. */
 const HANDED = `${PROMPT}\n\n---\n\nLuke started this run for the automation "Flaky-test sweep" because commits were pushed on GitHub.`;
+
+/** A deployment still holding Luke's own keys, which no title may spend. */
+const LUKE_KEYED_ENVIRONMENT: HostedEnvironmentValues = {
+  openAiKey: Redacted.make("sk-proj-luke-own-key-0000"),
+  anthropicKey: Redacted.make("sk-ant-luke-own-key-0000"),
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  eveDeploymentSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: undefined,
+};
 
 /** A model answering every call with `title`, keeping each prompt it was asked. */
 function scriptedTitleModel(title: string) {
@@ -195,6 +212,29 @@ it.layer(getTestDB())("an agent's title", (it) => {
         assert.equal(yield* titleOf(prompted), "Expire teammate invitations after one week");
         assert.equal(yield* titleOf(planned), "Teammate invitations by email");
         assert.equal(yield* taskName(owner, task.id), "Expire teammate invitations after one week");
+      }),
+  );
+
+  it.effect(
+    "a native agent of an account that saved no API key is titled from its opening's first words, never on Luke's key",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const organizationId = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId, planning: false });
+        const agent = yield* startOnTask(
+          owner,
+          task.id,
+          "Retry the invite email when the provider times out.",
+        );
+
+        yield* titleNativeAgent(
+          { userId: owner, conversationId: agent.conversationId },
+          agent,
+        ).pipe(Effect.provideService(HostedEnvironment, LUKE_KEYED_ENVIRONMENT));
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        assert.equal(titled.title, "Retry the invite email when the");
       }),
   );
 
