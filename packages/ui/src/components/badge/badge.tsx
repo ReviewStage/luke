@@ -38,6 +38,7 @@ export function Badge({
   tone = BADGE_TONE.NEUTRAL,
   icon,
   swatch,
+  dot = false,
   children,
 }: {
   tone?: BadgeTone;
@@ -45,8 +46,10 @@ export function Badge({
   icon?: ReactNode;
   /** A provider's colour for what the badge names, drawn as a dot before its words; any colour but six hex digits is drawn subtle. */
   swatch?: string | undefined;
+  /** Whether a muted dot leads the words, as a marker of something standing open. */
+  dot?: boolean;
   /** The state's words, which the colour only repeats. */
-  children: string;
+  children: ReactNode;
 }): React.JSX.Element {
   const colour = swatch === undefined ? undefined : SWATCH_COLOUR.exec(swatch)?.[1];
   return (
@@ -58,6 +61,7 @@ export function Badge({
           style={colour === undefined ? undefined : { background: `#${colour}` }}
         />
       )}
+      {dot ? <span className="luke-badge-swatch" aria-hidden="true" /> : null}
       {icon}
       <span className="luke-badge-words">{children}</span>
     </span>

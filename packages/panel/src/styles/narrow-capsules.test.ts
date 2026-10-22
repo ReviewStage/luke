@@ -14,14 +14,13 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { WaitingBadge } from "../desktop/task-row-parts.js";
-import { WaitingMarker } from "../tasks/inbox-ask-controls.js";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
  * narrow-capsules.test.ts -- in a narrow column, a side panel's or a
  * phone's, nothing round swells into a bubble and no label is squeezed to a
- * word a line. A form's select option, a badge, and the Inbox's settled and
- * waiting pills round their corners by half a line's height rather than
+ * word a line. A form's select option and a badge (the Inbox's settled and
+ * waiting pills among them) round their corners by half a line's height rather than
  * fully, so one whose words wrap stands as a rounded box; an option's badge
  * drops under its label rather than squeezing it; a board card's "1 needs
  * you" keeps its words on one line; and a settled form's value drops under
@@ -154,20 +153,6 @@ test("a board card's 1 needs you keeps its words on one line, the maker's name g
   );
   const badge = marks.querySelector(".luke-badge") ?? assert.fail("the badge");
   assert.equal(getComputedStyle(badge).flexShrink, "0");
-});
-
-test("the Inbox's settled and waiting pills round by half a line, so a long reason or name wraps into a rounded box", () => {
-  const settled = draw(
-    createElement("span", { className: "inbox-ask-settled" }, "Withdrawn: decided on the call"),
-  );
-  const waiting = draw(createElement(WaitingMarker, { on: "Orchestrate development plan" }));
-  for (const pill of [
-    settled.querySelector(".inbox-ask-settled") ?? assert.fail("the settled pill"),
-    waiting.querySelector(".inbox-ask-marker") ?? assert.fail("the waiting pill"),
-  ]) {
-    const line = pixels(pill, getComputedStyle(pill).getPropertyValue("min-height"));
-    assert.ok(roundsByHalfALine(pill, line), pill.className);
-  }
 });
 
 test("a settled form's long value drops under its name rather than squeezing the name a letter a line", () => {

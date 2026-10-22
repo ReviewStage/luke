@@ -1866,7 +1866,11 @@ export function InboxList({
   };
   // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's.
   const body = (
-    <div ref={bodyRef} className="inbox-tasks-body">
+    <div
+      ref={bodyRef}
+      className="inbox-tasks-body"
+      data-empty={String(listedItems(view).length === 0)}
+    >
       {view.grouping === INBOX_GROUPING.NONE ? (
         <InboxRows items={view.items} row={row} />
       ) : view.grouping === INBOX_GROUPING.PERSON ? (
