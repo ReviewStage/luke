@@ -29,6 +29,7 @@ import {
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listJournalsCalling } from "@luke/database/models/message-reads";
+import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask, updateTask } from "@luke/database/models/task-store";
@@ -2232,6 +2233,47 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           {},
         );
         assert.ok(!desked(coderTurn.text), coderTurn.text ?? "");
+      }),
+  );
+
+  it.effect(
+    "an operator's desk hands what its member's agents did since its last turn once, marks it read, and hands nothing again while nothing new stands",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted: coderAdmitted, auth, sessionId } = yield* openAgent(host);
+        const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+        const operator = yield* openOperator(host, userId, workspace);
+        const typed = (handed: TurnHanded) =>
+          host.turnMessage(
+            operator.admitted,
+            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            handed,
+          );
+        const noticed = (text: string | undefined) =>
+          text?.includes("New since your last turn") === true;
+        const first = yield* typed({});
+        assert.ok(!noticed(first.text), first.text ?? "");
+
+        // The member's agent ends a turn through the relay, and again: one notice of it.
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const turnId of ["turn_0", "turn_1"]) {
+          const state = memoryRelayState();
+          for (const event of codingTurn(turnId, "turn.completed")) {
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            yield* host.relay(event, coderAdmitted, session as never, state, {});
+          }
+        }
+        const told = yield* typed(first.handed);
+        const text = told.text ?? "";
+        assert.ok(noticed(text), text);
+        assert.ok(text.includes(`[@${agent.personaName ?? ""}]`), text);
+        assert.equal(text.split("a turn ended").length - 1, 1, text);
+
+        // Handed once: the notices are read, and a desk with nothing new hands nothing.
+        assert.deepEqual(yield* unreadOperatorNotices(operator.agent.id, 10), []);
+        const after = yield* typed(told.handed);
+        assert.ok(!after.text?.includes(DESK_LEAD), after.text ?? "");
       }),
   );
 

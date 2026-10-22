@@ -20,7 +20,7 @@
  */
 
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
-import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -132,11 +132,10 @@ const findUnread = SqlSchema.findAll({
 const updateRead = SqlSchema.void({
   Request: Schema.Struct({
     operatorId: Schema.String,
-    ids: Schema.Array(Schema.String),
-    readUntil: Schema.Date,
+    notices: Schema.Array(Schema.Struct({ id: Schema.String, at: Schema.Date })),
     readAt: Schema.Date,
   }),
-  execute: ({ operatorId, ids, readUntil, readAt }) =>
+  execute: ({ operatorId, notices, readAt }) =>
     Database.use((db) =>
       db
         .update(operatorNotice)
@@ -144,9 +143,12 @@ const updateRead = SqlSchema.void({
         .where(
           and(
             eq(operatorNotice.operatorId, operatorId),
-            inArray(operatorNotice.id, ids),
             isNull(operatorNotice.readAt),
-            lte(operatorNotice.at, readUntil),
+            or(
+              ...notices.map(({ id, at }) =>
+                and(eq(operatorNotice.id, id), eq(operatorNotice.at, at)),
+              ),
+            ),
           ),
         ),
     ),
@@ -260,17 +262,20 @@ export function unreadOperatorNotices(
 
 /**
  * Marks read, at `readAt`, the operator's notices named that still stand as
- * read at `readUntil`: one a later event moved past that instant stays
- * unread, so the desk hands it again.
+ * they were read: one a later event moved since stays unread, so the desk
+ * hands it again.
  */
 export function markOperatorNoticesRead(
   operatorId: string,
-  ids: readonly string[],
-  readUntil: Date,
+  notices: readonly Pick<UnreadOperatorNotice, "id" | "at">[],
   readAt: Date,
 ): NoticeEffect<void> {
-  if (ids.length === 0) return Effect.void;
-  return updateRead({ operatorId, ids, readUntil, readAt });
+  if (notices.length === 0) return Effect.void;
+  return updateRead({
+    operatorId,
+    notices: notices.map(({ id, at }) => ({ id, at })),
+    readAt,
+  });
 }
 
 /**

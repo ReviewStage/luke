@@ -56,17 +56,31 @@ const openAccount = Effect.gen(function* () {
 
 const started = (userId: string, organizationId: string, operator: boolean) =>
   Effect.map(
-    createCodingAgent(userId, {
-      taskId: null,
-      organizationId,
-      planSnapshot: null,
-      prompt: operator ? null : "Sweep the flaky tests.",
-      ...(operator ? { kind: CODING_AGENT_KIND.OPERATOR } : undefined),
-      idempotencyKey: randomUUID(),
-      model: "anthropic/claude-opus-5.5",
-      effort: "high",
-      repository: operator ? null : "acme/api",
-    }),
+    createCodingAgent(
+      userId,
+      operator
+        ? {
+            taskId: null,
+            organizationId,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }
+        : {
+            taskId: null,
+            organizationId,
+            planSnapshot: null,
+            prompt: "Sweep the flaky tests.",
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/api",
+          },
+    ),
     (made) => Option.getOrThrow(made).agent,
   );
 
@@ -222,12 +236,7 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
           OPERATOR_NOTICE_KIND.PR_CLOSED,
           new Date(T0 + 2_000),
         );
-        yield* markOperatorNoticesRead(
-          standing.id,
-          read.map(({ id }) => id),
-          new Date(T0 + 1_000),
-          new Date(T0 + 1_000),
-        );
+        yield* markOperatorNoticesRead(standing.id, read, new Date(T0 + 1_000));
         assert.deepEqual(yield* unreadOf(standing), [
           { kind: OPERATOR_NOTICE_KIND.PR_CLOSED, agentId: other.id, at: T0 + 2_000 },
         ]);
