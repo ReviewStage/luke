@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import {
+  DISCLOSURE_SUMMARY,
   Disclosure,
   DisclosureAction,
   DisclosureBody,
@@ -203,4 +204,22 @@ test("a box in the slot still checks, and a press on the slot's bare ground fold
   act(() => find(".ground").dispatchEvent(ground));
   assert.equal(ground.defaultPrevented, true, "the element's own toggle is stopped too");
   assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
+});
+
+test("a row summary draws no chevron of its own, stays out of the tab order, and folds on a press", () => {
+  const root = render(
+    createElement(Disclosure, {
+      defaultOpen: true,
+      children: createElement(DisclosureSummary, {
+        look: DISCLOSURE_SUMMARY.ROW,
+        children: createElement("span", null, "src/seats.ts"),
+      }),
+    }),
+  );
+  const summary = root.querySelector("summary") ?? assert.fail("the summary stands");
+  assert.equal(summary.querySelector(".luke-disclosure-turn"), null);
+  assert.equal(summary.tabIndex, -1);
+  assert.equal(summary.getAttribute("aria-expanded"), "true");
+  act(() => summary.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "false");
 });

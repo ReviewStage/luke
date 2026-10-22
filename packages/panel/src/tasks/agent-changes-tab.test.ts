@@ -2073,7 +2073,7 @@ test("a press anywhere on a header's row folds its file, and \u2325 with a press
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab();
   const row = (path: string) =>
-    header(path).querySelector<HTMLElement>(".diff-list-head-row") ?? assert.fail("the row stands");
+    header(path).querySelector<HTMLElement>("summary") ?? assert.fail("the row stands");
   act(() => row("b.ts").dispatchEvent(new MouseEvent("click", { bubbles: true })));
   await flush();
   assert.deepEqual(folds(), [

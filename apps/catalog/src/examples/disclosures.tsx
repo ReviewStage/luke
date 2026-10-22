@@ -1,10 +1,12 @@
 import {
   DISCLOSURE_BODY,
+  DISCLOSURE_SUMMARY,
   Disclosure,
   DisclosureAction,
   DisclosureBody,
   DisclosureSummary,
   EllipsisIcon,
+  FoldChevronIcon,
   IconButton,
   Stack,
   Text,
@@ -38,6 +40,25 @@ function ActionDisclosure(): React.JSX.Element {
       <DisclosureBody>
         <Text>Pressing the ⋯ leaves this fold as it stood; the rest of the row folds it.</Text>
       </DisclosureBody>
+    </Disclosure>
+  );
+}
+
+/** A fold that is only its row, as a file's header: its own chevron button among its controls, a rule under it while open. */
+function RowDisclosure(): React.JSX.Element {
+  const [open, setOpen] = useState(true);
+  return (
+    <Disclosure open={open} onOpenChange={setOpen}>
+      <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
+        <DisclosureAction>
+          <IconButton
+            icon={<FoldChevronIcon />}
+            label={open ? "Collapse file" : "Expand file"}
+            onClick={() => setOpen(!open)}
+          />
+        </DisclosureAction>
+        <span>src/seats.ts</span>
+      </DisclosureSummary>
     </Disclosure>
   );
 }
@@ -107,6 +128,11 @@ function Disclosures(): React.JSX.Element {
       <CatalogSection id="disclosure-action" title="Control in the summary">
         <div className="catalog-frame">
           <ActionDisclosure />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="disclosure-row" title="File row">
+        <div className="catalog-frame">
+          <RowDisclosure />
         </div>
       </CatalogSection>
       <CatalogSection id="disclosure-long" title="Long summary, narrow pane">

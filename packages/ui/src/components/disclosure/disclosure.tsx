@@ -268,7 +268,16 @@ export function Disclosure({
   );
 }
 
+/** How a summary is drawn: the quiet row with its chevron, or the file row, whose own controls stand in it and which a rule closes under while the fold is open. */
+export const DISCLOSURE_SUMMARY = {
+  QUIET: "quiet",
+  ROW: "row",
+} as const;
+export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DISCLOSURE_SUMMARY];
+
 type DisclosureSummaryProps = {
+  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. */
+  look?: DisclosureSummaryLook;
   children: ReactNode;
 } & Omit<
   ComponentPropsWithoutRef<"summary">,
@@ -277,6 +286,7 @@ type DisclosureSummaryProps = {
 
 /** The one line a closed fold shows, which opens and closes it: the chevron, then the caller's glyph and words. */
 export function DisclosureSummary({
+  look = DISCLOSURE_SUMMARY.QUIET,
   children,
   ...props
 }: DisclosureSummaryProps): React.JSX.Element {
@@ -285,8 +295,15 @@ export function DisclosureSummary({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a summary is the platform's own disclosure control, focusable and opened by Enter and Space; the click it already takes is routed to React's state.
     // biome-ignore lint/a11y/useAriaPropsSupportedByRole: a summary is exposed as its details' disclosure button, which takes aria-expanded; the rule's table gives the element no role.
-    <summary {...props} className="luke-disclosure-summary" aria-expanded={open} onClick={click}>
-      <DisclosureChevron />
+    <summary
+      {...props}
+      className="luke-disclosure-summary"
+      data-look={look === DISCLOSURE_SUMMARY.ROW ? look : undefined}
+      tabIndex={look === DISCLOSURE_SUMMARY.ROW ? -1 : props.tabIndex}
+      aria-expanded={open}
+      onClick={click}
+    >
+      {look === DISCLOSURE_SUMMARY.ROW ? null : <DisclosureChevron />}
       {children}
     </summary>
   );
