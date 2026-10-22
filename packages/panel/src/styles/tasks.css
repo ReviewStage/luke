@@ -930,11 +930,25 @@
     margin-block: 0 var(--luke-space-8);
   }
 
-  .transcript-message.is-user .message-content {
+  /* A chat notice, a teammate's message the chat steered into an agent's
+     turn (`chat-notice.tsx`), is the same bubble at the column's left, the
+     other side of the conversation, its line under it starting at its left
+     edge. */
+  .transcript-message.is-chat {
+    max-width: 95%;
+    margin-right: auto;
+    align-items: flex-start;
+  }
+
+  .transcript-message:is(.is-user, .is-chat) .message-content {
     width: fit-content;
     padding: var(--luke-space-8) var(--luke-space-12);
     border-radius: var(--luke-radius-14);
     background: var(--luke-color-fill-strong);
+  }
+
+  .transcript-message.is-chat .message-meta {
+    justify-content: flex-start;
   }
 
   .message-actions {
@@ -958,7 +972,11 @@
     box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
   }
 
-  .message-actions:focus-within {
+  /* An action whose hover card stands keeps the bar up while the pointer
+     crosses onto the card, off the message (`tooltip.tsx` marks it
+     described while it does). */
+  .message-actions:focus-within,
+  .message-actions:has([aria-describedby]) {
     opacity: 1;
     pointer-events: auto;
   }
