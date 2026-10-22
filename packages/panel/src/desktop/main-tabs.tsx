@@ -7,7 +7,7 @@ import {
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { INLINE_EDIT_LOOK, InlineEdit, SKELETON_SHAPE, Skeleton } from "@luke/ui";
+import { INLINE_EDIT_LOOK, InlineEdit, SKELETON_SHAPE, Skeleton, TABS_GROUND } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useEffect, useRef } from "react";
@@ -446,6 +446,7 @@ export function MainTabStrip({
     <div className="desktop-toolbar-heading main-tabs">
       <TabStrip
         label="Task"
+        ground={TABS_GROUND.GROUND}
         onMove={(from, to) => {
           const entry = own[from];
           if (entry !== undefined) main.onMove(entry.tab, to);
