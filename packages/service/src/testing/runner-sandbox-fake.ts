@@ -135,8 +135,19 @@ export function runnerSandboxApi() {
   const failPolicy = { remaining: 0 };
   /** Whether a read that waits for a running command's exit is held until the reader gives up. */
   const waits = { hold: false };
-  /** What a test does the moment a detached command has started, before the API answers. */
-  const hooks: { onStart?: ((command: FakeCommand) => Promise<void>) | undefined } = {};
+  /**
+   * What a test does the moment a detached command has started, before the API answers; and
+   * what a run that is waited on answers, where the test names an answer for its arguments,
+   * every other run exiting 0 with no output.
+   */
+  const hooks: {
+    onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
+    onRun?:
+      | ((
+          args: readonly string[],
+        ) => { readonly exitCode: number; readonly stdout?: string } | undefined)
+      | undefined;
+  } = {};
   let next = 0;
   const id = (prefix: string) => {
     next += 1;
@@ -251,7 +262,14 @@ export function runnerSandboxApi() {
       const asked = await body();
       if (asked.wait === true) {
         runs.push({ session: sessionId, args: asked.args });
-        return new Response(`${JSON.stringify({ command: { exitCode: 0 } })}\n`);
+        const answer = hooks.onRun?.(asked.args) ?? { exitCode: 0 };
+        const printed =
+          answer.stdout === undefined
+            ? ""
+            : `${JSON.stringify({ stream: "stdout", data: answer.stdout })}\n`;
+        return new Response(
+          `${printed}${JSON.stringify({ command: { exitCode: answer.exitCode } })}\n`,
+        );
       }
       assert.equal(asked.attachStdin, true);
       const command: FakeCommand = {

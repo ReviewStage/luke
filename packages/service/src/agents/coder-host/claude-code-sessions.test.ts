@@ -287,6 +287,48 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+/** An account on its Claude plan with one agent on a task of the Relay repository, and its sessions over the fake Vercel given. */
+const repositoryAgent = (api: ReturnType<typeof runnerSandboxApi>) =>
+  Effect.gen(function* () {
+    const userId = `user-${randomUUID()}`;
+    yield* Effect.flatMap(Database, (db) =>
+      db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    );
+    yield* savePlan(userId);
+    const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
+    yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: "start-1",
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Relay\n",
+      prompt: null,
+      repository: RELAY_FULL_NAME,
+    });
+    const agent = Option.getOrThrow(started).agent;
+    const github = githubReaching([RELAY_INSTALLATION], undefined, {}, (sent) =>
+      new URL(sent.url).hostname === "vercel.com"
+        ? api.respond(sent.url, { method: sent.method, headers: sent.headers, body: sent.body })
+        : undefined,
+    );
+    const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          github.layer,
+          Layer.succeed(HostedEnvironment, NO_KEYS),
+          Layer.succeed(AgentSandboxImage, {
+            snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+            snapshotGone: () => Effect.void,
+          }),
+          Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
+        ),
+      ),
+    );
+
+    return { userId, agent, sessions };
+  });
+
 it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   it.effect(
     "open launches the runner as root dropped to agent, its secrets in its environment alone, and writes its config and first message to its stdin",
@@ -1373,42 +1415,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
-        const userId = `user-${randomUUID()}`;
-        yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
-        );
-        yield* savePlan(userId);
-        const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
-        yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
-        const started = yield* createCodingAgent(userId, {
-          taskId: task.id,
-          idempotencyKey: "start-1",
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          planSnapshot: "# Relay\n",
-          prompt: null,
-          repository: RELAY_FULL_NAME,
-        });
-        const agent = Option.getOrThrow(started).agent;
-        const github = githubReaching([RELAY_INSTALLATION], undefined, {}, (sent) =>
-          new URL(sent.url).hostname === "vercel.com"
-            ? api.respond(sent.url, { method: sent.method, headers: sent.headers, body: sent.body })
-            : undefined,
-        );
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              github.layer,
-              Layer.succeed(HostedEnvironment, NO_KEYS),
-              Layer.succeed(AgentSandboxImage, {
-                snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
-                snapshotGone: () => Effect.void,
-              }),
-              Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
-            ),
-          ),
-        );
-
+        const { agent, sessions } = yield* repositoryAgent(api);
         const runsAtStart: number[] = [];
         api.hooks.onStart = async () => {
           runsAtStart.push(api.runs.length);
@@ -1428,6 +1435,47 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const visible = JSON.stringify([api.commands, api.runs, api.sandboxes]);
         assert.equal(visible.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
         assert.equal(visible.includes(writeHeader), false);
+      }),
+  );
+
+  it.effect(
+    "a history fetch that failed after the launch is made again past a later message's answer, and once whole is never made again",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const deepen = { failures: 1, marked: false };
+        api.hooks.onRun = (args) => {
+          const script = args.join(" ");
+          if (script.includes("--unshallow") && deepen.failures > 0) {
+            deepen.failures -= 1;
+            return { exitCode: 128 };
+          }
+          if (script.includes("touch")) deepen.marked = true;
+          if (script.includes("if [ -f")) return { exitCode: 0, stdout: String(deepen.marked) };
+          return undefined;
+        };
+        const fetches = () => api.runs.filter((run) => run.args.join(" ").includes("--unshallow"));
+        const { agent, sessions } = yield* repositoryAgent(api);
+
+        const opened = yield* sessions.open(message(agent, "Push a branch."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(fetches().length, 1);
+        assert.equal(deepen.marked, false);
+
+        const kept = keptAfterResponse();
+        const sent = yield* sessions
+          .send(opened.sessionId, message(agent, "Read the oldest commit."))
+          .pipe(Effect.provide(kept.layer));
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        // The message is written before the fetch it leaves to run past its answer.
+        assert.equal(fetches().length, 1);
+        yield* kept.run;
+        assert.equal(fetches().length, 2);
+        assert.equal(deepen.marked, true);
+
+        yield* sessions.send(opened.sessionId, message(agent, "And the next."));
+        assert.equal(fetches().length, 2);
       }),
   );
 });

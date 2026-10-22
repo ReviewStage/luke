@@ -130,7 +130,11 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
-import { REPOSITORY_REFUSAL, type RepositorySandbox } from "../repository-shell.js";
+import {
+  checkoutDeepened,
+  REPOSITORY_REFUSAL,
+  type RepositorySandbox,
+} from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
@@ -778,6 +782,28 @@ export const runnerSessions = <
       );
 
     /**
+     * The rest of a native checkout's history fetched in the running
+     * session, where its deepen has not finished: the open's fetch after its
+     * launch, and again after each later message while one before it failed
+     * or was cut short by the sandbox stopping, so a fetch that failed once
+     * is not left for good. A failure is logged and the next message tries
+     * again; the fetch runs once however many ask at once (`deepenRepository`).
+     */
+    const historyFetched = (agent: CodingAgent, running: string) =>
+      Effect.gen(function* () {
+        if (!hasRepository(agent)) return;
+        const sandbox = repositorySandboxOver(api, running, options.run);
+        if (yield* checkoutDeepened(sandbox)) return;
+        yield* deepenAgentHistory(sandbox);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning(
+            `A ${harness.name} checkout's history was not fetched: ${failure.reason}`,
+          ),
+        ),
+      );
+
+    /**
      * A new sandbox opened under the session given, the agent's repository
      * checked out in it, and the runner launched on the first line. What
      * needs no sandbox (the credential, the bundle) is read while the
@@ -843,17 +869,9 @@ export const runnerSessions = <
             discard: true,
           });
           yield* launch(sessionId, agent, { name: opened.name, running }, first, undefined, ready);
-          return { running, repositorySandbox };
+          return running;
         }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
-        if (hasRepository(agent)) {
-          yield* deepenAgentHistory(running.repositorySandbox).pipe(
-            Effect.catch((failure) =>
-              Effect.logWarning(
-                `A ${harness.name} checkout's history was not fetched: ${failure.reason}`,
-              ),
-            ),
-          );
-        }
+        yield* historyFetched(agent, running);
       });
 
     /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
@@ -886,6 +904,11 @@ export const runnerSessions = <
             live.sandboxSessionId,
             live.commandId,
             [...ahead.lines, sent].map(line).join(""),
+          );
+          // Past the answer, so the message never waits on a fetch an earlier one left undone.
+          yield* afterResponse(
+            `A ${harness.name} history fetch`,
+            historyFetched(agent, live.sandboxSessionId),
           );
           return accepted;
         }
@@ -925,6 +948,7 @@ export const runnerSessions = <
         const ready = yield* prepared(agent);
         yield* uploaded(running, ready);
         yield* launch(sessionId, agent, { name: found.value.name, running }, sent, resume, ready);
+        yield* afterResponse(`A ${harness.name} history fetch`, historyFetched(agent, running));
         return accepted;
       });
 
@@ -1059,25 +1083,33 @@ export const runnerSessions = <
         return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
       });
 
+    /**
+     * The sessions' own services with the calling request's after-response
+     * door beside them, so a launch or a history fetch runs past the answer
+     * of the request that asked for it, as that request's own work.
+     */
+    const callerContext = Effect.map(Effect.serviceOption(AfterResponse), (after) =>
+      Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
+    );
+
     const sessions: NativeSessions<Turn> = {
-      // The caller's after-response door is kept beside the sessions' own services, so the launch
-      // runs past the answer of the request that asked for it, as that request's own work.
       open: (message) =>
         Effect.gen(function* () {
-          const after = yield* Effect.serviceOption(AfterResponse);
+          const caller = yield* callerContext;
           return yield* opening(message).pipe(
             Effect.catch(failed("open")),
-            Effect.provideContext(
-              Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
-            ),
+            Effect.provideContext(caller),
           );
         }),
 
       send: (sessionId, message) =>
         Effect.gen(function* () {
-          const { id } = yield* agentOf(message.conversationId);
-          return yield* holdingRunner(id, sendHolding(sessionId, message));
-        }).pipe(Effect.catch(failed("send")), Effect.provideContext(context)),
+          const caller = yield* callerContext;
+          return yield* Effect.gen(function* () {
+            const { id } = yield* agentOf(message.conversationId);
+            return yield* holdingRunner(id, sendHolding(sessionId, message));
+          }).pipe(Effect.catch(failed("send")), Effect.provideContext(caller));
+        }),
 
       // The Stop is scoped to the turn it names: written only while that turn is the
       // conversation's turn under way, to the command of the launch running it, and naming that
