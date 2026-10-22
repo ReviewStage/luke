@@ -190,3 +190,27 @@ test("busy, the main part is named by what it is doing and refuses its press, wh
   expect(done).toEqual([]);
   expect(openMenu()).not.toBeNull();
 });
+
+test("every press but the chevron's is heard as it lands, one the busy main part refuses too", () => {
+  const done: Done = [];
+  mount(
+    createElement(SplitButton, {
+      label: "Save the plan",
+      busy: "Saving",
+      onClick: () => done.push("Save"),
+      onMainPress: () => done.push("heard"),
+      menu: {
+        label: "More ways to save",
+        "aria-haspopup": "menu",
+        "aria-expanded": false,
+        onClick: () => done.push("chevron"),
+      },
+      children: "Save",
+    }),
+  );
+
+  press(button("Saving"));
+  press(button("More ways to save"));
+
+  expect(done).toEqual(["heard", "chevron"]);
+});

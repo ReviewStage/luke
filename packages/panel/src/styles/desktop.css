@@ -6303,7 +6303,7 @@ ul.actor-stack {
   max-width: 50cqi;
 }
 
-/* The split button's box, which hears its presses as they pass. */
+/* The split button's box. */
 .start-agent-split {
   display: flex;
 }

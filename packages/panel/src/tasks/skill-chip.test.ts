@@ -112,7 +112,7 @@ test("a press on a skill's chip in the composer opens the skill's file, and a pr
   const { container, opened } = await mounted(
     createElement(Composer, { words: "Cut it with /release now" }),
   );
-  const chip = container.querySelector(".agent-composer-input .skill-chip");
+  const chip = container.querySelector(".agent-composer-input .luke-skill-chip");
   assert.equal(chip?.textContent, "/release", "the chosen skill is drawn as a chip");
   const words = container.querySelector(".agent-composer-input p");
   assert.ok(chip && words, "the box is drawn");
@@ -127,7 +127,7 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
   const { container } = await mounted(
     createElement(Composer, { words: "Cut it with /release now" }),
   );
-  const chip = container.querySelector(".agent-composer-input .skill-chip");
+  const chip = container.querySelector(".agent-composer-input .luke-skill-chip");
   assert.ok(chip, "the chosen skill is drawn as a chip");
 
   restOn(chip);

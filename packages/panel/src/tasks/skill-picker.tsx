@@ -5,6 +5,7 @@ import {
   GAP,
   MENU_SURFACE_INSET,
   MenuSurface,
+  SkillChip,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -188,9 +189,9 @@ function SkillMenu({
 }
 
 /**
- * A chosen skill in the box: its pill, which a press opens the skill's
- * `SKILL.md` from where the skill is known and the box stands on a task's
- * page, the pointer turning to a hand over it then.
+ * A chosen skill in the box: its pill (`SkillChip`), which a press opens the
+ * skill's `SKILL.md` from where the skill is known and the box stands on a
+ * task's page, the pointer turning to a hand over it then.
  */
 function BoxChip({
   name,
@@ -201,17 +202,11 @@ function BoxChip({
   skill: SkillOption | undefined;
   onOpen: ((skill: SkillOption) => void) | undefined;
 }): React.JSX.Element {
-  const opens = skill !== undefined && onOpen !== undefined;
   const chip = (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the pill is a word of the box's text, which the keyboard edits rather than presses; its press is the pointer's shortcut to the file, as a sent message's chip button is.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: as above.
-    <span
-      className="skill-chip"
-      data-opens={opens ? "" : undefined}
-      onClick={opens ? () => onOpen(skill) : undefined}
-    >
-      {skillWord(name)}
-    </span>
+    <SkillChip
+      label={skillWord(name)}
+      onOpen={skill === undefined || onOpen === undefined ? undefined : () => onOpen(skill)}
+    />
   );
   // A skill the repository holds hangs its card in the box as a sent chip of it does.
   if (skill === undefined) return chip;

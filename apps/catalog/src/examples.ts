@@ -41,6 +41,7 @@ import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
+import { PRESS_SHORTCUTS_EXAMPLE } from "./examples/press-shortcuts";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
@@ -132,6 +133,7 @@ export const EXAMPLES: readonly Example[] = [
   PAGINATION_EXAMPLE,
   PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
+  PRESS_SHORTCUTS_EXAMPLE,
   PROGRESS_EXAMPLE,
   PROSE_EXAMPLE,
   PROVIDER_BUTTONS_EXAMPLE,
