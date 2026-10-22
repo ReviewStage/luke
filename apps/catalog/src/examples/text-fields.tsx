@@ -4,6 +4,7 @@ import {
   GAP,
   SettingsRow,
   Stack,
+  TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
   TEXT_AREA_SUBMIT,
   TEXT_FIELD_AUTO_COMPLETE,
@@ -24,7 +25,7 @@ import { CatalogSection } from "../section";
  * unavailable, as a secret, as code in the mono face, as a time of day, and as a number; a page's title
  * written in place; a TextArea, standing and growing with its words, and busy
  * sending what ⌘Return submitted; a compact TextField in a bar, selecting its
- * address as the caret arrives; a bare TextArea growing in a message box's card,
+ * address as the caret arrives; a bare TextArea growing without limit in a message box's card,
  * sent with Return; a TextField in a settings row, invalid while the row says
  * its error; and both in a narrow column.
  */
@@ -86,6 +87,7 @@ function MessageBox(): React.JSX.Element {
           placeholder="Message"
           look={TEXT_AREA_LOOK.BARE}
           grow
+          growLimit={TEXT_AREA_GROW_LIMIT.NONE}
           rows={1}
           enterKeyHint={ENTER_KEY_HINT.SEND}
           submitKey={TEXT_AREA_SUBMIT.ENTER}

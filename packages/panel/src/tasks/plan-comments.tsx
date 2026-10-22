@@ -31,6 +31,7 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SUBMIT_STATE,
+  TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
   TEXT_AREA_SUBMIT,
   TEXT_ELEMENT,
@@ -645,6 +646,7 @@ function PlainCommentText({
   return (
     <TextArea
       look={TEXT_AREA_LOOK.BARE}
+      growLimit={TEXT_AREA_GROW_LIMIT.NONE}
       grow
       rows={1}
       value={value}

@@ -8,6 +8,7 @@ import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
 import {
   ENTER_KEY_HINT,
+  TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_SUBMIT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -519,4 +520,26 @@ test("a text area names its return key's label to an on-screen keyboard", () => 
     }),
   );
   assert.equal(page.querySelector("textarea")?.getAttribute("enterkeyhint"), "send");
+});
+
+test("a growing text area grows to the profile's tallest note, or past it where its limit is none", () => {
+  const page = render(
+    createElement(
+      "div",
+      null,
+      createElement(TextArea, { label: "Note", value: "", onChange: () => undefined, grow: true }),
+      createElement(TextArea, {
+        label: "Message",
+        value: "",
+        onChange: () => undefined,
+        grow: true,
+        growLimit: TEXT_AREA_GROW_LIMIT.NONE,
+      }),
+      createElement(TextArea, { label: "Prompt", value: "", onChange: () => undefined }),
+    ),
+  );
+  const limits = [...page.querySelectorAll("textarea")].map((area) =>
+    area.getAttribute("data-grow-limit"),
+  );
+  assert.deepEqual(limits, ["note", "none", null]);
 });

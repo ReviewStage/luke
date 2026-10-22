@@ -8059,7 +8059,6 @@ button.subagent-line:hover {
   --luke-text-area-inset-inline: var(--comment-field-inline);
   --luke-text-area-inset-end: var(--luke-space-2);
   --luke-text-area-least: 36px; /* off-scale: one line and its padding, as the editor stands */
-  --luke-text-area-grow-max: none; /* the plain field grows with its words, as the editor's card does */
   margin-top: var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);

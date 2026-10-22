@@ -86,6 +86,14 @@ export const TEXT_AREA_LOOK = {
 
 export type TextAreaLook = (typeof TEXT_AREA_LOOK)[keyof typeof TEXT_AREA_LOOK];
 
+/** How far a growing text area grows: to the profile's tallest note before it scrolls, or with its words however many, as a message box does. */
+export const TEXT_AREA_GROW_LIMIT = {
+  NOTE: "note",
+  NONE: "none",
+} as const;
+
+export type TextAreaGrowLimit = (typeof TEXT_AREA_GROW_LIMIT)[keyof typeof TEXT_AREA_GROW_LIMIT];
+
 /** The label an on-screen keyboard draws on its return key: Send where Return sends, a return where it is a new line. */
 export const ENTER_KEY_HINT = {
   SEND: "send",
@@ -270,6 +278,7 @@ export function TextArea({
   rows = 4,
   grow = false,
   look = TEXT_AREA_LOOK.WELL,
+  growLimit = TEXT_AREA_GROW_LIMIT.NOTE,
   enterKeyHint,
   busy = false,
   onSubmit,
@@ -285,6 +294,8 @@ export function TextArea({
   grow?: boolean;
   /** How it stands; in a field's well where none is named. */
   look?: TextAreaLook | undefined;
+  /** How far it grows, where it may; to the profile's tallest note where none is named. */
+  growLimit?: TextAreaGrowLimit | undefined;
   /** The label an on-screen keyboard's return key wears; the keyboard's own where none is named. */
   enterKeyHint?: EnterKeyHint | undefined;
   /** Whether its words are on their way somewhere, so it takes no typing and answers no key until they arrive. */
@@ -304,6 +315,7 @@ export function TextArea({
       rows={rows}
       data-grow={grow}
       data-look={look}
+      data-grow-limit={grow ? growLimit : undefined}
       enterKeyHint={enterKeyHint}
       // Note that a growing note sizes to its words, which the browser does
       // without reading `rows`, so its rows reach its stylesheet as its least height.

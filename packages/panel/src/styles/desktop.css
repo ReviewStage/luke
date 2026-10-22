@@ -4910,7 +4910,6 @@ ul.actor-stack {
 /* The plain box in the card (`PlainChatComposer`), bare at the agent
    composer's insets (`.agent-composer-input`). */
 .chat-composer {
-  --luke-text-area-grow-max: none; /* it grows with its words, as it always has */
   --luke-text-area-inset-start: var(--luke-space-16);
   --luke-text-area-inset-inline: var(--luke-space-16);
   --luke-text-area-inset-end: var(--luke-space-8);

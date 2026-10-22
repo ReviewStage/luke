@@ -138,9 +138,7 @@
   /* A text area bare in a card that is its well, as a message box's: no
      edge, no ground and no ring, the caret marking it, at the insets its
      card sets. Growing, its rows and those insets set its least height, or
-     the card's own least (`--luke-text-area-least`) where that is taller, and
-     the card may let it grow past the profile's tallest note by setting
-     `--luke-text-area-grow-max` itself. */
+     the card's own least (`--luke-text-area-least`) where that is taller. */
   textarea.luke-text-field[data-look="bare"],
   textarea.luke-text-field[data-look="bare"]:focus {
     padding: var(--luke-text-area-inset-start, 0) var(--luke-text-area-inset-inline, 0)
@@ -162,5 +160,11 @@
         var(--luke-text-area-inset-end, 0px)
       )
     );
+  }
+
+  /* A growing text area asked to grows with its words however many, as a
+     message box does, and scrolls the page around it rather than itself. */
+  textarea.luke-text-field[data-grow-limit="none"] {
+    max-height: none;
   }
 }

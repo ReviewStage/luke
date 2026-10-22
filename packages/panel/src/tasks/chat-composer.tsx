@@ -6,6 +6,7 @@ import {
   GAP,
   Inline,
   SUBMIT_STATE,
+  TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -543,6 +544,7 @@ function PlainChatComposer({
           <TextArea
             ref={field}
             look={TEXT_AREA_LOOK.BARE}
+            growLimit={TEXT_AREA_GROW_LIMIT.NONE}
             grow
             label={label}
             placeholder={label}
