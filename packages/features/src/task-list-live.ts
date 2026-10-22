@@ -79,7 +79,6 @@ const taskLiveRowSchema = EffectSchema.Struct({
   assigneeName: EffectSchema.NullOr(EffectSchema.String),
   pinnedAt: EffectSchema.NullOr(countedNumber),
   pinPosition: EffectSchema.NullOr(EffectSchema.String),
-  archivedAt: EffectSchema.NullOr(countedNumber),
   /** Absent from a service before it kept when a task was finished. */
   completedAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   createdAt: countedNumber,
@@ -342,7 +341,6 @@ function taskSummaryOf(
     ...(row.pinnedAt === null || row.pinPosition === null
       ? undefined
       : { pinPosition: row.pinPosition }),
-    ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt }),
     ...(row.completedAt === undefined || row.completedAt === null
       ? undefined
       : { completedAt: row.completedAt }),
@@ -469,8 +467,8 @@ export function taskAgentsOfLiveRows(
 }
 
 /**
- * The plan list as the held read answers it with every archived plan and
- * agent included, as the live rows stand at `now`: the plans newest started
+ * The plan list as the held read answers it with every archived agent
+ * included, as the live rows stand at `now`: the plans newest started
  * first, each with its agents in brief, and the agents with no plan newest
  * started first.
  */

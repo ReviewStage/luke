@@ -24,7 +24,6 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
-  type TasksArchiveParams,
   type TasksBoardSaveParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
@@ -92,7 +91,6 @@ export interface TasksProceduresDependencies {
     tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
     tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
     tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
-    tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
     tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
     tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
     tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
@@ -249,14 +247,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksWriteSection(input);
       },
     ),
-    [TASKS_ACT_KIND.TASKS_ARCHIVE]: actPort[TASKS_ACT_KIND.TASKS_ARCHIVE].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.tasksArchive(input);
-    }),
     [TASKS_ACT_KIND.TASKS_REPOSITORIES]: actPort[TASKS_ACT_KIND.TASKS_REPOSITORIES].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

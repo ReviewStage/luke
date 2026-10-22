@@ -397,9 +397,6 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
 /** What the Start button says while it cannot start: the task names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
-/** Why Start, and a draft's first message, cannot run on an archived task. */
-export const START_ARCHIVED = "Unarchive the task to start a coding agent.";
-
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
@@ -408,7 +405,6 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
-  [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
   [CODING_AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
   // Said once the panel stopped asking again (`image-preparing.ts`).
   [CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
@@ -529,7 +525,6 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
     case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
@@ -754,7 +749,6 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
     case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
@@ -798,7 +792,6 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
     case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:

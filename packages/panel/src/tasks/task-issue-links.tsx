@@ -47,7 +47,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * task's repository, the issues it links dimmed, and nothing more once it
  * links as many as a task may. A task with no links shows Link issue alone;
  * one whose workspace offers no issue to link and links none draws no row
- * at all. An archived task's chips only open their issue. What did not land
+ * at all. What did not land
  * is said under the chips, and a read that did not land says so in the
  * row's place with a Try again.
  */
@@ -92,13 +92,11 @@ function linkSummary(link: TaskIssueLinkView): string {
 /** One linked issue as its chip, and the menu it drops. */
 function LinkChip({
   link,
-  editable,
   onOpen,
   onRelate,
   onUnlink,
 }: {
   link: TaskIssueLinkView;
-  editable: boolean;
   onOpen: () => void;
   onRelate: (relation: TaskIssueRelation) => void;
   onUnlink: () => void;
@@ -151,7 +149,7 @@ function LinkChip({
               </span>
             </span>
           }
-          groups={editable ? [[open], relations, [unlink]] : [[open]]}
+          groups={[[open], relations, [unlink]]}
           onClose={close}
         />
       )}
@@ -163,7 +161,6 @@ export function TaskIssueLinks({
   taskId,
   workspaceId,
   repository,
-  archived,
   linearIn,
   githubIn,
 }: {
@@ -172,8 +169,6 @@ export function TaskIssueLinks({
   workspaceId: string;
   /** The task's repository, whose GitHub issues the picker lists. */
   repository: string | null;
-  /** Whether the task is archived, so its links read only. */
-  archived: boolean;
   linearIn: TasksControl["newTask"]["linearIssuesIn"];
   githubIn: TasksControl["newTask"]["githubIssuesIn"];
 }): React.JSX.Element | null {
@@ -195,7 +190,6 @@ export function TaskIssueLinks({
     );
   }
   if (links === undefined || (links.length === 0 && !offered)) return null;
-  const editable = !archived;
   const linked = new Set(links.map((link) => link.externalId));
   return (
     <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
@@ -204,13 +198,12 @@ export function TaskIssueLinks({
           <LinkChip
             key={link.id}
             link={link}
-            editable={editable}
             onOpen={() => openLink(link.url)}
             onRelate={(relation) => control.onRelate(link.id, relation)}
             onUnlink={() => control.onUnlink(link.id)}
           />
         ))}
-        {editable && offered ? (
+        {offered ? (
           <li className="task-issue-links-add">
             {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip

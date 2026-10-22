@@ -5242,7 +5242,7 @@ test("a message refused says why under the box, which keeps its words, and leave
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED }));
+  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED }));
   const pane = itemPane(page);
 
   typeInComposer(pane, "Page on-call at night too.");
@@ -5251,7 +5251,7 @@ test("a message refused says why under the box, which keeps its words, and leave
 
   assert.equal(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
-    "This task is archived. Unarchive it first.",
+    "Only the member who started this agent can do this.",
   );
   assert.equal(pane.querySelector('[data-inbox-comment="message"]'), null);
   assert.equal(composerEditor(pane).textContent, "Page on-call at night too.");
@@ -6996,14 +6996,14 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
     "a second Enter sends nothing again",
   );
 
-  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED }));
+  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED }));
   await settle();
 
   assert.equal(composerEditor(pane).textContent, "Does it matter for SSO teams?");
   assert.deepEqual(attachedNames(pane), ["notes.md"]);
   assert.equal(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
-    "This task is archived. Unarchive it first.",
+    "Only the member who started this agent can do this.",
   );
 });
 
@@ -7024,7 +7024,7 @@ test("words written in a reply's box while the reply is out stay there, whether 
         lands.push((refused) =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED } : landed,
+            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED } : landed,
           }),
         ),
       );
@@ -7072,7 +7072,7 @@ test("words written on a reply's settled box while the reply carrying the ask's 
         refuse.push(() =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: { failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED },
+            value: { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED },
           }),
         ),
       );
@@ -7109,7 +7109,7 @@ test("words another window writes in the open ask's box while this window's repl
         refuse.push(() =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: { failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED },
+            value: { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED },
           }),
         ),
       );

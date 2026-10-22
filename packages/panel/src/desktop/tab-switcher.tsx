@@ -208,14 +208,14 @@ function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined)
 
 /** The task's name, as the window lists it. */
 function taskName(tasks: TasksControl, taskId: string): string | undefined {
-  return [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
+  return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
 /** How a card wears its stop, from what the window holds of it now and what Back's list named it while it stood. */
 function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined): CardLook {
   switch (stop.kind) {
     case STOP_KIND.TASK: {
-      const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === stop.taskId);
+      const task = tasks.tasks.find((each) => each.id === stop.taskId);
       const column: HeldLook | undefined =
         stop.column === undefined
           ? undefined

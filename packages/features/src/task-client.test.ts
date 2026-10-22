@@ -240,7 +240,7 @@ it.effect(
 );
 
 it.effect(
-  "a change the service refuses answers why as the window names it: a repository out of reach, its reason beside it, and a move onto an archived plan; anything else, a deleted plan's delete among it, as unanswered",
+  "a change the service refuses answers why as the window names it: a repository out of reach, its reason beside it, and a move of a plan gone; anything else, a deleted plan's delete among it, as unanswered",
   () =>
     Effect.gen(function* () {
       const unreached = {
@@ -254,8 +254,8 @@ it.effect(
           answer: () => ({ error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached }),
         },
         [`PATCH /api/plans/${OTHER_TASK}`]: {
-          status: 409,
-          answer: () => ({ error: HOSTED_API_ERROR.TASK_ARCHIVED }),
+          status: 404,
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
         },
         [`DELETE /api/plans/${OTHER_TASK}`]: {
           status: 404,
@@ -278,7 +278,7 @@ it.effect(
         ok: false,
         failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       });
-      assert.deepEqual(moved, { ok: false, failure: TASK_CALL_FAILURE.TASK_ARCHIVED });
+      assert.deepEqual(moved, { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND });
       assert.equal(renamed, undefined);
       assert.equal(deleted, undefined);
       assert.deepEqual(
@@ -293,26 +293,28 @@ it.effect(
     }),
 );
 
-it.effect("the list asks for the archived plans too, and a revision is asked by its number", () =>
-  Effect.gen(function* () {
-    const api = fakeCloudApi({
-      "GET /api/plans": { answer: () => ({ plans: [SUMMARY] }) },
-      [`GET /api/plans/${TASK_ID}/revisions/3`]: {
-        status: 404,
-        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-      },
-    });
+it.effect(
+  "the list asks for the plans alone, an older service's archive stamp on one read past, and a revision is asked by its number",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "GET /api/plans": { answer: () => ({ plans: [{ ...SUMMARY, archivedAt: 5 }] }) },
+        [`GET /api/plans/${TASK_ID}/revisions/3`]: {
+          status: 404,
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+        },
+      });
 
-    const listed = yield* Effect.provide(client().list(), api.layer);
-    const revision = yield* Effect.provide(client().readRevision(TASK_ID, 3), api.layer);
+      const listed = yield* Effect.provide(client().list(), api.layer);
+      const revision = yield* Effect.provide(client().readRevision(TASK_ID, 3), api.layer);
 
-    assert.deepEqual(listed, { ok: true, answer: { plans: [SUMMARY] } });
-    assert.equal(revision, undefined);
-    assert.deepEqual(recordedRoutes(api.requests()), [
-      "GET /api/plans?archived=include",
-      `GET /api/plans/${TASK_ID}/revisions/3`,
-    ]);
-  }),
+      assert.deepEqual(listed, { ok: true, answer: { plans: [SUMMARY] } });
+      assert.equal(revision, undefined);
+      assert.deepEqual(recordedRoutes(api.requests()), [
+        "GET /api/plans",
+        `GET /api/plans/${TASK_ID}/revisions/3`,
+      ]);
+    }),
 );
 
 it.effect(

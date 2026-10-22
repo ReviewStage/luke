@@ -73,7 +73,6 @@ import {
   type PlanRevisionsAnswer,
   type RepositoryPinsWritten,
   repositoryPinRequestSchema,
-  TASK_LIST_ARCHIVED,
   type Task,
   type TaskCreateRequest,
   type TaskFileAnswer,
@@ -161,8 +160,8 @@ const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as 
 /** A comment call refused because the plan is not the account's to read or write. */
 const COMMENT_NOT_FOUND = { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
 
-/** What a task's pin and archive change names: pinned or not, where the pin stands, archived or not, or both. */
-export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "archived">;
+/** What a task's pin change names: pinned or not, and where the pin stands. */
+export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition">;
 
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
@@ -180,10 +179,9 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
-/** The refusals a move can answer with: the task or the workspace not the account's, the task archived, or the workspace not reaching its repository. */
+/** The refusals a move can answer with: the task or the workspace not the account's, or the workspace not reaching its repository. */
 const MOVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.TASK_ARCHIVED]: TASK_CALL_FAILURE.TASK_ARCHIVED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
@@ -219,7 +217,6 @@ function hostedResult<Answer, Failure extends string>(
 /** The refusals a call on a task's linked issues can answer with, by the service's own word for each. */
 const TASK_ISSUE_REFUSALS = new Map<HostedApiError, TaskIssueCallFailure>([
   [HOSTED_API_ERROR.NOT_FOUND, TASK_CALL_FAILURE.NOT_FOUND],
-  [HOSTED_API_ERROR.TASK_ARCHIVED, TASK_CALL_FAILURE.TASK_ARCHIVED],
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, TASK_CALL_FAILURE.LINEAR_UNAVAILABLE],
 ]);
 
@@ -324,16 +321,13 @@ export class HostedTaskClient {
     );
   }
 
-  /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived ones of each among them. */
+  /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived agents among them. */
   list(): Effect.Effect<
     TaskCallResult<TaskListAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {
-    return hostedResult(
-      askHosted(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
-      {},
-    );
+    return hostedResult(askHosted(this.#hosted.plans.list, {}), {});
   }
 
   /**
@@ -370,7 +364,7 @@ export class HostedTaskClient {
    * Saves the developer's edit of the document, answering the task as saved,
    * the text as it now stands where the edit no longer lands in it, or why
    * it was refused; or why there is no answer: the service did not answer,
-   * the task is gone, or it is archived. An edit the service would refuse by shape is
+   * or the task is gone. An edit the service would refuse by shape is
    * refused here without traveling at all.
    */
   edit(
@@ -379,9 +373,7 @@ export class HostedTaskClient {
   ): Effect.Effect<
     TaskCallResult<
       PlanEditAnswer,
-      | typeof TASK_CALL_FAILURE.UNANSWERED
-      | typeof TASK_CALL_FAILURE.NOT_FOUND
-      | typeof TASK_CALL_FAILURE.TASK_ARCHIVED
+      typeof TASK_CALL_FAILURE.UNANSWERED | typeof TASK_CALL_FAILURE.NOT_FOUND
     >,
     never,
     HttpClient.HttpClient
@@ -392,7 +384,6 @@ export class HostedTaskClient {
       askHosted(this.#hosted.plans.edit, { params: { id: taskId }, body: admitted }),
       {
         [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
-        [HOSTED_API_ERROR.TASK_ARCHIVED]: TASK_CALL_FAILURE.TASK_ARCHIVED,
       },
     );
   }
@@ -439,7 +430,7 @@ export class HostedTaskClient {
    * Moves one task to another of the account's workspaces, answering the
    * task as moved; or why it stands where it was: the service did not
    * answer, the task or the workspace is not the account's to move it to,
-   * the task is archived, or the workspace does not reach its repository.
+   * or the workspace does not reach its repository.
    */
   move(
     taskId: string,
@@ -925,7 +916,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Pins or unpins one task, archives it or brings it back, answering it as
+   * Pins or unpins one task, answering it as
    * changed with its document, or nothing where the service did not change
    * it; a change that names neither never travels.
    */

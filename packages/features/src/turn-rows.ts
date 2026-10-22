@@ -88,9 +88,7 @@ export const CALL_KIND = {
   DELETE_SECTION: "delete-section",
   /** A task moved into a section of the member's sidebar or out of them (`move_task`), its row naming the task once answered. */
   MOVE_TASK: "move-task",
-  /** A task of the workspace changed (`update_task`), its row naming the task once answered: archived, brought back, or else changed otherwise. */
-  ARCHIVE_TASK: "archive-task",
-  UNARCHIVE_TASK: "unarchive-task",
+  /** A task of the workspace changed (`update_task`), its row naming the task once answered; an older transcript's archive of one reads as a change too. */
   UPDATE_TASK: "update-task",
   /** The workspace's issues listed (`list_issues`, retired with Luke's own issues; an older transcript still names it). */
   LIST_ISSUES: "list-issues",
@@ -153,8 +151,6 @@ export const CALL_WORDS = {
   [CALL_KIND.CREATE_SECTION]: { verb: "Made the section", code: false },
   [CALL_KIND.DELETE_SECTION]: { verb: "Deleted the section", code: false },
   [CALL_KIND.MOVE_TASK]: { verb: "Moved the task", code: false },
-  [CALL_KIND.ARCHIVE_TASK]: { verb: "Archived the task", code: false },
-  [CALL_KIND.UNARCHIVE_TASK]: { verb: "Unarchived the task", code: false },
   [CALL_KIND.UPDATE_TASK]: { verb: "Updated the task", code: false },
   [CALL_KIND.LIST_ISSUES]: { verb: "Listed the issues", code: false },
   [CALL_KIND.READ_ISSUE]: { verb: "Read the issue", code: false },

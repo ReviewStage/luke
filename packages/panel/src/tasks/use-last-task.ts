@@ -8,10 +8,9 @@ import { readKept, writeKept } from "../desktop/folded-groups.js";
  * use-last-task.ts -- the task each account last had open, kept across launches, and opened again at the next launch where it still stands.
  *
  * A launch opens the window on the task the account had open when it quit,
- * once the task list says it is still one of the account's and not
- * archived; its tabs, the one shown, and its side panel come back with it,
+ * once the task list says it is still one of the account's; its tabs, the one shown, and its side panel come back with it,
  * because those are kept by task already (`use-main-tabs.ts`,
- * `use-side-panel.ts`). A task deleted or archived since, or none open at
+ * `use-side-panel.ts`). A task deleted since, or none open at
  * quit, leaves the window on the home page. The task names its workspace,
  * so opening it lists that workspace, as opening a task from the palette
  * does, and a task of a workspace the account has left is not listed, so it
@@ -97,7 +96,7 @@ export function useLastTask(input: {
   }, [staged, account, openTaskId, keep]);
 
   // Once per account signed in, as soon as the list is read: the kept task
-  // where it is listed and not archived, else nothing, and a kept task the
+  // where it is listed, else nothing, and a kept task the
   // list does not offer is let go. A read that failed decides nothing, so
   // the read Try again lands still reopens it. A window reloaded over a
   // task the host still holds has nothing to reopen.
@@ -109,7 +108,7 @@ export function useLastTask(input: {
       return;
     }
     if (listStatus !== TASKS_READ.READY) return;
-    const task = tasks.find((each) => each.id === keptTask && each.archivedAt === undefined);
+    const task = tasks.find((each) => each.id === keptTask);
     if (task === undefined) {
       if (keptTask !== undefined) keep((held) => withKept(held, account, undefined));
       setDecided({ account });

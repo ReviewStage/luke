@@ -806,13 +806,6 @@ function agentUpdateKind(input: WireValue | undefined): CallKind {
   return archived === false ? CALL_KIND.UNARCHIVE_AGENT : CALL_KIND.UPDATE_AGENT;
 }
 
-/** How a task's change is said on its row: archived or unarchived where it named its archive, which is what such a call is for, and updated otherwise. */
-function taskUpdateKind(input: WireValue | undefined): CallKind {
-  const archived = isRecord(input) ? input.archived : undefined;
-  if (archived === true) return CALL_KIND.ARCHIVE_TASK;
-  return archived === false ? CALL_KIND.UNARCHIVE_TASK : CALL_KIND.UPDATE_TASK;
-}
-
 /** The tools that keep the member's sidebar sections or make or change a task, whose accepted call changes the sidebar. */
 const SIDEBAR_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.CREATE_TASK,
@@ -938,7 +931,7 @@ function tasksToolView(
     case RETIRED_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:
-      return answeredCall(taskUpdateKind(input), input, output, "task", "name");
+      return answeredCall(CALL_KIND.UPDATE_TASK, input, output, "task", "name");
     case RETIRED_TOOL.LIST_ISSUES:
       return namedCall(CALL_KIND.LIST_ISSUES, input, output, undefined);
     case RETIRED_TOOL.READ_ISSUE:

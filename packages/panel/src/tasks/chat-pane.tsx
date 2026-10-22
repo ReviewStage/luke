@@ -49,7 +49,7 @@ import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
 import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { SendingAgent } from "./agent-ref.js";
-import { ArchivedComposerNote } from "./archived-task.js";
+import { ArchivedComposerNote } from "./archived-note.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";

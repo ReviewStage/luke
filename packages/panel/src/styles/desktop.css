@@ -1954,16 +1954,6 @@ ul.actor-stack {
 
 /* The document ------------------------------------------------------------- */
 
-/* A banner over a document (`archived-task.tsx`), `@luke/ui`'s card, on the
-   document's own reading width, so what it says is the first thing read. An
-   archived plan's says so with the one action the plan takes, the way Notion
-   marks a page in the trash, and the plan template's says what the template
-   is for. */
-.document-banner {
-  width: min(var(--luke-page-measure), calc(100% - 2 * var(--luke-page-inset)));
-  margin: var(--luke-space-16) auto 0;
-}
-
 /* The document's column answers its own width (`@container plan-document`
    below), the room the summary's rail leaves it included. */
 .desktop-document {

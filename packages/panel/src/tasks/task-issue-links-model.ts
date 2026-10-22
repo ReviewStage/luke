@@ -45,7 +45,6 @@ const REFUSAL_WORDS = {
 const FAILURE_WORDS = {
   [TASK_CALL_FAILURE.UNANSWERED]: "Luke didn't answer. Try again.",
   [TASK_CALL_FAILURE.NOT_FOUND]: "That issue couldn't be read, or the task is gone.",
-  [TASK_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived, so its issues can't change.",
   [TASK_CALL_FAILURE.LINEAR_UNAVAILABLE]: "The workspace's Linear couldn't read that issue.",
 } as const satisfies Record<TaskIssueCallFailure, string>;
 

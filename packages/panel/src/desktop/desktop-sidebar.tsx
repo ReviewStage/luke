@@ -143,7 +143,6 @@ import {
   useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view.js";
-import { NO_SIDEBAR_WALK, usePublishSidebarWalk } from "./sidebar-walk.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
@@ -1569,7 +1568,7 @@ function SidebarColumn({
     shared,
     readerId: tasks.me,
   });
-  const unread = useUnreadTasks([...tasks.tasks, ...tasks.archived], {
+  const unread = useUnreadTasks(tasks.tasks, {
     listRead: tasks.listRead,
     staged: sidebar.staged,
   });
@@ -1761,15 +1760,6 @@ function SidebarColumn({
   const listed = tasks.signedIn && drawn.length > 0;
   useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
-  // The same rows' tasks, for an archive of the open task to open the next
-  // of; only the pinned while the Inbox's items stand where the rest would.
-  usePublishSidebarWalk(
-    listed
-      ? (listsInbox ? pinnedShownDrawn : drawn).flatMap((row) =>
-          row.kind === TASK_ROW.TASK ? [row.task.id] : [],
-        )
-      : NO_SIDEBAR_WALK,
-  );
 
   // The pages' rows, then the rule under them. Beside the work they stand
   // put over the tasks' scroller; in a phone's drawer they scroll away with

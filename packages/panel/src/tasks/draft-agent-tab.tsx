@@ -6,7 +6,7 @@ import { ConversationEmptyState } from "../ai-elements/conversation.js";
 import { type AgentCallDoors, CallButton } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { TranscriptCards } from "./agent-tab.js";
-import { ArchivedComposerNote } from "./archived-task.js";
+import { ArchivedComposerNote } from "./archived-note.js";
 import { agentTabLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
@@ -34,9 +34,10 @@ import { useWorkingNow, WorkingLine } from "./working-time.js";
  * which asks again under the draft's own key, or, for a repository out of
  * reach, the press its reason names, a move of the task asking again by
  * itself once it lands. Closing the tab lets the draft go, and since
- * nothing was started, nothing is left behind. While the task is archived,
- * nothing starts on it, so the box gives way to the note that offers
- * Unarchive, and the words written wait in the draft until it is back.
+ * nothing was started, nothing is left behind. While the agent its page
+ * draws is archived, nothing starts from it, so the box gives way to the
+ * note that offers Unarchive, and the words written wait in the draft until
+ * it is back.
  *
  * A draft may fork one of the task's agents at one of its messages
  * (`fork-action.tsx`): a chip over the box names the source and the message,
@@ -246,7 +247,6 @@ export function DraftAgentTab({
             offersCall ? (
               <CallButton
                 subject={draft.id}
-                archived={false}
                 busy={sending || control.start.busy}
                 onPress={pressCall}
               />

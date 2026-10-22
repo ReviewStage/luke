@@ -45,7 +45,6 @@ interface Standing {
   taskId: string | undefined;
   agentId?: string;
   repository: string | null;
-  archived?: boolean;
 }
 
 /** Any kind the hook asks. */
@@ -84,7 +83,6 @@ function mount(
 ) {
   const asked: Asked[] = [];
   const started: string[] = [];
-  let unarchives = 0;
   /** An answer as a test queues it: at once, or a promise it settles when it chooses. */
   type Queued = WireBoundaryInput | Promise<WireBoundaryInput>;
   const answers = new Map<AnyKind, Queued[]>();
@@ -108,12 +106,8 @@ function mount(
       taskId: held.taskId,
       agentId: held.agentId,
       repository: held.repository,
-      archived: held.archived === true,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
-      onUnarchive: () => {
-        unarchives += 1;
-      },
       onStarted: (agentId) => started.push(agentId),
       mintKey: () => {
         keys += 1;
@@ -129,8 +123,6 @@ function mount(
   return {
     asked,
     started,
-    /** How many times the control's Unarchive was pressed. */
-    unarchives: () => unarchives,
     /** Queues the answers one kind gives, in order. */
     answer: (kind: AnyKind, ...queued: Queued[]) => {
       answers.set(kind, [...(answers.get(kind) ?? []), ...queued]);
@@ -1012,12 +1004,7 @@ test("a second continue of an agent once the first landed mints a key of its own
   assert.deepEqual(tab.started, [first.id, second.id, third.id]);
 });
 
-test("no continue is offered while no Start could run: an archived task, or a task naming no repository", async () => {
-  const archived = mount({ taskId: TASK, repository: "acme/relay", archived: true });
-  archived.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
-  await archived.mount();
-  assert.equal(archived.control().continueAgent, undefined);
-
+test("no continue is offered while no Start could run: a task naming no repository", async () => {
   const bare = mount({ taskId: TASK, repository: null });
   bare.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await bare.mount();

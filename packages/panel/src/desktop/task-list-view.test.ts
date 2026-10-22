@@ -111,14 +111,6 @@ const TASKS = [
   task("t-4", "Release checklist", "acme/relay", DEAN, { createdAt: 5, updatedAt: 5 }, 900),
 ];
 
-const ARCHIVED = [
-  { ...task("t-9", "Spike: edge caching", "acme/relay", CHARLES), archivedAt: 50 },
-  {
-    ...task("t-8", "Old dashboard charts", "acme/console", DEAN, { createdAt: 1, updatedAt: 9 }),
-    archivedAt: 40,
-  },
-];
-
 /** An agent an automation of `starter`'s started with no task, on `repository`, last moving at `activityAt`. */
 function oneOff(
   id: string,
@@ -156,11 +148,10 @@ let copied: string[] = [];
 /** Each agent's pin the sidebar asked for, in order, as `agentId:pinned`. */
 let pinsAsked: string[] = [];
 
-/** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
+/** The sidebar listing `plans` in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
   tasks: readonly TaskSummary[] = TASKS,
-  archived: readonly TaskSummary[] = ARCHIVED,
   agents: readonly TasklessAgent[] = [],
   agentShown?: string,
 ): HTMLElement {
@@ -170,7 +161,6 @@ function mountSidebar(
   roots.push(root);
   const control = tasksControl({
     tasks: [...tasks],
-    archived: [...archived],
     workspace,
     workspaces: [workspace],
     me: DEAN,
@@ -356,10 +346,9 @@ test("a workspace nobody shares offers no grouping by creator", () => {
 async function mountRead(
   workspace: Workspace,
   tasks?: readonly TaskSummary[],
-  archived?: readonly TaskSummary[],
   agents?: readonly TasklessAgent[],
 ): Promise<HTMLElement> {
-  const sidebar = mountSidebar(workspace, tasks, archived, agents);
+  const sidebar = mountSidebar(workspace, tasks, agents);
   await act(async () => undefined);
   return sidebar;
 }
@@ -467,35 +456,10 @@ test("in one run, a task with no repository says so on its row", async () => {
 });
 
 test("an empty workspace under a filter says only that it holds no tasks", async () => {
-  const sidebar = await mountRead(ACME, [], []);
+  const sidebar = await mountRead(ACME, []);
   choose(sidebar, "Created by", "Me");
   const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
   assert.deepEqual(notes, ["No tasks yet."]);
-});
-
-test("a task archived by an older build stands nowhere in the list, and View options offers no archived view", async () => {
-  const sidebar = await mountRead(ACME);
-  assert.ok(
-    !taskRows(sidebar).some((row) => row.name === "Spike: edge caching"),
-    "an archived task stands nowhere in the list",
-  );
-  assert.equal(groupNames(sidebar).includes("Archived"), false);
-  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-  assert.ok(button, "the Tasks head offers View options");
-  act(() => button.click());
-  const menu = document.querySelector('[role="menu"][aria-label="View options"]');
-  const labels = [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].map(
-    itemLabel,
-  );
-  assert.ok(labels.length > 0, "the menu is drawn");
-  assert.ok(!labels.includes("Archived tasks"), labels.join(" | "));
-});
-
-test("with every task archived by an older build, the list says only that no task stands", async () => {
-  const sidebar = await mountRead(ACME, [], ARCHIVED);
-  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
-  assert.ok(notes.includes("No tasks yet."), notes.join(" | "));
-  assert.ok(!notes.some((note) => note?.startsWith("Every task is archived")), notes.join(" | "));
 });
 
 test("⌘K offers each view choice only while it would change the list, and running one changes it as the menu would", async () => {
@@ -539,7 +503,7 @@ const TRIAGE = oneOff("a-1", "Triage overnight issues", "acme/relay", DEAN, 550)
 const SWEEP = oneOff("a-2", "Sweep flaky tests", "acme/console", CHARLES, 100);
 
 test("a one-off agent stands among its repository's tasks by its last activity, led by its harness mark and ending with its automation's clock, and a press opens its page", () => {
-  const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [TRIAGE, SWEEP]);
+  const sidebar = mountSidebar(ACME, TASKS, [TRIAGE, SWEEP]);
   assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
   assert.deepEqual(
     taskRows(sidebar).map((row) => row.name),
@@ -565,7 +529,7 @@ test("a one-off agent stands among its repository's tasks by its last activity, 
 });
 
 test("grouped by creator a one-off agent stands under whoever started it, and Created by filters it as a task", async () => {
-  const sidebar = await mountRead(ACME, TASKS, ARCHIVED, [TRIAGE, SWEEP]);
+  const sidebar = await mountRead(ACME, TASKS, [TRIAGE, SWEEP]);
   choose(sidebar, "Group by", "Creator");
   assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
   assert.deepEqual(
@@ -588,30 +552,28 @@ test("grouped by creator a one-off agent stands under whoever started it, and Cr
 
 test("an archived one-off agent stands nowhere in the list", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
-  const sidebar = await mountRead(ACME, TASKS, ARCHIVED, [TRIAGE, shelved]);
+  const sidebar = await mountRead(ACME, TASKS, [TRIAGE, shelved]);
   assert.ok(!taskRows(sidebar).some((row) => row.name === "Digest of open pull requests"));
 });
 
 test("the agent whose page stands is the row the sidebar marks", () => {
-  const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [TRIAGE], "a-1");
+  const sidebar = mountSidebar(ACME, TASKS, [TRIAGE], "a-1");
   const marked = [...sidebar.querySelectorAll('[aria-current="page"]')].map(
     (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent,
   );
   assert.deepEqual(marked, ["Triage overnight issues"]);
 });
 
-test("with every task archived but a one-off agent standing, the list holds the agent and says nothing of every task being archived", async () => {
-  const sidebar = await mountRead(ACME, [], ARCHIVED, [TRIAGE]);
+test("with no task but a one-off agent standing, the list holds the agent", async () => {
+  const sidebar = await mountRead(ACME, [], [TRIAGE]);
   assert.deepEqual(
     taskRows(sidebar).map((row) => row.name),
     ["Triage overnight issues"],
   );
-  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
-  assert.ok(!notes.some((note) => note?.startsWith("Every task is archived")), notes.join(" | "));
 });
 
 test("a one-off agent's row offers Copy link on a right-click, copying the agent's link under its workspace, and says Link copied", async () => {
-  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE]);
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, [TRIAGE]);
   const row = [
     ...sidebar.querySelectorAll<HTMLButtonElement>(
       ".sidebar-tasks > li > button:has(.sidebar-agent-glyph)",
@@ -687,7 +649,7 @@ function agentMenu(sidebar: HTMLElement, title: string): string[] {
 
 test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest pinned first, and not among its repository's tasks", () => {
   const pinned = { ...TRIAGE, pinnedAt: 950 };
-  const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [pinned, SWEEP]);
+  const sidebar = mountSidebar(ACME, TASKS, [pinned, SWEEP]);
   const section = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
     [...(section?.querySelectorAll(".luke-list-row-title") ?? [])].map(
@@ -704,7 +666,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
 });
 
 test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, Archive agent, Move to section, and Permanently delete last", async () => {
-  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, [
     TRIAGE,
     { ...SWEEP, pinnedAt: 950 },
   ]);
@@ -744,7 +706,7 @@ function rowMarks(sidebar: HTMLElement, title: string): string[] {
 }
 
 test("a one-off agent's row draws Pin and Archive at its end where a task's row draws Pin and Mark done, and its Pin pins it", async () => {
-  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE]);
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, [TRIAGE]);
   const task = TASKS[0] ?? assert.fail("a task stands");
 
   assert.deepEqual(rowMarks(sidebar, task.name), ["Pin", "Mark done"]);
@@ -778,7 +740,7 @@ function hiddenLine(sidebar: HTMLElement): HTMLButtonElement | null {
 }
 
 test("the list holds the tasks to do and in progress, each led by its status's mark, and a quiet line says how many it leaves out and in which statuses", () => {
-  const sidebar = mountSidebar(ACME, BY_STATUS, []);
+  const sidebar = mountSidebar(ACME, BY_STATUS);
 
   assert.deepEqual(
     taskRows(sidebar).map((row) => row.name),
@@ -792,7 +754,7 @@ test("the list holds the tasks to do and in progress, each led by its status's m
 });
 
 test("the hidden tasks' line opens the status filter, whose choice lists the backlog and is kept for the workspace on this Mac", () => {
-  const sidebar = mountSidebar(ACME, BY_STATUS, []);
+  const sidebar = mountSidebar(ACME, BY_STATUS);
   const line = hiddenLine(sidebar);
   assert.ok(line, "the hidden tasks' line stands");
 
@@ -809,11 +771,11 @@ test("the hidden tasks' line opens the status filter, whose choice lists the bac
   );
   assert.equal(hiddenLine(sidebar)?.textContent, "1 more in Done");
   unmountAll();
-  assert.equal(taskRows(mountSidebar(ACME, BY_STATUS, [])).length, 4);
+  assert.equal(taskRows(mountSidebar(ACME, BY_STATUS)).length, 4);
 });
 
 test("the status filter is on the Tasks head, and listing everyone's tasks again keeps the statuses chosen", async () => {
-  const sidebar = await mountRead(ACME, BY_STATUS, []);
+  const sidebar = await mountRead(ACME, BY_STATUS);
   const filter = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Show statuses"]');
   assert.ok(filter, "the Tasks head offers the status filter");
   act(() => filter.click());
@@ -830,7 +792,7 @@ test("the status filter is on the Tasks head, and listing everyone's tasks again
 });
 
 test("a task from a service before statuses stands whatever the filter", () => {
-  const sidebar = mountSidebar(ACME, [...BY_STATUS, task("t-0", "No status", null, DEAN)], []);
+  const sidebar = mountSidebar(ACME, [...BY_STATUS, task("t-0", "No status", null, DEAN)]);
   assert.ok(taskRows(sidebar).some((row) => row.name === "No status"));
 });
 

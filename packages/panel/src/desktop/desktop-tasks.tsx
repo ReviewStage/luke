@@ -15,7 +15,7 @@ import {
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -30,7 +30,6 @@ import { useSteadyDoor } from "../steady-door.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatNames } from "../tasks/chat-actors.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
@@ -148,12 +147,6 @@ import {
  * panel's bar while the panel covers the column (`task-banner.tsx`): a
  * task whose repository belongs to another of the account's workspaces says
  * which, with the press that moves it there (`stranded-task-banner.tsx`).
- *
- * An archived task reads and takes nothing until it is brought back: its
- * banner under the toolbar says so with Unarchive as its primary button,
- * and in the meantime the document is not edited, the task is not renamed,
- * no repository is chosen, Start, a new agent, and the call's start are not
- * drawn, and a version viewed is not restored (`../tasks/archived-task.tsx`).
  */
 
 /** What the task's page says to a reader while the task is read. */
@@ -555,16 +548,12 @@ function PlanDocument({
   const listedOpen =
     opened === undefined
       ? undefined
-      : ([...tasks.tasks, ...tasks.archived].find((each) => each.id === opened.id) ?? opened);
+      : (tasks.tasks.find((each) => each.id === opened.id) ?? opened);
   const stranded = useStrandedTaskBanner(tasks, listedOpen);
-  // The workspace's agents an `@` offers after the task's own, named by the tasks the window lists, archived ones among them.
-  const mentionTasks = useMemo(
-    () => [...tasks.tasks, ...tasks.archived],
-    [tasks.tasks, tasks.archived],
-  );
+  // The workspace's agents an `@` offers after the task's own, named by the tasks the window lists.
   const readMentionAgents = useMentionAgentsReader(
     opened?.workspaceId,
-    mentionTasks,
+    tasks.tasks,
     tasks.agents.models,
   );
   const openMention = tasks.onShowMention;
@@ -579,9 +568,8 @@ function PlanDocument({
         );
   const { mainTabs, sidePanel, agents } = tasks;
   const { tab } = mainTabs;
-  const archived = opened?.archivedAt !== undefined;
-  // The column's agents take calls on the open task, none while it is archived.
-  const calls = useAgentCallDoors(tasks.calls, { taskId, archived });
+  // The column's agents take calls on the open task.
+  const calls = useAgentCallDoors(tasks.calls, { taskId });
   const home =
     opened === undefined
       ? undefined
@@ -665,18 +653,18 @@ function PlanDocument({
   const openMentionedFileDoor = useSteadyDoor(openMentionedFile);
   const { onFork: forkDoor, onContinue: continueDoor } = useAgentDraftDoors(
     agents,
-    archived,
+    false,
     (draft) => openColumnTab({ draft }),
   );
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
   const edit: PlanEditDoor | undefined =
-    archived || opened === undefined ? undefined : (request) => tasks.edit(opened.id, request);
+    opened === undefined ? undefined : (request) => tasks.edit(opened.id, request);
   const editDoor = useSteadyDoor(edit);
-  const renameDoor = useSteadyDoor(archived ? undefined : (name: string) => rename.end(name));
+  const renameDoor = useSteadyDoor((name: string) => rename.end(name));
   const draftNameDoor = useSteadyDoor(
-    archived || opened === undefined
+    opened === undefined
       ? undefined
       : (name: string | undefined) => tasks.onDraftName(opened.id, name),
   );
@@ -684,7 +672,7 @@ function PlanDocument({
     if (opened !== undefined) reads.mark(opened, unread);
   });
   const setStanding = useSteadyDoor(
-    archived || opened === undefined
+    opened === undefined
       ? undefined
       : (standing: TaskStanding) => {
           void tasks.onSetTaskStanding(opened.id, standing);
@@ -724,12 +712,11 @@ function PlanDocument({
           taskId={opened.id}
           workspaceId={opened.workspaceId}
           repository={opened.repository}
-          archived={archived}
           linearIn={linearIssuesIn}
           githubIn={githubIssuesIn}
         />
       ),
-    [opened, archived, linearIssuesIn, githubIssuesIn],
+    [opened, linearIssuesIn, githubIssuesIn],
   );
   // A chat notice in an agent's transcript reads its message from the chat
   // the window holds, and opens the window's Chat on its channel.
@@ -854,10 +841,8 @@ function PlanDocument({
   }
   const { task } = region;
   const listed = listedOpen ?? task;
-  // The column has a tab on its way: the agents are still read, or, read, a draft opens in an unarchived task's empty column.
-  const columnComing =
-    agents.agents === undefined ? !agents.listFailed : agents.onUnarchive === undefined;
-  const unarchive = () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE);
+  // The column has a tab on its way: the agents are still read, or, read, a draft opens in the task's empty column.
+  const columnComing = agents.agents === undefined ? !agents.listFailed : true;
   const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
     const { id: taskId } = task;
@@ -897,16 +882,12 @@ function PlanDocument({
   };
   const documentBody = (
     <section className="desktop-document" aria-label={task.name}>
-      {/* Keyed by the archive, so an editor still open when the plan is
-          archived elsewhere is let go rather than left taking words. */}
       <PlanBody
-        key={String(archived)}
         task={task}
         live={tasks.live}
         reader={reader}
         agents={editAgents}
         onShowHistory={showHistory}
-        // None of the three stands on an archived plan, which is drawn read-only.
         onEdit={editDoor}
         // The title renames as the chip's field does, so a refusal is said beside it.
         onRename={renameDoor}
@@ -1013,18 +994,14 @@ function PlanDocument({
                         {/* Keyed once for the chip and the menu alike, so another plan
               starts both afresh and the same plan keeps them. */}
                         <Fragment key={task.id}>
-                          {archived ? null : (
-                            <>
-                              <RepositoryChip
-                                place={CHIP_PLACE.TOOLBAR}
-                                value={task.repository}
-                                chooser={tasks.repositories}
-                                onChoose={chooseRepository}
-                                openRequest={menuRequest}
-                              />
-                              <StartAgentButton control={agents} />
-                            </>
-                          )}
+                          <RepositoryChip
+                            place={CHIP_PLACE.TOOLBAR}
+                            value={task.repository}
+                            chooser={tasks.repositories}
+                            onChoose={chooseRepository}
+                            openRequest={menuRequest}
+                          />
+                          <StartAgentButton control={agents} />
                           {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. */}
                           <TaskActions tasks={tasks} task={task} button onRename={rename.begin} />
                         </Fragment>
@@ -1041,7 +1018,6 @@ function PlanDocument({
                           active={tasks.shown && !sideFocused}
                           subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
                         >
-                          {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
                           {tab === undefined ? (
                             // While the agents are read, or a draft opens on a task with none, the
                             // column stands as the tab it will show does before it lands.

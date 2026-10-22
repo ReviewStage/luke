@@ -277,7 +277,7 @@ function mountWith(
     me: DEAN.userId,
     workspace: { ...ACME, memberCount },
     tasks: TASKS,
-    listed: { tasks: TASKS, archived: [], ...HOLDING },
+    listed: { tasks: TASKS, ...HOLDING },
     ...HOLDING,
     onSelect: (taskId) => opened.tasks.push(taskId),
     onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),

@@ -23,7 +23,6 @@ import {
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
-  tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
@@ -129,9 +128,6 @@ export const tasksActsContract = {
     "Could not change that section on this system.",
   )
     .input(exactInput(tasksWriteSectionParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_ARCHIVE]: actProcedure("Could not archive that task on this system.")
-    .input(exactInput(tasksArchiveParamsSchema))
     .output(EffectSchema.Boolean),
   [TASKS_ACT_KIND.TASKS_REPOSITORIES]: actProcedure(
     "Could not read your GitHub repositories on this system.",

@@ -588,7 +588,7 @@ test("an archive names the agent its answer titles and opens nothing, its tab be
   });
 });
 
-test("a task's change says it archived, unarchived, or updated the task its answer names, by what it asked, and opens it, while one still out or refused names none and opens nothing", () => {
+test("a task's change says it updated the task its answer names, an older transcript's archive or unarchive alike, and opens it, while one still out or refused names none and opens nothing", () => {
   const call = (input: WireRecord, output?: WireRecord) => ({
     tool: "update_task",
     callId: "call-1",
@@ -611,13 +611,13 @@ test("a task's change says it archived, unarchived, or updated the task its answ
   };
 
   assert.deepEqual(line({ archived: true }, answer), [
-    CALL_KIND.ARCHIVE_TASK,
-    "Archived the task",
+    CALL_KIND.UPDATE_TASK,
+    "Updated the task",
     "Seat billing",
   ]);
   assert.deepEqual(line({ archived: false }, answer), [
-    CALL_KIND.UNARCHIVE_TASK,
-    "Unarchived the task",
+    CALL_KIND.UPDATE_TASK,
+    "Updated the task",
     "Seat billing",
   ]);
   assert.deepEqual(line({ name: "Seat billing", pinned: true }, answer), [
@@ -627,7 +627,7 @@ test("a task's change says it archived, unarchived, or updated the task its answ
   ]);
   assert.deepEqual(toolTarget(call({ archived: true }, answer)), opened);
 
-  assert.deepEqual(line({ archived: true }), [CALL_KIND.ARCHIVE_TASK, "Archived the task", ""]);
+  assert.deepEqual(line({ archived: true }), [CALL_KIND.UPDATE_TASK, "Updated the task", ""]);
   assert.equal(toolTarget(call({ archived: true })), undefined);
   const refused = call({ archived: true }, { status: "rejected", reason: "Not archived." });
   assert.equal(toolCallView(refused).subject, "");

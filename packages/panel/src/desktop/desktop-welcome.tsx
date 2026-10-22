@@ -42,7 +42,6 @@ export function welcomed(tasks: TasksControl): boolean {
     tasks.listRead &&
     freshAccount({
       tasks: tasks.tasks,
-      archived: tasks.archived,
       taskless: tasks.inboxTaskless,
       readerId: tasks.me,
     })

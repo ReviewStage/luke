@@ -167,7 +167,7 @@ function useTaskDoors(
   const latest = useRef(tasks);
   latest.current = tasks;
   const workspace = mentionPlaceOf(tasks)?.workspace;
-  const { tasks: listed, archived } = tasks;
+  const { tasks: listed } = tasks;
   // Note that each task's skills are read once and kept while its repository and workspace stand, because a source made anew, as a change to any listed task would make it, reads them again and draws its chips as words until it lands.
   const skillSources = useRef(
     new Map<string, { repository: string; workspaceId: string; source: SkillSource }>(),
@@ -186,7 +186,7 @@ function useTaskDoors(
       kept.set(taskId, { repository, workspaceId, source });
       return source;
     };
-    for (const task of [...listed, ...archived]) {
+    for (const task of listed) {
       const showFile = (ref: CodeRef, commit: string | undefined) =>
         latest.current.onShowFile(task.id, ref, commit);
       const code: InboxCodeDoors = {
@@ -221,7 +221,7 @@ function useTaskDoors(
     // A task no longer listed, or listed with no repository, lets its skills go, so a repository chosen again is read afresh.
     for (const taskId of kept.keys()) if (!reading.has(taskId)) kept.delete(taskId);
     return held;
-  }, [listed, archived, act, openTask, workspace, mentions]);
+  }, [listed, act, openTask, workspace, mentions]);
   return (taskId) => doors.get(taskId);
 }
 

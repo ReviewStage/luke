@@ -76,7 +76,6 @@ import {
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
-  tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
@@ -204,9 +203,8 @@ import {
  * with the document, and again as the record's code part moves, so a task
  * opened after a restart or a switch shows it; each code a call shows lands
  * over that read and stays past the call's end. The repositories the account reaches, and a task's repository
- * given or taken away, are the service's too, asked through here, as are a
- * task pinned or archived: the list holds the archived tasks beside the
- * rest, each flagged, and which the window draws where is the window's. A
+ * given or taken away, are the service's too, asked through here, as is a
+ * task pinned. A
  * plan's history is read for the version history that asks and held nowhere
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the task it answers.
@@ -230,8 +228,8 @@ import {
  * held nowhere here.
  */
 
-/** A task's pin, where it stands, and its archive as the list carries them, each only where it stands. */
-type TaskMarkStamps = Pick<Task, "pinnedAt" | "pinPosition" | "archivedAt">;
+/** A task's pin and where it stands as the list carries them, each only where it stands. */
+type TaskMarkStamps = Pick<Task, "pinnedAt" | "pinPosition">;
 
 /**
  * How long a read of whether the account's GitHub is connected stands
@@ -1492,7 +1490,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   ): Effect.Effect<void> =>
     serial(
       Effect.sync(() => {
-        // A task the list does not hold, as one archived out of it, has no row to change.
+        // A task the list does not hold has no row to change.
         if (!view.tasks.some((row) => row.id === taskId)) return;
         const tasks = view.tasks.map((row) => {
           if (row.id !== taskId) return row;
@@ -1504,17 +1502,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     );
 
-  /** The pin and the archive a task answered carries, each only where it stands. */
+  /** The pin a task answered carries, and where it stands, each only where it stands. */
   function marksOf(task: Task): TaskMarkStamps {
     return {
       ...(task.pinnedAt === undefined ? undefined : { pinnedAt: task.pinnedAt }),
       ...(task.pinPosition === undefined ? undefined : { pinPosition: task.pinPosition }),
-      ...(task.archivedAt === undefined ? undefined : { archivedAt: task.archivedAt }),
     };
   }
 
   /**
-   * Draws the pin and the archive `task` was answered with on its row of the
+   * Draws the pin `task` was answered with on its row of the
    * list, and on the open document where it is the one held. Note that the
    * row keeps what the list said of the task's coding agents, which only the
    * list answers, and the held document keeps everything else it holds,
@@ -1535,14 +1532,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       write({ tasks });
       return;
     }
-    const { pinnedAt: _pinned, pinPosition: _position, archivedAt: _archived, ...kept } = held;
+    const { pinnedAt: _pinned, pinPosition: _position, ...kept } = held;
     write({
       tasks,
       document: { status: TASKS_READ.READY, task: { ...kept, ...marksOf(task) } },
     });
   }
 
-  /** Pins or archives one task on the service, or undoes either, and draws what it answered. */
+  /** Pins or unpins one task on the service, and draws what it answered. */
   function markTask(taskId: string, marks: TaskMarks) {
     return writtenThenListed(
       Effect.gen(function* () {
@@ -2217,17 +2214,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             return { changed: true };
           }),
         );
-      }),
-    // Note that an archived task stays open where it is the open one: leaving
-    // it is the window's to ask, as it is for any task.
-    [GATEWAY_METHOD.TASKS_ARCHIVE]: (params) =>
-      Effect.gen(function* () {
-        const read = readEither(tasksArchiveParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("archiving a task names it and whether it is archived");
-        }
-        if (!gate()) return { changed: false };
-        return yield* markTask(read.success.taskId, { archived: read.success.archived });
       }),
     // The list is the service's answer whole, read now and held nowhere: the
     // panel asks again whenever its chip opens, so an App installed meanwhile

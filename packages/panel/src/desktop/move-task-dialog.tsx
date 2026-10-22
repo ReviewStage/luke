@@ -216,7 +216,7 @@ function MoveTaskCard({
 
 /**
  * The workspace a task's repository belongs to, where the reader may move
- * the task there: a task they own, not archived, its own workspace's GitHub
+ * the task there: a task they own, its own workspace's GitHub
  * not reaching its repository and another of the account's reaching it
  * (`strandedTaskHome`). None for any other task. The task's banner
  * (`stranded-task-banner.tsx`), its sidebar row's mark, and its card read it.
@@ -225,7 +225,7 @@ export function strandedHome(
   tasks: Pick<TasksControl, "me" | "workspaces">,
   task: TaskSummary,
 ): Workspace | undefined {
-  if (task.archivedAt !== undefined || !ownsTask(tasks, task)) return undefined;
+  if (!ownsTask(tasks, task)) return undefined;
   return strandedTaskHome(task, tasks.workspaces);
 }
 
@@ -243,11 +243,7 @@ export function useMoveTaskDialog(
   task: TaskSummary | undefined,
 ): MoveTaskDoor {
   const others = task === undefined ? [] : otherWorkspaces(tasks, task);
-  const offered =
-    task !== undefined &&
-    task.archivedAt === undefined &&
-    others.length > 0 &&
-    ownsTask(tasks, task);
+  const offered = task !== undefined && others.length > 0 && ownsTask(tasks, task);
   const [picked, setPicked] = useState<string | undefined>(undefined);
   const repository = task?.repository ?? null;
   const chosen =

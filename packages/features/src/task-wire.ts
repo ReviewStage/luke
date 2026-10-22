@@ -36,10 +36,10 @@ import {
  * `github-repositories-wire.ts` spells it, which the service confirms the
  * account reaches through the Luke GitHub App before it keeps it; null is a
  * task with no repository yet, and every task from before repositories.
- * A task may be pinned, which the sidebar lists first, and archived, which
- * the list leaves out unless asked for it (`TASK_LIST_QUERY`), so a build
- * that knows nothing of archiving never sees an archived task. Both are the
- * account's, so they follow it to every Mac it signs in on.
+ * A task may be pinned, which the sidebar lists first; the pin is the
+ * account's, so it follows it to every Mac it signs in on. Tasks are no
+ * longer archived: a service that still answers a task's `archivedAt` is
+ * read with the key ignored.
  * A row of the list also says, in brief, what the task's coding agents are
  * doing and what they published (`taskAgentsSummarySchema`), so the sidebar
  * can mark a task at work or with a pull request without a read per row.
@@ -444,8 +444,6 @@ const taskSummaryFields = {
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
   pinPosition: EffectSchema.optionalKey(EffectSchema.String),
-  /** Epoch milliseconds the task was archived; absent while it is not, and from a service before archiving. */
-  archivedAt: EffectSchema.optionalKey(countedNumber),
   /**
    * The account that started the task, its owner, which alone may move it to
    * another workspace; absent from a service before it was sent.

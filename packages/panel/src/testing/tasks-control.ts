@@ -202,10 +202,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     signedIn: true,
     me: undefined,
     tasks: [],
-    archived: [],
     listed: {
       tasks: overrides.tasks ?? [],
-      archived: overrides.archived ?? [],
       inbox: overrides.inbox ?? [],
       inboxTasks: overrides.inboxTasks ?? [],
     },

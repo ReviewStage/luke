@@ -460,14 +460,13 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
   assert.equal(mark(), null, "moved to Stage, the row wears it no longer");
 });
 
-test("no sidebar plan wears the attention mark where its own workspace reaches its repository, no other workspace does, a teammate owns it, or it is archived", () => {
+test("no sidebar plan wears the attention mark where its own workspace reaches its repository, no other workspace does, or a teammate owns it", () => {
   const { asked } = openTab();
   const reaching = { ...PERSONAL, github: { login: "acme-corp", active: true } };
   const cases: [TaskSummary, readonly Workspace[]][] = [
     [STRANDED, [reaching, STAGE]],
     [STRANDED, [PERSONAL]],
     [{ ...STRANDED, ownerId: CHARLES.userId }, [PERSONAL, STAGE]],
-    [{ ...STRANDED, archivedAt: 6 }, [PERSONAL, STAGE]],
   ];
   const marked = cases.map(([task, workspaces]) => {
     const tasks = tasksControl({ me: DEAN.userId, workspaces: [...workspaces] });
