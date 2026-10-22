@@ -571,6 +571,38 @@ test("while the account has the inbox-first sidebar on, the sidebar lists the In
   );
 });
 
+test("in a narrow room the inbox-first Inbox lists its items on its own page, across the screen, and the drawer keeps its Inbox row", async () => {
+  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const tasks = tasksControl({
+    page: TASKS_PAGE.HOME,
+    inboxView: { ...tasksControl().inboxView, open: true, listed: true },
+  });
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...shellProps(tasks, PANEL_TAB.TASKS, ignore, { overlay: SIDEBAR_OVERLAY.OPEN }),
+          room: SHELL_ROOM.NARROW,
+        }),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(
+    container.querySelector('aside .inbox-tasks[data-placement="sidebar"]'),
+    null,
+    "the drawer lists no Inbox",
+  );
+  assert.ok(placeRow(container, "Inbox"), "the drawer's Inbox row stands");
+  assert.ok(
+    container.querySelector('main .inbox-tasks[data-placement="page"]'),
+    "the Inbox's page lists its items",
+  );
+});
+
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {
   handState({});
   const page = mount(false);

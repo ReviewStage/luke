@@ -587,13 +587,15 @@ export function DesktopShell({
       : undefined;
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
+  // Note that a narrow room's drawer is too skinny for the list, so there the Inbox's page lists its items itself, the list and then the item each across the screen.
+  const sidebarListsInbox = inboxFirst && tasks.signedIn && room !== SHELL_ROOM.NARROW;
   // Note that the sidebar draws its list, so the list holds still while the sidebar is in sight.
   const inboxListing = useInboxListing(
     tasks,
-    inboxFirst && tasks.signedIn,
+    sidebarListsInbox,
     tasks.shown && sidebarInSight(sidebar),
   );
-  const sharedListing = inboxFirst && tasks.signedIn ? inboxListing : undefined;
+  const sharedListing = sidebarListsInbox ? inboxListing : undefined;
   useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
