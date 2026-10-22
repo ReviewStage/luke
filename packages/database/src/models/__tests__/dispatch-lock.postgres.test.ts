@@ -105,7 +105,8 @@ const untilBegan = (began: Deferred.Deferred<void>, fiber: Fiber.Fiber<unknown, 
 
 /**
  * Waits until the fiber is waiting on a lock or has already ended, read off
- * Postgres's own lock table, so the test moves on as soon as the write it
+ * Postgres's own lock table for this test's database alone (another file may
+ * be holding a waiter of its own on the same cluster), so the test moves on as soon as the write it
  * forked is either parked behind the hand-over or, where nothing parks it,
  * done; and so a write that should not wait fails rather than hangs.
  */
@@ -116,7 +117,7 @@ const parkedOrDone = (fiber: Fiber.Fiber<unknown, unknown>) =>
       if (fiber.pollUnsafe() !== undefined) return;
       const rows = yield* client<{
         readonly waiting: number;
-      }>`select count(*)::int as waiting from pg_locks where not granted`;
+      }>`select count(*)::int as waiting from pg_locks where not granted and pid in (select pid from pg_stat_activity where datname = current_database())`;
       if ((rows[0]?.waiting ?? 0) > 0) return;
       yield* Effect.yieldNow;
     }

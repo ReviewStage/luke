@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sentLineId } from "@luke/wire/host-ids";
-import { Deferred, Effect, Option, Result } from "effect";
+import { Deferred, Effect, Layer, Option, Result } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { Database } from "../../core/query.js";
@@ -99,7 +99,8 @@ if (anotherConnection !== undefined) {
               }),
             ),
           ),
-          anotherConnection(),
+          // Note that the layer is built fresh, or the memoized `Database` would run the lock on the test's own connection.
+          Layer.fresh(anotherConnection()),
         ),
       );
       await database.run(Deferred.await(locked));
