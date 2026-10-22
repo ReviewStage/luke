@@ -57,6 +57,8 @@ import {
 } from "../../testing/integration-connect.js";
 import {
   LINEAR_AND_NOTION_CONNECT,
+  LINEAR_EXPORT,
+  LINEAR_EXPORT_TEAM,
   linearServer,
   linearTokenOf,
 } from "../../testing/integration-mcp-fake.js";
@@ -641,6 +643,53 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           assert.equal(called.isError, refusedByDoor(direct), name);
         }
         yield* Effect.promise(() => client.close());
+      }),
+  );
+
+  it.effect(
+    "every tool declares the bound Claude Code takes its result whole to, and a result past it comes back cut to it, both ends kept",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* agentWithBearer;
+        yield* beginIntegrationSignIn(
+          agent.userId,
+          firstIntegrationAccount(agent.userId, "linear"),
+          `state-${agent.userId}`,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(agent.userId, "linear", `state-${agent.userId}`);
+        const heard = { calls: [], bearers: [] };
+        const fetch = yield* standingOver(
+          NO_SANDBOX,
+          Layer.merge(LINEAR_AND_NOTION_CONNECT, linearServer(linearTokenOf(agent.userId), heard)),
+        );
+        const client = yield* connected(fetch, agent.bearer);
+
+        const listed = yield* Effect.promise(() => client.listTools());
+        const exported = yield* Effect.promise(() =>
+          client.callTool({
+            name: "connection_execute",
+            arguments: {
+              connection: "linear",
+              tool: "list_issues",
+              input: { team: LINEAR_EXPORT_TEAM },
+            },
+          }),
+        );
+        yield* Effect.promise(() => client.close());
+
+        for (const tool of listed.tools) {
+          assert.equal(tool._meta?.["anthropic/maxResultSizeChars"], 200_000, tool.name);
+        }
+        assert.equal(exported.isError, false);
+        // SAFETY: the whole export is one text block (`integration-mcp-fake.ts`).
+        const [block] = exported.content as readonly { type: string; text: string }[];
+        const text = block?.text ?? "";
+        assert.equal(text.length, 200_000);
+        assert.ok(text.startsWith("FIRST issue"));
+        assert.ok(text.endsWith("issue LAST"));
+        assert.match(text, /… \d+ characters of this result were left out here …/);
+        assert.ok(LINEAR_EXPORT.length > 200_000);
       }),
   );
 

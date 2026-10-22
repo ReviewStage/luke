@@ -25,6 +25,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { LUKE_TOOL_RESULT } from "@luke/agent-runner/protocol";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@luke/wire";
@@ -180,13 +181,55 @@ interface McpToolCallResult {
   readonly isError: boolean;
 }
 
-/** A door's result as MCP's tool result: as the tool shows it (a picture as an image), else its JSON as one text block, marked an error where the door refused. */
+/** What a result cut to its bound says in the place of what it left out. */
+function cutMarker(leftOut: number): string {
+  return `\n… ${leftOut} characters of this result were left out here …\n`;
+}
+
+/** A text cut to the characters given: its first and last characters, and between them the count left out. */
+function cutText(text: string, budget: number): string {
+  const marker = cutMarker(text.length - budget);
+  const kept = Math.max(0, budget - marker.length);
+  const head = Math.ceil(kept / 2);
+  return `${text.slice(0, head)}${marker}${text.slice(text.length - (kept - head))}`;
+}
+
+/**
+ * A result's content bounded as the harness takes it whole
+ * (`LUKE_TOOL_RESULT`): its text blocks kept in order while they fit the
+ * bound together, the one that overflows cut to what is left of it, and
+ * any after it dropped; a picture kept wherever it stands, since the
+ * harness holds those to its own token bound. Note that eve's own tools
+ * bound what they answer, so a result past the bound is cut here rather
+ * than saved to a file the agent must read back.
+ */
+function boundedContent(content: readonly McpContent[]): readonly McpContent[] {
+  let left: number = LUKE_TOOL_RESULT.MAX_CHARS;
+  return content.flatMap((block): readonly McpContent[] => {
+    if (block.type !== "text") return [block];
+    if (block.text.length <= left) {
+      left -= block.text.length;
+      return [block];
+    }
+    if (left <= 0) return [];
+    const text = cutText(block.text, left);
+    left = 0;
+    return [{ type: "text", text }];
+  });
+}
+
+/** A door's result as MCP's tool result: as the tool shows it (a picture as an image), else its JSON as one text block, bounded, and marked an error where the door refused. */
 function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallResult {
   return {
-    content: tool.content?.(result) ?? [{ type: "text", text: JSON.stringify(result) }],
+    content: boundedContent(
+      tool.content?.(result) ?? [{ type: "text", text: JSON.stringify(result) }],
+    ),
     isError: refusedByDoor(result),
   };
 }
+
+/** What each listed tool declares to the harness: the most of its result Claude Code is to take whole rather than save to a file. */
+const TOOL_META = { "anthropic/maxResultSizeChars": LUKE_TOOL_RESULT.MAX_CHARS } as const;
 
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
@@ -275,6 +318,7 @@ function answerRequest(
             name,
             description: tool.description,
             inputSchema: tool.inputSchema,
+            _meta: TOOL_META,
           })),
         }),
       );

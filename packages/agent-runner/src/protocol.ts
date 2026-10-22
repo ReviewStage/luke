@@ -36,6 +36,25 @@ export const RUNNER_ENV = {
   CLAUDE_TOKEN: "CLAUDE_CODE_OAUTH_TOKEN",
 } as const;
 
+/**
+ * How much of one Luke tool's result a harness is handed whole. Claude Code
+ * saves an MCP result over 50,000 characters to a file and hands the model a
+ * pointer instead (code.claude.com/docs/en/mcp, "MCP output limits"), where
+ * eve hands its model the whole result. Luke's MCP server declares
+ * `MAX_CHARS` on each tool it lists as `_meta["anthropic/maxResultSizeChars"]`,
+ * which the pinned CLI (2.1.304) raises a tool's threshold to, up to its
+ * ceiling of 500,000, and cuts a result past it itself, as eve's own tools
+ * bound theirs (`luke-mcp/app.ts`). The runner sets the CLI's
+ * `MAX_MCP_OUTPUT_TOKENS` to `MAX_TOKENS`, the same bound counted in tokens,
+ * which a result with a picture is still held to.
+ */
+export const LUKE_TOOL_RESULT = {
+  MAX_CHARS: 200_000,
+  MAX_TOKENS: 50_000,
+  /** The CLI's variable for the token bound. */
+  TOKENS_VARIABLE: "MAX_MCP_OUTPUT_TOKENS",
+} as const;
+
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
 export const RUNNER_HARNESS = {
   CLAUDE_CODE: "claude_code",

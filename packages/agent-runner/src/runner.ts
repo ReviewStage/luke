@@ -60,6 +60,7 @@ import {
   INPUT_LINE,
   type InputLine,
   InputLineSchema,
+  LUKE_TOOL_RESULT,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
@@ -128,8 +129,13 @@ function queryOptions(
     allowDangerouslySkipPermissions: true,
     includePartialMessages: true,
     // The CLI's environment is the runner's own, less the bearer, which only
-    // the runner uses; Node leaves an undefined one unset.
-    env: { ...env, [RUNNER_ENV.BEARER]: undefined },
+    // the runner uses, and with Luke's tool results bounded as Luke bounds
+    // them (`LUKE_TOOL_RESULT`); Node leaves an undefined one unset.
+    env: {
+      ...env,
+      [RUNNER_ENV.BEARER]: undefined,
+      [LUKE_TOOL_RESULT.TOKENS_VARIABLE]: String(LUKE_TOOL_RESULT.MAX_TOKENS),
+    },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so Luke's is an
     // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`).
