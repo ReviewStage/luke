@@ -25,7 +25,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { focusRestOn } from "../testing/hint-rest.js";
+import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
@@ -836,31 +836,26 @@ function channelOf(seq: number): string | undefined {
   return chat.answer.messages.find((message) => message.seq === seq)?.channelId;
 }
 
-test("a line a chat notice wrote draws as a card from its sender, naming the channel, a task's by its glyph and name, and the message's place, its words the message's own, and Open in Chat opens the channel", () => {
+test("a line a chat notice wrote draws as its sender's bubble at the left, the line under it naming who and when, its words the message's own, and Open in Chat opens the channel", () => {
   const { container, opened } = noticeDrawn(true);
-  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
-  assert.ok(card, "the notice draws as a card");
-  assert.equal(card.dataset.messageId, "notice", "a link to the line finds its card");
+  const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.ok(bubble, "the notice draws as a bubble");
+  assert.equal(bubble.dataset.messageId, "notice", "a link to the line finds its bubble");
+  assert.ok(bubble.classList.contains("is-chat"), "it stands at the left");
   assert.equal(container.querySelector(".is-user"), null);
-  assert.match(
-    card.querySelector(".chat-notice-head [data-actor-ref]")?.textContent ?? "",
-    /Invite emails/u,
+  const meta = bubble.querySelector(".message-meta");
+  assert.match(meta?.querySelector("[data-actor-ref]")?.textContent ?? "", /Invite emails/u);
+  assert.ok(meta?.querySelector(".message-sent-at time"), "the line says when it was posted");
+  assert.equal(
+    /teammate-invitations|m 43/u.test(meta?.textContent ?? ""),
+    false,
+    "the line names no channel and no place in the chat",
   );
   assert.match(
-    card.querySelector(".chat-notice-place")?.textContent ?? "",
-    /^in teammate-invitations · m 43 · /u,
-  );
-  assert.ok(
-    card.querySelector(".chat-notice-place .chat-channel-glyph svg"),
-    "the task's channel wears its glyph",
-  );
-  assert.match(
-    card.querySelector(".chat-notice-words")?.textContent ?? "",
+    bubble.querySelector(".chat-notice-words")?.textContent ?? "",
     /^Add teammate invitations are you changing memberships columns\?/u,
   );
-  const open = [...card.querySelectorAll("button")].find(
-    (each) => each.textContent === "Open in Chat",
-  );
+  const open = bubble.querySelector<HTMLElement>('button[aria-label="Open in Chat"]');
   act(() => open?.click());
   assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: channelOf(43) }]);
 });
@@ -871,27 +866,45 @@ test("a notice a person posted names them by their own chip, which hangs their c
     parts: [{ type: "text", text: "Chat · Maria Chen in #general (m 37):\n\nMorning." }],
     metadata: { author: "human", channel: "chat", chat_seq: 37, from: "Maria Chen" },
   });
-  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
-  assert.ok(card, "the notice draws as a card");
-  const person = card.querySelector('.chat-notice-head [data-actor-ref][data-kind="person"]');
+  const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.ok(bubble, "the notice draws as a bubble");
+  const person = bubble.querySelector('.message-sender [data-actor-ref][data-kind="person"]');
   assert.match(person?.textContent ?? "", /Maria Chen/u);
 });
 
-test("where the window holds no chat, a notice's card says its sender and place from the notice alone, its own words under them, with nothing to open", () => {
+test("where the window holds no chat, a notice's bubble names its sender from the notice alone, its own words in it, with nothing to open", () => {
   const { container } = noticeDrawn(false);
-  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
-  assert.equal(card?.querySelector(".chat-notice-from")?.textContent, "Invite emails");
-  assert.equal(card?.querySelector(".chat-notice-place")?.textContent, "m 43");
+  const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.equal(bubble?.querySelector(".message-sender-words")?.textContent, "Invite emails");
   assert.equal(
-    card?.querySelector(".chat-notice-words")?.textContent?.trim(),
+    bubble?.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Are you changing memberships?",
   );
-  assert.equal(
-    [...(card?.querySelectorAll("button") ?? [])].some(
-      (each) => each.textContent === "Open in Chat",
-    ),
-    false,
-  );
+  assert.equal(bubble?.querySelector('button[aria-label="Open in Chat"]'), null);
+});
+
+/** The card Open in Chat hangs on a notice of message `seq`, once the pointer rests on it. */
+function placeCardOf(seq: number): string {
+  const { container } = noticeDrawn(true, true, {
+    ...NOTICE,
+    metadata: { author: "agent", channel: "chat", chat_seq: seq, from: "Invite emails" },
+  });
+  const open = container.querySelector('[data-chat-notice] button[aria-label="Open in Chat"]');
+  restOn(open ?? assert.fail("Open in Chat stands"));
+  return document.querySelector(".luke-tooltip-card [data-chat-notice-place]")?.textContent ?? "";
+}
+
+test("Open in Chat on a direct message hangs a card saying it is one, and who it is with", () => {
+  const card = placeCardOf(41);
+  assert.match(card, /^Direct message/u);
+  assert.equal(card.includes("Reply in a thread"), false);
+});
+
+test("Open in Chat on a thread reply hangs a card naming the channel, the thread, and its first message", () => {
+  const card = placeCardOf(44);
+  assert.match(card, /teammate-invitations/u);
+  assert.match(card, /Reply in a thread/u);
+  assert.match(card, /are you changing `?memberships`? columns\?/u);
 });
 
 test("a notice another coding agent posted names it by its own chip in the handle's place, and where the window holds no chat its words are the message alone, without the lines telling the agent how to answer", () => {
@@ -915,16 +928,16 @@ test("a notice another coding agent posted names it by its own chip in the handl
     },
   };
   const { container } = noticeDrawn(false, true, posted);
-  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
-  assert.ok(card, "the notice draws as a card");
+  const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.ok(bubble, "the notice draws as a bubble");
   assert.equal(
-    card.querySelector(".chat-notice-from"),
+    bubble.querySelector(".message-sender-words"),
     null,
     "no bare handle stands for the agent",
   );
-  assert.match(card.querySelector(".chat-notice-head")?.textContent ?? "", /Invite expiry/u);
+  assert.match(bubble.querySelector(".message-sender")?.textContent ?? "", /Invite expiry/u);
   assert.equal(
-    card.querySelector(".chat-notice-words")?.textContent?.trim(),
+    bubble.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Are you changing the memberships columns?",
   );
 });
@@ -961,13 +974,13 @@ test("an inbox answer the developer sent reads back in their bubble without the 
   assert.equal(said.includes("(key ship-it)"), false);
 });
 
-test("with Chat off, a line a chat notice wrote is drawn as the plain line it is, with no card and nothing to open", () => {
+test("with Chat off, a line a chat notice wrote is drawn as the plain line it is, with no bubble of its sender's and nothing to open", () => {
   const { container } = noticeDrawn(true, false);
   assert.equal(container.querySelector("[data-chat-notice]"), null);
   assert.match(container.textContent ?? "", /Are you changing memberships\?/u);
 });
 
-test("a notice of a message holding no Markdown, a link alone, keeps the notice's own words under its head", () => {
+test("a notice of a message holding no Markdown, a link alone, keeps the notice's own words in its bubble", () => {
   const read = fixtureChat({ fixtureMode: true }, 0);
   assert.ok(read);
   const answer = {
