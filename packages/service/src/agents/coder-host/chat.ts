@@ -36,6 +36,8 @@ import {
   listCodingAgents,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { chatNoticeKey, sentLineId } from "@luke/database/models/ids";
+import { sentLineStands } from "@luke/database/models/message-reads";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
@@ -1160,12 +1162,13 @@ function digestLine(message: ChatMessageRow, line: MessageLine): string {
  * message cut short names the read that carries it whole; a turn that
  * fails after its digest leaves what it carried to the chat's history,
  * where a read of its channel finds it. Note that
- * the message an outstanding notice told is left out, because the notice is
- * already a line of the agent's conversation. Nothing where the store
+ * a message whose notice line stands in the agent's conversation is left
+ * out, because the notice is already a line of it. Nothing where the store
  * cannot be reached, since the turn runs as well without it.
  */
 export function chatDigest(
   agent: ChatReader,
+  conversationId?: string,
 ): Effect.Effect<string | undefined, never, DatabaseServices> {
   return inTransaction(
     Effect.gen(function* () {
@@ -1173,14 +1176,22 @@ export function chatDigest(
       const found = yield* seatOf(agent);
       if (Option.isNone(found)) return undefined;
       const { organizationId, self } = found.value;
-      const noticed =
-        self.noticeSeq !== null && self.noticeSeq > self.readSeq ? self.noticeSeq : undefined;
       const read = yield* unreadFor(userId, organizationId, self.id, { limit: DIGEST_MESSAGES });
       const { messages: unread, more } = Option.getOrElse(read, () => ({
         messages: [],
         more: false,
       }));
-      const messages = unread.filter((message) => message.touchedSeq !== noticed);
+      // Note that a message steered into the conversation is left out, because its notice is already a line there.
+      const steered = yield* Effect.forEach(unread, (message) =>
+        conversationId === undefined
+          ? Effect.succeed(false)
+          : sentLineStands(
+              userId,
+              conversationId,
+              sentLineId(chatNoticeKey(message.id, message.askRevision ?? 0, self.id)),
+            ),
+      );
+      const messages = unread.filter((_, at) => steered[at] !== true);
       if (messages.length === 0 && !more) return undefined;
       const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
       const chat = yield* chatNamesOf(userId, organizationId, members.values());

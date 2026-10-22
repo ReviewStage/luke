@@ -56,9 +56,9 @@ import {
   postMessage,
   readAllTo,
   readAttachment,
+  readPast,
   readThrough,
   readTo,
-  releaseNotice,
   resolveAsk,
   roster,
   seqsOf,
@@ -865,7 +865,7 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   );
 
   it.effect(
-    "a member is told one notice until its cursor passes it, and one who left posts nothing",
+    "a member is told each newer message whether or not it read the last, never the same one twice nor one it read, and one who left posts nothing",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -874,11 +874,20 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         const told = yield* room.posted(room.first, `${agentLink(room.second)} ping.`);
         assert.equal(yield* notice(told.seq), true);
         const again = yield* room.posted(room.first, `${agentLink(room.second)} ping again.`);
-        assert.equal(yield* notice(again.seq), false);
+        assert.equal(yield* notice(again.seq), true);
+        assert.equal(yield* notice(again.seq), false, "the same message told again");
+        assert.equal(yield* notice(told.seq), false, "an older message told late");
+        const read = yield* room.posted(room.first, `${agentLink(room.second)} and now?`);
         yield* unreadFor(room.owner, room.workspace, room.second.id);
+        assert.equal(yield* notice(read.seq), false, "a message it read already");
+        const past = (seq: number) =>
+          readPast(room.owner, room.workspace, room.second.id, room.channel.id, seq);
+        assert.equal(yield* past(read.seq), true);
+        const later = yield* room.posted(room.first, "Later.");
+        assert.equal(yield* past(later.seq), false);
         assert.equal(
-          yield* notice((yield* room.posted(room.first, `${agentLink(room.second)} and now?`)).seq),
-          true,
+          yield* readPast(yield* openAccount(), room.workspace, room.second.id, room.channel.id, 1),
+          false,
         );
 
         yield* leave(room.owner, room.workspace, room.first.id);
@@ -1868,7 +1877,7 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
 
 it.layer(getTestDB())("the chat store's reads for telling a message", (it) => {
   it.effect(
-    "a thread's authors are its root's then each replier's before a place, once each; a channel reads by its id; and a notice let go lets the next be told",
+    "a thread's authors are its root's then each replier's before a place, once each, and a channel reads by its id",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -1884,20 +1893,6 @@ it.layer(getTestDB())("the chat store's reads for telling a message", (it) => {
         assert.equal(
           Option.getOrThrow(yield* channelOf(room.owner, room.workspace, room.channel.id)).id,
           room.channel.id,
-        );
-
-        assert.equal(
-          yield* markNoticed(room.owner, room.workspace, room.second.id, room.channel.id, root.seq),
-          true,
-        );
-        assert.equal(
-          yield* markNoticed(room.owner, room.workspace, room.second.id, room.channel.id, last.seq),
-          false,
-        );
-        yield* releaseNotice(room.owner, room.workspace, room.second.id, root.seq);
-        assert.equal(
-          yield* markNoticed(room.owner, room.workspace, room.second.id, room.channel.id, last.seq),
-          true,
         );
 
         const stranger = yield* openAccount();
@@ -2166,7 +2161,7 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
   );
 
   it.effect(
-    "a notice stands until its own channel is read past it: a read of another channel leaves it, a read of its channel or of every channel lets go of it",
+    "a notice moves on to each newer message in any channel, unread notice or not, and a channel read past the message takes none",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -2177,21 +2172,12 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
           unreadFor(room.teammate, room.workspace, room.grace.id, { channelId });
         const told = yield* room.posted(room.first, "Ping.");
         assert.equal(yield* notice(room.channel.id, told.seq), true);
-        yield* room.posted(room.ada, "Elsewhere.", { channelId: general.id });
-        yield* read(general.id);
-        const held = yield* room.posted(room.ada, "Again.", {
-          channelId: general.id,
-        });
-        assert.equal(yield* notice(general.id, held.seq), false);
-
-        yield* read(room.channel.id);
-        const freed = yield* room.posted(room.ada, "And now?", {
-          channelId: general.id,
-        });
-        assert.equal(yield* notice(general.id, freed.seq), true);
+        const elsewhere = yield* room.posted(room.ada, "Elsewhere.", { channelId: general.id });
+        assert.equal(yield* notice(general.id, elsewhere.seq), true);
         // A notice of a channel read past it already is no notice.
-        yield* read();
-        assert.equal(yield* notice(general.id, freed.seq), false);
+        const unread = yield* room.posted(room.ada, "And now?", { channelId: general.id });
+        yield* read(general.id);
+        assert.equal(yield* notice(general.id, unread.seq), false);
         const again = yield* room.posted(room.first, "Once more.");
         assert.equal(yield* notice(room.channel.id, again.seq), true);
       }),

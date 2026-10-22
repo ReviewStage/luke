@@ -670,11 +670,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     Effect.gen(function* () {
       // A turn opens with the chat only where the agent's starter turned Chat on.
       if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
-      return yield* chatDigest({
-        userId: admitted.target.userId,
-        taskId: agent.taskId,
-        self: { kind: MEMBER_KIND.AGENT, agentId: agent.id },
-      });
+      return yield* chatDigest(
+        {
+          userId: admitted.target.userId,
+          taskId: agent.taskId,
+          self: { kind: MEMBER_KIND.AGENT, agentId: agent.id },
+        },
+        admitted.target.conversationId,
+      );
     }).pipe(
       Effect.tapError(logStoreFailure),
       Effect.catch(() => Effect.succeed(undefined)),
