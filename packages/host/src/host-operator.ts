@@ -1351,7 +1351,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.TASKS_SKILLS,
           "planId" in params
             ? { planId: params.planId }
-            : { workspaceId: params.workspaceId, repository: params.repository },
+            : {
+                workspaceId: params.workspaceId,
+                ...(params.repository === undefined
+                  ? undefined
+                  : { repository: params.repository }),
+              },
         ),
         (answer): TasksSkillsAnswer =>
           (answer.ok

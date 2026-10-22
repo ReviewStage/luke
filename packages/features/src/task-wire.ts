@@ -1098,7 +1098,28 @@ export const TASK_SKILL_BOUNDS = {
   MAX_DESCRIPTION_CHARS: 1024,
 } as const;
 
-/** One skill of the task's repository a developer may choose by name: the name its folder carries, the description a model routes on, and its `SKILL.md`, named from the repository's root, which the File tab opens. */
+/**
+ * Where a skill the `/` list offers comes from: the task's repository, as
+ * GitHub holds it, or a skill a member installed into Luke for the whole
+ * workspace or for themselves alone (`installed-skill-wire.ts`). Where two
+ * share a name the earlier one here is offered and the later one is not,
+ * as an agent's session merges them.
+ */
+export const TASK_SKILL_SOURCE = {
+  REPOSITORY: "repository",
+  WORKSPACE: "workspace",
+  PERSONAL: "personal",
+} as const;
+
+export type TaskSkillSource = (typeof TASK_SKILL_SOURCE)[keyof typeof TASK_SKILL_SOURCE];
+
+/**
+ * One skill a developer may choose by name: the name an agent loads it by,
+ * the description a model routes on, where it comes from, and, for one of
+ * the repository's, its `SKILL.md`, named from the repository's root, which
+ * the File tab opens. An installed skill names no file, since its files are
+ * the service's rather than the repository's.
+ */
 const taskSkillSchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -1107,28 +1128,38 @@ const taskSkillSchema = EffectSchema.Struct({
   description: EffectSchema.String.check(
     EffectSchema.isMaxLength(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS),
   ),
-  path: EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
+  source: EffectSchema.Literals(Object.values(TASK_SKILL_SOURCE)),
+  path: EffectSchema.optionalKey(
+    EffectSchema.String.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
+    ),
   ),
 });
 
 /**
- * The skills a developer may choose of the task's repository as it stands
- * now on its default branch, read through the Luke GitHub App (GET
- * `/api/plans/{id}/skills`): the repository and the branch read, and the
- * skills in name order. A skill its `SKILL.md` says the model alone loads
- * is not one of them.
+ * The skills a developer may choose of a task (GET `/api/plans/{id}/skills`)
+ * or of a workspace's repository (GET `/api/github/repositories/skills`):
+ * the repository and the branch read, null where there is no repository,
+ * and the skills, the repository's as they stand now on its default branch,
+ * read through the Luke GitHub App, then the member's enabled installed
+ * skills, the workspace's and then their own, each source in name order and
+ * a name an earlier source holds left out. A skill its `SKILL.md` says the
+ * model alone loads is not one of them.
  */
 export const taskSkillsSchema = EffectSchema.Struct({
-  repository: githubRepositoryFullNameSchema,
-  branch: EffectSchema.String,
+  repository: EffectSchema.NullOr(githubRepositoryFullNameSchema),
+  branch: EffectSchema.NullOr(EffectSchema.String),
   skills: EffectSchema.Array(taskSkillSchema).check(
     EffectSchema.isMaxLength(TASK_SKILL_BOUNDS.MAX_SKILLS),
   ),
 });
 
-/** The read of the repository's skills answered: the skills, or why they are not read, in the File tab's own refusals. */
+export type TaskSkills = typeof taskSkillsSchema.Type;
+
+export type TaskSkill = TaskSkills["skills"][number];
+
+/** The read of the skills answered: the skills, or why the repository's are not read, in the File tab's own refusals. */
 export const taskSkillsAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ skills: taskSkillsSchema }),
   taskFileRefusalSchema,

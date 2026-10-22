@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
+import {
+  type InstalledSkillOwner,
+  installSkill,
+  setInstalledSkillEnabled,
+} from "@luke/database/models/installed-skill-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import {
   addWorkspaceTokenRepository,
@@ -15,6 +20,7 @@ import {
   joinWorkspace,
   openInstallationWorkspace,
   openWorkspace,
+  WORKSPACE_ROLE,
 } from "@luke/database/testing";
 import {
   accountBearer,
@@ -32,9 +38,11 @@ import {
   ISSUE_STATE,
   workspaceTokenRepositoriesAnswerSchema,
 } from "@luke/features/github-repositories-wire";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_FILE_REFUSAL,
+  TASK_SKILL_SOURCE,
   TASK_TREE_ENTRY,
   taskSkillsAnswerSchema,
   taskTreeAnswerSchema,
@@ -626,7 +634,146 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a repository's read in a workspace the account is not in is not found, and one naming no repository is invalid, before GitHub is asked",
+    "the skills a member may choose are the repository's, then the workspace's installed ones, then their own, a name an earlier source holds left out, as are an installed skill turned off or the model's alone; with no repository named, the installed ones alone",
+    () =>
+      Effect.gen(function* () {
+        const releaseSkill = "---\nname: release\ndescription: Cut a release.\n---\n# Release\n";
+        const github = githubReaching(
+          [{ id: 7651, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            const path = new URL(sent.url).pathname;
+            if (path === "/repos/acme/relay/git/trees/main%3A.agents%2Fskills") {
+              return Response.json({
+                tree: [{ path: "release", type: "tree" }],
+                truncated: false,
+              });
+            }
+            if (path === "/repos/acme/relay/contents/.agents/skills/release/SKILL.md") {
+              return Response.json({
+                type: "file",
+                size: releaseSkill.length,
+                encoding: "base64",
+                content: Buffer.from(releaseSkill).toString("base64"),
+              });
+            }
+            return undefined;
+          },
+        );
+        const { owner, other, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7651,
+          accountId: 9651,
+          accountLogin: "acme",
+        });
+        yield* joinWorkspace(workspace, other, WORKSPACE_ROLE.MEMBER);
+        const install = (
+          scope: InstalledSkillOwner,
+          name: string,
+          made: { readonly userInvocable?: boolean } = {},
+        ) =>
+          Effect.map(
+            installSkill(owner, {
+              owner: scope,
+              name,
+              description: `Installed ${name}.`,
+              userInvocable: made.userInvocable ?? true,
+              source: { type: INSTALLED_SKILL_SOURCE.TEXT },
+              files: [
+                {
+                  path: "SKILL.md",
+                  bytes: new TextEncoder().encode(
+                    `---\nname: ${name}\ndescription: Installed ${name}.\n---\n# ${name}\n`,
+                  ),
+                },
+              ],
+            }),
+            (row) => Option.getOrThrow(row).id,
+          );
+        const shared: InstalledSkillOwner = {
+          scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
+          organizationId: workspace,
+        };
+        const mine: InstalledSkillOwner = { scope: INSTALLED_SKILL_SCOPE.PERSONAL };
+        yield* install(shared, "release");
+        yield* install(shared, "triage");
+        yield* install(shared, "model-only", { userInvocable: false });
+        yield* install(mine, "triage");
+        yield* install(mine, "pr-style");
+        const off = yield* install(mine, "paused");
+        yield* setInstalledSkillEnabled(owner, off, false);
+        const skillsOf = (userId: string, repository: string | undefined) =>
+          Effect.map(
+            read(userId, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, [
+              [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+              ...(repository === undefined
+                ? []
+                : [[GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository] as const]),
+            ]),
+            (answered) => readOf(taskSkillsAnswerSchema, answered),
+          );
+
+        const withRepository = yield* skillsOf(owner, "acme/relay");
+        const withNone = yield* skillsOf(owner, undefined);
+        const teammate = yield* skillsOf(other, undefined);
+
+        assert.deepEqual(withRepository, {
+          skills: {
+            repository: "acme/relay",
+            branch: "main",
+            skills: [
+              {
+                name: "release",
+                description: "Cut a release.",
+                source: TASK_SKILL_SOURCE.REPOSITORY,
+                path: ".agents/skills/release/SKILL.md",
+              },
+              {
+                name: "triage",
+                description: "Installed triage.",
+                source: TASK_SKILL_SOURCE.WORKSPACE,
+              },
+              {
+                name: "pr-style",
+                description: "Installed pr-style.",
+                source: TASK_SKILL_SOURCE.PERSONAL,
+              },
+            ],
+          },
+        });
+        assert.deepEqual(withNone, {
+          skills: {
+            repository: null,
+            branch: null,
+            skills: [
+              {
+                name: "release",
+                description: "Installed release.",
+                source: TASK_SKILL_SOURCE.WORKSPACE,
+              },
+              {
+                name: "triage",
+                description: "Installed triage.",
+                source: TASK_SKILL_SOURCE.WORKSPACE,
+              },
+              {
+                name: "pr-style",
+                description: "Installed pr-style.",
+                source: TASK_SKILL_SOURCE.PERSONAL,
+              },
+            ],
+          },
+        });
+        assert.deepEqual(
+          "skills" in teammate ? teammate.skills.skills.map((skill) => skill.name) : teammate,
+          ["release", "triage"],
+        );
+      }),
+  );
+
+  it.effect(
+    "a repository's read in a workspace the account is not in is not found, and a tree's naming no repository is invalid, before GitHub is asked",
     () =>
       Effect.gen(function* () {
         const github = githubReaching([
@@ -652,12 +799,19 @@ it.layer(getTestDB())("the repositories route", (it) => {
             refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
             path,
           );
-          assert.deepEqual(
-            yield* read(owner, path, [[GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, mine]]),
-            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-            path,
-          );
         }
+        assert.deepEqual(
+          yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, mine],
+          ]),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, theirs],
+          ]),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
         assert.equal(github.sent.length, 0);
       }),
   );

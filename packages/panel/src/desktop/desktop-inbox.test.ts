@@ -43,7 +43,12 @@ import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
-import { TASK_STATUS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import {
+  TASK_SKILL_SOURCE,
+  TASK_STATUS,
+  TASK_TREE_ENTRY,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
@@ -4149,6 +4154,7 @@ function skillReads(): string[] {
         const release = {
           name: "release",
           description: "Use to cut a release.",
+          source: TASK_SKILL_SOURCE.REPOSITORY,
           path: ".agents/skills/release/SKILL.md",
         };
         return Promise.resolve({

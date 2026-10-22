@@ -128,7 +128,15 @@ export const githubContract = {
     .output(EffectSchema.flip(taskTreeAnswerSchema)),
   repositorySkills: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS }))
-    .input(EffectSchema.Struct(repositoryPlaceQuery))
+    .input(
+      EffectSchema.Struct({
+        [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceIdSchema,
+        /** The repository whose skills lead the list; where none is named, the member's installed skills alone are answered. */
+        [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: EffectSchema.optionalKey(
+          githubRepositoryFullNameSchema,
+        ),
+      }),
+    )
     .output(EffectSchema.flip(taskSkillsAnswerSchema)),
   repositoryPullRequest: hostedProcedure
     .meta(

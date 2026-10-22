@@ -489,8 +489,13 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
       });
     }),
     repositorySkills: signedIn.repositorySkills.effect(function* ({ context, input }) {
-      const place = yield* memberPlace(context.userId, input);
-      return yield* readWorkspaceSkills(place.workspaceId, place.repository, place.member);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* hostedStoreOrUnavailable(
+        readWorkspaceSkills(input.workspaceId, input.repository ?? null, context.userId),
+      );
     }),
     repositoryPullRequest: signedIn.repositoryPullRequest.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);

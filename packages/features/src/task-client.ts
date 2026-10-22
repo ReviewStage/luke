@@ -53,7 +53,7 @@ import {
   planCommentStartRequestSchema,
 } from "./plan-comment-wire.js";
 import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
-import { planAttachmentPath, type RepositoryPlace } from "./service-paths.js";
+import { planAttachmentPath, type RepositoryPlace, type SkillsPlace } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -649,7 +649,7 @@ export class HostedTaskClient {
 
   /** The skills a developer may choose of a repository the workspace's installation reaches, as `readSkills` reads a plan's; nothing where the service did not answer. */
   readRepositorySkills(
-    place: RepositoryPlace,
+    place: SkillsPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
     return orNothing(askHosted(this.#hosted.github.repositorySkills, { ...place }));
   }

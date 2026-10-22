@@ -50,7 +50,6 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
-import type { SkillOption } from "@luke/ui/skill-mention";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -94,6 +93,7 @@ import { LoneLinkCards } from "./lone-link-card.js";
 import { RelativeTime } from "./relative-time.js";
 import { SentWords, SkillFiles } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
+import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -316,7 +316,7 @@ export interface ChatTaskDoors {
   readonly mentions?: TaskMentionsValue | undefined;
   /** Where a person's `/skill` is read from and what opens its file, so it draws as its chip; none where the page hands its own, or the task names no repository. */
   readonly skills?:
-    | { readonly source: SkillSource; readonly onOpen: (skill: SkillOption) => void }
+    | { readonly source: SkillSource; readonly onOpen: (skill: SkillWithFile) => void }
     | undefined;
 }
 

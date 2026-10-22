@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -29,6 +30,7 @@ import type { SkillSource } from "./skill-picker.js";
 const RELEASE: SkillOption = {
   name: "release",
   description: "Use to cut a release of the relay.",
+  source: TASK_SKILL_SOURCE.REPOSITORY,
   path: ".agents/skills/release/SKILL.md",
 };
 
@@ -57,8 +59,15 @@ const ignore = () => undefined;
 const reading: SkillSource = () =>
   Promise.resolve({ skills: [RELEASE] satisfies readonly SkillOption[] });
 
+/** A skill installed for the whole workspace, which names no file of the repository's. */
+const TRIAGE: SkillOption = {
+  name: "triage",
+  description: "Use to triage a Sentry issue.",
+  source: TASK_SKILL_SOURCE.WORKSPACE,
+};
+
 /** The view drawn under the task's skills, every file it opens recorded, once the skills' read has landed. */
-async function mounted(view: ReactNode) {
+async function mounted(view: ReactNode, source: SkillSource = reading) {
   const opened: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -67,7 +76,7 @@ async function mounted(view: ReactNode) {
   await act(async () => {
     root.render(
       createElement(SkillFiles, {
-        source: reading,
+        source,
         onOpen: (skill) => opened.push(skill.path),
         children: view,
       }),
@@ -165,6 +174,29 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   );
   act(() => chip.click());
   assert.deepEqual(opened, [RELEASE.path]);
+});
+
+test("an installed skill's chip hangs a card saying where it comes from and naming no file, and a press on it opens nothing, as a repository's card says Repo", async () => {
+  const both: SkillSource = () => Promise.resolve({ skills: [RELEASE, TRIAGE] });
+  const { container, opened } = await mounted(
+    createElement(SentWords, { text: "Run /triage then /release now." }),
+    both,
+  );
+  const [triage, release] = container.querySelectorAll<HTMLButtonElement>("button[data-skill-ref]");
+  assert.ok(triage && release, "both skills are chips");
+  document.documentElement.dataset.keyboard = "true";
+  focusRestOn(triage);
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Workspace");
+  assert.equal(card?.querySelector('.luke-hover-card-row[data-look="detail"]'), null);
+  act(() => triage.click());
+  assert.deepEqual(opened, [], "an installed skill has no file to open");
+  act(() => triage.blur());
+  focusRestOn(release);
+  const repository = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(
+    -1,
+  );
+  assert.equal(repository?.querySelector(".luke-hover-card-corner")?.textContent, "Repo");
 });
 
 /** The lines a message's first paragraph is drawn on, each line's words as they read. */

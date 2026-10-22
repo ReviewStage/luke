@@ -31,6 +31,7 @@ import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
+import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -263,6 +264,7 @@ beforeEach(() => {
               {
                 name: "release",
                 description: "Cut a release.",
+                source: TASK_SKILL_SOURCE.REPOSITORY,
                 path: ".agents/skills/release/SKILL.md",
               },
             ],

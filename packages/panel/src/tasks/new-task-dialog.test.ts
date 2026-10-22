@@ -23,7 +23,12 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
-import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
+import {
+  TASK_SKILL_SOURCE,
+  TASK_STATUS,
+  TASK_TREE_ENTRY,
+  type TaskStatus,
+} from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -500,6 +505,7 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
             {
               name: "release",
               description: "Cut a release.",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
               path: ".agents/skills/release/SKILL.md",
             },
           ],
