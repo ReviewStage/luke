@@ -3,7 +3,10 @@ import {
   CODING_AGENT_BOUNDS,
   type CodingAgentAttachmentType,
 } from "@luke/features/coding-agent-wire";
-import { CONVERSATION_PICTURE_BOUNDS } from "@luke/features/conversation-picture-wire";
+import {
+  CONVERSATION_PICTURE_BOUNDS,
+  type ConversationMediaType,
+} from "@luke/features/conversation-picture-wire";
 import { INBOX_BOUNDS } from "@luke/features/inbox-wire";
 import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { sql } from "drizzle-orm";
@@ -131,8 +134,10 @@ export const attachment = pgTable(
     name: text("name"),
     /** A file's place among the files it travelled with, from zero, in the order they were attached; null for a picture. */
     position: integer("position"),
-    /** The media type the bytes were sniffed to be, or travelled as: what they are served under. */
-    contentType: text("content_type").$type<CodingAgentAttachmentType>().notNull(),
+    /** The media type the bytes were sniffed to be, or travelled as: what they are served under. A conversation's may be a WebM an agent recorded, which no other owner's is. */
+    contentType: text("content_type")
+      .$type<CodingAgentAttachmentType | ConversationMediaType>()
+      .notNull(),
     /** The hex SHA-256 of a conversation's picture's bytes, of which the conversation keeps one row; null for every other owner's. */
     sha256: text("sha256"),
     /** A conversation's picture's size in pixels, as its header states it; null for every other owner's. */

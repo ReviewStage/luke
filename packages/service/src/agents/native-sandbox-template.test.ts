@@ -368,12 +368,19 @@ it.effect(
       assert.deepEqual(yield* sweepTemplates(api, build), {
         current: TEMPLATE_STATE.READY,
         deleted: 0,
+        template: build.name,
+        listed: 2,
       });
 
       yield* TestClock.adjust(NATIVE_TEMPLATE.SWEEP_AFTER);
       const swept = yield* sweepTemplates(api, build);
 
-      assert.deepEqual(swept, { current: TEMPLATE_STATE.READY, deleted: 1 });
+      assert.deepEqual(swept, {
+        current: TEMPLATE_STATE.READY,
+        deleted: 1,
+        template: build.name,
+        listed: 2,
+      });
       assert.deepEqual(
         fake.sandboxes.filter((each) => !each.deleted).map((each) => each.name),
         [build.name],
@@ -390,7 +397,12 @@ it.effect(
 
       const swept = yield* sweepTemplates(api, build);
 
-      assert.deepEqual(swept, { current: TEMPLATE_STATE.PREPARING, deleted: 0 });
+      assert.deepEqual(swept, {
+        current: TEMPLATE_STATE.PREPARING,
+        deleted: 0,
+        template: build.name,
+        listed: 1,
+      });
       assert.equal(fake.commands.length, 1);
     }),
 );
@@ -551,6 +563,8 @@ it.effect(
       assert.deepEqual(yield* sweepTemplates(api, build), {
         current: TEMPLATE_STATE.READY,
         deleted: 0,
+        template: build.name,
+        listed: 1,
       });
       const lost = fake.snapshots[0];
       assert.ok(lost !== undefined);
