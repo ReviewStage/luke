@@ -114,6 +114,8 @@ type DatePickerClose = (typeof DATE_PICKER_CLOSE)[keyof typeof DATE_PICKER_CLOSE
 export interface DatePicked {
   readonly date: DateSpan | undefined;
   readonly zone: string;
+  /** Whether a zone other than the reader's was picked, which names the date anew even where its moment stands, as at a zone of the same offset. */
+  readonly zonePicked: boolean;
   readonly changed: boolean;
   readonly how: DatePickerClose;
 }
@@ -463,7 +465,13 @@ function DatePickerPanel({
     done.current = true;
     const at = chosenZone.current;
     const closing = wordsRead(latest.current, Date.now(), at)?.draft ?? latest.current;
-    onClose({ date: dateOfWall(closing.wall, at), zone: at, changed: closing.changed, how });
+    onClose({
+      date: dateOfWall(closing.wall, at),
+      zone: at,
+      zonePicked: at !== readerZone(),
+      changed: closing.changed,
+      how,
+    });
   };
   const leave = () => {
     if (!turning.current) finish(DATE_PICKER_CLOSE.LEAVE);

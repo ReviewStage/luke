@@ -401,6 +401,28 @@ test("Time zone keeps the time as written, read in the zone picked, and names th
   assert.equal(mention?.name, "Oct 23, 2026, 9:00 AM GMT+9");
 });
 
+test("a zone of the same offset picked names the date anew in that zone's words", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="Include time"]').click());
+  let zones = await openZones(container, dialog);
+  typeWords(zones, "Search time zones", "los angeles");
+  await pressKey(zones, "Enter");
+  await pressKey(picker(container) ?? dialog, "Escape");
+  const again = await pressChip(container);
+  act(() => control(again, 'button[role="switch"][aria-label="Include time"]').click());
+  act(() => control(again, 'button[role="switch"][aria-label="Include time"]').click());
+  zones = await openZones(container, again);
+  typeWords(zones, "Search time zones", "phoenix");
+  await pressKey(zones, "Enter");
+  await pressKey(picker(container) ?? again, "Escape");
+  const [mention] = mentionsIn(editor);
+
+  assert.equal(mention?.target, "luke://date/2026-10-23T09:00-07:00");
+  assert.equal(mention?.name, "Oct 23, 2026, 9:00 AM MST");
+});
+
 test("Escape on the zones turns back to the date, which stays open and unchanged", async () => {
   const { container, editor } = await opened();
 

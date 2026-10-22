@@ -103,7 +103,7 @@ function wordsWithDate(
   const moved =
     picked.changed &&
     date !== undefined &&
-    (date.start !== written.date.start || date.end !== written.date.end);
+    (date.start !== written.date.start || date.end !== written.date.end || picked.zonePicked);
   if (!cleared && !moved) return undefined;
   const at = link === "" ? undefined : linkIn(words, written.at, link);
   if (at === undefined) return undefined;

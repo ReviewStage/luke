@@ -1107,8 +1107,11 @@ function datePicked(
   }
   const keyed = picked.how === DATE_PICKER_CLOSE.KEY;
   const { date } = picked;
+  // Note that a zone picked names the date anew even where its moment stands, as at another zone of the same offset.
   const moved =
-    picked.changed && date !== undefined && (date.start !== was.start || date.end !== was.end);
+    picked.changed &&
+    date !== undefined &&
+    (date.start !== was.start || date.end !== was.end || picked.zonePicked);
   if (moved) node.rename(dateMentionNode(date, place, picked.zone), keyed);
   else if (keyed) node.focusAfter();
 }
