@@ -569,7 +569,7 @@ export const DELETE_WORDS = {
   refused: "The agent could not be deleted. Try again.",
 } as const;
 
-/** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked, as a task's do (`MARK_UNDOS`). */
+/** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked. */
 export function archiveWords(archived: boolean): {
   readonly done: string;
   readonly refused: string;
