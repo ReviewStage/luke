@@ -142,7 +142,10 @@ export const pullRequestMerging = /* @__PURE__ */ Effect.fn("web/pullRequestMerg
   });
 });
 
-const QUEUED_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+/** The operation's name, which tells this read apart from the merge box's own. */
+export const PULL_REQUEST_QUEUED_OPERATION = "PullRequestQueued";
+
+const QUEUED_QUERY = `query ${PULL_REQUEST_QUEUED_OPERATION}($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       mergeQueueEntry { position }
