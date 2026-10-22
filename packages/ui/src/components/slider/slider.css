@@ -1,0 +1,8 @@
+/* slider.css -- the native range input at a comfortable length, as long as
+   the room allows. */
+
+@layer components {
+  .luke-slider {
+    width: min(320px, 100%); /* off-scale: a slider's length */
+  }
+}

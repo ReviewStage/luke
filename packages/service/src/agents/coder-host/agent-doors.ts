@@ -396,7 +396,8 @@ export function runAgentChat(
           );
     const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
     const { clientKey, postsInTurn, sandbox } = call;
-    return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
+    const { conversationId } = admitted.target;
+    return yield* postAsAgent({ ...reader, conversationId, repository, telling }, call.input, {
       clientKey,
       postsInTurn,
       sandbox,

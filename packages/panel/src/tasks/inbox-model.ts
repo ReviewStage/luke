@@ -59,11 +59,12 @@ import { plainWords } from "./tool-call-model.js";
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan, under the person whose agent asks it, or in one
+ * first, under its plan, under the person it waits on, or in one
  * run with no groups, the items its tab takes: what needs the reader, what
  * is unread, every open item, or everything, each tab counting its own.
- * An item is the reader's where they started the agent that asks it,
- * or where the service does not say who did, as main counts what waits on
+ * An item is the reader's where it waits on them: they are its task's
+ * assignee, or, on a task nobody is assigned or an agent's with no task,
+ * they started the agent that asks it; or where the service does not say, as main counts what waits on
  * the account (`agent-notices.ts`), and only the reader's open items need
  * them: Needs you lists only those, though the steps through any tab keep the
  * item chosen, while a teammate's open item stands in the list as waiting
@@ -1827,14 +1828,14 @@ export interface InboxListed {
   readonly item: InboxItem;
 }
 
-/** The member who started an item's agent, as the service names them. */
-export type InboxStarter = NonNullable<InboxItem["startedBy"]>;
+/** A member an item names, as the service names them: who it waits on (`inboxWaitsOn`), or who started its agent. */
+export type InboxPerson = NonNullable<InboxItem["startedBy"]>;
 
-/** One person's items, by whoever started the agents that ask them; the reader's own where `starter` is none. */
+/** One person's items, by whoever they wait on (`inboxWaitsOn`); the reader's own where `person` is none. */
 export interface InboxPersonGroup {
   /** What the group is folded by, apart from any plan's or automation's key. */
   readonly key: string;
-  readonly starter: InboxStarter | undefined;
+  readonly person: InboxPerson | undefined;
   readonly items: readonly InboxListed[];
 }
 
@@ -1848,7 +1849,7 @@ export interface InboxStatusGroup {
 
 /**
  * The list as it is drawn: a group for each task holding an item it shows,
- * one for each person whose agents ask one, one for each status, or every
+ * one for each person items wait on, one for each status, or every
  * item in one run; and the reader it was drawn for, whose items alone need
  * them.
  */
@@ -1866,13 +1867,23 @@ export type InboxListView = { readonly readerId: string | undefined } & (
 );
 
 /**
- * Whether an item is the reader's: its agent started by them, or by nobody
- * the service names, or read before the reader's own id is known, as main
- * counts what waits on the account and as every item read before.
+ * The member an item waits on: its task's assignee, or its agent's starter
+ * where the task has nobody assigned or the agent works on no task, as the
+ * service resolves it; its starter from a service before it said; none where
+ * it names neither.
+ */
+export function inboxWaitsOn(item: InboxItem): InboxPerson | undefined {
+  return item.waitsOn ?? item.startedBy;
+}
+
+/**
+ * Whether an item is the reader's: it waits on them (`inboxWaitsOn`), or on
+ * nobody the service names, or is read before the reader's own id is known,
+ * as main counts what waits on the account and as every item read before.
  */
 export function readersItem(item: InboxItem, readerId: string | undefined): boolean {
-  const starter = item.startedBy?.userId;
-  return starter === undefined || readerId === undefined || starter === readerId;
+  const waitsOn = inboxWaitsOn(item)?.userId;
+  return waitsOn === undefined || readerId === undefined || waitsOn === readerId;
 }
 
 /**
@@ -1941,7 +1952,7 @@ export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[]
 const PERSON_KEY = { PREFIX: "person:", YOU: "person:you" } as const;
 
 /**
- * The items, in the order given, grouped by who started their agents: the
+ * The items, in the order given, grouped by who they wait on: the
  * reader's own first, then each teammate's, the one whose first item stands
  * first, each group's items in the order given.
  */
@@ -1951,18 +1962,18 @@ function personGroups(
 ): readonly InboxPersonGroup[] {
   const groups = new Map<
     string,
-    { key: string; starter: InboxStarter | undefined; items: InboxListed[] }
+    { key: string; person: InboxPerson | undefined; items: InboxListed[] }
   >();
   for (const listed of items) {
-    const starter = readersItem(listed.item, readerId) ? undefined : listed.item.startedBy;
-    const key = starter === undefined ? PERSON_KEY.YOU : `${PERSON_KEY.PREFIX}${starter.userId}`;
+    const person = readersItem(listed.item, readerId) ? undefined : inboxWaitsOn(listed.item);
+    const key = person === undefined ? PERSON_KEY.YOU : `${PERSON_KEY.PREFIX}${person.userId}`;
     const held = groups.get(key);
-    if (held === undefined) groups.set(key, { key, starter, items: [listed] });
+    if (held === undefined) groups.set(key, { key, person, items: [listed] });
     else held.items.push(listed);
   }
   // Note that the groups stand in the order their first item does, which a stable sort keeps behind the reader's own.
   return [...groups.values()].toSorted(
-    (a, b) => Number(a.starter !== undefined) - Number(b.starter !== undefined),
+    (a, b) => Number(a.person !== undefined) - Number(b.person !== undefined),
   );
 }
 
@@ -2011,7 +2022,7 @@ function statusGroups(
 /** No search: every item answers it. */
 const NO_SEARCH: readonly string[] = [];
 
-/** Whether an item is one the Whose choice lists: anyone's, the reader's own (`readersItem`), or one the teammate's agent asks. */
+/** Whether an item is one the Whose choice lists: anyone's, the reader's own (`readersItem`), or one that waits on the teammate (`inboxWaitsOn`). */
 function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefined): boolean {
   switch (whose.kind) {
     case INBOX_WHOSE.EVERYONE:
@@ -2019,14 +2030,14 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
     case INBOX_WHOSE.MINE:
       return readersItem(item, readerId);
     case INBOX_WHOSE.PERSON:
-      return item.startedBy?.userId === whose.userId;
+      return inboxWaitsOn(item)?.userId === whose.userId;
   }
 }
 
 /**
  * The list from every task's items: each item in the sort's order, the
  * latest changed first or the oldest changed first, under its plan,
- * under the person whose agent asks it, under where it stands, or in one
+ * under the person it waits on, under where it stands, or in one
  * run, the tasks and the people in the order their first item stands and
  * the statuses in theirs. The scope shown lists only the items it takes
  * (`showsItem`) of the people Whose names that its search finds (`searchedItem`), and the item chosen where one is given. Note that the rows a list draws are given

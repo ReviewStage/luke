@@ -445,11 +445,23 @@
   pointer-events: auto;
 }
 
-/* Its foot, ruled off from the switches, holds Clear as a quiet word that
-   lines up with the fields and the rows' names above it. */
+/* Its foot, ruled off from the switches across the card's whole width,
+   holds Clear as a menu's row (`@luke/ui`'s row Button): the row stands
+   out in the card's inset by its own, so its word lines up with the fields
+   and the rows' names above it, and its fill keeps a row's inset from the
+   card's edges, as a menu's pinned foot does. */
 .date-picker-foot {
-  padding-top: var(--luke-space-12);
+  margin: 0 calc(-1 * var(--luke-space-16)) calc(-1 * var(--luke-space-8));
+  padding: var(--luke-space-4) var(--luke-space-8) 0;
   border-top: 1px solid var(--luke-color-border);
+}
+
+/* The date picker's zones (`date-picker.tsx`'s Time zone) stand in the
+   room its card stood in, as wide as the card, rather than hung under a
+   field: the popover already places them. */
+.searchable-menu.date-zone-menu {
+  position: static;
+  width: auto;
 }
 
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
@@ -457,30 +469,6 @@
    its glyph keeps the rows' inset. */
 .mention-menu-crumb:not(:has(button)) {
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
-}
-
-/* The crumb's glyph stands in a row glyph's column, muted beside its words. */
-.mention-menu-crumb-glyph {
-  display: inline-flex;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.mention-menu-crumb-glyph svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-}
-
-/* A folder's path too long for the crumb is cut short. */
-.mention-menu-crumb-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mention-menu .mention-menu-foot {
@@ -763,8 +751,22 @@
   display: flex;
 }
 
-.desktop-shell[data-room="narrow"] .plan-diagram-picture {
-  cursor: zoom-in;
+/* The picture's press stands centred where the picture did. With a mouse in a
+   wide room a pointer's press opens nothing and falls through to the
+   section, so there the press wears the plain pointer and does not sink; a
+   key's press still opens it. */
+.plan-diagram > .luke-picture-tile {
+  margin-inline: auto;
+}
+
+@media (pointer: fine) {
+  .desktop-shell:not([data-room="narrow"]) .plan-diagram > .luke-picture-tile {
+    cursor: auto;
+  }
+
+  .desktop-shell:not([data-room="narrow"]) .plan-diagram .luke-picture-tile-face {
+    transform: none;
+  }
 }
 
 @media (pointer: coarse) {
@@ -930,11 +932,25 @@
     margin-block: 0 var(--luke-space-8);
   }
 
-  .transcript-message.is-user .message-content {
+  /* A chat notice, a teammate's message the chat steered into an agent's
+     turn (`chat-notice.tsx`), is the same bubble at the column's left, the
+     other side of the conversation, its line under it starting at its left
+     edge. */
+  .transcript-message.is-chat {
+    max-width: 95%;
+    margin-right: auto;
+    align-items: flex-start;
+  }
+
+  .transcript-message:is(.is-user, .is-chat) .message-content {
     width: fit-content;
     padding: var(--luke-space-8) var(--luke-space-12);
     border-radius: var(--luke-radius-14);
     background: var(--luke-color-fill-strong);
+  }
+
+  .transcript-message.is-chat .message-meta {
+    justify-content: flex-start;
   }
 
   .message-actions {
@@ -958,7 +974,11 @@
     box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
   }
 
-  .message-actions:focus-within {
+  /* An action whose hover card stands keeps the bar up while the pointer
+     crosses onto the card, off the message (`tooltip.tsx` marks it
+     described while it does). */
+  .message-actions:focus-within,
+  .message-actions:has([aria-describedby]) {
     opacity: 1;
     pointer-events: auto;
   }
@@ -1212,13 +1232,6 @@
   white-space: nowrap;
 }
 
-/* The words and when, one run of text, so the separators keep their own spaces. */
-.call-marker-text {
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-}
-
 .call-marker-words {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
@@ -1412,12 +1425,6 @@
   margin: 0;
   color: var(--luke-color-text-muted);
   white-space: nowrap;
-}
-
-.files-viewed-words {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .files-viewed[data-complete] {
@@ -2079,38 +2086,6 @@
   flex: 1;
 }
 
-.browser-view-address input {
-  width: 100%;
-  min-width: 0;
-  height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
-  padding: 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border);
-  border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
-  background: var(--luke-color-well);
-  color: var(--luke-color-text);
-  font-family: inherit;
-  font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  transition: border-color var(--duration-hover) ease;
-}
-
-/* A finger's field takes 16px words, or iOS zooms the page into it the
-   moment it is focused. */
-@media (pointer: coarse) {
-  .browser-view-address input {
-    font-size: 16px;
-  }
-}
-
-.browser-view-address input::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
-.browser-view-address input:focus {
-  border-color: var(--luke-color-text-subtle);
-  outline: none; /* no ring: its border lights */
-}
-
 .browser-view-body {
   position: relative;
   display: flex;
@@ -2249,22 +2224,6 @@
   cursor: default;
 }
 
-.diff-list-head-row {
-  display: flex;
-  box-sizing: border-box;
-  height: 36px;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: 0 var(--luke-space-12) 0 var(--luke-space-4);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-.diff-list-head:not([data-collapsed]) > .diff-list-head-row {
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
 /* The file stage-cli's keys stand on is marked as a selected card is: the
    card's own edge, Pierre's file element the header stands in, drawn in the
    selected edge's ink, around the folded header or the whole open file. It
@@ -2316,18 +2275,13 @@
 }
 
 .diff-list-folder {
-  min-width: 0;
-  overflow: hidden;
   color: var(--luke-color-text-muted);
-  text-overflow: ellipsis;
 }
 
 .diff-list-name {
   flex: none;
   max-width: 100%;
-  overflow: hidden;
   font-weight: var(--luke-weight-medium);
-  text-overflow: ellipsis;
 }
 
 /* A file's letter in its header stands on a tint of its own colour, the
@@ -2458,10 +2412,6 @@
   grid-area: 1 / 1;
   border: 0;
   background-color: var(--code-ground);
-}
-
-.image-diff-slider {
-  width: min(320px, 100%);
 }
 
 .image-diff-note {
@@ -3305,12 +3255,9 @@
 }
 
 .pull-request-section-head > .pull-request-heading {
-  min-width: 0;
   flex: 1 1 auto;
-  overflow: hidden;
   margin: 0;
   padding: 0;
-  text-overflow: ellipsis;
   transition: color var(--luke-duration-hover) ease;
 }
 
@@ -4195,13 +4142,6 @@
   white-space: nowrap;
 }
 
-.annotation-where-folder,
-.annotation-where-file {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* The folder gives way long before the file's name does. */
 .annotation-where-folder {
   flex: 0 1000 auto;
@@ -4456,12 +4396,6 @@
 
 .pull-request-pending-list > .pull-request-thread-comment:first-child {
   border-top: 0;
-}
-
-.pull-request-pending-where {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .pull-request-thread-actions-row {
@@ -4744,39 +4678,12 @@ ol.transcript-list {
   --transcript-gutter: calc(var(--luke-space-4) + 16px + var(--luke-icon-gap));
 }
 
-/* A tool call (../ai-elements/tool.tsx): one line, opening its body under
-   it, or a tab elsewhere (`.tool-opening`), in the muted ink its icon,
-   subject, and working mark keep, its label in the full ink over it; a
-   hover fill says the line opens. */
+/* A tool call (../ai-elements/tool.tsx): one line, a LineSummary opening
+   its body under it or a LineButton opening a tab elsewhere, in the muted
+   ink its icon, subject, and working mark keep, its label in the full ink
+   over it. */
 .tool {
   font-size: var(--luke-type-caption-size);
-}
-
-.tool-line {
-  display: flex;
-  height: 28px; /* off-scale: a call's line */
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding-inline: var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  cursor: pointer;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.tool-line:hover {
-  background: var(--luke-color-fill-strong);
-}
-
-/* A call whose subject opens in a tab of its own: the same line as a button
-   across the transcript's width. */
-.tool-opening {
-  width: 100%;
-  background: transparent;
-  font-size: var(--luke-type-caption-size);
-  text-align: left;
 }
 
 .tool-icon {
@@ -4839,7 +4746,7 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   background: var(--luke-color-fill-selected);
 }
 
-.tool-line button[data-tool-agent-ref]:is(:hover, :focus-visible) {
+summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   background: var(--luke-color-fill-pressed);
 }
 
@@ -5044,25 +4951,6 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   font-size: var(--luke-type-caption-size);
 }
 
-.reasoning-line {
-  display: flex;
-  height: 28px; /* off-scale: a call's line */
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding-inline: var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  cursor: pointer;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.reasoning-line:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
 .reasoning-icon {
   width: 16px;
   height: 16px;
@@ -5070,11 +4958,7 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 }
 
 .reasoning-preview {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .reasoning-label {
@@ -5121,12 +5005,8 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 }
 
 .transcript-code-language {
-  min-width: 0;
-  overflow: hidden;
   font-family: var(--luke-font-mono);
-  text-overflow: ellipsis;
   text-transform: lowercase;
-  white-space: nowrap;
 }
 
 /* A suggested change's header names it in words rather than as a language. */
@@ -5614,11 +5494,11 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 }
 
 /* A finger's press is 44px tall, so on a coarse pointer a transcript's rows
-   that open something, a call's line, the docked to-do list's head, and the
-   agent's pull request's row, stand that tall, their words still centred;
-   a mouse keeps their compact heights. */
+   that open something, the docked to-do list's head and the agent's pull
+   request's row, stand that tall, their words still centred, as a call's
+   line (a LineButton's row) does of its own; a mouse keeps their compact
+   heights. */
 @media (pointer: coarse) {
-  .tool-line,
   .todos-dock-head {
     height: auto;
     min-height: 44px;
@@ -5647,11 +5527,7 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 }
 
 .todos-dock-focus {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .todos-dock-chevron {
@@ -5899,14 +5775,11 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   top: 0;
   right: 0;
   left: 0;
-  overflow: hidden;
   padding: var(--luke-space-16) var(--luke-space-16) 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);
   pointer-events: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .agent-composer-field:has([aria-disabled="true"]) .agent-composer-placeholder {
@@ -6147,7 +6020,6 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 .reply-to-selection {
   position: fixed;
   z-index: var(--luke-z-menu);
-  padding: var(--luke-space-2);
   translate: -50% -100%;
 }
 
@@ -6577,15 +6449,6 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   padding: var(--luke-space-4);
 }
 
-.terminal-shells-none {
-  flex: 1;
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* The list's room while no read has listed the shells: the blocks standing
    for them, or the failure, with the foot kept at the list's end. */
 .terminal-shells-wait {
@@ -6681,12 +6544,6 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 .terminal-bar-busy {
   color: var(--luke-color-text-subtle);
   letter-spacing: 1px;
-}
-
-.terminal-bar-words {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .terminal-bar-end {
@@ -7033,6 +6890,12 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   --pull-request-tone: var(--luke-color-danger);
 }
 
+/* An open pull request GitHub holds in its merge queue, as its Pull request
+   tab's pill says it: in the attention tone. */
+[data-pull-request-state="queued"] {
+  --pull-request-tone: var(--luke-color-attention);
+}
+
 .pull-request-mark {
   width: 13px;
   height: 13px;
@@ -7207,13 +7070,17 @@ svg.lucide {
 }
 
 /* A subagent's row, on the Work tab and an agent's tab alike
-   (transcript-blocks.tsx): a line drawn as a call's row is (`.tool-line`),
-   in its muted ink, unboxed, the whole of it the button that opens the
-   subagent's tab, with the same hover fill and the focus ring every button
-   of ours draws. It answers its own width, so the job, the one thing naming
+   (transcript-blocks.tsx): a call's row, the whole of it the line button
+   that opens the subagent's tab, the summary that folds its task and
+   answer open, or, where it opens nothing, the same line pressed by
+   nothing. The row answers its own width, so the job, the one thing naming
    the subagent, keeps the room in a narrow column. */
-.subagent-line {
+.subagent-row {
   container: subagent-row / inline-size;
+  font-size: var(--luke-type-caption-size);
+}
+
+.subagent-line {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -7222,16 +7089,9 @@ svg.lucide {
   gap: var(--luke-icon-gap);
   padding: 0 var(--luke-space-4);
   border-radius: var(--luke-radius-6);
-  background: none;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.subagent-line:hover {
-  background: var(--luke-color-fill-strong);
 }
 
 /* The harness's mark, in the 16px seat a call's icon stands in. */
@@ -7364,16 +7224,24 @@ button.subagent-line:hover {
   overflow: clip;
 }
 
-button.picture-frame {
-  cursor: zoom-in;
-}
-
 .picture-image {
   display: block;
   max-width: 100%;
   max-height: 520px;
   height: auto;
   object-fit: contain;
+}
+
+/* A video an agent recorded and showed as a picture (`agent-pictures.tsx`):
+   played in the frame at its own shape up to the column's, no taller than a
+   picture is drawn, on black while its first frame loads. */
+.picture-video {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  width: auto;
+  height: auto;
+  background: #000;
 }
 
 .picture-caption {
@@ -7526,20 +7394,12 @@ button.picture-frame {
   gap: var(--luke-space-6);
 }
 
+/* A tile's room in the row, its shape set where it is drawn; the tile fills it. */
 .picture-set-tile {
-  position: relative;
   display: flex;
   min-width: 0;
   max-width: 100%;
   flex-direction: column;
-  gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: zoom-in;
-  font: inherit;
-  text-align: left;
 }
 
 .picture-set-frame {
@@ -7566,12 +7426,9 @@ button.picture-frame {
 }
 
 .picture-set-caption {
-  overflow: hidden;
   color: var(--luke-color-text-muted);
   font-size: 0.9em;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .picture-set-more {
@@ -7799,7 +7656,10 @@ button.picture-frame {
   line-height: 1.5;
 }
 
+/* A thread at rest is one press (`CardPress`) over its words and replies,
+   which reaches its whole card and rings it from the keyboard. */
 .comment-card[data-open="false"] {
+  position: relative;
   border-color: var(--luke-color-border);
   cursor: pointer;
 }
@@ -7873,10 +7733,6 @@ button.picture-frame {
   margin-left: var(--comment-indent);
 }
 
-.comment-entry > .comment-quote-link {
-  width: calc(100% - var(--comment-indent));
-}
-
 .comment-entry > .comment-quote {
   margin-top: var(--luke-space-4);
 }
@@ -7887,26 +7743,6 @@ button.picture-frame {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-}
-
-/* A thread at rest is one press over its words and replies. */
-.comment-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-/* The keyboard on a thread at rest rings its card, since its button may
-   hold nothing to see but its name for a screen reader. */
-.comment-card[data-open="false"]:has(> .comment-open:focus-visible) {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--luke-focus-ring-width) / -2);
 }
 
 .comment-replies {
@@ -8040,35 +7876,15 @@ button.picture-frame {
 /* The field that answers a thread, or starts one, in the composer's well. */
 .comment-field {
   --comment-field-inline: var(--luke-space-8);
+  /* The plain field's insets and height (`PlainCommentText`), the editor's below. */
+  --luke-text-area-inset-start: var(--luke-space-8);
+  --luke-text-area-inset-inline: var(--comment-field-inline);
+  --luke-text-area-inset-end: var(--luke-space-2);
+  --luke-text-area-least: 36px; /* off-scale: one line and its padding, as the editor stands */
   margin-top: var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-ground);
-}
-
-.comment-text {
-  display: block;
-  width: 100%;
-  min-height: 36px; /* off-scale: one line and its padding */
-  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  line-height: 1.45;
-  resize: none;
-}
-
-/* A finger's comment field takes 16px words, or iOS zooms the page into it
-   the moment it is focused, as it does a Browser tab's address. */
-@media (pointer: coarse) {
-  .comment-text {
-    font-size: 16px;
-  }
-}
-
-.comment-text::placeholder {
-  color: var(--luke-color-text-muted);
 }
 
 /* The agent box's editor as a comment's field, its placeholder and its
@@ -8212,23 +8028,6 @@ button.picture-frame {
   box-shadow: none;
 }
 
-/* A quote that shows its words in the plan: the quote's look, pressed. */
-.comment-quote-link {
-  width: 100%;
-  border-top: 0;
-  border-right: 0;
-  border-bottom: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.comment-quote-link:hover {
-  color: var(--luke-color-text);
-}
-
 /* A call that sent another agent words (`SentCall`): the words whole in
    the body its line folds open, set in to the line's words as a call's
    body is. */
@@ -8239,17 +8038,6 @@ button.picture-frame {
 .tool-sent-note {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-}
-
-/* Who pays for an agent, under its box (`plan-label.tsx`): "Using ChatGPT
-   plan · Manage usage", or in the attention colour why the plan cannot
-   serve it, set in from the card's edge as the box's note is. */
-.agent-composer-payer {
-  padding-left: var(--luke-space-4);
-}
-
-.agent-plan-label[data-state="attention"] {
-  color: var(--luke-color-attention);
 }
 
 /* One of an agent's log's rows (`agent-tab.tsx`, drawn only near the view

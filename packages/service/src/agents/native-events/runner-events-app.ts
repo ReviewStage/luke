@@ -1,10 +1,13 @@
 import { RUNNER_EVENT } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import {
+  type CodingAgent,
   readCodingAgentOfConversation,
   readCodingAgentRouting,
   recordCodingAgentCompaction,
   recordCodingAgentNativeSession,
+  recordCodingAgentStep,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
@@ -23,6 +26,7 @@ import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
   type ProviderKeyKind,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
@@ -46,9 +50,11 @@ import {
   parseJsonBytes,
   readBodyBytesEffect,
 } from "../../http/http-effect.js";
+import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
+import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { keepAliveDue } from "../sandbox-keep-alive.js";
@@ -90,6 +96,12 @@ import {
  * heartbeat (`@luke/agent-runner`'s `RUNNER_HEARTBEAT`), posted while its
  * harness says nothing, as it may for an hour while a background command
  * runs; it applies nothing but that.
+ *
+ * As eve's relay does (`../coder-host/host.ts`), the route also keeps what
+ * the newest model call read on the agent's row for its context ring, the
+ * batch's last such reading alone, and once a batch has started or ended a
+ * turn, asks for the agent's title where none stands yet
+ * (`../coder-host/title.ts`), which names its untitled task with it.
  */
 
 /** The path a runner posts its events to. */
@@ -128,7 +140,12 @@ interface Applying {
   readonly read: NativeReader;
   /** Who pays for the agent, as recorded as it started; none for an agent from before payers. */
   readonly payer: CodingAgentPayer | undefined;
+  /** The plan or prompt the agent was handed first, whose share of its context the ring estimates. */
+  readonly brief: string;
 }
+
+/** The asks a call made, bound to the native turn that took each one's line. */
+const ASKS = askRecord();
 
 /** The row each plan is kept in, which a turn's word on the plan is written to; a key's payer has none. */
 const PLAN_ROW: Partial<
@@ -146,6 +163,14 @@ const PLAN_ROW: Partial<
     kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
   },
 };
+
+/** The API key row of the agent's model's provider, which pays for an agent on its starter's key. */
+function apiKeyRowOf(
+  model: string,
+): { readonly provider: ProviderKeyProvider; readonly kind: ProviderKeyKind } | undefined {
+  const provider = providerModelOf(model)?.provider;
+  return provider === undefined ? undefined : { provider, kind: PROVIDER_KEY_KIND.API_KEY };
+}
 
 /** What one post applied: how many events, and the number of the last event the conversation has applied. */
 interface Applied {
@@ -167,7 +192,7 @@ export interface RunnerEnded {
 }
 
 /** What the route reads a batch with and tells of a launch's end. */
-export interface RunnerEventsOptions {
+export interface RunnerEventsOptions<R = never> {
   /** How every conversation's messages are read; by the harness each conversation runs on where left out. */
   readonly read?: NativeReader;
   /**
@@ -181,6 +206,15 @@ export interface RunnerEventsOptions {
    * the run's sandbox kept alive (`sandboxKeptAlive`). Nothing where left out.
    */
   readonly alive?: (alive: RunnerAlive) => Effect.Effect<void, never, DatabaseServices>;
+  /**
+   * Told once a batch that started or ended a turn has landed, after its
+   * transaction: the agent's title asked for where none stands
+   * (`titleNativeAgent`). Nothing where left out.
+   */
+  readonly title?: (
+    target: ConversationTarget,
+    agent: CodingAgent,
+  ) => Effect.Effect<void, never, DatabaseServices | R>;
 }
 
 /**
@@ -296,9 +330,20 @@ function landWrite(
         (result) => reportRefused("a turn's queueing", result),
       );
     case NATIVE_WRITE.TAKE_LINE:
+      // A typed line awaits its turn as a row; a call's ask has none and is bound by its delivery,
+      // the line's id the ask named (`brain-host/brain-ask.ts`), so the call follows the turn.
       return Effect.flatMap(
-        writer.takeAwaitingLine(target, { clientId: write.clientId, turnId: write.turnId }),
-        (result) => reportRefused("a line's taking", result),
+        ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
+        (bound) =>
+          bound.length > 0
+            ? // The call's own rows, written before its line was taken, go into the turn too.
+              Effect.flatMap(writer.attachAskLines(target, write.turnId), (attached) =>
+                reportRefused("a call's lines' attaching", attached),
+              )
+            : Effect.flatMap(
+                writer.takeAwaitingLine(target, { clientId: write.clientId, turnId: write.turnId }),
+                (result) => reportRefused("a line's taking", result),
+              ),
       );
     case NATIVE_WRITE.SESSION:
       return Effect.asVoid(
@@ -306,14 +351,32 @@ function landWrite(
       );
     case NATIVE_WRITE.COMPACTED:
       return recordCodingAgentCompaction(target.userId, applying.agentId, new Date(now));
+    case NATIVE_WRITE.CONTEXT:
+      // Note that the harness's own instructions and tools are no text Luke composed, so they are
+      // told as the conversation's share rather than estimated, and the brief alone is estimated.
+      return recordCodingAgentStep(target.userId, applying.agentId, {
+        ...write.usage,
+        systemPromptTokens: 0,
+        toolDefinitionTokens: 0,
+        briefTokens: estimatedTokens(JSON.stringify(applying.brief)),
+        at: now,
+      });
     case NATIVE_WRITE.WAKEUPS:
       return replaceCodingAgentWakeups(
         applying.agentId,
         write.wakeups.map(({ at, prompt }) => ({ at: new Date(at), prompt })),
       );
     case NATIVE_WRITE.PLAN_STATUS: {
-      // Note that the plan's row is the starter's, whose plan pays, and an agent a key pays for writes none.
-      const row = applying.payer === undefined ? undefined : PLAN_ROW[applying.payer];
+      // Note that the row is the starter's credential that pays: its plan's, or, for an agent its API key
+      // pays for, that key's, which a refusal marks invalid as eve's step does; a plan's limit is no key's.
+      const row =
+        applying.payer === CODING_AGENT_PAYER.API_KEY
+          ? write.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
+            ? undefined
+            : apiKeyRowOf(applying.model)
+          : applying.payer === undefined
+            ? undefined
+            : PLAN_ROW[applying.payer];
       if (row === undefined) return Effect.void;
       return setPlanStatus(
         target.userId,
@@ -336,7 +399,10 @@ function landWrite(
 function landWrites(applying: Applying, writes: readonly NativeWrite[], now: number) {
   return Effect.gen(function* () {
     let events: BrainRunEvent[] = [];
-    for (const write of writes) {
+    // Only the newest reading of the context stands, so one batch writes it once.
+    const lastContext = writes.findLastIndex((write) => write.kind === NATIVE_WRITE.CONTEXT);
+    for (const [index, write] of writes.entries()) {
+      if (write.kind === NATIVE_WRITE.CONTEXT && index !== lastContext) continue;
       if (write.kind === NATIVE_WRITE.EVENT) {
         events.push(write.event);
         continue;
@@ -412,15 +478,14 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
 }
 
 /** POST: one batch of a runner's events, admitted by its bearer and applied once. */
-const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* (
-  read: NativeReader | undefined,
-  ended: RunnerEventsOptions["ended"],
-  alive: RunnerEventsOptions["alive"],
+const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* <R>(
+  options: RunnerEventsOptions<R>,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices
+  HttpServerRequest.HttpServerRequest | DatabaseServices | R
 > {
+  const { read, ended, alive, title } = options;
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
@@ -454,6 +519,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     writer,
     read: reader,
     payer: Option.getOrUndefined(routing)?.payer ?? undefined,
+    brief: agent.value.prompt ?? agent.value.planSnapshot ?? "",
   };
   const applied = yield* hostedStoreOrUnavailable(
     withNativeProjection(target, runnerTokenDigest(bearer), (held) =>
@@ -471,6 +537,10 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   if (taskId !== null && applied.value.turns.ended) {
     yield* settleTaskIfFinished(target.userId, taskId);
   }
+  // Note that the title is awaited rather than forked, because the function instance ends with the answer.
+  if (title !== undefined && (applied.value.turns.started || applied.value.turns.ended)) {
+    yield* title(target, agent.value);
+  }
   if (alive !== undefined && applied.value.keepsAlive) {
     yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
   }
@@ -483,8 +553,10 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
 });
 
 /** The group: the one events path, read as the conversation's harness's unless told otherwise, and the hosted vocabulary's own refusal for any other. */
-export function runnerEventsApp(options: RunnerEventsOptions = {}): WebRoutes<DatabaseServices> {
-  const endpoint = runnerEventsEndpoint(options.read, options.ended, options.alive);
+export function runnerEventsApp<R = never>(
+  options: RunnerEventsOptions<R> = {},
+): WebRoutes<DatabaseServices | R> {
+  const endpoint = runnerEventsEndpoint(options);
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, RUNNER_EVENTS_PATH, hostedRefusing(endpoint)),
     hostedNotFoundRoute,

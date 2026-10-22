@@ -118,9 +118,6 @@
      two reasons — a capture must land on one frame, and reduced motion asked
      for stillness. */
   --loop-motion: running;
-  /* How a scroller the app moves itself, a tab strip bringing a tab into
-     view, gets there: a glide, held still where the durations are. */
-  --scroll-glide: smooth;
   /* A comment's anchored words (`tasks/plan-comments.tsx`): a wash under
      the words and an edge beneath them, both stronger while their thread is
      open or the pointer is on them, in an amber that is neither the blue of
@@ -316,6 +313,12 @@ body,
 .luke-face {
   width: 18px;
   height: 18px;
+}
+
+/* A face handed to an auth card as its mark takes the artwork's size. */
+.luke-auth-mark .luke-face {
+  width: 52px;
+  height: 52px;
 }
 
 /* The wait's three dots, one drawing wherever a run of Luke's is still going:
@@ -563,7 +566,7 @@ body,
 
 /* The mark an agent at work wears (`working-mark.tsx`): two pixels and their
    fainter tails lapping a faint track, in the ink around it. Its size is
-   fixed and set past a slot's own `svg` rule (`.tab-icon svg`), by the
+   fixed and set past a slot's own `svg` rule (`.luke-tab-icon svg`), by the
    `viewBox` the mark always carries, so no slot ever stretches the grid and
    its cells and gaps stay whole pixels. Each pixel steps a cell, 4px, on one
    200ms beat, lapping the eight cells in 1.6s. An endless motion
@@ -636,20 +639,6 @@ svg.working-mark[viewBox] {
 
 /* Session primitives ----------------------------------------------------- */
 
-/* Read by assistive tech and drawn nowhere: the rows carry state in colour and
-   glyphs, and this is how the words behind them stay spoken. */
-.visually-hidden {
-  position: absolute;
-  overflow: hidden;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,
    so without this a capture could land mid-transition and the PNGs would stop
    being reproducible.
@@ -675,7 +664,6 @@ body:has(.app-stage[data-capture="true"]) {
      first frame, he is the same face in every PNG. The working rows' spinners
      hold still for exactly the same reason. */
   --loop-motion: paused;
-  --scroll-glide: auto;
   /* The shared components' own names for the same motion (`@luke/ui`'s
      tokens), held still with the rest. */
   --luke-duration-exit: 0s;
@@ -686,6 +674,7 @@ body:has(.app-stage[data-capture="true"]) {
   --luke-hint-delay: 0s;
   --luke-loop-motion: paused;
   --luke-face-motion: paused;
+  --luke-scroll-glide: auto;
 }
 
 /* Reduced motion is answered at the tokens rather than element by element: a
@@ -709,6 +698,5 @@ body:has(.app-stage[data-capture="true"]) {
        face's own token, `--luke-face-motion`, is `@luke/ui`'s, which pauses
        it here too.) */
     --loop-motion: paused;
-    --scroll-glide: auto;
   }
 }

@@ -3,7 +3,7 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, ErrorState, FormField, TextField } from "@luke/ui";
+import { BUTTON_VARIANT, ErrorState, FormField, TextField, useFilePicker } from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -352,7 +352,6 @@ export function useEditorPictures(
   const [drawn, setDrawn] = useState<readonly DrawnPicture[]>([]);
   const [uploads, setUploads] = useState<ReadonlyMap<string, Upload>>(new Map());
   const counted = useRef(0);
-  const chooser = useRef<HTMLInputElement>(null);
   const settled = useCallback(
     (upload: string, next: Upload | undefined) =>
       setUploads((was) => {
@@ -446,10 +445,12 @@ export function useEditorPictures(
       },
     };
   }
-  useAppCommand(
-    APP_COMMAND.INSERT_PICTURE,
-    workspace === undefined ? undefined : () => chooser.current?.click(),
-  );
+  const chooser = useFilePicker({
+    accept: CHOSEN_TYPES,
+    multiple: true,
+    onFiles: (files) => handle.current?.insertPictures([...files]),
+  });
+  useAppCommand(APP_COMMAND.INSERT_PICTURE, workspace === undefined ? undefined : chooser.open);
   const portals = drawn.map((each) =>
     createPortal(
       each.picture.upload === "" ? (
@@ -480,18 +481,7 @@ export function useEditorPictures(
     drawn: (
       <>
         {portals}
-        <input
-          ref={chooser}
-          type="file"
-          accept={CHOSEN_TYPES}
-          multiple
-          hidden
-          onChange={(event) => {
-            const files = [...(event.currentTarget.files ?? [])];
-            event.currentTarget.value = "";
-            handle.current?.insertPictures(files);
-          }}
-        />
+        {chooser.input}
       </>
     ),
   };

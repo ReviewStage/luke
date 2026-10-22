@@ -11,8 +11,6 @@ import { Context, Data, Duration, Effect, Exit, Layer, Option, Result, Schema } 
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import { HostedEnvironment } from "../environment.js";
-import { checkFastAccess } from "./provider-key-check.js";
 
 /**
  * model-catalog.ts -- the models a coding agent may run on, read from AI Gateway's public catalog.
@@ -31,16 +29,14 @@ import { checkFastAccess } from "./provider-key-check.js";
  * `MODEL_CATALOG_TTL`, a failed read for no time at all, so an outage at the
  * catalog is retried on the next request rather than remembered.
  *
- * Model calls themselves go straight to each provider on Luke's own keys,
- * never through AI Gateway, so `providerModelOf` is the one translation
+ * Model calls themselves go straight to each provider on the account's own
+ * keys, never through AI Gateway, so `providerModelOf` is the one translation
  * from a catalog id to the id the provider's own API takes. A fast slug is
  * AI Gateway's own name and no provider's: the provider is asked for the
  * base model with its fast option on. Nothing here
  * knows which account asked: the catalog is public and the same for every
- * caller, and so is the one thing kept beside it, whether Luke's own
- * Anthropic key may run fast mode (`provider-key-check.ts`), asked once
- * per instance for the same TTL. What an account is offered of the catalog
- * is `offeredToAccount`, by whether the key its steps run on may.
+ * caller. What an account is offered of the catalog is `offeredToAccount`,
+ * by whether the key its steps run on may run fast mode.
  */
 
 const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
@@ -152,8 +148,6 @@ export class ModelCatalog extends Context.Service<
   ModelCatalog,
   {
     readonly read: Effect.Effect<readonly OfferedModel[], ModelCatalogUnavailable>;
-    /** Whether Luke's own Anthropic key may run fast mode, as the instance last asked; nothing where it holds no key or the answer said neither. */
-    readonly lukeFastAccess: Effect.Effect<FastAccess | undefined>;
   }
 >()("ModelCatalog") {}
 
@@ -370,41 +364,23 @@ const fetchOfferedModels = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The catalog as this instance's one cached read over the ambient client. A
  * success stands for the TTL; a failure stands for no time, so the next
- * request asks again rather than answering the outage for an hour. Luke's
- * own key's fast access is asked on first use and kept for the same TTL,
- * an answer that said neither too, since the check spends on Luke's key.
+ * request asks again rather than answering the outage for an hour.
  */
-export const modelCatalogLayer: Layer.Layer<
-  ModelCatalog,
-  never,
-  HttpClient.HttpClient | HostedEnvironment
-> = Layer.effect(
-  ModelCatalog,
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    const { anthropicKey } = yield* HostedEnvironment;
-    const read = yield* Effect.cachedWithTTL(fetchOfferedModels(client), (exit) =>
-      Exit.isSuccess(exit) ? MODEL_CATALOG_TTL : Duration.zero,
-    );
-    const lukeFastAccess = yield* Effect.cachedWithTTL(
-      anthropicKey === undefined
-        ? Effect.succeed(undefined)
-        : checkFastAccess(anthropicKey).pipe(Effect.provideService(HttpClient.HttpClient, client)),
-      MODEL_CATALOG_TTL,
-    );
-    return { read, lukeFastAccess };
-  }),
-);
+export const modelCatalogLayer: Layer.Layer<ModelCatalog, never, HttpClient.HttpClient> =
+  Layer.effect(
+    ModelCatalog,
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      const read = yield* Effect.cachedWithTTL(fetchOfferedModels(client), (exit) =>
+        Exit.isSuccess(exit) ? MODEL_CATALOG_TTL : Duration.zero,
+      );
+      return { read };
+    }),
+  );
 
-/** A catalog of exactly these models, and Luke's key's fast access as given, for a test or a caller that already holds one. */
-export function modelCatalogOf(
-  models: readonly OfferedModel[],
-  lukeFastAccess?: FastAccess,
-): Layer.Layer<ModelCatalog> {
-  return Layer.succeed(ModelCatalog, {
-    read: Effect.succeed(models),
-    lukeFastAccess: Effect.succeed(lukeFastAccess),
-  });
+/** A catalog of exactly these models, for a test or a caller that already holds one. */
+export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<ModelCatalog> {
+  return Layer.succeed(ModelCatalog, { read: Effect.succeed(models) });
 }
 
 // ------------------------------------------------------------- the checks

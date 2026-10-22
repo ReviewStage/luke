@@ -1,0 +1,57 @@
+/* bar-item.css -- BarItem: a place in a phone's bar, its glyph over its name. */
+
+@layer components {
+  .luke-bar-item {
+    display: flex;
+    min-height: var(--luke-space-48);
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-2);
+    border: 0;
+    background: none;
+    color: var(--luke-color-text-muted);
+    font: inherit;
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .luke-bar-item[aria-current="page"] {
+    color: var(--luke-color-accent-text);
+  }
+
+  .luke-bar-item-icon {
+    position: relative;
+    display: flex;
+  }
+
+  .luke-bar-item-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* What waits on the reader, as a badge on the glyph's top corner: a
+     NavItem's accent count turned inside out, its figures in the ground on
+     the accent's ink, so it holds the contrast that count holds, in even
+     figures, growing away from the glyph as it lengthens. A ring of the
+     ground the bar stands on parts it from the glyph's strokes. */
+  .luke-bar-item-count {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-4));
+    left: calc(100% - var(--luke-space-8));
+    min-width: var(--luke-type-caption-leading);
+    height: var(--luke-type-caption-leading);
+    padding: 0 var(--luke-space-4);
+    border-radius: var(--luke-radius-full);
+    box-shadow: 0 0 0 var(--luke-space-2) var(--luke-color-ground);
+    background: var(--luke-color-accent-text);
+    color: var(--luke-color-ink-inverse);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-semibold);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+}

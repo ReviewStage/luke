@@ -1,3 +1,4 @@
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import {
   type ReactNode,
   type RefObject,
@@ -233,9 +234,15 @@ export function ComposerField({
   return (
     <div ref={roomHost} className="agent-composer-field">
       {draft === "" ? (
-        <span className="agent-composer-placeholder" aria-hidden="true">
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="agent-composer-placeholder"
+          aria-hidden="true"
+        >
           {placeholder}
-        </span>
+        </Text>
       ) : null}
       {module === undefined ? <div className={FIELD_CLASS} aria-busy="true" /> : <div ref={host} />}
       {chips.map((each) =>

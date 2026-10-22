@@ -4,7 +4,7 @@ import {
   PROVIDER_KEY_UNREADABLE,
   type ProviderKeyUnreadable,
 } from "@luke/database/models/provider-key-seal";
-import { MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
   type FastAccess,
@@ -24,12 +24,11 @@ import {
   type ProviderModel,
   providerModelOf,
 } from "../../providers/model-catalog.js";
-import { type MeterSeams, meteredModel } from "../agent-runtime/meter.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import { pictureBudgetMiddleware } from "./picture-budget.js";
 
 /**
- * model.ts -- the model one step of a coding agent runs on, reached at its provider directly on Luke's own key.
+ * model.ts -- the model one step of a coding agent runs on, reached at its provider directly on the account's own key.
  *
  * The agent's row names a catalog id and an effort; the step is told the
  * provider's own model and the provider's own word for the effort, since
@@ -52,13 +51,13 @@ import { pictureBudgetMiddleware } from "./picture-budget.js";
  * account's own key, what the fast call showed of its organization is
  * written on the key's row, which the catalog then offers by. The agent's
  * title is one small call beside the steps, on a fixed cheap model at the
- * same provider door, always on Luke's own Anthropic key. A key is
+ * same provider door, on the account's own key (`account-keys.ts`'s
+ * `ownKeyOf`). A key is
  * revealed here alone, into the SDK client that puts it on its requests.
  *
- * A step runs on the account's own key for its provider where the account
- * saved one, and on Luke's only where it saved none: an account's key that
- * cannot be read refuses the step rather than run it on Luke's, so nothing
- * the account meant to pay for is quietly billed to Luke. A step on the
+ * A step runs on the account's own key for its provider, and never on
+ * Luke's: an account that saved none for the provider, or whose key cannot
+ * be read, has the step refused, so nothing is quietly billed to Luke. A step on the
  * account's key reports how the provider answered it, so its row reads
  * invalid when the provider refuses the key, quota exceeded when it refuses
  * the work for the key's billing, and verified again once a step goes
@@ -69,8 +68,11 @@ import { pictureBudgetMiddleware } from "./picture-budget.js";
  * (`picture-budget.ts`), whichever key it runs on.
  */
 
-/** The one model an agent's title is generated on: the cheapest that names a task well, at Anthropic's own id. */
-const AGENT_TITLE_MODEL_ID = "claude-haiku-5-5";
+/** The one model an agent's title is generated on at each provider: the cheapest that names a task well, at the provider's own id. */
+const AGENT_TITLE_MODEL_ID = {
+  [MODEL_PROVIDER.ANTHROPIC]: "claude-haiku-5-5",
+  [MODEL_PROVIDER.OPENAI]: "gpt-6-luna",
+} as const;
 
 /** How much of its reasoning an OpenAI step is asked to summarise: `auto` lets the model choose how much to say. */
 const OPENAI_REASONING_SUMMARY = "auto";
@@ -114,12 +116,6 @@ type ModelCallOptions = Parameters<
   NonNullable<LanguageModelMiddleware["wrapGenerate"]>
 >[0]["params"];
 
-/** Luke's own keys, sealed; one absent is that provider's agents refused at their first step where the account holds none of its own. */
-export interface LukeKeys {
-  readonly anthropic: Redacted.Redacted | undefined;
-  readonly openAi: Redacted.Redacted | undefined;
-}
-
 /** The account's own key as a step finds it: what its row says now, and where a change is reported. */
 interface AccountKeyStanding {
   readonly status: ProviderKeyStatus;
@@ -131,17 +127,21 @@ interface AccountKeyStanding {
   readonly reportFast?: (access: FastAccess) => Promise<void>;
 }
 
-/** The key one provider's steps run on, and, where it is the account's own, its standing. */
+/** One provider's API key the account saved, opened, for a call beside its agents (`account-keys.ts`'s `ownKeyOf`). */
+export interface OwnKey {
+  readonly provider: ModelProvider;
+  readonly key: Redacted.Redacted;
+}
+
+/** The key one provider's steps run on, and its standing on the account's row. */
 export interface ProviderKey {
   readonly key: Redacted.Redacted;
   readonly account?: AccountKeyStanding;
-  /** The account's meter, which Luke's own key carries and the account's never does (`../agent-runtime/meter.ts`). */
-  readonly meter?: MeterSeams;
 }
 
 /**
- * The key each provider's steps run on for one account: its own, Luke's,
- * its own that cannot be read, or none. `fetch` is the provider's HTTP door,
+ * The key each provider's steps run on for one account: its own, its own
+ * that cannot be read, or none. `fetch` is the provider's HTTP door,
  * the platform's own where absent.
  */
 export interface ProviderKeys {
@@ -157,7 +157,7 @@ export interface CoderModelSelection {
   readonly modelOptions: AgentModelOptionsDefinition;
 }
 
-/** A selection reached at a provider's door, whose model is the SDK's own object and so can be wrapped further, as the brain's meter wraps it. */
+/** A selection reached at a provider's door, whose model is the SDK's own object and so can be wrapped further, as a caller's middleware may wrap it. */
 export interface ProviderModelSelection extends CoderModelSelection {
   readonly model: Exclude<LanguageModel, string>;
 }
@@ -255,7 +255,7 @@ function atStandardSpeed(params: ModelCallOptions): ModelCallOptions {
  * answers. Note that the standard call is made at once rather than left to
  * the SDK's retries, because a fast limit of 0 answers every retry the same,
  * and that the call is made again under this middleware rather than around
- * it, so the meter in front counts the step once. A standard call that fails
+ * it, so a middleware in front sees the step once. A standard call that fails
  * fails the step as any call would. The prompt cache is keyed by speed, so
  * the standard call reads none of what the fast calls before it cached.
  * What the fast call showed of the key's organization is handed to
@@ -297,7 +297,7 @@ function fastFallbackMiddleware(
   };
 }
 
-/** Where what a fast call showed is written: the account's own key's row where it changes what the row says; nowhere on Luke's key, which the catalog asks of itself. */
+/** Where what a fast call showed is written: the account's own key's row where it changes what the row says. */
 function fastAccessReport(
   standing: AccountKeyStanding | undefined,
 ): (access: FastAccess) => Promise<void> {
@@ -310,8 +310,7 @@ function fastAccessReport(
 /**
  * The provider's model on the key: its pictures held to the budget,
  * falling back from a refused fast call where the step is a fast version,
- * behind the account's middleware where the key is the account's own, and
- * the meter where it is Luke's.
+ * and behind the account's middleware where the key carries its standing.
  */
 function modelOnKey(
   named: ProviderModel,
@@ -335,25 +334,21 @@ function modelOnKey(
         middleware: fastFallbackMiddleware(onFastRefused, fastAccessReport(key.account)),
       })
     : provided;
-  if (key.account === undefined) {
-    return key.meter === undefined ? model : meteredModel(model, key.meter);
-  }
+  if (key.account === undefined) return model;
   return wrapLanguageModel({ model, middleware: accountKeyMiddleware(key.account) });
 }
 
-/** The model an agent's title is generated on, on Luke's key behind the account's meter, or nothing where the deployment holds no Anthropic key, which leaves agents untitled. */
-export function titleModel(
-  keys: LukeKeys,
-  meter: MeterSeams,
-  fetch?: typeof globalThis.fetch,
-): LanguageModel | undefined {
-  if (keys.anthropic === undefined) return undefined;
+/** The model an agent's title is generated on: its provider's cheap title model, on the account's own key for that provider. */
+export function titleModel(own: OwnKey, fetch?: typeof globalThis.fetch): LanguageModel {
   // The key is revealed here alone, into the SDK client that puts it on its requests.
   const settings = {
-    apiKey: Redacted.value(keys.anthropic),
+    apiKey: Redacted.value(own.key),
     ...(fetch === undefined ? undefined : { fetch }),
   };
-  return meteredModel(createAnthropic(settings)(AGENT_TITLE_MODEL_ID), meter);
+  const modelId = AGENT_TITLE_MODEL_ID[own.provider];
+  return own.provider === MODEL_PROVIDER.ANTHROPIC
+    ? createAnthropic(settings)(modelId)
+    : createOpenAI(settings).responses(modelId);
 }
 
 /**

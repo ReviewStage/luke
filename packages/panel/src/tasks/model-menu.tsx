@@ -15,6 +15,7 @@ import {
   FAST_WORD,
   fastRestingNote,
   longWindowNote,
+  MODEL_NOT_CONNECTED,
   type ModelChoiceRead,
   modelLabel,
   offeredModels,
@@ -66,7 +67,9 @@ const FOOT_ROW = {
  * The menu's rows: each base model under the mark of the harness that runs
  * it, found by its name, its catalog name, or its provider, so "claude"
  * still finds the names that no longer say it; the chosen one says its
- * effort, and its window where standard, after its name. Before a search only the newest of each family
+ * effort, and its window where standard, after its name. A model whose
+ * provider no credential of the account's pays for is drawn disabled, so a
+ * Start never fails late on it. Before a search only the newest of each family
  * and the chosen one are listed (`unsearchedModels`).
  */
 function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefined): MenuRow[] {
@@ -82,6 +85,7 @@ function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefi
         ? choiceWords(chosen, models).detail
         : undefined,
     searchOnly: !unsearched.has(model.id),
+    ...(model.credentialMissing === true ? { disabled: MODEL_NOT_CONNECTED } : undefined),
   }));
 }
 
@@ -121,6 +125,8 @@ export function ModelMenu(props: {
   offersFast?: boolean | undefined;
   /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on the Start button's. */
   footNote?: string | undefined;
+  /** One muted line under that: the plan that pays and where to manage it, on a ChatGPT-paid agent's chip; nothing elsewhere. */
+  planNote?: React.ReactNode;
   /** The menu is on its way out (`SearchableMenu`'s). */
   leaving?: boolean | undefined;
   /** Hands the menu's element to the hold its owner draws it through its exit with. */
@@ -249,6 +255,7 @@ export function ModelMenu(props: {
       onLeave={props.onLeave}
       foot={foot}
       footNote={props.footNote}
+      planNote={props.planNote}
       leaving={props.leaving}
       ref={props.ref}
     />

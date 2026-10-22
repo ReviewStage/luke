@@ -208,7 +208,7 @@ export function TaskIssueLinks({
             {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip
               trigger={LINKS_WORDS.LINK}
-              align={PICKER_ALIGN.AUTO}
+              align={PICKER_ALIGN.START}
               linearIn={linearIn}
               githubIn={githubIn}
               workspaceId={workspaceId}

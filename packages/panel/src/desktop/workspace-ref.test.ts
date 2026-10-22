@@ -60,7 +60,8 @@ test("a workspace is named by its letter and its name", () => {
       size: WORKSPACE_REF_SIZE.ROW,
     }),
   );
-  const tile = view.querySelector(".workspace-tile") ?? assert.fail("the ref draws the tile");
+  const tile =
+    view.querySelector(".luke-avatar[data-shape='tile']") ?? assert.fail("the ref draws the tile");
 
   assert.equal(tile.textContent, "S");
   assert.equal(heard(view), "Stage");
@@ -77,7 +78,7 @@ test("a workspace with a photo is named by the photo once it loads, and the name
   act(() => image.dispatchEvent(new Event("load")));
 
   assert.equal(image.getAttribute("src"), `data:image/png;base64,${PHOTO.base64}`);
-  assert.equal(view.querySelector(".workspace-tile")?.textContent, "");
+  assert.equal(view.querySelector(".luke-avatar[data-shape='tile']")?.textContent, "");
   assert.equal(heard(view), "Stage");
 });
 

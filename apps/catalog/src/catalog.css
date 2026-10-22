@@ -374,6 +374,14 @@ body {
   width: 160px;
 }
 
+/* A transcript's column, as wide as a narrow panel's, which a line spans. */
+.catalog-transcript {
+  width: 360px;
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
 /* A card in a column narrower than its words. */
 .catalog-card-narrow {
   width: 200px;
@@ -387,6 +395,12 @@ body {
 
 .catalog-card-row + .catalog-card-row {
   border-top: 1px solid var(--luke-color-border);
+}
+
+/* A card's own control, standing over the card's press. */
+.catalog-card-press-lift {
+  position: relative;
+  z-index: 1;
 }
 
 /* A form's column at a settings page's measure. */
@@ -791,4 +805,102 @@ body {
 .catalog-width-frame {
   outline: 1px dashed var(--luke-color-border);
   outline-offset: var(--luke-space-4);
+}
+
+/* Picture tiles: the frame a place draws a picture in, and a row of tiles
+   that fill the room each is given. */
+.catalog-picture-frame {
+  display: block;
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+}
+
+.catalog-picture-frame > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.catalog-picture-frame-wide > img {
+  width: 100%;
+}
+
+.catalog-picture-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-6);
+  max-width: 480px;
+}
+
+.catalog-picture-slot {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.catalog-picture-caption {
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+  font-size: 0.9em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A message box's card around a bare text area, at a composer's insets. */
+.catalog-message-box {
+  --luke-text-area-inset-start: var(--luke-space-12);
+  --luke-text-area-inset-inline: var(--luke-space-12);
+  --luke-text-area-inset-end: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-ground);
+}
+
+/* A toolbar's row a tab strip stands in, at a pane's width and a narrow
+   one's, so its tabs give way and scroll along. */
+.catalog-tab-row {
+  display: flex;
+  align-items: center;
+  width: 640px;
+  max-width: 100%;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-tab-row-narrow {
+  width: 320px;
+}
+
+/* A failure's mark at a tab's end, as an app draws its own: the alert in
+   the danger colour, a size under the glyph it follows. */
+.catalog-end-mark {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--luke-color-danger);
+}
+
+.catalog-end-mark > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A list an app hangs on the menu's surface (`MenuSurface`), at an `@`
+   list's width, its crumb inset as the rows' words are. */
+.catalog-menu-surface {
+  width: 280px;
+}
+
+.catalog-menu-crumb {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+}
+
+/* A row that has set its own type and ink, for words that inherit them. */
+.catalog-inherited {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }

@@ -11,6 +11,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
+  TextLink,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import {
@@ -103,7 +105,7 @@ export function AccountCell({
 }): React.JSX.Element {
   const href = useAdminDoorsIfAny()?.address.accountHref(account.id);
   const content = (
-    <>
+    <div className="flex items-center gap-(--luke-space-12)">
       <span className="flex shrink-0">
         <AccountAvatar
           account={{ name: account.name, email: account.email, image: account.image ?? undefined }}
@@ -122,25 +124,16 @@ export function AccountCell({
           </Text>
         )}
       </div>
-    </>
+    </div>
   );
   // Where the mount keeps no address, the account opens on a press alone,
   // so nothing poses as a link a modified click could open elsewhere.
   if (href === undefined) {
-    return (
-      <button
-        type="button"
-        className="flex cursor-pointer items-center gap-(--luke-space-12) border-0 bg-transparent p-0 text-start text-inherit outline-offset-2"
-        onClick={() => onOpen(account.id)}
-      >
-        {content}
-      </button>
-    );
+    return <TextButton onClick={() => onOpen(account.id)}>{content}</TextButton>;
   }
   return (
-    <a
+    <TextLink
       href={href}
-      className="flex items-center gap-(--luke-space-12) outline-offset-2"
       onClick={(event) => {
         if (!plainLeftClick(event)) return;
         event.preventDefault();
@@ -148,7 +141,7 @@ export function AccountCell({
       }}
     >
       {content}
-    </a>
+    </TextLink>
   );
 }
 

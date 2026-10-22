@@ -4,11 +4,14 @@ import {
   ComboboxList,
   type ComboboxOption,
   comboboxOptionId,
+  cssCustomProperties,
   LIST_DENSITY,
   List,
   ListRow,
   MENU_ITEM_MARK,
+  MENU_SURFACE_INSET,
   MenuItem,
+  MenuSurface,
   SEARCH_FIELD_LOOK,
   SearchField,
   TEXT_ELEMENT,
@@ -137,10 +140,19 @@ type SubmenuStand = (typeof SUBMENU_STAND)[keyof typeof SUBMENU_STAND];
 /** Where a submenu stands, measured as it opens. */
 interface SubmenuPlace {
   side: SubmenuSide;
+  /** How far it is pushed back over the menu, where neither side holds it whole. */
+  shift: number;
   stand: SubmenuStand;
 }
 
-const SUBMENU_FIRST_PLACE: SubmenuPlace = { side: SUBMENU_SIDE.RIGHT, stand: SUBMENU_STAND.DOWN };
+const SUBMENU_FIRST_PLACE: SubmenuPlace = {
+  side: SUBMENU_SIDE.RIGHT,
+  shift: 0,
+  stand: SUBMENU_STAND.DOWN,
+};
+
+/** The gap a submenu keeps from its row's edge, which desktop.css's `.task-compose-submenu` draws. */
+const SUBMENU_GAP = 9;
 
 /** The matching rows cut into runs that share a heading, in their order. */
 function sectionsOf<Row extends MenuRow>(rows: readonly Row[]): Section<Row>[] {
@@ -234,9 +246,16 @@ function submenuOptions(open: Submenu): ComboboxOption[] {
 }
 
 /** One muted line pressed by nothing, under the pinned rows or a submenu's. */
-function FootNote({ words }: { words: string }): React.JSX.Element {
+function FootNote({
+  words,
+  aligned = false,
+}: {
+  words: React.ReactNode;
+  /** Whether the words start where a row's label does, past its glyph slot. */
+  aligned?: boolean;
+}): React.JSX.Element {
   return (
-    <div className="task-compose-menu-foot-note">
+    <div className="task-compose-menu-foot-note" data-aligned={aligned || undefined}>
       <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
         {words}
       </Text>
@@ -318,6 +337,8 @@ export function SearchableMenu(props: {
   foot?: readonly FootRow[] | undefined;
   /** One muted line under the pinned rows, pressed by nothing: what the agent has cost. */
   footNote?: string | undefined;
+  /** One muted line under that, which may hold a link: the plan that pays, as its provider asks. */
+  planNote?: React.ReactNode;
   className?: string;
   /** The menu is on its way out: drawn fading, and taking nothing. */
   leaving?: boolean | undefined;
@@ -390,18 +411,33 @@ export function SearchableMenu(props: {
     if (!leaving) (field.current ?? list.current)?.focus();
   }, [leaving]);
 
-  // A submenu opens to the right and down from its row, and turns to the
-  // left or stands up where the window ends before it does, measured
-  // before it is painted, and again as the pointer moves it to another
-  // row, whose submenu may stand taller.
+  // A submenu opens to the right and down from its row, turns to the left
+  // where the room ends before it does (the window, or the box its menu
+  // keeps to, `data-popover-room`, the side panel or an agent's pane), and
+  // where neither side holds it, takes the one it runs past less, pushed
+  // back over the menu so it never runs past a column; it stands up where
+  // the window's bottom would cut it. Measured before it is painted, and
+  // again as the pointer moves it to another row, whose submenu may stand taller.
   const openAt = open === undefined ? undefined : footAt;
   useLayoutEffect(() => {
-    if (openAt === undefined || panel.current === null) return;
+    const branch = panel.current?.parentElement;
+    if (openAt === undefined || panel.current === null || branch == null) return;
     const bounds = panel.current.getBoundingClientRect();
-    const room = document.documentElement;
+    const row = branch.getBoundingClientRect();
+    const page = document.documentElement;
+    const marked = panel.current.closest("[data-popover-room]")?.getBoundingClientRect();
+    const roomLeft = Math.max(marked?.left ?? 0, 0);
+    const roomRight = Math.min(marked?.right ?? page.clientWidth, page.clientWidth);
+    const pastRight = Math.max(row.right + SUBMENU_GAP + bounds.width - roomRight, 0);
+    const pastLeft = Math.max(roomLeft - (row.left - SUBMENU_GAP - bounds.width), 0);
+    const side =
+      pastRight === 0 || (pastLeft > 0 && pastRight <= pastLeft)
+        ? SUBMENU_SIDE.RIGHT
+        : SUBMENU_SIDE.LEFT;
     setPlace({
-      side: bounds.right > room.clientWidth ? SUBMENU_SIDE.LEFT : SUBMENU_SIDE.RIGHT,
-      stand: bounds.bottom > room.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
+      side,
+      shift: side === SUBMENU_SIDE.RIGHT ? pastRight : pastLeft,
+      stand: bounds.bottom > page.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
     });
   }, [openAt]);
 
@@ -423,7 +459,7 @@ export function SearchableMenu(props: {
   // What the field controls, as the space-separated list of ids ARIA reads:
   // the list, the pinned rows, and a submenu while one is open, so every row
   // it may name stands in a popup it controls.
-  const footed = foot.length > 0 || props.footNote !== undefined;
+  const footed = foot.length > 0 || props.footNote !== undefined || props.planNote !== undefined;
   const controlled = [
     listId,
     ...(footed ? [footId] : []),
@@ -509,18 +545,16 @@ export function SearchableMenu(props: {
   };
 
   const root =
-    props.className === undefined
-      ? "menu-surface searchable-menu"
-      : `menu-surface searchable-menu ${props.className}`;
+    props.className === undefined ? "searchable-menu" : `searchable-menu ${props.className}`;
   return (
-    <div
+    <MenuSurface
       ref={props.ref}
       id={props.id}
       className={root}
+      inset={MENU_SURFACE_INSET.NONE}
       role="dialog"
       aria-label={props.label}
-      data-leaving={leaving ? "true" : undefined}
-      inert={leaving}
+      leaving={leaving}
       onKeyDown={onKey}
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >
@@ -584,12 +618,13 @@ export function SearchableMenu(props: {
                 {item}
                 {index === footAt && open !== undefined ? (
                   // Note that a press anywhere on the submenu, its note too, keeps the focus in the field.
-                  // biome-ignore lint/a11y/noStaticElementInteractions: the press is its options'; the box only keeps the focus where it is.
-                  <div
+                  <MenuSurface
                     ref={panel}
-                    className="menu-surface task-compose-submenu"
+                    className="task-compose-submenu"
+                    inset={MENU_SURFACE_INSET.NONE}
                     data-side={place.side}
                     data-stand={place.stand}
+                    style={cssCustomProperties({ "--submenu-shift": `${place.shift}px` })}
                     onMouseDown={(event) => event.preventDefault()}
                   >
                     <ComboboxList
@@ -601,7 +636,7 @@ export function SearchableMenu(props: {
                       onChoose={(_index, option) => open.onPick(option.id)}
                     />
                     {open.note === undefined ? null : <FootNote words={open.note} />}
-                  </div>
+                  </MenuSurface>
                 ) : null}
               </div>
             );
@@ -616,8 +651,9 @@ export function SearchableMenu(props: {
             );
           })}
           {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
+          {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
         </div>
       ) : null}
-    </div>
+    </MenuSurface>
   );
 }

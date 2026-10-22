@@ -1,8 +1,13 @@
 import {
   DISCLOSURE_BODY,
+  DISCLOSURE_SUMMARY,
   Disclosure,
+  DisclosureAction,
   DisclosureBody,
   DisclosureSummary,
+  EllipsisIcon,
+  FoldChevronIcon,
+  IconButton,
   Stack,
   Text,
 } from "@luke/ui";
@@ -13,8 +18,50 @@ import { CatalogSection } from "../section";
 /**
  * disclosures.tsx -- a fold closed and open, its body indented under the
  * summary's words or flush with the row, a fold whose holder keeps its
- * state, and a summary long enough to wrap in a pane narrower than its words.
+ * state, a summary long enough to wrap in a pane narrower than its words,
+ * and a summary holding a control that is pressed without folding it.
  */
+
+/** A fold whose summary ends with a ⋯ in its action slot, which counts its presses rather than folding the row. */
+function ActionDisclosure(): React.JSX.Element {
+  const [presses, setPresses] = useState(0);
+  return (
+    <Disclosure>
+      <DisclosureSummary>
+        <span>Review thread · ⋯ pressed {presses}×</span>
+        <DisclosureAction>
+          <IconButton
+            icon={<EllipsisIcon />}
+            label="More"
+            onClick={() => setPresses((count) => count + 1)}
+          />
+        </DisclosureAction>
+      </DisclosureSummary>
+      <DisclosureBody>
+        <Text>Pressing the ⋯ leaves this fold as it stood; the rest of the row folds it.</Text>
+      </DisclosureBody>
+    </Disclosure>
+  );
+}
+
+/** A fold that is only its row, as a file's header: its own chevron button among its controls, a rule under it while open. */
+function RowDisclosure(): React.JSX.Element {
+  const [open, setOpen] = useState(true);
+  return (
+    <Disclosure open={open} onOpenChange={setOpen}>
+      <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
+        <DisclosureAction>
+          <IconButton
+            icon={<FoldChevronIcon />}
+            label={open ? "Collapse file" : "Expand file"}
+            onClick={() => setOpen(!open)}
+          />
+        </DisclosureAction>
+        <span>src/seats.ts</span>
+      </DisclosureSummary>
+    </Disclosure>
+  );
+}
 
 /** A fold whose open state its holder keeps, as a tab keeps which of its notes it folded. */
 function HeldDisclosure(): React.JSX.Element {
@@ -76,6 +123,16 @@ function Disclosures(): React.JSX.Element {
       <CatalogSection id="disclosure-held" title="Held by its holder">
         <div className="catalog-frame catalog-frame-wide">
           <HeldDisclosure />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="disclosure-action" title="Control in the summary">
+        <div className="catalog-frame">
+          <ActionDisclosure />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="disclosure-row" title="File row">
+        <div className="catalog-frame">
+          <RowDisclosure />
         </div>
       </CatalogSection>
       <CatalogSection id="disclosure-long" title="Long summary, narrow pane">

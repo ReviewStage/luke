@@ -254,7 +254,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
     "`glob`",
     "`grep`",
     `\`${CODER_TOOL.SLEEP}\``,
-    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.WEB_SEARCH}\``,
     `\`${CODER_TOOL.READ_WEB_PAGE}\``,
     `\`${CODER_TOOL.LOAD_SKILL}\``,
     "`write_todos`",
@@ -359,7 +359,7 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
     "`glob`",
     "`grep`",
     `\`${CODER_TOOL.SLEEP}\``,
-    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.WEB_SEARCH}\``,
     `\`${CODER_TOOL.READ_WEB_PAGE}\``,
     `\`${CODER_TOOL.LOAD_SKILL}\``,
     "`write_todos`",
@@ -671,7 +671,7 @@ test("every agent is told that what happens on its pull request after its turn r
   }
 });
 
-test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone", () => {
+test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone, and never to post how the work is going", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const instructions = coderInstructions(
@@ -687,8 +687,15 @@ test("every agent is told to reply to a message on an inbox thread on that threa
         brief,
       );
       assert.ok(instructions.includes("never answer them in your message alone"), brief);
+      // Note that a progress note on a thread is noise the developer must acknowledge, so none is asked for.
+      assert.ok(
+        instructions.includes("Never post on a thread to say how the work is going"),
+        brief,
+      );
+      assert.ok(!instructions.includes("saying what you did with it"), brief);
     }
   }
+  assert.ok(INBOX_TOOLS.POST.description.includes("never how the work is going"));
 });
 
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {

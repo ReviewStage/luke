@@ -4,6 +4,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
+  AVATAR_SIZE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -239,7 +240,7 @@ export function RepositoryChip(props: {
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, trigger, props.align ?? PICKER_ALIGN.END);
+  const placement = usePickerPlacement(open, trigger, props.align ?? PICKER_ALIGN.END, menuId);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // Note that the chooser is read through a ref, because the tab hands a
@@ -361,6 +362,7 @@ export function RepositoryChip(props: {
               repository={props.value}
               pictures={chooser.pictures}
               fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+              size={AVATAR_SIZE.GLYPH}
             />
           )}
           <ChipName>{label}</ChipName>

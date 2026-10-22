@@ -7,7 +7,18 @@ import {
   type ShortcutChord,
   shortcutAria,
 } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, IconButton, TextButton } from "@luke/ui";
+import {
+  BUTTON_SIZE,
+  DISCLOSURE_SUMMARY,
+  Disclosure,
+  DisclosureAction,
+  DisclosureSummary,
+  IconButton,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  TextButton,
+} from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -396,22 +407,29 @@ const HEAD_WORDS = {
   ALL_HINT: "\u2325-click for all files",
 } as const;
 
-/** What on a header's row keeps its press for itself rather than folding the file. */
-const HEAD_CONTROLS = "button, a, input, label, summary, [role='button'], [role='checkbox']";
-
 /** A path as a header names it: its folder, quiet, then its name. */
 function PathParts({ path }: { path: string }): React.JSX.Element {
   const cut = path.lastIndexOf("/") + 1;
   return (
     <>
       {cut === 0 ? null : (
-        <span className="diff-list-folder">
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="diff-list-folder"
+        >
           <bdi>{path.slice(0, cut)}</bdi>
-        </span>
+        </Text>
       )}
-      <span className="diff-list-name">
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="diff-list-name"
+      >
         <bdi>{path.slice(cut)}</bdi>
-      </span>
+      </Text>
     </>
   );
 }
@@ -515,14 +533,16 @@ export function FileHead({
     </span>
   );
   const pathCopy = (path: string, at: number, words: string, hint: string, moved: boolean) => (
-    <span ref={partAt(at)} className="diff-list-path-part" data-moved={moved ? "" : undefined}>
-      {hinted(
-        hint,
-        <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
-          <PathParts path={path} />
-        </TextButton>,
-      )}
-    </span>
+    <DisclosureAction>
+      <span ref={partAt(at)} className="diff-list-path-part" data-moved={moved ? "" : undefined}>
+        {hinted(
+          hint,
+          <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
+            <PathParts path={path} />
+          </TextButton>,
+        )}
+      </span>
+    </DisclosureAction>
   );
   return (
     <div
@@ -541,47 +561,47 @@ export function FileHead({
         setNear(true);
       }}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: a press anywhere on the row folds the file as its fold does, which is the control the keyboard reaches. */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the fold beside it is the row's keyboard control, and ; folds the file stood on. */}
-      <div
-        className="diff-list-head-row"
-        onClick={(event) => {
-          if (event.target instanceof Element && event.target.closest(HEAD_CONTROLS) !== null) {
-            return;
-          }
-          onToggle();
-        }}
-      >
-        {hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
-        {hinted(STATUS_WORDS[file.status], letter)}
-        <span className="diff-list-path">
-          {file.previousPath === null ? (
-            pathCopy(file.path, 3, PATH_COPY_WORDS.PATH_COPIED, PATH_COPY_WORDS.COPY_PATH, false)
-          ) : (
-            <>
-              {pathCopy(
-                file.previousPath,
-                2,
-                PATH_COPY_WORDS.PATH_COPIED,
-                PATH_COPY_WORDS.COPY_OLD_PATH,
-                true,
-              )}
-              <span className="diff-list-folder" aria-hidden="true">
-                {"\u00a0\u2192\u00a0"}
-              </span>
-              {pathCopy(
-                file.path,
-                3,
-                PATH_COPY_WORDS.PATH_COPIED,
-                PATH_COPY_WORDS.COPY_NEW_PATH,
-                false,
-              )}
-            </>
-          )}
-        </span>
-        <LinesChanged additions={file.additions} deletions={file.deletions} />
-        {controls}
-      </div>
+      <Disclosure open={!collapsed} onOpenChange={onToggle}>
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
+          <DisclosureAction>
+            {hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
+          </DisclosureAction>
+          {hinted(STATUS_WORDS[file.status], letter)}
+          <span className="diff-list-path">
+            {file.previousPath === null ? (
+              pathCopy(file.path, 3, PATH_COPY_WORDS.PATH_COPIED, PATH_COPY_WORDS.COPY_PATH, false)
+            ) : (
+              <>
+                {pathCopy(
+                  file.previousPath,
+                  2,
+                  PATH_COPY_WORDS.PATH_COPIED,
+                  PATH_COPY_WORDS.COPY_OLD_PATH,
+                  true,
+                )}
+                <Text
+                  as={TEXT_ELEMENT.SPAN}
+                  variant={TEXT_VARIANT.INHERIT}
+                  truncate
+                  className="diff-list-folder"
+                  aria-hidden="true"
+                >
+                  {"\u00a0\u2192\u00a0"}
+                </Text>
+                {pathCopy(
+                  file.path,
+                  3,
+                  PATH_COPY_WORDS.PATH_COPIED,
+                  PATH_COPY_WORDS.COPY_NEW_PATH,
+                  false,
+                )}
+              </>
+            )}
+          </span>
+          <LinesChanged additions={file.additions} deletions={file.deletions} />
+          {controls === undefined ? null : <DisclosureAction>{controls}</DisclosureAction>}
+        </DisclosureSummary>
+      </Disclosure>
     </div>
   );
 }

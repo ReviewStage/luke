@@ -11,8 +11,9 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
@@ -23,10 +24,12 @@ import { getTestDB } from "../../testing/index.js";
 import {
   aimOperatorHeartbeat,
   automationRunsSince,
+  claimAutomationRun,
   claimDueAutomations,
   createAutomation,
   deleteAutomation,
   githubAutomationsOn,
+  integrationAutomationsOn,
   listAutomationRuns,
   listAutomations,
   type NewAutomation,
@@ -36,6 +39,7 @@ import {
   readWebhookAutomation,
   recordAutomationRun,
   settleAutomationRun,
+  subjectRunStartedSince,
   updateAutomation,
 } from "../automation-store.js";
 import { createCodingAgent } from "../coding-agent-store.js";
@@ -79,6 +83,17 @@ const openTask = (userId: string) =>
       repository: "acme/api",
     });
     return made.id;
+  });
+
+/** The workspace a task stands in. */
+const workspaceOf = (taskId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const [row] = yield* db
+      .select({ organizationId: task.organizationId })
+      .from(task)
+      .where(eq(task.id, taskId));
+    return row?.organizationId ?? "";
   });
 
 const nightly = (taskId: string): NewAutomation => ({
@@ -624,6 +639,150 @@ it.layer(getTestDB())("the automation store", (it) => {
           [],
           "nor an automation listening for another event",
         );
+      }),
+  );
+
+  it.effect(
+    "a Sentry delivery to one workspace finds that workspace's enabled automations on its event alone, never another's, and none of a departed creator",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const ours = yield* workspaceOf(yield* openTask(owner));
+        const theirs = yield* workspaceOf(yield* openTask(other));
+        const alert = {
+          kind: AUTOMATION_TRIGGER.INTEGRATION,
+          provider: TRIGGER_PROVIDER.SENTRY,
+          event: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+          filters: { environment: ["production"] },
+        } as const;
+        const onWorkspace = (organizationId: string): NewAutomation => ({
+          ...nightly(""),
+          taskId: null,
+          organizationId,
+          repositories: ["acme/api"],
+          trigger: alert,
+          nextRunAt: null,
+        });
+        const listening = Option.getOrThrow(yield* createAutomation(owner, onWorkspace(ours)));
+        yield* createAutomation(owner, {
+          ...onWorkspace(ours),
+          trigger: { ...alert, event: SENTRY_TRIGGER_EVENT.ISSUE_CREATED },
+        });
+        const paused = Option.getOrThrow(yield* createAutomation(owner, onWorkspace(ours)));
+        yield* updateAutomation(owner, paused.id, { enabled: false });
+        const elsewhere = Option.getOrThrow(yield* createAutomation(other, onWorkspace(theirs)));
+
+        const found = yield* integrationAutomationsOn(
+          ours,
+          TRIGGER_PROVIDER.SENTRY,
+          SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+          10,
+        );
+        const foundThere = yield* integrationAutomationsOn(
+          theirs,
+          TRIGGER_PROVIDER.SENTRY,
+          SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+          10,
+        );
+        const db = yield* Database;
+        yield* db.delete(member).where(eq(member.userId, owner));
+        const departed = yield* integrationAutomationsOn(
+          ours,
+          TRIGGER_PROVIDER.SENTRY,
+          SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+          10,
+        );
+
+        assert.deepEqual(
+          found.map((each) => [each.id, each.trigger]),
+          [[listening.id, alert]],
+        );
+        assert.deepEqual(
+          foundThere.map((each) => each.id),
+          [elsewhere.id],
+        );
+        assert.deepEqual(departed, []);
+      }),
+  );
+
+  it.effect(
+    "a run started on a Sentry issue holds its cooldown for that issue alone from when it started, however late after it fired, and a skipped one holds nothing",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const taskId = yield* openTask(owner);
+        const made = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            ...nightly(taskId),
+            trigger: {
+              kind: AUTOMATION_TRIGGER.INTEGRATION,
+              provider: TRIGGER_PROVIDER.SENTRY,
+              event: SENTRY_TRIGGER_EVENT.ISSUE_CREATED,
+            },
+            nextRunAt: null,
+          }),
+        );
+        const fireOn = (subjectId: string) =>
+          Effect.map(
+            recordAutomationRun(made, {
+              dedupeKey: randomUUID(),
+              firing: {
+                kind: AUTOMATION_FIRING.INTEGRATION,
+                provider: TRIGGER_PROVIDER.SENTRY,
+                event: SENTRY_TRIGGER_EVENT.ISSUE_CREATED,
+                subject: { id: subjectId, title: "TypeError: x is undefined" },
+              },
+              firedAt: new Date("2026-10-15T12:00:00Z"),
+            }),
+            Option.getOrThrow,
+          );
+        yield* TestClock.setTime(Date.parse("2026-10-15T12:00:00Z"));
+        const started = yield* fireOn("4001");
+        // The sweep starts it three quarters of an hour after it fired; a claim is a start, its agent still to come.
+        yield* TestClock.adjust(Duration.minutes(45));
+        yield* claimAutomationRun(started.id);
+        const skipped = yield* fireOn("4002");
+        yield* settleAutomationRun(skipped.id, {
+          status: AUTOMATION_RUN_STATUS.SKIPPED,
+          reason: AUTOMATION_RUN_REASON.CONCURRENCY,
+        });
+
+        const within = yield* subjectRunStartedSince(
+          made.id,
+          "4001",
+          new Date("2026-10-15T00:00:00Z"),
+        );
+        const startedAfterFiring = yield* subjectRunStartedSince(
+          made.id,
+          "4001",
+          new Date("2026-10-15T12:30:00Z"),
+        );
+        const after = yield* subjectRunStartedSince(
+          made.id,
+          "4001",
+          new Date("2026-10-15T12:45:01Z"),
+        );
+        const skippedIssue = yield* subjectRunStartedSince(
+          made.id,
+          "4002",
+          new Date("2026-10-15T00:00:00Z"),
+        );
+        const otherIssue = yield* subjectRunStartedSince(
+          made.id,
+          "4003",
+          new Date("2026-10-15T00:00:00Z"),
+        );
+
+        assert.equal(within, true);
+        assert.equal(
+          startedAfterFiring,
+          true,
+          "a run that fired earlier but started since holds it",
+        );
+        assert.equal(after, false, "a run started before the instant holds nothing");
+        assert.equal(skippedIssue, false);
+        assert.equal(otherIssue, false);
       }),
   );
 });

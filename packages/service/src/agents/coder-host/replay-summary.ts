@@ -1,7 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { spendHostedMeter } from "@luke/database/models/quota";
 import {
   newestStepsWithin,
   type ReplayStep,
@@ -20,7 +19,7 @@ import { generateText, type LanguageModel } from "ai";
 import { Duration, Effect, Option, Redacted } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import { spendingKeyOf } from "./account-keys.js";
+import { ownKeyOf } from "./account-keys.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -95,12 +94,34 @@ const CHUNK_INSTRUCTIONS =
 const COMBINE_INSTRUCTIONS =
   "You combine summaries of consecutive parts of one coding agent's transcript, oldest first, into one summary for another agent that takes over its work. Keep the goal, every instruction or correction the developer gave near verbatim, the decisions and why, the files changed, the commands that mattered with their outcomes, where the work stood at the end, and the problems still open. Where a later part overrides an earlier one, keep the later. Answer with the summary alone.";
 
-/** The model a summary is written on: the new agent's own model on the key its turns spend on, the provider's options for its lowest effort, and the count of one use on Luke's key, nothing on the account's own. */
+/** The model a summary is written on, on the account's own key, and the provider's options for its lowest effort. */
 export interface SummaryModel {
   readonly model: LanguageModel;
   readonly providerOptions: Record<string, Record<string, string>>;
-  readonly counted: Effect.Effect<void>;
+  /** The most the summary model's own window holds, where it is another model than the new agent's and may hold less; the new agent's window bounds it otherwise. */
+  readonly windowTokens?: number;
 }
+
+/**
+ * The model a summary is written on where the account saved no key for the
+ * new agent's own provider but one for the other: that provider's balanced
+ * model, at its lowest effort, which both providers spell alike.
+ */
+const OTHER_PROVIDER_SUMMARY = {
+  [MODEL_PROVIDER.ANTHROPIC]: "claude-sonnet-5-5",
+  [MODEL_PROVIDER.OPENAI]: "gpt-6.1-sol",
+} as const satisfies Record<ModelProvider, string>;
+
+const OTHER_PROVIDER_SUMMARY_EFFORT = "low";
+
+/**
+ * The window a summary on the other provider's model is sized against. Note
+ * that it is the least either provider's balanced model holds, rather than
+ * read from the catalog, because the catalog lists the new agent's model and
+ * a summary sized past the model it runs on fails and leaves the earlier
+ * steps out.
+ */
+const OTHER_PROVIDER_SUMMARY_WINDOW_TOKENS = 200_000;
 
 /** How a Start finds the model a summary is written on, for the account and the new agent's choice at the effort named; nothing where it has no key to reach it on. */
 export type SummaryModelOf = (
@@ -117,19 +138,6 @@ function summaryOptions(
   return provider === MODEL_PROVIDER.ANTHROPIC
     ? { anthropic: { effort } }
     : { openai: { reasoningEffort: effort } };
-}
-
-/** One use counted on the account's meter, a count that cannot be written logged, since a meter enforces nothing. */
-function countedOnLuke(userId: string): Effect.Effect<void, never, DatabaseServices> {
-  return Effect.flatMap(
-    Effect.clockWith((clock) => clock.currentTimeMillis),
-    (now) => spendHostedMeter({ userId, now }),
-  ).pipe(
-    Effect.asVoid,
-    Effect.catch((failure) =>
-      Effect.logWarning(`A hosted inference was not counted: ${failureKind(failure)}`),
-    ),
-  );
 }
 
 /** The tokens text of these bytes is told at, as above. */
@@ -236,10 +244,9 @@ function chunkSteps(chunks: readonly (readonly SummaryPart[])[]): number {
   return chunks.flat().reduce((sum, part) => sum + part.steps, 0);
 }
 
-/** One summary call: the instructions and the words, bounded in what it writes, the use counted first; a call that fails or writes nothing fails. */
+/** One summary call: the instructions and the words, bounded in what it writes; a call that fails or writes nothing fails. */
 function summaryCall(model: SummaryModel, system: string, prompt: string, maxOutputTokens: number) {
   return Effect.gen(function* () {
-    yield* model.counted;
     const answer = yield* Effect.tryPromise(() =>
       generateText({
         model: model.model,
@@ -258,7 +265,8 @@ function summaryCall(model: SummaryModel, system: string, prompt: string, maxOut
 /**
  * A summary of the steps, the recap the source already carried of those
  * before them read first, written on the model in chunks sized to its
- * window, a few at a time, then combined into one; each chunk's summary is
+ * window, the new agent's or the summary model's own where that holds less,
+ * a few at a time, then combined into one; each chunk's summary is
  * held to its share of the combining call's room, and the oldest chunks
  * past `REPLAY_FIT.MAX_CHUNKS` are left out, which the summary says. The
  * summary stands for the steps of the chunks it read alone, so the steps
@@ -271,7 +279,8 @@ export function summarizeSteps(
   windowTokens: number,
   earlier?: ReplaySummary,
 ): Effect.Effect<Option.Option<ReplaySummary>> {
-  const threshold = Math.floor(windowTokens * CODER.COMPACTION_THRESHOLD_SHARE);
+  const window = Math.min(windowTokens, model.windowTokens ?? windowTokens);
+  const threshold = Math.floor(window * CODER.COMPACTION_THRESHOLD_SHARE);
   const room = Math.max(
     1,
     threshold - REPLAY_FIT.SUMMARY_OUTPUT_TOKENS - REPLAY_FIT.SUMMARY_PROMPT_TOKENS,
@@ -400,29 +409,27 @@ export function withinWindow(
 }
 
 /**
- * The deployment's summary model: the new agent's own model, its fast
- * version's base where it chose one, reached at its provider directly on
- * the key its turns spend on (`account-keys.ts`), at the effort named and
- * with no thinking asked for; nothing where the provider is unknown or no
- * key stands. The key is revealed here alone, into the SDK client that puts
- * it on its requests.
+ * The deployment's summary model, on the account's own API key and never
+ * Luke's (`account-keys.ts`'s `ownKeyOf`): the new agent's own model, its
+ * fast version's base where it chose one, at the effort named and with no
+ * thinking asked for, where the account saved a key for its provider; the
+ * other provider's balanced model where it saved only that one; nothing
+ * where the provider is unknown or it saved neither, so the Start replays
+ * without a summary. The key is revealed here alone, into the SDK client
+ * that puts it on its requests; `fetch` is the provider's HTTP door, the
+ * platform's own where absent.
  */
 export const productionSummaryModel = (
   userId: string,
   choice: ModelChoice,
   effort: string,
+  fetch?: typeof globalThis.fetch,
 ): Effect.Effect<SummaryModel | undefined, never, DatabaseServices | HostedEnvironment> =>
   Effect.gen(function* () {
     const named = providerModelOf(choice.model);
     if (named === undefined) return undefined;
     const environment = yield* HostedEnvironment;
-    const luke = { anthropic: environment.anthropicKey, openAi: environment.openAiKey };
-    const spending = yield* spendingKeyOf(
-      userId,
-      named.provider,
-      luke,
-      environment.providerKeyEncryptionKeys,
-    ).pipe(
+    const own = yield* ownKeyOf(userId, named.provider, environment.providerKeyEncryptionKeys).pipe(
       Effect.catch((failure) =>
         Effect.as(
           Effect.logWarning(`a replay summary's key could not be read: ${failureKind(failure)}`),
@@ -430,19 +437,21 @@ export const productionSummaryModel = (
         ),
       ),
     );
-    if (spending === undefined) return undefined;
-    // The meter is written on the Start's own database, held here so a summary call needs nothing more.
-    const database = yield* Effect.context<DatabaseServices>();
-    const settings = { apiKey: Redacted.value(spending.key) };
+    if (own === undefined) return undefined;
+    const settings = {
+      apiKey: Redacted.value(own.key),
+      ...(fetch === undefined ? undefined : { fetch }),
+    };
+    const same = own.provider === named.provider;
+    const modelId = same ? named.modelId : OTHER_PROVIDER_SUMMARY[own.provider];
     const model =
-      named.provider === MODEL_PROVIDER.ANTHROPIC
-        ? createAnthropic(settings)(named.modelId)
-        : createOpenAI(settings).responses(named.modelId);
+      own.provider === MODEL_PROVIDER.ANTHROPIC
+        ? createAnthropic(settings)(modelId)
+        : createOpenAI(settings).responses(modelId);
+    if (same) return { model, providerOptions: summaryOptions(own.provider, effort) };
     return {
       model,
-      providerOptions: summaryOptions(named.provider, effort),
-      counted: spending.lukes
-        ? countedOnLuke(userId).pipe(Effect.provideContext(database))
-        : Effect.void,
+      providerOptions: summaryOptions(own.provider, OTHER_PROVIDER_SUMMARY_EFFORT),
+      windowTokens: OTHER_PROVIDER_SUMMARY_WINDOW_TOKENS,
     };
   });

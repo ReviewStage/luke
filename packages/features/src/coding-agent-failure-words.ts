@@ -18,7 +18,7 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
   [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
   [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or can't be read; check Settings › Coding agents › API keys",
+    "your API key was refused or can't be read; check Settings › Agents",
   [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started",
   [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
     "Fast isn't available on your own API key; choose the model with Fast off",

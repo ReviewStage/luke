@@ -35,5 +35,5 @@ test("with a session, the panel rests on the Inbox beside the tasks the service 
     );
     assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
   });
-  assert.equal(root.querySelector("section.sign-in-gate"), null, "no sign-in is drawn");
+  assert.equal(root.querySelector("section.luke-auth-card"), null, "no sign-in is drawn");
 });

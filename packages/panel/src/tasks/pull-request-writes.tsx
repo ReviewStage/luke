@@ -300,7 +300,14 @@ export function PullRequestStateMenu({
   const mark = inQueue ? (
     <GitMergeIcon aria-hidden="true" />
   ) : (
-    <PullRequestMark pullRequest={pullRequest} />
+    // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
+    <PullRequestMark
+      pullRequest={{
+        number: pullRequest.number,
+        state: pullRequest.state,
+        checks: pullRequest.checks,
+      }}
+    />
   );
   if (actions.length === 0) {
     return (

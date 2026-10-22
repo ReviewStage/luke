@@ -10,7 +10,12 @@ import {
 } from "@luke/settings/diff-view";
 import { afterEach, test, vi } from "vitest";
 import type { DiffLook } from "./contract.js";
-import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
+import {
+  HIGHLIGHT_MODE,
+  HIGHLIGHTER,
+  type Highlighting,
+  startHighlighting,
+} from "./highlight-pool.js";
 
 /**
  * highlight-pool.test.ts -- a list's files are highlighted in Pierre's pool
@@ -40,6 +45,7 @@ interface Request {
   readonly type: string;
   readonly id: string;
   readonly renderOptions?: { readonly theme?: unknown };
+  readonly preferredHighlighter?: string;
 }
 
 /** Every request the stand-in workers were sent, in order. */
@@ -118,4 +124,14 @@ test("a pool kept for a list drawn in another look hands its workers that look",
     assert.equal(told.length, 2, "both workers are told");
     for (const request of told) assert.deepEqual(request.renderOptions?.theme, solarized);
   });
+});
+
+test("a list's workers colour with Highlights where the window may compile WebAssembly", async () => {
+  started = startHighlighting(() => new StandInWorker(true), LOOK, 1000);
+  assert.equal(await started.settled, HIGHLIGHT_MODE.POOL);
+  const starts = sent.filter((request) => request.type === "initialize");
+  assert.equal(starts.length, 2, "both workers are started");
+  for (const request of starts) {
+    assert.equal(request.preferredHighlighter, HIGHLIGHTER.HIGHLIGHTS);
+  }
 });

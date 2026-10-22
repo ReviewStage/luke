@@ -21,6 +21,7 @@ export * from "./inbox-item-read.js";
 export * from "./inbox-message.js";
 export * from "./installed-skill.js";
 export * from "./integration.js";
+export * from "./integration-installation.js";
 export * from "./mac-command.js";
 export * from "./operator-notice.js";
 export * from "./personal-workspace.js";

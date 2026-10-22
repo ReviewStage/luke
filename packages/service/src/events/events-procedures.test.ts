@@ -31,8 +31,6 @@ const EVENTS = "https://luke.test/api/events";
 const JSON_TYPE = "application/json";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

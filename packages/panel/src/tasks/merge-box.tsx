@@ -28,11 +28,11 @@ import {
   SplitButton,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
 import {
-  CircleDotIcon,
   CircleXIcon,
   ClockIcon,
   GitMergeIcon,
@@ -50,13 +50,14 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  *
  * The chip is a status badge at the pill's size, in the tone of where the
  * merge stands, its glyph and its word: Checking, Conflicts, Behind,
- * Review required, Changes requested, Checks failing, Checks running,
- * Blocked, Ready, Auto-merge on. Its hint, and a reader, have
- * GitHub's fuller sentence ("A required review is missing"). It stands only
- * where it says what the press does not: a pull request ready to merge
- * shows the press alone, a draft nothing, its pill saying Draft, and one in
- * the merge queue only Remove from queue, its pill saying Queued and its
- * place, as stage-cli's does. A narrow header draws the chip's glyph alone,
+ * Review required, Changes requested, Blocked, Ready, Auto-merge on. Its
+ * hint, and a reader, have GitHub's fuller sentence ("A required review is
+ * missing"). It stands only where it says what nothing else on the page
+ * does: a pull request ready to merge shows the press alone, a draft
+ * nothing, its pill saying Draft, one in the merge queue only Remove from
+ * queue, its pill saying Queued and its place, as stage-cli's does, and one
+ * held up by its checks alone no chip, since the Checks tab under the
+ * header says how they went in its glyph and its colour. A narrow header draws the chip's glyph alone,
  * its word still read.
  *
  * The press is the one thing that may be done from where the pull request
@@ -244,7 +245,6 @@ const CHIP_GLYPHS = {
   HELD: <CircleXIcon aria-hidden="true" />,
   BEHIND: <TriangleAlertIcon aria-hidden="true" />,
   REVIEW: <UserRoundIcon aria-hidden="true" />,
-  RUNNING: <CircleDotIcon aria-hidden="true" />,
   WAITING: <ClockIcon aria-hidden="true" />,
   READY: <GitMergeIcon aria-hidden="true" />,
 } as const;
@@ -253,27 +253,25 @@ function chip(label: string, tone: BadgeTone, icon: ReactNode): ChipFace {
   return { label, tone, icon };
 }
 
-/** What a merge GitHub says is blocked is held up by, as the chip says it. */
-function blockedChip(merging: PullRequestMerging | undefined): ChipFace {
+/** What a merge GitHub says is blocked is held up by, as the chip says it; none where it waits on its checks, which the Checks tab says. */
+function blockedChip(merging: PullRequestMerging | undefined): ChipFace | undefined {
   if (merging?.review === REVIEW_DECISION.CHANGES_REQUESTED) {
     return chip("Changes requested", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
   }
   if (merging?.review === REVIEW_DECISION.REVIEW_REQUIRED) {
     return chip("Review required", BADGE_TONE.ATTENTION, CHIP_GLYPHS.REVIEW);
   }
-  if (merging?.checks === CHECK_SUMMARY.FAILING) {
-    return chip("Checks failing", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
-  }
-  if (merging?.checks === CHECK_SUMMARY.PENDING) {
-    return chip("Checks running", BADGE_TONE.WORKING, CHIP_GLYPHS.RUNNING);
+  if (merging?.checks === CHECK_SUMMARY.FAILING || merging?.checks === CHECK_SUMMARY.PENDING) {
+    return undefined;
   }
   return chip("Blocked", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
 }
 
 /**
  * The chip for where the pull request stands and what the press offers, or
- * none where it would only say what the press or the pill already does: a
- * merge ready and offered, a draft, or one in the merge queue.
+ * none where it would only say what the press, the pill, or the Checks tab
+ * already does: a merge ready and offered, a draft, one in the merge queue,
+ * or one waiting on its checks.
  */
 function chipOf(
   pullRequest: CodingAgentOverviewPullRequest,
@@ -311,7 +309,7 @@ function MergeChip({ face, sentence }: { face: ChipFace; sentence: string }): Re
         <Badge tone={face.tone} icon={face.icon}>
           {face.label}
         </Badge>
-        <span className="visually-hidden">{`: ${sentence}`}</span>
+        <VisuallyHidden>{`: ${sentence}`}</VisuallyHidden>
       </span>
     </Tooltip>
   );

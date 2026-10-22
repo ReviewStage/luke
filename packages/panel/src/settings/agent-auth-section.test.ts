@@ -201,13 +201,13 @@ async function open(page: HTMLElement, harness: string): Promise<HTMLElement> {
 }
 
 const radio = (dialog: Element, label: string) =>
-  [...dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
-    (each) => each.textContent === label,
+  [...dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((each) =>
+    each.textContent?.startsWith(label),
   ) ?? assert.fail(`no ${label} radio`);
 
 /** The card a radio heads. */
 const card = (dialog: Element, label: string) =>
-  radio(dialog, label).closest<HTMLElement>(".agent-auth-card") ?? assert.fail(`no ${label} card`);
+  radio(dialog, label).closest<HTMLElement>(".luke-choice-card") ?? assert.fail(`no ${label} card`);
 
 /** Types into a field as a paste would, then submits its form. */
 async function pasteAndSave(field: HTMLInputElement, value: string): Promise<void> {
@@ -412,7 +412,7 @@ test("Codex's subscription signs in with ChatGPT on the desktop, meets the first
   const page = await mount();
   const dialog = await open(page, "Codex");
   assert.ok(dialog.querySelector('a[href="https://platform.openai.com/api-keys"]'));
-  await press(card(dialog, "Subscription"), "Continue with ChatGPT");
+  await press(card(dialog, "Subscription"), "Sign in with ChatGPT");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN).length, 1);
   assert.ok(
     [...document.querySelectorAll('[role="dialog"]')].some((each) =>

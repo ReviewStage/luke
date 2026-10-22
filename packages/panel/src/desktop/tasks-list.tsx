@@ -15,7 +15,11 @@ import {
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  AVATAR_SIZE,
   BUTTON_SIZE,
+  BUTTON_VARIANT,
+  CARD_PRESS_SELECTOR,
+  CardPress,
   CHIP_LOOK,
   COLLECTION_STATE,
   CollectionPage,
@@ -26,8 +30,10 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FoldChevronIcon,
+  FoldingButton,
   IconButton,
   InlineEdit,
+  OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
   TaskPriorityMark,
@@ -36,6 +42,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -72,7 +79,6 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { FadingWords } from "../fading-words.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -162,7 +168,7 @@ const DRAG_HERE = "Drag tasks here";
 const PINNED = "Pinned";
 
 /** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
-const ROW_HANDLE = ".tasks-list-press";
+const ROW_HANDLE = CARD_PRESS_SELECTOR;
 
 /** Where the folded groups are kept in the renderer's storage. */
 const LIST_FOLDS_KEY = "luke.tasksListFolds";
@@ -379,6 +385,7 @@ function groupHead(
                 repository={head.repository}
                 pictures={tasks.repositories.pictures}
                 fallback={<FolderGitIcon />}
+                size={AVATAR_SIZE.GLYPH}
               />
             ),
             name: repositoryLabel(head.repository, repositories),
@@ -593,25 +600,23 @@ function TaskListRow({
           </span>
         ) : (
           <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardRegion={item}>
-            <button
+            <CardPress
               ref={press}
-              type="button"
-              className="tasks-list-press"
               disabled={actions.deletion.busy}
-              onClick={() => {
+              onPress={() => {
                 actions.close(false);
                 onOpen();
               }}
               onKeyDown={actions.keyMenu}
-              {...actions.contextMenu(press)}
+              contextMenu={actions.contextMenu(press)}
             >
-              <FadingWords className="tasks-list-name" words={task.name} />
-              {spoken === "" ? null : (
-                <span className="visually-hidden" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-                  {spoken}
-                </span>
-              )}
-            </button>
+              <span className="tasks-list-press">
+                <OneLine>{task.name}</OneLine>
+                {spoken === "" ? null : (
+                  <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
+                )}
+              </span>
+            </CardPress>
           </Tooltip>
         )}
         {rename.refused ? (
@@ -648,7 +653,7 @@ function TaskListRow({
               }
             />
           )}
-          <FadingWords className="tasks-list-repository" words={repositoryName} />
+          <OneLine>{repositoryName}</OneLine>
         </>,
       )}
       {/* Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does. */}
@@ -656,7 +661,14 @@ function TaskListRow({
         TASK_PROPERTY.CREATOR,
         <>
           {maker === undefined ? null : (
-            <span className="tasks-list-maker">{actorName(maker.actor)}</span>
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="tasks-list-maker"
+            >
+              {actorName(maker.actor)}
+            </Text>
           )}
           <ActorMark
             actor={maker?.actor ?? creator}
@@ -665,7 +677,7 @@ function TaskListRow({
           />
         </>,
       )}
-      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} />)}
+      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} steady />)}
       {cell(
         TASK_PROPERTY.UPDATED,
         <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
@@ -731,25 +743,27 @@ function TasksListGroup({
       {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
       {titled ? (
         <h2 className="tasks-list-head">
-          <button
-            type="button"
-            className="tasks-list-fold"
+          <FoldingButton
+            variant={BUTTON_VARIANT.ROW}
+            label={head.name}
             aria-expanded={!folded}
             onClick={onToggle}
-          >
-            <span className="tasks-list-chevron" aria-hidden="true">
-              <FoldChevronIcon />
-            </span>
-            <span className="tasks-list-glyph" aria-hidden="true">
-              {head.icon}
-            </span>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
-              {head.name}
-            </Text>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {group.tasks.length}
-            </Text>
-          </button>
+            trailing={group.tasks.length}
+            icon={
+              <>
+                <span
+                  className="tasks-list-chevron"
+                  data-open={folded ? undefined : "true"}
+                  aria-hidden="true"
+                >
+                  <FoldChevronIcon />
+                </span>
+                <span className="tasks-list-glyph" aria-hidden="true">
+                  {head.icon}
+                </span>
+              </>
+            }
+          />
         </h2>
       ) : null}
       {folded ? null : group.tasks.length === 0 ? (

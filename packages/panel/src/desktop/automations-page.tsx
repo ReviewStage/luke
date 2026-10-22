@@ -21,6 +21,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  CardPress,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -45,6 +46,7 @@ import {
   TEXT_VARIANT,
   Text,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -205,8 +207,7 @@ function AutomationRow({
   // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
-  const hiddenWorking =
-    working === undefined ? null : <span className="luke-visually-hidden">{working}</span>;
+  const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
   return (
     <>
       <ListRow
@@ -215,7 +216,7 @@ function AutomationRow({
         }}
         leading={
           <span className="automation-row-glyph">
-            <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
+            <StateGlyph glyph={<FiringGlyph of={automation.trigger} />} state={state} />
           </span>
         }
         title={
@@ -246,7 +247,14 @@ function AutomationRow({
               <span className="automation-row-next">
                 {stateEndMark(state, true)}
                 <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
-                  <span className="automation-row-when">{automationNextText(automation, now)}</span>
+                  <Text
+                    as={TEXT_ELEMENT.SPAN}
+                    variant={TEXT_VARIANT.INHERIT}
+                    truncate
+                    className="automation-row-when"
+                  >
+                    {automationNextText(automation, now)}
+                  </Text>
                 </Tooltip>
               </span>
             </span>
@@ -361,22 +369,24 @@ function SuggestedAutomations({
         {SUGGESTIONS.map(({ name, glyph }) => {
           const preset = automationPreset(name);
           return (
-            <button
+            <div
               key={name}
-              type="button"
               className="automation-suggestion"
-              disabled={disabled}
-              onClick={() => onStart(name)}
+              data-disabled={disabled ? "true" : undefined}
             >
-              <span className="automation-suggestion-head">
-                <span className="automation-suggestion-glyph" aria-hidden="true">
-                  {glyph}
+              <CardPress disabled={disabled} onPress={() => onStart(name)}>
+                <span className="automation-suggestion-face">
+                  <span className="automation-suggestion-head">
+                    <span className="automation-suggestion-glyph" aria-hidden="true">
+                      {glyph}
+                    </span>
+                    <PlusIcon className="automation-suggestion-add" aria-hidden="true" />
+                  </span>
+                  <span className="automation-suggestion-name">{preset.name}</span>
+                  <span className="automation-suggestion-detail">{preset.description}</span>
                 </span>
-                <PlusIcon className="automation-suggestion-add" aria-hidden="true" />
-              </span>
-              <span className="automation-suggestion-name">{preset.name}</span>
-              <span className="automation-suggestion-detail">{preset.description}</span>
-            </button>
+              </CardPress>
+            </div>
           );
         })}
       </div>

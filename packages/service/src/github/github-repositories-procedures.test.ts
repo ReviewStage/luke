@@ -731,6 +731,54 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
+    "an open pull request GitHub's merge queue holds is answered queued, and a merged one asks GitHub no queue",
+    () =>
+      Effect.gen(function* () {
+        let queueAnswer: Response | undefined;
+        const github = githubReaching(
+          [{ id: 7831, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            if (new URL(sent.url).pathname === "/graphql") return queueAnswer?.clone();
+            const pulled = PULL_PATH.exec(new URL(sent.url).pathname);
+            const record = pulled === null ? undefined : RELAY_PULLS.get(Number(pulled[1]));
+            return record === undefined ? undefined : Response.json(record);
+          },
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7831,
+          accountId: 9831,
+          accountLogin: "acme",
+        });
+        const pullRequest = (number: number) =>
+          Effect.map(
+            read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+              [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+              [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+              [GITHUB_REPOSITORIES_QUERY.NUMBER, String(number)],
+            ]),
+            (answered) => readOf(githubRepositoryPullRequestAnswerSchema, answered).pullRequest,
+          );
+
+        queueAnswer = Response.json({
+          data: { repository: { pullRequest: { mergeQueueEntry: { position: 1 } } } },
+        });
+        const queued = yield* pullRequest(42);
+        const merged = yield* pullRequest(43);
+
+        assert.equal(queued?.state, PULL_REQUEST_STATE.OPEN);
+        assert.equal(queued?.queued, true);
+        assert.equal(merged?.queued, undefined, "a merged one is asked no queue");
+        assert.equal(
+          github.sent.filter((sent) => new URL(sent.url).pathname === "/graphql").length,
+          1,
+        );
+      }),
+  );
+
+  it.effect(
     "a pull request of a repository the installation does not reach, or of a number the repository holds none under, answers none",
     () =>
       Effect.gen(function* () {

@@ -24,6 +24,8 @@ export interface StackCandidate {
   readonly base: string;
   /** Whether its head is a fork's branch, which no pull request of this repository stands on. */
   readonly crossRepository: boolean;
+  /** True where it is open and GitHub's merge queue holds it; absent otherwise. */
+  readonly queued?: true;
 }
 
 /** One pull request of a stack, as its header lists it. */
@@ -89,5 +91,11 @@ export function stackOf(
     chain.push(node);
   }
   if (chain.length < 2) return [];
-  return chain.map(({ number, title, url, draft }) => ({ number, title, url, draft }));
+  return chain.map(({ number, title, url, draft, queued }) => ({
+    number,
+    title,
+    url,
+    draft,
+    ...(queued === true ? { queued } : undefined),
+  }));
 }

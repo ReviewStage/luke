@@ -35,6 +35,7 @@
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
     "./installed-skill-wire": "./src/installed-skill-wire.js",
+    "./video-signature": "./src/video-signature.js",
     "./agent-pictures-model": "./src/agent-pictures-model.js",
     "./agent-replay": "./src/agent-replay.js",
     "./agent-runtime-models": "./src/agent-runtime-models.js",
@@ -60,6 +61,7 @@
     "./mac-command-wire": "./src/mac-command-wire.js",
     "./mac-terminal-wire": "./src/mac-terminal-wire.js",
     "./linear-wire": "./src/linear-wire.js",
+    "./sentry-install-wire": "./src/sentry-install-wire.js",
     "./link-home": "./src/link-home.js",
     "./link-open": "./src/link-open.js",
     "./luke-link": "./src/luke-link.js",
@@ -146,7 +148,8 @@
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
-    "./terminal-store": "./src/terminal-store.js"
+    "./terminal-store": "./src/terminal-store.js",
+    "./trigger-catalog": "./src/trigger-catalog.js"
   },
   "types": "./src/index.ts",
   "scripts": {

@@ -53,8 +53,10 @@ import { agentPublished } from "./published.js";
  * the agent's later pull requests go out as the App without asking again;
  * the agent is told, so it can tell the developer. A refusal of the pull
  * request itself, such as one already open from the branch, is the agent's
- * to read and opens nothing. Every description ends on the line saying Luke
- * made it, since its author may be a person. It merges into the
+ * to read and opens nothing. The description is the agent's own, with no
+ * line of Luke's added: where its author is a person, the trailer on its
+ * commits (`checkout.ts`) names Luke's bot as co-author, which GitHub shows
+ * on the pull request, as it does for Claude Code. It merges into the
  * repository's default branch unless the agent names another base, such as
  * the branch of the pull request it stacks on; a base GitHub does not know
  * is refused like any other. Once GitHub opens it, its branch and the pull
@@ -72,9 +74,6 @@ const PULL_REQUEST_BOUNDS = {
   MAX_REFUSAL_CHARS: 500,
 } as const;
 
-/** The line every pull request the agent opens ends its description with. */
-const PULL_REQUEST_FOOTER = "Made with [Luke](https://tryluke.dev)";
-
 const openPullRequestInputSchema = Schema.Struct({
   head: Schema.Trim.check(
     Schema.isNonEmpty(),
@@ -84,9 +83,7 @@ const openPullRequestInputSchema = Schema.Struct({
     Schema.isNonEmpty(),
     Schema.isMaxLength(PULL_REQUEST_BOUNDS.MAX_TITLE_CHARS),
   ),
-  body: Schema.String.check(
-    Schema.isMaxLength(PULL_REQUEST_BOUNDS.MAX_BODY_CHARS - PULL_REQUEST_FOOTER.length - 2),
-  ),
+  body: Schema.String.check(Schema.isMaxLength(PULL_REQUEST_BOUNDS.MAX_BODY_CHARS)),
   draft: Schema.optionalKey(Schema.Boolean),
   base: Schema.optionalKey(
     Schema.Trim.check(
@@ -115,7 +112,7 @@ export const OPEN_PULL_REQUEST_TOOL = {
     "Markdown, draft whether it opens as a draft, and base the branch it merges into: the repository's default branch " +
     "where left out, or another branch on GitHub, such as the parent's branch for a stacked pull request. Use this rather than " +
     "`gh pr create`: the service opens it as the developer who started you where you write as them, and as Luke's GitHub " +
-    `App otherwise, and ends the description with the line "${PULL_REQUEST_FOOTER}". Where GitHub refuses the developer's ` +
+    "App otherwise, and adds nothing to the description. Where GitHub refuses the developer's " +
     "own access, it is opened as the App instead and the answer says so; tell the developer, who can sign in with GitHub " +
     "again. The call answers with the pull request's address and number, or GitHub's reason it opened none.",
   inputSchema: openPullRequestInputSchema,
@@ -319,14 +316,13 @@ const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDevel
   );
 });
 
-/** The pull request GitHub is asked to open: the agent's branch against the base it named or the default branch, its description ending on Luke's line. */
+/** The pull request GitHub is asked to open: the agent's branch against the base it named or the default branch, its description as the agent wrote it. */
 function pullRequestOf(input: OpenPullRequestInput, defaultBranch: string): PullRequestAsked {
-  const body = input.body.trimEnd();
   return {
     head: input.head,
     base: input.base ?? defaultBranch,
     title: input.title,
-    body: body.endsWith(PULL_REQUEST_FOOTER) ? body : `${body}\n\n${PULL_REQUEST_FOOTER}`.trim(),
+    body: input.body.trimEnd(),
     draft: input.draft ?? false,
   };
 }

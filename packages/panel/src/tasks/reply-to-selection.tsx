@@ -1,6 +1,6 @@
 import { useAtomSet } from "@effect/atom-react";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
+import { BUTTON_SIZE, Button, IconButton, MenuSurface } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Duration, Effect } from "effect";
@@ -183,8 +183,8 @@ export function ReplyToSelection({
 
   if (picked === undefined || reply === undefined) return null;
   return createPortal(
-    <div
-      className="menu-surface reply-to-selection"
+    <MenuSurface
+      className="reply-to-selection"
       data-below={picked.below ? "" : undefined}
       style={{ left: picked.left, top: picked.top }}
     >
@@ -199,7 +199,7 @@ export function ReplyToSelection({
           {REPLY_WORDS.REPLY}
         </Button>
       </Tooltip>
-    </div>,
+    </MenuSurface>,
     document.body,
   );
 }

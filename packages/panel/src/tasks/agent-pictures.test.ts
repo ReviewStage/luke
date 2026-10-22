@@ -2,7 +2,10 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import { PICTURE_OMISSION } from "@luke/features/conversation-picture-wire";
+import {
+  CONVERSATION_MEDIA_TYPE,
+  PICTURE_OMISSION,
+} from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
@@ -18,8 +21,12 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
  * fold and reads each picture once through the door it is given; two calls
  * one after another are one set; an integration's call keeps its row and
  * gains its pictures as chips under it, one left out saying so; a refused
- * call is a row where its error is read; and a picture written in the
- * agent's words is a link, never an image.
+ * call is a row where its error is read; a picture written in the
+ * agent's words is a link, never an image; a WebM it showed plays in a
+ * player of its own, from a `blob:` address let go of as the player goes;
+ * and an image a line handed the agent, which its row names by id, is read
+ * through the door as a chip, while one a row keeps the bytes of is drawn
+ * from them.
  *
  * Synthetic turns and pictures throughout: the door answers a PNG's first
  * bytes for every picture it is asked for.
@@ -302,7 +309,7 @@ test("a refused set is a row that failed, its reason read in it, and nothing wai
 test("the viewer over a set of eight walks all eight, the two the turn did not draw among them", async () => {
   const pictures = Array.from({ length: 8 }, () => picture(800, 450));
   const { container } = await drawn(finished([shown("call-eight", pictures), text("All eight.")]));
-  const first = container.querySelector<HTMLButtonElement>(".picture-set-tile");
+  const first = container.querySelector<HTMLButtonElement>(".picture-set-tile button");
   assert.ok(first);
 
   await act(async () => first.click());
@@ -355,7 +362,7 @@ test("the viewer opened on the first picture to land reaches the rest as their r
             held.push(() => resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }));
           }),
   );
-  const tile = container.querySelector<HTMLButtonElement>(".picture-set-tile");
+  const tile = container.querySelector<HTMLButtonElement>(".picture-set-tile button");
   assert.ok(tile);
 
   await act(async () => tile.click());
@@ -368,4 +375,159 @@ test("the viewer opened on the first picture to land reaches the rest as their r
   });
 
   assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 3");
+});
+
+test("a WebM the agent showed plays in its own player, left out of the replay, beside the picture shown with it", async () => {
+  const created: string[] = [];
+  const revoked: string[] = [];
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = (blob: Blob) => {
+    created.push(blob.type);
+    return `blob:video-${String(created.length)}`;
+  };
+  URL.revokeObjectURL = (url: string) => {
+    revoked.push(url);
+  };
+  try {
+    const video = { ...picture(1280, 800), mediaType: CONVERSATION_MEDIA_TYPE.WEBM };
+    const still = picture(1200, 720);
+    const { container, read } = await drawn(
+      finished([
+        toolPart(
+          "show_image",
+          "call-show",
+          {
+            images: [
+              { path: "/tmp/video/flow.webm", caption: "Inviting a member" },
+              { path: "shots/after.png", caption: "The invite sent" },
+            ],
+          },
+          { status: "accepted", pictures: [video, still] },
+        ),
+        text("Invites can be sent from the members page."),
+      ]),
+      false,
+      (id) =>
+        Promise.resolve(
+          id === video.id
+            ? { contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }
+            : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" },
+        ),
+    );
+
+    const player = container.querySelector("video");
+    assert.ok(player, "the video is played, not drawn");
+    assert.equal(player.getAttribute("src"), "blob:video-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member");
+    assert.ok(player.hasAttribute("controls"));
+    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM]);
+    assert.deepEqual(
+      [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
+      ["data:image/png;base64,iVBORw=="],
+      "the picture shown with it is drawn as one picture alone is",
+    );
+    assert.deepEqual(read.sort(), [video.id, still.id].sort());
+
+    const root = roots.pop();
+    assert.ok(root);
+    act(() => root.unmount());
+    assert.deepEqual(revoked, ["blob:video-1"], "the address is let go of as the player goes");
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
+});
+
+test("a recording a finished browser call kept plays under its row, out of the turn's fold, its caption under it", async () => {
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = () => "blob:recording-1";
+  URL.revokeObjectURL = () => undefined;
+  try {
+    const video = { ...picture(1278, 598), mediaType: CONVERSATION_MEDIA_TYPE.WEBM };
+    const { container, read } = await drawn(
+      finished([
+        toolPart(
+          "browser",
+          "call-record",
+          { actions: [{ action: "record" }] },
+          {
+            status: "ran",
+            steps: [{ action: "record", status: "done", maxSeconds: 120 }],
+            skipped: 0,
+            tabs: [],
+          },
+        ),
+        toolPart(
+          "browser",
+          "call-stop",
+          { actions: [{ action: "stop_recording", caption: "Inviting a member" }] },
+          {
+            status: "ran",
+            steps: [
+              {
+                action: "stop_recording",
+                status: "done",
+                seconds: 8.3,
+                caption: "Inviting a member",
+                picture: video,
+              },
+            ],
+            skipped: 0,
+            tabs: [],
+          },
+        ),
+        text("Invites can be sent from the members page."),
+      ]),
+      false,
+      () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
+    );
+
+    const player = container.querySelector("video");
+    assert.ok(player, "the recording plays though the work before it folded");
+    assert.equal(player.getAttribute("src"), "blob:recording-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member");
+    assert.ok(player.closest(".ph-no-capture"));
+    assert.equal(
+      player.closest(".picture-block")?.querySelector(".picture-caption")?.textContent,
+      "Inviting a member",
+    );
+    assert.deepEqual(read, [video.id]);
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
+});
+
+test("an image a line's row names by the picture it was kept as is read through the door and drawn as its chip, and one an older row keeps the bytes of is drawn from them with no read", async () => {
+  const kept = picture(2, 1);
+  const { container, read } = await drawn({
+    id: "line",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      text("Match these."),
+      {
+        type: "file",
+        mediaType: INBOX_IMAGE_TYPE.PNG,
+        filename: "flow.png",
+        url: "",
+        providerMetadata: { luke: { attachmentId: kept.id } },
+      },
+      {
+        type: "file",
+        mediaType: INBOX_IMAGE_TYPE.PNG,
+        filename: "old.png",
+        url: "data:image/png;base64,AAAA",
+      },
+    ],
+  });
+
+  const chips = [...container.querySelectorAll('ul[aria-label="Attached files"] > li')];
+  assert.deepEqual(
+    chips.map((chip) => chip.querySelector("img")?.getAttribute("src")),
+    ["data:image/png;base64,iVBORw==", "data:image/png;base64,AAAA"],
+  );
+  assert.deepEqual(read, [kept.id]);
 });

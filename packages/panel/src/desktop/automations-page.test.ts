@@ -34,6 +34,7 @@ import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
+import { CARD_PRESS_SELECTOR } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -1282,7 +1283,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
     row.querySelector(".luke-combobox-option-label")?.textContent,
     row.querySelector(".actor-mark") !== null
       ? "person"
-      : row.querySelector(".workspace-tile") !== null
+      : row.querySelector(".luke-avatar[data-shape='tile']") !== null
         ? "tile"
         : "none",
   ]);
@@ -1296,7 +1297,10 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   );
   assert.ok(acme, "the menu offers the workspace");
   act(() => acme.click());
-  assert.ok(picker(page, "Owner").querySelector(".workspace-tile"), "the workspace wears its tile");
+  assert.ok(
+    picker(page, "Owner").querySelector(".luke-avatar[data-shape='tile']"),
+    "the workspace wears its tile",
+  );
 });
 
 test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
@@ -1323,7 +1327,7 @@ test("the list's Owner column draws the workspace by its tile, the account's own
 
   const markOf = (name: string) => {
     const owner = rowOf(page, name).querySelector(".automation-owner");
-    if (owner?.querySelector(".workspace-tile")) return "tile";
+    if (owner?.querySelector(".luke-avatar[data-shape='tile']")) return "tile";
     return owner?.querySelector(".actor-mark")?.getAttribute("data-kind") ?? "none";
   };
   assert.equal(markOf(SWEEP.name), "tile");
@@ -2570,7 +2574,9 @@ test("an automation whose task opens with no code review settings shows no Code 
 /** The suggestion named, under the list. */
 function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
   const found = [
-    ...page.querySelectorAll<HTMLButtonElement>("[aria-label='Suggested'] .automation-suggestion"),
+    ...page.querySelectorAll<HTMLButtonElement>(
+      `[aria-label='Suggested'] .automation-suggestion ${CARD_PRESS_SELECTOR}`,
+    ),
   ].find((each) => each.querySelector(".automation-suggestion-name")?.textContent === name);
   assert.ok(found, `no suggestion ${name}`);
   return found;

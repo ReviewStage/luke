@@ -19,6 +19,9 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CARD_PRESS_CORNER,
+  CARD_PRESS_REACH,
+  CardPress,
   CommentsIcon,
   ConfirmDialog,
   DIALOG_TONE,
@@ -28,16 +31,24 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  LINE_BUTTON_LOOK,
+  LineButton,
+  MenuSurface,
   SCROLL_FADE,
   ScrollArea,
   SUBMIT_STATE,
+  TEXT_AREA_GROW_LIMIT,
+  TEXT_AREA_LOOK,
+  TEXT_AREA_SUBMIT,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextArea,
   TrashIcon,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
@@ -150,6 +161,9 @@ const COMMENT_MARK_CLASS = "plan-comment-mark";
 
 /** How far below the scroller's top a thread asked to be shown lands. */
 const REVEAL_ROOM = 96;
+
+/** What a mention's chip wears, whose press opens the thread at rest it stands in as well as what it names. */
+const MENTION_REF = "[data-mention-ref]";
 
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
@@ -639,39 +653,26 @@ function PlainCommentText({
   autoFocus = false,
   onPasteFiles,
 }: CommentTextProps): React.JSX.Element {
-  const field = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
-    const element = field.current;
-    if (element === null) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  }, [value]);
   return (
-    <textarea
-      ref={field}
-      className="comment-text"
+    <TextArea
+      look={TEXT_AREA_LOOK.BARE}
+      growLimit={TEXT_AREA_GROW_LIMIT.NONE}
+      grow
       rows={1}
       value={value}
       placeholder={label}
-      aria-label={label}
+      label={label}
       // biome-ignore lint/a11y/noAutofocus: the field is opened by the press that asked for it, as a reply field is.
       autoFocus={autoFocus}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={onChange}
       onPaste={(event) => {
         // Note that only files the field takes stop the paste, so text pastes as it always does.
         const files = Array.from(event.clipboardData.files);
         if (files.length > 0 && onPasteFiles?.(files) === true) event.preventDefault();
       }}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          onSubmit();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          onCancel();
-        }
-      }}
+      submitKey={TEXT_AREA_SUBMIT.ENTER}
+      onSubmit={onSubmit}
+      onEscape={onCancel}
     />
   );
 }
@@ -866,16 +867,13 @@ function ThreadQuote({
     );
   }
   return (
-    <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
-      <button
-        type="button"
-        className="comment-quote comment-quote-link"
-        data-gone={gone}
-        onClick={onShowWords}
-      >
-        {thread.quote}
-      </button>
-    </Tooltip>
+    <blockquote className="comment-quote" data-gone={gone}>
+      <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
+        <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShowWords}>
+          {thread.quote}
+        </LineButton>
+      </Tooltip>
+    </blockquote>
   );
 }
 
@@ -925,32 +923,12 @@ function ThreadCard({
     const faces = [
       ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
     ];
-    // Note that the whole card at rest is one press that opens it, but for what is a press of its own inside it, a writer's name say; its button is the keyboard's way in.
-    const pressed = (event: React.MouseEvent<HTMLDivElement>) => {
-      const inner =
-        event.target instanceof Element
-          ? event.target.closest("a, button, [role='button'], [role='menuitem']")
-          : null;
-      if (inner === null || inner.classList.contains("comment-open")) onOpen?.();
-    };
     return (
-      // biome-ignore lint/a11y/noStaticElementInteractions: the card's own button takes the keyboard, and this widens its press to the card
-      // biome-ignore lint/a11y/useKeyWithClickEvents: the card's own button takes the keyboard, and this widens its press to the card
       <div
         className="comment-card"
         data-open="false"
         data-pointed={pointed}
         data-thread={thread.id}
-        onClick={pressed}
-        // Note that a mention's chip takes its own press and lets it go no further, so the card hears it first and opens with it.
-        onClickCapture={(event) => {
-          if (
-            event.target instanceof Element &&
-            event.target.closest("[data-mention-ref]") !== null
-          ) {
-            onOpen?.();
-          }
-        }}
       >
         {head}
         {first === undefined ? null : (
@@ -967,10 +945,15 @@ function ThreadCard({
             <CommentWords words={first.words ?? ""} />
           </div>
         )}
-        {/* Note that the card's button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
-        <button type="button" className="comment-open">
+        {/* Note that the whole card at rest is one press that opens it, but for a control of its own inside it, an agent's name say, and a mention's chip opens it as it takes its own press; its button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
+        <CardPress
+          reach={CARD_PRESS_REACH.CARD}
+          alsoPressedBy={MENTION_REF}
+          corner={CARD_PRESS_CORNER.MENU}
+          onPress={() => onOpen?.()}
+        >
           {replies.length === 0 ? (
-            <span className="luke-visually-hidden">{COMMENT_WORDS.OPEN_THREAD}</span>
+            <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
           ) : (
             <span className="comment-replies">
               <span className="comment-faces">
@@ -985,7 +968,7 @@ function ThreadCard({
               </span>
             </span>
           )}
-        </button>
+        </CardPress>
       </div>
     );
   }
@@ -1635,8 +1618,8 @@ export function PlanCommentLayer({
     );
   const bubbleDrawn =
     bubble === undefined ? null : (
-      <div
-        className="comment-bubble menu-surface"
+      <MenuSurface
+        className="comment-bubble"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
@@ -1645,7 +1628,7 @@ export function PlanCommentLayer({
             {COMMENT_WORDS.COMMENT}
           </Button>
         </Tooltip>
-      </div>
+      </MenuSurface>
     );
   if (wide) {
     return (

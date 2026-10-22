@@ -4,6 +4,7 @@ import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
+  AVATAR_SIZE,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -13,6 +14,7 @@ import {
   ProviderMark,
   TaskPriorityMark,
   TaskStatusMark as TaskStatusGlyph,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -85,7 +87,7 @@ export function TaskStatusMark({
     return (
       <span className="task-mark-attention">
         <AttentionMark />
-        <span className="visually-hidden">{`(repository belongs to ${stranded.name})`}</span>
+        <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
       </span>
     );
   }
@@ -119,6 +121,7 @@ export function RepositoryDetail({
           repository={repository}
           pictures={pictures}
           fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+          size={AVATAR_SIZE.MARK}
         />
       }
       label={repository}

@@ -7,6 +7,7 @@ import { askRecord } from "@luke/database/models/asks";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
@@ -18,6 +19,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
+import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import {
   callOpeningHistory,
   LIVE_CLIENT_EVENT,
@@ -45,6 +47,7 @@ import {
 import { memoryRelayState, StreamRelay } from "../agents/brain-host/relay.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../core.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import {
   appended,
@@ -55,6 +58,7 @@ import {
 } from "../testing/live-events.js";
 import {
   connect,
+  everyAccountKeyed,
   type FakeAccounts,
   fakeAccounts,
   hangUpDevice,
@@ -182,7 +186,12 @@ const TASK = {
 } as const;
 
 /** An agent on the task, started blank under the account, on eve unless a runtime is named. */
-async function startAgent(userId: string, taskId: string, runtime?: ConversationRuntime) {
+async function startAgent(
+  userId: string,
+  taskId: string,
+  runtime?: ConversationRuntime,
+  payer?: CodingAgentPayer,
+) {
   const started = await database.run(
     createCodingAgent(userId, {
       taskId,
@@ -193,6 +202,7 @@ async function startAgent(userId: string, taskId: string, runtime?: Conversation
       effort: "high",
       repository: null,
       runtime,
+      payer,
     }),
   );
   return Option.getOrThrow(started).agent;
@@ -219,6 +229,8 @@ async function startTasklessAgent(userId: string) {
 /** An account holding one task with one agent on it, and the agent's conversation every call into it lands in. */
 async function account(): Promise<{ target: ConversationTarget; taskId: string; agentId: string }> {
   const userId = await database.createUser();
+  // Luke's key pays for no coding agent, so a call's turns run on the account's own keys.
+  await database.run(connectAgentApiKeys(userId));
   const task = await database.run(startTask(userId, TASK));
   const agent = await startAgent(userId, task.id);
   return {
@@ -357,7 +369,7 @@ async function stand(offer: Offer): Promise<Stand> {
         const listener = yield* listening(voice, 0, "127.0.0.1");
         yield* VoiceService.make({
           server: voice,
-          apiKey: API_KEY,
+          openAiKeyOf: everyAccountKeyed(API_KEY),
           accounts,
           record: sessionRecord,
           openAiBaseUrl: openAi.baseUrl,
@@ -751,6 +763,8 @@ it.effect(
       const context = await stand(OFFER.EXCHANGE);
       const member = context.target.userId;
       const teammate = await database.createUser();
+      // The call's turns run on the starter's key, so the teammate saved its own.
+      await database.run(connectAgentApiKeys(teammate));
       const task = await database.run(startTask(teammate, TASK));
       await database.run(joinWorkspace(task.workspaceId, member));
       const theirs = await startAgent(teammate, task.id);
@@ -877,6 +891,47 @@ it.effect(
       assert.deepEqual(context.accounts.spent, []);
       assert.equal(context.openAi.creates.length, 0);
       assert.deepEqual(context.offered, []);
+      assert.deepEqual(context.eve.opened, []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into an eve agent Luke's key paid for is refused by name before anything is counted or created, though its starter saved an API key since, and so is one into an agent whose starter keeps no API key",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const lukes = await startAgent(
+        context.target.userId,
+        context.taskId,
+        CONVERSATION_RUNTIME.EVE,
+        CODING_AGENT_PAYER.LUKE,
+      );
+      const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in refused);
+      await send(refused.reader.socket, createFrame(context.taskId, lukes.id));
+      assert.equal(
+        record(await refused.reader.next()).error,
+        HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING,
+      );
+      await database.run(
+        Database.use((db) =>
+          db.delete(accountProviderKey).where(eq(accountProviderKey.userId, context.target.userId)),
+        ),
+      );
+      const keyless = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in keyless);
+      await send(keyless.reader.socket, createFrame(context.taskId, context.agentId));
+      assert.equal(
+        record(await keyless.reader.next()).error,
+        HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING,
+      );
+      assert.deepEqual(context.accounts.spent, []);
+      assert.equal(context.openAi.creates.length, 0);
       assert.deepEqual(context.eve.opened, []);
       await context.stop();
     }),

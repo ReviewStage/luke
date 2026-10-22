@@ -99,11 +99,13 @@ const AUTOMATION_REASON_LABEL = {
   [AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE]: "Repository unreachable",
   [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "GitHub sign-in lapsed",
   [AUTOMATION_RUN_REASON.MODEL]: "Model no longer offered",
+  [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "No credential connected",
   [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Agents unreachable",
   [AUTOMATION_RUN_REASON.REPOSITORY_CHANGED]: "Repository changed",
   [AUTOMATION_RUN_REASON.PAUSED]: "Paused before start",
   [AUTOMATION_RUN_REASON.MISSED]: "Missed its hour",
   [AUTOMATION_RUN_REASON.AGENT_GONE]: "Agent gone",
+  [AUTOMATION_RUN_REASON.SAME_SUBJECT]: "Same issue in cooldown",
 } as const satisfies Record<AutomationRunReason, string>;
 
 const NO_REASON_LABEL = "No reason recorded";

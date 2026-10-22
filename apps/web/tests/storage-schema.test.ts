@@ -73,6 +73,8 @@ const DECLARED_TABLES = [
   "installed_skill",
   "installed_skill_file",
   "integration_connection",
+  "integration_install_intent",
+  "integration_installation",
   "invitation",
   "jwks",
   "mac_command",

@@ -582,6 +582,19 @@ test("a page on an integration's host, its own or one under it, reads as that in
   }
 });
 
+test("a Notion page reads as Notion's link on its app's host, app.notion.com, as on notion.so", () => {
+  for (const url of [
+    "https://app.notion.com/p/1a2b3c4d5e6f40718293a4b5c6d7e8f9",
+    "https://www.notion.so/acme/Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9",
+  ]) {
+    assert.deepEqual(
+      decodeMention(url, REPOSITORY),
+      { kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.NOTION, url },
+      url,
+    );
+  }
+});
+
 test("a page's address stays one markdown link's however many parentheses it keeps", () => {
   const mention = decodeMention("https://www.notion.so/acme/Plan-(draft)-1a2b3c", REPOSITORY);
   assert.ok(mention !== undefined);

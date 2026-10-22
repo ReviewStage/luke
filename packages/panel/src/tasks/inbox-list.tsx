@@ -39,6 +39,7 @@ import {
   SkeletonRegion,
   TaskStatusMark,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -130,10 +131,10 @@ import {
   type InboxLineKind,
   type InboxListed,
   type InboxListView,
+  type InboxPerson,
   type InboxPersonGroup,
   type InboxShow,
   type InboxSort,
-  type InboxStarter,
   type InboxStatusGroup,
   type InboxStatusGroupKind,
   type InboxWhose,
@@ -144,6 +145,7 @@ import {
   inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
+  inboxWaitsOn,
   isDone,
   isUnread,
   listedItems,
@@ -775,7 +777,7 @@ export function InboxItemRow({
   const drafted = useInboxItemDrafted(item) && !open;
   const starter = readersItem(item, reader)
     ? undefined
-    : personActor(item.startedBy, directory.members, reader, directory.former);
+    : personActor(inboxWaitsOn(item), directory.members, reader, directory.former);
   const ticked = inboxShownTicks(item, useInboxItemDraft(item));
   const lineKind = inboxLineKind(item);
   const nameOf = (member: Parameters<typeof personActor>[0]) =>
@@ -872,7 +874,7 @@ export function InboxItemRow({
           }
           meta={
             <span className="home-row-meta">
-              {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
+              {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
               {context === undefined ? null : (
                 <FadingWords className="home-row-context" words={context} />
               )}
@@ -880,13 +882,13 @@ export function InboxItemRow({
                 <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
               )}
               {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
-                <span className="visually-hidden">{waitingOn(starter)}</span>
+                <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
               )}
               {drafted ? <DraftMark /> : null}
               {needsYou ? (
                 <span className="inbox-row-attention">
                   <AttentionMark />
-                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
                 </span>
               ) : null}
               <TaskStatusChip holder={holder} />
@@ -961,7 +963,7 @@ function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element 
   return (
     <span className="inbox-row-task-status" data-task-status={status}>
       <TaskStatusMark status={status} />
-      <span className="visually-hidden">{TASK_STATUS_WORDS[status]}</span>
+      <VisuallyHidden>{TASK_STATUS_WORDS[status]}</VisuallyHidden>
     </span>
   );
 }
@@ -1085,13 +1087,13 @@ function StatusHeader({
  * heads its groups. A press folds the group, as every group header's does.
  */
 function PersonHeader({
-  starter,
+  person,
   readerId,
   folded,
   count,
   onToggle,
 }: {
-  starter: InboxStarter | undefined;
+  person: InboxPerson | undefined;
   readerId: string | undefined;
   folded: boolean;
   count: number;
@@ -1101,8 +1103,8 @@ function PersonHeader({
   const reader = known ?? readerId;
   const you = members?.find((each) => each.userId === reader);
   const actor: Actor =
-    starter !== undefined
-      ? personActor(starter, members, reader, former)
+    person !== undefined
+      ? personActor(person, members, reader, former)
       : you !== undefined
         ? memberActor(you, reader)
         : { kind: ACTOR_KIND.PERSON, userId: reader ?? "", name: "", you: true };
@@ -1550,9 +1552,9 @@ function ListHead({
   );
 }
 
-/** What a list its search left empty says. */
-function noMatch(searched: string): string {
-  return `No items match “${searched.trim()}”.`;
+/** What a list its search left empty says, under its rows, on the window's Inbox and a task's own alike. */
+export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
+  return <p className="sidebar-note">{`No items match “${searched.trim()}”.`}</p>;
 }
 
 /** What the list says where a task's read did not answer. */
@@ -1617,7 +1619,7 @@ export function InboxListNote({
   }
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
-  if (searched !== undefined) return <p className="sidebar-note">{noMatch(searched)}</p>;
+  if (searched !== undefined) return <SearchEmpty searched={searched} />;
   if (filteredOut !== undefined)
     return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
@@ -1649,7 +1651,7 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
-  /** The list's search, which its head's magnifier opens; none where the list offers none, as a task's own Inbox does. */
+  /** The list's search, which its head's magnifier opens, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
 }
 
@@ -1843,14 +1845,14 @@ export function InboxList({
     );
   };
   const personSection = (
-    { key, starter, items }: InboxPersonGroup,
+    { key, person, items }: InboxPersonGroup,
     leave: React.RefCallback<HTMLElement> | undefined,
   ) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
       <div key={key} ref={leave} className="sidebar-repository">
         <PersonHeader
-          starter={starter}
+          person={person}
           readerId={readerId}
           folded={folded}
           count={needingYou(items)}

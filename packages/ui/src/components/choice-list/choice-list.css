@@ -34,11 +34,15 @@
     gap: var(--luke-space-6);
   }
 
+  /* Note that a pill's corners are half its one-line height rather than a
+     full round, so a long option that wraps in a narrow column stands as a
+     rounded box instead of swelling into an ellipse, while a short one is
+     the same capsule as ever. */
   .luke-choice-list[data-look="pill"] > .luke-choice {
     gap: var(--luke-icon-gap);
     min-height: var(--luke-control-height);
-    padding: 0 var(--luke-space-12);
-    border-radius: 999px;
+    padding: var(--luke-space-4) var(--luke-space-12);
+    border-radius: calc(var(--luke-control-height) / 2);
     box-shadow: inset 0 0 0 1px var(--luke-color-border);
     font-size: var(--luke-type-caption-size);
   }
@@ -50,7 +54,15 @@
 
   .luke-choice-list[data-look="pill"] .luke-choice-check {
     display: none;
+    flex: none;
     margin: 0;
+  }
+
+  /* A pill's badge stands beside its words while they fit on one line,
+     and drops under them once they would wrap, rather than squeezing them
+     into a column of a word a line. */
+  .luke-choice-list[data-look="pill"] .luke-choice-label {
+    flex: 0 1 auto;
   }
 
   .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] .luke-choice-check {
@@ -123,17 +135,22 @@
     min-width: 0;
   }
 
-  /* The label gives the badge its room: it shrinks past its longest word,
-     and a word too long for what is left, a path or an identifier, breaks
-     anywhere rather than pushing the badge out past the row's edge. */
+  /* The badge stands at the label's top right while the label keeps a
+     readable measure beside it; in a column too narrow for both, a side
+     panel's or a phone's, the badge and the number drop to a line of
+     their own under the label rather than squeezing it to a word a line.
+     A word too long for its line, a path or an identifier, still breaks
+     anywhere rather than pushing past the row's edge. */
   .luke-choice-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: var(--luke-space-8);
+    gap: var(--luke-space-4) var(--luke-space-8);
   }
 
   .luke-choice-label {
+    flex: 1 1 0;
     min-width: 0;
     font-weight: var(--luke-weight-medium);
     overflow-wrap: anywhere;
@@ -146,6 +163,15 @@
     flex: none;
     align-items: center;
     gap: var(--luke-space-8);
+  }
+
+  /* Note that only a badge asks a row's label for a measure, since a
+     number alone is narrow enough to stand beside any label; a pill sizes
+     to its words and asks none. */
+  .luke-choice-list:not([data-look="pill"])
+    .luke-choice-head:has(> .luke-choice-end .luke-badge)
+    > .luke-choice-label {
+    flex-basis: 10em;
   }
 
   .luke-choice-number {
@@ -238,5 +264,148 @@
     height: 12px;
     margin-right: var(--luke-space-2);
     vertical-align: -1px;
+  }
+
+  /* Faces in a grid, four to a line: each a round picture over its name,
+     ringed in the switch's accent once picked, the keyboard's ring drawn
+     on the picture since the row itself has no box to ring. */
+  .luke-choice-list[data-look="picture"] {
+    display: grid;
+    gap: var(--luke-space-12) var(--luke-space-8);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .luke-choice-list[data-look="picture"] > .luke-choice {
+    flex-direction: column;
+    gap: var(--luke-space-4);
+    padding: 0;
+    outline: none;
+    background: none;
+    box-shadow: none;
+    color: var(--luke-color-text-muted);
+    font-size: inherit;
+  }
+
+  .luke-choice-list[data-look="picture"] > .luke-choice:hover:not(:disabled) {
+    background: none;
+  }
+
+  .luke-choice-list[data-look="picture"] .luke-choice-mark {
+    overflow: hidden;
+    width: 100%;
+    max-width: 88px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--luke-color-border);
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+    transition: box-shadow var(--luke-duration-hover) ease;
+  }
+
+  .luke-choice-list[data-look="picture"] .luke-choice-mark img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 25%;
+  }
+
+  .luke-choice-list[data-look="picture"] > .luke-choice:hover:not(:disabled) .luke-choice-mark {
+    box-shadow: 0 0 0 2px var(--luke-color-border-strong);
+  }
+
+  .luke-choice-list[data-look="picture"] > .luke-choice[aria-checked="true"] .luke-choice-mark {
+    box-shadow: 0 0 0 2px var(--luke-color-switch-on);
+  }
+
+  :root[data-keyboard="true"]
+    .luke-choice-list[data-look="picture"]
+    > .luke-choice:focus-visible
+    .luke-choice-mark {
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: calc(2px + var(--luke-focus-ring-offset));
+  }
+
+  .luke-choice-name {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: var(--luke-type-caption-size);
+    white-space: nowrap;
+  }
+
+  /* A name cut short fades out at its end, once it is measured cut. */
+  .luke-choice-name[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 var(--label-fade, 20px));
+  }
+
+  .luke-choice-list[data-look="picture"] > .luke-choice[aria-checked="true"] .luke-choice-name {
+    color: var(--luke-color-text);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  /* A card holds its radio, what it says at the head's end, and controls of
+     its own under them; the card wears the row's box, the radio none. */
+  .luke-choice-list[data-look="card"] {
+    gap: var(--luke-space-8);
+  }
+
+  .luke-choice-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-8);
+    padding: var(--luke-space-12);
+    border-radius: var(--luke-control-radius);
+    box-shadow: inset 0 0 0 1px var(--luke-color-border);
+  }
+
+  .luke-choice-card[data-checked="true"] {
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+  }
+
+  .luke-choice-card[data-unavailable="true"] {
+    opacity: 0.55;
+  }
+
+  .luke-choice-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-space-8);
+  }
+
+  .luke-choice-card-head > .luke-choice,
+  .luke-choice-card-head > .luke-choice[aria-checked="true"],
+  .luke-choice-card-head > button.luke-choice:hover:not(:disabled) {
+    min-width: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .luke-choice-card-head > .luke-choice:disabled {
+    opacity: 1;
+  }
+
+  /* An unsaved credential's radio cannot be picked, so its ring steps back while its label stays readable. */
+  .luke-choice-card-head > .luke-choice:disabled > .luke-choice-control {
+    opacity: 0.4;
+  }
+
+  .luke-choice-card-head .luke-choice-control {
+    margin-top: 0;
+    align-self: center;
+  }
+
+  .luke-choice-card-head .luke-choice-words {
+    flex: 0 1 auto;
+  }
+
+  .luke-choice-aside {
+    font-size: var(--luke-type-caption-size);
+  }
+
+  .luke-choice-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-6);
   }
 }

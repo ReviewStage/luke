@@ -9,6 +9,8 @@ import {
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  CARD_PRESS_SELECTOR,
+  CardPress,
   CHIP_LOOK,
   CHIP_SIZE,
   CHOICE_BAR_LOOK,
@@ -29,6 +31,7 @@ import {
   PROVIDER_MARK_SIZE,
   ProviderMark,
   SCROLL_FADE,
+  SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
   TaskPriorityMark,
@@ -137,7 +140,7 @@ function repositoryName(repository: string): string {
 }
 
 /** What a press must land on to carry a card: the press that opens it, which reaches every edge of the card but its foot's controls. */
-const CARD_HANDLE = ".tasks-board-card-press";
+const CARD_HANDLE = CARD_PRESS_SELECTOR;
 
 /** The column a narrow board shows first, where it stands: where a task starts. */
 const FIRST_SHOWN: string = TASK_STATUS.TODO;
@@ -242,7 +245,14 @@ function TaskBoardCard({
         {drawn(TASK_PROPERTY.CREATOR) ? (
           <span className="tasks-board-face">
             {maker === undefined ? null : (
-              <span className="tasks-board-maker">{actorName(maker.actor)}</span>
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="tasks-board-maker"
+              >
+                {actorName(maker.actor)}
+              </Text>
             )}
             <ActorMark
               actor={maker?.actor ?? creator}
@@ -262,7 +272,7 @@ function TaskBoardCard({
       data-editing={rename.editing ? "true" : undefined}
     >
       {rename.editing ? (
-        <div className="tasks-board-card-press">
+        <div className="tasks-board-card-face">
           {head}
           <span className="tasks-board-name">
             <InlineEdit
@@ -278,21 +288,21 @@ function TaskBoardCard({
           </span>
         </div>
       ) : (
-        <button
+        <CardPress
           ref={press}
-          type="button"
-          className="tasks-board-card-press"
           disabled={actions.deletion.busy}
-          onClick={() => {
+          onPress={() => {
             actions.close(false);
             onOpen();
           }}
           onKeyDown={actions.keyMenu}
-          {...actions.contextMenu(press)}
+          contextMenu={actions.contextMenu(press)}
         >
-          {head}
-          <span className="tasks-board-name">{task.name}</span>
-        </button>
+          <span className="tasks-board-card-face">
+            {head}
+            <span className="tasks-board-name">{task.name}</span>
+          </span>
+        </CardPress>
       )}
       {rename.refused ? (
         <span className="tasks-board-card-note" role="alert">
@@ -309,7 +319,14 @@ function TaskBoardCard({
           <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} named={narrow} onStanding={onStanding} />
         ) : null}
         {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
-          <span className="tasks-board-repository">{repositoryName(task.repository)}</span>
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="tasks-board-repository"
+          >
+            {repositoryName(task.repository)}
+          </Text>
         )}
         {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMarks task={task} /> : null}
         <span className="tasks-board-card-more">
@@ -442,9 +459,11 @@ function TaskBoardColumnView({
         ) : null
       ) : (
         <div className="tasks-board-column-scroll">
+          {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
           <ScrollArea
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
             fade={SCROLL_FADE.BOTH}
+            overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
             <ul className="tasks-board-cards" onPointerDown={narrow ? undefined : drag}>
               {column.tasks.map((task) => (

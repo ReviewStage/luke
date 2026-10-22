@@ -9,6 +9,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Spinner } from "../spinner.js";
@@ -28,7 +29,9 @@ import { DICTATION_PHASE, type DictationControl } from "./use-dictation.js";
  * one spinner until the words land in the box. The bars are the
  * microphone's level and nothing else, so the screen recording, which
  * masks every word, keeps no more than their heights; reduced motion
- * holds them still at rest while the clock still counts.
+ * holds them still at rest while the clock still counts. A clip is heard on
+ * the account's own OpenAI key, so with none saved the button says to add
+ * one and its press opens Settings › Agents (`../openai-key.tsx`).
  */
 
 const LABEL = {
@@ -67,14 +70,15 @@ export function DictateButton({
   dictation: DictationControl;
   disabled: boolean;
 }): React.JSX.Element {
+  const label = dictation.keyMissing ? OPENAI_KEY_MISSING_NOTE : LABEL.DICTATE;
   return (
     // Note that the box is what a narrow card's stylesheet hides and its ⋯ reads, and
     // the press keeps the caret where it was in the box, which is where the words go.
     <span className="dictate-button">
-      <Tooltip label={LABEL.DICTATE}>
+      <Tooltip label={label}>
         <IconButton
           icon={<MicrophoneIcon />}
-          label={LABEL.DICTATE}
+          label={label}
           disabled={disabled}
           keepFocus
           onClick={dictation.start}

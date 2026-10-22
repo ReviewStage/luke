@@ -8,11 +8,12 @@ import {
 } from "@luke/wire";
 import { AGENT_TOOL } from "./agent-tools.js";
 import {
+  CONVERSATION_MEDIA_TYPE,
+  type ConversationMediaType,
   type KeptPicture,
   PICTURE_OMISSION,
   type PictureOmission,
 } from "./conversation-picture-wire.js";
-import { INBOX_IMAGE_TYPE, type InboxImageType } from "./inbox-wire.js";
 
 /**
  * agent-pictures-model.ts -- the pictures an agent's transcript names, read from its stored calls: the set a `show_image` call showed, the pictures an integration's call answered, and the screenshots a `browser` call took, each by the id the service kept it under.
@@ -24,14 +25,14 @@ import { INBOX_IMAGE_TYPE, type InboxImageType } from "./inbox-wire.js";
  * picture the service did not keep is named by why, with its size.
  */
 
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
 
 const OMISSIONS: ReadonlySet<string> = new Set(Object.values(PICTURE_OMISSION));
 
 /** The kinds of block an MCP tool answers that can carry a picture. */
 const PICTURE_BLOCK = { IMAGE: "image", RESOURCE: "resource" } as const;
 
-function isPictureType(value: UnparsedWireValue): value is InboxImageType {
+function isPictureType(value: UnparsedWireValue): value is ConversationMediaType {
   return isWireString(value) && PICTURE_TYPES.has(value);
 }
 
@@ -117,6 +118,33 @@ function screenshotsOf(output: UnparsedWireValue): readonly CalledPicture[] {
     if (!isRecord(step) || step.action !== SCREENSHOT_ACTION) continue;
     const called = calledPicture(step, `${SCREENSHOT_NAME}-${String(found.length + 1)}`);
     if (called !== undefined) found.push(called);
+  }
+  return found;
+}
+
+/** The step a browser call's recording answers once stopped and kept. */
+const STOP_RECORDING_ACTION = "stop_recording";
+
+/** What a browser call's recording is named by where it has no caption, before its place among the call's: `recording-1`. */
+const RECORDING_NAME = "recording";
+
+/**
+ * The videos a browser call recorded and the transcript kept, in the order
+ * its steps stopped them, each with the caption it was stopped with; nothing
+ * for any other call, or a recording not kept.
+ */
+export function recordedVideosOf(
+  tool: string,
+  output: UnparsedWireValue,
+): readonly (ShownPicture & { readonly picture: KeptPicture })[] {
+  if (tool !== AGENT_TOOL.BROWSER || !isRecord(output) || !Array.isArray(output.steps)) return [];
+  const found: (ShownPicture & { readonly picture: KeptPicture })[] = [];
+  for (const step of output.steps) {
+    if (!isRecord(step) || step.action !== STOP_RECORDING_ACTION) continue;
+    const picture = keptPictureOf(step.picture);
+    if (picture === undefined) continue;
+    const caption = isWireString(step.caption) ? step.caption : "";
+    found.push({ picture, name: `${RECORDING_NAME}-${String(found.length + 1)}`, caption });
   }
   return found;
 }

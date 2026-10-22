@@ -30,7 +30,7 @@ import {
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
-import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
+import { READ_WEB_PAGE_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 import { CODER } from "./bounds.js";
@@ -44,6 +44,7 @@ import { bashStartingIn } from "./shell.js";
 import { SHOW_IMAGE_TOOL } from "./show-image.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { TODOS_TOOL } from "./todos.js";
+import { estimatedTokens } from "./token-estimate.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
@@ -61,9 +62,6 @@ import { CODER_TOOL } from "./tool-set.js";
  * is in eve's service alone: this module reaches eve's tools, which no
  * route may load.
  */
-
-/** The bytes a token stands for in eve's own estimate. */
-const BYTES_PER_TOKEN = 4;
 
 /** A tool as the model is shown it: its words and its input's JSON Schema. */
 interface ShownTool {
@@ -87,9 +85,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.GLOB]: shown(globIn(CODER.CHECKOUT_PATH)),
   [CODER_TOOL.GREP]: shown(grepIn(CODER.CHECKOUT_PATH)),
   [CODER_TOOL.APPLY_PATCH]: shown(applyPatchIn(CODER.CHECKOUT_PATH)),
-  [CODER_TOOL.SEARCH_WEB]: {
-    description: SEARCH_WEB_TOOL.description,
-    inputSchema: emitJsonSchema(SEARCH_WEB_TOOL.inputSchema),
+  // Note that the provider declares its own search tool, so this stands for it at about its size.
+  [CODER_TOOL.WEB_SEARCH]: {
+    description: "Search the web.",
+    inputSchema: { type: "object", properties: { query: { type: "string" } } },
   },
   [CODER_TOOL.READ_WEB_PAGE]: {
     description: READ_WEB_PAGE_TOOL.description,
@@ -266,11 +265,6 @@ type StepUsage = Extract<MessageStreamEvent, { type: "step.completed" }>["data"]
 export interface StepText {
   readonly instructions: string;
   readonly brief: string;
-}
-
-/** The tokens of a value's JSON as eve's compaction estimates them: its bytes over four, rounded up. */
-function estimatedTokens(json: string): number {
-  return Math.ceil(new TextEncoder().encode(json).byteLength / BYTES_PER_TOKEN);
 }
 
 /** The definitions of the authored tools, estimated once: the same for every agent and every turn. */

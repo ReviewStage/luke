@@ -59,8 +59,6 @@ const ORIGIN = "https://luke.test";
 const PREFERENCES_PATH = "/api/account/preferences";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

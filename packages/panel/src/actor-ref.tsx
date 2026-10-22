@@ -22,6 +22,7 @@ import {
   ScrollArea,
   TEXT_BUTTON_LINES,
   TextButton,
+  VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import {
@@ -281,7 +282,7 @@ const LEFT_WORDS = " (former member)";
 
 /** What a screen reader hears after the name of a member who left, set beside it; nothing for anyone else. */
 export function LeftWords({ actor }: { actor: Actor }): React.JSX.Element | null {
-  return leftWithFace(actor) ? <span className="visually-hidden">{LEFT_WORDS}</span> : null;
+  return leftWithFace(actor) ? <VisuallyHidden>{LEFT_WORDS}</VisuallyHidden> : null;
 }
 
 /** An actor's circle or square alone, at a size. */
@@ -330,13 +331,13 @@ export function ActorMark({
  */
 export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
-  return <span className="visually-hidden">{`(created by ${actorName(actor)}${left})`}</span>;
+  return <VisuallyHidden>{`(created by ${actorName(actor)}${left})`}</VisuallyHidden>;
 }
 
 /** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
 export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
-  return <span className="visually-hidden">{`(assigned to ${actorName(actor)}${left})`}</span>;
+  return <VisuallyHidden>{`(assigned to ${actorName(actor)}${left})`}</VisuallyHidden>;
 }
 
 /** The quiet badge the reader's own account wears beside its name. */

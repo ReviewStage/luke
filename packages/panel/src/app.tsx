@@ -55,13 +55,14 @@ import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
+import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
-import { useStageRoom } from "./stage-room.js";
+import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatOn } from "./tasks/chat-gate.js";
@@ -244,7 +245,17 @@ function ChatToasts({
 export function App(): React.JSX.Element {
   const fixtureMode = useAppSlice(FIXTURE_MODE);
   const landed = useTasksFixtureLanded(fixtureMode);
-  return landed ? <AppWindow /> : <></>;
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  // Note that the account's key is read above the window, because the window's own call press reads it too.
+  return (
+    <OpenAiKeyProvider
+      account={
+        account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined
+      }
+    >
+      {landed ? <AppWindow /> : null}
+    </OpenAiKeyProvider>
+  );
 }
 
 function AppWindow(): React.JSX.Element {
@@ -807,23 +818,25 @@ function AppWindow(): React.JSX.Element {
                           style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
                         >
                           {/* The window's content. */}
-                          <div className="desktop-stage">
-                            <MessageRevealProvider value={messageReveal}>
-                              <ThreadRevealProvider value={threadReveal}>
-                                <SettingsShell
-                                  gates={gates}
-                                  tab={tab}
-                                  onTabChange={changeTab}
-                                  tasks={shellTasks}
-                                  history={history}
-                                  sidebar={sidebar}
-                                  room={room}
-                                  settingsStep={settingsStep}
-                                  doors={settingsDoors}
-                                />
-                              </ThreadRevealProvider>
-                            </MessageRevealProvider>
-                          </div>
+                          <ShellRoomContext.Provider value={room}>
+                            <div className="desktop-stage">
+                              <MessageRevealProvider value={messageReveal}>
+                                <ThreadRevealProvider value={threadReveal}>
+                                  <SettingsShell
+                                    gates={gates}
+                                    tab={tab}
+                                    onTabChange={changeTab}
+                                    tasks={shellTasks}
+                                    history={history}
+                                    sidebar={sidebar}
+                                    room={room}
+                                    settingsStep={settingsStep}
+                                    doors={settingsDoors}
+                                  />
+                                </ThreadRevealProvider>
+                              </MessageRevealProvider>
+                            </div>
+                          </ShellRoomContext.Provider>
                           {/* A note to the people who make Luke, written in a dialog over the
           window. */}
                           <FeedbackDialog

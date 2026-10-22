@@ -3392,6 +3392,48 @@ const findAttachment = SqlSchema.findOneOption({
     ),
 });
 
+const ChatImageRowSchema = Schema.Struct({
+  contentType: chatImageTypeSchema,
+  bytes: Schema.Uint8Array,
+});
+
+/**
+ * The picture a chat message carries under its attachment id alone, where
+ * the reader may see the message's channel, as its reads of the chat do
+ * (`visibleTo`): a person every channel bar a DM with a teammate's
+ * operator, an agent its home and the DMs it is one of. Nothing where the
+ * account is not in the workspace, may not act as the reader, or the reader
+ * sees no message carrying a picture under the id, such as a picture kept
+ * beside a conversation rather than a message.
+ */
+export function readAttachmentFor(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  attachmentId: string,
+): ChatStoreEffect<Option.Option<ChatImage>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader) || !actsAs(userId, reader.value)) return Option.none();
+    const rows = yield* Database.use((db) =>
+      db
+        .select({ contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
+        .innerJoin(chatMessage, eq(chatMessage.id, attachment.chatMessageId))
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+        .where(
+          and(
+            eq(attachment.organizationId, organizationId),
+            eq(attachment.id, attachmentId),
+            visibleTo(reader.value),
+          ),
+        ),
+    );
+    const [row] = yield* Schema.decodeUnknownEffect(Schema.Array(ChatImageRowSchema))(rows);
+    return Option.fromNullishOr(row);
+  });
+}
+
 /** The message under its row's lock, with its author and the blocks that name its pictures. */
 const lockMessageInWorkspace = SqlSchema.findOneOption({
   Request: Schema.Struct({ organizationId: Schema.String, messageId: Schema.String }),
@@ -3477,6 +3519,56 @@ export function readAttachment(
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
     return yield* findAttachment({ organizationId, userId, messageId, attachmentId });
+  });
+}
+
+const findMessagePictures = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    userId: Schema.String,
+    messageId: Schema.String,
+  }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    contentType: chatImageTypeSchema,
+    bytes: Schema.Uint8Array,
+  }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: attachment.id, contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
+        .innerJoin(chatMessage, eq(chatMessage.id, attachment.chatMessageId))
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+        .where(
+          and(
+            eq(attachment.organizationId, key.organizationId),
+            eq(chatMessage.organizationId, key.organizationId),
+            eq(attachment.chatMessageId, key.messageId),
+            // A picture in a DM with a teammate's operator is as private as the DM.
+            channelSeenBy(key.userId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Every picture the message keeps, each under its id, in no order of its
+ * own: what a notice of the message hands the agents it tells, which put
+ * them in the order its image blocks name them. Scoped as `readAttachment`
+ * is: nothing where the account is not in the workspace, the message is
+ * not the workspace's, or its channel is a DM the account does not see.
+ * Kept apart from a read of one picture by its id alone, which checks the
+ * caller's own right to read it.
+ */
+export function readMessagePictures(
+  userId: string,
+  organizationId: string,
+  messageId: string,
+): ChatStoreEffect<readonly ChatImageWrite[]> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
+    return yield* findMessagePictures({ organizationId, userId, messageId });
   });
 }
 

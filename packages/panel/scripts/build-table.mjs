@@ -144,9 +144,10 @@ export function lucideWholeModule(file) {
 // (`src/diff-view/index.ts`'s `highlightPool`), bundled whole as one classic
 // script and handed to the diff bundle as text (`DIFF_HIGHLIGHT_WORKER`),
 // which starts each worker from a `blob:`, the one place the panel's policy
-// admits a worker from. Its WebAssembly engine is answered with nothing,
-// since the policy admits no WebAssembly and the bundle asks for Shiki's
-// JavaScript engine; carried, it would be 600 KB of the worker's text.
+// admits a worker from. Shiki's WebAssembly engine is answered with nothing,
+// since the bundle colours with Pierre's Highlights, or with Shiki's
+// JavaScript engine where WebAssembly is refused, and never with Shiki's own
+// WebAssembly; carried, it would be 600 KB of the worker's text.
 const SHIKI_WASM = /^shiki\/wasm$/;
 const shikiWasmLeftOut = {
   name: "shiki-wasm-left-out",

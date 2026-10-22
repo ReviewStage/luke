@@ -16,16 +16,23 @@ import {
 import {
   type CodingAgent,
   createCodingAgent,
+  latestTurnsOfReached,
   readCodingAgentRouting,
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey, setPlanStatus } from "@luke/database/models/provider-key-store";
+import {
+  removeProviderKey,
+  saveProviderKey,
+  setPlanStatus,
+} from "@luke/database/models/provider-key-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { CODING_AGENT_FAILURE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -46,8 +53,9 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { TURN_ORIGIN } from "../../core.js";
+import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { keptAfterResponse } from "../../http/after-response.js";
 import {
   connectWorkspaceGitHub,
   GITHUB_APP_WITH_TOKENS,
@@ -68,6 +76,7 @@ import {
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import {
@@ -78,6 +87,7 @@ import {
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
+import { codingAgentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -97,6 +107,7 @@ const MCP_URL = "https://luke.test/api/agents/mcp";
 const INSTRUCTIONS = "You are a Luke coding agent.";
 const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
+const API_KEY = "sk-ant-api03-fixture-account-key";
 const RING = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -108,8 +119,6 @@ const RELAY_INSTALLATION: InstallationFixture = {
 const CLI_SESSION = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
 const NO_KEYS: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
@@ -253,9 +262,80 @@ const raceThrough = <A, E>(held: { open: () => void }, fibers: readonly Fiber.Fi
     return yield* Effect.forEach(fibers, Fiber.join);
   });
 
+/**
+ * The work run, the clock moved on by `step` a time at a time, `times`
+ * times, each after the event loop turned enough for a wait the work armed
+ * to stand, and the work joined.
+ */
+const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times: number) =>
+  Effect.gen(function* () {
+    const fiber = yield* Effect.forkChild(work);
+    for (let move = 0; move < times; move += 1) {
+      yield* Effect.promise(async () => {
+        for (let turn = 0; turn < 50; turn += 1) {
+          await new Promise<void>((settle) => setImmediate(settle));
+        }
+      });
+      yield* TestClock.adjust(step);
+    }
+    return yield* Fiber.join(fiber);
+  });
+
+/** The agent's newest turn, as its status reads it, and the word its failure is read as. */
+const newestTurn = (agent: CodingAgent) =>
+  Effect.map(latestTurnsOfReached([agent.conversationId]), (turns) => {
+    const turn = turns.get(agent.conversationId);
+    return { status: turn?.status, failure: codingAgentFailureOf(turn) };
+  });
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
+
+/** An account on its Claude plan with one agent on a task of the Relay repository, and its sessions over the fake Vercel given. */
+const repositoryAgent = (
+  api: ReturnType<typeof runnerSandboxApi>,
+  installation: InstallationFixture = RELAY_INSTALLATION,
+) =>
+  Effect.gen(function* () {
+    const userId = `user-${randomUUID()}`;
+    yield* Effect.flatMap(Database, (db) =>
+      db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    );
+    yield* savePlan(userId);
+    const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
+    yield* connectWorkspaceGitHub(task.workspaceId, installation);
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: "start-1",
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Relay\n",
+      prompt: null,
+      repository: RELAY_FULL_NAME,
+    });
+    const agent = Option.getOrThrow(started).agent;
+    const github = githubReaching([installation], undefined, {}, (sent) =>
+      new URL(sent.url).hostname === "vercel.com"
+        ? api.respond(sent.url, { method: sent.method, headers: sent.headers, body: sent.body })
+        : undefined,
+    );
+    const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          github.layer,
+          Layer.succeed(HostedEnvironment, NO_KEYS),
+          Layer.succeed(AgentSandboxImage, {
+            snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+            snapshotGone: () => Effect.void,
+          }),
+          Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
+        ),
+      ),
+    );
+
+    return { userId, agent, sessions };
+  });
 
 it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   it.effect(
@@ -402,6 +482,88 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "an agent its starter's API key pays for launches on ANTHROPIC_API_KEY, never the plan, takes messages whatever the plan says, and is refused once the key is gone",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-key",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.API_KEY,
+        });
+        assert.ok(Option.isSome(started));
+        const agent = started.value.agent;
+        // The account keeps a plan too, refused: an agent on its key never asks it.
+        yield* savePlan(userId);
+        const now = yield* DateTime.nowAsDate;
+        yield* setPlanStatus(
+          userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+          PROVIDER_KEY_STATUS.INVALID,
+          undefined,
+          now,
+          now,
+        );
+        const ring = parseKeyRing(Redacted.make(RING));
+        assert.ok(Result.isSuccess(ring));
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(ring.success, owner, Redacted.make(API_KEY)),
+          "sk-ant-api…-key",
+          null,
+          new Date(0),
+        );
+
+        const api = runnerSandboxApi();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [command] = api.commands;
+        assert.ok(command !== undefined);
+        assert.equal(command.env[RUNNER_ENV.API_KEY], API_KEY);
+        assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        const visible = JSON.stringify([command.args, command.stdin, api.sandboxes]);
+        assert.equal(visible.includes(API_KEY), false);
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+
+        yield* removeProviderKey(
+          userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.API_KEY,
+        );
+        const gone = runnerSandboxApi();
+        const without = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(gone)),
+        );
+        assert.equal((yield* without.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(gone.commands, []);
+      }),
+  );
+
+  it.effect(
     "open answers failed and opens nothing where no snapshot or no setup-token stands",
     () =>
       Effect.gen(function* () {
@@ -428,6 +590,74 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The sandbox the failed launch opened is deleted again, and no runner started.
         assert.ok(noToken.sandboxes.every((sandbox) => sandbox.deleted));
         assert.deepEqual(noToken.commands, []);
+      }),
+  );
+
+  it.effect(
+    "a PDF attached to the first message or a later one is written into the sandbox and named by its path, where an image goes as a block",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const pdf = "%PDF-1.7 the spec";
+        const png = Buffer.from("png bytes").toString("base64");
+        const withFiles = (text: string, lineId: string, filename: string) => ({
+          ...message(agent, text, lineId),
+          message: [
+            { type: "text" as const, text },
+            {
+              type: "file" as const,
+              data: `data:application/pdf;base64,${Buffer.from(pdf).toString("base64")}`,
+              mediaType: "application/pdf",
+              filename,
+            },
+            { type: "file" as const, data: png, mediaType: "image/png", filename: "shot.png" },
+          ],
+        });
+        const firstId = randomUUID();
+        const laterId = randomUUID();
+
+        const opened = yield* sessions.open(withFiles("Read the spec.", firstId, "Spec v2.pdf"));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const sent = yield* sessions.send(
+          opened.sessionId,
+          withFiles("And this one.", laterId, "../../etc/notes.pdf"),
+        );
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+
+        const firstPath = `/tmp/luke-attachments/${firstId}/2-Spec-v2.pdf`;
+        const laterPath = `/tmp/luke-attachments/${laterId}/2-etc-notes.pdf`;
+        const written = new Map(api.uploads.flatMap((upload) => [...upload]));
+        assert.equal(written.get(firstPath), pdf);
+        assert.equal(written.get(laterPath), pdf);
+        const messages = (linesOf(api.commands[0]) as InputLine[]).filter(
+          (each) => each.type === INPUT_LINE.MESSAGE,
+        );
+        assert.deepEqual(
+          messages.map((each) => ("content" in each ? each.content : undefined)),
+          [
+            [
+              { type: "text", text: "Read the spec." },
+              {
+                type: "text",
+                text: `[Spec v2.pdf (application/pdf) was attached: it is at ${firstPath} in your sandbox, read it from there]`,
+              },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: png } },
+            ],
+            [
+              { type: "text", text: "And this one." },
+              {
+                type: "text",
+                text: `[../../etc/notes.pdf (application/pdf) was attached: it is at ${laterPath} in your sandbox, read it from there]`,
+              },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: png } },
+            ],
+          ],
+        );
       }),
   );
 
@@ -704,7 +934,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a template snapshot Vercel answers gone (410 snapshot_not_found) is handed back to the image, and the launch answers as preparing",
+    "a template snapshot Vercel answers gone (410 snapshot_not_found) is handed back to the image, and the open waits for the image made again and launches on its new snapshot",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -712,22 +942,32 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         api.goneSnapshots.add(SNAPSHOT);
         const { userId, agent } = yield* openAgent;
         const handedBack: string[] = [];
+        const current = { snapshot: SNAPSHOT };
         const image = Layer.succeed(AgentSandboxImage, {
-          snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
-          snapshotGone: (snapshotId) => Effect.sync(() => handedBack.push(snapshotId)),
+          snapshotId: Effect.sync(() => Option.some(current.snapshot)),
+          snapshotGone: (snapshotId) =>
+            Effect.sync(() => {
+              handedBack.push(snapshotId);
+              current.snapshot = "snap_fixture_image_again";
+            }),
         });
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(Layer.merge(services(api), image)),
         );
 
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        const opened = yield* across(
+          sessions.open(message(agent, "Fix the invitations.")),
+          NATIVE_TEMPLATE.POLL,
+          2,
+        );
 
-        assert.deepEqual(opened, {
-          outcome: EVE_SEND_OUTCOME.FAILED,
-          status: IMAGE_PREPARING_STATUS,
-        });
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.deepEqual(handedBack, [SNAPSHOT]);
-        assert.equal(api.sandboxes.length, 0);
+        assert.deepEqual(
+          api.sandboxes.map((sandbox) => sandbox.snapshotId),
+          ["snap_fixture_image_again"],
+        );
+        assert.equal(api.commands.length, 1);
       }),
   );
 
@@ -814,7 +1054,45 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch while the image is still being prepared fails as preparing and opens nothing",
+    "an open answers at once while the image is still being prepared, opens nothing until it is ready, then launches with no ask again",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const preparing = { remaining: 2 };
+        const kept = keptAfterResponse();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(api),
+              Layer.succeed(AgentSandboxImage, {
+                snapshotId: Effect.suspend(() => {
+                  if (preparing.remaining === 0) return Effect.succeed(Option.some(SNAPSHOT));
+                  preparing.remaining -= 1;
+                  return Effect.fail(new ImagePreparing());
+                }),
+                snapshotGone: () => Effect.void,
+              }),
+            ),
+          ),
+        );
+
+        const opened = yield* sessions
+          .open(message(agent, "Fix the invitations."))
+          .pipe(Effect.provide(kept.layer));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 0);
+        yield* across(kept.run, NATIVE_TEMPLATE.POLL, 3);
+        assert.equal(api.sandboxes.length, 1);
+        assert.equal(api.commands.length, 1);
+        assert.equal((yield* newestTurn(agent)).status, undefined);
+      }),
+  );
+
+  it.effect(
+    "an image still being prepared past the open's wait opens nothing, and the agent's first turn reads failed for its sandbox",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -831,14 +1109,63 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             ),
           ),
         );
+        const polls =
+          Duration.toMillis(NATIVE_TEMPLATE.WAIT) / Duration.toMillis(NATIVE_TEMPLATE.POLL) + 2;
 
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        const opened = yield* across(
+          sessions.open(message(agent, "Fix the invitations.")),
+          NATIVE_TEMPLATE.POLL,
+          polls,
+        );
 
-        assert.deepEqual(opened, {
-          outcome: EVE_SEND_OUTCOME.FAILED,
-          status: IMAGE_PREPARING_STATUS,
-        });
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 0);
+        assert.deepEqual(yield* newestTurn(agent), {
+          status: TURN_STATUS.FAILED,
+          failure: CODING_AGENT_FAILURE.SANDBOX,
+        });
+      }),
+  );
+
+  it.effect(
+    "a Start's open answers before any sandbox is made, the launch running once the answer has left, and a plan signed out is refused at once with nothing left to run",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const kept = keptAfterResponse();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+
+        const opened = yield* sessions
+          .open(message(agent, "Fix the invitations."))
+          .pipe(Effect.provide(kept.layer));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.deepEqual([api.sandboxes.length, api.commands.length], [0, 0]);
+        yield* kept.run;
+        assert.deepEqual([api.sandboxes.length, api.commands.length], [1, 1]);
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes[0]?.tags.sessionId, opened.sessionId);
+
+        const unplanned = yield* openAgentWithoutPlan;
+        const refusedApi = runnerSandboxApi();
+        const refusedKept = keptAfterResponse();
+        const unplannedSessions = yield* sessionsFor(unplanned.userId, { next: 0 }).pipe(
+          Effect.provide(services(refusedApi)),
+        );
+        const refused = yield* unplannedSessions
+          .open(message(unplanned.agent, "Go."))
+          .pipe(Effect.provide(refusedKept.layer));
+        assert.deepEqual(refused, {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+        });
+        yield* refusedKept.run;
+        assert.deepEqual(refusedApi.sandboxes, []);
       }),
   );
 
@@ -1195,7 +1522,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch Vercel refused logs the call, its status, and Vercel's error, and no secret",
+    "a launch Vercel refused after the open answered logs the call, its status, and Vercel's error, and no secret, deletes its sandbox, and reads as the agent's failed turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1217,10 +1544,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .open(message(agent, "Fix the invitations."))
           .pipe(Effect.provide(logger));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.ok(
           logged.includes(
-            "A Claude Code open failed: Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused",
+            "A Claude Code launch failed after its Start: Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused",
           ),
           logged.join("\n"),
         );
@@ -1230,6 +1557,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         for (const secret of [PLAN_TOKEN, bearer, fixtureToken()]) {
           assert.equal(written.includes(secret), false);
         }
+        assert.ok(api.sandboxes.every((sandbox) => sandbox.deleted));
+        assert.deepEqual(yield* newestTurn(agent), {
+          status: TURN_STATUS.FAILED,
+          failure: CODING_AGENT_FAILURE.SANDBOX,
+        });
       }),
   );
 
@@ -1239,51 +1571,50 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
-        const userId = `user-${randomUUID()}`;
-        yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
-        );
-        yield* savePlan(userId);
-        const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
-        yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
-        const started = yield* createCodingAgent(userId, {
-          taskId: task.id,
-          idempotencyKey: "start-1",
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          planSnapshot: "# Relay\n",
-          prompt: null,
-          repository: RELAY_FULL_NAME,
-        });
-        const agent = Option.getOrThrow(started).agent;
-        const github = githubReaching([RELAY_INSTALLATION], undefined, {}, (sent) =>
-          new URL(sent.url).hostname === "vercel.com"
-            ? api.respond(sent.url, { method: sent.method, headers: sent.headers, body: sent.body })
-            : undefined,
-        );
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              github.layer,
-              Layer.succeed(HostedEnvironment, NO_KEYS),
-              Layer.succeed(AgentSandboxImage, {
-                snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
-                snapshotGone: () => Effect.void,
-              }),
-              Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
-            ),
-          ),
-        );
+        const { agent, sessions } = yield* repositoryAgent(api);
+        const runsAtStart: number[] = [];
+        api.hooks.onStart = async () => {
+          runsAtStart.push(api.runs.length);
+        };
 
         const opened = yield* sessions.open(message(agent, "Push a branch."));
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        // The clone and the rest of its history are both fetched before the runner starts, so no
+        // fetch runs beside the agent's own git.
+        const ran = (words: string) =>
+          api.runs.findIndex((run) => run.args.join(" ").includes(words));
+        assert.ok(ran("clone") >= 0);
+        assert.ok(ran("--unshallow") > ran("clone"));
+        assert.ok(ran("--unshallow") < (runsAtStart[0] ?? -1));
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
         assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
         assert.equal(api.commands.length, 1);
         const visible = JSON.stringify([api.commands, api.runs, api.sandboxes]);
         assert.equal(visible.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
         assert.equal(visible.includes(writeHeader), false);
+      }),
+  );
+
+  it.effect(
+    "an image that could not be made opens nothing, and the agent's first turn reads failed for its sandbox",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api, null)),
+        );
+
+        const opened = yield* sessions.open(message(agent, "Go."));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.deepEqual(api.sandboxes, []);
+        assert.deepEqual(yield* newestTurn(agent), {
+          status: TURN_STATUS.FAILED,
+          failure: CODING_AGENT_FAILURE.SANDBOX,
+        });
       }),
   );
 });

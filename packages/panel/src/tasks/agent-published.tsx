@@ -185,7 +185,7 @@ export function PublishedRow({
   doors: PublishedDoors;
 }): ReactNode {
   const menu = useMenu(true);
-  const state = pullRequestStateWord(pullRequest.state);
+  const state = pullRequestStateWord(pullRequest);
   const inPanel = doors.openPullRequest;
   const actions = branchActions(branch, doors, inPanel === undefined ? undefined : pullRequest.url);
   const mentionDoors = useMentionDoors();

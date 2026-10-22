@@ -10,16 +10,10 @@
  * each.
  */
 
+import { ENTER_KEY_HINT, type EnterKeyHint, TEXT_AREA_SUBMIT, type TextAreaSubmit } from "@luke/ui";
+
 /** The pointer a phone or a tablet has, a finger. */
 const COARSE_POINTER = "(pointer: coarse)";
-
-/** The label an on-screen keyboard draws on its return key: Send where Enter sends, a return where it is a new line. */
-const ENTER_KEY_HINT = {
-  SEND: "send",
-  NEW_LINE: "enter",
-} as const;
-
-export type EnterKeyHint = (typeof ENTER_KEY_HINT)[keyof typeof ENTER_KEY_HINT];
 
 /** The keys of a press this reads. */
 interface EnterPress {
@@ -43,4 +37,9 @@ export function enterSends(press: EnterPress): boolean {
 /** The return key's label as the pointer stands now. */
 export function enterKeyHint(): EnterKeyHint {
   return coarsePointer() ? ENTER_KEY_HINT.NEW_LINE : ENTER_KEY_HINT.SEND;
+}
+
+/** The key a plain text area sends on, as `enterSends` reads a press: Return with a mouse, ⌘Return on a finger's keyboard. */
+export function enterSubmitKey(): TextAreaSubmit {
+  return coarsePointer() ? TEXT_AREA_SUBMIT.MOD_ENTER : TEXT_AREA_SUBMIT.ENTER;
 }

@@ -14,6 +14,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  AVATAR_SIZE,
   BUTTON_SIZE,
   Button,
   ComposeIcon,
@@ -26,6 +27,8 @@ import {
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -37,9 +40,9 @@ import {
   UnpinIcon,
   useMenu,
   useTouchHold,
+  VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
-import { forYou } from "@luke/ui/chat-model";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
@@ -87,7 +90,7 @@ import {
   ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useMemo, useRef } from "react";
+import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -103,8 +106,6 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { Shortcut } from "../shortcut.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model.js";
-import { type SettledWaiting, useSettledToDo, useSettledWaiting } from "../tasks/inbox-settling.js";
 import { useMinute } from "../tasks/task-time.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
@@ -120,6 +121,7 @@ import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
+import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
@@ -711,7 +713,9 @@ function PinnedSection({
       />
       {drawn.length === 0 ? (
         folded ? null : (
-          <p className="sidebar-section-empty">Drag tasks here to pin them</p>
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
+          </div>
         )
       ) : (
         <PinnedRows
@@ -828,6 +832,7 @@ function RepositorySection({
               repository={repository}
               pictures={context.tasks.repositories.pictures}
               fallback={<FolderIcon />}
+              size={AVATAR_SIZE.GLYPH}
             />
           )
         }
@@ -838,7 +843,7 @@ function RepositorySection({
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
             <span className="sidebar-repository-pinned">
               <PinIcon />
-              <span className="luke-visually-hidden">(pinned)</span>
+              <VisuallyHidden>(pinned)</VisuallyHidden>
             </span>
           ) : null
         }
@@ -1068,26 +1073,6 @@ function ListSkeleton(): React.JSX.Element {
 }
 
 /**
- * How many items the Inbox's To do lists: main's count of each standing
- * task's of the listed workspace (`toDo`), the reader's own open or unread,
- * and every open one from an agent with no task that the developer started
- * (`waitsOnReader`), which names no workspace to be counted in; a
- * teammate's is listed in the Inbox, and waits on the teammate. An item the
- * window answered or marked is counted as it now stands from the moment it
- * was sent (`inbox-settling.ts`). Where main carries no count of the tasks'
- * to do, from a service before it, their open items are counted, as
- * before.
- */
-function waitingItems(
-  { waiting, taskless }: SettledWaiting,
-  toDo: number | undefined,
-  readerId: string | undefined,
-): number {
-  const tasks = toDo ?? waiting.reduce((sum, task) => sum + task.items.length, 0);
-  return tasks + taskless.filter((each) => waitsOnReader(each, readerId)).length;
-}
-
-/**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
  * task at its end, the sum of the counts the Inbox's rows show, in even
@@ -1114,7 +1099,7 @@ function SidebarInboxRow({
       current={current ? NAV_CURRENT.PAGE : undefined}
       count={{
         value: waiting,
-        noun: waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many,
+        noun: needsYouNoun(waiting),
         tone: NAV_COUNT_TONE.ACCENT,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
@@ -1125,12 +1110,6 @@ function SidebarInboxRow({
       Inbox
     </NavItem>
   );
-}
-
-/** How many messages wait on the developer in Chat: what For you lists. */
-function waitingMessages(tasks: TasksControl): number {
-  const read = tasks.chatView.chat;
-  return read === undefined ? 0 : forYou(read.answer).length;
 }
 
 /**
@@ -1155,7 +1134,7 @@ function SidebarChatRow({
       current={current ? NAV_CURRENT.PAGE : undefined}
       count={{
         value: waiting,
-        noun: waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many,
+        noun: needsYouNoun(waiting),
         tone: NAV_COUNT_TONE.ACCENT,
       }}
       onClick={onOpen}
@@ -1491,19 +1470,7 @@ function SidebarColumn({
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
-  const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
-  // Note that only the standing tasks are counted, as To do lists them, so an archived task's or one not listed yet counts nowhere.
-  const { inboxTasks, tasks: standingTasks } = tasks.listed;
-  const standingHoldings = useMemo(
-    () => inboxTasks.filter((holding) => standingTasks.some((task) => task.id === holding.taskId)),
-    [inboxTasks, standingTasks],
-  );
-  const toDo = useSettledToDo(
-    standingHoldings,
-    tasks.listed.inbox,
-    settledWaiting.waiting,
-    tasks.inboxTasks,
-  );
+  const waiting = usePlacesWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1802,7 +1769,7 @@ function SidebarColumn({
         </NavItem>
         {listsInbox ? null : (
           <SidebarInboxRow
-            waiting={tasks.signedIn ? waitingItems(settledWaiting, toDo, tasks.me) : 0}
+            waiting={waiting.inbox}
             current={inInbox}
             disabled={!tasks.signedIn}
             onOpen={chosen(openInbox)}
@@ -1811,11 +1778,7 @@ function SidebarColumn({
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
         {chatOn && tasks.signedIn && tasks.chatView.available ? (
-          <SidebarChatRow
-            waiting={waitingMessages(tasks)}
-            current={inChat}
-            onOpen={chosen(openChat)}
-          />
+          <SidebarChatRow waiting={waiting.chat} current={inChat} onOpen={chosen(openChat)} />
         ) : null}
         <SidebarAutomationsRow
           current={inAutomations}

@@ -14,6 +14,8 @@ import {
   EllipsisIcon,
   IconButton,
   MarkDoneIcon,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PencilIcon,
   TextField,
   TrashIcon,
@@ -461,7 +463,9 @@ function SidebarSection({
       )}
       {rows.length === 0 ? (
         folded ? null : (
-          <p className="sidebar-section-empty">Drag tasks here</p>
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
+          </div>
         )
       ) : (
         // A folded section's rows are only the open one, so a drop over it lands on top rather than among them.

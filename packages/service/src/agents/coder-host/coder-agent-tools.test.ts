@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Database } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { sweepAbandonedTurns, TURN_ABANDON } from "@luke/database/models/abandoned-turns";
@@ -7,7 +9,14 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
-import { ensureMember, unreadFor } from "@luke/database/models/chat-store";
+import {
+  attachMessageImages,
+  ensureMember,
+  ensureTaskChannel,
+  findOrMakeDm,
+  postMessage,
+  unreadFor,
+} from "@luke/database/models/chat-store";
 import {
   archiveCodingAgent,
   createCodingAgent,
@@ -17,8 +26,13 @@ import {
   readCodingAgent,
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
+import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
+import {
+  listProviderKeyRows,
+  setProviderKeyFastAccess,
+} from "@luke/database/models/provider-key-store";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   createTask,
@@ -42,7 +56,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
-import { CHANNEL_KIND, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
+import { CHANNEL_KIND, CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
@@ -58,12 +72,17 @@ import { INBOX_ASK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import {
+  FAST_ACCESS,
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+} from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { settleJsonSchemaGolden } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -95,6 +114,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -109,6 +129,7 @@ import {
   CODING_AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
   READ_PAGE_REFUSAL,
+  START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
   STOP_AGENT_REFUSAL,
   UPDATE_AGENT_REFUSAL,
@@ -222,8 +243,7 @@ function hostOf(acting: boolean, summaryModel?: SummaryModelOf): CoderHost {
     eveOrigin: () => (acting ? EVE_ORIGIN : undefined),
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     fastRefused: async () => undefined,
-    titleModel: () => undefined,
-    research: () => ({ openAi: undefined, spend: Effect.void }),
+    titleModel: () => Effect.succeed(undefined),
     scriptedModel: () => true,
     ...(summaryModel === undefined ? undefined : { summaryModel }),
     now: () => NOW,
@@ -590,8 +610,11 @@ function tailMessageIds(read: WireRecord): readonly string[] {
  */
 async function openWorkspaces() {
   const alice = await database.createUser();
+  await database.run(connectAgentApiKeys(alice));
   const bob = await database.createUser();
+  await database.run(connectAgentApiKeys(bob));
   const carol = await database.createUser();
+  await database.run(connectAgentApiKeys(carol));
   const invitations = await database.run(
     startTask(alice, { name: "Teammate invitations", repository: RELAY_FULL_NAME }),
   );
@@ -618,6 +641,7 @@ async function openWorkspaces() {
   const otherWorkspaces = await agentOn(carol, elsewhereTask.id);
 
   const stranger = await database.createUser();
+  await database.run(connectAgentApiKeys(stranger));
   const strangersTask = await database.run(
     startTask(stranger, { name: "Stranger's plan", repository: RELAY_FULL_NAME }),
   );
@@ -853,6 +877,199 @@ test("start_agent hands over a prompt and a note each as long as a start allows,
   assert.ok(message.includes(`\n\n${note}`), "the note follows it whole");
 });
 
+/** A PNG's bytes of the size given, each a mark of its own so two pictures never share a hash. */
+function pngOf(size: number, mark: number): Uint8Array {
+  const bytes = new Uint8Array(size);
+  bytes.set([137, 80, 78, 71, mark]);
+  return bytes;
+}
+
+/** A picture kept beside the agent's conversation, as `show_image` keeps one, a PNG unless another type is given; answers its attachment id. */
+async function keptPicture(
+  agent: ConversationTarget,
+  bytes: Uint8Array,
+  contentType: "image/png" | "video/webm" = "image/png",
+): Promise<string> {
+  const kept = await database.run(
+    keepConversationPicture(
+      { userId: agent.userId, conversationId: agent.conversationId },
+      { bytes, contentType, width: 1, height: 1 },
+    ),
+  );
+  return Option.getOrThrow(kept).id;
+}
+
+/** A chat message carrying one picture, posted by the member into the channel as the account given; answers the picture's attachment id and the message's id. */
+async function chatPicture(
+  as: string,
+  workspaceId: string,
+  author: { readonly id: string },
+  channelId: string,
+  bytes: Uint8Array,
+): Promise<{ readonly attachmentId: string; readonly messageId: string }> {
+  const attachmentId = randomUUID();
+  const posted = await database.run(
+    postMessage(as, workspaceId, {
+      authorMemberId: author.id,
+      to: { channelId },
+      blocks: [{ type: CHAT_BLOCK.IMAGE, attachmentId, alt: "The invite as it renders." }],
+      clientKey: randomUUID(),
+    }),
+  );
+  const { message } = Result.getOrThrow(posted);
+  const kept = await database.run(
+    attachMessageImages(as, workspaceId, author.id, message.id, [
+      { id: attachmentId, contentType: "image/png", bytes },
+    ]),
+  );
+  assert.equal(kept, true);
+  return { attachmentId, messageId: message.id };
+}
+
+/** The file parts a message eve was sent carries, each as eve is handed it. */
+function sentFiles(body: string | undefined): readonly unknown[] {
+  const message: unknown = JSON.parse(body ?? "").message;
+  return Array.isArray(message)
+    ? message.filter((part) => isRecord(part) && part.type === "file")
+    : [];
+}
+
+/** A file part as eve is handed a PNG forwarded under its attachment id. */
+function forwardedPng(attachmentId: string, bytes: Uint8Array) {
+  return {
+    type: "file",
+    data: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`,
+    mediaType: "image/png",
+    filename: `${attachmentId}.png`,
+  };
+}
+
+/** The caller's seat in its workspace's chat and its task's channel, as a real start seats it, and its starter's own seat. */
+async function seatedCaller(workspaceId: string, taskId: string, caller: StartedAgent) {
+  const seat = async (subject: Parameters<typeof ensureMember>[2], as = caller.userId) =>
+    Option.getOrThrow(await database.run(ensureMember(as, workspaceId, subject)));
+  const self = await seat({ kind: MEMBER_KIND.AGENT, agentId: caller.id });
+  const person = await seat({ kind: MEMBER_KIND.HUMAN, userId: caller.userId });
+  const channel = Option.getOrThrow(await database.run(ensureTaskChannel(caller.userId, taskId)));
+  return { self, person, channel, seat };
+}
+
+test("start_agent on the plan with a note hands the agent the pictures images names as file parts of its first message: one kept beside the caller's own conversation, one of a chat message in its task's channel, and one of a DM it is one of", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const { self, person, channel } = await seatedCaller(workspaceId, tasks.invitations, caller);
+  const shown = pngOf(64, 1);
+  const inChannel = pngOf(64, 2);
+  const inDm = pngOf(64, 3);
+  const shownId = await keptPicture(caller, shown);
+  const posted = await chatPicture(caller.userId, workspaceId, person, channel.id, inChannel);
+  const channelId = posted.attachmentId;
+  const dm = Option.getOrThrow(
+    await database.run(findOrMakeDm(caller.userId, workspaceId, self.id, person.id)),
+  );
+  const { attachmentId: dmId } = await chatPicture(caller.userId, workspaceId, person, dm.id, inDm);
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { note: NOTE, images: [shownId, channelId, dmId] },
+    "call-images",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.equal(eve.sent.length, 1);
+  const [opening] = eve.sent;
+  const message = sentWords(opening?.body);
+  assert.ok(message.startsWith("# Teammate invitations"), "a plan start opens on the plan");
+  assert.ok(message.includes(NOTE), message);
+  assert.deepEqual(sentFiles(opening?.body), [
+    forwardedPng(shownId, shown),
+    forwardedPng(channelId, inChannel),
+    forwardedPng(dmId, inDm),
+  ]);
+
+  // The same call run again answers the agent it made, though a picture it named is gone since.
+  await database.run(
+    attachMessageImages(caller.userId, workspaceId, person.id, posted.messageId, []),
+  );
+  const again = await call(
+    CODER_TOOL.START_AGENT,
+    { note: NOTE, images: [shownId, channelId, dmId] },
+    "call-images",
+  );
+  assert.ok(isRecord(started.agent) && isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, started.agent.id);
+  assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
+});
+
+/** The JSON Schema goldens of this package, where a tool's input a model is shown is recorded. */
+const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../../fixtures/json-schema");
+
+test("start_agent shows the model the recorded input, images among it", async () => {
+  await settleJsonSchemaGolden(GOLDEN_ROOT, "start-agent-input", START_AGENT_TOOL.inputSchema);
+});
+
+test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, one of a DM the caller is not in, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const { seat } = await seatedCaller(workspaceId, tasks.invitations, caller);
+  const teammate = teammates.userId;
+  const theirs = await keptPicture(teammates, pngOf(64, 4));
+  const bobAgent = await seat({ kind: MEMBER_KIND.AGENT, agentId: teammates.id }, teammate);
+  const bob = await seat({ kind: MEMBER_KIND.HUMAN, userId: teammate }, teammate);
+  const dm = Option.getOrThrow(
+    await database.run(findOrMakeDm(teammate, workspaceId, bobAgent.id, bob.id)),
+  );
+  const { attachmentId: notTheirs } = await chatPicture(
+    teammate,
+    workspaceId,
+    bob,
+    dm.id,
+    pngOf(64, 5),
+  );
+  const tooLarge = pngOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES + 1, 6);
+  const tooLargeId = await keptPicture(caller, tooLarge);
+  const recording = await keptPicture(caller, pngOf(64, 10), "video/webm");
+  const together = await Promise.all(
+    [7, 8, 9].map((mark) => keptPicture(caller, pngOf(1_200_000, mark))),
+  );
+  const unreached = (id: string) =>
+    `Not started: attachment ${id} is no picture you can hand on. Name a picture of your own ` +
+    "conversation, such as one show_image kept, or one of a chat message you can read.";
+
+  for (const [images, reason] of [
+    [[theirs], unreached(theirs)],
+    [[notTheirs], unreached(notTheirs)],
+    [
+      [recording],
+      `Not started: attachment ${recording} is a video, and only a picture, a PNG, JPEG, or ` +
+        "WebP, is handed to another agent.",
+    ],
+    [
+      [tooLargeId],
+      `Not started: attachment ${tooLargeId} is 1.6 MB, past the 1.5 MB an image handed to ` +
+        "another agent may be. It is not made smaller for you: hand on a smaller picture.",
+    ],
+    [
+      together,
+      "Not started: the images come to 3.6 MB together, past the 3 MB one message may carry: " +
+        "hand on fewer.",
+    ],
+    [
+      Array.from({ length: CODING_AGENT_BOUNDS.MAX_ATTACHMENTS + 1 }, () => randomUUID()),
+      START_CODING_AGENT_REFUSAL.UNREADABLE,
+    ],
+  ] as const) {
+    assert.deepEqual(
+      await call(CODER_TOOL.START_AGENT, { note: NOTE, images }, `call-${randomUUID()}`),
+      { status: ACTION_RESULT_STATUS.REJECTED, reason },
+    );
+  }
+  assert.equal(eve.sent.length, 0, "a start whose pictures are refused starts nothing");
+});
+
 test("start_agent with a title names the agent by it from the start, and a title generated later never covers it; an empty or over-long title starts nothing", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller } = agents;
@@ -993,8 +1210,21 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
     },
     { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
   ];
-  // Luke's own Anthropic key, which the starter's agents run on, was never granted fast mode.
-  const catalog = modelCatalogOf(offered, FAST_ACCESS.NOT_ENABLED);
+  // The starter's own Anthropic key, which its agents run on, was never granted fast mode.
+  const owner = agents.caller.userId;
+  const [anthropicRow] = (
+    await database.run(listProviderKeyRows(owner, PROVIDER_KEY_KIND.API_KEY))
+  ).filter((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
+  assert.ok(anthropicRow !== undefined);
+  await database.run(
+    setProviderKeyFastAccess(
+      owner,
+      PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      anthropicRow.sealedKey,
+      FAST_ACCESS.NOT_ENABLED,
+    ),
+  );
+  const catalog = modelCatalogOf(offered);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services, catalog);
 
   const listed = await call(CODER_TOOL.LIST_MODELS, {});
@@ -1069,7 +1299,6 @@ test("list_models says the default is no longer offered where the catalog droppe
         ? Effect.succeed([sol])
         : Effect.fail(new ModelCatalogUnavailable({ cause: "offline" }));
     }),
-    lukeFastAccess: Effect.succeed(undefined),
   });
   const once = await peerCaller(hostOf(true), agents.caller, eve.services, flaky);
   const refused = await once(CODER_TOOL.START_AGENT, { model: SOL, effort: "max" }, "call-max");
@@ -1078,7 +1307,6 @@ test("list_models says the default is no longer offered where the catalog droppe
 
   const unreadable = Layer.succeed(ModelCatalog, {
     read: Effect.fail(new ModelCatalogUnavailable({ cause: "offline" })),
-    lukeFastAccess: Effect.succeed(undefined),
   });
   const blind = await peerCaller(hostOf(true), agents.caller, eve.services, unreadable);
   assert.deepEqual(await blind(CODER_TOOL.LIST_MODELS, {}), {
@@ -1377,7 +1605,6 @@ test("start_agent from a source whose transcript does not fit the new agent's wi
         }),
       }),
       providerOptions: {},
-      counted: Effect.void,
     });
   const eve = await fakeCoderEve(workspaceId);
   const small: OfferedModel = {
@@ -1921,14 +2148,16 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   const billing = Option.getOrThrow(
     await database.run(readTask(agents.teammates.userId, tasks.billing)),
   );
-  const answered = (status: string, already: boolean) => ({
+  // An unarchive moves the task into progress, which assigns the caller's member a task no one was on.
+  const assignee = `[@Test User](https://tryluke.dev/workspace-${workspaceId}/person/${agents.caller.userId})`;
+  const answered = (status: string, already: boolean, assigned: string | null = null) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
     task: {
       id: tasks.billing,
       key: `TW-${billing.task.number}`,
       status,
       priority: TASK_PRIORITY.NONE,
-      assignee: null,
+      assignee: assigned,
       name: "Billing",
       repository: RELAY_FULL_NAME,
       pinned: false,
@@ -1983,7 +2212,10 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   );
   assert.deepEqual(await archive(true, "call-2"), answered(TASK_STATUS.CANCELED, true));
 
-  assert.deepEqual(await archive(false, "call-3"), answered(TASK_STATUS.IN_PROGRESS, false));
+  assert.deepEqual(
+    await archive(false, "call-3"),
+    answered(TASK_STATUS.IN_PROGRESS, false, assignee),
+  );
   assert.deepEqual(await standing(), {
     status: TASK_STATUS.IN_PROGRESS,
     archivedAt: undefined,
@@ -2003,12 +2235,12 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       mergedAt: NOW,
     }),
   );
-  assert.deepEqual(await archive(true, "call-4"), answered(TASK_STATUS.DONE, false));
+  assert.deepEqual(await archive(true, "call-4"), answered(TASK_STATUS.DONE, false, assignee));
   // A task already settled keeps its status under an archive asked again.
   await database.run(
     updateTask(agents.teammates.userId, tasks.billing, { status: TASK_STATUS.CANCELED }),
   );
-  assert.deepEqual(await archive(true, "call-5"), answered(TASK_STATUS.CANCELED, true));
+  assert.deepEqual(await archive(true, "call-5"), answered(TASK_STATUS.CANCELED, true, assignee));
 });
 
 test("update_task renames a task, pins it for the caller's starter alone, sets its repository only where the workspace's installation reaches it and clears it, and renames the caller's own task, as the member's menu does", async () => {

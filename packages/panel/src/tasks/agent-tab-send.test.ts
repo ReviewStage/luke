@@ -7,6 +7,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
@@ -106,7 +107,7 @@ async function settle(): Promise<void> {
  * The agent's tab, its sends answered only as the test lets it and its
  * transcript pushed with `later` once the test releases it.
  */
-async function drawnTab(later: readonly CodingAgentMessage[]) {
+async function drawnTab(later: readonly CodingAgentMessage[], agent = AGENT_SUMMARY) {
   fakeAppBridge({});
   const answers: ((answer: CodingAgentAgentAnswer) => void)[] = [];
   const sent: { text: string; clientKey: string }[] = [];
@@ -121,7 +122,7 @@ async function drawnTab(later: readonly CodingAgentMessage[]) {
     title: null,
   });
   const control = codingAgentsControl({
-    agents: [AGENT_SUMMARY],
+    agents: [agent],
     onMessage: (_agentId, text, clientKey) => {
       sent.push({ text, clientKey });
       return new Promise((resolve) => answers.push(resolve));
@@ -139,7 +140,7 @@ async function drawnTab(later: readonly CodingAgentMessage[]) {
       onRegistry(
         AtomRegistry.make(),
         createElement(AgentTab, {
-          agent: AGENT_SUMMARY,
+          agent,
           control,
           shown: true,
           onOpenSubagent: () => undefined,
@@ -205,6 +206,16 @@ test("a message sent stands in the transcript at once, the box empty and taking 
 
   await tab.answer(0, TAKEN);
   assert.equal(tab.lines("Now the dark variant.").length, 1);
+});
+
+test("a Codex or Claude Code agent's box says nothing under it of the plan that pays", async () => {
+  for (const runtime of [CODING_AGENT_RUNTIME.CODEX, CODING_AGENT_RUNTIME.CLAUDE_CODE]) {
+    const tab = await drawnTab([], { ...AGENT_SUMMARY, runtime });
+    const box = composerEditor(tab.container).closest(".agent-composer") ?? tab.container;
+    for (const words of ["Using ChatGPT plan", "Using your Claude plan", "Manage usage"]) {
+      assert.ok(!box.textContent?.includes(words), `${runtime} draws no "${words}"`);
+    }
+  }
 });
 
 test("two messages of the same words are two lines, each let go by its own row alone", async () => {

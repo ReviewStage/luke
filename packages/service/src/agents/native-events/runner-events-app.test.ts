@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
 import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import {
   createCodingAgent,
   readCodingAgent,
@@ -24,6 +25,7 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { ASK_ORIGIN } from "@luke/features";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_PAYER,
@@ -35,10 +37,11 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_STATUS, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
+import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -47,6 +50,7 @@ import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { CODER } from "../coder-host/bounds.js";
+import { titleCodingAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
@@ -288,6 +292,67 @@ function drawn(part: StoredUIMessage["parts"][number]): readonly WireValue[] {
 
 it.layer(getTestDB())("the runner events route", (it) => {
   it.effect(
+    "a call's ask whose line a native runner takes is bound to the turn that took it, as its whole turn where it opened it and from the step it joined at where it joined one under way, before its first step among them, and the turn's first line its whole turn though the harness opened the turn just before naming it, so the call follows that turn",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, []);
+        const asks = askRecord();
+        const delivered = (clientId: string) =>
+          Effect.gen(function* () {
+            const ask = yield* asks.record({
+              userId: agent.userId,
+              conversationId: agent.target.conversationId,
+              clientId,
+              origin: ASK_ORIGIN.SPOKEN,
+              createdAt: new Date(yield* Clock.currentTimeMillis),
+            });
+            // The ask stands on its own line, as `acceptAsk` records one a native session took.
+            yield* asks.dispatchOnce(agent.target, ask.id, () =>
+              Effect.succeed({ sessionId: `${SESSION}-luke`, deliveryId: ask.id }),
+            );
+            return ask.id;
+          });
+        const opening = yield* delivered("dl_1");
+        const early = yield* delivered("dl_3");
+        const joining = yield* delivered("dl_2");
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const step = (text: string) => ({
+          type: "assistant",
+          message: { content: [{ type: "text", text }] },
+          ...envelope,
+        });
+        const batch = [
+          // The harness may open the turn a moment before it names the line that opened it, as Codex does.
+          { type: "system", subtype: "init", ...envelope },
+          { type: RUNNER_EVENT.ACCEPTED, uuid: opening },
+          // Taken into the turn the first line opened, before its first step.
+          { type: RUNNER_EVENT.ACCEPTED, uuid: early },
+          step("Looking."),
+          { type: RUNNER_EVENT.ACCEPTED, uuid: joining },
+          step("Found it."),
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        yield* post(
+          agent.bearer,
+          batch.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+
+        const [turn] = (yield* transcriptOf(agent.target.conversationId)).turns;
+        assert.ok(turn !== undefined);
+        const opened = yield* asks.named(agent.userId, opening);
+        const joinedEarly = yield* asks.named(agent.userId, early);
+        const joined = yield* asks.named(agent.userId, joining);
+        assert.ok(opened?.turnId !== undefined);
+        assert.deepEqual([joinedEarly?.turnId, joined?.turnId], [opened.turnId, opened.turnId]);
+        assert.deepEqual(
+          [opened.joinedAfterStep, joinedEarly?.joinedAfterStep, joined?.joinedAfterStep],
+          [undefined, 0, 1],
+        );
+      }),
+  );
+
+  it.effect(
     "P00's workflow turn lands as one turn: the line it took, each call settled, the words, and its cost",
     () =>
       Effect.gen(function* () {
@@ -441,13 +506,23 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took",
+    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took, and names its payer before any turn settled",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* post(agent.bearer, workflowTurn(agent.lineId));
         const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        // Before any turn settles, the page already names who pays.
+        const first = yield* transcriptPast(
+          agent.target,
+          CODER_TOOL_SET,
+          CURSOR_START,
+          row,
+          row,
+        ).pipe(Effect.provide(modelCatalogOf([])));
+        assert.equal(first.usage, undefined);
+        assert.equal(first.payer, CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION);
+        yield* post(agent.bearer, workflowTurn(agent.lineId));
 
         const page = yield* transcriptPast(
           agent.target,
@@ -583,6 +658,86 @@ it.layer(getTestDB())("the runner events route", (it) => {
           ended.map((turn) => turn.status),
           [TURN_STATUS.CANCELLED],
         );
+      }),
+  );
+
+  it.effect(
+    "a background subagent's call stays running past Claude Code's launch notice, and its task notification settles it",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const launched =
+          "Async agent launched successfully. (This tool result is internal metadata, never quote it.) agentId: a1";
+        const first = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          {
+            type: "assistant",
+            message: {
+              id: "msg_1",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "toolu_agent",
+                  name: "Agent",
+                  input: { description: "find the queue", prompt: "Find it." },
+                },
+              ],
+            },
+            ...top,
+          },
+          {
+            type: "user",
+            message: {
+              content: [{ type: "tool_result", tool_use_id: "toolu_agent", content: launched }],
+            },
+            tool_use_result: { status: "async_launched", agentId: "a1", prompt: "Find it." },
+            ...top,
+          },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.WAITING, background_tasks: [], session_crons: [] },
+        ];
+        const second = [
+          {
+            type: "system",
+            subtype: "task_notification",
+            task_id: "a1",
+            tool_use_id: "toolu_agent",
+            status: "completed",
+            output_file: "/tmp/a1.output",
+            summary: "It is in queue.ts.",
+            ...top,
+          },
+          {
+            type: "assistant",
+            message: { id: "msg_2", content: [{ type: "text", text: "Found it." }] },
+            ...top,
+          },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = [...first, ...second].map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events.slice(0, first.length));
+        const running = yield* transcriptOf(agent.target.conversationId);
+        yield* post(agent.bearer, events.slice(first.length));
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(running.rows.at(-1)?.parts.map(drawn), [
+          ["step-start"],
+          ["tool-Agent", "input-available"],
+        ]);
+        assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
+          ["step-start"],
+          ["tool-Agent", "output-available", "It is in queue.ts."],
+          ["step-start"],
+          ["text", "Found it."],
+        ]);
+        assert.ok(!JSON.stringify(rows).includes("internal metadata"));
       }),
   );
 
@@ -1161,6 +1316,128 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       }),
   );
 
+  it.effect("a spawned subagent's call stays running until its thread's turn completes", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Find the queue."]);
+      const spawn = {
+        type: "collabAgentToolCall",
+        id: "call_spawn",
+        tool: "spawnAgent",
+        status: "inProgress",
+        senderThreadId: THREAD,
+        receiverThreadIds: [],
+        prompt: null,
+        model: null,
+        reasoningEffort: null,
+        agentsStates: {},
+      };
+      const first: WireValue[] = [
+        {
+          method: "thread/started",
+          params: { thread: { id: THREAD, parentThreadId: null } },
+        },
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        notification("turn/started", { turn: { id: "turn-1" } }),
+        notification("item/started", { item: spawn }),
+        notification("item/completed", {
+          item: {
+            ...spawn,
+            status: "completed",
+            receiverThreadIds: ["thread-sub"],
+            prompt: "Find the queue.",
+            model: "gpt-5.5",
+            reasoningEffort: "high",
+          },
+        }),
+      ];
+      const second: WireValue[] = [
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-sub", turn: { id: "turn-sub", status: "completed" } },
+        },
+        notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+      ];
+      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+      const events = [...first, ...second].map(
+        (message, sequence) => ({ sequence, message }) as RunnerEvent,
+      );
+
+      yield* post(agent.bearer, events.slice(0, first.length));
+      const running = yield* transcriptOf(agent.target.conversationId);
+      yield* post(agent.bearer, events.slice(first.length));
+      const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+      assert.deepEqual(running.rows.at(-1)?.parts.map(drawn), [
+        ["step-start"],
+        ["tool-collabAgentToolCall", "input-available"],
+      ]);
+      assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
+        ["step-start"],
+        ["tool-collabAgentToolCall", "output-available", { status: "completed" }],
+      ]);
+      // The spawn settles with the task and the pair it completed with, which its start left out.
+      const call = rows.at(-1)?.parts.find((part) => part.type === "tool-collabAgentToolCall");
+      assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
+        tool: "spawnAgent",
+        prompt: "Find the queue.",
+        model: "gpt-5.5",
+        effort: "high",
+        receiverThreadIds: ["thread-sub"],
+      });
+    }),
+  );
+
+  it.effect("a subagent that ends before its spawn completes still settles it", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Find the queue."]);
+      const spawn = {
+        type: "collabAgentToolCall",
+        id: "call_spawn",
+        tool: "spawnAgent",
+        status: "inProgress",
+        senderThreadId: THREAD,
+        receiverThreadIds: ["thread-sub"],
+        prompt: null,
+        model: null,
+        agentsStates: {},
+      };
+      const messagesOfTurn: WireValue[] = [
+        {
+          method: "thread/started",
+          params: { thread: { id: THREAD, parentThreadId: null } },
+        },
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        notification("turn/started", { turn: { id: "turn-1" } }),
+        notification("item/started", { item: spawn }),
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-sub", turn: { id: "turn-sub", status: "completed" } },
+        },
+        notification("item/completed", {
+          item: { ...spawn, status: "completed", prompt: "Find the queue.", model: "gpt-5.5" },
+        }),
+        notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+      ];
+      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+      const events = messagesOfTurn.map(
+        (message, sequence) => ({ sequence, message }) as RunnerEvent,
+      );
+
+      yield* post(agent.bearer, events);
+      const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+      const call = rows.at(-1)?.parts.find((part) => part.type === "tool-collabAgentToolCall");
+      assert.deepEqual(
+        call !== undefined && "state" in call ? call.state : undefined,
+        "output-available",
+      );
+    }),
+  );
+
   /** The account's ChatGPT sign-in, kept as connecting keeps it: sealed, and not yet answered. */
   const signedIn = (userId: string, at = new Date(0)) =>
     saveProviderKey(
@@ -1468,7 +1745,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood",
+    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood, and the refused API key is marked invalid as eve's step marks it",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1495,6 +1772,15 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ["Fix the test."],
         );
         yield* pasted(onKey.userId);
+        yield* saveProviderKey(
+          onKey.userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.API_KEY,
+          { keyVersion: 1, sealedDataKey: "sealed-data-key", sealedKey: "sealed-api-key" },
+          "sk-ant-api03…fake",
+          null,
+          new Date(0),
+        );
         yield* post(
           onKey.bearer,
           numberedFrom(
@@ -1518,6 +1804,160 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
           ],
         );
+        const keyRows = yield* listProviderKeyRows(onKey.userId, PROVIDER_KEY_KIND.API_KEY);
+        assert.deepEqual(
+          keyRows.map((row) => row.status),
+          [PROVIDER_KEY_STATUS.INVALID],
+        );
+      }),
+  );
+});
+
+/** A title model answering every call with `title`, counting the calls. */
+function scriptedTitleModel(title: string) {
+  const asked = { calls: 0 };
+  const model = new MockLanguageModelV4({
+    doGenerate: async () => {
+      asked.calls += 1;
+      return {
+        content: [{ type: "text", text: title }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      };
+    },
+  });
+  return { model, asked };
+}
+
+it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", (it) => {
+  const top = { parent_tool_use_id: null, session_id: SESSION };
+  const numbered = (messagesOfLaunch: readonly unknown[], from = 0) =>
+    // SAFETY: each message is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.
+    messagesOfLaunch.map((message, index) => ({ sequence: from + index, message }) as RunnerEvent);
+  /** A model call's answer carrying the usage the Messages API counts for it. */
+  const answered = (
+    id: string,
+    text: string,
+    input: number,
+    cacheRead: number,
+    output: number,
+  ) => ({
+    type: "assistant",
+    message: {
+      id,
+      content: [{ type: "text", text }],
+      usage: {
+        input_tokens: input,
+        output_tokens: output,
+        cache_read_input_tokens: cacheRead,
+        cache_creation_input_tokens: 10,
+      },
+    },
+    uuid: randomUUID(),
+    ...top,
+  });
+
+  it.effect(
+    "a Claude Code agent's ring reads its newest model call, cache and all, and its brief's estimate",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the test."]);
+        const before = yield* readCodingAgentContext(agent.userId, agent.agentId);
+        yield* post(
+          agent.bearer,
+          numbered([
+            { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+            { type: "system", subtype: "init", ...top },
+            answered("msg_1", "Reading the test.", 3, 2000, 40),
+            answered("msg_2", "Fixed it.", 5, 2400, 60),
+          ]),
+        );
+        const step = Option.getOrThrow(
+          yield* readCodingAgentContext(agent.userId, agent.agentId),
+        ).lastStep;
+
+        assert.equal(Option.getOrThrow(before).lastStep, null);
+        assert.deepEqual(step === null ? null : { ...step, at: 0 }, {
+          inputTokens: 5 + 2400 + 10,
+          outputTokens: 60,
+          cachedInputTokens: 2400,
+          cacheWriteTokens: 10,
+          systemPromptTokens: 0,
+          toolDefinitionTokens: 0,
+          // The brief, "# Teammate invitations\n", is 26 bytes of JSON: seven tokens.
+          briefTokens: 7,
+          at: 0,
+        });
+      }),
+  );
+
+  it.effect("a Codex agent's ring reads the last request beside the thread's total", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+      const breakdown = (input: number, cached: number, output: number) => ({
+        totalTokens: input + output,
+        inputTokens: input,
+        cachedInputTokens: cached,
+        cacheWriteInputTokens: 0,
+        outputTokens: output,
+        reasoningOutputTokens: 0,
+      });
+      yield* post(
+        agent.bearer,
+        numbered([
+          notification("thread/tokenUsage/updated", {
+            tokenUsage: {
+              total: breakdown(9000, 6000, 500),
+              last: breakdown(4000, 3500, 200),
+              modelContextWindow: 400_000,
+            },
+          }),
+        ]),
+      );
+      const step = Option.getOrThrow(
+        yield* readCodingAgentContext(agent.userId, agent.agentId),
+      ).lastStep;
+
+      assert.deepEqual(
+        step === null ? null : [step.inputTokens, step.cachedInputTokens, step.outputTokens],
+        [4000, 3500, 200],
+      );
+    }),
+  );
+
+  it.effect(
+    "a turn's start names an untitled agent and its untitled task, once, and a titled agent is never asked",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel("Fix the flaky invite test");
+        const post = yield* standingWith({
+          title: (target, agent) => Effect.orDie(titleCodingAgent(model, target, agent)),
+        });
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the flaky invite test."]);
+        yield* updateTask(agent.userId, agent.taskId, { name: UNTITLED_TASK_NAME });
+        const turn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...top },
+          answered("msg_1", "On it.", 3, 0, 4),
+        ];
+        yield* post(agent.bearer, numbered(turn));
+        const named = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        const task = Option.getOrThrow(yield* readTask(agent.userId, agent.taskId)).task;
+        // The turn's end asks again, and the title now standing is kept.
+        yield* post(
+          agent.bearer,
+          numbered([{ type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED }], turn.length),
+        );
+
+        assert.equal(named.title, "Fix the flaky invite test");
+        assert.equal(task.name, "Fix the flaky invite test");
+        assert.equal(asked.calls, 1);
       }),
   );
 });

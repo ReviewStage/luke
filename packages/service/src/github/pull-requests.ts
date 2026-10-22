@@ -1804,7 +1804,7 @@ function conversationOf(
 const OPEN_PULL_REQUESTS_QUERY = `query OpenPullRequests($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequests(states: OPEN, first: ${STACK_CANDIDATES}, after: $after) {
-      nodes { number title url isDraft headRefName baseRefName isCrossRepository }
+      nodes { number title url isDraft headRefName baseRefName isCrossRepository mergeQueueEntry { position } }
       pageInfo { hasNextPage endCursor }
     }
   }
@@ -1827,6 +1827,9 @@ const OpenPullRequestsAnswerSchema = Schema.Struct({
                     headRefName: Schema.String,
                     baseRefName: Schema.String,
                     isCrossRepository: Schema.Boolean,
+                    mergeQueueEntry: Schema.optional(
+                      Schema.NullOr(Schema.Struct({ position: Schema.Number })),
+                    ),
                   }),
                 ),
               ),
@@ -1861,6 +1864,7 @@ function candidatesOf(nodes: OpenPullRequestNodes): readonly StackCandidate[] {
             head: node.headRefName,
             base: node.baseRefName,
             crossRepository: node.isCrossRepository,
+            ...(node.mergeQueueEntry == null || node.isDraft ? undefined : { queued: true }),
           },
         ],
   );
@@ -1967,6 +1971,10 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     head: pull.head.ref,
     base: pull.base.ref,
     crossRepository: pull.head.repo?.id !== pull.base.repo?.id,
+    // Note that the REST read says nothing of the merge queue, so the pull request's own place in it is the listing's.
+    ...(open?.some((each) => each.number === pullRequest.number && each.queued === true)
+      ? { queued: true }
+      : undefined),
   };
   const stands =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;

@@ -1,6 +1,6 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
+import { TEXT_BUTTON_TONE, TEXT_ELEMENT, TEXT_VARIANT, Text, TextButton } from "@luke/ui";
 import { useMemo } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
@@ -80,7 +80,14 @@ function StateBar({
           ⋯
         </span>
       ) : null}
-      <span className="terminal-bar-words">{bar.words}</span>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="terminal-bar-words"
+      >
+        {bar.words}
+      </Text>
       <span className="terminal-bar-end">
         {bar.since === undefined ? null : (
           <WorkingTime startedAt={bar.since} className="terminal-bar-note" />

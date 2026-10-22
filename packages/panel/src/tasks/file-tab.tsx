@@ -3,6 +3,7 @@ import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND, FILES_CHANGED_KEY, filesChangedKeyFor } from "@luke/settings/shortcuts";
 import {
+  EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   type ErrorStatePlacement,
@@ -217,9 +218,11 @@ function ReadNotice({
       </ErrorState>
     );
   }
+  const refusal = refusalLine(read.refusal, read.branch, commit);
+  if (place === ERROR_STATE_PLACEMENT.CENTRED) return <EmptyState alert>{refusal}</EmptyState>;
   return (
     <p className="m-0" role="alert">
-      {refusalLine(read.refusal, read.branch, commit)}
+      {refusal}
     </p>
   );
 }
@@ -324,14 +327,12 @@ export function FileTab({
       ) : read.kind === FILE_READ.READING ? (
         <SpinnerRegion label="Loading file" />
       ) : snippet === undefined ? (
-        <div className="side-panel-empty">
-          <ReadNotice
-            read={read}
-            commit={file.commit}
-            onRetry={readWhole}
-            place={ERROR_STATE_PLACEMENT.CENTRED}
-          />
-        </div>
+        <ReadNotice
+          read={read}
+          commit={file.commit}
+          onRetry={readWhole}
+          place={ERROR_STATE_PLACEMENT.CENTRED}
+        />
       ) : (
         <>
           <div className="file-tab-notice">

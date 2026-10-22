@@ -107,6 +107,7 @@ function FoldingBox({
   busy,
   disabled,
   onClick,
+  trailing,
   doors,
   ...hinted
 }: FoldingHintProps & {
@@ -120,13 +121,19 @@ function FoldingBox({
   busy: string | undefined;
   disabled: boolean | undefined;
   onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  trailing: ReactNode;
 }): React.JSX.Element {
   const busyProps = busy === undefined ? {} : { busy: true, busyLabel: busy };
   return (
-    <span ref={measured} className="luke-folding-button">
+    <span
+      ref={measured}
+      className="luke-folding-button"
+      data-row={variant === BUTTON_VARIANT.ROW ? "" : undefined}
+    >
       <Button
         ref={doors.ref}
         icon={icon}
+        trailing={trailing}
         variant={variant}
         shape={shape ?? BUTTON_SHAPE.SQUARE}
         size={size}
@@ -155,6 +162,7 @@ export function FoldingButton({
   busy,
   disabled,
   onClick,
+  trailing,
   hint: Hint,
   ...doors
 }: FoldingButtonDoors & {
@@ -170,6 +178,8 @@ export function FoldingButton({
   busy?: string | undefined;
   disabled?: boolean | undefined;
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  /** A count after its words, inside the button's fill; it stays drawn when the words fold. */
+  trailing?: ReactNode;
   /** The app's hint, raising the words while they are folded. */
   hint?: FoldingButtonHint | undefined;
 }): React.JSX.Element {
@@ -185,6 +195,7 @@ export function FoldingButton({
       busy={busy}
       disabled={disabled}
       onClick={onClick}
+      trailing={trailing}
       doors={doors}
     />
   );

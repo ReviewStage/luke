@@ -12,6 +12,7 @@ import {
   type CodingAgentContext,
   type CodingAgentFailure,
   type CodingAgentMessage,
+  type CodingAgentPayer,
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentUsage,
@@ -109,6 +110,8 @@ export interface AgentTranscriptControl {
   failure: CodingAgentFailure | undefined;
   /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
   usage: CodingAgentUsage | undefined;
+  /** Who pays for the agent, as the last page said; nothing on a worker's, and for an agent from before payers. */
+  payer: CodingAgentPayer | undefined;
   /** What the agent's model's context holds as its newest step left it, as the last page said; nothing before a step ended, and on a worker's. */
   context: CodingAgentContext | undefined;
   /** When the run under way began, as the last page said; nothing where it did not, which is where a worker's tab counts from. */
@@ -147,6 +150,7 @@ interface Held {
   messages: readonly CodingAgentMessage[];
   failure: CodingAgentFailure | undefined;
   usage: CodingAgentUsage | undefined;
+  payer: CodingAgentPayer | undefined;
   context: CodingAgentContext | undefined;
   runStartedAt: number | undefined;
   pageStatus: CodingAgentStatus | undefined;
@@ -173,6 +177,7 @@ function fresh(transcript: CodingAgentTranscriptKey): Held {
     messages: [],
     failure: undefined,
     usage: undefined,
+    payer: undefined,
     context: undefined,
     runStartedAt: undefined,
     pageStatus: undefined,
@@ -250,6 +255,7 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
     olderFailed: replaces ? false : was.olderFailed,
     failure: page.failureReason,
     usage: page.usage,
+    payer: page.payer,
     context: page.context,
     runStartedAt: page.runStartedAt,
     pageStatus: page.status,
@@ -421,6 +427,7 @@ export function useAgentTranscript(input: {
     messages: held.messages,
     failure: held.failure,
     usage: held.usage,
+    payer: held.payer,
     context: held.context,
     runStartedAt: held.runStartedAt,
     pageStatus: held.pageStatus,

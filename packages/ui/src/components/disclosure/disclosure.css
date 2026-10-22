@@ -29,6 +29,23 @@
       color var(--luke-duration-hover) ease;
   }
 
+  /* The file row: the text's own ink, a fixed height, and a rule under it
+     while its fold is open. */
+  .luke-disclosure-summary[data-look="row"] {
+    box-sizing: border-box;
+    height: 36px;
+    min-height: 36px;
+    gap: var(--luke-space-8);
+    padding: 0 var(--luke-space-12) 0 var(--luke-space-4);
+    border-radius: 0;
+    color: var(--luke-color-text);
+    white-space: nowrap;
+  }
+
+  .luke-disclosure-summary[data-look="row"][aria-expanded="true"] {
+    border-bottom: 1px solid var(--luke-color-border);
+  }
+
   .luke-disclosure-summary::-webkit-details-marker {
     display: none;
   }
@@ -56,6 +73,12 @@
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
     flex: none;
+  }
+
+  /* A control's seat in a summary (`DisclosureAction`), which keeps its
+     presses and draws no box, so the control is laid out as the summary's. */
+  .luke-disclosure-action {
+    display: contents;
   }
 
   .luke-disclosure-turn {

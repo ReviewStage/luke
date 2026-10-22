@@ -96,8 +96,8 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * at most; until then the view stands as a skeleton timed from the press.
  * Chapters someone else is making stand the same way, with a Refresh, since
  * only a read sees them land. A generation that failed says why with a
- * Retry; a deployment holding no key for the model says chapters are not
- * available on it. Chapters made for a head the pull request has moved on
+ * Retry; a member who saved no API key, which chapters run on, is told to
+ * save one. Chapters made for a head the pull request has moved on
  * from stand as they were, under a line saying new commits came since,
  * with Regenerate (`chapters-model.ts`): their titles, risks, summaries,
  * and What to review, but no diff, no lines or threads counted, no Viewed,
@@ -143,7 +143,7 @@ const CHAPTERS_WORDS = {
   NO_PULL_REQUEST: "No pull request yet.",
   NONE: "No chapters yet.",
   GENERATE: "Generate chapters",
-  UNAVAILABLE: "Chapters aren't available on this deployment.",
+  UNAVAILABLE: "Save an API key in Settings › Agents to generate chapters.",
   GENERATING: "Generating chapters",
   ELSEWHERE: "Chapters are being generated",
   REFRESH: "Refresh",

@@ -89,6 +89,19 @@ function Tinted(): React.JSX.Element {
   );
 }
 
+/** A group's fold: a row-wide press, its glyph then its words, and a count inside its fill. */
+function Counted(): React.JSX.Element {
+  return (
+    <FoldingButton
+      label="Todo"
+      icon={<PlusIcon />}
+      variant={BUTTON_VARIANT.ROW}
+      trailing={3}
+      aria-expanded
+    />
+  );
+}
+
 function FoldingButtons(): React.JSX.Element {
   return (
     <>
@@ -115,6 +128,9 @@ function FoldingButtons(): React.JSX.Element {
             <Tinted />
           </div>
         </Stack>
+      </CatalogSection>
+      <CatalogSection id="folding-counted" title="Row look with a count">
+        <Counted />
       </CatalogSection>
       <CatalogSection id="folding-toolbar" title="Folding with its toolbar">
         <div className="catalog-folding-toolbar">

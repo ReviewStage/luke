@@ -1,5 +1,5 @@
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
-import type { WireValue } from "@luke/wire";
+import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
   addModelUsage,
@@ -17,6 +17,7 @@ import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
 import {
   NATIVE_ENDING,
   NATIVE_MOMENT,
+  type NativeContextUsage,
   type NativeMoment,
   type NativeWakeup,
   PLAN_STATUS,
@@ -77,6 +78,14 @@ const UsageSchema = Schema.Struct({
   cacheWriteTokens: Schema.optionalKey(Schema.Number),
 });
 
+/** A call whose subagent runs on in the background, and its input as it stood when it answered, which it settles with. */
+const SubagentSchema = Schema.Struct({
+  callId: Schema.String,
+  input: Schema.optionalKey(WireValueSchema),
+  /** Whether its call has settled, so a later word of the same subagent settles nothing twice. */
+  settled: Schema.optionalKey(Schema.Boolean),
+});
+
 const TurnSchema = Schema.Struct({
   /** The store's id for the turn. */
   id: Schema.String,
@@ -86,9 +95,14 @@ const TurnSchema = Schema.Struct({
   told: Schema.Number,
   /** How many steps the turn has opened. */
   steps: Schema.Number,
+  /** Whether a line of Luke's was already taken into the turn, so a later one joined it: false from its opening until the
+   * first, and absent on a turn saved before this was kept, which is read as taken, as every such turn was bound. */
+  taken: Schema.optionalKey(Schema.Boolean),
   step: Schema.optionalKey(StepSchema),
   /** The calls the turn holds, by id, under the name each is stored under. */
   calls: Schema.Record(Schema.String, Schema.String),
+  /** The calls whose subagents run on in the background, by the key their end is named by (`NATIVE_MOMENT.SUBAGENT_RUNNING`). */
+  subagents: Schema.optionalKey(Schema.Record(Schema.String, SubagentSchema)),
   usage: Schema.optionalKey(UsageSchema),
   /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
@@ -144,7 +158,7 @@ export const NATIVE_WRITE = {
   ENQUEUE: "enqueue",
   /** Hand the writer one event of the turn. */
   EVENT: "event",
-  /** Take the awaiting line written under the client id into the turn. */
+  /** Take the awaiting line written under the client id into the turn, and bind the ask delivered under it, a call's, to the turn. */
   TAKE_LINE: "take_line",
   /** Record the harness's session id on the conversation. */
   SESSION: "session",
@@ -154,6 +168,8 @@ export const NATIVE_WRITE = {
   PLAN_STATUS: "plan_status",
   /** Replace the wakeups Luke delivers to the agent once due (`coding-agent-wakeups.ts`). */
   WAKEUPS: "wakeups",
+  /** Record what the newest model call read on the agent's row, which its context ring reads. */
+  CONTEXT: "context",
 } as const;
 
 export type NativeWrite =
@@ -163,10 +179,13 @@ export type NativeWrite =
       readonly kind: typeof NATIVE_WRITE.TAKE_LINE;
       readonly turnId: string;
       readonly clientId: string;
+      /** How many steps of the turn had begun where the line joined one under way, zero among them; none where it opened the turn. */
+      readonly joinedAfterStep?: number;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
   | { readonly kind: typeof NATIVE_WRITE.WAKEUPS; readonly wakeups: readonly NativeWakeup[] }
   | { readonly kind: typeof NATIVE_WRITE.COMPACTED }
+  | { readonly kind: typeof NATIVE_WRITE.CONTEXT; readonly usage: NativeContextUsage }
   | {
       readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
       readonly status: PlanStatus;
@@ -204,6 +223,19 @@ function tellable(draft: Draft): string {
   return draft.forming.length === 0
     ? draft.completed
     : finishedSentencesOf(joinedWords(draft.completed, draft.forming));
+}
+
+/** The turn with every subagent its call waited on marked settled, as the call is. */
+function withSettledSubagents(turn: Turn, callId: string): Turn {
+  const held = turn.subagents;
+  if (held === undefined) return turn;
+  const subagents = Object.fromEntries(
+    Object.entries(held).map(([key, subagent]) => [
+      key,
+      subagent.callId === callId ? { ...subagent, settled: true } : subagent,
+    ]),
+  );
+  return { ...turn, subagents };
 }
 
 /** Everything one event's moments do, gathered as they are folded. */
@@ -245,7 +277,7 @@ class Fold {
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
     const { origin, trigger } = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
     const opened = this.#tell(
-      { id, told: 0, steps: 0, calls: {}, openedAt: this.#context.now },
+      { id, told: 0, steps: 0, calls: {}, taken: false, openedAt: this.#context.now },
       { kind: BRAIN_RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
     );
     this.#setTurn(opened);
@@ -338,7 +370,7 @@ class Fold {
     const name = turn?.calls[moment.callId];
     if (turn === undefined || name === undefined) return;
     this.#setTurn(
-      this.#tell(turn, {
+      this.#tell(withSettledSubagents(turn, moment.callId), {
         kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
         callId: moment.callId,
         name,
@@ -346,6 +378,34 @@ class Fold {
         ...(moment.input !== undefined ? { input: moment.input } : undefined),
       }),
     );
+  }
+
+  /** A subagent call kept open while its subagent runs, where the turn holds the call. */
+  #subagentRunning(
+    moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_RUNNING }>,
+  ): void {
+    const turn = this.state.turn;
+    if (turn?.calls[moment.callId] === undefined) return;
+    if (turn.subagents?.[moment.key]?.settled === true) return;
+    const { callId, input } = moment;
+    const subagent = input === undefined ? { callId } : { callId, input };
+    this.#setTurn({ ...turn, subagents: { ...turn.subagents, [moment.key]: subagent } });
+  }
+
+  /** A background subagent's end, settling the call it runs under; nothing for a key no held call waits on, such as a foreground subagent's, which its answer settled, or one whose call already settled. */
+  #subagentEnded(
+    moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_ENDED }>,
+  ): void {
+    const turn = this.state.turn;
+    const subagent = turn?.subagents?.[moment.key];
+    if (turn === undefined || subagent === undefined || subagent.settled === true) return;
+    const { callId, input } = subagent;
+    this.#toolSettled({
+      kind: NATIVE_MOMENT.TOOL_SETTLED,
+      callId,
+      settlement: moment.settlement,
+      ...(input === undefined ? undefined : { input }),
+    });
   }
 
   /** The turn's end: its words told whole, then its status, cost, and why it failed, where it did. */
@@ -403,11 +463,20 @@ class Fold {
   fold(moment: NativeMoment): void {
     switch (moment.kind) {
       case NATIVE_MOMENT.LINE_ACCEPTED: {
+        // Note that a line taken into a turn another line already opened joined it at the steps begun so
+        // far, none among them, which is where a call's ask that joined it is told from and what keeps its
+        // Stop its own, as eve's relay binds one (`brain-host/relay.ts`). The turn's first line has none,
+        // though the harness may have opened the turn a moment before it named the line (Codex does). A turn saved
+        // before `taken` was kept reads as taken, so a call joining it after a deploy still stops only its own ask.
+        const before = this.state.turn;
+        const joined = before === undefined || before.taken === false ? undefined : before.steps;
         const turn = this.turn();
+        this.#setTurn({ ...turn, taken: true });
         this.writes.push({
           kind: NATIVE_WRITE.TAKE_LINE,
           turnId: turn.id,
           clientId: moment.clientId,
+          ...(joined === undefined ? undefined : { joinedAfterStep: joined }),
         });
         return;
       }
@@ -446,11 +515,23 @@ class Fold {
       case NATIVE_MOMENT.TOOL_SETTLED:
         this.#toolSettled(moment);
         return;
+      case NATIVE_MOMENT.SUBAGENT_RUNNING:
+        this.#subagentRunning(moment);
+        return;
+      case NATIVE_MOMENT.SUBAGENT_ENDED:
+        this.#subagentEnded(moment);
+        return;
       case NATIVE_MOMENT.USAGE:
         this.#usage(moment.usage);
         return;
       case NATIVE_MOMENT.USAGE_TOTAL:
         this.#usageTotal(moment.total);
+        return;
+      case NATIVE_MOMENT.CONTEXT:
+        // Note that a call that read nothing, as an error the CLI makes up does, leaves the last one standing.
+        if (moment.usage.inputTokens > 0) {
+          this.writes.push({ kind: NATIVE_WRITE.CONTEXT, usage: moment.usage });
+        }
         return;
       case NATIVE_MOMENT.RESULT:
         this.#result(moment.failure);

@@ -4,6 +4,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentContext,
+  type CodingAgentPayer,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentUsage,
@@ -29,6 +30,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
@@ -50,7 +52,7 @@ import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
-import { AttachFilesButton } from "./attach-files-button.js";
+import { AttachFilesButton, type AttachPicker } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
@@ -335,6 +337,7 @@ export function AgentComposer({
   models,
   readModels,
   usage,
+  payer,
   servers,
   context,
   brief,
@@ -347,7 +350,6 @@ export function AgentComposer({
   replyDoor,
   sendsEmpty = false,
   closedRemedy,
-  payer,
   wording,
   maxLength = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
   above,
@@ -373,6 +375,8 @@ export function AgentComposer({
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
+  /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
+  payer?: CodingAgentPayer | undefined;
   /** The MCP servers the agent is handed and their switches; none where the box offers none, as New task's does. */
   servers: AgentServersControl | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
@@ -396,8 +400,6 @@ export function AgentComposer({
   sendsEmpty?: boolean;
   /** What mends a box closed for good, drawn after its note: Continue in new agent (`continue-agent.tsx`); none where nothing does. */
   closedRemedy?: ReactNode;
-  /** Who pays, said under the card: a plan's label, as its provider asks; none where nothing is said. */
-  payer?: ReactNode;
   /** What the box asks for, calls its field, and calls its round button, where its owner says other than an agent's box does, as New task's does. */
   wording?: ComposerWords | undefined;
   /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
@@ -428,7 +430,7 @@ export function AgentComposer({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
-  const picker = useRef<HTMLInputElement>(null);
+  const picker = useRef<AttachPicker>(null);
   const foot = useRef<HTMLDivElement>(null);
   const footWidth = useFootWidth(card);
   const folds = (below: number) => footWidth !== undefined && footWidth < below;
@@ -617,7 +619,7 @@ export function AgentComposer({
         label: BUTTON.ATTACH,
         icon: <PlusIcon />,
         disabled: held,
-        onSelect: () => picker.current?.click(),
+        onSelect: () => picker.current?.open(),
       },
     },
     ...(servers === undefined
@@ -643,7 +645,7 @@ export function AgentComposer({
     {
       press: OVERFLOW_PRESS.DICTATE,
       action: {
-        label: "Dictate",
+        label: dictation.keyMissing ? OPENAI_KEY_MISSING_NOTE : "Dictate",
         icon: <MicrophoneIcon />,
         disabled: held || module === undefined,
         onSelect: dictation.start,
@@ -779,6 +781,7 @@ export function AgentComposer({
                     models={models}
                     readModels={readModels}
                     usage={usage}
+                    payer={payer}
                     narrow={folds(FOLD_WIDTH.MODEL)}
                   />
                 )}
@@ -845,7 +848,6 @@ export function AgentComposer({
           {closed ? closedRemedy : null}
         </div>
       ) : null}
-      {payer !== undefined ? <div className="agent-composer-payer">{payer}</div> : null}
     </div>
   );
 }

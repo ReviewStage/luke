@@ -19,12 +19,18 @@
  * its screenshots answers each with a second copy beside it, the page at its
  * own size and good quality ({@link BROWSER_KEPT_SCREENSHOT}), which the
  * caller keeps for the transcript and never shows the model.
+ *
+ * A recording is no tab's: `record` starts recording whatever the browser
+ * shows, tab after tab, and `stop_recording` stops it and answers the video
+ * as the caller kept it, where the caller records at all; one that does not
+ * fails both.
  */
 
 import { describeWire } from "@luke/wire/effect";
 import { Schema } from "effect";
 import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "./browser-acts.js";
 import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
+import { CONVERSATION_MEDIA_TYPE, PICTURE_OMISSION } from "./conversation-picture-wire.js";
 
 /** The actions an agent takes on a browser's tabs. */
 export const BROWSER_AGENT_ACTION = {
@@ -43,6 +49,10 @@ export const BROWSER_AGENT_ACTION = {
   SNAPSHOT: "snapshot",
   CONSOLE: "console",
   CLOSE: "close",
+  /** Starts recording the browser as a video, whichever tab it shows. */
+  RECORD: "record",
+  /** Stops the recording and keeps it, as a video the transcript plays. */
+  STOP_RECORDING: "stop_recording",
 } as const;
 
 export type BrowserAgentActionName =
@@ -79,6 +89,12 @@ export const BROWSER_AGENT_LIMITS = {
   SCROLL_MAX_PIXELS: 100_000,
   /** The furthest a click lands from the page's corner, in CSS pixels. */
   POINT_MAX_PIXELS: 100_000,
+  /** The longest a recording runs before it stops on its own, in seconds. */
+  RECORDING_MAX_SECONDS: 120,
+  /** How long `stop_recording` may take, since the video is encoded as it stops. */
+  RECORDING_STOP_TIMEOUT_MS: 90_000,
+  /** The longest caption a recording is kept with. */
+  RECORDING_CAPTION_MAX_CHARS: 300,
 } as const;
 
 /**
@@ -370,6 +386,22 @@ const waitAction = Schema.Struct({
   ),
 });
 
+const recordAction = Schema.Struct({ action: Schema.Literal(BROWSER_AGENT_ACTION.RECORD) });
+
+const stopRecordingAction = Schema.Struct({
+  action: Schema.Literal(BROWSER_AGENT_ACTION.STOP_RECORDING),
+  caption: Schema.optionalKey(
+    describeWire(
+      Schema.String.check(
+        Schema.isNonEmpty(),
+        Schema.isMaxLength(BROWSER_AGENT_LIMITS.RECORDING_CAPTION_MAX_CHARS),
+        Schema.isPattern(/^[^\r\n]*$/u),
+      ),
+      "What the recording shows, in one line, which the transcript shows under it.",
+    ),
+  ),
+});
+
 /** One action on a browser's tabs. */
 export const browserAgentActionSchema = Schema.Union([
   listAction,
@@ -382,6 +414,8 @@ export const browserAgentActionSchema = Schema.Union([
   keyAction,
   scrollAction,
   waitAction,
+  recordAction,
+  stopRecordingAction,
 ]);
 
 export type BrowserAgentAction = typeof browserAgentActionSchema.Type;
@@ -506,6 +540,34 @@ const consoled = Schema.Struct({
   truncated: Schema.Boolean,
 });
 
+/** A recording started: how long it runs at most before it stops on its own. */
+const recordingStarted = Schema.Struct({
+  action: Schema.Literal(BROWSER_AGENT_ACTION.RECORD),
+  status: done,
+  maxSeconds: Schema.Int,
+});
+
+/** A recording stopped: how long it ran, its caption, and the video as the transcript kept it, or why it was not kept and its size. */
+const recordingStopped = Schema.Struct({
+  action: Schema.Literal(BROWSER_AGENT_ACTION.STOP_RECORDING),
+  status: done,
+  seconds: Schema.Number,
+  caption: Schema.optionalKey(Schema.String),
+  picture: Schema.optionalKey(
+    Schema.Struct({
+      id: Schema.String,
+      mediaType: Schema.Literal(CONVERSATION_MEDIA_TYPE.WEBM),
+      width: Schema.Int,
+      height: Schema.Int,
+      byteCount: Schema.Int,
+    }),
+  ),
+  omitted: Schema.optionalKey(Schema.Literals(Object.values(PICTURE_OMISSION))),
+  byteCount: Schema.optionalKey(Schema.Int),
+});
+
+export type BrowserRecordingStopped = typeof recordingStopped.Type;
+
 /** A step that failed: the tab it was on where it named one, and why, in words a model can act on. */
 const failed = Schema.Struct({
   action: Schema.Literals(Object.values(BROWSER_AGENT_ACTION)),
@@ -522,6 +584,8 @@ export const browserAgentStepSchema = Schema.Union([
   screenshotted,
   snapshotted,
   consoled,
+  recordingStarted,
+  recordingStopped,
   failed,
 ]);
 

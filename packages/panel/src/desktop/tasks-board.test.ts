@@ -477,6 +477,16 @@ test("in a wide room every column stands side by side, with no tabs, and a card'
   assert.equal(chipOf(board, "t-39", "Priority").dataset.iconOnly, "true");
 });
 
+test("a column's cards hand a swipe on to the board, so a sideways one over them scrolls the board", async () => {
+  const board = await mountBoard();
+  const scrollers = [
+    ...board.querySelectorAll<HTMLElement>(".tasks-board-column .luke-scroll-area"),
+  ];
+
+  assert.ok(scrollers.length > 0, "the columns holding cards scroll them");
+  for (const scroller of scrollers) assert.equal(scroller.dataset.overscroll, "chain");
+});
+
 test("a card's Priority chip sends the priority picked, and a Status chip the status, opening no task", async () => {
   const board = await mountBoard();
 

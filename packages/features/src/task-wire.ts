@@ -11,6 +11,7 @@ import {
 } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
+import { modelProviderSchema } from "./models-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import {
@@ -532,6 +533,8 @@ const taskPullRequestLineSchema = EffectSchema.Struct({
   url: EffectSchema.optionalKey(EffectSchema.String),
   /** The newest of the task's agents that opened it, whose Pull request tab a press on it opens; absent from a service before it was sent. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** True where it is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
@@ -708,10 +711,11 @@ export const taskRestoreAnswerSchema = EffectSchema.Struct({
  * Note that it carries no `unreached`, because the start confirmed the
  * repository reachable as it made the task.
  */
-/** Why the agent a start asked for was refused, and when a plan's reached limit resets where that is why and the provider said. */
+/** Why the agent a start asked for was refused, when a plan's reached limit resets where that is why and the provider said, and the provider whose credential is missing where that is why. */
 const taskAgentRefusalSchema = EffectSchema.Struct({
   error: EffectSchema.String,
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+  provider: EffectSchema.optionalKey(modelProviderSchema),
 });
 
 export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;

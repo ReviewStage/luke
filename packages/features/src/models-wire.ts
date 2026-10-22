@@ -43,6 +43,9 @@ export const MODEL_PROVIDER = {
 
 export type ModelProvider = (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER];
 
+/** A model provider as the wire spells it. */
+export const modelProviderSchema = EffectSchema.Literals(Object.values(MODEL_PROVIDER));
+
 /** A model id or an effort as the wire carries it, bounded as a Start bounds them. */
 const choiceText = EffectSchema.Trim.check(
   EffectSchema.isNonEmpty(),
@@ -88,6 +91,13 @@ export const catalogModelSchema = EffectSchema.Struct({
    * Codex), so no Fast is drawn for it; absent otherwise.
    */
   fastWithheldByPlan: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * Whether no subscription or API key of the account's pays for this
+   * model's provider, so a Start on it is refused until one is connected in
+   * Settings › Agents; the menus draw it disabled. Absent otherwise, and
+   * from a service older than it.
+   */
+  credentialMissing: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CatalogModel = typeof catalogModelSchema.Type;

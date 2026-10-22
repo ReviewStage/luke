@@ -55,8 +55,6 @@ import { accountProcedures } from "./account-procedures.js";
 const ORIGIN = "https://luke.test";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

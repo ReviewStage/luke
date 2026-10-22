@@ -616,7 +616,7 @@ test("a channel's composer offers the members a mention there tells under the ap
   assert.equal(
     [...page.querySelectorAll(".chat-message")]
       .at(-1)
-      ?.querySelector(".chat-byline .visually-hidden")?.textContent,
+      ?.querySelector(".chat-byline .luke-visually-hidden")?.textContent,
     "Dean Stratakos",
   );
   const last = [...page.querySelectorAll(".chat-message")].at(-1);
@@ -1068,7 +1068,7 @@ test("a # at the start of a word offers the channels in the same list as an @, a
   assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
 });
 
-test("a task's channel offers its repository's files and its agents' pull requests as the agent box does, and dates down to the picker", async () => {
+test("a task's channel offers its repository's files and its agents' pull requests as the agent box does, a queued one marked queued, and dates down to the picker", async () => {
   const told: unknown[] = [];
   fakeActPort({
     [ACT_KIND.TASKS_TREE]: (payload) => {
@@ -1100,6 +1100,7 @@ test("a task's channel offers its repository's files and its agents' pull reques
           additions: 1,
           deletions: 0,
           url: "https://github.com/ada/relay/pull/214",
+          queued: true,
         },
       ],
     },
@@ -1107,6 +1108,7 @@ test("a task's channel offers its repository's files and its agents' pull reques
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   let kinds: string[];
   let offered: string[];
+  let mark: string | null | undefined;
   let dates: string[];
   try {
     const page = mount((chat) => chat, ACME, undefined, undefined, { tasks: [opened] });
@@ -1117,6 +1119,9 @@ test("a task's channel offers its repository's files and its agents' pull reques
     kinds = menuRows(page).slice(menuRows(page).indexOf("# Mention from"));
     typeInComposer(box, "invite");
     offered = menuRows(page);
+    mark = page
+      .querySelector('.mention-menu [aria-label="Pull requests"] [data-pull-request-mark]')
+      ?.getAttribute("data-pull-request-state");
     pressInComposer(box, "Escape");
     typeInComposer(box, " @dates:");
     dates = menuRows(page);
@@ -1143,6 +1148,7 @@ test("a task's channel offers its repository's files and its agents' pull reques
     "# Pull requests",
     "#214 Send invite emails · Pull request",
   ]);
+  assert.equal(mark, "queued", "a pull request in the merge queue is offered queued");
   assert.deepEqual(dates, [
     "Today · Oct 19, 2026",
     "Tomorrow · Oct 20, 2026",
@@ -1671,7 +1677,7 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
   assert.equal(alone?.querySelector(".picture-block img")?.getAttribute("alt"), "second.png");
   assert.equal(new Set(asked).size, 2, "each picture is read under its own message");
 
-  act(() => alone?.querySelector<HTMLButtonElement>("button.picture-frame")?.click());
+  act(() => alone?.querySelector<HTMLButtonElement>(".picture-block button")?.click());
   assert.ok(
     document.querySelector('[role="dialog"] img[src^="data:image/png"]'),
     "a press opens the picture over the window",

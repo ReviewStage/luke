@@ -271,6 +271,41 @@ test("a press on a diagram's Show code shows its code and opens no editor", asyn
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
+test("a mouse's press on a diagram in a wide room, which enlarges nothing, opens the editor as a press on its words does", async () => {
+  const { container, render } = mount();
+  render({
+    ...DOCUMENT_TASK,
+    document: {
+      body: "## Flow\n\n```mermaid\nflowchart LR\n  Invite --> Join\n```\n",
+      assumptions: [],
+    },
+  });
+  await settle();
+  // A mouse: the window answers every query but a finger's.
+  const ignore = () => undefined;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: !query.includes("pointer: coarse"),
+      addEventListener: ignore,
+      removeEventListener: ignore,
+    }),
+  });
+  const picture = container.querySelector<HTMLElement>(".plan-diagram-picture");
+  assert.ok(picture, "the diagram is drawn");
+
+  act(() => {
+    picture.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+  });
+
+  assert.equal(
+    document.querySelector(".attachment-viewer"),
+    null,
+    "nothing opened over the window",
+  );
+  assert.ok(container.querySelector(".plan-document-editor") !== null, "the editor opened");
+});
+
 test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused, and opens no editor", async () => {
   const body = [
     "## Goal",
@@ -330,7 +365,7 @@ test("a press on the label around a task's checkbox, which takes a finger's pres
   const { container, sent, render } = mount([{ saved: true }]);
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
   await settle();
-  const label = block(container, "Steps").querySelector<HTMLLabelElement>(".task-list-box");
+  const label = block(container, "Steps").querySelector<HTMLLabelElement>(".task-list-box > label");
   assert.ok(label, "the box stands in its label");
 
   act(() => label.click());

@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
+import { sniffImageType } from "@luke/features/image-signature";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ANSWER_LEAD,
@@ -100,7 +101,7 @@ export const INBOX_TOOLS = {
       `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
       `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and required where it must be filled; ` +
       "or no fields for an answer in their own words); never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
-      "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread. " +
+      "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread; never how the work is going, such as that you started or that a pull request is almost merged. " +
       "It waits in their inbox until they acknowledge it, which never reaches you unless they write something; " +
       `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
       "A thread holds one open ask, and a newer ask replaces it. " +
@@ -221,6 +222,7 @@ const readWithdraw = readEither(inboxWithdrawInputSchema, { excess: EXCESS_KEYS.
 /** How a post's picture is read from the sandbox: held to the inbox's picture bound, and refused in a post's own words. */
 const PICTURE_TERMS: SandboxImageTerms = {
   maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
+  sniff: sniffImageType,
   refusals: {
     NO_FILE: "Not posted: a picture names no file in your sandbox:",
     NOT_IMAGE: "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image:",

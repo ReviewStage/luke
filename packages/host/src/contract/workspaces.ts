@@ -3,6 +3,7 @@ import {
   workspaceTokenRepositorySchema,
 } from "@luke/features/github-repositories-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
+import { workspaceSentryAnswerSchema } from "@luke/features/sentry-install-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
@@ -20,6 +21,7 @@ import {
   tasksWorkspacePhotoParamsSchema,
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
+  tasksWorkspaceSentryDisconnectParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
@@ -102,6 +104,21 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksLinearIssuesParamsSchema))
     .output(EffectSchema.flip(EffectSchema.Array(linearIssueSummarySchema))),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actProcedure(
+    "Could not read that workspace's Sentry on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]: actProcedure(
+    "Could not install Sentry for that workspace on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.Void),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]: actProcedure(
+    "Could not disconnect Sentry from that workspace on this system.",
+  )
+    .input(exactInput(tasksWorkspaceSentryDisconnectParamsSchema))
+    .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]: actProcedure(
     "Could not read that repository's issues on this system.",
   )

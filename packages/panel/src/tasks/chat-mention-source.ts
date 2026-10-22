@@ -53,6 +53,7 @@ function summaryPullRequests(
         url: line.url,
         state: line.state,
         checks: line.checks,
+        ...(line.queued === true ? { queued: true } : undefined),
         agent:
           agent === undefined ? undefined : (agentGivenName(agent) ?? agent.title ?? undefined),
       },

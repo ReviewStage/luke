@@ -26,6 +26,10 @@
  *   not hold, one OpenAI signed out, one the deployment cannot open, or
  *   OpenAI not answering fails the call with that refusal: an agent paid for
  *   by the plan never turns to another payer.
+ * - An agent its starter's OpenAI API key pays for is launched with that key
+ *   opened as `OPENAI_API_KEY`, which the runner names as app-server's
+ *   provider `env_key` in place of the token command; it never asks the
+ *   plan, and a key gone or unreadable refuses the launch.
  * - A `model` line with the agent's model and effort as they stand goes
  *   ahead of every message, as on Claude Code.
  */
@@ -37,13 +41,17 @@ import {
   type CodexEffort,
   INPUT_LINE,
   type InputLine,
+  RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { parseKeyRing } from "@luke/database/models/provider-key-seal";
+import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
+import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { Duration, Effect, Result } from "effect";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { Duration, Effect, Option, Redacted, Result } from "effect";
 import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-credentials.js";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
@@ -134,7 +142,46 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     }
   });
 
-  const launch = () => Effect.as(standingPlan, { env: { [CODEX_HOME_ENV]: CODEX_PATH.HOME } });
+  /** Whether the agent was started on its starter's own OpenAI API key rather than the plan, as recorded as it started. */
+  const onApiKey = (agent: CodingAgent) =>
+    Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
+      Option.exists(routing, (row) => row.payer === CODING_AGENT_PAYER.API_KEY),
+    );
+
+  /**
+   * The account's OpenAI API key opened, as `OPENAI_API_KEY`, which the
+   * runner names as app-server's provider `env_key` in place of the plan's
+   * token command; refused where the key is gone or unreadable, and never
+   * turned to the plan.
+   */
+  const apiKeyEnv = Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    const ring = environment.providerKeyEncryptionKeys;
+    const parsed = ring === undefined ? undefined : parseKeyRing(ring);
+    if (parsed === undefined || Result.isFailure(parsed)) {
+      return yield* new LaunchRefused({ reason: "no key ring" });
+    }
+    const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
+    const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.OPENAI);
+    if (row === undefined) return yield* new LaunchRefused({ reason: "no API key" });
+    const opened = openProviderKey(
+      parsed.success,
+      { userId, provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.API_KEY },
+      row,
+    );
+    if (Result.isFailure(opened)) return yield* new LaunchRefused({ reason: "API key unreadable" });
+    const env: Readonly<Record<string, string>> = {
+      [CODEX_HOME_ENV]: CODEX_PATH.HOME,
+      [RUNNER_ENV.OPENAI_API_KEY]: Redacted.value(opened.success),
+    };
+    return { env };
+  });
+
+  const planLaunch: Readonly<Record<string, string>> = { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
+  const planEnv = Effect.as(standingPlan, { env: planLaunch });
+
+  const launch = (agent: CodingAgent) =>
+    Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? apiKeyEnv : planEnv));
 
   const config = (agent: CodingAgent, resume: string | undefined, firstSequence: number) =>
     Effect.gen(function* () {
@@ -147,6 +194,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         executable: CODEX_PATH.EXECUTABLE,
         model,
         ...(effort === undefined ? undefined : { effort }),
+        ...(providerModelOf(agent.model)?.fast === true ? { fast: true } : undefined),
         developerInstructions: yield* options.instructions(agent),
         ...(resume === undefined ? undefined : { threadId: resume }),
         firstSequence,
@@ -163,10 +211,14 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     const effort = effortOf(agent.effort);
     const choice: InputLine = {
       type: INPUT_LINE.MODEL,
-      ...(model === undefined ? undefined : { model }),
+      ...(model === undefined
+        ? undefined
+        : { model, fast: providerModelOf(agent.model)?.fast === true }),
       ...(effort === undefined ? undefined : { effort }),
     };
-    return Effect.as(standingPlan, { lines: [choice] });
+    // Note that an agent on its API key has no plan to ask, and its runner holds the key it launched with.
+    const asked = Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? Effect.void : standingPlan));
+    return Effect.as(asked, { lines: [choice] });
   };
 
   return {

@@ -127,6 +127,12 @@ export const GATEWAY_METHOD = {
   WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
   /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
+  /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_SENTRY: "workspaces.sentry",
+  /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
+  WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
+  /** One of a workspace's Sentry installations disconnected on the service, answered with the workspace's Sentry as it then stands. */
+  WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /**

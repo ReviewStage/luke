@@ -27,6 +27,9 @@ import {
   comboboxOptionId,
   DocumentIcon,
   IconButton,
+  MENU_SURFACE_INSET,
+  MenuGlyph,
+  MenuSurface,
   ProviderMark,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -955,14 +958,17 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
           onClick={back}
         />
       )}
-      <span className="mention-menu-crumb-glyph">
+      <MenuGlyph>
         {folder === undefined ? <KindGlyph kind={kind} /> : <FolderIcon aria-hidden="true" />}
-      </span>
-      <span className="mention-menu-crumb-title">
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
-          {folder ?? kind.name}
-        </Text>
-      </span>
+      </MenuGlyph>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.SECTION}
+        truncate
+        className="mention-menu-crumb-title"
+      >
+        {folder ?? kind.name}
+      </Text>
     </div>
   );
 }
@@ -989,7 +995,11 @@ function MentionMenu({
 }): React.JSX.Element {
   const rows = groups.flatMap((group) => group.rows);
   return (
-    <div className="menu-surface searchable-menu mention-menu" style={place}>
+    <MenuSurface
+      className="searchable-menu mention-menu"
+      inset={MENU_SURFACE_INSET.NONE}
+      style={place}
+    >
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
       <ComboboxList
         id={id}
@@ -1017,7 +1027,7 @@ function MentionMenu({
           </Text>
         ))}
       </div>
-    </div>
+    </MenuSurface>
   );
 }
 
@@ -1090,7 +1100,7 @@ export interface MentionChannels {
 
 /** One of the task's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
 export interface MentionablePullRequest
-  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks"> {
+  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks" | "queued"> {
   readonly agent: string | undefined;
 }
 
@@ -1497,14 +1507,14 @@ export function useMentionPicker({
     datePicker.open({
       at: word.rect,
       date: undefined,
-      onClose: ({ date, changed, how }: DatePicked) => {
+      onClose: ({ date, zone, changed, how }: DatePicked) => {
         const kept = how === DATE_PICKER_CLOSE.CLEAR || !changed ? undefined : date;
         if (
           (kept !== undefined || how !== DATE_PICKER_CLOSE.LEAVE) &&
           editing instanceof HTMLElement
         )
           editing.focus();
-        if (kept !== undefined) onChoose(dateMentionNode(kept, place));
+        if (kept !== undefined) onChoose(dateMentionNode(kept, place, zone));
       },
     });
   };

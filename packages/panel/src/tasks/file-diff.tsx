@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import { EmptyState } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -167,7 +168,7 @@ export function PierreDiff({
   });
 
   if (AsyncResult.isFailure(loaded)) {
-    return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
+    return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;
   }
   return (
     <div ref={host} className={className} data-diff-layout={look.layout}>

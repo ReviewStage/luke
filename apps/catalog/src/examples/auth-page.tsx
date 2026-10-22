@@ -6,6 +6,7 @@ import {
   FormField,
   MARK_PROVIDER,
   ProviderButton,
+  SocialSignInCard,
   TEXT_FIELD_TYPE,
   TextField,
   WingFace,
@@ -79,6 +80,28 @@ function AuthPages(): React.JSX.Element {
           >
             <ProviderChoices />
           </AuthPage>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="auth-social-card" title="Social sign-in card, opening and failed">
+        <div className="catalog-screens">
+          <div className="catalog-screen catalog-screen-phone">
+            <SocialSignInCard
+              mark={<Face />}
+              title="Luke admin"
+              pending={undefined}
+              onPress={() => undefined}
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <SocialSignInCard
+              mark={<Face />}
+              title="Sign in to accept your invitation"
+              description="Sign in with the account that uses someone@acme-corporation.example."
+              pending="github"
+              failed
+              onPress={() => undefined}
+            />
+          </div>
         </div>
       </CatalogSection>
       <CatalogSection id="auth-status" title="Status, settled and failed">

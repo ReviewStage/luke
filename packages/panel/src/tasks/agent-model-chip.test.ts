@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_RUNTIME, type CodingAgentRuntime } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_PAYER,
+  CODING_AGENT_RUNTIME,
+  type CodingAgentPayer,
+  type CodingAgentRuntime,
+  type CodingAgentUsage,
+} from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,6 +26,8 @@ import { AgentModelChip } from "./agent-model-chip.js";
  * on Codex GPT models alone with neither, the list `list_models` answers
  * for the same catalog (`coder-agent-tools.test.ts`), while an eve agent's
  * offers all of it. A model whose plan runs no fast mode draws no Fast.
+ * A Codex agent's menu ends on the ChatGPT plan that pays and a link to
+ * manage its usage; no other agent's says what pays.
  */
 
 const MODELS: readonly CatalogModel[] = [
@@ -169,9 +177,12 @@ function openMenuOn(
   runtime: CodingAgentRuntime | undefined,
   choice: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" },
   models: readonly CatalogModel[] = RUNTIME_MODELS,
+  usage: CodingAgentUsage | undefined = undefined,
+  payer: CodingAgentPayer | undefined = undefined,
 ): {
   models: string[];
   foot: string;
+  menu: Element;
 } {
   const view = document.createElement("div");
   document.body.append(view);
@@ -188,7 +199,8 @@ function openMenuOn(
         },
         models,
         readModels: () => undefined,
-        usage: undefined,
+        usage,
+        payer,
       }),
     ),
   );
@@ -201,7 +213,7 @@ function openMenuOn(
   const listed = [...menu.querySelectorAll('[role="listbox"] [role="option"]')].map(
     (row) => row.textContent ?? "",
   );
-  return { models: listed, foot };
+  return { models: listed, foot, menu };
 }
 
 test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither, while an eve agent's offers every model with both", () => {
@@ -241,4 +253,42 @@ test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not eve
   assert.match(gpt.foot, /Effort/u);
   assert.doesNotMatch(gpt.foot, /Fast/u);
   assert.match(opus.foot, /Fast/u);
+});
+
+test("a Codex agent's menu ends on \"Using ChatGPT plan · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
+  const opened: string[] = [];
+  fakeAppPlatform({ assetBase: () => "https://luke.test/", openWeb: (href) => opened.push(href) });
+  const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX, {
+    model: "openai/gpt-6.1-sol",
+    effort: "low",
+  });
+  assert.match(codex.foot, /Using ChatGPT plan · Manage usage$/u);
+  const link = [...codex.menu.querySelectorAll("a")].find((a) => a.textContent === "Manage usage");
+  assert.ok(link, "Manage usage is a link");
+  act(() => link.click());
+  assert.deepEqual(opened, ["https://chatgpt.com/settings/usage"]);
+
+  for (const runtime of [CODING_AGENT_RUNTIME.CLAUDE_CODE, undefined]) {
+    assert.doesNotMatch(openMenuOn(runtime).foot, /plan|Manage usage/u);
+  }
+});
+
+test("a Codex agent its OpenAI API key pays for names no plan, before its first turn settles too, and its menu ends on what it cost", () => {
+  const onKey = openMenuOn(
+    CODING_AGENT_RUNTIME.CODEX,
+    { model: "openai/gpt-6.1-sol", effort: "low" },
+    RUNTIME_MODELS,
+    { inputTokens: 1000, outputTokens: 200, costUsd: 0.42, payer: CODING_AGENT_PAYER.API_KEY },
+  );
+  assert.doesNotMatch(onKey.foot, /plan|Manage usage/u);
+  assert.match(onKey.foot, /\$0\.42/u);
+  // Before its first turn settles, the payer the page names says the same.
+  const first = openMenuOn(
+    CODING_AGENT_RUNTIME.CODEX,
+    { model: "openai/gpt-6.1-sol", effort: "low" },
+    RUNTIME_MODELS,
+    undefined,
+    CODING_AGENT_PAYER.API_KEY,
+  );
+  assert.doesNotMatch(first.foot, /plan|Manage usage/u);
 });

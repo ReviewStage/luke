@@ -61,11 +61,20 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
 /** How far back a run that failed to start is still carried to its automation's owner, as the live read keeps it too. */
 const FAILED_RUN_WINDOW = Duration.millis(FAILED_RUN_WINDOW_MILLIS);
 
-/** What a cursor digests of one thing it covers, an item, whose stamp says whether it is unread for the reader, or a failed run. */
+/** What a cursor digests of one thing it covers, an item, whose stamp says whether it is unread for the reader and who it waits on, or a failed run. */
 type InboxCursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & {
   readonly status: string;
   readonly unread?: boolean;
+  readonly waitsOn?: string;
 };
+
+/** Where each item a read answers stands, as its stamp says it (`taskInboxStamps`): the member it waits on by id. */
+function itemStamps(items: InboxAnswer["items"]): readonly InboxCursorStamp[] {
+  return items.map(({ waitsOn, ...item }) => ({
+    ...item,
+    ...(waitsOn === undefined ? undefined : { waitsOn: waitsOn.userId }),
+  }));
+}
 
 /** Waits until the inbox moves past the reader's cursor, or a transcript read's hold ends. */
 function heldUntilMoved(
@@ -104,7 +113,7 @@ export function agentInboxPast(
 ): InboxStoreEffect<InboxAnswer> {
   return heldUntilMoved(memberAgentInboxStamps(userId, agentId), after, CODER.MESSAGES_POLL).pipe(
     Effect.andThen(memberAgentInboxItems(userId, agentId)),
-    Effect.map((items) => ({ items, cursor: cursorOf(items) })),
+    Effect.map((items) => ({ items, cursor: cursorOf(itemStamps(items)) })),
   );
 }
 
@@ -116,7 +125,7 @@ export function taskInboxPast(
 ): InboxStoreEffect<InboxAnswer> {
   return heldUntilMoved(taskInboxStamps(userId, taskId), after, CODER.MESSAGES_POLL).pipe(
     Effect.andThen(taskInboxItems(userId, taskId)),
-    Effect.map((items) => ({ items, cursor: cursorOf(items) })),
+    Effect.map((items) => ({ items, cursor: cursorOf(itemStamps(items)) })),
   );
 }
 

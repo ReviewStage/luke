@@ -1,10 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { keptImageOf } from "@luke/database/models/attached-file-parts";
 import {
   type CodingAgent,
   type LineSent,
   lineSendersOf,
   listPublishedCodingAgentsById,
 } from "@luke/database/models/coding-agent-store";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import {
   listMessagesBefore,
   listMessagesPast,
@@ -26,6 +28,7 @@ import {
   type StartNoteHeading,
   toolStep,
 } from "@luke/features/agent-replay";
+import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
 import {
   base64Bytes,
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -36,9 +39,10 @@ import {
   type CodingAgentStartFrom,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { isVideoType } from "@luke/features/conversation-picture-wire";
 import { agentGivenName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { isFileUIPart, isTextUIPart } from "ai";
+import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import {
   isRecord,
@@ -78,7 +82,8 @@ import { CURSOR_START } from "./transcript.js";
  * the press stays out of it. The source's first
  * message is its brief and is not replayed: the new agent is handed the
  * plan as it stands now, or the source's prompt with the text files
- * attached to it, an automation run's prompt as it was handed, without the
+ * attached to it and the images kept beside its conversation (`filesOf`),
+ * an automation run's prompt as it was handed, without the
  * replay or note the source's own first message carried. A note the source
  * was handed behind its marker, or after a replay, is its first step
  * instead. A source that was itself started
@@ -126,7 +131,11 @@ interface CallWords {
   readonly key: string;
 }
 
-/** Each coding tool's words; a patch names its files in its own headers and stands apart. */
+/**
+ * Each coding tool's words, eve's and those a native harness calls under its
+ * own names (`../native-events/`); a patch, and a Codex file change, name
+ * their files in their own input and stand apart.
+ */
 const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODER_TOOL.BASH, { verb: "Ran", key: "command" }],
   [CODER_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
@@ -134,9 +143,28 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODER_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
   [CODER_TOOL.GREP, { verb: "Searched", key: "pattern" }],
   [CODER_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
-  [CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
+  [CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   [RETIRED_CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
-  [RETIRED_CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  [RETIRED_CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
+  [CLAUDE_CODE_TOOL.BASH, { verb: "Ran", key: "command" }],
+  [CLAUDE_CODE_TOOL.READ, { verb: "Read", key: "file_path" }],
+  [CLAUDE_CODE_TOOL.WRITE, { verb: "Wrote", key: "file_path" }],
+  [CLAUDE_CODE_TOOL.EDIT, { verb: "Edited", key: "file_path" }],
+  [CLAUDE_CODE_TOOL.NOTEBOOK_EDIT, { verb: "Edited", key: "notebook_path" }],
+  [CLAUDE_CODE_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
+  [CLAUDE_CODE_TOOL.GREP, { verb: "Searched", key: "pattern" }],
+  [CLAUDE_CODE_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
+  [CLAUDE_CODE_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  [CODEX_TOOL.COMMAND_EXECUTION, { verb: "Ran", key: "command" }],
+  [CODEX_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+]);
+
+/** The tools that edit the one file their input names: eve's own, and Claude Code's. */
+const ONE_FILE_EDITS: ReadonlySet<string> = new Set([
+  CODER_TOOL.WRITE_FILE,
+  CLAUDE_CODE_TOOL.WRITE,
+  CLAUDE_CODE_TOOL.EDIT,
+  CLAUDE_CODE_TOOL.NOTEBOOK_EDIT,
 ]);
 
 /** A patch header naming a file, as `apply_patch` spells one: a file added, updated, or deleted, or where an update moves it to. */
@@ -190,9 +218,28 @@ function patchFiles(input: UnparsedWireValue): readonly string[] {
   return patch.split("\n").flatMap((line) => PATCH_FILE_HEADER.exec(line.trimEnd())?.[1] ?? []);
 }
 
+/** The files a Codex file change names, each change's path and where an update moves it to, in the order written. */
+function changedFiles(input: UnparsedWireValue): readonly string[] {
+  const changes = isRecord(input) && Array.isArray(input.changes) ? input.changes : [];
+  return changes.flatMap((change: UnparsedWireValue) => {
+    if (!isRecord(change) || !isWireString(change.path)) return [];
+    const moved = isRecord(change.kind) ? change.kind.move_path : undefined;
+    return isWireString(moved) ? [change.path, moved] : [change.path];
+  });
+}
+
+/** The files a patch or a Codex file change edits; none for any other call. */
+function patchedFiles(name: string, input: UnparsedWireValue): readonly string[] {
+  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input);
+  if (name === CODEX_TOOL.FILE_CHANGE) return changedFiles(input);
+  return [];
+}
+
 /** What a call was done to, read from its input alone. */
 function subjectOf(name: string, input: UnparsedWireValue): string {
-  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input).join(", ");
+  if (name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE) {
+    return patchedFiles(name, input).join(", ");
+  }
   const words = CALL_WORDS.get(name);
   if (words === undefined || !isRecord(input)) return "";
   const subject = input[words.key];
@@ -203,7 +250,7 @@ function subjectOf(name: string, input: UnparsedWireValue): string {
 export function callEntry(part: StoredToolPart): string {
   const name = part.type.slice("tool-".length);
   const verb =
-    name === CODER_TOOL.APPLY_PATCH
+    name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE
       ? CALL_ENTRY_WORDS.EDITED
       : (CALL_WORDS.get(name)?.verb ?? CALL_ENTRY_WORDS.USED);
   // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
@@ -372,37 +419,61 @@ function filesBytes(files: readonly CodingAgentAttachment[]): number {
 }
 
 /**
- * The files the source's first message carried: those whose bytes stand
- * and that fit beside the note's own files within one message's bounds,
- * attached again, and the names of the rest. Note that the note's files
- * are kept first, because they are what the developer attached now.
+ * A file of the source's first message as a Start attaches it again: its
+ * bytes where the row keeps them, or else the picture it was kept as beside
+ * the source's conversation, which a row names by id with no bytes once it
+ * was kept (`attached-file-parts.ts`); nothing where neither stands.
  */
-function filesOf(
+const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
+  Effect.gen(function* () {
+    const inline = attachmentOf(file.url, file.mediaType, name);
+    const kept = keptImageOf(file);
+    if (inline !== undefined || kept === undefined || !("id" in kept)) return inline;
+    const picture = yield* readConversationPicture(source.conversationId, kept.id);
+    // A video an agent showed is no file a message carries, so a Start names it as not attached.
+    if (Option.isNone(picture) || isVideoType(picture.value.contentType)) return undefined;
+    return {
+      name,
+      mediaType: picture.value.contentType,
+      data: Buffer.from(picture.value.bytes).toString("base64"),
+    } satisfies CodingAgentAttachment;
+  });
+
+/**
+ * The files the source's first message carried: those whose bytes stand,
+ * in the row or kept beside the source's conversation, and that fit beside
+ * the note's own files within one message's bounds, attached again, and the
+ * names of the rest. Note that the note's files are kept first, because
+ * they are what the developer attached now.
+ */
+const filesOf = (
+  source: CodingAgent,
   first: StoredMessageRecord | undefined,
   noteFiles: readonly CodingAgentAttachment[],
-): SourceFiles {
-  const files = (first?.message.parts ?? []).filter(isFileUIPart);
-  const attachments: CodingAgentAttachment[] = [];
-  const unkept: string[] = [];
-  let count = noteFiles.length;
-  let bytes = filesBytes(noteFiles);
-  for (const file of files) {
-    const name = file.filename ?? file.mediaType;
-    const attached = attachmentOf(file.url, file.mediaType, name);
-    const size = attached === undefined ? 0 : base64Bytes(attached.data);
-    const fits =
-      count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
-      bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
-    if (attached === undefined || !fits) {
-      unkept.push(name);
-    } else {
-      attachments.push(attached);
-      count += 1;
-      bytes += size;
+) =>
+  Effect.gen(function* () {
+    const files = (first?.message.parts ?? []).filter(isFileUIPart);
+    const attachments: CodingAgentAttachment[] = [];
+    const unkept: string[] = [];
+    let count = noteFiles.length;
+    let bytes = filesBytes(noteFiles);
+    for (const file of files) {
+      const name = file.filename ?? file.mediaType;
+      const attached = yield* sourceFileOf(source, file, name);
+      const size = attached === undefined ? 0 : base64Bytes(attached.data);
+      const fits =
+        count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
+        bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
+      if (attached === undefined || !fits) {
+        unkept.push(name);
+      } else {
+        attachments.push(attached);
+        count += 1;
+        bytes += size;
+      }
     }
-  }
-  return { attachments, unkept };
-}
+    return { attachments, unkept } satisfies SourceFiles;
+  });
 
 /** The source's rows a replay reads: its brief and the newest rows at or before the cut, oldest first, and the cut's sequence for a fork. */
 interface SourceRecords {
@@ -766,14 +837,15 @@ export function replayOf(
   };
 }
 
-/** The files a call edited through the agent's own file tools: a patch's, or the one file written; none for a call that failed, which edited nothing. */
+/** The files a call edited through the agent's own file tools, or a native harness's: a patch's or a file change's, or the one file written or edited; none for a call that failed, which edited nothing. */
 function editedFiles(part: StoredToolPart): readonly string[] {
   if (part.state === "output-error") return [];
   const name = part.type.slice("tool-".length);
   // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
   const input = part.input as UnparsedWireValue;
-  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input);
-  if (name !== CODER_TOOL.WRITE_FILE) return [];
+  const patched = patchedFiles(name, input);
+  if (patched.length > 0) return patched;
+  if (!ONE_FILE_EDITS.has(name)) return [];
   const file = subjectOf(name, input);
   return file === "" ? [] : [file];
 }
@@ -1030,7 +1102,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
   // A source handed the plan carries files only where its own note did, so its first message is read either way.
-  const files = filesOf(records[0], noteFiles);
+  const files = yield* hostedStoreOrUnavailable(filesOf(source, records[0], noteFiles));
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);

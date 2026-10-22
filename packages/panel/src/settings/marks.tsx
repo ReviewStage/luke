@@ -1,4 +1,4 @@
-import { AlertIcon } from "@luke/ui";
+import { AlertIcon, VisuallyHidden } from "@luke/ui";
 
 /**
  * The word beside a row's name while its value differs from the default,
@@ -24,7 +24,7 @@ export function AttentionMark({ note }: { note: string }): React.JSX.Element {
   return (
     <span className="settings-attention" title={note}>
       <AlertIcon />
-      <span className="visually-hidden">({note})</span>
+      <VisuallyHidden>({note})</VisuallyHidden>
     </span>
   );
 }

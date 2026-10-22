@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { readCodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import {
+  PROVIDER_KEY_UNREADABLE,
+  type ProviderKeyUnreadable,
+} from "@luke/database/models/provider-key-seal";
 import type {
   EarlierCallLine,
   HeldVoiceAgent,
@@ -25,6 +30,7 @@ import {
 } from "@luke/live";
 import { Effect, Option, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
+import { messageCredentialMissing } from "../agents/coder-host/agent-runtime-choice.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -78,6 +84,8 @@ type AdmittedAccount =
       task: Task | undefined;
       /** The agent the call speaks into. */
       agent: HeldVoiceAgent;
+      /** OpenAI on the caller's own key, which the call runs on. */
+      upstream: LiveUpstream;
     }
   | Refusal;
 
@@ -118,6 +126,19 @@ type Opened =
 function refused(reason: HostedApiError): Refusal {
   return { refusal: reason };
 }
+
+/** Whether the agent a call names, on eve, has no credential of its starter's to run its turns on (`messageCredentialMissing`). */
+const callCredentialMissing = (accountId: string, agentId: string) =>
+  Effect.gen(function* () {
+    const agent = yield* readCodingAgent(accountId, agentId);
+    if (Option.isNone(agent)) return false;
+    const routing = yield* readCodingAgentRouting(accountId, agentId);
+    const missing = yield* messageCredentialMissing(agent.value, {
+      runtime: Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE,
+      payer: Option.isSome(routing) ? routing.value.payer : null,
+    });
+    return missing !== undefined;
+  });
 
 /**
  * What one session's own effect may fail with: the `voice_sessions` writes
@@ -354,6 +375,18 @@ export interface SessionOpenerOptions {
   readonly model: string | undefined;
   /** How long a fresh socket has to send its opening frame before it is refused. */
   readonly firstFrameTimeoutMs: number;
+  /**
+   * OpenAI on the account's own OpenAI API key, read afresh for each opening;
+   * nothing where it saved none, which refuses the call, since Luke spends no
+   * key of its own on one.
+   */
+  readonly upstreamOf: (
+    accountId: string,
+  ) => Effect.Effect<
+    LiveUpstream | ProviderKeyUnreadable | undefined,
+    SessionFailure,
+    DatabaseServices
+  >;
 }
 
 export interface SessionOpener {
@@ -364,7 +397,7 @@ export interface SessionOpener {
    * refused the same way and answered nothing, since nothing is spent on a
    * caller who is not there.
    */
-  open(upstream: LiveUpstream, admission: Admission, device: VoiceSocket): SessionEffect<Opened>;
+  open(admission: Admission, device: VoiceSocket): SessionEffect<Opened>;
 }
 
 export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
@@ -410,7 +443,9 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * the one named, or where it is archived and so takes nothing; an agent on
    * a native harness (Claude Code or Codex) is refused by name, since a call
    * runs on eve alone; a teammate's agent the account reaches takes the
-   * call, which runs on its starter's key as its every turn does.
+   * call, which runs on its starter's key as its every turn does. The call's
+   * voice runs on the caller's own OpenAI key, and an account that saved none
+   * is refused as missing one, last before the count.
    */
   const admitAccount = (
     admission: Admission,
@@ -437,8 +472,16 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (agent.runtime !== CONVERSATION_RUNTIME.EVE) {
         return refused(HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE);
       }
+      // Note that a call's turns run on the agent's starter's key, and Luke's pays for no coding
+      // agent, so one Luke's key paid for, or whose starter keeps no API key now, is refused first.
+      if (yield* callCredentialMissing(accountId, agentId)) {
+        return refused(HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING);
+      }
+      const upstream = yield* options.upstreamOf(accountId);
+      if (upstream === undefined) return refused(HOSTED_API_ERROR.OPENAI_KEY_MISSING);
+      if (upstream === PROVIDER_KEY_UNREADABLE) return refused(HOSTED_API_ERROR.UNAVAILABLE);
       yield* accounts.spend(accountId);
-      return { accountId, task, agent };
+      return { accountId, task, agent, upstream };
     });
 
   /**
@@ -455,16 +498,13 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
     Effect.catch(upstream.attach(sessionId), () => Effect.succeed(undefined));
 
   /** A new WebRTC session: authorized and counted, created at OpenAI, registered to its account, and attached. */
-  const openCreated = (
-    upstream: LiveUpstream,
-    admission: Admission,
-    frame: SessionCreateFrame,
-  ): SessionEffect<Opened> =>
+  const openCreated = (admission: Admission, frame: SessionCreateFrame): SessionEffect<Opened> =>
     Effect.gen(function* () {
       const input = sessionsInput(frame);
       if (input === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const account = yield* admitAccount(admission, frame.planId, frame.agentId);
       if ("refusal" in account) return account;
+      const { upstream } = account;
       const { agentId } = account.agent;
       const earlier = yield* record.earlierCalls({ agentId });
       const agentHistory = yield* agentCallHistory(account.agent.conversation);
@@ -494,7 +534,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const sideband = yield* attach(upstream, sessionId);
       if (sideband === undefined) {
         // The session stands at OpenAI with no sideband to close it: stamped,
-        // so the sweep ends it on Luke's key.
+        // so the sweep ends it on the account's key.
         yield* record.detach({ sessionId, attachId });
         return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       }
@@ -531,11 +571,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * names an agent and no task is a call into an agent with no task, and is
    * taken back as it was created.
    */
-  const openAttached = (
-    upstream: LiveUpstream,
-    admission: Admission,
-    frame: SessionAttachFrame,
-  ): SessionEffect<Opened> =>
+  const openAttached = (admission: Admission, frame: SessionAttachFrame): SessionEffect<Opened> =>
     Effect.gen(function* () {
       const account = yield* accounts.resolveUserId(admission.bearer);
       const owned = Option.isNone(account)
@@ -547,6 +583,11 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // A session no agent was bound to is no call this service still runs.
       if (owned.agentId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
+      // Note that the session was created on this account's key, so it is re-attached on its key now:
+      // one replaced in Settings since reaches the session no more, which OpenAI's hour limit then ends.
+      const upstream = yield* options.upstreamOf(accountId);
+      if (upstream === undefined) return refused(HOSTED_API_ERROR.OPENAI_KEY_MISSING);
+      if (upstream === PROVIDER_KEY_UNREADABLE) return refused(HOSTED_API_ERROR.UNAVAILABLE);
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       // A connection holds the session again, so the orphan sweep leaves it be
@@ -573,15 +614,15 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
     });
 
   return {
-    open: (upstream, admission, device) =>
+    open: (admission, device) =>
       Effect.gen(function* () {
         const frame = yield* firstFrame(device);
         if (frame === undefined || !(yield* device.isOpen)) {
           return refused(HOSTED_API_ERROR.INVALID_REQUEST);
         }
         return frame.type === VOICE_SERVICE_FRAME.SESSION_ATTACH
-          ? yield* openAttached(upstream, admission, frame)
-          : yield* openCreated(upstream, admission, frame);
+          ? yield* openAttached(admission, frame)
+          : yield* openCreated(admission, frame);
       }),
   };
 }

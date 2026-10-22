@@ -41,6 +41,7 @@ import { afterEach, vi } from "vitest";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "../agents/brain-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -89,6 +90,8 @@ interface PullRequestFixture {
   state: "open" | "closed";
   merged: boolean;
   conclusion: string;
+  /** Whether the base's merge queue holds it, as GitHub's GraphQL API answers; held by none where absent. */
+  queued?: boolean;
 }
 
 /** The repository's pull request from the agent's branch, read by number or by its head, with its head's one check run. */
@@ -112,6 +115,10 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
     if (url.origin === EVE_ORIGIN) {
       return Response.json({ sessionId: "wrun_eve", deliveryId: "delivery-1" }, { status: 202 });
     }
+    if (url.pathname === "/graphql" && sent.method === "POST") {
+      const mergeQueueEntry = pull.queued === true ? { position: 1 } : null;
+      return Response.json({ data: { repository: { pullRequest: { mergeQueueEntry } } } });
+    }
     if (!url.pathname.startsWith(base)) return undefined;
     const path = url.pathname.slice(base.length);
     if (path === "/pulls") return Response.json([pullJson()]);
@@ -132,8 +139,6 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
 /** The environment a deployment holds, with the webhook's secret or without it. */
 function environment(secret: string | undefined): HostedEnvironmentValues {
   return {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,
@@ -213,6 +218,7 @@ function pullRequestDelivery(action: string, ref: string) {
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
+    yield* connectAgentApiKeys(owner);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: RELAY_FULL_NAME,
@@ -292,10 +298,43 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
+    "a pull request entering and leaving the merge queue is read again onto the agent's row, which keeps it queued while GitHub holds it there",
+    () =>
+      Effect.gen(function* () {
+        const pull: PullRequestFixture = { state: "open", merged: false, conclusion: "success" };
+        const { github, kept, ref } = yield* openAgent(pull);
+        const deliver = (action: string) =>
+          Effect.map(
+            answer(github, SECRET, delivery("pull_request", pullRequestDelivery(action, ref))),
+            (got) => got.body,
+          );
+
+        yield* deliver("opened");
+        const opened = yield* kept();
+        pull.queued = true;
+        const enqueued = yield* deliver("enqueued");
+        const inQueue = yield* kept();
+        pull.queued = false;
+        const dequeued = yield* deliver("dequeued");
+        const left = yield* kept();
+
+        assert.equal(opened?.queued, undefined);
+        assert.deepEqual(
+          [enqueued, dequeued],
+          [1, 1].map((read) => ({ read, queued: 0, told: 0 })),
+        );
+        assert.equal(inQueue?.state, "open");
+        assert.equal(inQueue?.queued, true);
+        assert.equal(left?.queued, undefined);
+      }),
+  );
+
+  it.effect(
     "an installation removed or suspended leaves its workspace's GitHub account inactive, and one brought back active again",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const installationId = 900_000 + Math.floor(Math.random() * 90_000);
         const login = `acme-${randomUUID()}`;
         const github = githubReaching([{ id: installationId, login, repositories: [] }]);
@@ -442,6 +481,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/triage-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Triage", repository: repositoryName });
         const trigger: AutomationTrigger = {
@@ -520,6 +560,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/review-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const onWorkspace = (event: GitHubTriggerEvent, name: string) =>
@@ -595,6 +636,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/settings-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const listening = (trigger: AutomationTrigger) =>
@@ -684,6 +726,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/agents-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const hearing = (senders: readonly GitHubSender[]) =>
@@ -760,6 +803,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   it.effect("a failed check suite queues a run, but not on a coding agent's own luke/ branch", () =>
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
+      yield* connectAgentApiKeys(owner);
       const repositoryName = `Acme/ci-${randomUUID()}`;
       const task = yield* startTask(owner, { name: "CI", repository: repositoryName });
       const made = Option.getOrThrow(

@@ -406,7 +406,8 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.deepEqual([...policiesSent(answer)], [headers.get("content-security-policy")], path);
     const directives = directivesOf(headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], path);
-    assert.deepEqual(directives.get("script-src"), ["'self'"], path);
+    // Files changed colours its diffs with Pierre's Highlights, one WebAssembly module, which this alone lets the app compile.
+    assert.deepEqual(directives.get("script-src"), ["'self'", "'wasm-unsafe-eval'"], path);
     assert.deepEqual(directives.get("object-src"), ["'none'"], path);
     assert.deepEqual(directives.get("base-uri"), ["'self'"], path);
     assert.deepEqual(directives.get("form-action"), ["'self'"], path);

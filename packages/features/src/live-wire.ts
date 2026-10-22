@@ -237,7 +237,8 @@ function digest(text: string): string {
 
 /**
  * The cursor of a live answer: a digest of what the held read's cursor
- * stamps, each item's id, revision, instant, and read state, each failed
+ * stamps, each item's id, revision, instant, read state, and who it waits
+ * on, so its task's assignee changing moves it, each failed
  * run, and each chat entry where it stands, so an answer whose cursor is
  * the last one's moved nothing a reader announces or counts, as a held
  * answer's does.
@@ -248,7 +249,8 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     readonly revision: number;
     readonly updatedAt: number;
     readonly unread?: boolean | undefined;
-  }) => [item.id, item.revision, item.updatedAt, item.unread ?? null];
+    readonly waitsOn?: string | undefined;
+  }) => [item.id, item.revision, item.updatedAt, item.unread ?? null, item.waitsOn ?? null];
   return digest(
     JSON.stringify([
       answer.items.map(itemStamp),
@@ -582,6 +584,9 @@ const inboxLiveRowSchema = EffectSchema.Struct({
   ...inboxItemSchema.fields,
   startedBy: EffectSchema.String,
   startedByName: EffectSchema.NullOr(EffectSchema.String),
+  /** Absent from a service before it, as the item's own `waitsOn` is. */
+  waitsOn: EffectSchema.optionalKey(EffectSchema.String),
+  waitsOnName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   answer: EffectSchema.NullOr(inboxReplySchema),
   answeredBy: EffectSchema.NullOr(EffectSchema.String),
   answeredByName: EffectSchema.NullOr(EffectSchema.String),
@@ -681,6 +686,8 @@ function inboxItemOfLiveRow(
   const {
     startedBy,
     startedByName,
+    waitsOn,
+    waitsOnName,
     answer,
     answeredBy,
     answeredByName,
@@ -705,6 +712,9 @@ function inboxItemOfLiveRow(
     ...(startedByName === null
       ? undefined
       : { startedBy: { userId: startedBy, name: startedByName } }),
+    ...(waitsOn === undefined || waitsOnName === undefined || waitsOnName === null
+      ? undefined
+      : { waitsOn: { userId: waitsOn, name: waitsOnName } }),
     ...(answer === null ? undefined : { answer }),
     ...(answerFiles.length === 0 ? undefined : { answerFiles }),
     ...(answeredBy === null || answeredByName === null

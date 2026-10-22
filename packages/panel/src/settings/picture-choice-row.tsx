@@ -4,9 +4,9 @@
  * A face is a person to tell apart, which a pop-up's row-sized picture is
  * too small for, so a set with faces stands open under its name: the chosen
  * one large, as the call will show it, beside every face with its name
- * under it. The faces are the platform's own radio group, each a hidden
- * radio inside the face that labels it, so Tab reaches the chosen face and
- * the arrows move the choice as any radio group's do; a press or an arrow
+ * under it. The faces are `@luke/ui`'s `ChoiceList` in its picture look, so Tab
+ * reaches the chosen face and the arrows move the choice as any radio
+ * group's do; a press or an arrow
  * writes at once, as a pop-up's choice does. It is `@luke/ui`'s
  * `SettingsRow`, the faces standing in its `below` slot, so the row's words
  * name and describe the group and a refused write stands in its error line.
@@ -16,11 +16,9 @@
  */
 
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SettingsRow } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import { CHOICE_LOOK, ChoiceList, SettingsRow } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { useId } from "react";
 import { ChangedMark } from "./marks.js";
 
 /** Each face's token, its name, and the address of its picture. */
@@ -50,7 +48,6 @@ export function PictureChoiceRow<Value extends string>({
   onChange: (value: Value) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
-  const group = useId();
   const chosen = options.find((option) => option.value === value) ?? options[0];
 
   // Note that the anchor wraps the shared row, which takes no attribute of its own, so the landing rings it whole.
@@ -74,49 +71,26 @@ export function PictureChoiceRow<Value extends string>({
                 <span className="picture-choice-stage-name">{chosen.label}</span>
               </div>
             )}
-            <fieldset
-              className="picture-choice-faces"
-              aria-labelledby={control.labelId}
-              aria-describedby={control["aria-describedby"]}
-              aria-invalid={control["aria-invalid"]}
-              aria-busy={busy}
-            >
-              {options.map((option) => {
-                const checked = option.value === chosen?.value;
-                return (
-                  <label key={option.value} className="picture-choice-face">
-                    <input
-                      type="radio"
-                      className="visually-hidden"
-                      name={group}
-                      value={option.value}
-                      checked={checked}
-                      // Note that a write in flight rests the group without disabling it, so the radio the arrows reached keeps the keyboard.
-                      onChange={() => {
-                        if (!busy && !checked) run(option.value);
-                      }}
-                    />
-                    <span className="picture-choice-photo">
-                      <img src={option.picture} alt="" draggable={false} />
-                    </span>
-                    <PictureName name={option.label} />
-                  </label>
-                );
-              })}
-            </fieldset>
+            <ChoiceList
+              legend={label}
+              describedBy={control["aria-describedby"]}
+              invalid={control["aria-invalid"]}
+              busy={busy}
+              options={options.map((option) => ({
+                value: option.value,
+                label: option.label,
+                mark: <img src={option.picture} alt="" draggable={false} />,
+              }))}
+              value={chosen === undefined ? [] : [chosen.value]}
+              look={CHOICE_LOOK.PICTURE}
+              // Note that a write in flight rests the group without disabling it, so the face the arrows reached keeps the keyboard.
+              onChange={([next]) => {
+                if (!busy && next !== undefined && next !== chosen?.value) run(next);
+              }}
+            />
           </div>
         )}
       />
     </div>
-  );
-}
-
-/** A face's name under its picture, faded where the face is too narrow to hold it. */
-function PictureName({ name }: { name: string }): React.JSX.Element {
-  const [box, clipped] = useClipped(name);
-  return (
-    <span ref={box} className="picture-choice-name" data-overflow={String(clipped)}>
-      {name}
-    </span>
   );
 }

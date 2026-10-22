@@ -31,6 +31,7 @@ export function CopyMessageAction({
   forkable = false,
   forkCut,
   placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
+  lead,
 }: {
   words: string;
   /** Whether its words are whole and there are any, which its Copy needs; a turn still running, or one with no words, is offered no Copy. */
@@ -43,12 +44,15 @@ export function CopyMessageAction({
   forkCut?: ForkCut | undefined;
   /** Where the actions stand: floated over the message's corner, or set in the line under it. */
   placement?: MessageActionsPlacement;
+  /** An action of the message's own set before Copy, as a chat notice's Open in Chat is. */
+  lead?: ReactNode;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
   const place = useMessagePlace(messageId ?? "");
   const copyLink = useCopyLink();
   return (
     <MessageActions placement={placement}>
+      {lead}
       {copyable ? (
         <MessageAction
           label={COPY_LABEL}

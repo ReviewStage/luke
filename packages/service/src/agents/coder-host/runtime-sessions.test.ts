@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
 import {
   type CodingAgent,
   createCodingAgent,
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -20,10 +22,12 @@ import {
 } from "@luke/database/models/recorded-session";
 import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -31,13 +35,14 @@ import {
 } from "@luke/features/provider-key-wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { HOSTED_REFUSAL } from "../../http/http-effect.js";
-import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { credentialMissing, HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
+import { type ModelChoiceRefused, modelCatalogOf } from "../../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -174,7 +179,7 @@ function runtimes() {
 }
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 32 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 64 }, (_, index) => ({
   id: 9_100 + index,
   login: RELAY.owner,
   accountId: 91_000 + index,
@@ -190,8 +195,6 @@ const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 /** The deployment's environment: its eve secret and the key ring. */
 function environment(): Layer.Layer<HostedEnvironment> {
   const values: HostedEnvironmentValues = {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,
@@ -209,6 +212,9 @@ function environment(): Layer.Layer<HostedEnvironment> {
 const openTeam = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const teammate = yield* openGithubUser();
+  // The owner's agents on eve run on its own keys, since Luke's pays for no coding agent.
+  yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+  yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
   const workspaceId = yield* openWorkspace(owner);
   yield* joinWorkspace(workspaceId, teammate);
   const task = yield* createTask(owner, { organizationId: workspaceId, name: "Invitations" });
@@ -458,6 +464,83 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(eve.messages[0]?.lineId, undefined);
           assert.deepEqual(claudeCode.calls, [`send:${nativeSession}`]);
           assert.equal(claudeCode.messages[0]?.lineId, sentLineId("key-native"));
+        }),
+    );
+
+    it.effect(
+      "a message to an agent Luke's key paid for is refused by name whatever its starter keeps now, and so is one to an agent on eve whose starter keeps no API key for its model, from before payers were recorded or on a key since removed, and one on Claude Code whose API key was since removed; nothing reaches eve and no payer moves",
+      () =>
+        Effect.gen(function* () {
+          const { owner, taskId } = yield* openTeam;
+          const bare = yield* openGithubUser();
+          const bareTask = yield* createTask(bare, {
+            organizationId: yield* openWorkspace(bare),
+            name: "Invitations",
+          });
+          const onEveAs = (
+            starter: string,
+            onTask: string,
+            payer: CodingAgentPayer | undefined,
+            runtime: "eve" | "claude_code" = "eve",
+          ) =>
+            Effect.map(
+              createCodingAgent(starter, {
+                taskId: onTask,
+                idempotencyKey: randomUUID(),
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                planSnapshot: "# Invitations\n",
+                prompt: null,
+                repository: null,
+                runtime,
+                payer,
+              }),
+              (started) => Option.getOrThrow(started).agent,
+            );
+          const lukes = yield* onEveAs(owner, taskId, CODING_AGENT_PAYER.LUKE);
+          const unrecorded = yield* onEveAs(bare, bareTask.id, undefined);
+          const keyRemoved = yield* onEveAs(bare, bareTask.id, CODING_AGENT_PAYER.API_KEY);
+          const nativeKeyRemoved = yield* onEveAs(
+            bare,
+            bareTask.id,
+            CODING_AGENT_PAYER.API_KEY,
+            "claude_code",
+          );
+          const { eve } = runtimes();
+          const writer = storeWriter({ tools: CODER_TOOL_SET });
+          const send = (starter: string, agent: CodingAgent) =>
+            Effect.result(
+              steerCodingAgent(eve.sessions, writer, starter, agent, {
+                text: "Expire invitations after a week.",
+                clientKey: randomUUID(),
+                sender: { kind: MESSAGE_SENDER.MEMBER, userId: starter },
+              }),
+            );
+
+          for (const [name, starter, agent] of [
+            ["Luke's key paid, an API key saved since", owner, lukes],
+            ["no payer recorded, no API key", bare, unrecorded],
+            ["its API key removed", bare, keyRemoved],
+            ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
+          ] as const) {
+            const sent = yield* send(starter, agent);
+            assert.ok(Result.isFailure(sent), name);
+            assert.deepEqual(sent.failure, credentialMissing(MODEL_PROVIDER.ANTHROPIC), name);
+            const routing = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
+            assert.deepEqual(
+              [routing.runtime, routing.payer],
+              [
+                agent === nativeKeyRemoved ? "claude_code" : "eve",
+                agent === unrecorded
+                  ? null
+                  : agent === lukes
+                    ? CODING_AGENT_PAYER.LUKE
+                    : CODING_AGENT_PAYER.API_KEY,
+              ],
+              name,
+            );
+          }
+          assert.deepEqual(eve.calls, []);
         }),
     );
 
@@ -915,6 +998,20 @@ const saveApiKey = (
     );
   });
 
+/** The provider of a case's model, by its catalog id's prefix. */
+const providerOfCase = (model: string): ModelProvider =>
+  model.startsWith(`${MODEL_PROVIDER.OPENAI}/`) ? MODEL_PROVIDER.OPENAI : MODEL_PROVIDER.ANTHROPIC;
+
+/** A Start refused because no credential of the account's pays for the provider named, which the refusal carries. */
+function assertCredentialMissing(
+  started: Result.Result<unknown, HostedRefusal | ModelChoiceRefused>,
+  provider: ModelProvider,
+  name: string,
+): void {
+  assert.ok(Result.isFailure(started) && "error" in started.failure, name);
+  assert.deepEqual(started.failure, credentialMissing(provider), name);
+}
+
 const startIn = (workspaceId: string, model: string, key = randomUUID()) => ({
   taskId: null,
   organizationId: workspaceId,
@@ -928,7 +1025,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
   "a Start decides the runtime and the payer once",
   (it) => {
     it.effect(
-      "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model, an account with no setup-token, or a function with no harness starts on eve as today, with no payer",
+      "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model, an account with no setup-token, or a function with no harness, none with an API key, is refused by name with the provider and leaves no agent, since Luke's key pays for no coding agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -944,21 +1041,21 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               token: true,
               model: "openai/gpt-5.5",
               native: true,
-              on: "eve",
+              on: MODEL_PROVIDER.OPENAI,
             },
             {
               name: "no plan connected",
               token: false,
               model: "anthropic/claude-opus-5.5",
               native: true,
-              on: "eve",
+              on: MODEL_PROVIDER.ANTHROPIC,
             },
             {
               name: "no harness here, nor a relay to one",
               token: true,
               model: "anthropic/claude-opus-5.5",
               native: false,
-              on: "eve",
+              on: MODEL_PROVIDER.ANTHROPIC,
             },
           ] as const;
           for (const each of cases) {
@@ -970,55 +1067,195 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               environment(),
               ...(each.native ? [native] : []),
             );
-            const started = yield* startCodingAgent(
-              routedSessions(eve.sessions, owner),
-              owner,
-              startIn(workspaceId, each.model),
-            ).pipe(Effect.provide(layers));
+            const ask = startIn(workspaceId, each.model);
+            const started = yield* Effect.result(
+              startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+                Effect.provide(layers),
+              ),
+            );
 
+            if (each.on !== "claude_code") {
+              assertCredentialMissing(started, each.on, each.name);
+              assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, ask.idempotencyKey)));
+              assert.deepEqual([heard(eve), heard(claudeCode)], [[], []], each.name);
+              continue;
+            }
+            assert.ok(Result.isSuccess(started), each.name);
             const routing = Option.getOrThrow(
-              yield* readCodingAgentRouting(owner, started.agent.id),
+              yield* readCodingAgentRouting(owner, started.success.agent.id),
             );
             assert.deepEqual(
               [routing.runtime, routing.payer],
-              each.on === "claude_code"
-                ? ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]
-                : ["eve", null],
+              ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
               each.name,
             );
-            assert.deepEqual(
-              [heard(eve), heard(claudeCode)],
-              each.on === "claude_code" ? [[], ["open"]] : [["open"], []],
-              each.name,
-            );
+            assert.deepEqual([heard(eve), heard(claudeCode)], [[], ["open"]], each.name);
           }
         }),
     );
 
     it.effect(
-      "a Start a Call opens a call into runs on eve with its words as the prompt, for an account the routing would otherwise send to Claude Code",
+      "a Start's first message stands in a native agent's transcript as the line awaiting its turn, its id handed to the runner, which names it back as it takes it, on Claude Code and Codex alike; eve writes its own",
       () =>
         Effect.gen(function* () {
-          const { owner, workspaceId } = yield* openStarter(true);
-          const { eve, claudeCode, native } = runtimes();
-          const started = yield* startCodingAgent(routedSessions(eve.sessions, owner), owner, {
-            ...startIn(workspaceId, "anthropic/claude-opus-5.5"),
-            call: true,
-          }).pipe(
-            Effect.provide(
-              Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native),
-            ),
-          );
+          const layers = (native: ReturnType<typeof runtimes>["native"]) =>
+            Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native);
+          const cases = [
+            {
+              name: "Claude Code",
+              token: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+            },
+            { name: "Codex", token: false, chatGpt: "signed_in", model: "openai/gpt-5.5" },
+          ] as const;
+          for (const each of cases) {
+            const { owner, workspaceId } = yield* openStarter(each.token, each.chatGpt);
+            const { eve, claudeCode, codex, native } = runtimes();
+            const started = yield* startCodingAgent(
+              routedSessions(eve.sessions, owner),
+              owner,
+              startIn(workspaceId, each.model),
+            ).pipe(Effect.provide(layers(native)));
 
-          const routing = Option.getOrThrow(yield* readCodingAgentRouting(owner, started.agent.id));
-          assert.deepEqual([routing.runtime, routing.payer], ["eve", null]);
-          assert.deepEqual([heard(eve), heard(claudeCode)], [["open"], []]);
-          assert.equal(started.agent.prompt, "Fix the flaky test.");
+            const [handed] = [...claudeCode.messages, ...codex.messages];
+            assert.ok(handed?.lineId !== undefined, each.name);
+            assert.ok(
+              yield* sentLineStands(owner, started.agent.conversationId, handed.lineId),
+              each.name,
+            );
+          }
+
+          // An automation's run says its prompt as the automation, never as its creator.
+          const automated = yield* openStarter(true);
+          const byAutomation = runtimes();
+          const run = yield* startCodingAgent(
+            routedSessions(byAutomation.eve.sessions, automated.owner),
+            automated.owner,
+            {
+              ...startIn(automated.workspaceId, "anthropic/claude-opus-5.5"),
+              automationOrigin: {
+                name: "Nightly checks",
+                firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+                prompt: "Fix the flaky test.",
+              },
+            },
+          ).pipe(Effect.provide(layers(byAutomation.native)));
+          const lineId = byAutomation.claudeCode.messages[0]?.lineId ?? "";
+          const db = yield* Database;
+          const [said] = yield* db
+            .select({ sender: messages.sender, senderName: messages.senderName })
+            .from(messages)
+            .where(eq(messages.clientId, lineId));
+          assert.deepEqual(said, {
+            sender: MESSAGE_SENDER.AUTOMATION,
+            senderName: "Nightly checks",
+          });
+          assert.ok(run.agent.conversationId !== "");
+
+          const keyed = yield* openStarter(false);
+          yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+          const onEve = runtimes();
+          yield* startCodingAgent(
+            routedSessions(onEve.eve.sessions, keyed.owner),
+            keyed.owner,
+            startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"),
+          ).pipe(Effect.provide(layers(onEve.native)));
+          assert.equal(onEve.eve.messages[0]?.lineId, undefined);
         }),
     );
 
     it.effect(
-      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a sign-in OpenAI signed out, none, or a function with no harness starts on eve as today, with no payer, and a Claude agent is untouched",
+      "a Start a Call opens a call into runs on eve on the account's API key with its words as the prompt, for an account the routing would otherwise send to Claude Code, and is refused by name where it saved no API key, the plan never paying for eve",
+      () =>
+        Effect.gen(function* () {
+          const layers = (native: ReturnType<typeof runtimes>["native"]) =>
+            Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native);
+          const keyed = yield* openStarter(true);
+          yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+          const onKey = runtimes();
+          const started = yield* startCodingAgent(
+            routedSessions(onKey.eve.sessions, keyed.owner),
+            keyed.owner,
+            { ...startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"), call: true },
+          ).pipe(Effect.provide(layers(onKey.native)));
+
+          const routing = Option.getOrThrow(
+            yield* readCodingAgentRouting(keyed.owner, started.agent.id),
+          );
+          assert.deepEqual([routing.runtime, routing.payer], ["eve", CODING_AGENT_PAYER.API_KEY]);
+          assert.deepEqual([heard(onKey.eve), heard(onKey.claudeCode)], [["open"], []]);
+          assert.equal(started.agent.prompt, "Fix the flaky test.");
+
+          const planOnly = yield* openStarter(true);
+          const refusedOn = runtimes();
+          const refused = yield* Effect.result(
+            startCodingAgent(
+              routedSessions(refusedOn.eve.sessions, planOnly.owner),
+              planOnly.owner,
+              {
+                ...startIn(planOnly.workspaceId, "anthropic/claude-opus-5.5"),
+                call: true,
+              },
+            ).pipe(Effect.provide(layers(refusedOn.native))),
+          );
+          assertCredentialMissing(refused, MODEL_PROVIDER.ANTHROPIC, "a plan and no API key");
+          assert.deepEqual([heard(refusedOn.eve), heard(refusedOn.claudeCode)], [[], []]);
+        }),
+    );
+
+    it.effect(
+      "a blank Start routes by credential as any Start does: an account whose Claude plan pays records Claude Code and opens no session until its first words, and one with no credential is refused by name",
+      () =>
+        Effect.gen(function* () {
+          // A blank Start lands on a task, here one naming no repository, so GitHub is never asked.
+          const blankIn = (owner: string, workspaceId: string) =>
+            Effect.map(
+              createTask(owner, { organizationId: workspaceId, name: "Invitations" }),
+              (task) => ({
+                taskId: task.id,
+                prompt: undefined,
+                idempotencyKey: randomUUID(),
+                choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+                blank: true,
+              }),
+            );
+          const planned = yield* openStarter(true);
+          const { eve, claudeCode, native } = runtimes();
+          const layers = Layer.mergeAll(
+            githubReaching(INSTALLATIONS).layer,
+            CATALOG,
+            environment(),
+            native,
+          );
+          const started = yield* startCodingAgent(
+            routedSessions(eve.sessions, planned.owner),
+            planned.owner,
+            yield* blankIn(planned.owner, planned.workspaceId),
+          ).pipe(Effect.provide(layers));
+          const routing = Option.getOrThrow(
+            yield* readCodingAgentRouting(planned.owner, started.agent.id),
+          );
+          assert.deepEqual(
+            [routing.runtime, routing.payer],
+            ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
+          );
+          assert.deepEqual([heard(eve), heard(claudeCode)], [[], []]);
+
+          const none = yield* openStarter(false);
+          const refused = yield* Effect.result(
+            startCodingAgent(
+              routedSessions(eve.sessions, none.owner),
+              none.owner,
+              yield* blankIn(none.owner, none.workspaceId),
+            ).pipe(Effect.provide(layers)),
+          );
+          assertCredentialMissing(refused, MODEL_PROVIDER.ANTHROPIC, "no credential");
+        }),
+    );
+
+    it.effect(
+      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a sign-in OpenAI signed out, none, or a function with no harness, none with an API key, is refused by name, and so is a Claude agent with no Claude credential",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1034,35 +1271,35 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               chatGpt: "signed_out",
               model: "openai/gpt-5.5",
               native: true,
-              on: "eve",
+              on: MODEL_PROVIDER.OPENAI,
             },
             {
               name: "a sign-in the ring no longer opens",
               chatGpt: "rotated_out",
               model: "openai/gpt-5.5",
               native: true,
-              on: "eve",
+              on: MODEL_PROVIDER.OPENAI,
             },
             {
               name: "no plan connected",
               chatGpt: "none",
               model: "openai/gpt-5.5",
               native: true,
-              on: "eve",
+              on: MODEL_PROVIDER.OPENAI,
             },
             {
               name: "no harness here, nor a relay to one",
               chatGpt: "signed_in",
               model: "openai/gpt-5.5",
               native: false,
-              on: "eve",
+              on: MODEL_PROVIDER.OPENAI,
             },
             {
               name: "a Claude model, no setup-token",
               chatGpt: "signed_in",
               model: "anthropic/claude-opus-5.5",
               native: true,
-              on: "eve",
+              on: MODEL_PROVIDER.ANTHROPIC,
             },
           ] as const;
           for (const each of cases) {
@@ -1074,25 +1311,31 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               environment(),
               ...(each.native ? [native] : []),
             );
-            const started = yield* startCodingAgent(
-              routedSessions(eve.sessions, owner),
-              owner,
-              startIn(workspaceId, each.model),
-            ).pipe(Effect.provide(layers));
+            const ask = startIn(workspaceId, each.model);
+            const started = yield* Effect.result(
+              startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+                Effect.provide(layers),
+              ),
+            );
 
+            if (each.on !== "codex") {
+              assertCredentialMissing(started, each.on, each.name);
+              assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, ask.idempotencyKey)));
+              assert.deepEqual([heard(eve), heard(codex), heard(claudeCode)], [[], [], []]);
+              continue;
+            }
+            assert.ok(Result.isSuccess(started), each.name);
             const routing = Option.getOrThrow(
-              yield* readCodingAgentRouting(owner, started.agent.id),
+              yield* readCodingAgentRouting(owner, started.success.agent.id),
             );
             assert.deepEqual(
               [routing.runtime, routing.payer],
-              each.on === "codex"
-                ? ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]
-                : ["eve", null],
+              ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
               each.name,
             );
             assert.deepEqual(
               [heard(eve), heard(codex), heard(claudeCode)],
-              each.on === "codex" ? [[], ["open"], []] : [["open"], [], []],
+              [[], ["open"], []],
               each.name,
             );
           }
@@ -1126,7 +1369,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the Claude plan is offered, Settings' choice alone decides: Subscription runs every Claude model on Claude Code, a fast version with its own fast mode, and API key runs on eve on the API key, or Luke's key where none was saved; with no plan connected nothing changes",
+      "where the Claude plan is offered, Settings' choice alone decides: Subscription runs every Claude model on Claude Code, a fast version with its own fast mode, and API key runs on Claude Code on the API key, a fast version included; with no API key saved and the plan not selected, or nothing connected, the Start is refused, never run on Luke's key",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1135,7 +1378,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             readonly forAgents: boolean;
             readonly apiKey: boolean;
             readonly model: string;
-            readonly recorded: readonly [string, CodingAgentPayer | null];
+            readonly recorded: readonly [string, CodingAgentPayer | null] | "refused";
           }[] = [
             {
               name: "Subscription, an API key saved too",
@@ -1159,7 +1402,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: true,
               model: "anthropic/claude-opus-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["claude_code", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "API key, a fast version",
@@ -1167,7 +1410,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: true,
               model: "anthropic/claude-opus-5.5-fast",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["claude_code", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "the plan off, no API key",
@@ -1175,7 +1418,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: false,
               model: "anthropic/claude-opus-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
+              recorded: "refused",
             },
             {
               name: "no plan connected, an API key saved",
@@ -1183,7 +1426,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: true,
               apiKey: true,
               model: "anthropic/claude-opus-5.5",
-              recorded: ["eve", null],
+              recorded: ["claude_code", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "no plan connected, a fast version",
@@ -1191,7 +1434,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: true,
               apiKey: false,
               model: "anthropic/claude-opus-5.5-fast",
-              recorded: ["eve", null],
+              recorded: "refused",
             },
           ];
           for (const each of cases) {
@@ -1213,11 +1456,19 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               environment(),
               native,
             );
-            const started = yield* startCodingAgent(
-              routedSessions(eve.sessions, owner),
-              owner,
-              startIn(workspaceId, each.model),
-            ).pipe(Effect.provide(layers));
+            const result = yield* Effect.result(
+              startCodingAgent(
+                routedSessions(eve.sessions, owner),
+                owner,
+                startIn(workspaceId, each.model),
+              ).pipe(Effect.provide(layers)),
+            );
+            if (each.recorded === "refused") {
+              assertCredentialMissing(result, providerOfCase(each.model), each.name);
+              continue;
+            }
+            assert.ok(Result.isSuccess(result), each.name);
+            const started = result.success;
 
             const routing = Option.getOrThrow(
               yield* readCodingAgentRouting(owner, started.agent.id),
@@ -1234,7 +1485,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex, and API key runs on eve on the OpenAI API key, or Luke's key where none was saved",
+      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex on the plan, and API key on Codex on the OpenAI API key, and the Start is refused where none was saved",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1245,7 +1496,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               | typeof PROVIDER_KEY_PROVIDER.ANTHROPIC
               | undefined;
             readonly model: string;
-            readonly recorded: readonly [string, CodingAgentPayer | null];
+            readonly recorded: readonly [string, CodingAgentPayer | null] | "refused";
           }[] = [
             {
               name: "Subscription, an API key saved too",
@@ -1259,21 +1510,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
               model: "openai/gpt-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
-            },
-            {
-              name: "API key, a fast version on eve",
-              forAgents: false,
-              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
-              model: "openai/gpt-5.5-fast",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["codex", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "the plan off, only an Anthropic API key saved",
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.ANTHROPIC,
               model: "openai/gpt-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.LUKE],
+              recorded: "refused",
             },
           ];
           for (const each of cases) {
@@ -1295,11 +1539,19 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               environment(),
               native,
             );
-            const started = yield* startCodingAgent(
-              routedSessions(eve.sessions, owner),
-              owner,
-              startIn(workspaceId, each.model),
-            ).pipe(Effect.provide(layers));
+            const result = yield* Effect.result(
+              startCodingAgent(
+                routedSessions(eve.sessions, owner),
+                owner,
+                startIn(workspaceId, each.model),
+              ).pipe(Effect.provide(layers)),
+            );
+            if (each.recorded === "refused") {
+              assertCredentialMissing(result, providerOfCase(each.model), each.name);
+              continue;
+            }
+            assert.ok(Result.isSuccess(result), each.name);
+            const started = result.success;
 
             const routing = Option.getOrThrow(
               yield* readCodingAgentRouting(owner, started.agent.id),
@@ -1316,7 +1568,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before",
+      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before, Codex running it on its fast tier",
       () =>
         Effect.gen(function* () {
           for (const forAgents of [true, false]) {
@@ -1328,6 +1580,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 PROVIDER_KEY_KIND.CHATGPT_OAUTH,
                 false,
               );
+              // API key selected is a key saved, which pays now that Luke's never does.
+              yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
             }
             const { eve, codex, native } = runtimes();
             const layers = Layer.mergeAll(

@@ -6,13 +6,16 @@ import {
   GAP,
   Inline,
   SUBMIT_STATE,
+  TEXT_AREA_GROW_LIMIT,
+  TEXT_AREA_LOOK,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextArea,
 } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputFooter,
@@ -23,7 +26,7 @@ import {
 import { useSideBundles } from "../bundle-loader.js";
 import { type ChatDraftPlace, DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
-import { enterKeyHint, enterSends } from "../enter-sends.js";
+import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
 import { imageFiles } from "../feedback-images.js";
 import {
   COMPOSER_INPUT,
@@ -533,35 +536,30 @@ function PlainChatComposer({
 }: ChatComposerProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const { draft, setDraft, empty, note, send } = useChatSend(chatPlace(channelId, replyTo), onSend);
-  // The field grows with its words, a line at a time, as a plan comment's plain field does.
-  useLayoutEffect(() => {
-    const element = field.current;
-    if (element === null) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  }, [draft]);
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Note that every key an input method composes with is the method's.
-    if (event.nativeEvent.isComposing || !enterSends(event)) return;
-    event.preventDefault();
-    submitPromptInput(event.currentTarget);
-  };
-
   return (
     <div className="agent-composer chat-composer" data-compact={String(compact === true)}>
       <PromptInput onSubmit={send}>
-        <textarea
-          ref={field}
-          className="chat-composer-field ph-no-capture"
-          aria-label={label}
-          placeholder={label}
-          rows={compact === true ? 1 : 2}
-          maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
-          enterKeyHint={enterKeyHint()}
-          value={draft}
-          onChange={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={onKeyDown}
-        />
+        {/* Note that the field is left out of the screen recording whole, past its words' masking. */}
+        <div className="ph-no-capture">
+          <TextArea
+            ref={field}
+            look={TEXT_AREA_LOOK.BARE}
+            growLimit={TEXT_AREA_GROW_LIMIT.NONE}
+            grow
+            label={label}
+            placeholder={label}
+            rows={compact === true ? 1 : 2}
+            maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
+            enterKeyHint={enterKeyHint()}
+            submitKey={enterSubmitKey()}
+            value={draft}
+            onChange={setDraft}
+            // Note that a send goes through the form, whose held submit holds it too.
+            onSubmit={() => {
+              if (field.current !== null) submitPromptInput(field.current);
+            }}
+          />
+        </div>
         <ComposerFoot empty={empty} />
       </PromptInput>
       <CrowdedNote shown={mentions.crowded(draft)} />

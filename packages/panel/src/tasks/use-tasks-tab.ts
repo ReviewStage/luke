@@ -146,6 +146,7 @@ import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { useOpenAiKeyMissing } from "../openai-key.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -169,8 +170,12 @@ import {
   agentStillWriting,
   agentTabLabel,
   choiceRequest,
+  openingLineOf,
+  type SentLine,
 } from "./coding-agent-model.js";
 import type { MessageReveal } from "./message-links.js";
+import type { NewTaskPress } from "./new-task-composer.js";
+import type { NewTaskLink } from "./new-task-links.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
@@ -547,9 +552,24 @@ function agentRequest(handed: NewTaskAgent) {
   };
 }
 
-/** What the press that opened New task chose: a repository (a repository group's +). */
+/** What the press that opened New task chose: a repository (a repository group's +), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
+  /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
+  readonly refused?: { readonly card: NewTaskCardKept; readonly note: string };
+}
+
+/**
+ * What New task's card held as it pressed Start, which it hands its start
+ * so a card opened again on a refusal starts where it was left: the
+ * repository, the issues linked, the model on its chip, and the press it
+ * made, whose key a Retry asking the same carries again.
+ */
+export interface NewTaskCardKept {
+  readonly repository: string | null;
+  readonly links: readonly NewTaskLink[];
+  readonly choice: ModelChoice | undefined;
+  readonly press: NewTaskPress;
 }
 
 /**
@@ -565,6 +585,8 @@ export interface NewTaskStart {
   readonly brief?: string;
   /** Where the task starts: to do where none is named, or the backlog for one New task files for later. */
   readonly status?: TaskStatus;
+  /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
+  readonly card?: NewTaskCardKept;
 }
 
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
@@ -572,6 +594,13 @@ export interface TasksControl {
   page: TasksPage;
   /** Whether a launch is still opening the task last open, while the page with no task open waits rather than flash before it (`use-last-task.ts`). */
   restoring: boolean;
+  /**
+   * The line New task's agent start under way opens its agent on, which the
+   * window draws on a task's page in its shape until the start answers
+   * (`StartingAgentTab`); none otherwise, or once the developer went to
+   * another task or page meanwhile.
+   */
+  starting: SentLine | undefined;
   /** Whether the page standing is the one the window rests on with no task open (`resting-page.ts`), which the window's history steps to as it would to no page at all. */
   resting: boolean;
   /** Whether the tab is on screen: the panel open, on this tab. */
@@ -1206,6 +1235,10 @@ export function useTasksTab(input: {
   // The New task dialog's ask, standing while the dialog does: the preset it was opened with, if any.
   const [newTaskAsk, setNewTaskAsk] = useState<
     { readonly preset: TasksControl["newTask"]["preset"] } | undefined
+  >(undefined);
+  // New task's agent start under way: the line its agent opens on, and the navigation it was pressed at.
+  const [startingTask, setStartingTask] = useState<
+    { readonly line: SentLine; readonly navigation: number } | undefined
   >(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<TasksControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<TaskAsk | undefined>(undefined);
@@ -2412,6 +2445,7 @@ export function useTasksTab(input: {
   } else if (
     standIn === undefined &&
     boundFor === undefined &&
+    startingTask === undefined &&
     signedIn &&
     !restoring &&
     listSettled
@@ -2468,6 +2502,7 @@ export function useTasksTab(input: {
   // an agent's own page, so it goes the moment another opens, and its
   // surface is that page, which a version history covers.
   const callSurface = pageAgent ?? tasks.activeTaskId;
+  const openAiKeyMissing = useOpenAiKeyMissing();
   const [askedFor, setAskedFor] = useState<{
     surface: string;
     agentId: string;
@@ -2508,7 +2543,9 @@ export function useTasksTab(input: {
       listening: now.listening,
       call: now.call,
       voiceStatus: now.voiceStatus,
+      openAiKeyMissing,
     });
+    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys();
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
       tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
     }
@@ -2804,8 +2841,33 @@ export function useTasksTab(input: {
   ): Promise<string | undefined> => {
     const panelWasOpen = sidePanel.open;
     sidePanel.onSetOpen(true);
+    // An agent's start opens on its task's page at once, its words drawn as
+    // the agent's first line, rather than holding the card until the
+    // service answers; a refusal opens the card again where it was left.
+    const { handed, card } = from;
+    const standingBefore = standIn;
+    const historyBefore = historyFor;
+    if (handed !== undefined) {
+      setStartingTask({
+        line: openingLineOf({
+          key: handed.idempotencyKey,
+          prompt: handed.prompt,
+          attachments: handed.attachments,
+        }),
+        navigation: navigations.current,
+      });
+      setNewTaskAsk(undefined);
+      setStandIn(undefined);
+      setHistoryFor(undefined);
+    }
     const refusedWith = (note: string): string => {
       if (!panelWasOpen) sidePanel.onSetOpen(false);
+      if (handed !== undefined) {
+        setStartingTask(undefined);
+        setStandIn((now) => now ?? standingBefore);
+        setHistoryFor((now) => now ?? historyBefore);
+        setNewTaskAsk({ preset: card === undefined ? undefined : { refused: { card, note } } });
+      }
       return note;
     };
     return act(ACT_KIND.TASKS_START, {
@@ -2823,11 +2885,10 @@ export function useTasksTab(input: {
       (answer) => {
         if ("failure" in answer) return refusedWith(startFailureNote(answer.failure));
         setNewTaskAsk(undefined);
+        setStartingTask(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
-        if (from.handed !== undefined) {
-          openAgent(answer.planId, from.handed, answer.agentStart);
-        }
+        if (handed !== undefined) openAgent(answer.planId, handed, answer.agentStart);
         return undefined;
       },
       (refused: Error) => refusedWith(refused.message),
@@ -2845,7 +2906,11 @@ export function useTasksTab(input: {
     started: CodingAgentAgentAnswer | undefined,
   ) => {
     if (started !== undefined && !("failure" in started)) {
-      agents.onTaskStarted(planId, started.agent);
+      agents.onTaskStarted(planId, started.agent, {
+        key: handed.idempotencyKey,
+        prompt: handed.prompt,
+        attachments: handed.attachments,
+      });
       mainTabs.onShow(planId, { agent: started.agent.id });
       return;
     }
@@ -3400,9 +3465,19 @@ export function useTasksTab(input: {
   }, [leaveTask, page, sidePanel.fullScreen, sidePanel.onToggleFullScreen]);
 
   // Note that the tab is handed back steady, so a part that holds while its share of the tab does (`memo`) holds for every draw that moved nothing it reads.
+  // Note that the start's page gives way to a task the developer opened, or a page standing in a task's place, while it is out.
+  const starting =
+    startingTask !== undefined &&
+    startingTask.navigation === navigations.current &&
+    standIn === undefined &&
+    historyFor === undefined
+      ? startingTask.line
+      : undefined;
+
   return useSteadyDoors({
     page,
     restoring,
+    starting,
     resting,
     shown,
     signedIn,

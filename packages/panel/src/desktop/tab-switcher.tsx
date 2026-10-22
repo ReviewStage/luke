@@ -53,7 +53,7 @@ import {
   SHORTCUT_KEY,
   type ShortcutChord,
 } from "@luke/settings/shortcuts";
-import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import { TabCard, TabCards } from "@luke/ui";
 import {
   isAgentTab,
   isBrowserTab,
@@ -337,67 +337,6 @@ function claim(event: Event): void {
   event.stopPropagation();
 }
 
-/** One card: its still or its glyph, its name, and the task and strip it stands in. */
-function SwitcherCard({
-  look,
-  still,
-  here,
-  chosen,
-  onPoint,
-  onPick,
-}: {
-  look: CardLook;
-  still: string | undefined;
-  here: boolean;
-  chosen: boolean;
-  onPoint: () => void;
-  onPick: () => void;
-}): React.JSX.Element {
-  return (
-    <div
-      role="option"
-      aria-selected={chosen}
-      // Note that a card takes no stop of its own, because the keys stay where they were while ⌃ is held, as ⌘Tab's do.
-      tabIndex={-1}
-      className="tab-switcher-card"
-      data-here={here}
-      onPointerEnter={onPoint}
-      // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
-      onPointerDown={(event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        onPick();
-      }}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <div className="tab-switcher-preview ph-no-capture">
-        {still === undefined ? (
-          <span className="tab-switcher-glyph">{look.icon}</span>
-        ) : (
-          <img className="tab-switcher-still" src={still} alt="" draggable={false} />
-        )}
-      </div>
-      <div className="tab-switcher-name">
-        {look.icon}
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-          {look.label}
-        </Text>
-      </div>
-      <div className="tab-switcher-detail">
-        {look.detail === undefined ? null : (
-          <>
-            {look.detailIcon}
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {look.detail}
-            </Text>
-            {look.endMark}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /**
  * The switcher, answering ⌃Tab while `available`, past the sign-in, on a
  * desktop app. It is mounted once for the window and draws nothing until
@@ -670,26 +609,35 @@ export function TabSwitcher({
     <>
       <div className="tab-switcher-backdrop" aria-hidden="true" />
       <div className="tab-switcher" role="dialog" aria-label="Recent tabs">
-        <div className="tab-switcher-cards" role="listbox" aria-label="Recent tabs">
-          {cards.map((stop, at) => (
-            <SwitcherCard
-              key={at}
-              look={cardLook(
-                stop,
-                tasks,
-                titles.current.find((held) => sameStop(held.stop, stop))?.title,
-              )}
-              still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
-              here={state.here && at === 0}
-              chosen={at === chosen}
-              onPoint={() => move(switcherChose(latest.current, at))}
-              onPick={() => {
-                move(switcherChose(latest.current, at));
-                letGo(true);
-              }}
-            />
-          ))}
-        </div>
+        <TabCards label="Recent tabs">
+          {cards.map((stop, at) => {
+            const look = cardLook(
+              stop,
+              tasks,
+              titles.current.find((held) => sameStop(held.stop, stop))?.title,
+            );
+            return (
+              <TabCard
+                key={at}
+                icon={look.icon}
+                label={look.label}
+                detail={look.detail}
+                detailIcon={look.detailIcon}
+                endMark={look.endMark}
+                still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
+                here={state.here && at === 0}
+                chosen={at === chosen}
+                // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
+                pickOnPress
+                onPoint={() => move(switcherChose(latest.current, at))}
+                onPick={() => {
+                  move(switcherChose(latest.current, at));
+                  letGo(true);
+                }}
+              />
+            );
+          })}
+        </TabCards>
         <div className="tab-switcher-footer" aria-hidden="true">
           {FOOT_HINTS.map((hint) => (
             <span key={hint.label} className="tab-switcher-footer-hint">

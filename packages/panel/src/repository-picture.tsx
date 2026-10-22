@@ -1,10 +1,12 @@
+import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, type AvatarSize } from "@luke/ui";
 import { repositoryOwnerPictureUrl } from "@luke/ui/tasks-model";
 import { useState } from "react";
 
 /**
  * repository-picture.tsx -- a repository drawn as its owner's picture on GitHub, wherever a repository is named or picked.
  *
- * The owner's picture, an organization's logo or a person's avatar, is how
+ * It is a tile of `@luke/ui`'s Avatar, edged, blank until the picture has
+ * loaded. The owner's picture, an organization's logo or a person's avatar, is how
  * GitHub itself and every devtool beside it tells repositories apart at a
  * glance, so a repository's name is led by it: the sidebar's headers, the
  * repository chip and the rows of its menu, a task's row naming its
@@ -22,6 +24,7 @@ export function RepositoryPicture({
   repository,
   pictures,
   fallback,
+  size = AVATAR_SIZE.INLINE,
 }: {
   /** The repository, `owner/name`. */
   repository: string;
@@ -29,19 +32,23 @@ export function RepositoryPicture({
   pictures: boolean;
   /** What stands in the picture's place where there is none to draw. */
   fallback: React.ReactNode;
+  /** The tile's size, the glyph slot's it stands in. */
+  size?: AvatarSize;
 }): React.ReactNode {
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
   const url = pictures ? repositoryOwnerPictureUrl(repository) : undefined;
   if (url === undefined || url === failedUrl) return fallback;
   return (
-    <img
-      className="repository-picture"
+    <Avatar
+      name=""
       src={url}
-      alt=""
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      draggable={false}
-      onError={() => setFailedUrl(url)}
+      size={size}
+      shape={AVATAR_SHAPE.TILE}
+      decorative
+      edged
+      blank
+      lazy
+      onFail={() => setFailedUrl(url)}
     />
   );
 }

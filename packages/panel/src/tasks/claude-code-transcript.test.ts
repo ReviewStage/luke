@@ -162,17 +162,6 @@ const CLI_CALLS: readonly {
     body: ["Web search results for query"],
   },
   {
-    tool: "Agent",
-    input: {
-      description: "Find the invoice callers",
-      prompt: "Find every caller of invoiceTotal and say which round.",
-      subagent_type: "general-purpose",
-    },
-    output: "Two callers round: src/export.ts and src/print.ts.",
-    line: ["Find the invoice callers"],
-    body: ["Find every caller of invoiceTotal", "Two callers round"],
-  },
-  {
     tool: "Skill",
     input: { skill: "testing" },
     output: "Launching skill: testing",
@@ -207,6 +196,37 @@ for (const call of CLI_CALLS) {
     assert.ok(!body.includes(ESCAPE), "a terminal's escapes are taken out");
   });
 }
+
+test("Claude Code's Agent is drawn as a subagent's row, named by its description, on the model it asked for, running until its call settles", () => {
+  const input = {
+    description: "Find the invoice callers",
+    prompt: "Find every caller of invoiceTotal and say which round.",
+    model: "sonnet",
+    effort: "high",
+  };
+  const running = drawn({
+    type: "tool-Agent",
+    toolCallId: "toolu_agent",
+    state: "input-available",
+    input,
+  }).container;
+  const row = running.querySelector("[data-subagent-row]") ?? assert.fail("a subagent's row");
+  assert.ok(row.textContent?.includes("Find the invoice callers"), row.textContent ?? "");
+  assert.ok(row.textContent?.includes("Sonnet"), row.textContent ?? "");
+  assert.notEqual(row.tagName, "BUTTON", "no worker's tab to open yet");
+  const settled = drawn({
+    type: "tool-Agent",
+    toolCallId: "toolu_agent",
+    state: "output-available",
+    input,
+    output: "Two callers round: src/export.ts and src/print.ts.",
+  }).container;
+  const line = settled.querySelector<HTMLElement>("[data-subagent-row]") ?? assert.fail("a row");
+  act(() => line.click());
+  // With no worker's tab to read it in, the task and the answer fold open under the row.
+  assert.ok(settled.textContent?.includes("Find every caller of invoiceTotal"));
+  assert.ok(settled.textContent?.includes("Two callers round"));
+});
 
 test("an Edit's patch marks the lines it changed, the newline ending its words opening none", () => {
   const { container } = drawn(

@@ -5,9 +5,11 @@ import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
+import { BAR_ITEMS_EXAMPLE } from "./examples/bar-items";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
+import { CARD_PRESSES_EXAMPLE } from "./examples/card-presses";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
@@ -22,6 +24,7 @@ import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
+import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
@@ -29,11 +32,14 @@ import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
 import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
 import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
+import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
+import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
@@ -46,9 +52,12 @@ import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
+import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
+import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
+import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
@@ -83,7 +92,9 @@ export const EXAMPLES: readonly Example[] = [
   BUTTONS_EXAMPLE,
   CALENDAR_EXAMPLE,
   CARDS_EXAMPLE,
+  CARD_PRESSES_EXAMPLE,
   CHIPS_EXAMPLE,
+  BAR_ITEMS_EXAMPLE,
   CHOICE_BAR_EXAMPLE,
   CHOICE_LIST_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
@@ -95,23 +106,29 @@ export const EXAMPLES: readonly Example[] = [
   DISCLOSURES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
+  FILE_PICKERS_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   FORM_SECTION_EXAMPLE,
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
   INLINE_REFS_EXAMPLE,
+  SWATCHES_EXAMPLE,
   TEXT_BUTTONS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   TEXT_LINKS_EXAMPLE,
+  LINE_BUTTONS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
+  NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
+  PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PROGRESS_EXAMPLE,
   PROSE_EXAMPLE,
@@ -125,6 +142,7 @@ export const EXAMPLES: readonly Example[] = [
   SPINNERS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
+  SLIDER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
 ];
