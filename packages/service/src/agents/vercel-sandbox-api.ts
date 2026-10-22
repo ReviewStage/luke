@@ -92,6 +92,7 @@ export const SANDBOX_CALL = {
   FS_WRITE: "fs/write",
   CMD: "cmd",
   STDIN: "stdin",
+  LOGS: "logs",
   KILL: "kill",
   TAGS: "tags",
   TIMEOUT: "timeout",
@@ -216,7 +217,8 @@ export interface CommandAsk {
  * sandbox's API does by running the `sudo` binary as the default user, so
  * it needs that user's sudoers entry, which the image keeps; its stdin held
  * open for `writeStdin`. Its `env` is handed to it by the API alone, so a
- * secret in it reaches no argv and no file.
+ * secret in it reaches no argv and no file. Note that `sudo` resets the
+ * environment, so a command that needs its `env` runs without it.
  */
 interface DetachedCommandAsk extends CommandAsk {
   readonly sudo: boolean;
@@ -406,6 +408,15 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     commandId: string,
   ) => Effect.Effect<CommandExit, SandboxUnavailable>;
+  /**
+   * What a command that exited printed on stderr, the tail kept and every
+   * token-shaped run redacted, for a log; none where Vercel has none or did
+   * not answer in time.
+   */
+  readonly commandStderrTail: (
+    sandboxSessionId: string,
+    commandId: string,
+  ) => Effect.Effect<string | undefined>;
   /** Ends a command with SIGTERM; one already gone counts as ended. */
   readonly kill: (
     sandboxSessionId: string,
@@ -590,6 +601,15 @@ const REDACTED_DETAIL = "[redacted]";
  */
 function capped(text: string): string {
   return clipped(text.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim());
+}
+
+/** How much of a dead command's stderr a log keeps: its end, where the reason it died is written. */
+const STDERR_TAIL_CHARS = 600;
+
+/** A stderr's tail as a log keeps it: every token-shaped run redacted, then its last `STDERR_TAIL_CHARS` on one line. */
+function stderrTail(stderr: string): string {
+  const said = stderr.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim();
+  return said.length > STDERR_TAIL_CHARS ? `…${said.slice(-STDERR_TAIL_CHARS)}` : said;
 }
 
 /** A line cut to `DETAIL_CHARS`. */
@@ -1355,6 +1375,33 @@ export function vercelSandboxApi(
           }
           return read.success.command.exitCode;
         }),
+      commandStderrTail: (sandboxSessionId, commandId) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.LOGS);
+          const url = apiUrl(
+            `/sessions/${encodeURIComponent(sandboxSessionId)}/cmd/${encodeURIComponent(commandId)}/logs`,
+            asked.teamId,
+          );
+          const read = yield* callApi(
+            client,
+            SANDBOX_CALL.LOGS,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          ).pipe(Effect.timeoutOption(SANDBOX_API.EXIT_WAIT));
+          if (Option.isNone(read) || !succeeded(read.value.status)) return undefined;
+          let stderr = "";
+          for (const line of read.value.text.split("\n")) {
+            if (line.trim() === "") continue;
+            const each = readCommandLine(jsonOf(line));
+            if (
+              Result.isSuccess(each) &&
+              "stream" in each.success &&
+              each.success.stream === "stderr"
+            ) {
+              stderr += String(each.success.data);
+            }
+          }
+          return stderr === "" ? undefined : stderrTail(stderr);
+        }).pipe(Effect.orElseSucceed(() => undefined)),
       kill: (sandboxSessionId, commandId) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.KILL);

@@ -11,7 +11,13 @@
  * What the image carries, and why, is told in `sandbox.ts`.
  */
 
-import { AGENT_USER, CLAUDE_CODE_PIN, CLAUDE_EXECUTABLE, CODEX_PIN } from "@luke/agent-runner/pins";
+import {
+  AGENT_USER,
+  CLAUDE_CODE_PIN,
+  CLAUDE_EXECUTABLE,
+  CODEX_PIN,
+  RUNNER_DIRECTORY,
+} from "@luke/agent-runner/pins";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
@@ -142,13 +148,20 @@ const INSTALL_CODEX = [
 ];
 
 /**
+ * The directory each launch installs the runner's bundle in, made here as
+ * root's, since the launch runs as the default user (holding the capability
+ * set, which `install -o root` needs) and a directory it made would be that
+ * user's, whose Terminal shells could then replace the bundle.
+ */
+const MAKE_RUNNER_DIRECTORY = [`$SUDO install -d -o root -g root -m 0755 ${RUNNER_DIRECTORY}`];
+
+/**
  * The image's last step: a check that a command started under the
  * capability drop (`../sandbox-capabilities.ts`) holds no capability, which
  * fails the preparation rather than leave a Terminal's shell, an agent's
  * command, or the runner holding the set. Note that the default user keeps
- * its sudo: Vercel Sandbox runs the API's `sudo` through it, which the
- * runner's launch needs, and the user reaches root without sudo anyway
- * while it holds the set, so the drop, not sudoers, is the boundary.
+ * its sudo, which eve's own commands use, and reaches root without sudo
+ * anyway while it holds the set, so the drop, not sudoers, is the boundary.
  */
 const CHECK_CAPABILITY_DROP = [
   `${WITHOUT_CAPABILITIES.COMMAND} ${WITHOUT_CAPABILITIES.ARGS.join(" ")} grep -q '^CapEff:[[:space:]]*0*$' /proc/self/status || { echo 'a command without capabilities still holds one' >&2; exit 1; }`,
@@ -182,6 +195,7 @@ export const PREPARE_SCRIPT = [
   ...INSTALL_CLAUDE_CODE,
   ...CREATE_AGENT_USER,
   ...INSTALL_CODEX,
+  ...MAKE_RUNNER_DIRECTORY,
   // Last, once everything is in place.
   ...CHECK_CAPABILITY_DROP,
 ].join("\n");

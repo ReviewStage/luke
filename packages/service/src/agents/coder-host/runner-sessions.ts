@@ -19,8 +19,9 @@
  * (`checkout.ts`, the same token at the firewall), and launches the runner.
  * A launch mints the runner's bearer and records its digest on the
  * agent's row, uploads the runner's bundle (`runner-bundle.ts`), and starts
- * it as a detached command of the sandbox's API as root, which installs the
- * bundle where only root writes, checks its digest, shares the checkout with
+ * it as a detached command of the sandbox's API as the default user, whose
+ * capability set lets it install the bundle where only root writes, check its
+ * digest, share the checkout with
  * the `agent` user, and drops to that user with every capability gone
  * (`sandbox-capabilities.ts`). The harness's credential and the bearer are
  * in that command's environment and nowhere else: never in its argv, its
@@ -61,7 +62,7 @@
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { AGENT_USER } from "@luke/agent-runner/pins";
+import { AGENT_USER, RUNNER_DIRECTORY } from "@luke/agent-runner/pins";
 import {
   type ContentBlock,
   INPUT_LINE,
@@ -220,20 +221,21 @@ export const SANDBOX_NAME = "luke-agent-";
 
 /**
  * Where the launch stands in the sandbox: the bundle as the file API uploads
- * it, as the default user, and where root installs it, in a directory only
- * root writes, so no Terminal's shell changes what runs as `agent`.
+ * it, as the default user, and where it is installed root's, in the directory
+ * the image made root's (`RUNNER_DIRECTORY`), so no Terminal's shell changes
+ * what runs as `agent`.
  */
 const RUNNER_PATH = {
   UPLOAD: "/tmp/luke-agent-runner.mjs",
-  INSTALLED: "/opt/luke/agent-runner/agent-runner.mjs",
+  INSTALLED: `${RUNNER_DIRECTORY}/agent-runner.mjs`,
 } as const;
 
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
 
 /**
- * The launch, run by bash as root: the uploaded bundle installed where only
- * root writes and checked against the digest Luke computed, the checkout
+ * The launch, run by bash as the default user with its capability set: the
+ * uploaded bundle installed root's where only root writes and checked against the digest Luke computed, the checkout
  * marked safe for git and shared with `agent`'s group, then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
@@ -250,6 +252,23 @@ const LAUNCH_SCRIPT = [
   `find ${CODER.CHECKOUT_PATH} -type d -exec chmod g+s {} +`,
   `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
 ].join("\n");
+
+/**
+ * A launch whose stdin was refused, said in the log by how its command
+ * ended: its exit code where Vercel has one, and the tail of its stderr,
+ * every token-shaped run redacted (`commandStderrTail`), since a runner that
+ * dies before it reads its config says why there alone.
+ */
+const diedAtStart = (api: VercelSandboxApi, sandboxSessionId: string, commandId: string) =>
+  Effect.gen(function* () {
+    const exit = yield* api
+      .commandExit(sandboxSessionId, commandId)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    const stderr = yield* api.commandStderrTail(sandboxSessionId, commandId);
+    yield* Effect.logWarning(
+      `A runner's launch took no stdin: exit ${exit === null || exit === undefined ? "unknown" : String(exit)}, stderr: ${stderr ?? "none"}`,
+    );
+  });
 
 /** What `$0` reads as in the launch's shell. */
 const LAUNCH_NAME = "luke-agent-runner";
@@ -604,8 +623,10 @@ export const runnerSessions = <
           command: "bash",
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
           cwd: CODER.CHECKOUT_PATH,
+          // Note that the launch runs as the default user and never through the API's `sudo`, because
+          // Vercel's sudo resets the environment, and the credential and bearer ride in it alone.
           env: { ...SANDBOX_ENV, ...credential.env, [RUNNER_ENV.BEARER]: bearer },
-          sudo: true,
+          sudo: false,
         });
         // A runner started but never configured is ended, and its tags cleared, so the next
         // message relaunches whole rather than writing to a runner that waits for its config.
@@ -619,7 +640,9 @@ export const runnerSessions = <
             }),
           );
           const config = yield* harness.config(agent, resume, firstSequence);
-          yield* api.writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`);
+          yield* api
+            .writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`)
+            .pipe(Effect.tapError(() => diedAtStart(api, sandbox.running, commandId)));
         }).pipe(
           Effect.tapError(() =>
             Effect.ignore(

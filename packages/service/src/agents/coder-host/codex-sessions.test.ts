@@ -250,7 +250,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         const [command] = api.commands;
         assert.ok(command !== undefined);
-        assert.equal(command.sudo, true);
+        assert.equal(command.sudo, false);
         assert.match(command.args[1] ?? "", /exec setpriv --reuid=agent --regid=agent/u);
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
