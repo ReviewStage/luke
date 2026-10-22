@@ -20,6 +20,7 @@ import {
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -2989,4 +2990,34 @@ test("Create with an agent starts nothing without words or a repository, and a r
   assert.equal(keys.length, 2);
   assert.equal(keys[0], keys[1], "the retry carries the first start's key");
   assert.equal(agentQuestion(), null);
+});
+
+test("Create with an agent starts a request changed after a refusal under a new key, and refuses one whose message would pass the agent's bound", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  act(() => button("Create with an agent").click());
+  const field = () => agentQuestion()?.querySelector("textarea") ?? null;
+  const refusal = () => agentQuestion()?.querySelector("[role='alert']")?.textContent;
+  // Note that a run of seven backticks needs a longer fence than the field's own bound allows for.
+  type(field(), `\`\`\`\`\`\`\`${"a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS)}`);
+  act(() => button("Start agent").click());
+  await settle();
+  assert.equal(refusal(), "That request is too long.");
+  assert.equal(taskStarts.length, 0, "nothing past the bound is sent");
+
+  type(field(), "Post a daily report.");
+  taskRefusals = ["Luke couldn't reach GitHub."];
+  act(() => button("Start agent").click());
+  await settle();
+  type(field(), "Post a weekly report.");
+  act(() => button("Start agent").click());
+  await settle();
+
+  const [first, second] = taskStarts.map((each) => each.from?.handed);
+  assert.match(second?.prompt ?? "", /Post a weekly report\./u);
+  assert.notEqual(
+    first?.idempotencyKey,
+    second?.idempotencyKey,
+    "the changed request is a start of its own",
+  );
 });

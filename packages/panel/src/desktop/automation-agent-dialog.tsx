@@ -25,9 +25,12 @@ import { automationAgentBrief } from "./automation-agent-brief.js";
  * answers it there. The repository starts at the one the account's tasks
  * were about lately, as a new automation's does. Each opening starts from
  * no words under a key of its own, which a retry of a refused start carries
- * again so a start that landed unheard is answered rather than made twice.
- * A refusal stands in the card until the words or the repository change,
- * and the question goes with the workspace it was asked in.
+ * again so a start that landed unheard is answered rather than made twice;
+ * a change of the words or the repository mints a new key, since the start
+ * it asks is another. A request whose message would pass the agent's bound,
+ * its fence included, is refused before it is sent. A refusal stands in the
+ * card until the words or the repository change, and the question goes
+ * with the workspace it was asked in.
  */
 
 /** Why nothing was started with no words. */
@@ -36,9 +39,11 @@ const WORDS_ASKED = "Say what to automate.";
 /** Why nothing was started with no repository, as a new automation says it. */
 const REPOSITORY_ASKED = "Choose the repository it works in.";
 
-/** The most a request may say, the brief and its fence fitting beside it in the agent's first message. */
-const REQUEST_MAX_CHARS =
-  CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - automationAgentBrief("").length - 8;
+/** Why nothing was started where the brief and the words pass the agent's bound. */
+const TOO_LONG = "That request is too long.";
+
+/** The most the field takes, the brief and its shortest fence beside it; a longer fence is held to the bound as the start is asked. */
+const REQUEST_MAX_CHARS = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - automationAgentBrief("").length;
 
 /** Create with an agent's ask: the press that opens the card, and the card. */
 export interface AutomationAgentAsk {
@@ -76,20 +81,26 @@ export function useAutomationAgentDialog(
       const request = words.trim();
       if (request === "") return Promise.resolve(answered(WORDS_ASKED));
       if (repository === null) return Promise.resolve(answered(REPOSITORY_ASKED));
+      const prompt = automationAgentBrief(request);
+      if (prompt.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+        return Promise.resolve(answered(TOO_LONG));
+      }
       const handed = {
         idempotencyKey: key,
-        prompt: automationAgentBrief(request),
+        prompt,
         attachments: [],
         choice: undefined,
       };
       return start("", repository, askedIn, { handed }).then(answered);
     },
   );
-  // Note that a refused answer stands in the card until what was asked changes, which asks again.
+  // Note that what was asked changing is another start, under a key of its own, and
+  // a refused answer stands in the card until then, which asks again.
   const changed =
     <T,>(set: (value: T) => void) =>
     (value: T) => {
       set(value);
+      setKey(crypto.randomUUID());
       if (confirm.rejection !== undefined) confirm.ask();
     };
   const dialog = (
