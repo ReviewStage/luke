@@ -419,17 +419,17 @@ test("on a call the voice's notice line floats just over the video's room, never
   assert.equal(tab.querySelector(".voice-caption, .voice-caption-speaker"), null, "no captions");
 });
 
-test("an agent on Claude Code or Codex draws no Call button and no call foot, even where the platform has a voice", async () => {
+test("an agent on Claude Code or Codex offers the same Call button, which calls that agent, where the platform has a voice", async () => {
   for (const runtime of NATIVE_CODING_AGENT_RUNTIMES) {
     const pressed: string[] = [];
     const page = await mountOn({ onPress: (agentId) => pressed.push(agentId) }, IDLE_VOICE_VIEW, {
       ...AGENT,
       runtime,
     });
-    assert.ok(page.querySelector(".dictate-button"), `${runtime}: the composer stands`);
-    assert.equal(callButton(page), null, `${runtime}: no Call button`);
-    assert.equal(page.querySelector(".agent-call-foot"), null, `${runtime}: no call foot`);
-    assert.deepEqual(pressed, []);
+    const call = callButton(page);
+    assert.ok(call !== null, `${runtime}: the Call button stands`);
+    act(() => call.click());
+    assert.deepEqual(pressed, [AGENT.id], `${runtime}: it calls the agent`);
     act(() => roots.pop()?.unmount());
     document.body.innerHTML = "";
   }
