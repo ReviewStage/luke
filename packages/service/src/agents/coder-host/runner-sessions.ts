@@ -19,9 +19,8 @@
  * (`checkout.ts`, the same token at the firewall), and launches the runner.
  * A launch mints the runner's bearer and records its digest on the
  * agent's row, uploads the runner's bundle (`runner-bundle.ts`), and starts
- * it as a detached command of the sandbox's API as the default user, whose
- * capability set lets it install the bundle where only root writes, check its
- * digest, share the checkout with
+ * it as a detached command of the sandbox's API as root, which installs the
+ * bundle where only root writes, checks its digest, shares the checkout with
  * the `agent` user, and drops to that user with every capability gone
  * (`sandbox-capabilities.ts`). The harness's credential and the bearer are
  * in that command's environment and nowhere else: never in its argv, its
@@ -234,8 +233,8 @@ const RUNNER_PATH = {
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
 
 /**
- * The launch, run by bash as the default user with its capability set: the
- * uploaded bundle installed root's where only root writes and checked against the digest Luke computed, the checkout
+ * The launch, run by bash as root: the uploaded bundle installed where only
+ * root writes and checked against the digest Luke computed, the checkout
  * marked safe for git and shared with `agent`'s group, then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
@@ -630,10 +629,10 @@ export const runnerSessions = <
           command: "bash",
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
           cwd: CODER.CHECKOUT_PATH,
-          // Note that the launch runs as the default user and never through the API's `sudo`, because
-          // Vercel's sudo resets the environment, and the credential and bearer ride in it alone.
+          // Note that the credential and the bearer ride in the environment alone, which the API's
+          // sudo keeps, as Vercel documents it does, on an image that honours that (`sandbox-image.ts`).
           env: { ...SANDBOX_ENV, ...credential.env, [RUNNER_ENV.BEARER]: bearer },
-          sudo: false,
+          sudo: true,
         });
         // A runner started but never configured is ended, and its tags cleared, so the next
         // message relaunches whole rather than writing to a runner that waits for its config.

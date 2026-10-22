@@ -285,7 +285,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const [command] = api.commands;
         assert.ok(command !== undefined);
-        assert.equal(command.sudo, false);
+        assert.equal(command.sudo, true);
         assert.equal(command.command, "bash");
         const script = command.args[1] ?? "";
         assert.match(

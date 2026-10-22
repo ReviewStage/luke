@@ -217,8 +217,9 @@ export interface CommandAsk {
  * sandbox's API does by running the `sudo` binary as the default user, so
  * it needs that user's sudoers entry, which the image keeps; its stdin held
  * open for `writeStdin`. Its `env` is handed to it by the API alone, so a
- * secret in it reaches no argv and no file. Note that `sudo` resets the
- * environment, so a command that needs its `env` runs without it.
+ * secret in it reaches no argv and no file. Vercel documents that its `sudo`
+ * keeps that environment (setting `HOME` to root's), which the image's
+ * sudoers must honour (`agent-runtime/sandbox-image.ts`).
  */
 interface DetachedCommandAsk extends CommandAsk {
   readonly sudo: boolean;

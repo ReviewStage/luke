@@ -148,12 +148,36 @@ const INSTALL_CODEX = [
 ];
 
 /**
- * The directory each launch installs the runner's bundle in, made here as
- * root's, since the launch runs as the default user (holding the capability
- * set, which `install -o root` needs) and a directory it made would be that
- * user's, whose Terminal shells could then replace the bundle.
+ * The directory each launch installs the runner's bundle in, made root's
+ * here, before any Terminal opens, so no shell of the default user's makes
+ * it first and replaces the bundle in it.
  */
 const MAKE_RUNNER_DIRECTORY = [`$SUDO install -d -o root -g root -m 0755 ${RUNNER_DIRECTORY}`];
+
+/** The user Vercel Sandbox runs the API's commands as, and its `sudo` through. */
+const SANDBOX_USER = "vercel-sandbox";
+
+/** The drop-in that keeps the API's `sudo` to Vercel's documented contract. */
+const SUDO_ENV_DROP_IN = "/etc/sudoers.d/luke-env";
+
+/**
+ * Vercel documents that the API's `sudo: true` keeps the command's
+ * environment, setting `HOME` to root's, and its own image's sudoers says
+ * `!env_reset`. The base image this one builds on resets it (`Defaults
+ * env_reset`), so a launch's credential and bearer, which ride in the
+ * environment alone, never reached the runner. This drop-in, scoped to the
+ * sandbox's user, restores the contract and is checked by `visudo`; the
+ * check after it fails the build where a variable still does not survive.
+ * The default user's Terminal shells and an agent's commands run with every
+ * capability dropped, so they reach no `sudo` through it.
+ */
+const KEEP_SUDO_ENVIRONMENT = [
+  `printf 'Defaults:${SANDBOX_USER} !env_reset, always_set_home\\n' | $SUDO tee ${SUDO_ENV_DROP_IN} >/dev/null`,
+  `$SUDO chmod 0440 ${SUDO_ENV_DROP_IN}`,
+  `$SUDO visudo -c -q -f ${SUDO_ENV_DROP_IN}`,
+  `$SUDO visudo -c -q`,
+  `if [ "$(id -un)" = ${SANDBOX_USER} ]; then LUKE_SUDO_KEEPS=kept sudo -n bash -c '[ "\${LUKE_SUDO_KEEPS:-}" = kept ]' || { echo 'sudo does not keep the environment' >&2; exit 1; }; fi`,
+];
 
 /**
  * The image's last step: a check that a command started under the
@@ -196,6 +220,7 @@ export const PREPARE_SCRIPT = [
   ...CREATE_AGENT_USER,
   ...INSTALL_CODEX,
   ...MAKE_RUNNER_DIRECTORY,
+  ...KEEP_SUDO_ENVIRONMENT,
   // Last, once everything is in place.
   ...CHECK_CAPABILITY_DROP,
 ].join("\n");
