@@ -28,7 +28,8 @@ import {
  * so it can offer its row's menu, and an unavailable one is pressed to no
  * effect, as is an unavailable compact labelled button, which is named by
  * its words. An unavailable button that keeps its Tab stop shakes at a
- * press it refuses, and stops once the shake ends. A submit sends its form while it takes a press, sends nothing
+ * press it refuses, and stops once the shake ends; one that takes a press
+ * pulses instead. A submit sends its form while it takes a press, sends nothing
  * while it is unavailable, and made a Stop does its own act without
  * sending the form.
  */
@@ -348,7 +349,7 @@ test("a compact labelled button is named by its words, pressed, and refuses its 
   expect(pressed).toEqual(["Restart"]);
 });
 
-test("an unavailable button that keeps its Tab stop shakes at a refused press, until the shake ends; a busy one and an available one do not", () => {
+test("an unavailable button that keeps its Tab stop shakes at a refused press, until the shake ends; a busy one does not, and an available one pulses at the press it takes", () => {
   const pressed: string[] = [];
   const container = mount(
     createElement(
@@ -379,6 +380,9 @@ test("an unavailable button that keeps its Tab stop shakes at a refused press, u
   expect(merge?.getAttribute("data-denied")).toBe("true");
   expect(save?.hasAttribute("data-denied")).toBe(false);
   expect(open?.hasAttribute("data-denied")).toBe(false);
+  expect(open?.getAttribute("data-pulse")).toBe("true");
+  expect(merge?.hasAttribute("data-pulse")).toBe(false);
+  expect(save?.hasAttribute("data-pulse")).toBe(false);
 
   act(() => merge?.dispatchEvent(new Event("animationend")));
   expect(merge?.hasAttribute("data-denied")).toBe(false);

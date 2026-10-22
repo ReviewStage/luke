@@ -321,9 +321,43 @@
     transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
+  /* Note that the face goes down on the quick exit beat and comes back on
+     the spring, because a click holds the press for a tenth of a second,
+     which the spring's beat would spend before the face had moved. */
   .luke-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"])
-    .luke-button-face {
-    transform: scale(0.94);
+  .luke-button-face {
+    transform: scale(0.9);
+    transition: transform var(--luke-duration-exit) ease-out;
+  }
+
+  /* Every press a button takes is answered once it lands: its face springs
+     back from pressed, so even a click too quick to hold the press down is
+     seen (`button.tsx` restarts `data-pulse` on each). A row is a menu's
+     row, lit rather than pressed, so it plays nothing. */
+  .luke-button[data-pulse="true"]:not([data-variant="row"]) .luke-button-face {
+    animation: luke-button-pulse var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @keyframes luke-button-pulse {
+    from {
+      transform: scale(0.86);
+    }
+  }
+
+  /* A submit's arrow lifts away as the message goes and drops back in. */
+  .luke-button[data-submit="ready"][data-pulse="true"] svg {
+    animation: luke-button-send var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @keyframes luke-button-send {
+    30% {
+      transform: translateY(-6px);
+      opacity: 0;
+    }
+    31% {
+      transform: translateY(6px);
+      opacity: 0;
+    }
   }
 
   /* A press an unavailable button refuses shakes it, once per press, so the
