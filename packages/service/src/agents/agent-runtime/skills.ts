@@ -51,6 +51,8 @@ export interface AgentSkill {
   readonly markdown: string;
   /** Its supporting files, by path from its folder, `SKILL.md` aside; none for a repository skill, whose files the checkout holds. */
   readonly files?: Readonly<Record<string, Uint8Array>>;
+  /** Its own `SKILL.md` as installed, frontmatter and all, for a native harness that reads the folder whole; none for a repository skill. */
+  readonly skillFile?: Uint8Array;
 }
 
 /** How many skills a session is offered. */
@@ -144,13 +146,14 @@ function installedAgentSkill(skill: InstalledSkillWithFiles): AgentSkill | undef
   // The body is handed without its frontmatter, as a repository skill's is.
   const body = readSkillFile(text)?.body ?? text.replace(/^\uFEFF/u, "").trim();
   const markdown = installedMarkdown(skill.name, body, siblings.length > 0);
-  if (siblings.length === 0) return { name: skill.name, description: skill.description, markdown };
-  return {
+  const offered = {
     name: skill.name,
     description: skill.description,
     markdown,
-    files: Object.fromEntries(siblings.map((file) => [file.path, file.bytes])),
+    skillFile: main.bytes,
   };
+  if (siblings.length === 0) return offered;
+  return { ...offered, files: Object.fromEntries(siblings.map((file) => [file.path, file.bytes])) };
 }
 
 /**

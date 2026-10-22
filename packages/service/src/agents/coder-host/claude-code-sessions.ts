@@ -46,6 +46,7 @@ import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
+import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import {
   LaunchRefused,
   type RunnerHarness,
@@ -197,6 +198,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
         allowedDomains: [...ALLOWED_DOMAINS],
+        installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
       };
       return written;
     });

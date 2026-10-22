@@ -21,7 +21,7 @@ import {
   openGithubUser,
 } from "../../testing/github-app-fake.js";
 import { offeredSkills, skillsOpenSandbox } from "../agent-runtime/skills.js";
-import { agentSkills } from "./skills.js";
+import { agentSkills, nativeSkills } from "./skills.js";
 
 /**
  * The skills a coding agent's session is offered, through `agentSkills`
@@ -29,8 +29,9 @@ import { agentSkills } from "./skills.js";
  * repository's skills: the repository's, then the workspace's installed
  * skills, then the member's personal ones, a name offered once by the
  * earliest; installed skills for an agent with no repository too; an
- * installed skill's supporting files handed to eve; a skill turned off left
- * out; and an installed read that fails offering the repository's alone.
+ * installed skill's supporting files handed to eve; a native harness handed
+ * the installed skills alone, whole; a skill turned off left out; and an
+ * installed read that fails offering the repository's alone.
  *
  * Synthetic accounts, repositories, and skills throughout.
  */
@@ -240,5 +241,34 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills, unrea
         ["testing"],
       );
     }),
+  );
+});
+
+// Note that a database of its own, as the unread case has, because a second agent on the fixture's repository in one database is offered none of its skills.
+it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills", (it) => {
+  it.effect(
+    "hands a native harness the installed skills alone, with their SKILL.md as installed, an installed name the repository holds left to the repository",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent, target, workspace } = yield* startAgent(REPOSITORY);
+        yield* install(userId, workspace, "testing", "The workspace's testing.");
+        yield* install(userId, workspace, "release-notes", "The workspace's release notes.");
+        yield* install(userId, PERSONAL, "release-notes", "My release notes.");
+        yield* install(userId, PERSONAL, "pr-style", "My pr style.");
+
+        const skills = yield* nativeSkills(target, agent).pipe(
+          Effect.provide(repositoryWithSkills(["testing"])),
+        );
+
+        assert.deepEqual(
+          skills.map((skill) => skill.name),
+          ["release-notes", "pr-style"],
+        );
+        const [notes] = skills;
+        assert.equal(
+          new TextDecoder().decode(notes?.skillFile),
+          skillText("release-notes", "The workspace's release notes."),
+        );
+      }),
   );
 });

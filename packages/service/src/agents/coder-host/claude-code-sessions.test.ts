@@ -21,6 +21,7 @@ import {
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
+import { installSkill } from "@luke/database/models/installed-skill-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   removeProviderKey,
@@ -33,6 +34,7 @@ import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_FAILURE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -399,6 +401,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           eventsUrl: EVENTS_URL,
           mcpUrl: MCP_URL,
           allowedDomains: config.allowedDomains,
+          installedSkills: "/opt/luke/installed-skills",
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,
@@ -413,6 +416,80 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [...(api.uploads[0]?.values() ?? [])],
         ]);
         for (const secret of [PLAN_TOKEN, bearer]) assert.equal(visible.includes(secret), false);
+      }),
+  );
+
+  it.effect(
+    "open writes the member's installed skills as whole folders outside the checkout, which root installs where the config names, and writes none where there are none",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const skillFile =
+          "---\nname: sentry-triage\ndescription: Triage a Sentry issue.\nallowed-tools: Bash\n---\nRun `scripts/triage.sh`.\n";
+        yield* installSkill(userId, {
+          owner: { scope: INSTALLED_SKILL_SCOPE.PERSONAL },
+          name: "sentry-triage",
+          description: "Triage a Sentry issue.",
+          userInvocable: true,
+          source: { type: INSTALLED_SKILL_SOURCE.TEXT },
+          files: [
+            { path: "SKILL.md", bytes: new TextEncoder().encode(skillFile) },
+            { path: "scripts/triage.sh", bytes: new TextEncoder().encode("echo triage\n") },
+          ],
+        });
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+
+        const opened = yield* sessions.open(message(agent, "Triage it."));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const skills = api.uploads.find((upload) =>
+          [...upload.keys()].some((path) => path.startsWith("/tmp/luke-installed-skills/")),
+        );
+        assert.ok(skills !== undefined);
+        // A Claude Code local plugin named luke, its skill a whole folder, its SKILL.md as installed.
+        assert.deepEqual([...skills.keys()].sort(), [
+          "/tmp/luke-installed-skills/.claude-plugin/plugin.json",
+          "/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md",
+          "/tmp/luke-installed-skills/skills/sentry-triage/scripts/triage.sh",
+        ]);
+        assert.equal(
+          JSON.parse(skills.get("/tmp/luke-installed-skills/.claude-plugin/plugin.json") ?? "")
+            .name,
+          "luke",
+        );
+        assert.equal(
+          skills.get("/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md"),
+          skillFile,
+        );
+        // Nothing lands in the checkout, so nothing can be committed.
+        assert.ok(![...skills.keys()].some((path) => path.startsWith(CODER.CHECKOUT_PATH)));
+
+        const [command] = api.commands;
+        assert.ok(command !== undefined);
+        const script = command.args[1] ?? "";
+        assert.match(
+          script,
+          /mv \/tmp\/luke-installed-skills \/opt\/luke\/installed-skills && chown -R root:root \/opt\/luke\/installed-skills && chmod -R u=rwX,go=rX/u,
+        );
+        const [config] = linesOf(command) as [ClaudeCodeConfig];
+        assert.equal(config.installedSkills, "/opt/luke/installed-skills");
+
+        // An account with no installed skills uploads none, and the launch installs nothing.
+        const bare = runnerSandboxApi();
+        const other = yield* openAgent;
+        const otherSessions = yield* sessionsFor(other.userId, { next: 0 }).pipe(
+          Effect.provide(services(bare)),
+        );
+        yield* otherSessions.open(message(other.agent, "Triage it."));
+        assert.ok(
+          !bare.uploads.some((upload) =>
+            [...upload.keys()].some((path) => path.startsWith("/tmp/luke-installed-skills/")),
+          ),
+        );
       }),
   );
 

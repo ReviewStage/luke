@@ -3,6 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import {
@@ -27,6 +30,7 @@ import {
   type CodexConfig,
   IMAGE_MEDIA_TYPE,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   type InputLine,
   RUNNER_END,
   RUNNER_ENV,
@@ -221,6 +225,56 @@ function fakeLuke(watchFor?: string) {
     watchFor,
   });
 }
+
+it.effect(
+  "sets the member's installed skills as an extra skills root before the thread opens, and none where Luke wrote none",
+  () =>
+    Effect.gen(function* () {
+      const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
+      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
+      const skills = join(folder, INSTALLED_SKILLS.SKILLS);
+      mkdirSync(join(skills, "pr-style"), { recursive: true });
+      const extraRoots: Exchange = {
+        method: "skills/extraRoots/set",
+        reply: [{ id: 0, result: {} }],
+      };
+      const withRoot: Script = {
+        exchanges: [
+          exchange(FIRST, 0),
+          exchange(FIRST, 1),
+          extraRoots,
+          ...WORKFLOW.exchanges.slice(2),
+        ],
+      };
+
+      const turn = (script: Script, installedSkills: string) =>
+        Effect.gen(function* () {
+          const luke = fakeLuke("ci-watch");
+          const { spawned, write, run } = yield* launch([script], luke);
+          yield* write({ ...CONFIG, installedSkills });
+          yield* write(message("The probe's first turn.", LINE.FIRST));
+          yield* luke.seen;
+          yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
+          assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+          return spawned[0];
+        });
+
+      const withSkills = yield* turn(withRoot, folder);
+      const withNone = yield* turn(WORKFLOW, join(folder, "never-written"));
+
+      assert.deepEqual(withSkills?.unexpected, []);
+      assert.deepEqual(received(withSkills, "skills/extraRoots/set"), [{ extraRoots: [skills] }]);
+      // Set before the thread is opened, so the thread's first turn lists them.
+      assert.deepEqual(withSkills?.received.map((each) => each.method).slice(0, 4), [
+        "initialize",
+        "initialized",
+        "skills/extraRoots/set",
+        "thread/start",
+      ]);
+      assert.deepEqual(withNone?.unexpected, []);
+      assert.deepEqual(received(withNone, "skills/extraRoots/set"), []);
+    }),
+);
 
 it.effect(
   "starts app-server with the plan's provider, steers the running turn, and ends at its completion",

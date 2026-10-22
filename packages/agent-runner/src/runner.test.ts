@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ import {
   EFFORT,
   IMAGE_MEDIA_TYPE,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   type InputLine,
   RUNNER_END,
   RUNNER_ENV,
@@ -617,6 +618,38 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+    }),
+);
+
+it.effect(
+  "loads the member's installed skills as a local plugin where Luke wrote them, and none where it wrote none",
+  () =>
+    Effect.gen(function* () {
+      const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
+      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
+      const missing = join(folder, "never-written");
+      const installed = join(folder, "installed");
+      mkdirSync(join(installed, ".claude-plugin"), { recursive: true });
+      writeFileSync(join(installed, INSTALLED_SKILLS.MANIFEST), '{"name":"luke"}\n');
+
+      const optionsWith = (installedSkills: string) =>
+        Effect.gen(function* () {
+          const { cli, write, run } = yield* launch(SHORT_TURN, fakeLuke());
+          yield* write({ ...CONFIG, installedSkills });
+          yield* write(FIRST_MESSAGE);
+          yield* Fiber.join(run);
+          return cli.options;
+        });
+
+      const withSkills = yield* optionsWith(installed);
+      const withNone = yield* optionsWith(missing);
+
+      assert.deepEqual(withSkills?.plugins, [
+        { type: "local", path: installed, skipMcpDiscovery: true },
+      ]);
+      // The checkout's own settings stay the only ones read.
+      assert.deepEqual(withSkills?.settingSources, ["project"]);
+      assert.equal(withNone?.plugins, undefined);
     }),
 );
 

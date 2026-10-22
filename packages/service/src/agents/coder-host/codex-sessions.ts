@@ -59,6 +59,7 @@ import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
+import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import {
   LaunchRefused,
   type RunnerHarness,
@@ -201,6 +202,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
         tokenUrl,
+        installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
       };
       return written;
     });
