@@ -52,6 +52,7 @@ import {
   type AppServerListener,
   spawnAppServer,
 } from "./app-server.js";
+import type { ReasoningSummary } from "./codex-protocol/index.js";
 import type { ThreadStartParams, TurnStatus, UserInput } from "./codex-protocol/v2/index.js";
 import type { LaunchContext, LaunchOutcome, RunnerSelf } from "./launch.js";
 import {
@@ -89,6 +90,9 @@ const TOKEN_COMMAND = {
   TIMEOUT_MS: 30_000,
   REFRESH_INTERVAL_MS: 300_000,
 } as const;
+
+/** The reasoning summary every turn asks for, as `ReasoningSummary` spells it. */
+const REASONING_SUMMARY_AUTO: ReasoningSummary = "auto";
 
 /** The name the Luke MCP server is registered under in Codex's config. */
 const MCP_SERVER = "luke";
@@ -421,6 +425,9 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
       input: [...outgoing.input],
       model: launch.model,
       effort: launch.effort ?? null,
+      // Note that a turn asks for its reasoning's summary, which is the step's reasoning in the transcript,
+      // because the model answers none unless asked; `auto` is the most detailed the model offers.
+      summary: REASONING_SUMMARY_AUTO,
     }),
   );
   if (Option.isNone(answer)) {

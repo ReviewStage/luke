@@ -587,6 +587,57 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a call to a tool the transcript knows no name for stands as a row, its own name, input, and answer kept",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const input = { cron: "*/5 * * * *", prompt: "check ci" };
+        yield* post(
+          agent.bearer,
+          // SAFETY: each message is one the pinned SDK or the runner emits, written in its JSON shape.
+          [
+            { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+            {
+              type: "assistant",
+              message: {
+                content: [{ type: "tool_use", id: "toolu_cron", name: "CronCreate", input }],
+              },
+              ...top,
+            },
+            {
+              type: "user",
+              message: {
+                role: "user",
+                content: [
+                  {
+                    type: "tool_result",
+                    tool_use_id: "toolu_cron",
+                    content: [{ type: "text", text: "Scheduled job cron_1." }],
+                  },
+                ],
+              },
+              ...top,
+            },
+          ].map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+        const call = rows.at(-1)?.parts.find((part) => part.type === "tool-nativeTool");
+
+        assert.deepEqual(call && "input" in call ? call.input : undefined, {
+          name: "CronCreate",
+          input,
+        });
+        assert.deepEqual(call === undefined ? [] : drawn(call), [
+          "tool-nativeTool",
+          "output-available",
+          "Scheduled job cron_1.",
+        ]);
+      }),
+  );
+
+  it.effect(
     "a compaction stamps the agent, and a launch the plan's limit refused fails its turn saying so",
     () =>
       Effect.gen(function* () {

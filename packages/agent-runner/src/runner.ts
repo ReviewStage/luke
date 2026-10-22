@@ -97,6 +97,18 @@ function isClaudeEffort(effort: string): effort is Effort {
   return CLAUDE_EFFORTS.has(effort);
 }
 
+/**
+ * The CLI's switches that make its to-do tool the one Luke draws as eve's
+ * list and dock (`TodoWrite`). Note that the pinned CLI (2.1.304) offers
+ * its task tools (`TaskCreate`, `TaskUpdate`, ...) in its place unless
+ * tasks are switched off, and on a model newer than its own list offers
+ * neither unless to-dos are switched on, as a probe of its tool list found.
+ */
+const TODO_TOOL_ENV = {
+  CLAUDE_CODE_ENABLE_TASKS: "false",
+  CLAUDE_CODE_ENABLE_TODO_TOOLS: "true",
+} as const;
+
 /** What the last Stop hook reported still in flight. */
 type InFlight = Omit<RunnerWaiting, "type">;
 
@@ -129,7 +141,10 @@ function queryOptions(
     includePartialMessages: true,
     // The CLI's environment is the runner's own, less the bearer, which only
     // the runner uses; Node leaves an undefined one unset.
-    env: { ...env, [RUNNER_ENV.BEARER]: undefined },
+    env: { ...env, ...TODO_TOOL_ENV, [RUNNER_ENV.BEARER]: undefined },
+    // Note that the models Luke offers think adaptively, and the CLI omits the thinking's text
+    // unless asked for its summary (the SDK's `ThinkingAdaptive.display`).
+    thinking: { type: "adaptive", display: "summarized" },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so Luke's is an
     // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`).

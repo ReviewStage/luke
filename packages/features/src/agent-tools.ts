@@ -171,6 +171,16 @@ export const CLAUDE_CODE_TOOL = {
   SCHEDULE_WAKEUP: "ScheduleWakeup",
 } as const;
 
+/**
+ * The name a native harness's call is stored under where its own name is
+ * no tool the transcript knows, a tool a newer CLI added among them, so the
+ * call still stands as a row rather than being dropped. Its input keeps the
+ * harness's own name and input (`{ name, input }`), which the transcript
+ * draws it by (`native-tool-calls.ts`), and its answer is the text the
+ * model read.
+ */
+export const NATIVE_OTHER_TOOL = "nativeTool";
+
 /** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_inbox` is Luke's `read_inbox`. */
 export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
 

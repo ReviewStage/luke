@@ -1,4 +1,9 @@
-import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
+import {
+  AGENT_TOOL,
+  CLAUDE_CODE_TOOL,
+  CODEX_TOOL,
+  NATIVE_OTHER_TOOL,
+} from "@luke/features/agent-tools";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 
@@ -326,10 +331,18 @@ const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCa
   }),
 };
 
+/** A call stored under the catch-all, as the harness's own call it kept: drawn by its own name, as any call no renderer knows. */
+function otherCall({ input, output }: DrawnCall): DrawnCall {
+  const name = inputString(input, "name");
+  if (name === undefined || !isRecord(input)) return { tool: NATIVE_OTHER_TOOL, input, output };
+  return { tool: name, input: input.input, output };
+}
+
 /** Every native harness's calls, by the names they are stored under. */
 const NATIVE_TOOL_CALLS: ReadonlyMap<string, NativeCallReading> = new Map([
   ...Object.entries(CLAUDE_CODE_CALLS),
   ...Object.entries(CODEX_CALLS),
+  [NATIVE_OTHER_TOOL, otherCall],
 ]);
 
 /** A stored call as the transcript draws it: a native harness's as the eve call that does the same, and any other as it is. */

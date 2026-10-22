@@ -1,4 +1,8 @@
-import { CLAUDE_CODE_LUKE_TOOL_PREFIX, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
+import {
+  CLAUDE_CODE_LUKE_TOOL_PREFIX,
+  CLAUDE_CODE_TOOL,
+  NATIVE_OTHER_TOOL,
+} from "@luke/features/agent-tools";
 import type { ToolCallSettlement } from "@luke/features/brain";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type WireValue, WireValueSchema } from "@luke/wire";
@@ -166,7 +170,11 @@ function storedClaudeCodeToolName(name: string): string {
     : name;
 }
 
-const CLI_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_TOOL));
+/** The calls whose answer is the text the model read: the CLI's own, and any the transcript stores under the catch-all. */
+const CLI_TOOL_NAMES: ReadonlySet<string> = new Set([
+  ...Object.values(CLAUDE_CODE_TOOL),
+  NATIVE_OTHER_TOOL,
+]);
 
 /** A tool's answer as the text the model read: its text blocks joined, a picture standing in for its bytes where `pictures` asks, and left out otherwise. */
 function answerText(content: string | readonly WireValue[] | undefined, pictures: boolean): string {

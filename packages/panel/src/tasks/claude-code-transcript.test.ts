@@ -224,6 +224,20 @@ test("an Edit's patch marks the lines it changed, the newline ending its words o
   assert.deepEqual(marked("added"), ["+b;", "+", "+c;"]);
 });
 
+test("a call the transcript stored under the catch-all is drawn by the CLI's own name and input", () => {
+  const { line, body } = opened(
+    storedPart(
+      "nativeTool",
+      { name: "CronCreate", input: { cron: "*/5 * * * *", prompt: "check ci" } },
+      "Scheduled job cron_1.",
+    ),
+  );
+  assert.ok(line.includes("CronCreate"));
+  assert.ok(!line.includes("nativeTool"));
+  assert.ok(body.includes("check ci"));
+  assert.ok(body.includes("Scheduled job cron_1."));
+});
+
 test("a call still running draws its row from its input alone", () => {
   const { line } = opened(storedPart("Read", { file_path: `${CHECKOUT}/src/invoice.ts` }));
   assert.ok(line.includes(`${CHECKOUT}/src/invoice.ts`));

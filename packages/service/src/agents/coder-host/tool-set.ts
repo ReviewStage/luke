@@ -1,5 +1,10 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import {
+  CLAUDE_CODE_TOOL,
+  CODEX_TOOL,
+  NATIVE_OTHER_TOOL,
+  RETIRED_TOOL,
+} from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
@@ -342,6 +347,7 @@ export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
       ...Object.values(RETIRED_CODER_TOOL),
       ...Object.values(CLAUDE_CODE_TOOL),
       ...Object.values(CODEX_TOOL),
+      NATIVE_OTHER_TOOL,
     ]),
   ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),
   ...connectionToolEntries(),

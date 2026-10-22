@@ -266,6 +266,8 @@ it.effect(
       assert.equal(start?.clientUserMessageId, LINE.FIRST);
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
+      // Every turn asks for its reasoning's summary, which the transcript draws as thoughts.
+      assert.equal(start?.summary, "auto");
       assert.deepEqual(start?.input, [
         { type: "text", text: "The probe's first turn.", text_elements: [] },
         { type: "image", url: "data:image/png;base64,iVBORw0K" },

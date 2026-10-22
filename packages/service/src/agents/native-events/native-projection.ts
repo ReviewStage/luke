@@ -1,4 +1,5 @@
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
+import { NATIVE_OTHER_TOOL } from "@luke/features/agent-tools";
 import type { WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
@@ -182,7 +183,7 @@ export interface NativeProjectionContext {
   readonly sequence: number;
   readonly now: number;
   readonly model: string | undefined;
-  /** Whether the stored tool set holds a call of this name; a call of any other is left out, its answer with it. */
+  /** Whether the stored tool set holds a call of this name; a call of any other is stored under `NATIVE_OTHER_TOOL`. */
   readonly registered: (name: string) => boolean;
   /** Where a moment the record leaves out is said. */
   readonly report: (message: string) => void;
@@ -317,20 +318,25 @@ class Fold {
     this.#setTurn({ ...told, step: { ...step, reasoning: step.reasoning + 1 } });
   }
 
+  /**
+   * A call the model asked for, stored under its own name, or, where that
+   * names no stored tool, under the catch-all with its own name and input
+   * kept, so a tool the harness added still stands as a row.
+   */
   #toolStarted(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.TOOL_STARTED }>): void {
-    if (!this.#context.registered(moment.name)) {
-      this.#context.report(`A call to ${moment.name} names no stored tool and is not recorded.`);
-      return;
-    }
+    const known = this.#context.registered(moment.name);
+    if (!known) this.#context.report(`A call to ${moment.name} is stored as ${NATIVE_OTHER_TOOL}.`);
+    const name = known ? moment.name : NATIVE_OTHER_TOOL;
+    const input = known ? moment.input : { name: moment.name, input: moment.input ?? null };
     const turn = this.#step(undefined);
     if (turn.calls[moment.callId] !== undefined) return;
     const told = this.#tell(turn, {
       kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
       callId: moment.callId,
-      name: moment.name,
-      input: moment.input,
+      name,
+      input,
     });
-    this.#setTurn({ ...told, calls: { ...told.calls, [moment.callId]: moment.name } });
+    this.#setTurn({ ...told, calls: { ...told.calls, [moment.callId]: name } });
   }
 
   #toolSettled(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.TOOL_SETTLED }>): void {

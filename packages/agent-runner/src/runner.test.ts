@@ -586,6 +586,11 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+      // The CLI offers TodoWrite, which draws as eve's list, rather than its task tools, and
+      // answers its thinking's summary rather than omitting it.
+      assert.equal(options.env?.CLAUDE_CODE_ENABLE_TASKS, "false");
+      assert.equal(options.env?.CLAUDE_CODE_ENABLE_TODO_TOOLS, "true");
+      assert.deepEqual(options.thinking, { type: "adaptive", display: "summarized" });
     }),
 );
 
