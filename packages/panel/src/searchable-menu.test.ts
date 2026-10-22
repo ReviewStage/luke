@@ -212,22 +212,45 @@ test("a list too short to search holds focus, names its highlight, and reads the
   assert.deepEqual(asked.said, ["pick haiku"]);
 });
 
-test("a submenu that would run past the room its menu keeps to turns to the left, though the window has room", () => {
-  // jsdom lays nothing out, so the window, the room, and the submenu are answered as a side panel would lay them.
+/**
+ * Where the Effort submenu stands once opened in a room `room` wide at the
+ * window's left, its menu's row from `rowLeft` to `rowRight`: the side it
+ * took and how far it was pushed back over the menu. jsdom lays nothing
+ * out, so the window, the room, the row, and the submenu, 200px wide and
+ * drawn on the right, are answered as the panel would lay them.
+ */
+function submenuIn(room: number, rowLeft: number, rowRight: number) {
   vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1200);
   vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    if (this.dataset.popoverRoom !== undefined) return new DOMRect(0, 0, 400, 800);
-    if (this.classList.contains("task-compose-submenu")) return new DOMRect(300, 100, 200, 100);
+    if (this.dataset.popoverRoom !== undefined) return new DOMRect(0, 0, room, 800);
+    if (this.classList.contains("task-compose-menu-branch")) {
+      return new DOMRect(rowLeft, 100, rowRight - rowLeft, 32);
+    }
+    if (this.classList.contains("task-compose-submenu")) {
+      return new DOMRect(rowRight + 9, 100, 200, 100);
+    }
     return new DOMRect(0, 0, 0, 0);
   });
   mount({ placeholder: "Search models", foot: true, room: true });
   press({ key: "ArrowUp" });
   press({ key: "ArrowUp" });
   press({ key: "ArrowRight" });
+  const submenu =
+    document.querySelector<HTMLElement>(".task-compose-submenu") ?? assert.fail("it opens");
+  return {
+    side: submenu.dataset.side,
+    shift: Number.parseFloat(submenu.style.getPropertyValue("--submenu-shift")),
+  };
+}
 
-  const submenu = document.querySelector<HTMLElement>(".task-compose-submenu");
-  assert.equal(submenu?.dataset.side, "left");
+test("a submenu that would run past the room its menu keeps to turns to the left, though the window has room", () => {
+  assert.deepEqual(submenuIn(800, 300, 600), { side: "left", shift: 0 });
+});
+
+test("a submenu with room on neither side takes the side it runs past less, pushed back over the menu inside the room", () => {
+  // A 340px menu at x=30 in a 390px side panel: 209px past on the right, 179px on the left.
+  assert.deepEqual(submenuIn(390, 30, 370), { side: "left", shift: 179 });
 });
