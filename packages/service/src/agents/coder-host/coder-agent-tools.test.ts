@@ -29,6 +29,7 @@ import {
 } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { inboxItem } from "@luke/database/schemas/inbox";
 import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -53,7 +54,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { INBOX_ASK } from "@luke/features/inbox-wire";
+import { INBOX_ASK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
@@ -3489,6 +3490,24 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   await ask(agents.caller, tasks.invitations, "deploy-region", "Where should the preview deploy?");
   await ask(second, tasks.invitations, "token-expiry", "How long should invites last?");
   await ask(agents.teammates, tasks.billing, "billing-plan", "Which plan do we bill?");
+  // A notice asks nothing, and is read with its words.
+  await database.run(
+    postInboxThread(
+      { userId: member, taskId: tasks.invitations, agentId: agents.caller.id },
+      { key: "preview-live", title: "The preview is live", body: "It deployed to iad1." },
+    ),
+  );
+  // An item from before version 5 holds its ask as its response, with no ask message.
+  const legacy = await ask(second, tasks.invitations, "legacy-approval", "Ship it?");
+  assert.ok(Result.isSuccess(legacy));
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db
+        .update(inboxItem)
+        .set({ version: 4, openAskMessageId: null, response: { type: INBOX_RESPONSE.APPROVAL } })
+        .where(eq(inboxItem.id, legacy.success.id)),
+    ),
+  );
   const operator = await operatorOn(member, workspaceId);
   const call = await peerCaller(hostOf(true), operator, eve.services);
 
@@ -3496,7 +3515,19 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
   const asks = Array.isArray(listed.asks) ? listed.asks : [];
   const byKey = new Map(asks.flatMap((each) => (isRecord(each) ? [[each.key, each]] : [])));
-  assert.deepEqual([...byKey.keys()].sort(), ["deploy-region", "token-expiry"]);
+  assert.deepEqual([...byKey.keys()].sort(), [
+    "deploy-region",
+    "legacy-approval",
+    "preview-live",
+    "token-expiry",
+  ]);
+  const notice = byKey.get("preview-live");
+  assert.ok(isRecord(notice));
+  assert.deepEqual([notice.ask, notice.words], [null, "It deployed to iad1."]);
+  const approval = byKey.get("legacy-approval");
+  assert.ok(isRecord(approval));
+  assert.equal(approval.ask, INBOX_ASK.DECIDE);
+  assert.equal(approval.words, "Two regions are free.");
   const deploy = byKey.get("deploy-region");
   assert.ok(isRecord(deploy) && isRecord(deploy.agent));
   assert.equal(deploy.agent.id, agents.caller.id);

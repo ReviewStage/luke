@@ -2236,6 +2236,53 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "an operator's desk shows a section's newest rows and counts the rest, and leaves out a teammate's agents",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const userId = yield* openGithubUser();
+        const teammate = yield* openGithubUser();
+        const task = yield* startTask(userId, {
+          name: "Teammate invitations",
+          repository: "acme/relay",
+        });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        const started = (starter: string) =>
+          Effect.gen(function* () {
+            // Each a second after the last, so newest first is one order, and none yet reads as never started.
+            yield* TestClock.adjust("1 second");
+            const made = yield* createCodingAgent(starter, {
+              taskId: task.id,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              planSnapshot: PLAN_TEXT,
+              prompt: null,
+              repository: "acme/relay",
+            });
+            return Option.getOrThrow(made).agent;
+          });
+        const own = [];
+        for (let index = 0; index < 9; index += 1) own.push(yield* started(userId));
+        const teammates = yield* started(teammate);
+        const operator = yield* openOperator(host, userId, task.workspaceId);
+
+        const desk =
+          (yield* host.turnMessage(
+            operator.admitted,
+            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            {},
+          )).text ?? "";
+        const named = (agent: { readonly personaName: string | null }) =>
+          desk.includes(`[@${agent.personaName ?? ""}]`);
+        assert.ok(desk.includes("and 1 more"), desk);
+        assert.ok(own.slice(1).every(named), desk);
+        assert.ok(!named(own[0] ?? teammates), "the oldest is the one counted");
+        assert.ok(!named(teammates), "a teammate's agent is no row of the desk");
+      }),
+  );
+
+  it.effect(
     "the call's words open the first of a run of spoken turns as its message, a later spoken turn says in a line they still hold, and a typed turn after them says they no longer do",
     () =>
       Effect.gen(function* () {

@@ -39,7 +39,7 @@ import { type StartAsk, startCodingAgent } from "./start.js";
  * is still refused, as is an operator's that is not blank or names a
  * repository or a task. An ensure that made an operator opens its session
  * once, on its opening turn, and one that found it opens none; an eve that
- * would not take the opening leaves no operator behind. eve writes down
+ * would not take the opening still leaves the operator standing. eve writes down
  * every session opened, the catalog is fixed, and the store PGlite.
  * Synthetic accounts throughout.
  */
@@ -278,22 +278,26 @@ it.layer(getTestDB())("the member's operator", (it) => {
   );
 
   it.effect(
-    "an eve that will not take the opening leaves no operator, so the next ensure makes one and opens it",
+    "an eve that will not take the opening still leaves an operator standing, a Reset's fresh one among them, so a member is never left with none",
     () =>
       Effect.gen(function* () {
         const member = yield* openMember;
         const workspaceId = yield* openWorkspace(member);
         const refusing = recordingEve(true);
 
-        const refused = yield* Effect.result(
-          ensure(member, workspaceId, false, nothingToStop, refusing.eve),
-        );
-        assert.ok(Result.isFailure(refused));
-        assert.deepEqual(yield* operatorsOf(member, workspaceId), []);
-
-        const made = yield* ensure(member, workspaceId);
+        const made = yield* ensure(member, workspaceId, false, nothingToStop, refusing.eve);
         assert.equal(made.created, true);
-        assert.equal(EVE.openedOver(made.agent.conversationId).length, 1);
+        assert.equal(refusing.openedOver(made.agent.conversationId).length, 1);
+        const reset = yield* ensure(member, workspaceId, true, nothingToStop, refusing.eve);
+
+        const standing = (yield* operatorsOf(member, workspaceId)).filter(
+          (operator) => operator.archivedAt === null,
+        );
+        assert.deepEqual(
+          standing.map((operator) => operator.id),
+          [reset.agent.id],
+        );
+        assert.equal(reset.retired?.id, made.agent.id);
       }),
   );
 

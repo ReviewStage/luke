@@ -16,9 +16,9 @@
  * kept, and ensures a fresh one. The member's choice is checked against the
  * catalog before anything is archived, so a Reset the catalog would refuse
  * leaves the standing operator standing. An operator the ensure made runs
- * one opening turn as it is made (`start.ts`), in which it reads its
- * member's open work and says what stands; one the ensure found runs none,
- * so a repeat ensure opens nothing.
+ * one opening turn as it is made (`openedOnItsOpening`), in which it reads
+ * its member's open work and says what stands; one the ensure found runs
+ * none, so a repeat ensure opens nothing.
  *
  * Only a member of the workspace who turned the operator experiment on
  * (`EXPERIMENT.OPERATOR`) ensures one; anyone else is answered as though
@@ -42,7 +42,14 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import type { AgentSessions, EveTypedTurn } from "../brain-host/eve-sessions.js";
+import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import {
+  type AgentSessions,
+  describeUnreachable,
+  EVE_SEND_OUTCOME,
+  type EveTypedTurn,
+} from "../brain-host/eve-sessions.js";
+import { OPERATOR_OPENING } from "./instructions.js";
 import {
   acceptedAgentChoice,
   type CodingAgentStart,
@@ -61,6 +68,46 @@ export interface OperatorEnsure<R> {
 export interface OperatorEnsured extends CodingAgentStart {
   readonly retired: CodingAgent | undefined;
 }
+
+/**
+ * The operator's session opened on its opening turn (`instructions.ts`'s
+ * `OPERATOR_OPENING`), in which it reads its member's open work and says
+ * what stands. Note that an eve that does not take it is logged and leaves
+ * the operator standing, rather than failing the ensure, because a Reset has
+ * archived the operator before and a member must never be left with none;
+ * an operator never opened opens on its member's first words, as any blank
+ * agent does (`steer.ts`).
+ */
+const openedOnItsOpening = (
+  eve: Effect.Effect<
+    AgentSessions<EveTypedTurn>,
+    HostedRefusal,
+    HttpClient.HttpClient | DatabaseServices
+  >,
+  operator: CodingAgent,
+) =>
+  Effect.gen(function* () {
+    const sessions = yield* eve;
+    const opened = yield* sessions.open({
+      conversationId: operator.conversationId,
+      turn: BRAIN_HOST_TURN.TYPED,
+      message: OPERATOR_OPENING,
+    });
+    if (opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+      yield* Effect.logWarning(
+        `eve did not take operator ${operator.id}'s opening: ${opened.outcome}`,
+      );
+    }
+  }).pipe(
+    Effect.catchTag("EveUnreachable", (failure) =>
+      Effect.logWarning(
+        `eve could not be reached to open operator ${operator.id}: ${describeUnreachable(failure)}`,
+      ),
+    ),
+    Effect.catch((refusal) =>
+      Effect.logWarning(`eve was not composed to open operator ${operator.id}: ${refusal.error}`),
+    ),
+  );
 
 /**
  * The member's operator in the workspace, as above: the one standing, or
@@ -108,5 +155,7 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
     idempotencyKey: randomUUID(),
     choice,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
+  // Only the ensure that made the operator opens it, so a repeat ensure runs no second opening.
+  if (started.created) yield* openedOnItsOpening(eve, started.agent);
   return { ...started, retired };
 });

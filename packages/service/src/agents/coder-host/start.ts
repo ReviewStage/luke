@@ -99,7 +99,6 @@ import {
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
-import { OPERATOR_OPENING } from "./instructions.js";
 import {
   type FittedReplay,
   replayOf,
@@ -196,11 +195,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * with no prompt or note, and no other Start is an operator's. Every other
  * Start with no task still names a repository and a prompt. The store
  * answers the operator already standing where there is one
- * (`createCodingAgent`), so a Start of it is an ensure. Blank as it is, an
- * operator the Start made opens its session on its opening turn
- * (`instructions.ts`'s `OPERATOR_OPENING`), in which it reads its member's
- * open work and says what stands; one the Start found opens nothing, so a
- * repeat ensure runs no second opening.
+ * (`createCodingAgent`), so a Start of it is an ensure.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An agent started is minted as a member
  * of its workspace's chat in the order agents were started, so it answers
@@ -1023,10 +1018,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (!created) return { agent, created };
   // The session opens with the plan or the prompt as its first message; an eve that did not take
   // it leaves no agent behind, so the retry under the same key starts afresh. A blank agent opens
-  // none: its first words open its session as they reach it (`steer.ts`). The member's operator,
-  // blank as it is, opens on its opening, once, as it is made.
-  const opening = ask.kind === CODING_AGENT_KIND.OPERATOR ? OPERATOR_OPENING : null;
-  const handed = brief.prompt ?? brief.planSnapshot ?? opening;
+  // none: its first words open its session as they reach it (`steer.ts`).
+  const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
     const sessions = yield* eve;
     const opened = yield* sessions

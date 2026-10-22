@@ -10,7 +10,8 @@
  * provider's cached prefix. It holds the member's own agents of the
  * workspace still running and failed, the pull requests they opened that
  * wait on the member, and the asks waiting in the member's inbox, each
- * section at most `OPERATOR_DESK.ROWS` rows with how many more stand; no
+ * section newest first and at most `OPERATOR_DESK.ROWS` rows with how many
+ * more stand; no
  * row names a time, so the same work reads as the same desk. A section is a
  * heading and its rows (`DeskSection`), so another kind of row joins the
  * desk as one more section (`readDeskSections`).
@@ -147,16 +148,21 @@ export function deskText(sections: readonly DeskSection[]): string {
 /** The member's own agents of the workspace standing, the operator left out, each with what it reads as now. */
 const memberAgentsOf = (operator: CodingAgent) =>
   Effect.gen(function* () {
+    // The member's own are read before the bound, so a busy workspace's other agents crowd none out.
     const listed = yield* listWorkspaceCodingAgents(operator.userId, operator.organizationId, {
+      ownOnly: true,
       limit: OPERATOR_DESK.AGENTS_READ,
     });
-    const own = listed.filter(
-      (agent) => agent.userId === operator.userId && agent.id !== operator.id,
-    );
+    const own = listed.filter((agent) => agent.id !== operator.id);
     // What each published is read beside it, as its tab reads it: the pull request GitHub last answered.
-    const agents = yield* listPublishedCodingAgentsById(
+    const read = yield* listPublishedCodingAgentsById(
       operator.userId,
       own.map((agent) => agent.id),
+    );
+    // That read answers oldest first, so the list's own order, newest first, is kept: a section shows its newest.
+    const order = new Map(own.map((agent, index) => [agent.id, index]));
+    const agents = [...read].sort(
+      (left, right) => (order.get(left.agent.id) ?? 0) - (order.get(right.agent.id) ?? 0),
     );
     const ids = agents.map(({ agent }) => agent.conversationId);
     const turns = yield* latestTurnsOfReached(ids);
