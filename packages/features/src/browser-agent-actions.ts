@@ -15,12 +15,16 @@
  * words a model can act on; what ran before it stands, and the rest is
  * counted as skipped. Every text a result carries is cut to its cap, and a
  * screenshot is a JPEG no longer than {@link BROWSER_SCREENSHOT}'s side and
- * no larger than its bytes.
+ * no larger than its bytes: the copy the model is shown. A run asked to keep
+ * its screenshots answers each with a second copy beside it, the page at its
+ * own size and good quality ({@link BROWSER_KEPT_SCREENSHOT}), which the
+ * caller keeps for the transcript and never shows the model.
  */
 
 import { describeWire } from "@luke/wire/effect";
 import { Schema } from "effect";
 import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "./browser-acts.js";
+import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 
 /** The actions an agent takes on a browser's tabs. */
 export const BROWSER_AGENT_ACTION = {
@@ -77,19 +81,47 @@ export const BROWSER_AGENT_LIMITS = {
   POINT_MAX_PIXELS: 100_000,
 } as const;
 
-/** How a screenshot is made: a JPEG of the visible page downscaled to a longest side, at the first quality that fits the byte cap. */
+/**
+ * How the model's copy of a screenshot is made: a JPEG of the visible page
+ * downscaled to a longest side, at the first quality that fits the byte cap.
+ */
 export const BROWSER_SCREENSHOT = {
   MIME: "image/jpeg",
   /** The longest side of the picture, in pixels; a smaller page is never scaled up. */
   LONGEST_SIDE: 1_280,
   /** The JPEG qualities tried in order, until one fits. */
   QUALITIES: [70, 50, 30],
-  /** The most bytes the JPEG may hold: its base64 fits a 256 KB body with room to spare. */
+  /**
+   * The most bytes the JPEG may hold. Note that this bounds what one picture
+   * costs the model's context and each step's request, where a call may carry
+   * ten of them and every later step of the turn carries them again; the
+   * transcript keeps its own copy at full quality (`BROWSER_KEPT_SCREENSHOT`).
+   */
   MAX_BYTES: 180_000,
 } as const;
 
 /** The longest base64 a screenshot's bytes are carried as. */
 const SCREENSHOT_MAX_BASE64 = Math.ceil(BROWSER_SCREENSHOT.MAX_BYTES / 3) * 4;
+
+/**
+ * How the transcript's copy of a screenshot is made: the visible page at its
+ * own pixels, up to a longest side, as a JPEG at the first quality or a PNG,
+ * whichever is smaller, trying the lower qualities only where neither fits
+ * the byte cap, which is the cap on an image a conversation's message
+ * carries; none where nothing fits.
+ */
+export const BROWSER_KEPT_SCREENSHOT = {
+  JPEG: CODING_AGENT_ATTACHMENT_TYPE.JPEG,
+  PNG: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+  /** The longest side, in pixels: a page drawn at twice its CSS size fits whole; a smaller page is never scaled up. */
+  LONGEST_SIDE: 2_560,
+  /** The JPEG qualities tried in order, the PNG beside each, until the smaller of the two fits. */
+  QUALITIES: [85, 70, 50],
+  MAX_BYTES: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+} as const;
+
+/** The longest base64 a kept screenshot's bytes are carried as. */
+const KEPT_SCREENSHOT_MAX_BASE64 = Math.ceil(BROWSER_KEPT_SCREENSHOT.MAX_BYTES / 3) * 4;
 
 /** The keys `key` presses by name, with the code, Windows key code, and text a browser's own key event carries for each. */
 export const BROWSER_KEYS = {
@@ -419,11 +451,27 @@ const browserScreenshotSchema = Schema.Struct({
 /** @public */
 export type BrowserScreenshot = typeof browserScreenshotSchema.Type;
 
+/** A screenshot's copy for the transcript: a JPEG's or a PNG's base64 and its size in pixels. */
+const browserKeptScreenshotSchema = Schema.Struct({
+  mime: Schema.Literals([BROWSER_KEPT_SCREENSHOT.JPEG, BROWSER_KEPT_SCREENSHOT.PNG]),
+  data: Schema.String.check(Schema.isMaxLength(KEPT_SCREENSHOT_MAX_BASE64)),
+  width: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: BROWSER_KEPT_SCREENSHOT.LONGEST_SIDE }),
+  ),
+  height: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: BROWSER_KEPT_SCREENSHOT.LONGEST_SIDE }),
+  ),
+});
+
+export type BrowserKeptScreenshot = typeof browserKeptScreenshotSchema.Type;
+
 const screenshotted = Schema.Struct({
   action: Schema.Literal(BROWSER_AGENT_ACTION.SCREENSHOT),
   status: done,
   tab: tabId,
   image: browserScreenshotSchema,
+  /** The transcript's copy, where the run was asked to keep its screenshots and one fit its cap. */
+  kept: Schema.optionalKey(browserKeptScreenshotSchema),
 });
 
 const snapshotted = Schema.Struct({

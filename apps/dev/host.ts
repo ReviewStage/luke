@@ -10,6 +10,7 @@ import {
   type BrowserToolResult,
   browserModelOutput,
   browserNotRun,
+  browserTranscriptOf,
   runBrowserTool,
 } from "@luke/service/agents/browser/browser-tool";
 import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
@@ -577,7 +578,8 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
  * the root's sandbox, which a worker shares, with its tabs kept under the
  * agent's own conversation, which a worker's admission names too. A session
  * the host does not admit runs nothing. Its screenshots reach the model as
- * images and the transcript keeps the rest.
+ * small images, and the transcript keeps each at full size beside the
+ * transcript the call is written to, a worker's its own.
  */
 export function browserFor(admit: CoderHost["admit"]) {
   return defineTool({
@@ -590,9 +592,12 @@ export function browserFor(admit: CoderHost["admit"]) {
         Effect.gen(function* () {
           const admitted = yield* admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return browserNotRun(admitted.failure);
+          const { target } = admitted.success;
           const call = {
             browserSession: browserSessionOf(ctx.session),
-            conversationId: admitted.success.target.conversationId,
+            conversationId: target.conversationId,
+            // A worker's screenshots are kept beside its own transcript, where its window reads them.
+            transcript: browserTranscriptOf(target, ctx.session.parent?.callId),
             // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
             openSandbox: () => ctx.getSandbox(),
           };

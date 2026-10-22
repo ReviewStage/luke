@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
+  BROWSER_KEPT_SCREENSHOT,
   BROWSER_SCREENSHOT,
   BROWSER_STEP_STATUS,
   type BrowserAgentAction,
@@ -81,16 +82,26 @@ function browser(
   }));
 }
 
-/** Runs the actions on a session with the peer's browser, as the tool will, with the cursor given. */
-function run(peer: FakeCdpPeer, actions: readonly BrowserAgentAction[], cursor?: BrowserCursor) {
+/** Runs the actions on a session with the peer's browser, as the tool will, with the cursor given, keeping each screenshot's transcript copy where `keep` asks. */
+function run(
+  peer: FakeCdpPeer,
+  actions: readonly BrowserAgentAction[],
+  cursor?: BrowserCursor,
+  keep = false,
+) {
   const { api } = fakeSandboxApi({ status: "running", sessionId: SESSION });
   const service = agentBrowserOver(api, fakeBridgePty(peer));
+  const options = {
+    ...(cursor === undefined ? undefined : { cursor }),
+    ...(keep ? { keepScreenshots: true } : undefined),
+  };
   return Effect.scoped(
-    Effect.flatMap(service.connect(SESSION), (cdp) =>
-      runBrowserActions(cdp, actions, cursor === undefined ? {} : { cursor }),
-    ),
+    Effect.flatMap(service.connect(SESSION), (cdp) => runBrowserActions(cdp, actions, options)),
   );
 }
+
+/** Base64 that spells `bytes` bytes, as a capture of that size answers. */
+const base64Of = (bytes: number) => "A".repeat(Math.ceil(bytes / 3) * 4);
 
 /** A cursor that writes each move it hears into the browser's own record, so the order of moves and commands reads as one. */
 function cursorInto(sent: FakeCdpCommand[], watched: boolean) {
@@ -570,6 +581,120 @@ it.effect("a screenshot that never fits the byte cap fails and says what to do i
 
     assert.match(failureOf(ran.steps[0]) ?? "", /take a snapshot instead$/u);
   }),
+);
+
+it.effect(
+  "a screenshot kept for the transcript is the page at its own pixels, the smaller of a good JPEG and a PNG, beside the model's bounded copy",
+  () =>
+    Effect.gen(function* () {
+      const kept = base64Of(600_000);
+      const captures: unknown[] = [];
+      const { peer } = yield* browser((command) => {
+        if (command.method === "Page.getLayoutMetrics") {
+          return {
+            result: {
+              cssLayoutViewport: { clientWidth: 1600, clientHeight: 1000 },
+              cssVisualViewport: { pageX: 0, pageY: 0, clientWidth: 1600, clientHeight: 1000 },
+            },
+          };
+        }
+        if (command.method === "Runtime.evaluate") return { result: { result: { value: 2 } } };
+        if (command.method !== "Page.captureScreenshot") return undefined;
+        const { format, quality, clip } = command.params;
+        captures.push({ format, quality, clip });
+        if (format === "png") return { result: { data: base64Of(900_000) } };
+        return { result: { data: quality === 85 ? kept : "/9j/AAAA" } };
+      });
+
+      const ran = yield* run(
+        peer,
+        [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "page-blank" }],
+        undefined,
+        true,
+      );
+
+      assert.deepEqual(ran.steps, [
+        {
+          action: "screenshot",
+          status: "done",
+          tab: "page-blank",
+          image: { mime: "image/jpeg", data: "/9j/AAAA", width: 1280, height: 800 },
+          kept: { mime: "image/jpeg", data: kept, width: 2560, height: 1600 },
+        },
+      ]);
+      const full = { x: 0, y: 0, width: 1600, height: 1000, scale: 0.8 };
+      assert.deepEqual(captures, [
+        { format: "jpeg", quality: 70, clip: { ...full, scale: 0.4 } },
+        { format: "png", quality: undefined, clip: full },
+        { format: "jpeg", quality: 85, clip: full },
+      ]);
+    }),
+);
+
+it.effect("a kept copy is a PNG where the PNG is the smaller", () =>
+  Effect.gen(function* () {
+    const png = base64Of(200_000);
+    const { peer } = yield* browser((command) => {
+      if (command.method === "Runtime.evaluate") return { result: { result: { value: 1 } } };
+      if (command.method !== "Page.captureScreenshot") return undefined;
+      if (command.params.format === "png") return { result: { data: png } };
+      return { result: { data: command.params.quality === 85 ? base64Of(400_000) : "/9j/AAAA" } };
+    });
+
+    const ran = yield* run(
+      peer,
+      [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "page-blank" }],
+      undefined,
+      true,
+    );
+
+    const [step] = ran.steps;
+    assert.ok(step?.action === "screenshot" && step.status === "done");
+    assert.deepEqual(step.kept, { mime: "image/png", data: png, width: 1280, height: 800 });
+  }),
+);
+
+it.effect(
+  "a kept copy holds to its cap, trying lower qualities, and is left out where nothing fits while the model's copy stands",
+  () =>
+    Effect.gen(function* () {
+      const over = base64Of(BROWSER_KEPT_SCREENSHOT.MAX_BYTES + 3);
+      const fits = base64Of(BROWSER_KEPT_SCREENSHOT.MAX_BYTES);
+      let fitAt = 50;
+      let shown = false;
+      const kept: unknown[] = [];
+      const { peer } = yield* browser((command) => {
+        if (command.method === "Runtime.evaluate") return { result: { result: { value: 1 } } };
+        if (command.method !== "Page.captureScreenshot") return undefined;
+        // Note that the model's copy is asked for first, so the first JPEG is its own.
+        if (command.params.format === "jpeg" && !shown) {
+          shown = true;
+          return { result: { data: "/9j/AAAA" } };
+        }
+        kept.push(command.params.quality ?? command.params.format);
+        return { result: { data: command.params.quality === fitAt ? fits : over } };
+      });
+      const screenshot = [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "page-blank" }] as const;
+
+      const lowered = yield* run(peer, screenshot, undefined, true);
+      const keptAt = kept.splice(0);
+      shown = false;
+      fitAt = 0;
+      const unkept = yield* run(peer, screenshot, undefined, true);
+
+      const [low] = lowered.steps;
+      assert.ok(low?.action === "screenshot" && low.status === "done");
+      assert.equal(low.kept?.data, fits);
+      assert.deepEqual(keptAt, ["png", 85, 70, 50]);
+      assert.deepEqual(unkept.steps, [
+        {
+          action: "screenshot",
+          status: "done",
+          tab: "page-blank",
+          image: { mime: "image/jpeg", data: "/9j/AAAA", width: 1280, height: 800 },
+        },
+      ]);
+    }),
 );
 
 /** A console call on the session given, at the time given. */

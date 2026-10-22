@@ -1440,12 +1440,19 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "an agent's browser call keeps its steps and the tabs it acted on in the transcript, and never a screenshot's picture",
+    "an agent's browser call keeps its steps, the tabs it acted on, and each screenshot's kept picture by id in the transcript, and never the model's base64",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
         const picture = "/9j/4AAQSkZJRgABAQAAAQABAAD";
+        const kept = {
+          id: "0b6f3c1e-7d1a-4c55-9e0b-1f2a3b4c5d6e",
+          mediaType: "image/jpeg",
+          width: 1280,
+          height: 800,
+          byteCount: 241_000,
+        };
         const input = { actions: [{ action: "screenshot", tab: "tab-1" }] };
         const answer = {
           status: BROWSER_TOOL_STATUS.RAN,
@@ -1455,6 +1462,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
               status: "done",
               tab: "tab-1",
               image: { mime: "image/jpeg", data: picture, width: 1280, height: 800 },
+              picture: kept,
             },
           ],
           skipped: 0,
@@ -1502,6 +1510,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
               status: "done",
               tab: "tab-1",
               image: { mime: "image/jpeg", width: 1280, height: 800 },
+              picture: kept,
             },
           ],
         });

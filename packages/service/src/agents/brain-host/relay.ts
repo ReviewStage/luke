@@ -662,10 +662,11 @@ function heldCallName(state: RelayState, eveTurnId: string, callId: string): str
 /**
  * A look's result as the conversation keeps it, a look at the board or at
  * one of the plan's pictures without the image, and a browser call's
- * without its screenshots; nothing for any other call. Note that a look's
- * image went to the model once and is not kept, because it is no record of
- * the plan, and that a page's screenshot is kept nowhere (the cloud
- * browser's line in `AGENTS.md`).
+ * without the model's copy of each screenshot; nothing for any other call.
+ * Note that a look's image went to the model once and is not kept, because
+ * it is no record of the plan, and that a browser call's screenshots are
+ * named by the full-size copy the tool already kept beside the transcript
+ * (`browser-tool.ts`, the cloud browser's line in `AGENTS.md`).
  */
 function storedLook(toolName: string, output: UnparsedWireValue): UnparsedWireValue | undefined {
   switch (toolName) {

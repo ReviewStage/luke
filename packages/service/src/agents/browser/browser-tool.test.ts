@@ -7,6 +7,7 @@ import {
   takeOverBrowserTab,
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
@@ -17,7 +18,7 @@ import { BROWSER_AGENT_ACTION, BROWSER_STEP_STATUS } from "@luke/features/browse
 import { BROWSER_CURSOR_BEAT } from "@luke/features/browser-agent-cdp";
 import type { PageTarget } from "@luke/features/browser-cdp";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Clock, Duration, Effect, Fiber, Layer } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {
   agentBrowserTestLayer,
@@ -35,6 +36,7 @@ import {
   BROWSER_TOOL_STATUS,
   type BrowserToolResult,
   browserModelOutput,
+  browserTranscriptOf,
   runBrowserTool,
   storedBrowserOutput,
 } from "./browser-tool.js";
@@ -43,9 +45,10 @@ import {
  * The `browser` tool over a fake Chromium behind the real CDP session and
  * the real tab store on a migrated database: a call runs its actions and
  * keeps the agent's tabs in step with the browser, an action on a tab a
- * member drives is refused with nothing after it run, a screenshot reaches
- * the model and never the stored conversation, and a browser that cannot be
- * reached answers why. Synthetic accounts and pages throughout.
+ * member drives is refused with nothing after it run, a screenshot's
+ * bounded copy reaches the model while its full-size copy is kept beside
+ * the transcript and named by id, never as base64, and a browser that cannot
+ * be reached answers why. Synthetic accounts and pages throughout.
  */
 
 const SESSION = "wrun_browser_tool_fixture";
@@ -56,6 +59,52 @@ const LAYOUT = {
 };
 
 const JPEG = "/9j/AAAA";
+
+/** A synthetic JPEG whose frame header states 1280 by 800, as the transcript's copy of a page answers; no real picture. */
+const KEPT_JPEG = Buffer.from([
+  0xff,
+  0xd8,
+  0xff,
+  0xc0,
+  0x00,
+  0x11,
+  0x08,
+  0x03,
+  0x20,
+  0x05,
+  0x00,
+  0x03,
+  ...new Array(64).fill(7),
+]).toString("base64");
+
+/** A synthetic PNG whose header states the same size, larger than the JPEG, so the JPEG is kept. */
+const KEPT_PNG = Buffer.from([
+  0x89,
+  0x50,
+  0x4e,
+  0x47,
+  0x0d,
+  0x0a,
+  0x1a,
+  0x0a,
+  0x00,
+  0x00,
+  0x00,
+  0x0d,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x00,
+  0x00,
+  0x03,
+  0x20,
+  ...new Array(256).fill(9),
+]).toString("base64");
 
 /** The commands a page answers with nothing much, as Chrome does once they are done. */
 const PLAIN = new Set([
@@ -152,7 +201,8 @@ function browser(
               }
             : { result: { result: { value: 1 } } };
         case "Page.captureScreenshot":
-          return { result: { data: JPEG } };
+          if (params.format === "png") return { result: { data: KEPT_PNG } };
+          return { result: { data: params.quality === 85 ? KEPT_JPEG : JPEG } };
         default:
           return PLAIN.has(command.method) ? { result: {} } : undefined;
       }
@@ -172,6 +222,9 @@ function runningBrowser(peer: FakeCdpPeer) {
   return Effect.as(Effect.provide(started, layer), layer);
 }
 
+/** The account each conversation the suite opened belongs to, so a call names the transcript it is written to. */
+const owners = new Map<string, string>();
+
 /** A new account and a conversation of its own, the one an agent's tabs are kept under. */
 const openConversation = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
@@ -185,13 +238,15 @@ const openConversation = Effect.gen(function* () {
       .returning({ id: conversations.id }),
   );
   assert.ok(row);
+  owners.set(row.id, id);
   return { userId: id, conversationId: row.id };
 });
 
 /** One call of the tool, as an agent's root makes it, on the browser given. */
 function call(conversationId: string, input: unknown, browserLayer: Layer.Layer<AgentBrowser>) {
+  const transcript = { userId: owners.get(conversationId) ?? "", conversationId };
   return runBrowserTool(
-    { browserSession: SESSION, conversationId, openSandbox: async () => undefined },
+    { browserSession: SESSION, conversationId, transcript, openSandbox: async () => undefined },
     unparsedWire(input as WireBoundaryInput),
   ).pipe(Effect.provide(browserLayer));
 }
@@ -705,7 +760,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
   );
 
   it.effect(
-    "a screenshot reaches the model as an image and is left out of the stored conversation",
+    "a screenshot keeps the page at full size beside the transcript, the model sees its bounded copy, and the stored conversation names the kept picture without its base64",
     () =>
       Effect.gen(function* () {
         const { conversationId } = yield* openConversation;
@@ -713,25 +768,91 @@ it.layer(getTestDB())("the browser tool", (it) => {
           { targetId: "tab-1", url: "https://shop.test/", title: "Shop" },
         ]);
 
-        const result = yield* call(
-          conversationId,
-          { actions: [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "tab-1" }] },
-          agentBrowserTestLayer(peer, SESSION),
+        const result = ran(
+          yield* call(
+            conversationId,
+            { actions: [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "tab-1" }] },
+            agentBrowserTestLayer(peer, SESSION),
+          ),
         );
+        const [step] = result.steps;
+        assert.ok(step !== undefined && "picture" in step);
+        const kept = yield* readConversationPicture(conversationId, step.picture.id);
         const output = unparsedWire(result);
         const shown = browserModelOutput(output);
-        const stored = JSON.stringify(storedBrowserOutput(output));
+        const stored = storedBrowserOutput(output);
 
-        assert.equal(shown.type, "content");
+        assert.deepEqual(
+          Option.map(kept, (picture) => [
+            picture.contentType,
+            Buffer.from(picture.bytes).toString("base64"),
+          ]),
+          Option.some(["image/jpeg", KEPT_JPEG]),
+        );
+        assert.deepEqual(
+          { ...step.picture, id: "" },
+          { id: "", mediaType: "image/jpeg", width: 1280, height: 800, byteCount: 76 },
+        );
         assert.ok(shown.type === "content");
         assert.deepEqual(shown.value.at(-1), {
           type: "file",
           data: { type: "data", data: JPEG },
           mediaType: "image/jpeg",
         });
+        assert.ok(!JSON.stringify(shown.value).includes(KEPT_JPEG));
         assert.ok(!JSON.stringify(shown.value.slice(0, -1)).includes(JPEG));
-        assert.ok(!stored.includes(JPEG));
-        assert.ok(stored.includes('"action":"screenshot"'));
+        assert.ok(!JSON.stringify(shown.value).includes(step.picture.id));
+        assert.deepEqual(stored, {
+          ...result,
+          steps: [
+            {
+              action: "screenshot",
+              status: "done",
+              tab: "tab-1",
+              image: { mime: "image/jpeg", width: 1280, height: 800 },
+              picture: step.picture,
+            },
+          ],
+        });
+      }),
+  );
+
+  it.effect(
+    "a worker's screenshot is kept beside its own transcript, the child of the call that started it",
+    () =>
+      Effect.gen(function* () {
+        const { userId, conversationId } = yield* openConversation;
+        const transcript = browserTranscriptOf({ userId, conversationId }, "call-worker");
+        yield* Database.use((db) =>
+          db.insert(conversations).values({
+            id: transcript.conversationId,
+            userId,
+            kind: CONVERSATION_KIND.CODING_AGENT,
+            parentConversationId: conversationId,
+          }),
+        );
+        const { peer } = yield* browser([
+          { targetId: "tab-1", url: "https://shop.test/", title: "Shop" },
+        ]);
+
+        const result = ran(
+          yield* runBrowserTool(
+            {
+              browserSession: SESSION,
+              conversationId,
+              transcript,
+              openSandbox: async () => undefined,
+            },
+            unparsedWire({ actions: [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "tab-1" }] }),
+          ).pipe(Effect.provide(agentBrowserTestLayer(peer, SESSION))),
+        );
+        const [step] = result.steps;
+        assert.ok(step !== undefined && "picture" in step);
+
+        assert.ok(
+          Option.isSome(yield* readConversationPicture(transcript.conversationId, step.picture.id)),
+        );
+        assert.ok(Option.isNone(yield* readConversationPicture(conversationId, step.picture.id)));
       }),
   );
 
@@ -739,7 +860,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
     "an agent's first call opens its sandbox before it looks for its browser there, and a sandbox that would not open answers why",
     () =>
       Effect.gen(function* () {
-        const { conversationId } = yield* openConversation;
+        const { userId, conversationId } = yield* openConversation;
         const { peer } = yield* browser();
         // No sandbox stands under the session until its door is opened, as before an agent's first sandbox call.
         let opened = false;
@@ -762,6 +883,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
           {
             browserSession: SESSION,
             conversationId,
+            transcript: { userId, conversationId },
             openSandbox: async () => {
               opened = true;
             },
@@ -772,6 +894,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
           {
             browserSession: SESSION,
             conversationId,
+            transcript: { userId, conversationId },
             openSandbox: async () => Promise.reject(new Error("Vercel refused")),
           },
           input,

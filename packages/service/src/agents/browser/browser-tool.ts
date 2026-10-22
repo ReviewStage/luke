@@ -31,11 +31,16 @@
  * and its kind are no page content and are never logged.
  *
  * A browser that cannot be reached answers `not-run` and why, never a throw.
- * A screenshot reaches the model as an image (`browserModelOutput`) and is
- * left out of the stored conversation (`storedBrowserOutput`), as
- * `look_at_picture`'s picture is (`../../tasks/picture-look.ts`). Nothing a
- * page holds is logged or traced here: a failure to keep the store is logged
- * by its kind alone.
+ * A screenshot is taken twice over: the model's copy, small
+ * (`BROWSER_SCREENSHOT`), reaches the model as an image
+ * (`browserModelOutput`) and its base64 is left out of the stored
+ * conversation (`storedBrowserOutput`); the transcript's copy, the page at
+ * its own size and good quality (`BROWSER_KEPT_SCREENSHOT`), is kept beside
+ * the transcript the call is written to as `show_image`'s pictures are
+ * (`@luke/database/models/conversation-pictures`), deleted with that
+ * conversation, and the step names it by id (`picture`), or says why it was
+ * not kept (`omitted`). Nothing a page holds is logged or traced here: a
+ * failure to keep the store is logged by its kind alone.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -47,23 +52,33 @@ import {
   pointBrowserTab,
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
+import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { childConversationId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
+import type { TaskStoreFailure } from "@luke/database/models/task-store";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
   BROWSER_STEP_STATUS,
   type BrowserAgentAction,
-  type BrowserAgentRun,
   type BrowserAgentStep,
+  type BrowserKeptScreenshot,
   browserAgentActionsSchema,
   cutBrowserText,
 } from "@luke/features/browser-agent-actions";
 import { type BrowserCursor, runBrowserActions } from "@luke/features/browser-agent-cdp";
 import type { CdpSession, PageTarget } from "@luke/features/browser-cdp";
+import {
+  type KeptPicture,
+  PICTURE_OMISSION,
+  type PictureOmission,
+} from "@luke/features/conversation-picture-wire";
+import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Result, Schema } from "effect";
+import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
@@ -109,12 +124,31 @@ export const BROWSER_TOOL_STATUS = {
 /** A tab as a result names it: its id, address, and title. */
 type ShownTab = { readonly tab: string; readonly url: string; readonly title: string };
 
+/** A screenshot step as the runner answers it, the transcript's copy beside the model's where it fit. */
+type ScreenshotStep = Extract<
+  BrowserAgentStep,
+  { readonly action: typeof BROWSER_AGENT_ACTION.SCREENSHOT; readonly status: "done" }
+>;
+
+/** What the transcript kept of a screenshot: the picture by id, or why it was not kept and its size. */
+type KeptNote =
+  | { readonly picture: { readonly [Key in keyof KeptPicture]: KeptPicture[Key] } }
+  | { readonly omitted: PictureOmission; readonly byteCount: number };
+
+/** A step as the tool answers it: a screenshot's transcript copy replaced by what was kept of it, every other step as it ran. */
+export type BrowserToolStep =
+  | Exclude<BrowserAgentStep, ScreenshotStep>
+  | (Omit<ScreenshotStep, "kept"> & (KeptNote | Record<never, never>));
+
 // A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
 export type BrowserToolResult =
-  | ({ readonly status: typeof BROWSER_TOOL_STATUS.RAN } & BrowserAgentRun & {
-        /** The tabs the call acted on and still open, as they stand once it ran. */
-        readonly tabs: readonly ShownTab[];
-      })
+  | {
+      readonly status: typeof BROWSER_TOOL_STATUS.RAN;
+      readonly steps: readonly BrowserToolStep[];
+      readonly skipped: number;
+      /** The tabs the call acted on and still open, as they stand once it ran. */
+      readonly tabs: readonly ShownTab[];
+    }
   | { readonly status: typeof BROWSER_TOOL_STATUS.NOT_RUN; readonly reason: string };
 
 /** The address of a page that holds nothing: Chromium's own first page, which a call never sees. */
@@ -141,14 +175,33 @@ export const BROWSER_TOOL_REFUSAL = {
   NO_SANDBOX: "Not run: your sandbox could not be opened. The call may be made again.",
 } as const;
 
-/** What a call runs under: the session whose sandbox its browser is in, and the conversation its tabs belong to. */
+/** What a call runs under: the session whose sandbox its browser is in, the conversation its tabs belong to, and the transcript its screenshots are kept beside. */
 export interface BrowserCall {
   /** The eve session whose sandbox the browser runs in: a root's own, a worker's root's (`browserSessionOf`). */
   readonly browserSession: string;
   /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for Luke, a worker's parent's. */
   readonly conversationId: string;
+  /** The transcript the call is written to, which keeps its screenshots: an agent's own, a worker's own child (`browserTranscriptOf`). */
+  readonly transcript: ConversationTarget;
   /** Opens the sandbox the browser runs in, as eve opens it for any tool that needs it, a worker's its parent's; one already open is answered as it stands. */
   readonly openSandbox: () => PromiseLike<unknown>;
+}
+
+/**
+ * The transcript a call is written to, from the conversation its session
+ * was admitted to: that one for an agent's own call, and for a worker's,
+ * the child its turns are recorded under, which the delegation call names,
+ * so its screenshots are read where its transcript is.
+ */
+export function browserTranscriptOf(
+  admitted: ConversationTarget,
+  parentCallId: string | undefined,
+): ConversationTarget {
+  if (parentCallId === undefined) return admitted;
+  return {
+    userId: admitted.userId,
+    conversationId: childConversationId(admitted.conversationId, parentCallId),
+  };
 }
 
 /** A call that ran nothing, and why. */
@@ -400,7 +453,7 @@ function runOn(
 ) {
   return Effect.gen(function* () {
     const cursor = yield* storedCursor(call.conversationId, now);
-    const run = yield* runBrowserActions(cdp, actions, { cursor });
+    const run = yield* runBrowserActions(cdp, actions, { cursor, keepScreenshots: true });
     yield* settleTitles(cdp, run.steps);
     const pages = yield* Effect.result(cdp.pages);
     const held = Result.isSuccess(pages) ? pages.success : [];
@@ -416,6 +469,56 @@ function runOn(
       return page === undefined ? [] : [shownTab(page)];
     });
     return { run: { ...run, steps: withSettledTitles(run.steps, byId) }, tabs };
+  });
+}
+
+/**
+ * What the transcript keeps of one screenshot's copy: the picture, sniffed
+ * and measured from its own bytes, kept beside the transcript; why not
+ * where its bytes are no picture or the transcript has no room left.
+ */
+function keepScreenshot(
+  transcript: ConversationTarget,
+  kept: BrowserKeptScreenshot,
+): Effect.Effect<KeptNote, TaskStoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const bytes = new Uint8Array(Buffer.from(kept.data, "base64"));
+    const contentType = sniffImageType(bytes);
+    const dimensions = contentType === undefined ? undefined : imageDimensions(bytes, contentType);
+    if (contentType === undefined || dimensions === undefined) {
+      return { omitted: PICTURE_OMISSION.UNSUPPORTED, byteCount: bytes.byteLength };
+    }
+    const picture = yield* keepConversationPicture(transcript, {
+      bytes,
+      contentType,
+      ...dimensions,
+    });
+    if (Option.isNone(picture))
+      return { omitted: PICTURE_OMISSION.LIMIT, byteCount: bytes.byteLength };
+    return { picture: { ...picture.value } };
+  });
+}
+
+/**
+ * The steps with each screenshot's transcript copy kept and named by what
+ * was kept of it, never carried on. Note that a copy the store could not
+ * keep is logged by its kind alone and named by nothing, since the model
+ * saw its own copy all the same and the call stands.
+ */
+function keptSteps(
+  transcript: ConversationTarget,
+  steps: readonly BrowserAgentStep[],
+): Effect.Effect<readonly BrowserToolStep[], never, DatabaseServices> {
+  return Effect.forEach(steps, (step): Effect.Effect<BrowserToolStep, never, DatabaseServices> => {
+    if (step.action !== BROWSER_AGENT_ACTION.SCREENSHOT || step.status !== BROWSER_STEP_STATUS.DONE)
+      return Effect.succeed(step);
+    const { kept, ...shown } = step;
+    if (kept === undefined) return Effect.succeed(shown);
+    return keepScreenshot(transcript, kept).pipe(
+      Effect.map((note) => ({ ...shown, ...note })),
+      Effect.tapError(logStoreFailure),
+      Effect.orElseSucceed(() => shown),
+    );
   });
 }
 
@@ -476,11 +579,12 @@ export function runBrowserTool(
       refused !== undefined &&
       run.steps.length === runnable.length &&
       run.steps.every((step) => step.status === BROWSER_STEP_STATUS.DONE);
-    const steps: readonly BrowserAgentStep[] =
+    const ranSteps = yield* keptSteps(call.transcript, run.steps);
+    const steps: readonly BrowserToolStep[] =
       refused === undefined || !reachedRefused
-        ? run.steps
+        ? ranSteps
         : [
-            ...run.steps,
+            ...ranSteps,
             {
               action: actions[refused.index]?.action ?? BROWSER_AGENT_ACTION.LIST,
               status: BROWSER_STEP_STATUS.FAILED,
@@ -517,8 +621,15 @@ const isRan = Schema.is(
   }),
 );
 
-/** A result with every screenshot's picture taken out, its size and kind left; any other result as it is. */
-function withoutPictures(output: UnparsedWireValue): UnparsedWireValue {
+/** What the transcript's view of a step names of what was kept, which the model's view leaves out. */
+const KEPT_NOTE_KEYS: readonly string[] = ["picture", "omitted", "byteCount"];
+
+/**
+ * A result with every screenshot's picture taken out, its size and kind
+ * left; where `forModel`, without what the transcript kept of it too, which
+ * is no business of the model's; any other result as it is.
+ */
+function withoutPictures(output: UnparsedWireValue, forModel: boolean): UnparsedWireValue {
   if (!isRecord(output) || !isRan(output) || !Array.isArray(output.steps)) return output;
   const steps: readonly UnparsedWireValue[] = output.steps;
   return unparsedWire({
@@ -526,7 +637,10 @@ function withoutPictures(output: UnparsedWireValue): UnparsedWireValue {
     steps: steps.map((step) => {
       if (!isRecord(step) || !isScreenshotted(step) || !isRecord(step.image)) return step;
       const { data: _data, ...image } = step.image;
-      return { ...step, image };
+      const kept = forModel
+        ? Object.fromEntries(Object.entries(step).filter(([key]) => !KEPT_NOTE_KEYS.includes(key)))
+        : step;
+      return { ...kept, image };
     }),
   });
 }
@@ -550,7 +664,7 @@ export function browserModelOutput(output: UnparsedWireValue): ToolModelOutput {
   return {
     type: "content",
     value: [
-      { type: "text", text: JSON.stringify(withoutPictures(output)) },
+      { type: "text", text: JSON.stringify(withoutPictures(output, true)) },
       ...pictures.flatMap(({ tab, mime, data }) => [
         { type: "text" as const, text: `The screenshot of tab ${tab}:` },
         { type: "file" as const, data: { type: "data" as const, data }, mediaType: mime },
@@ -559,7 +673,7 @@ export function browserModelOutput(output: UnparsedWireValue): ToolModelOutput {
   };
 }
 
-/** A call's result as the conversation keeps it: every screenshot without its picture. */
+/** A call's result as the conversation keeps it: every screenshot without the model's copy, naming the transcript's copy kept beside it by id. */
 export function storedBrowserOutput(output: UnparsedWireValue): UnparsedWireValue {
-  return withoutPictures(output);
+  return withoutPictures(output, false);
 }
