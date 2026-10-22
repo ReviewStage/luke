@@ -47,6 +47,14 @@
  * task or a wakeup has posted no END, so its sandbox stays up. An END from a
  * launch a newer one replaced, told by its event number, stops nothing.
  *
+ * `open`, `send`, `cancel`, and `retune` each hold the agent's runner lease
+ * (`coding-agent-runner-lease.ts`) from before they read where its runner
+ * stands until they wrote to it or launched it, so two calls at once never
+ * both relaunch, each minting a bearer that shuts the other's runner out,
+ * nor write at one stdin offset; the later call waits, and finds the runner
+ * the earlier one launched. A call that waits past `CODER.RUNNER_LEASE.WAIT`
+ * fails as unavailable.
+ *
  * Every call answers in eve's outcomes, so a caller holds one interface
  * whichever runtime answers. What fails here (Vercel, the store, GitHub, a
  * missing credential or snapshot) answers `failed`, with the reason in the
@@ -63,6 +71,10 @@ import {
   RUNNER_ENV,
   type RunnerConfig,
 } from "@luke/agent-runner/protocol";
+import {
+  claimCodingAgentRunnerLease,
+  releaseCodingAgentRunnerLease,
+} from "@luke/database/models/coding-agent-runner-lease";
 import {
   type CodingAgent,
   hasRepository,
@@ -459,6 +471,60 @@ function sandboxOf(api: VercelSandboxApi, sessionId: string) {
   return Effect.map(api.listTagged(sessionId), (sandboxes) => Option.fromNullishOr(sandboxes[0]));
 }
 
+/** Another call held the agent's runner lease for as long as a call waits on it. */
+class RunnerLeaseBusy extends Data.TaggedError("RunnerLeaseBusy") {}
+
+/**
+ * The agent's runner lease taken, waiting behind another call's for at most
+ * `CODER.RUNNER_LEASE.WAIT`: the holder's id, which lets it go. Run where
+ * nothing interrupts, so a claim that landed is always handed back to be let
+ * go; only the waits between claims are given to `restore`, so a caller's
+ * deadline interrupts a call waiting behind another's lease at once, holding
+ * nothing.
+ */
+const claimRunnerLease = (
+  agentId: string,
+  restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const holder = randomUUID();
+    const hold = Duration.toMillis(CODER.RUNNER_LEASE.HOLD);
+    const startedAt = yield* Clock.currentTimeMillis;
+    while (true) {
+      const now = yield* Clock.currentTimeMillis;
+      if (
+        yield* claimCodingAgentRunnerLease(agentId, holder, new Date(now), new Date(now + hold))
+      ) {
+        return holder;
+      }
+      if (now - startedAt >= Duration.toMillis(CODER.RUNNER_LEASE.WAIT)) {
+        return yield* new RunnerLeaseBusy();
+      }
+      yield* restore(Effect.sleep(CODER.RUNNER_LEASE.POLL));
+    }
+  });
+
+/**
+ * The body run holding the agent's runner lease, let go as it ends however
+ * it ends, an interruption included. A release that fails leaves the lease
+ * to lapse at its `HOLD`.
+ */
+const holdingRunner = <A, E, R>(agentId: string, body: Effect.Effect<A, E, R>) =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const holder = yield* claimRunnerLease(agentId, restore);
+      return yield* restore(body).pipe(
+        Effect.ensuring(
+          releaseCodingAgentRunnerLease(agentId, holder).pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning(`a runner lease was not let go: ${failure._tag}`),
+            ),
+          ),
+        ),
+      );
+    }),
+  );
+
 /** The status a failure answers as. */
 function failedStatus(failure: { readonly _tag: string }): number {
   if (failure instanceof LaunchRefused) {
@@ -690,90 +756,135 @@ export const runnerSessions = <
         }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
       });
 
+    /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
+    const sendHolding = (sessionId: string, message: EveMessage<Turn>) =>
+      Effect.gen(function* () {
+        const found = yield* sandboxOf(api, sessionId);
+        if (Option.isNone(found)) return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+        // The session must be the conversation's own agent's, which the account reaches.
+        const agent = yield* agentOf(message.conversationId);
+        if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) {
+          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+        }
+        const target = { userId, conversationId: agent.conversationId };
+        const sent = messageLine(message);
+        const accepted = {
+          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          sessionId,
+          deliveryId: sent.uuid,
+        } as const;
+        const live = yield* liveRunner(api, found.value);
+        if (live !== undefined) {
+          // The installation token lives an hour, so each message sets a fresh one; and the
+          // harness's lines (the agent's model and effort as they stand, a renewed credential)
+          // go ahead of the message, which a change since the launch takes effect from.
+          yield* renewCredential(target, agent, live.sandboxSessionId);
+          // The choice read above stands until the write: a change of it is handed to the runner
+          // by `retune`, which holds the same lease, so it is written after this line, never
+          // undone by it.
+          const ahead = yield* harness.ahead(agent, live.stamp);
+          yield* api.writeStdin(
+            live.sandboxSessionId,
+            live.commandId,
+            [...ahead.lines, sent].map(line).join(""),
+          );
+          // The runner holds the renewed credential now; a tag not updated only sends it again.
+          if (ahead.stamp !== live.stamp) {
+            yield* api.updateTags(
+              found.value.name,
+              runnerTags(sessionId, agent.id, { ...live, stamp: ahead.stamp }),
+            );
+          }
+          return accepted;
+        }
+        // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
+        // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+        yield* capSandboxTimeout(api, found.value);
+        const resumed = yield* Effect.result(api.resume(found.value.name));
+        if (Result.isFailure(resumed)) {
+          if (resumed.failure.status !== SNAPSHOT_GONE_STATUS) return yield* resumed.failure;
+          // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
+          // the session goes on in a fresh one, a clean checkout of the repository under the
+          // session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
+          // gone). The harness's own session files went with the old filesystem, so none is
+          // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
+          // that fails (the image still preparing, a clone refused) leaves the session standing
+          // for the next message to try again rather than retired; a delete that fails leaves
+          // the expired one beside the fresh one, which `listTagged` lists after it as the older.
+          yield* openedSandbox(agent, sessionId, sent);
+          yield* api
+            .deleteSandbox(found.value.name)
+            .pipe(
+              Effect.catch((failure) =>
+                Effect.logWarning(
+                  `An expired ${harness.name} sandbox was not deleted: ${failure.message}`,
+                ),
+              ),
+            );
+          return accepted;
+        }
+        const running = resumed.success.currentSessionId;
+        if (running === undefined) return yield* new SandboxUnavailable({});
+        yield* renewCredential(target, agent, running);
+        const routing = yield* readCodingAgentRouting(userId, agent.id);
+        const resume = Option.getOrUndefined(
+          Option.flatMapNullishOr(routing, (read) => read.nativeSession),
+        );
+        yield* launch(sessionId, agent, { name: found.value.name, running }, sent, resume);
+        return accepted;
+      });
+
+    /** A Stop of the turn named, under the agent's runner lease, to the runner as it stands once the lease is held. */
+    const cancelHolding = (sessionId: string, turnId: string, agent: CodingAgent) =>
+      Effect.gen(function* () {
+        const found = yield* sandboxOf(api, sessionId);
+        const live =
+          Option.isSome(found) && found.value.tags?.[RUNNER_TAG.AGENT] === agent.id
+            ? yield* liveRunner(api, found.value)
+            : undefined;
+        if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+        const { conversationId } = agent;
+        const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
+        if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
+          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+        }
+        yield* api.writeStdin(
+          live.sandboxSessionId,
+          live.commandId,
+          line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
+        );
+        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+      });
+
+    /** A change of model or effort, under the agent's runner lease. */
+    const retuneHolding = (sessionId: string, conversationId: string) =>
+      Effect.gen(function* () {
+        const found = yield* sandboxOf(api, sessionId);
+        if (Option.isNone(found)) return RUNNER_CHOICE.NOT_LIVE;
+        const agent = yield* agentOf(conversationId);
+        if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) return RUNNER_CHOICE.NOT_LIVE;
+        const live = yield* liveRunner(api, found.value);
+        if (live === undefined) return RUNNER_CHOICE.NOT_LIVE;
+        const ahead = yield* harness.ahead(agent, live.stamp);
+        const model = ahead.lines.filter((each) => each.type === INPUT_LINE.MODEL);
+        if (model.length === 0) return RUNNER_CHOICE.NOT_LIVE;
+        yield* api.writeStdin(live.sandboxSessionId, live.commandId, model.map(line).join(""));
+        return RUNNER_CHOICE.WRITTEN;
+      });
+
     const sessions: NativeSessions<Turn> = {
       open: (message) =>
         Effect.gen(function* () {
           const agent = yield* agentOf(message.conversationId);
           const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
-          yield* openedSandbox(agent, sessionId, messageLine(message));
+          yield* holdingRunner(agent.id, openedSandbox(agent, sessionId, messageLine(message)));
           return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
         }).pipe(Effect.catch(failed("open")), Effect.provideContext(context)),
 
       send: (sessionId, message) =>
         Effect.gen(function* () {
-          const found = yield* sandboxOf(api, sessionId);
-          if (Option.isNone(found)) return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
-          // The session must be the conversation's own agent's, which the account reaches.
-          const agent = yield* agentOf(message.conversationId);
-          if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) {
-            return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
-          }
-          const target = { userId, conversationId: agent.conversationId };
-          const sent = messageLine(message);
-          const accepted = {
-            outcome: EVE_SEND_OUTCOME.ACCEPTED,
-            sessionId,
-            deliveryId: sent.uuid,
-          } as const;
-          const live = yield* liveRunner(api, found.value);
-          if (live !== undefined) {
-            // The installation token lives an hour, so each message sets a fresh one; and the
-            // harness's lines (the agent's model and effort as they stand, a renewed credential)
-            // go ahead of the message, which a change since the launch takes effect from.
-            yield* renewCredential(target, agent, live.sandboxSessionId);
-            // Note that the choice is read again just before it is written, because a change
-            // handed to the runner since the read above (`retune`) must not be undone by this
-            // message's stale line; what is left is the moment between this read and the write.
-            const ahead = yield* harness.ahead(yield* agentOf(message.conversationId), live.stamp);
-            yield* api.writeStdin(
-              live.sandboxSessionId,
-              live.commandId,
-              [...ahead.lines, sent].map(line).join(""),
-            );
-            // The runner holds the renewed credential now; a tag not updated only sends it again.
-            if (ahead.stamp !== live.stamp) {
-              yield* api.updateTags(
-                found.value.name,
-                runnerTags(sessionId, agent.id, { ...live, stamp: ahead.stamp }),
-              );
-            }
-            return accepted;
-          }
-          // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
-          // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
-          yield* capSandboxTimeout(api, found.value);
-          const resumed = yield* Effect.result(api.resume(found.value.name));
-          if (Result.isFailure(resumed)) {
-            if (resumed.failure.status !== SNAPSHOT_GONE_STATUS) return yield* resumed.failure;
-            // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
-            // the session goes on in a fresh one, a clean checkout of the repository under the
-            // session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
-            // gone). The harness's own session files went with the old filesystem, so none is
-            // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
-            // that fails (the image still preparing, a clone refused) leaves the session standing
-            // for the next message to try again rather than retired; a delete that fails leaves
-            // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-            yield* openedSandbox(agent, sessionId, sent);
-            yield* api
-              .deleteSandbox(found.value.name)
-              .pipe(
-                Effect.catch((failure) =>
-                  Effect.logWarning(
-                    `An expired ${harness.name} sandbox was not deleted: ${failure.message}`,
-                  ),
-                ),
-              );
-            return accepted;
-          }
-          const running = resumed.success.currentSessionId;
-          if (running === undefined) return yield* new SandboxUnavailable({});
-          yield* renewCredential(target, agent, running);
-          const routing = yield* readCodingAgentRouting(userId, agent.id);
-          const resume = Option.getOrUndefined(
-            Option.flatMapNullishOr(routing, (read) => read.nativeSession),
-          );
-          yield* launch(sessionId, agent, { name: found.value.name, running }, sent, resume);
-          return accepted;
+          const { id } = yield* agentOf(message.conversationId);
+          return yield* holdingRunner(id, sendHolding(sessionId, message));
         }).pipe(Effect.catch(failed("send")), Effect.provideContext(context)),
 
       // The Stop is scoped to the turn it names: written only while that turn is the
@@ -785,24 +896,11 @@ export const runnerSessions = <
           const agentId = Option.isSome(found) ? found.value.tags?.[RUNNER_TAG.AGENT] : undefined;
           const agent =
             agentId === undefined ? Option.none() : yield* readCodingAgent(userId, agentId);
-          const live =
-            Option.isSome(found) && Option.isSome(agent)
-              ? yield* liveRunner(api, found.value)
-              : undefined;
-          if (live === undefined || Option.isNone(agent)) {
-            return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
-          }
-          const { conversationId } = agent.value;
-          const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
-          if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
-            return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
-          }
-          yield* api.writeStdin(
-            live.sandboxSessionId,
-            live.commandId,
-            line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
+          if (Option.isNone(agent)) return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          return yield* holdingRunner(
+            agent.value.id,
+            cancelHolding(sessionId, turnId, agent.value),
           );
-          return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
         }).pipe(Effect.catch(unavailable("cancel")), Effect.provideContext(context)),
 
       reset: (sessionId) =>
@@ -832,17 +930,8 @@ export const runnerSessions = <
       // which it takes at its next model call; a runner not up takes it at the next message's launch.
       retune: (sessionId, conversationId) =>
         Effect.gen(function* () {
-          const found = yield* sandboxOf(api, sessionId);
-          if (Option.isNone(found)) return RUNNER_CHOICE.NOT_LIVE;
-          const agent = yield* agentOf(conversationId);
-          if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) return RUNNER_CHOICE.NOT_LIVE;
-          const live = yield* liveRunner(api, found.value);
-          if (live === undefined) return RUNNER_CHOICE.NOT_LIVE;
-          const ahead = yield* harness.ahead(agent, live.stamp);
-          const model = ahead.lines.filter((each) => each.type === INPUT_LINE.MODEL);
-          if (model.length === 0) return RUNNER_CHOICE.NOT_LIVE;
-          yield* api.writeStdin(live.sandboxSessionId, live.commandId, model.map(line).join(""));
-          return RUNNER_CHOICE.WRITTEN;
+          const { id } = yield* agentOf(conversationId);
+          return yield* holdingRunner(id, retuneHolding(sessionId, conversationId));
         }).pipe(
           Effect.catch((failure) =>
             Effect.as(

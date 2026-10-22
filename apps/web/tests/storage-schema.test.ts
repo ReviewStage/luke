@@ -58,6 +58,7 @@ const DECLARED_TABLES = [
   "chat_read",
   "coding_agent",
   "coding_agent_delegation",
+  "coding_agent_runner_lease",
   "coding_agent_wakeup",
   "conversations",
   "github_connect_intent",

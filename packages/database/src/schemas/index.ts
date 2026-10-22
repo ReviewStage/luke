@@ -8,6 +8,7 @@ export * from "./auth.js";
 export * from "./automation.js";
 export * from "./chat.js";
 export * from "./coding-agent.js";
+export * from "./coding-agent-runner-lease.js";
 export * from "./coding-agent-wakeup.js";
 export * from "./favorite.js";
 export * from "./github-connect-intent.js";

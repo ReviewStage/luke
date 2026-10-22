@@ -44,7 +44,7 @@ import { ActionMenu } from "./action-menu.js";
  */
 
 /** What a change the service did not keep says. */
-const UNCHANGED_LINE = "Couldn't change the task. Try again.";
+const UNCHANGED_LINE = "The task could not be changed. Try again.";
 
 /** The most pull requests a task's marks draw before they count the rest. */
 const MARKED_PULL_REQUESTS = 3;

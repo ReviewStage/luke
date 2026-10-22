@@ -50,6 +50,7 @@
     "./models/repository-pin-store": "./src/models/repository-pin-store.js",
     "./models/sandbox-terminal-lease": "./src/models/sandbox-terminal-lease.js",
     "./models/token-pull-request-poll": "./src/models/token-pull-request-poll.js",
+    "./models/coding-agent-runner-lease": "./src/models/coding-agent-runner-lease.js",
     "./models/coding-agent-wakeups": "./src/models/coding-agent-wakeups.js",
     "./models/session-sandbox-cleanup": "./src/models/session-sandbox-cleanup.js",
     "./models/soft-delete": "./src/models/soft-delete.js",
