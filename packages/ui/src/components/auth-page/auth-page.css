@@ -47,12 +47,6 @@
     max-width: 100%;
   }
 
-  /* A bare face handed as the mark takes the artwork's size. */
-  .luke-auth-mark > .luke-face {
-    width: 52px;
-    height: 52px;
-  }
-
   .luke-auth-status {
     margin: var(--luke-space-16) 0 0;
     padding: var(--luke-space-2) var(--luke-space-12);
@@ -86,6 +80,11 @@
   :is(.luke-auth-description, .luke-auth-footnote) {
     margin: var(--luke-space-8) 0 0;
     color: var(--luke-color-text-muted);
+  }
+
+  /* A footnote of several notes stands them one under another. */
+  .luke-auth-footnote > * {
+    display: block;
   }
 
   .luke-auth-footnote {
