@@ -19,7 +19,7 @@ import {
 import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -50,10 +50,12 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { NATIVE_RELAY_CALL, NATIVE_RELAY_PATH } from "./native-relay.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
+  NativeAgentSessions,
   RUNNER_CHOICE,
   routedSessions,
   runnerChoiceApplied,
@@ -575,6 +577,34 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const response = yield* Effect.promise(() => unsecured.post(rawCall(undefined, send)));
           assert.equal(response.status, 503);
           assert.deepEqual(unsecured.heard, []);
+        }),
+    );
+
+    it.effect(
+      "a launch the starter's plan refused for its limit reaches the eve app with the reset it named",
+      () =>
+        Effect.gen(function* () {
+          const { owner, taskId } = yield* openTeam;
+          const onClaudeCode = yield* agentOn(owner, taskId, "claude_code", true);
+          const resetsAt = Date.UTC(2026, 9, 22, 9);
+          const relay = yield* nativeRelayFake({
+            planRefused: { planRefusal: PLAN_REFUSAL.LIMIT_REACHED, planResetsAt: resetsAt },
+          });
+          yield* Effect.addFinalizer(() => Effect.promise(relay.dispose));
+          const opened = yield* Effect.gen(function* () {
+            const native = yield* NativeAgentSessions;
+            const reached = native.sessions(CONVERSATION_RUNTIME.CLAUDE_CODE, owner);
+            assert.ok(Option.isSome(reached));
+            const sessions = yield* reached.value;
+            return yield* sessions.open(messageTo(onClaudeCode));
+          }).pipe(Effect.provide(relay.layer));
+
+          assert.deepEqual(opened, {
+            outcome: EVE_SEND_OUTCOME.FAILED,
+            status: 422,
+            planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+            planResetsAt: resetsAt,
+          });
         }),
     );
 

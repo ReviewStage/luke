@@ -35,8 +35,9 @@ import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
+  planLimitResetsAt,
 } from "@luke/features/provider-key-wire";
-import { DateTime, Effect, Redacted, Result } from "effect";
+import { Clock, Effect, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
@@ -103,17 +104,12 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         planRefusal: PLAN_REFUSAL.SIGNED_OUT,
       });
     }
-    const now = yield* DateTime.nowAsDate;
-    // Note that a limit with no reset named holds until a turn finds it lifted, which needs a launch, so only a named reset still ahead refuses.
-    if (
-      row.status === PROVIDER_KEY_STATUS.LIMIT_REACHED &&
-      row.limitResetsAt !== null &&
-      row.limitResetsAt.getTime() > now.getTime()
-    ) {
+    const planResetsAt = planLimitResetsAt(row, yield* Clock.currentTimeMillis);
+    if (planResetsAt !== undefined) {
       return yield* new LaunchRefused({
         reason: "plan limit reached",
         planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
-        planResetsAt: row.limitResetsAt.getTime(),
+        planResetsAt,
       });
     }
     return row;

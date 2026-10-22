@@ -5,8 +5,19 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { type Cause, Deferred, Effect, Fiber, Layer, Logger, Queue, Stream } from "effect";
+import {
+  type Cause,
+  Deferred,
+  Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Logger,
+  Queue,
+  Stream,
+} from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { TestClock } from "effect/testing";
 import { askCodexToken } from "./codex-token.js";
 import type { RunnerSelf } from "./launch.js";
 import { processTable } from "./processes.js";
@@ -27,6 +38,7 @@ import { runAgent } from "./runner.js";
 import {
   type Exchange,
   fakeAppServer,
+  type RecordedMessage,
   received,
   recordedExchanges,
   type Script,
@@ -351,6 +363,95 @@ it.effect(
       const firstCompletedAt = kinds(luke.applied).indexOf("turn/completed");
       assert.ok(steeredAt > firstCompletedAt);
     }),
+);
+
+/** The resumed launch, its second message's steer refused as said, then, where it waits, run as the next turn. */
+function refusedSteer(error: NonNullable<RecordedMessage["error"]>, waits: boolean): Script {
+  const refusal: RecordedMessage = { id: 4, error };
+  return {
+    exchanges: [
+      ...RESUME,
+      { method: "turn/start", reply: RESUMED_TURN.reply.slice(0, -2) },
+      { method: "turn/steer", reply: waits ? [refusal, ...RESUMED_TURN_END] : [refusal] },
+      ...(waits ? [RESUMED_TURN] : []),
+    ],
+  };
+}
+
+it.effect("sends a steer refused by a turn that cannot be steered as the next turn", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke("What exact line");
+    const script = refusedSteer(
+      {
+        code: -32600,
+        message: "cannot steer a compact turn",
+        data: {
+          message: "cannot steer a compact turn",
+          codexErrorInfo: { activeTurnNotSteerable: { turnKind: "compact" } },
+          additionalDetails: null,
+        },
+      },
+      true,
+    );
+    const { spawned, write, run } = yield* launch([script], luke);
+    yield* write({ ...CONFIG, threadId: THREAD });
+    yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
+    yield* luke.seen;
+    yield* write(message("And the second line?", LINE.STEERED));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+    const [process] = spawned;
+    assert.deepEqual(process?.unexpected, []);
+    assert.deepEqual(received(process, "turn/start")[1]?.input, [
+      { type: "text", text: "And the second line?", text_elements: [] },
+    ]);
+    assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
+  }),
+);
+
+it.effect("ends the launch as failed when app-server refuses a steer for any other reason", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke("What exact line");
+    const script = refusedSteer({ code: -32603, message: "failed to steer turn: boom" }, false);
+    const { spawned, write, run } = yield* launch([script], luke);
+    yield* write({ ...CONFIG, threadId: THREAD });
+    yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
+    yield* luke.seen;
+    yield* write(message("And the second line?", LINE.STEERED));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
+    assert.deepEqual(luke.applied.at(-1)?.message, {
+      type: RUNNER_EVENT.END,
+      reason: RUNNER_END.FAILED,
+      detail: "turn/steer: failed to steer turn: boom",
+    });
+    assert.deepEqual(received(spawned[0], "turn/start").length, 1);
+    assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST]);
+  }),
+);
+
+it.effect("ends the launch as stopped when app-server never answers the stop's interrupt", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke("sleep 600");
+    const hung: Script = {
+      exchanges: [...OPEN, exchange(FIRST, 5), { method: "turn/interrupt", reply: [] }],
+    };
+    const { spawned, write, run } = yield* launch([hung], luke);
+    yield* write(CONFIG);
+    yield* write(message("Run `sleep 600` and wait for it to finish."));
+    yield* luke.seen;
+    yield* write({ type: INPUT_LINE.STOP });
+    while (received(spawned[0], "turn/interrupt").length === 0) yield* Effect.yieldNow;
+    yield* Effect.yieldNow.pipe(Effect.repeat({ times: 50 }));
+    yield* TestClock.adjust(Duration.minutes(1));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+    assert.ok(spawned[0]?.ended);
+    assert.deepEqual(luke.applied.at(-1)?.message, {
+      type: RUNNER_EVENT.END,
+      reason: RUNNER_END.STOPPED,
+    });
+  }),
 );
 
 it.effect(

@@ -30,7 +30,7 @@ import { failureKind } from "@luke/runtime/effect";
 import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result, Schema } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -43,6 +43,7 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { AgentBrowser } from "../browser/agent-browser.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { lukeMcpDoorSeams } from "./door-seams.js";
 import type { AgentSandboxDoors } from "./sandbox-door.js";
@@ -196,9 +197,18 @@ const DOOR_FAILED_RESULT: McpToolCallResult = {
 /** The doors to an admitted agent's sandbox, which the edge composes on its own runner (`sandbox-door.ts`). */
 export type LukeMcpSandboxDoor = (admitted: AdmittedConversation) => AgentSandboxDoors;
 
+/** The agent's browser as the edge composes it (`../browser/agent-browser.ts`'s `agentBrowserServices`), over the runtime's HTTP client. */
+export type LukeMcpBrowser = Layer.Layer<AgentBrowser, never, HttpClient.HttpClient>;
+
+/** What the server is composed over: the doors to the agent's sandbox, and its browser. */
+export interface LukeMcpDoors {
+  readonly sandbox: LukeMcpSandboxDoor;
+  readonly browser: LukeMcpBrowser;
+}
+
 /** One `tools/call` run through the tool's door as the admitted conversation, with a fresh id of its own. */
 function callTool(
-  sandboxDoor: LukeMcpSandboxDoor,
+  doors: LukeMcpDoors,
   admitted: AdmittedConversation,
   params: UnparsedWireValue,
 ): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
@@ -213,15 +223,16 @@ function callTool(
   }
   const input = fieldOf(params, "arguments") ?? {};
   return Effect.flatMap(lukeMcpDoorSeams, (seams) => {
-    const doors = sandboxDoor(admitted);
+    const sandbox = doors.sandbox(admitted);
     const context = {
-      sandbox: doors.files,
-      repository: doors.repository,
+      sandbox: sandbox.files,
+      repository: sandbox.repository,
       callId: randomUUID(),
       seams,
     };
     return tool.run(admitted, input, context);
   }).pipe(
+    Effect.provide(doors.browser),
     Effect.map((result) => Result.succeed(toolResult(tool, result))),
     Effect.catchCause((cause) =>
       Effect.as(
@@ -234,7 +245,7 @@ function callTool(
 
 /** One request's answer, by its method. */
 function answerRequest(
-  sandboxDoor: LukeMcpSandboxDoor,
+  doors: LukeMcpDoors,
   admitted: AdmittedConversation,
   method: string,
   params: UnparsedWireValue,
@@ -268,7 +279,7 @@ function answerRequest(
         }),
       );
     case MCP_METHOD.TOOLS_CALL:
-      return callTool(sandboxDoor, admitted, params);
+      return callTool(doors, admitted, params);
     default:
       return Effect.succeed(
         rpcFailure(JSON_RPC_ERROR.METHOD_NOT_FOUND, `Method not found: ${method}`),
@@ -278,7 +289,7 @@ function answerRequest(
 
 /** One message answered: a request with its response, anything else taken with 202 and no body. */
 function answerMessage(
-  sandboxDoor: LukeMcpSandboxDoor,
+  doors: LukeMcpDoors,
   admitted: AdmittedConversation,
   message: Message,
   raw: UnparsedWireValue,
@@ -288,7 +299,7 @@ function answerMessage(
     return Effect.succeed(HttpServerResponse.empty({ status: HOSTED_HTTP_STATUS.ACCEPTED }));
   }
   return Effect.map(
-    answerRequest(sandboxDoor, admitted, method, fieldOf(raw, "params") ?? {}),
+    answerRequest(doors, admitted, method, fieldOf(raw, "params") ?? {}),
     (answer) => rpcResponse(id, answer),
   );
 }
@@ -303,7 +314,7 @@ function bearerRefused(): HttpServerResponse.HttpServerResponse {
 
 /** POST: one JSON-RPC message, admitted on the runner's bearer. */
 const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
-  sandboxDoor: LukeMcpSandboxDoor,
+  doors: LukeMcpDoors,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
@@ -340,13 +351,13 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
   if (Result.isFailure(message)) {
     return rpcResponse(null, rpcFailure(JSON_RPC_ERROR.INVALID_REQUEST, "Invalid Request"));
   }
-  return yield* answerMessage(sandboxDoor, admitted.value, message.success, parsed.success);
+  return yield* answerMessage(doors, admitted.value, message.success, parsed.success);
 });
 
-/** The group: the one MCP path over the sandbox door the edge composes, and the hosted vocabulary's own refusal for any other. */
-export function lukeMcpApp(sandboxDoor: LukeMcpSandboxDoor): WebRoutes<LukeMcpServices> {
+/** The group: the one MCP path over the sandbox door and the browser the edge composes, and the hosted vocabulary's own refusal for any other. */
+export function lukeMcpApp(doors: LukeMcpDoors): WebRoutes<LukeMcpServices> {
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, LUKE_MCP_PATH, hostedRefusing(mcpEndpoint(sandboxDoor))),
+    HttpRouter.add(ANY_METHOD, LUKE_MCP_PATH, hostedRefusing(mcpEndpoint(doors))),
     hostedNotFoundRoute,
   );
 }

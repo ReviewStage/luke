@@ -23,16 +23,36 @@ const APP_SERVER_KILL = {
   GRACE: Duration.seconds(5),
 } as const;
 
+/**
+ * How long a request waits on app-server's answer before it is failed, so a
+ * hung app-server cannot hold the launch, a stop included: opening a thread
+ * may start its MCP servers, and every other request is answered at once.
+ */
+const REQUEST_TIMEOUT = {
+  OPEN: Duration.minutes(2),
+  DEFAULT: Duration.seconds(30),
+} as const;
+
+/** The requests that open a thread, which wait the longer bound. */
+const OPENING_METHODS: ReadonlySet<string> = new Set(["thread/start", "thread/resume"]);
+
 /** How much of app-server's stderr is kept, for a failure's detail. */
 const STDERR_TAIL = 2000;
 
 /** How long an ended app-server's stderr is read on for its last words. */
 const STDERR_DRAIN = Duration.seconds(1);
 
-/** A request app-server answered with an error, or could not answer because it ended. */
+/**
+ * A request app-server answered with an error, or could not answer because
+ * it ended or did not answer in time. Where app-server answered, its
+ * JSON-RPC `code` and `data` are kept, which say why in its own terms (a
+ * steer refused for a turn that cannot be steered carries a `TurnError`).
+ */
 export class AppServerError extends Data.TaggedError("AppServerError")<{
   readonly method: string;
   readonly detail: string;
+  readonly code?: number | undefined;
+  readonly data?: Schema.Json | undefined;
 }> {}
 
 /** What the runner spawns: Codex's binary and argv, its directory, and its whole environment. */
@@ -86,7 +106,13 @@ const IncomingSchema = Schema.Struct({
   id: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
   method: Schema.optionalKey(Schema.String),
   result: Schema.optionalKey(Schema.Json),
-  error: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
+  error: Schema.optionalKey(
+    Schema.Struct({
+      code: Schema.optionalKey(Schema.Number),
+      message: Schema.String,
+      data: Schema.optionalKey(Schema.Json),
+    }),
+  ),
 });
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
 const decodeIncoming = Schema.decodeUnknownOption(IncomingSchema);
@@ -157,9 +183,15 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
     if (answer === undefined) return Effect.void;
     return error === undefined
       ? Deferred.succeed(answer, result ?? null).pipe(Effect.asVoid)
-      : Deferred.fail(answer, new AppServerError({ method: "", detail: error.message })).pipe(
-          Effect.asVoid,
-        );
+      : Deferred.fail(
+          answer,
+          new AppServerError({
+            method: "",
+            detail: error.message,
+            code: error.code,
+            data: error.data,
+          }),
+        ).pipe(Effect.asVoid);
   };
 
   // Note that stderr is read to its end, or for a moment at most, before the
@@ -205,8 +237,26 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
       if (closed) return yield* new AppServerError({ method, detail: "app-server exited" });
       pending.set(id, answer);
       yield* write({ id, method, params });
-      return yield* Deferred.await(answer);
-    }).pipe(Effect.mapError((error) => new AppServerError({ method, detail: error.detail })));
+      const bound = OPENING_METHODS.has(method) ? REQUEST_TIMEOUT.OPEN : REQUEST_TIMEOUT.DEFAULT;
+      // Note that an unanswered request is forgotten, so an answer that comes late is dropped.
+      return yield* Deferred.await(answer).pipe(
+        Effect.timeoutOrElse({
+          duration: bound,
+          orElse: () =>
+            Effect.suspend(() => {
+              pending.delete(id);
+              return Effect.fail(
+                new AppServerError({ method, detail: "app-server did not answer in time" }),
+              );
+            }),
+        }),
+      );
+    }).pipe(
+      Effect.mapError(
+        (error) =>
+          new AppServerError({ method, detail: error.detail, code: error.code, data: error.data }),
+      ),
+    );
   const notify = (method: string) => write({ method });
   return { request, notify } satisfies AppServer;
 });

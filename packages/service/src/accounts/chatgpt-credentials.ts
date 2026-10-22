@@ -64,6 +64,7 @@ import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
+  planLimitResetsAt,
 } from "@luke/features/provider-key-wire";
 import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -244,9 +245,14 @@ export type ChatGptAccess =
       readonly expiresAt: Date;
     }
   | {
+      readonly outcome: typeof CHATGPT_ACCESS.LIMIT_REACHED;
+      /** When the reached limit resets, in epoch milliseconds, as the provider named it. */
+      readonly limitResetsAt: number;
+    }
+  | {
       readonly outcome: Exclude<
         (typeof CHATGPT_ACCESS)[keyof typeof CHATGPT_ACCESS],
-        typeof CHATGPT_ACCESS.READY
+        typeof CHATGPT_ACCESS.READY | typeof CHATGPT_ACCESS.LIMIT_REACHED
       >;
     };
 
@@ -482,14 +488,9 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
       const credentials = openCredentials(ring, userId, row);
       if (credentials === undefined) return { outcome: CHATGPT_ACCESS.UNREADABLE };
       const now = yield* DateTime.nowAsDate;
-      // Note that a limit with no reset named holds until a turn finds it lifted, which needs a launch, so only a named reset still ahead refuses.
-      if (
-        row.status === PROVIDER_KEY_STATUS.LIMIT_REACHED &&
-        row.limitResetsAt !== null &&
-        row.limitResetsAt.getTime() > now.getTime()
-      ) {
-        return { outcome: CHATGPT_ACCESS.LIMIT_REACHED };
-      }
+      const limitResetsAt = planLimitResetsAt(row, now.getTime());
+      if (limitResetsAt !== undefined)
+        return { outcome: CHATGPT_ACCESS.LIMIT_REACHED, limitResetsAt };
       const dueAt = now.getTime() + Duration.toMillis(Duration.max(margin, REFRESH_MARGIN));
       if (row.accessExpiresAt !== null && row.accessExpiresAt.getTime() > dueAt) {
         return {

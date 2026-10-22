@@ -5706,10 +5706,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           part.text,
           new RegExp(`on no task, "[^"]+" \\(id \`${oneOff.agent.id}\`\\)`, "u"),
         );
-        assert.equal(
-          part.text.match(/To message it, call `message_agent` with its id\./gu)?.length,
-          2,
-        );
+        assert.equal(part.text.match(/To message it, send it a direct message/gu)?.length, 2);
         assert.match(part.text, /The coding agent "Stranger": not found in your workspace\./u);
         assert.ok(!part.text.includes(`id \`${foreign.agent.id}\``), part.text);
       }),
@@ -8641,6 +8638,19 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.deepEqual(
           yield* chat.post(chat.first, { text: "Hi.", to: chat.links.first }),
+          refused(CHAT_TOOL_REFUSAL.TO_SELF),
+        );
+        // A place refused without a write is said before any picture is read, so a missing one never hides it.
+        assert.deepEqual(
+          yield* chat.post(
+            chat.first,
+            {
+              text: "Hi.",
+              to: chat.links.first,
+              blocks: [{ type: CHAT_BLOCK.IMAGE, path: "missing.png", alt: "Missing." }],
+            },
+            { sandbox: noSandbox },
+          ),
           refused(CHAT_TOOL_REFUSAL.TO_SELF),
         );
         assert.deepEqual(

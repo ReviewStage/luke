@@ -1701,7 +1701,8 @@ export type TurnRecord = typeof turnRecordSchema.Type;
  * the message box or an Inbox answer; Luke, from a call; an automation's
  * run, on its creator's behalf; GitHub, telling the agent of a review, a
  * comment, or a failed check on its pull request, by who caused it there;
- * or another coding agent of the workspace, through its `message_agent` tool.
+ * or another coding agent of the workspace, through a chat message told to
+ * it, or, in a line written before it was retired, through `message_agent`.
  */
 export const MESSAGE_SENDER = {
   MEMBER: "member",

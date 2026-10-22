@@ -65,7 +65,6 @@ export const CODER_TOOL = {
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
-  MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   START_AGENT: AGENT_TOOL.START_AGENT,
   STOP_AGENT: AGENT_TOOL.STOP_AGENT,
   UPDATE_AGENT: AGENT_TOOL.UPDATE_AGENT,
@@ -204,7 +203,8 @@ export function repositoryToolsOf(
  * the hosted pair, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
- * `post_to_inbox`. A transcript written then names them, and reads back
+ * `post_to_inbox`, and `message_agent`, since folded into `post_chat`'s
+ * direct message. A transcript written then names them, and reads back
  * under the same set.
  */
 export const RETIRED_CODER_TOOL = {
@@ -215,6 +215,7 @@ export const RETIRED_CODER_TOOL = {
   MOVE_TASK: RETIRED_TOOL.MOVE_TASK,
   CLOSE_INBOX_ITEM: RETIRED_TOOL.CLOSE_INBOX_ITEM,
   REPLY_INBOX: RETIRED_TOOL.REPLY_INBOX,
+  MESSAGE_AGENT: RETIRED_TOOL.MESSAGE_AGENT,
 } as const;
 
 /**
