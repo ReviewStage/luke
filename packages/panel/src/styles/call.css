@@ -38,32 +38,13 @@ html.call-window #root {
   font-size: var(--luke-type-label-size);
   line-height: var(--luke-type-label-leading);
   animation:
-    call-card-fade var(--duration-quick) var(--motion-exit),
-    call-card-rise var(--duration-fast) var(--spring-fast);
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit),
+    luke-card-rise var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
 .call-card[data-leaving="true"] {
   pointer-events: none;
-  animation: call-card-leave var(--duration-exit) var(--motion-exit) forwards;
-}
-
-@keyframes call-card-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes call-card-rise {
-  from {
-    transform: translateY(var(--luke-space-8));
-  }
-}
-
-@keyframes call-card-leave {
-  to {
-    opacity: 0;
-    transform: translateY(var(--luke-space-8));
-  }
+  animation: luke-card-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 /* Above the account row, edge to edge with the rows' own fills. */
@@ -98,7 +79,7 @@ html.call-window #root {
         var(--luke-space-16)
       )
     );
-  transition: translate var(--duration-fast) var(--spring-fast);
+  transition: translate var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
 /* On a phone the card is fixed to the page rather than the stage, so it

@@ -7,6 +7,7 @@
    utilities, so a reset never undoes a control and an app's own rule always
    can. An app imports this after its reset and before its utilities. */
 
+@import "./components/motion/motion.css";
 @import "./components/visually-hidden/visually-hidden.css";
 @import "./components/anchored-popover/anchored-popover.css";
 @import "./components/layout/layout.css";

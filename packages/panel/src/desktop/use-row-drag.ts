@@ -395,7 +395,7 @@ function lengthOf(token: string): number {
  */
 function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
   const look = getComputedStyle(list);
-  const duration = lengthOf(look.getPropertyValue("--duration-fast"));
+  const duration = lengthOf(look.getPropertyValue("--luke-duration-fast"));
   if (duration <= 0) {
     copy.remove();
     return;
@@ -404,7 +404,7 @@ function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
   const across = home.left - Number.parseFloat(copy.style.left);
   const down = home.top - Number.parseFloat(copy.style.top);
   row.setAttribute(DRAGGING_ATTRIBUTE, "true");
-  const easing = look.getPropertyValue("--spring-fast").trim() || "ease-out";
+  const easing = look.getPropertyValue("--luke-spring-fast").trim() || "ease-out";
   const landed = copy.animate(
     [{ transform: copy.style.transform }, { transform: `translate(${across}px, ${down}px)` }],
     { duration, easing, fill: "forwards" },

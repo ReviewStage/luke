@@ -1,0 +1,50 @@
+/* motion.css -- the keyframes a surface of an app's own draws its arrival on, where no shared component owns the surface.
+
+   Each is the ui's one statement of its motion: a fade is `luke-dialog-fade`,
+   `luke-menu-arrive`, or `luke-menu-leave`, and these are the travels they do
+   not cover. Their timing and easing belong to the rule that names them,
+   over the `--luke-duration-*` and `--luke-spring-fast` tokens. */
+
+@keyframes luke-card-rise {
+  from {
+    transform: translateY(var(--luke-space-8));
+  }
+}
+
+@keyframes luke-card-leave {
+  to {
+    opacity: 0;
+    transform: translateY(var(--luke-space-8));
+  }
+}
+
+@keyframes luke-toast-rise {
+  from {
+    transform: translateY(var(--luke-space-12));
+  }
+}
+
+@keyframes luke-sheet-drop {
+  from {
+    transform: translateY(-16px);
+  }
+}
+
+@keyframes luke-card-grow {
+  from {
+    transform: scale(0.97);
+  }
+}
+
+/* Centred on its own width by a transform, so the keyframe holds the centring. */
+@keyframes luke-scale-in-centered-x {
+  from {
+    transform: translateX(-50%) scale(0.96);
+  }
+}
+
+@keyframes luke-scale-in-centered {
+  from {
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}

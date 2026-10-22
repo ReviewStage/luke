@@ -76,7 +76,8 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   set under the web profile only; the window has no display type.
 - **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
   `pnpm --filter @luke/brand generate`; `motion.css`): `--luke-duration-*`,
-  `--luke-spring-fast`, `--luke-motion-exit|pane`, `--luke-hint-delay`, and
+  `--luke-duration-shape`, `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit|pane`,
+  `--luke-row-stagger`, `--luke-hint-delay`, `--luke-late-delay`, and
   `--luke-loop-motion`, the play state an endless loop holds, and
   `--luke-face-motion`, the face's. Reduced motion zeroes the durations but
   hover's and pauses both loops. The face's own rules are `face/face.css`, and

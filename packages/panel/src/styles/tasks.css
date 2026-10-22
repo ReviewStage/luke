@@ -178,7 +178,7 @@
   inset: -2px;
   border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;
 }
@@ -196,23 +196,13 @@
   inset: -4px;
   border-radius: var(--luke-radius-8);
   background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;
 }
 
 @keyframes plan-caret-blink {
   50% {
-    opacity: 0;
-  }
-}
-
-@keyframes plan-fresh {
-  from {
-    opacity: 1;
-  }
-
-  to {
     opacity: 0;
   }
 }
@@ -348,7 +338,7 @@
   line-height: var(--luke-type-caption-leading);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .plan-unit-attributed:focus-within .plan-unit-byline {
@@ -371,7 +361,7 @@
   flex: none;
   opacity: 0;
   pointer-events: auto;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .plan-unit-attributed:focus-within .plan-unit-more,
@@ -959,7 +949,7 @@
     gap: var(--luke-space-2);
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--duration-quick) var(--spring);
+    transition: opacity var(--luke-duration-quick) var(--luke-spring);
   }
 
   .message-actions[data-placement="floating"] {
@@ -1618,11 +1608,11 @@
   display: flex;
   width: min(var(--file-tree-width, 264px), calc(100% - var(--luke-space-48)));
   box-shadow: var(--luke-menu-shadow);
-  animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 .file-view[data-pane-beside="false"][data-pane-over="peek"] .file-tree-pane {
-  animation-delay: var(--duration-quick);
+  animation-delay: var(--luke-duration-quick);
 }
 
 .file-view[data-pane-beside="false"]:is([data-pane-over="peek"], [data-pane-over="open"])
@@ -1664,11 +1654,11 @@
 
   .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
     display: flex;
-    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+    animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
   .file-view[data-pane-over="peek"] .file-tree-pane {
-    animation-delay: var(--duration-quick);
+    animation-delay: var(--luke-duration-quick);
   }
 
   .file-view[data-pane-over="closed"] .file-tree-pane {
@@ -1715,11 +1705,11 @@
   .file-view:is([data-pane-over="peek"], [data-pane-over="open"])
   .file-tree-pane {
   display: flex;
-  animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 .desktop-shell[data-room="narrow"] .file-view[data-pane-over="peek"] .file-tree-pane {
-  animation-delay: var(--duration-quick);
+  animation-delay: var(--luke-duration-quick);
 }
 
 .desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="over"] {
@@ -1750,11 +1740,11 @@
 
   .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"]) .terminal-shells {
     display: flex;
-    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+    animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
   .terminal-tab[data-pane-over="peek"] .terminal-shells {
-    animation-delay: var(--duration-quick);
+    animation-delay: var(--luke-duration-quick);
   }
 
   .terminal-tab[data-pane-over="closed"] .terminal-shells {
@@ -1854,7 +1844,7 @@
   pointer-events: none;
   transform: scale(0.25);
   transform-origin: 0 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .page-card-preview[data-loaded="true"] .page-card-frame {
@@ -1915,8 +1905,8 @@
 /* The agent's pointer over a cloud Browser tab (cloud-browser-cursor.tsx):
    an arrow over the drawn page, never in its frame, taking no pointer
    events. It stands at the agent's point, scaled onto the page by the
-   component, and glides to each new one over --duration-fast on
-   --spring-fast, about the beat its action waits; a still pointer jumps.
+   component, and glides to each new one over --luke-duration-fast on
+   --luke-spring-fast, about the beat its action waits; a still pointer jumps.
    While the agent is active it rocks about its tip, and fades once it is
    not. A click presses it once it has arrived, with a ripple at the point;
    typing bobs it. It is a compact neutral arrowhead on a soft neutral halo,
@@ -1936,8 +1926,8 @@
   opacity: 0;
   translate: var(--cloud-browser-cursor-x) var(--cloud-browser-cursor-y);
   transition:
-    translate var(--duration-fast) var(--spring-fast),
-    opacity var(--duration-quick) ease;
+    translate var(--luke-duration-fast) var(--luke-spring-fast),
+    opacity var(--luke-duration-quick) ease;
 }
 
 .cloud-browser-cursor[data-shown] {
@@ -1945,7 +1935,7 @@
 }
 
 .cloud-browser-cursor[data-still] {
-  transition: opacity var(--duration-quick) ease;
+  transition: opacity var(--luke-duration-quick) ease;
 }
 
 .cloud-browser-cursor-rock {
@@ -2005,7 +1995,7 @@
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
-  animation: cloud-browser-cursor-press var(--duration-fast) ease-in-out var(--duration-fast)
+  animation: cloud-browser-cursor-press var(--luke-duration-fast) ease-in-out var(--luke-duration-fast)
     backwards;
 }
 
@@ -2024,7 +2014,7 @@
   border: calc(var(--luke-space-2) / 2) solid var(--agent-pointer);
   border-radius: 50%;
   opacity: 0;
-  animation: cloud-browser-cursor-ripple var(--duration-shape) ease-out var(--duration-fast)
+  animation: cloud-browser-cursor-ripple var(--luke-duration-shape) ease-out var(--luke-duration-fast)
     backwards;
 }
 
@@ -2236,7 +2226,7 @@
 
 .diff-list-fold {
   transform: rotate(90deg);
-  transition: transform var(--duration-quick) ease;
+  transition: transform var(--luke-duration-quick) ease;
 }
 
 .diff-list-head[data-collapsed] .diff-list-fold {
@@ -2970,7 +2960,7 @@
 
   .chapters-view[data-rail-over="open"] .chapter-rail {
     display: flex;
-    animation: chapter-rail-in var(--duration-pane) var(--motion-pane) backwards;
+    animation: chapter-rail-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
   .chapters-view .chapter-strip {
@@ -3479,7 +3469,7 @@
 
 .pull-request-branch-glyph > * {
   grid-area: 1 / 1;
-  transition: opacity var(--duration-quick) var(--motion-exit);
+  transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .pull-request-branch-glyph > .copy-glyph {
@@ -4128,7 +4118,7 @@
   width: 100%;
   min-width: 0;
   border-radius: 0;
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 .annotation-card-where > .luke-text-button:hover {
@@ -4172,7 +4162,7 @@
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   white-space: nowrap;
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 .annotation-card-head:hover {
@@ -4886,8 +4876,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   padding-inline: var(--luke-space-12);
   border-radius: inherit;
   transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
+    color var(--luke-duration-quick) var(--luke-spring),
+    background-color var(--luke-duration-quick) var(--luke-spring);
 }
 
 .plan-card-head:hover {
@@ -5485,8 +5475,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   border-radius: inherit;
   cursor: pointer;
   transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
+    color var(--luke-duration-quick) var(--luke-spring),
+    background-color var(--luke-duration-quick) var(--luke-spring);
 }
 
 .todos-dock-head:hover {
@@ -5610,31 +5600,31 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    standing still under it, because the card's ground is translucent and a
    line passing over a list would show it through. */
 [data-todos-dock][data-disclosure="opening"] {
-  animation: todos-dock-unroll var(--duration-pane) var(--motion-pane) backwards;
+  animation: todos-dock-unroll var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="opening"] > summary {
-  animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+  animation: todos-dock-rise var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="opening"] > .todos-dock-body {
   animation:
-    luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
-    todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+    luke-disclosure-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+    todos-dock-rise var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] {
-  animation: todos-dock-roll-up var(--duration-exit) var(--motion-exit) forwards;
+  animation: todos-dock-roll-up var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > summary {
-  animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+  animation: todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > .todos-dock-body {
   animation:
-    luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
-    todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+    luke-disclosure-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards,
+    todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 /* Note that each clip names both ends, because a clip cannot be interpolated
@@ -6290,7 +6280,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .attachment-viewer-image[data-glide="true"] {
-  transition: transform var(--duration-quick) var(--motion-pane);
+  transition: transform var(--luke-duration-quick) var(--luke-motion-pane);
 }
 
 /* A text file fills the card under its header and scrolls there, drawn
@@ -6529,7 +6519,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    is already making again, shows only once it has held a second, so a blip
    is never seen. */
 .terminal-bar[data-late="true"] {
-  animation: terminal-bar-late 0s linear var(--late-delay) both;
+  animation: terminal-bar-late 0s linear var(--luke-late-delay) both;
 }
 
 @keyframes terminal-bar-late {
@@ -6764,7 +6754,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .agent-context-fill {
   stroke: var(--context-fill);
   stroke-linecap: round;
-  transition: stroke-dasharray var(--duration-quick) var(--spring);
+  transition: stroke-dasharray var(--luke-duration-quick) var(--luke-spring);
 }
 
 /* The popover hangs above the ring as the model menu does above its chip,
@@ -7482,7 +7472,7 @@ svg.lucide {
   background: var(--comment-mark);
   color: inherit;
   cursor: pointer;
-  transition: background var(--duration-hover) ease;
+  transition: background var(--luke-duration-hover) ease;
 }
 
 .plan-comment-mark:hover,
@@ -7533,20 +7523,14 @@ svg.lucide {
   top: 0;
   right: 0;
   left: 0;
-  animation: comment-slot-arrive var(--duration-quick) ease-out backwards;
+  animation: luke-menu-arrive var(--luke-duration-quick) ease-out backwards;
 }
 
 /* A card already in the margin travels to its next place, as threads above
    it open, grow, or arrive, on the spring every move rides; one arriving
    lands where it belongs and fades in. */
 .comment-slot[data-moves="true"] {
-  transition: transform var(--duration-shape) var(--spring);
-}
-
-@keyframes comment-slot-arrive {
-  from {
-    opacity: 0;
-  }
+  transition: transform var(--luke-duration-shape) var(--luke-spring);
 }
 
 /* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
@@ -7557,7 +7541,7 @@ svg.lucide {
   position: absolute;
   left: calc(100% + var(--luke-space-2));
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .comment-block-button:focus-within {
@@ -7765,11 +7749,11 @@ svg.lucide {
   display: flex;
   margin-right: calc(var(--luke-space-6) * -1);
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .comment-head-end > .comment-time {
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .comment-tools:focus-within,

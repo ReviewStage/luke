@@ -41,7 +41,7 @@
  * included, and no chord changes what stands behind it. Closing hands focus
  * back to whatever had it, and only then runs what was chosen, so a command
  * acts from where the developer was, as its shortcut would have. It then
- * fades out over `--duration-exit`, held by Radix's dialog through the exit
+ * fades out over `--luke-duration-exit`, held by Radix's dialog through the exit
  * its `data-state` plays, and inert while it does.
  *
  * Every row's value is its place in the list, never words: cmdk writes it
