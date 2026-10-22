@@ -1,4 +1,8 @@
-import type { CodingAgentSummary, TasklessAgent } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  type CodingAgentSummary,
+  type TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
@@ -108,6 +112,7 @@ export function agentCardReading(
           messages,
           brief: agent.brief,
           chatOn: agents.chatOn === true,
+          quiet: agent.kind === CODING_AGENT_KIND.OPERATOR,
         }),
       startedBy: teammateRef(agent.startedBy, agents.me),
       automationId: agent.automationId,
