@@ -74,7 +74,7 @@ const KEPT_JPEG = Buffer.from([
   0x05,
   0x00,
   0x03,
-  ...new Array(64).fill(7),
+  ...Array.from({ length: 64 }, () => 7),
 ]).toString("base64");
 
 /** A synthetic PNG whose header states the same size, larger than the JPEG, so the JPEG is kept. */
@@ -103,7 +103,7 @@ const KEPT_PNG = Buffer.from([
   0x00,
   0x03,
   0x20,
-  ...new Array(256).fill(9),
+  ...Array.from({ length: 256 }, () => 9),
 ]).toString("base64");
 
 /** The commands a page answers with nothing much, as Chrome does once they are done. */
