@@ -27,10 +27,11 @@ its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
 `apps/web/server/routes/`, the deployment shell beside them, the agents' eve
 apps, `apps/dev`, and build and release scripts. A React component, control, or
-repeated UI shape lives in `packages/ui` whatever app mounts it, even one
-app alone, and a duplicate is folded into one; an app or `packages/panel`
-composes those components and never hand-builds a control (a raw `<button>`,
-input, tab, or card with its own press handling). A hook or DOM-free view
+repeated UI shape must live in `packages/ui` whatever app mounts it, even one
+app alone, with no exceptions, and a duplicate is folded into one; an app or
+`packages/panel` must compose those components and never hand-builds a control
+(a raw `<button>`, input, tab, or card with its own press handling) outside
+`@luke/ui`: the design system is one rigid set that every agent must use. A hook or DOM-free view
 model lives in `packages/ui` when more than one app can mount it, the panel every client mounts, the desktop's panel window and the
 web's tab alike, in `packages/panel`, the hosted service's logic in
 `packages/service`, its contract and clients in `packages/features`, and a
