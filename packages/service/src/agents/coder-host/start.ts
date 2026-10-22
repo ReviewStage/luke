@@ -968,7 +968,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const serverWords =
     ask.serverWords ??
     (from === undefined ? words : wordsOf(from.serverWords ?? from.prompt, ask.note));
-  // The files of the source's brief that fit, then those the note carries, which a fresh plan start has none of.
+  // The files of the source's brief that fit, then those the note carries; a fresh start's are its own,
+  // a prompt's or, on the plan, the note's, such as the pictures `start_agent` hands on.
   const attachments =
     from === undefined
       ? (ask.attachments ?? [])
@@ -1028,7 +1029,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         turn: BRAIN_HOST_TURN.TYPED,
         message: eveContent(
           handed,
-          brief.prompt === null && from === undefined ? [] : attachments,
+          attachments,
           words === undefined ? undefined : mentionedContext(words, landing.task, reads),
         ),
       })
