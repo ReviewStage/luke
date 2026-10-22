@@ -25,7 +25,7 @@ const SETTLED_STATUSES: ReadonlySet<TaskStatus> = new Set([TASK_STATUS.DONE, TAS
  * one it stands in where that is Done or Canceled, else Done where an agent
  * on it has a merged pull request and Canceled where none does.
  */
-export function archiveSettledStatus(
+function archiveSettledStatus(
   userId: string,
   taskId: string,
   standing: TaskStatus,
