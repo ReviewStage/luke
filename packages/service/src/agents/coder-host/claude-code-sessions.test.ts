@@ -27,7 +27,8 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { DateTime, Effect, Fiber, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN } from "../../core.js";
@@ -107,9 +108,13 @@ const NO_KEYS: HostedEnvironmentValues = {
 };
 
 /** Everything but the store, around the fake Vercel given. */
-function services(api: ReturnType<typeof runnerSandboxApi>, snapshot: string | null = SNAPSHOT) {
+function services(
+  api: ReturnType<typeof runnerSandboxApi>,
+  snapshot: string | null = SNAPSHOT,
+  http = api.layer,
+) {
   return Layer.mergeAll(
-    api.layer,
+    http,
     GITHUB_APP_WITH_TOKENS,
     Layer.succeed(HostedEnvironment, NO_KEYS),
     Layer.succeed(AgentSandboxImage, {
@@ -174,6 +179,44 @@ const turnUnderWay = (userId: string, agent: CodingAgent) =>
       { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
     );
     return turnId;
+  });
+
+/** A point a fake call stops at until the test opens it: `arrived` settles once a call reached it. */
+function gate() {
+  let arrive = () => {};
+  let open = () => {};
+  const arrived = new Promise<void>((settle) => {
+    arrive = settle;
+  });
+  const opened = new Promise<void>((settle) => {
+    open = settle;
+  });
+  return {
+    arrived,
+    open,
+    pass: async () => {
+      arrive();
+      await opened;
+    },
+  };
+}
+
+/** Every turn of the event loop a call not held behind the lease would need to race the one held, then the held one let through, its waiter woken, until both settle. */
+const raceThrough = <A, E>(held: { open: () => void }, fibers: readonly Fiber.Fiber<A, E>[]) =>
+  Effect.gen(function* () {
+    const turns = () =>
+      Effect.promise(async () => {
+        for (let turn = 0; turn < 50; turn += 1) {
+          await new Promise<void>((settle) => setImmediate(settle));
+        }
+      });
+    yield* turns();
+    held.open();
+    for (let poll = 0; poll < 20; poll += 1) {
+      yield* turns();
+      yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
+    }
+    return yield* Effect.forEach(fibers, Fiber.join);
   });
 
 afterEach(() => {
@@ -802,6 +845,105 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.commands.length, 2);
         assert.equal(api.commands[1]?.sandboxSessionId, first.sandboxSessionId);
         assert.equal(linesOf(first).length, 2);
+      }),
+  );
+
+  it.effect(
+    "two messages at once to a runner that exited relaunch it once, and both reach that one runner in order",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        // The first message's relaunch is held as its command starts, the widest the race stands open.
+        const held = gate();
+        api.hooks.onStart = () => {
+          api.hooks.onStart = undefined;
+          return held.pass();
+        };
+
+        const one = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "One.")),
+        );
+        yield* Effect.promise(() => held.arrived);
+        const two = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Two.")),
+        );
+        const sent = yield* raceThrough(held, [one, two]);
+
+        assert.deepEqual(
+          sent.map((each) => each.outcome),
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        assert.equal(api.commands.length, 2);
+        assert.deepEqual(
+          (linesOf(api.commands[1]) as InputLine[]).flatMap((each) =>
+            each.type === INPUT_LINE.MESSAGE ? each.content : [],
+          ),
+          [
+            { type: "text", text: "One." },
+            { type: "text", text: "Two." },
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "two messages at once to a running runner are both written, in order, neither over the other",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        // The first message's write of its bytes is held, after it read where the stdin stands.
+        const held = gate();
+        let holding = false;
+        const http = fakeHttpClientLayer(async (url, init) => {
+          if (holding && url.includes("/stdin") && String(init.body).includes('"data"')) {
+            holding = false;
+            await held.pass();
+          }
+          return api.respond(url, init);
+        });
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api, SNAPSHOT, http)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        holding = true;
+
+        const one = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "One.")),
+        );
+        yield* Effect.promise(() => held.arrived);
+        const two = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Two.")),
+        );
+        const sent = yield* raceThrough(held, [one, two]);
+
+        assert.deepEqual(
+          sent.map((each) => each.outcome),
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        assert.equal(api.commands.length, 1);
+        assert.deepEqual(
+          (linesOf(api.commands[0]) as InputLine[]).flatMap((each) =>
+            each.type === INPUT_LINE.MESSAGE ? each.content : [],
+          ),
+          [
+            { type: "text", text: "Fix the invitations." },
+            { type: "text", text: "One." },
+            { type: "text", text: "Two." },
+          ],
+        );
       }),
   );
 
