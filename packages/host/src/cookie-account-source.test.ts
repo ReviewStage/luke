@@ -1121,11 +1121,13 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     // An experiment's switch is written for the same account and lands.
     const set = settings.methods[GATEWAY_METHOD.EXPERIMENTS_SET];
     assert.ok(set);
-    const result = yield* Effect.orDie(set({ experiment: EXPERIMENT.FACTORY, on: true }, CONTEXT));
+    const result = yield* Effect.orDie(
+      set({ experiment: EXPERIMENT.CODE_REVIEW, on: true }, CONTEXT),
+    );
     assert.ok(isRecord(result));
     assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
-    assert.equal((yield* experiments)[EXPERIMENT.FACTORY], true);
-    assert.equal(state.experiments[EXPERIMENT.FACTORY], true);
+    assert.equal((yield* experiments)[EXPERIMENT.CODE_REVIEW], true);
+    assert.equal(state.experiments[EXPERIMENT.CODE_REVIEW], true);
 
     // Another tab signs in as someone else; a switch pressed here for the first account is sent for no one.
     state.user = { ...USER, id: "user-2", email: "other@example.com" };
@@ -1136,7 +1138,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     assert.equal(state.experiments[EXPERIMENT.BROWSER], undefined);
     assert.equal(yield* account.token.readAccountKey?.() ?? Effect.void, "other@example.com");
     // The first account's choices are no longer drawn for the one now signed in.
-    assert.equal((yield* experiments)[EXPERIMENT.FACTORY], undefined);
+    assert.equal((yield* experiments)[EXPERIMENT.CODE_REVIEW], undefined);
     assert.equal(yield* voice, undefined);
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, service),
@@ -1215,12 +1217,12 @@ describe("a settings store that keeps no account of its own", () => {
       const directory = yield* temporaryDirectoryScoped("luke-cookie-store-");
       const signedIn: SignedIn = { email: ADA };
       const store = yield* storeOver(directory, signedIn);
-      assert.equal(yield* store.cacheExperiments(ADA, { [EXPERIMENT.FACTORY]: true }), true);
+      assert.equal(yield* store.cacheExperiments(ADA, { [EXPERIMENT.CODE_REVIEW]: true }), true);
 
       const reopened = yield* storeOver(directory, signedIn);
-      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.FACTORY], true);
+      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.CODE_REVIEW], true);
       signedIn.email = BOB;
-      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.FACTORY], undefined);
+      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.CODE_REVIEW], undefined);
     }).pipe(Effect.orDie, Effect.provide([NodeFileSystem.layer, NodePath.layer])),
   );
 

@@ -159,9 +159,6 @@ function experimentalFound(query: string, accountDrawn: boolean): readonly strin
 }
 
 test("an experiment is found by its name, what it brings, and what other apps call the page, while signed in", () => {
-  for (const query of ["Factory", "Talk to Build to Ship"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Factory"], query);
-  }
   for (const query of ["Code review", "reviews each pull request"]) {
     assert.deepEqual(experimentalFound(query, true), ["Code review"], query);
   }
@@ -181,11 +178,11 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Inbox-first sidebar", "Code review", "Browser tab", "Chat", "Video calls", "Factory"],
+      ["Inbox-first sidebar", "Code review", "Browser tab", "Chat", "Video calls"],
       query,
     );
   }
-  assert.deepEqual(experimentalFound("Factory", false), []);
+  assert.deepEqual(experimentalFound("Chat", false), []);
 });
 
 test("Video calls is one switch, on the Experimental page, and not among the Voice page's controls", () => {

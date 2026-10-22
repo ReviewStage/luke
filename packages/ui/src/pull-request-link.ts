@@ -53,7 +53,7 @@ interface ListedTask {
 /**
  * The task and the agent whose Pull request tab a link to a pull request
  * opens, among the tasks the window lists, wherever the link is pressed:
- * Factory, Chat, a task's card, or another task. Note that a task's row
+ * Chat, a task's card, or another task. Note that a task's row
  * names only its few newest pull requests, so an older one is not found here
  * and opens on GitHub.
  */

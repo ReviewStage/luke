@@ -344,14 +344,13 @@ const STAND_IN = {
   INBOX: "inbox",
   AGENT: "agent",
   PERSON: "person",
-  FACTORY: "factory",
   AUTOMATIONS: "automations",
   CHAT: "chat",
   BOARD: "board",
   ADMIN: "admin",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Board. */
+/** The window's Inbox with the item chosen in it, one agent's page, a person's page, the Automations page, Chat with the place shown in it, or the Board. */
 type StandIn =
   | {
       readonly kind: typeof STAND_IN.INBOX;
@@ -367,7 +366,6 @@ type StandIn =
       /** The workspace the page is the person's in, which it gives way to another listed in its place. */
       readonly workspaceId: string | undefined;
     }
-  | { readonly kind: typeof STAND_IN.FACTORY }
   | {
       readonly kind: typeof STAND_IN.AUTOMATIONS;
       readonly place: AutomationsPlace;
@@ -401,13 +399,6 @@ interface AdminViewControl {
   readonly onOpen: (view?: AdminView) => void;
   /** Stands the section list, the view kept, as a narrow room's way back from a view does. */
   readonly onList: () => void;
-  readonly onClose: () => void;
-}
-
-/** The window's Factory: whether it stands in the task's place, and the presses that open and leave it. */
-interface FactoryViewControl {
-  readonly open: boolean;
-  readonly onOpen: () => void;
   readonly onClose: () => void;
 }
 
@@ -476,7 +467,7 @@ interface AutomationsViewControl {
  * The window's Chat, standing in the plan's place beside the sidebar as the
  * Inbox does and on the same terms: the workspace's channels in a rail of
  * their own, and For you or the channel chosen beside it. It gives way to
- * the Inbox, an agent's page, Factory, and the Automations page, and they to it. A live run reads
+ * the Inbox, an agent's page, and the Automations page, and they to it. A live run reads
  * the listed workspace's chat, followed and pushed (`use-workspace-chat.ts`), while
  * the account has Chat on; a fixture run stages its own.
  */
@@ -688,7 +679,7 @@ export interface TasksControl {
   /**
    * Opens the place a Luke link names, of the Plans tab's: a task, its
    * section, version, page, call, or turn; an agent, on its task's tab or
-   * its own page; the Inbox, on an item; Automations, on one; Factory. A
+   * its own page; the Inbox, on an item; Automations, on one. A
    * place of a workspace the account lists by the link's slug is shown in
    * it. Whoever cannot read the place is told so where it would stand, by
    * the place's own read, which is checked against them.
@@ -732,16 +723,12 @@ export interface TasksControl {
   agentView: AgentViewControl;
   /** One person's page: whose stands in the plan's place, if anyone's, and its presses (`person-page.tsx`). */
   personView: PersonViewControl;
-  /** The window's Factory: whether it stands in the task's place, and its presses (`desktop-factory.tsx`). */
-  factoryView: FactoryViewControl;
   /** The window's Admin place, an admin's alone: whether it takes the window, its view, and its presses (`desktop-admin.tsx`). */
   adminView: AdminViewControl;
   /** The window's Automations page: whether it stands in the task's place, and its presses (`automations-page.tsx`). */
   automationsView: AutomationsViewControl;
   /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
   boardView: BoardViewControl;
-  /** The task of the agent a call in progress on this Mac speaks into, or none: what Factory marks as talked through. */
-  talkingTaskId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
   chatView: ChatViewControl;
   /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code, and a chat message's, opens. */
@@ -3174,9 +3161,6 @@ export function useTasksTab(input: {
           },
         });
         return;
-      case LINK_PLACE.FACTORY:
-        standInFor({ kind: STAND_IN.FACTORY });
-        return;
       // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
       // workspace's accounts, so it lists nothing; one naming the place alone opens on its list, as Settings' does.
       case LINK_PLACE.ADMIN: {
@@ -3682,16 +3666,7 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // Factory stands over the task's place as the Inbox and an agent's page do, each giving way to the others.
-    factoryView: {
-      open: standIn?.kind === STAND_IN.FACTORY,
-      onOpen: guard(() => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.FACTORY });
-      }),
-      onClose: guard(() => setStandIn(undefined)),
-    },
-    // The Admin place stands over the task's place as Factory does, each giving way to the others.
+    // The Admin place stands over the task's place as the Inbox and an agent's page do, each giving way to the others.
     adminView: {
       open: standIn?.kind === STAND_IN.ADMIN,
       view: standIn?.kind === STAND_IN.ADMIN ? standIn.view : ADMIN_OVERVIEW,
@@ -3708,7 +3683,7 @@ export function useTasksTab(input: {
         setStandIn((held) => (held?.kind === STAND_IN.ADMIN ? { ...held, listed: true } : held)),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // The Automations page stands over the task's place as Factory does, each giving way to the others.
+    // The Automations page stands over the task's place as the Admin place does, each giving way to the others.
     automationsView: {
       open: standIn?.kind === STAND_IN.AUTOMATIONS,
       place: standIn?.kind === STAND_IN.AUTOMATIONS ? standIn.place : AUTOMATIONS_LIST,
@@ -3725,7 +3700,7 @@ export function useTasksTab(input: {
         ),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // The Board stands over the plan's place as Factory does, each giving way to the others.
+    // The Board stands over the plan's place as the Automations page does, each giving way to the others.
     boardView: {
       open: standIn?.kind === STAND_IN.BOARD,
       onOpen: guard(() => {
@@ -3734,7 +3709,6 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    talkingTaskId: standingCall?.taskId,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the task's Call tab, asked to

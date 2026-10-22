@@ -83,7 +83,7 @@ import { useRowDrag } from "./use-row-drag.js";
  * tasks-board.tsx -- the Tasks page's Board: the listed workspace's tasks on a column for each status, or each priority, in the order work moves through them.
  *
  * It is one of the Tasks page's two views (`tasks-page.tsx`), which stands
- * in the plan's place beside the sidebar, as Factory does. A column is a quiet well headed by
+ * in the plan's place beside the sidebar, as the Inbox does. A column is a quiet well headed by
  * its status's mark, its name, and how many tasks stand in it, and scrolls
  * its own cards, the most pressing first. A card is raised off the well:
  * its key, how many of its Inbox threads wait on the reader, when it last
@@ -103,7 +103,7 @@ import { useRowDrag } from "./use-row-drag.js";
  * Canceled once asked for. A task archived is off the board, as it is off
  * the sidebar's list. A task from a service before statuses stands under
  * Todo, where a task starts, and is sent nothing until it is dragged.
- * Escape closes the board, as it closes Factory.
+ * Escape closes the board, as it closes the Automations page.
  *
  * A narrow room, a phone's, has no width for columns side by side, nor a
  * second column in sight to drag a card onto: it stands one column at a

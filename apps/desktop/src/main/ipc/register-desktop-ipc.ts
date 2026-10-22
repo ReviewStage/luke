@@ -275,7 +275,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
         chapters: { host: operator.host },
-        factory: { host: operator.host },
         integrations: { host: operator.host },
         pushes: windowPushes,
         settings: {

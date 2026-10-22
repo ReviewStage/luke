@@ -59,7 +59,7 @@ function Places(): React.JSX.Element {
         general
       </NavItem>
       <NavItem icon={<FolderIcon />} disabled>
-        Factory
+        Automations
       </NavItem>
       <NavItem icon={<BackIcon />} mark={<Badge tone={BADGE_TONE.ATTENTION}>Needs you</Badge>}>
         Back

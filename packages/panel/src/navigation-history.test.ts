@@ -812,7 +812,6 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
       },
     }),
     tasksControl({ ...none, inboxView: { ...tasksControl().inboxView, open: true } }),
-    tasksControl({ ...none, factoryView: { ...tasksControl().factoryView, open: true } }),
     tasksControl({ ...none, agentView: { ...tasksControl().agentView, agentId: "agent-1" } }),
     tasksControl({
       ...none,

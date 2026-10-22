@@ -12,8 +12,6 @@ export const EXPERIMENT = {
   BROWSER: "browser",
   /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
   CHAT: "chat",
-  /** The read-only Talk → Build → Ship board beside the Inbox. */
-  FACTORY: "factory",
   /** The Code review automation, offered on the Automations page with its own settings in the editor. */
   CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
@@ -86,13 +84,6 @@ export const EXPERIMENTS = [
       "Keyframe. Your own voice never does.",
     owner: "Charles",
     since: "2026-10-15",
-  },
-  {
-    key: EXPERIMENT.FACTORY,
-    name: "Factory",
-    detail: "Every task on one board, from Talk to Build to Ship. Read-only for now.",
-    owner: "Dean",
-    since: "2026-10-14",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

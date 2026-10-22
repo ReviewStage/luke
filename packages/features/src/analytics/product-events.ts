@@ -238,6 +238,7 @@ export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_S
 export const PRODUCT_EXPERIMENT = {
   BROWSER: "browser",
   CHAT: "chat",
+  /** Removed with Factory, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   FACTORY: "factory",
   /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   AUTOMATIONS: "automations",

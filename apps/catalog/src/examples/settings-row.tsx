@@ -75,7 +75,7 @@ function Rows(): React.JSX.Element {
       </SettingsRow>
       <SettingsRow
         label="Archive a coding agent's run once its pull request merges into the default branch"
-        description="Runs whose branch acme/a-repository-whose-name-runs-long-and-longer merged stop showing in Factory."
+        description="Runs whose branch acme/a-repository-whose-name-runs-long-and-longer merged stop showing in the sidebar."
       >
         {(control) => (
           <Button variant={BUTTON_VARIANT.OUTLINE} aria-describedby={control["aria-describedby"]}>

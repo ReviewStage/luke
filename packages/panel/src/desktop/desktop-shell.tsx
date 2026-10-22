@@ -62,7 +62,7 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
-import { ADMIN_PLACE, FACTORY, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
+import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
@@ -114,27 +114,6 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       }
       state={COLLECTION_STATE.LOADING}
       loadingLabel="Reading tasks"
-    />
-  );
-}
-
-/** What stands while Factory's chunk loads (`pages-on-demand.ts`): its frame and title over quiet blocks, and its own way out, as the Tasks page's does. */
-function FactoryLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_FACTORY, onExit);
-  return (
-    <CollectionPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Factory"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Factory</h1>
-            <ExperimentTag />
-          </div>
-        </header>
-      }
-      state={COLLECTION_STATE.LOADING}
-      loadingLabel="Reading tasks…"
     />
   );
 }
@@ -375,18 +354,7 @@ function usePlaceCommands(
         }
       : undefined,
   );
-  // Factory is an experiment: offered nowhere, ⌘K, its chord, or the menu, while it is off.
-  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  useAppCommand(
-    APP_COMMAND.FACTORY,
-    pastGate && tasks.signedIn && factoryOn
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.factoryView.onOpen();
-        }
-      : undefined,
-  );
-  // Chat is an experiment as Factory is, so ⌘K offers it only on the terms its sidebar row stands on.
+  // Chat is an experiment, so ⌘K offers it only on the terms its sidebar row stands on.
   const chatOn = useChatOn();
   useAppCommand(
     APP_COMMAND.CHAT,
@@ -474,7 +442,7 @@ function callTabShown(tasks: TasksControl, calling: string | undefined): boolean
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
- * from; Factory, the Automations page, and Chat in the listed workspace; the task on screen in its own workspace, or alone while that is not
+ * from; the Automations page and Chat in the listed workspace; the task on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
@@ -491,7 +459,6 @@ function titleSubject(
   if (tasks.personView.userId !== undefined) {
     return { signedIn, subject: "Profile", workspace: tasks.workspace };
   }
-  if (tasks.factoryView.open) return { signedIn, subject: "Factory", workspace: tasks.workspace };
   // The Admin place reads every workspace's accounts, so it is no one workspace's.
   if (tasks.adminView.open) return { signedIn, subject: "Admin", workspace: undefined };
   if (tasks.automationsView.open) {
@@ -571,13 +538,7 @@ export function DesktopShell({
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   const offline = useOffline();
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
-  // Factory switched off while it stands, here or on another Mac, gives the task's place back.
-  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const { open: factoryShown, onClose: closeFactory } = tasks.factoryView;
-  useEffect(() => {
-    if (factoryShown && !factoryOn) closeFactory();
-  }, [factoryShown, factoryOn, closeFactory]);
-  // Chat is an experiment on the same terms: turned off while it stands, it puts itself away.
+  // Chat is an experiment: switched off while it stands, here or on another Mac, it puts itself away.
   const chatOn = useChatOn();
   const { open: chatShown, onClose: closeChat } = tasks.chatView;
   useEffect(() => {
@@ -597,15 +558,14 @@ export function DesktopShell({
     shell,
     tasks.sidePanel.fullScreen,
     room === SHELL_ROOM.NARROW,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${tasks.adminView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${tasks.adminView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
+  // the Inbox, an agent's or a person's page, the Automations page, Chat, or the Board standing in its place is not the plan.
   const standingIn =
     tasks.inboxView.open ||
     tasks.agentView.agentId !== undefined ||
     tasks.personView.userId !== undefined ||
-    tasks.factoryView.open ||
     tasks.automationsView.open ||
     tasks.chatView.open ||
     tasks.boardView.open ||
@@ -663,8 +623,8 @@ export function DesktopShell({
   // New task asks over whatever stands, the tasks or a version history.
   const newTaskDialog = useMemo(() => <NewTaskDialog newTask={tasks.newTask} />, [tasks.newTask]);
   // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. Factory,
-  // the Automations page, and Chat stand in the plan's place, so they draw
+  // toolbar beneath it leaves the toggle room then and only then. The
+  // Automations page and Chat stand in the plan's place, so they draw
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
@@ -790,7 +750,6 @@ export function DesktopShell({
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
-  const factoryOpen = tasks.factoryView.open && factoryOn;
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
@@ -877,12 +836,6 @@ export function DesktopShell({
                     name={tasks.personView.name}
                     staged={sidebar.staged}
                   />
-                </Suspense>
-              </PageFind>
-            ) : factoryOpen ? (
-              <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
-                <Suspense fallback={<FactoryLoading onExit={tasks.factoryView.onClose} />}>
-                  <FACTORY.Route tasks={tasks} />
                 </Suspense>
               </PageFind>
             ) : boardOpen ? (

@@ -5,7 +5,7 @@ settings rows, and experiments, is `@luke/panel` (`packages/panel/AGENTS.md`).
 What lives here is the desktop's shell around it: each window's entry and
 root, the desktop's answer to the panel's platform and bundle doors
 (`desktop-platform.ts`, `desktop-bundles.ts`), session replay, the voice and
-call windows, the avatar, and the Factory's scenes and worlds.
+call windows, and the avatar.
 
 `repository-checks.sh` already fails the build on a `#main/` or `node:` import
 here. What it cannot see is the same trap arriving through a package barrel:

@@ -5,7 +5,7 @@
  * Back's (`navigation-history.ts`): a task with the tab its column showed
  * and the tab its side panel showed, either of them none, or a place the
  * window shows in the task's place, the Inbox, Chat, the Board,
- * Automations, Factory, an agent's own page, or a person's. Settings and a
+ * Automations, an agent's own page, or a person's. Settings and a
  * version history are no stop, since each is a layer over the window rather
  * than a place in it, and nor is a new account's welcome, which stands only
  * until a first task. Arriving on a task is one stop; a tab chosen there by
@@ -40,7 +40,6 @@ export const SWITCHER_PLACE = {
   CHAT: "chat",
   BOARD: "board",
   AUTOMATIONS: "automations",
-  FACTORY: "factory",
 } as const;
 
 export type SwitcherPlace = (typeof SWITCHER_PLACE)[keyof typeof SWITCHER_PLACE];
@@ -215,7 +214,6 @@ export interface WindowStanding {
         readonly workspaceId: string | undefined;
       }
     | undefined;
-  readonly factory: boolean;
   readonly board: boolean;
   readonly automations: boolean;
   /** The task the window is on, or on its way to; none with no task open. */
@@ -243,7 +241,6 @@ export function shownStop(standing: WindowStanding): Stop | undefined {
   if (standing.inbox) return place(SWITCHER_PLACE.INBOX);
   if (standing.agentId !== undefined) return { kind: STOP_KIND.AGENT, agentId: standing.agentId };
   if (standing.person !== undefined) return { kind: STOP_KIND.PERSON, ...standing.person };
-  if (standing.factory) return place(SWITCHER_PLACE.FACTORY);
   if (standing.board) return place(SWITCHER_PLACE.BOARD);
   if (standing.automations) return place(SWITCHER_PLACE.AUTOMATIONS);
   const taskId = standing.boundFor;

@@ -94,7 +94,7 @@ function SettingsSections(): React.JSX.Element {
           <SettingsSection title="Coding agents that open pull requests against acme/a-repository-whose-name-runs-long">
             <SettingsRow
               label="Archive a coding agent's run once its pull request merges into the default branch"
-              description="Runs whose branch merged stop showing in Factory."
+              description="Runs whose branch merged stop showing in the sidebar."
             >
               {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Choose repositories</Button>}
             </SettingsRow>

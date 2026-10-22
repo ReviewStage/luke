@@ -1650,7 +1650,7 @@ test("the Inbox opened again stands on the item last chosen in it, as a row's ch
 
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().boardView.onOpen());
   act(() => tab.control().inboxView.onOpen());
   const chosen = tab.control().inboxView.chosen;
   act(() =>
@@ -1659,7 +1659,7 @@ test("the Inbox opened again stands on the item last chosen in it, as a row's ch
       place: { kind: LINK_PLACE.INBOX_ITEM, planId: "notes", itemId },
     }),
   );
-  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().boardView.onOpen());
   act(() => tab.control().inboxView.onOpen());
   const linked = tab.control().inboxView.chosen;
   act(() => tab.control().onChooseWorkspace(ACME.id));
@@ -1676,7 +1676,7 @@ test("a link to the Inbox stands on the item last chosen in the workspace it lis
 
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().boardView.onOpen());
   act(() => tab.control().onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.INBOX } }));
 
   assert.equal(tab.control().inboxView.open, true);
@@ -2517,14 +2517,14 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
     down = tab.control().leaveGuard.stand(ask);
   });
 
-  act(() => tab.control().factoryView.onOpen());
   act(() => tab.control().boardView.onOpen());
+  act(() => tab.control().automationsView.onOpen());
   act(() => tab.control().onChooseWorkspace("workspace-other"));
   assert.equal(tab.control().inboxView.open, true, "the page stands while it is asked about");
   assert.equal(asked.length, 3, "the workspace switcher asks as the other doors do");
 
   act(() => asked[0]?.());
-  assert.equal(tab.control().factoryView.open, true, "Leave goes where the first way out went");
+  assert.equal(tab.control().boardView.open, true, "Leave goes where the first way out went");
 
   act(() => down());
   act(() => tab.control().inboxView.onOpen());
@@ -2532,20 +2532,20 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
   assert.equal(asked.length, 3, "nothing is asked once the ask is down");
 });
 
-test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and a plan's press puts Factory away", () => {
+test("the Board and the Inbox stand in the plan's place in turn: opening one puts the other away, and a plan's press puts the Board away", () => {
   const tab = mount({ shown: true, tasks: listRead([listed()]) });
   act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().factoryView.onOpen());
-  assert.equal(tab.control().factoryView.open, true);
+  act(() => tab.control().boardView.onOpen());
+  assert.equal(tab.control().boardView.open, true);
   assert.equal(tab.control().inboxView.open, false);
 
   act(() => tab.control().inboxView.onOpen());
-  assert.equal(tab.control().factoryView.open, false);
+  assert.equal(tab.control().boardView.open, false);
   assert.equal(tab.control().inboxView.open, true);
 
-  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().boardView.onOpen());
   act(() => tab.control().onSelect(TASK.id));
-  assert.equal(tab.control().factoryView.open, false);
+  assert.equal(tab.control().boardView.open, false);
 });
 
 test("with no plan open the window rests on the Inbox: it stands once the list lands, and closing it or any page over it lands on it again", () => {
@@ -2554,10 +2554,6 @@ test("with no plan open the window rests on the Inbox: it stands once the list l
 
   act(() => tab.control().inboxView.onClose());
   assert.equal(tab.control().inboxView.open, true, "the Inbox has nothing under it to close to");
-
-  act(() => tab.control().factoryView.onOpen());
-  act(() => tab.control().factoryView.onClose());
-  assert.equal(tab.control().inboxView.open, true, "Factory put away lands on the Inbox");
 
   act(() => tab.control().boardView.onOpen());
   act(() => tab.control().boardView.onClose());

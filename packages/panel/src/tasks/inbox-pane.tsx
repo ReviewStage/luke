@@ -1745,7 +1745,7 @@ function useAutomationCrumb(
   if (holder.kind !== INBOX_HOLDER.AUTOMATION) return undefined;
   return {
     label: holder.name,
-    // Note that the agents no automation names stand under no automation, so their crumb wears the Factory's glyph, where every agent is listed, as their group's header does.
+    // Note that the agents no automation names stand under no automation, so their crumb wears the factory glyph, as their group's header does.
     glyph: holder.automationId === null ? <FactoryIcon /> : <ClockIcon />,
     hint: holder.name,
     card:

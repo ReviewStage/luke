@@ -13,10 +13,10 @@ import {
  * names where the account is in it, so a teammate's link to their
  * workspace's members lands on the reader's own copy of that page, or on
  * the reader's own Workspace page where they are not in it; a page the
- * window does not know opens Settings on its first. Factory's place, and
- * Chat's, stand nowhere while their experiment is off, as every other door
- * to them does (`renderer/CLAUDE.md`'s "Experiments"), so a link to either
- * says how to turn it on instead. The Admin place is an admin's alone, so
+ * window does not know opens Settings on its first. Chat's place stands
+ * nowhere while its experiment is off, as every other door to it does
+ * (`renderer/CLAUDE.md`'s "Experiments"), so a link to it says how to turn
+ * it on instead. The Admin place is an admin's alone, so
  * its link opens nowhere, and says nothing, for a reader who is no admin;
  * the window counts a reader whose access it is still reading as one, the
  * place waiting on that read, since a reload on an Admin address would
@@ -49,7 +49,6 @@ export function linkRoute(
   { workspace, place }: ReadLink,
   window: {
     readonly workspaces: readonly Workspace[];
-    readonly factoryOn: boolean;
     readonly chatOn: boolean;
     /** Whether the reader is an admin, or may be one while their access is read. */
     readonly adminOn: boolean;
@@ -71,8 +70,6 @@ export function linkRoute(
         settings: home === undefined ? page : { ...page, workspaceId: home.id },
       };
     }
-    case LINK_PLACE.FACTORY:
-      return window.factoryOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     case LINK_PLACE.CHAT:
       return window.chatOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     case LINK_PLACE.ADMIN:

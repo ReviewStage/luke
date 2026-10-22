@@ -156,15 +156,17 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
       const { owner, ask } = yield* openAccounts;
       assert.deepEqual(partOf(yield* ask(request(owner)), "experiments"), {});
 
-      const turnedOn = yield* ask(request(owner, { experiments: { [EXPERIMENT.FACTORY]: true } }));
-      assert.deepEqual(partOf(turnedOn, "experiments"), { [EXPERIMENT.FACTORY]: true });
+      const turnedOn = yield* ask(
+        request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } }),
+      );
+      assert.deepEqual(partOf(turnedOn, "experiments"), { [EXPERIMENT.CODE_REVIEW]: true });
 
       // The voice's own write leaves the experiments standing, and the experiments' leaves the voice.
       yield* ask(request(owner, { preferences: { voice: "cedar" } }));
       const turnedOff = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.FACTORY]: false } }),
+        request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: false } }),
       );
-      assert.deepEqual(partOf(turnedOff, "experiments"), { [EXPERIMENT.FACTORY]: false });
+      assert.deepEqual(partOf(turnedOff, "experiments"), { [EXPERIMENT.CODE_REVIEW]: false });
       assert.deepEqual(partOf(turnedOff, "preferences"), { voice: "cedar" });
     }),
   );
@@ -173,17 +175,17 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts;
       const newer = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.FACTORY]: true, newer: true } }),
+        request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true, newer: true } }),
       );
-      assert.deepEqual(partOf(newer, "experiments"), { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(partOf(newer, "experiments"), { [EXPERIMENT.CODE_REVIEW]: true });
 
-      const refused = yield* ask(request(owner, { experiments: [EXPERIMENT.FACTORY] }));
+      const refused = yield* ask(request(owner, { experiments: [EXPERIMENT.CODE_REVIEW] }));
       assert.deepEqual(refused, {
         status: HOSTED_HTTP_STATUS.BAD_REQUEST,
         body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
       });
       assert.deepEqual(partOf(yield* ask(request(owner)), "experiments"), {
-        [EXPERIMENT.FACTORY]: true,
+        [EXPERIMENT.CODE_REVIEW]: true,
       });
     }),
   );
@@ -191,7 +193,7 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
   it.effect("answers the bearer's own account's choices and no other's", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts;
-      yield* ask(request(owner, { experiments: { [EXPERIMENT.FACTORY]: true } }));
+      yield* ask(request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } }));
       assert.deepEqual(partOf(yield* ask(request(other)), "experiments"), {});
     }),
   );

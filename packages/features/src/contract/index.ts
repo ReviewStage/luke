@@ -14,7 +14,6 @@ import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
 import { dictationContract } from "./dictation.js";
 import { eventsContract } from "./events.js";
-import { factoryContract } from "./factory.js";
 import { githubContract } from "./github.js";
 import { githubTokenContract } from "./github-token.js";
 import { inboxContract } from "./inbox.js";
@@ -52,7 +51,6 @@ export const hostedContract = {
   automations: automationsContract,
   dictation: dictationContract,
   events: eventsContract,
-  factory: factoryContract,
   github: githubContract,
   githubToken: githubTokenContract,
   inbox: inboxContract,

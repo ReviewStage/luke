@@ -105,18 +105,18 @@ function draw(
 test("each experiment is a switch, on as the account chose, that writes the choice it is pressed to", async () => {
   const page = draw({
     entries: EXPERIMENTS,
-    experiments: experimentsOn(EXPERIMENT.FACTORY),
+    experiments: experimentsOn(EXPERIMENT.CHAT),
     signedIn: true,
   });
 
-  const factory = page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Factory"]');
-  assert.ok(factory, "Factory has a switch");
-  assert.equal(factory.getAttribute("aria-checked"), "true");
+  const chat = page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Chat"]');
+  assert.ok(chat, "Chat has a switch");
+  assert.equal(chat.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
   assert.ok(page.textContent?.startsWith("Inbox-first sidebar"));
 
-  await act(async () => factory.click());
-  assert.deepEqual(sent, [{ experiment: EXPERIMENT.FACTORY, on: false }]);
+  await act(async () => chat.click());
+  assert.deepEqual(sent, [{ experiment: EXPERIMENT.CHAT, on: false }]);
 });
 
 test("an experiment's Send feedback opens the dialog about that experiment", () => {
@@ -134,7 +134,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     EXPERIMENT.BROWSER,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
-    EXPERIMENT.FACTORY,
   ]);
 });
 
@@ -183,7 +182,6 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ["Browser tab"],
     ["Chat"],
     ["Video calls", "Avatar"],
-    ["Factory"],
   ]);
 
   // Every face stands open, with no menu to open first: one radio group, Atlas chosen at first.

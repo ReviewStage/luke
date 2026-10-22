@@ -249,8 +249,6 @@ const experimentAtom = Atom.family((experiment: Experiment) =>
  * the one way a gated feature's row, command, and place ask, so each appears
  * and goes as its switch in Settings › Experimental does. Signed out, or
  * before the first read, every experiment is off.
- *
- * @public Read by Factory's gated surfaces (#2608), above this contract.
  */
 export function useExperiment(experiment: Experiment): boolean {
   return useAtomValue(experimentAtom(experiment));
@@ -259,7 +257,7 @@ export function useExperiment(experiment: Experiment): boolean {
 /**
  * The same answer for a callback that cannot wait a render.
  *
- * @public Read by Factory's gated surfaces (#2608), above this contract.
+ * @public The door `AGENTS.md`'s "Experiments" names for a gated callback, kept for the next one.
  */
 export function experimentOnNow(experiment: Experiment): boolean {
   return experimentOn(appStateNow()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);

@@ -366,7 +366,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     inboxTaskless: [],
     failedRuns: [],
-    factoryView: { open: false, onOpen: ignore, onClose: ignore },
     adminView: {
       open: false,
       view: { kind: "dashboard" },
@@ -384,7 +383,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onRuns: ignore,
       onClose: ignore,
     },
-    talkingTaskId: undefined,
     chatView: {
       open: false,
       available: false,

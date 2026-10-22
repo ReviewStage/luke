@@ -964,7 +964,7 @@ function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element 
 
 /**
  * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the Factory's glyph for the agents no
+ * automation's clock tile, and the factory glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
 function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
@@ -987,9 +987,8 @@ function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
 /**
  * A holder's group header: a task's status's mark and name; an
  * automation's clock tile, wearing how its last run went and hanging its
- * card where the window reads the automation; and the Factory's glyph, the
- * sidebar's row listing every agent, for the agents no automation names,
- * since that group names no one actor.
+ * card where the window reads the automation; and the factory glyph for the
+ * agents no automation names, since that group names no one actor.
  * A press folds the group, as every group header's does.
  */
 function HolderHeader({

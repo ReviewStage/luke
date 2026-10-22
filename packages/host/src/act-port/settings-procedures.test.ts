@@ -112,7 +112,7 @@ async function everyKindRefused(client: ActPortClient) {
       client[SETTINGS_ACT_KIND.SETTINGS_RESET]({ scope: SETTINGS_RESET_SCOPE.VOICE, kept: [] }),
     ),
     [SETTINGS_ACT_KIND.EXPERIMENT_SET]: await refusal(
-      client[SETTINGS_ACT_KIND.EXPERIMENT_SET]({ experiment: "factory", on: true }),
+      client[SETTINGS_ACT_KIND.EXPERIMENT_SET]({ experiment: "code-review", on: true }),
     ),
   };
 }
@@ -121,11 +121,11 @@ it("a write reaches the host as its field's guard reads it, under the asking win
   const { client, writes } = windowPort();
 
   await client[SETTINGS_ACT_KIND.SETTING_UPDATE]({ field: "theme", value: THEME.DARK });
-  await client[SETTINGS_ACT_KIND.EXPERIMENT_SET]({ experiment: "factory", on: true });
+  await client[SETTINGS_ACT_KIND.EXPERIMENT_SET]({ experiment: "code-review", on: true });
 
   assert.deepEqual(writes, [
     ["theme", THEME.DARK, "panel"],
-    ["factory", true, "panel"],
+    ["code-review", true, "panel"],
   ]);
 });
 
@@ -182,7 +182,7 @@ it("a value its field's guard refuses, or a key the payload does not take, is re
 it("a reset or an experiment switch carrying a key its payload does not take is refused in the kind's own words, and the host is not asked", async () => {
   const { client, writes } = windowPort();
   const reset = { scope: SETTINGS_RESET_SCOPE.VOICE, kept: [], unexpected: true } as const;
-  const experiment = { experiment: "factory", on: true, unexpected: true } as const;
+  const experiment = { experiment: "code-review", on: true, unexpected: true } as const;
 
   assert.equal(
     await refusal(client[SETTINGS_ACT_KIND.SETTINGS_RESET](reset)),

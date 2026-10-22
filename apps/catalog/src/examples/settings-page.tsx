@@ -49,7 +49,7 @@ function Page({ title }: { title: string }): React.JSX.Element {
       <SettingsSection title="Coding agents">
         <SwitchRow
           label="Archive a run once its pull request merges"
-          description="Runs whose branch merged stop showing in Factory."
+          description="Runs whose branch merged stop showing in the sidebar."
         />
         <SettingsRow label="Repositories">
           {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Choose repositories</Button>}

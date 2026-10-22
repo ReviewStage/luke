@@ -22,7 +22,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
  * fills the window, else the
  * work column's agent, then the side panel's tab, then the task under them;
  * what stands in the plan's place (an agent's page, the Inbox on an item,
- * an automation, Factory, a channel of Chat, an Admin view) before the list it is in; and a page of Settings
+ * an automation, a channel of Chat, an Admin view) before the list it is in; and a page of Settings
  * while Settings stands. A tab with nothing of its own to link to, a
  * file's, the board, the code, the Inbox, or a terminal, is passed over for
  * the task, and so is the plan's, whose link is the task's.
@@ -36,7 +36,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
  * version history stands, the Inbox, an agent's or a person's page, an
- * automation or the list, Factory, Chat, the Admin place's view, or a page of Settings. The history
+ * automation or the list, Chat, the Admin place's view, or a page of Settings. The history
  * writes that link as the step's address, so the address and Copy link
  * never disagree. Chat names its channel shown, or itself on For you. The
  * Board, a new automation's page, and the home page have none. A narrow
@@ -63,7 +63,6 @@ const LINK_THING = {
   INBOX_ITEM: "Inbox item",
   AUTOMATIONS: "Automations",
   AUTOMATION: "automation",
-  FACTORY: "Factory",
   SETTINGS: "settings page",
   PERSON: "profile",
   CHAT: "Chat",
@@ -284,7 +283,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
     return [at_(list, LINK_THING.AUTOMATIONS)];
   }
-  if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
   // The Admin place stands over the plan, so its link is the step's rather than the plan's behind it.
   // Its workspace is only the one listed, since the place reads every workspace's accounts.
   if (tasks.adminView.open) {

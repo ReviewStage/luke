@@ -6,14 +6,13 @@ import { useTasklessInboxItems } from "./use-taskless-inbox-items.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
- * use-waiting-items.ts -- every open Inbox item of the listed workspace, a teammate's agent's among them, as Home and Factory list what waits on the developer.
+ * use-waiting-items.ts -- every open Inbox item of the listed workspace, a teammate's agent's among them, as Home and a person's page list what waits.
  *
  * Main's read of the account counts only what waits on its own agents, so
  * a place that lists what waits as the window's Inbox does follows each plan
  * holding an item whole, and each agent with no plan main says something
  * waits on, as the Inbox follows them. Every open item is listed, whoever
- * it waits on, since Factory counts what holds a teammate's task up and a
- * person's page what waits on them; Home keeps only the reader's own
+ * it waits on, since a person's page lists what waits on them; Home keeps only the reader's own
  * (`needsReader`).
  */
 

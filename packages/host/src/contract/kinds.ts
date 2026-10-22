@@ -241,11 +241,6 @@ export const CHAPTERS_ACT_KIND = {
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
 } as const;
 
-/** The Factory page's ask: a workspace's Factory world, read whole as it stands now. */
-export const FACTORY_ACT_KIND = {
-  FACTORY_WORLD: "factory.world",
-} as const;
-
 /**
  * Settings' integration rows: where every one of the account's integrations
  * stands, a browser sign-in to one begun and opened by the host, and one
@@ -571,7 +566,6 @@ export const PORT_ACT_KIND = {
   ...BROWSER_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
-  ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,

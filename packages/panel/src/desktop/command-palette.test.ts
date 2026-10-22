@@ -1266,7 +1266,6 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
         place: { kind: AUTOMATIONS_PAGE.EDIT, automationId },
       },
     }),
-    tasksControl({ ...listed, factoryView: { ...tasksControl().factoryView, open: true } }),
   ]) {
     openPalette(tasks);
     act(() => {
@@ -1283,7 +1282,6 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
     `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
     `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
     `https://tryluke.dev/acme/automation/${automationId}`,
-    "https://tryluke.dev/acme/factory",
   ]);
 });
 

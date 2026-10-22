@@ -5,12 +5,9 @@ import { EXPERIMENT } from "@luke/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
-  appCommandLabel,
   KEYED_COMMANDS,
-  SHORTCUT_KEY,
   shortcutAccelerator,
   shortcutShown,
-  shownShortcutGroups,
 } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import type { BaseWindow, KeyboardEvent, MenuItem, MenuItemConstructorOptions } from "electron";
@@ -89,26 +86,6 @@ describe("the Automations item", () => {
   });
 });
 
-describe("Factory", () => {
-  test("keeps no menu bar item and no chord, with its experiment on as off, so ⇧⌘F reaches no command", () => {
-    const on = appMenuTemplate("Luke", undefined, (command) =>
-      shortcutShown(command, experimentsOn(EXPERIMENT.FACTORY), DESKTOP_CAPABILITIES),
-    );
-    assert.ok(!labelsOf(on, "Go").includes("Factory"));
-    const listed = shownShortcutGroups(
-      experimentsOn(EXPERIMENT.FACTORY),
-      DESKTOP_CAPABILITIES,
-    ).flatMap((group) => group.commands);
-    assert.ok(!listed.some((command) => appCommandLabel(command) === "Factory"));
-    const freed = shortcutAccelerator({ key: SHORTCUT_KEY.F, shift: true });
-    assert.ok(
-      !KEYED_COMMANDS.some(
-        (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === freed,
-      ),
-    );
-  });
-});
-
 describe("the menu bar's drawer", () => {
   test("draws what it holds, and again only when the update item or the experiments move", () => {
     const drawn: MenuItemConstructorOptions[][] = [];
@@ -123,7 +100,7 @@ describe("the menu bar's drawer", () => {
     show();
     assert.equal(drawn.length, 1, "nothing moved, so nothing was drawn again");
 
-    show({ experiments: experimentsOn(EXPERIMENT.FACTORY), capabilities: [] });
+    show({ experiments: experimentsOn(EXPERIMENT.CHAT), capabilities: [] });
     assert.equal(drawn.length, 2);
 
     const update = {

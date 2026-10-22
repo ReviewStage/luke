@@ -45,7 +45,7 @@ import { appPlatform } from "../app-platform.js";
  * rather than on GitHub (`openPullRequestsHere`). Past the place, the window opens
  * a pull request any listed task's agent opened in that agent's Pull request
  * tab, on its task (`ListedPullRequestsProvider`), wherever it is pressed:
- * Factory, Chat, a version, a task's card, or another task. Inside a pull
+ * Chat, a version, a task's card, or another task. Inside a pull
  * request's own tab, a link leaves for GitHub (`PullRequestsOnGitHub`).
  */
 

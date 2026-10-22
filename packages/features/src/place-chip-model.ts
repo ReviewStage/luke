@@ -50,7 +50,6 @@ const KIND_NAME = {
   [LINK_PLACE.AUTOMATIONS]: "Automations",
   [LINK_PLACE.AUTOMATION]: "Automation",
   [LINK_PLACE.AUTOMATION_RUN]: "Run",
-  [LINK_PLACE.FACTORY]: "Factory",
   [LINK_PLACE.SETTINGS]: "Settings",
   [LINK_PLACE.PERSON]: "Profile",
   [LINK_PLACE.CHAT]: "Chat",

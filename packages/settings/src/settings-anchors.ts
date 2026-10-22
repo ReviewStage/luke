@@ -49,7 +49,6 @@ export const SETTINGS_SEARCH_ROW = {
 export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.BROWSER]: "experiment-browser",
   [EXPERIMENT.CHAT]: "experiment-chat",
-  [EXPERIMENT.FACTORY]: "experiment-factory",
   [EXPERIMENT.CODE_REVIEW]: "experiment-code-review",
   [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
   [EXPERIMENT.INBOX_FIRST]: "experiment-inbox-first",

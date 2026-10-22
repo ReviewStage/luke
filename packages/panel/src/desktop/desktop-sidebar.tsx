@@ -80,7 +80,6 @@ import {
 } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import {
-  FactoryIcon,
   FolderPlusIcon,
   InboxIcon,
   ListTodoIcon,
@@ -119,7 +118,7 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
-import { ADMIN_PLACE, FACTORY } from "./pages-on-demand.js";
+import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
@@ -1194,35 +1193,6 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
 }
 
 /**
- * Factory's row, after the Inbox's and drawn as it is: the factory and its
- * name, with no chord, since Factory keeps none while it is an experiment
- * (⌘K reaches it). A press opens the window's Factory (`desktop-factory.tsx`),
- * and the row is the place shown while it stands.
- */
-function SidebarFactoryRow({
-  current,
-  disabled,
-  onOpen,
-}: {
-  current: boolean;
-  disabled: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <NavItem
-      icon={<FactoryIcon />}
-      current={current ? NAV_CURRENT.PAGE : undefined}
-      disabled={disabled}
-      // The pointer on the row is the way to Factory, so its chunk is read now rather than at the press.
-      onPointerEnter={FACTORY.prefetch}
-      onClick={onOpen}
-    >
-      Factory
-    </NavItem>
-  );
-}
-
-/**
  * The Tasks page's row, under the Inbox's. A press opens the listed
  * workspace's tasks as a List or a Board (`tasks-page.tsx`), and the row is
  * the place shown while it stands. It is always offered.
@@ -1249,7 +1219,7 @@ function SidebarTasksRow({
 }
 
 /**
- * The Automations page's row, after Factory's and drawn as it is: the
+ * The Automations page's row, after Chat's and drawn as it is: the
  * zap, its name, and its chord. A press opens the window's Automations page
  * (`automations-page.tsx`), and the row is the place shown while it stands.
  * While a run of the account's own automation failed to start since that
@@ -1446,10 +1416,10 @@ function NewTaskButton({
  * a new task, Search, which opens the command palette, every task of the
  * workspace chosen, and the account's
  * row, whose menu and gear lead to Settings and the rest. The Inbox's row
- * and Factory's follow Search above the rule: the Inbox's counts what waits
- * on the developer and opens the window's Inbox, which is also where the
- * window rests with no task open (`resting-page.ts`), and Factory's, while its experiment is on, opens the
- * window's Factory, and the Automations page's likewise opens it; Chat's, where
+ * and the Automations page's follow Search above the rule: the Inbox's
+ * counts what waits on the developer and opens the window's Inbox, which is
+ * also where the window rests with no task open (`resting-page.ts`), and
+ * the Automations page's opens the window's Automations page; Chat's, where
  * a chat is read, counts what waits on the developer in Chat and opens it. The pinned tasks, and the side panel tabs
  * pinned to the sidebar, stand in the Pinned section while any are pinned,
  * newest pinned first, under a head that folds it, every row one line whose
@@ -1494,9 +1464,8 @@ function SidebarColumn({
   const narrow = room === SHELL_ROOM.NARROW;
   const coarse = useCoarsePointer();
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
+  // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
-  const inFactory = onTasks && tasks.factoryView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inBoard = onTasks && tasks.boardView.open;
@@ -1512,14 +1481,12 @@ function SidebarColumn({
   );
   const standingIn =
     inInbox ||
-    inFactory ||
     inAutomations ||
     inChat ||
     inBoard ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // Factory and Chat are experiments: each row stands only while the account has it on.
+  // Chat is an experiment: its row stands only while the account has it on.
   const chatOn = useChatOn();
-  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
@@ -1560,10 +1527,6 @@ function SidebarColumn({
   const openInbox = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.inboxView.onOpen();
-  };
-  const openFactory = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.factoryView.onOpen();
   };
   const openBoard = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -1850,13 +1813,6 @@ function SidebarColumn({
             waiting={waitingMessages(tasks)}
             current={inChat}
             onOpen={chosen(openChat)}
-          />
-        ) : null}
-        {factoryOn ? (
-          <SidebarFactoryRow
-            current={inFactory}
-            disabled={!tasks.signedIn}
-            onOpen={chosen(openFactory)}
           />
         ) : null}
         <SidebarAutomationsRow
