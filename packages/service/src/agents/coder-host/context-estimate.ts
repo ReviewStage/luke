@@ -22,7 +22,6 @@ import {
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
   LIST_TASKS_TOOL,
-  MESSAGE_AGENT_TOOL,
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
@@ -134,10 +133,6 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.READ_AGENT]: {
     description: CODER_READ_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(CODER_READ_AGENT_TOOL.inputSchema),
-  },
-  [CODER_TOOL.MESSAGE_AGENT]: {
-    description: MESSAGE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(MESSAGE_AGENT_TOOL.inputSchema),
   },
   [CODER_TOOL.START_AGENT]: {
     description: START_AGENT_TOOL.description,

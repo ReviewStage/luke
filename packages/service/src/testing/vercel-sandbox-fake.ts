@@ -3,7 +3,9 @@
  *
  * A fake that answers any query would have answered the `limit=100` every
  * real list was refused for, and a fake that answers any POST would have
- * answered the bodiless stop every real one was refused for with 415, so
+ * answered the bodiless stop every real one was refused for with 415, and one
+ * that answers a name prefix under any sort would have answered the list every
+ * template sweep was refused for, so
  * each fake's list and stop asks this first and answers what it returns
  * where it returns anything.
  */
@@ -21,6 +23,12 @@ const JSON_MEDIA_TYPE = "application/json";
 
 /** The 400 Vercel answers a list whose query it refuses, or nothing where it would answer the list. */
 export function sandboxListRefusal(url: URL): Response | undefined {
+  if (url.searchParams.has("namePrefix") && url.searchParams.get("sortBy") !== "name") {
+    return Response.json(
+      { error: { code: "bad_request", message: "namePrefix is only valid when sortBy is name" } },
+      { status: INVALID_QUERY_STATUS },
+    );
+  }
   const limit = url.searchParams.get("limit");
   if (limit === null) return undefined;
   const asked = Number(limit);

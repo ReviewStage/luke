@@ -11,6 +11,7 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Duration, Effect, Fiber, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { commandRead } from "../testing/runner-sandbox-fake.js";
+import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
 import { PREPARE_SCRIPT } from "./agent-runtime/sandbox-image.js";
 import {
   AgentSandboxImage,
@@ -132,6 +133,8 @@ function vercel() {
       return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
     }
     if (method === "GET" && path === "/api/v2/sandboxes") {
+      const refused = sandboxListRefusal(parsed);
+      if (refused !== undefined) return refused;
       const prefix = parsed.searchParams.get("namePrefix") ?? "";
       const found = sandboxes.filter((each) => !each.deleted && each.name.startsWith(prefix));
       return Response.json({ sandboxes: found.map(listed) });

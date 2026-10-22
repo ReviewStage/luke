@@ -28,14 +28,16 @@
  * Every sandbox eve opens carries its session's id as a tag, so a session's
  * sandbox is found by the tag alone; a session has one, so the first page is
  * all of them. What is sent is a tag, a name, and the argv of a command Luke
- * wrote; what a failure carries is its status alone. A deployment without an
- * OIDC token answers every call as unavailable.
+ * wrote; what a failure carries is the call that failed, its status, and
+ * Vercel's own error code and message, or the cause's where Vercel never
+ * answered, and never what was sent. A deployment without an OIDC token
+ * answers every call as unavailable.
  */
 
 import { gzipSync } from "node:zlib";
 import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { Data, Duration, Effect, Option, Redacted, Result, Schema, Stream } from "effect";
+import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 
@@ -79,14 +81,45 @@ export const COMMAND_GONE = "gone";
 /** A command's exit code, null while it runs, or gone (`COMMAND_GONE`). */
 export type CommandExit = number | null | typeof COMMAND_GONE;
 
-/** Vercel could not be asked, or did not confirm what was asked; the status where it answered one. */
+/** Which of the API's calls was made, as a failure names it. */
+export const SANDBOX_CALL = {
+  CREATE: "create",
+  FS_WRITE: "fs/write",
+  FS_READ: "fs/read",
+  CMD: "cmd",
+  STDIN: "stdin",
+  KILL: "kill",
+  TAGS: "tags",
+  TIMEOUT: "timeout",
+  GET: "get",
+  LIST: "list",
+  DELETE: "delete",
+  STOP: "stop",
+  SESSION: "session",
+  EXTEND: "extend",
+  NETWORK_POLICY: "network-policy",
+  INTERACTIVE: "interactive",
+  SNAPSHOT: "snapshot",
+} as const;
+
+export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
+
+/**
+ * Vercel could not be asked, or did not confirm what was asked: the call
+ * that failed, the status where Vercel answered one, and what went wrong in
+ * a line, Vercel's own error code and message or the cause's where it never
+ * answered. None of it is anything Luke sent.
+ */
 export class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
+  readonly call?: SandboxCall;
   readonly status?: number;
+  readonly detail?: string;
 }> {
   override get message(): string {
-    return this.status === undefined
-      ? "Vercel Sandbox was unavailable"
-      : `Vercel Sandbox answered ${this.status}`;
+    const asked = this.call === undefined ? "Vercel Sandbox" : `Vercel Sandbox ${this.call}`;
+    const answer =
+      this.status === undefined ? `${asked} was unavailable` : `${asked} answered ${this.status}`;
+    return this.detail === undefined ? answer : `${answer}: ${this.detail}`;
   }
 }
 
@@ -390,6 +423,14 @@ const RunningSandboxesSchema = Schema.Struct({
   ),
 });
 
+/** Vercel's answer to a call it refused: its error's code and message. */
+const ErrorAnswerSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.optional(Schema.String),
+    message: Schema.optional(Schema.String),
+  }),
+});
+
 /** A lookup's answer: the sandbox, and the session it runs now, which a resume opened. */
 const FoundSandboxSchema = Schema.Struct({
   sandbox: ListedSandboxSchema,
@@ -438,6 +479,112 @@ const readCommand = readEither(CommandSchema, { excess: EXCESS_KEYS.DROP });
 const readStdin = readEither(StdinSchema, { excess: EXCESS_KEYS.DROP });
 const readSnapshot = readEither(SnapshotTakenSchema, { excess: EXCESS_KEYS.DROP });
 const readSession = readEither(SessionSchema, { excess: EXCESS_KEYS.DROP });
+const readErrorAnswer = readEither(ErrorAnswerSchema, { excess: EXCESS_KEYS.DROP });
+
+/** The most characters a failure's detail keeps, so one log line stays one line's worth. */
+const DETAIL_CHARS = 300;
+
+/** What a 2xx answer this module could not read is detailed as. */
+const UNREADABLE_DETAIL = "an answer that could not be read";
+
+/**
+ * The statuses Vercel answers a passing refusal with, which the SDK's 3.8.0
+ * client tries again, and the waits between tries: 200 milliseconds, doubled
+ * each time, three tries more at most.
+ */
+const PASSING = {
+  STATUSES: new Set([429, 502, 503, 504]),
+  FIRST_WAIT: Duration.millis(200),
+  RETRIES: 3,
+} as const;
+
+const PASSING_RETRY = Schedule.max([
+  Schedule.exponential(PASSING.FIRST_WAIT),
+  Schedule.recurs(PASSING.RETRIES),
+]);
+
+/**
+ * A run of characters shaped like a credential: twenty or more of a token's
+ * alphabet unbroken, which a bearer, a provider key, a JWT, and an env value
+ * Luke sent all are, and Vercel's prose, codes, and a URL's slashed path
+ * segments mostly are not.
+ */
+const TOKEN_SHAPED = /[A-Za-z0-9._~+-]{20,}=*/gu;
+
+/** An error code as Vercel writes one: lowercase words joined by underscores. */
+const ERROR_CODE = /^[a-z]+(?:_[a-z]+){0,7}$/u;
+
+/** What a token-shaped run of a detail reads as. */
+const REDACTED_DETAIL = "[redacted]";
+
+/**
+ * The text cut to `DETAIL_CHARS` and to one line, every token-shaped run
+ * redacted first. Note that a detail is redacted by shape rather than by the
+ * values sent, because Vercel or a cause may echo any of them back, and a
+ * detail reaches the logs.
+ */
+function capped(text: string): string {
+  return clipped(text.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim());
+}
+
+/** A line cut to `DETAIL_CHARS`. */
+function clipped(line: string): string {
+  return line.length > DETAIL_CHARS ? `${line.slice(0, DETAIL_CHARS - 1)}…` : line;
+}
+
+/** How many causes deep a failure's detail reads, as a transport error wraps fetch's, which wraps the socket's. */
+const CAUSE_DEPTH = 3;
+
+/** A cause as a failure's detail: its name and message, and those of the causes under it, never anything else it holds. */
+function causeDetail(cause: unknown): string {
+  const said: string[] = [];
+  let at: unknown = cause;
+  while (at instanceof Error && said.length < CAUSE_DEPTH) {
+    said.push(`${at.name}: ${at.message}`);
+    at = at.cause;
+  }
+  return capped(said.length === 0 ? typeof cause : said.join(" <- "));
+}
+
+/** Vercel's error code and message from a refusal's text, where it wrote them. */
+function errorDetail(text: string): string | undefined {
+  const read = readErrorAnswer(jsonOf(text));
+  if (Result.isFailure(read)) return undefined;
+  const { code, message } = read.success.error;
+  // Note that a code shaped as Vercel's are is kept whole, because one such as
+  // `unsupported_media_type` is token-shaped by length and names the refusal.
+  const named = code !== undefined && ERROR_CODE.test(code) ? code : undefined;
+  const said = [named === undefined ? code : undefined, message].filter(
+    (each): each is string => each !== undefined && each.trim() !== "",
+  );
+  const rest = said.length === 0 ? undefined : capped(said.join(": "));
+  if (named === undefined) return rest;
+  return rest === undefined ? named : clipped(`${named}: ${rest}`);
+}
+
+/** An answer as the failure it is: the call, its status, and Vercel's own words, or that a 2xx could not be read. */
+function refused(
+  call: SandboxCall,
+  answered: { readonly status: number; readonly text: string },
+): SandboxUnavailable {
+  const detail =
+    errorDetail(answered.text) ?? (succeeded(answered.status) ? UNREADABLE_DETAIL : undefined);
+  return new SandboxUnavailable({
+    call,
+    status: answered.status,
+    ...(detail === undefined ? undefined : { detail }),
+  });
+}
+
+/** The call tried again where Vercel answered a passing refusal; any other failure answers at once. */
+function retryingPassing<A>(
+  effect: Effect.Effect<A, SandboxUnavailable>,
+): Effect.Effect<A, SandboxUnavailable> {
+  return Effect.retry(effect, {
+    schedule: PASSING_RETRY,
+    while: (failure) => failure.status !== undefined && PASSING.STATUSES.has(failure.status),
+  });
+}
 
 /** A session's answer as its lifetime, counted from its start, or from its creation where it names no start yet. */
 function lifetimeOf(text: string): SessionLifetime | undefined {
@@ -533,9 +680,10 @@ function succeeded(status: number): boolean {
   return status >= OK_STATUS.FIRST && status <= OK_STATUS.LAST;
 }
 
-/** One call as the client answers it: its status and its body's text, or unavailable where it never answered. */
+/** One call as the client answers it: its status and its body's text, or unavailable, with why, where it never answered. */
 function callApi(
   client: HttpClient.HttpClient,
+  call: SandboxCall,
   request: HttpClientRequest.HttpClientRequest,
 ): Effect.Effect<{ readonly status: number; readonly text: string }, SandboxUnavailable> {
   return client.execute(request).pipe(
@@ -546,7 +694,7 @@ function callApi(
       ),
     ),
     Effect.scoped,
-    Effect.mapError(() => new SandboxUnavailable({})),
+    Effect.mapError((cause) => new SandboxUnavailable({ call, detail: causeDetail(cause) })),
   );
 }
 
@@ -615,15 +763,19 @@ export function vercelSandboxApi(
   readToken: OidcTokenRead,
 ): Effect.Effect<VercelSandboxApi, never, HttpClient.HttpClient> {
   return Effect.map(HttpClient.HttpClient, (client) => {
-    const credentials = Effect.gen(function* () {
-      const token = yield* Effect.tryPromise({
-        try: readToken,
-        catch: () => new SandboxUnavailable({}),
+    /** The token's headers and claims for the call given, which a failure to read them names. */
+    const credentials = (call: SandboxCall) =>
+      Effect.gen(function* () {
+        const token = yield* Effect.tryPromise({
+          try: readToken,
+          catch: (cause) => new SandboxUnavailable({ call, detail: causeDetail(cause) }),
+        });
+        const claims = claimsOf(token);
+        if (claims === undefined) {
+          return yield* new SandboxUnavailable({ call, detail: "a token naming no project" });
+        }
+        return { headers: { authorization: `Bearer ${token}` }, ...claims };
       });
-      const claims = claimsOf(token);
-      if (claims === undefined) return yield* new SandboxUnavailable({});
-      return { headers: { authorization: `Bearer ${token}` }, ...claims };
-    });
 
     /** A URL on the API, under the team the token names and the extra query given. */
     const apiUrl = (path: string, teamId: string, query: Readonly<Record<string, string>> = {}) => {
@@ -636,7 +788,7 @@ export function vercelSandboxApi(
     return {
       listTagged: (sessionId) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.LIST);
           const url = apiUrl("", asked.teamId, {
             project: asked.projectId,
             limit: String(SANDBOX_API.PAGE),
@@ -645,11 +797,12 @@ export function vercelSandboxApi(
           });
           const listed = yield* callApi(
             client,
+            SANDBOX_CALL.LIST,
             HttpClientRequest.get(url, { headers: asked.headers }),
           );
           const page = readListed(jsonOf(listed.text));
           if (!succeeded(listed.status) || Result.isFailure(page)) {
-            return yield* new SandboxUnavailable({ status: listed.status });
+            return yield* refused(SANDBOX_CALL.LIST, listed);
           }
           return page.success.sandboxes.toSorted(
             (first, second) => (second.createdAt ?? 0) - (first.createdAt ?? 0),
@@ -657,7 +810,7 @@ export function vercelSandboxApi(
         }),
       listRunning: (cursor, order) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.LIST);
           const url = apiUrl("", asked.teamId, {
             project: asked.projectId,
             limit: String(SANDBOX_API.PAGE),
@@ -669,11 +822,12 @@ export function vercelSandboxApi(
           });
           const listed = yield* callApi(
             client,
+            SANDBOX_CALL.LIST,
             HttpClientRequest.get(url, { headers: asked.headers }),
           );
           const page = readRunning(jsonOf(listed.text));
           if (!succeeded(listed.status) || Result.isFailure(page)) {
-            return yield* new SandboxUnavailable({ status: listed.status });
+            return yield* refused(SANDBOX_CALL.LIST, listed);
           }
           return {
             sandboxes: page.success.sandboxes,
@@ -682,18 +836,19 @@ export function vercelSandboxApi(
         }),
       resume: (name) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.GET);
           const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
             projectId: asked.projectId,
             resume: "true",
           });
           const found = yield* callApi(
             client,
+            SANDBOX_CALL.GET,
             HttpClientRequest.get(url, { headers: asked.headers }),
           );
           const read = readFound(jsonOf(found.text));
           if (!succeeded(found.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: found.status });
+            return yield* refused(SANDBOX_CALL.GET, found);
           }
           const { sandbox, session } = read.success;
           // The session a resume opened is the one running now, whatever the sandbox's own record lags.
@@ -707,7 +862,7 @@ export function vercelSandboxApi(
         }),
       stopSession: (sandboxSessionId) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.STOP);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/stop`,
             asked.teamId,
@@ -717,29 +872,30 @@ export function vercelSandboxApi(
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({}),
           );
-          const stopped = yield* callApi(client, request);
+          const stopped = yield* callApi(client, SANDBOX_CALL.STOP, request);
           if (!succeeded(stopped.status) && stopped.status !== NOT_FOUND_STATUS) {
-            return yield* new SandboxUnavailable({ status: stopped.status });
+            return yield* refused(SANDBOX_CALL.STOP, stopped);
           }
         }),
       deleteSandbox: (name) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.DELETE);
           const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
             projectId: asked.projectId,
             deleteOrphanSnapshots: "true",
           });
           const deleted = yield* callApi(
             client,
+            SANDBOX_CALL.DELETE,
             HttpClientRequest.delete(url, { headers: asked.headers }),
           );
           if (!succeeded(deleted.status) && deleted.status !== NOT_FOUND_STATUS) {
-            return yield* new SandboxUnavailable({ status: deleted.status });
+            return yield* refused(SANDBOX_CALL.DELETE, deleted);
           }
         }),
       run: (sandboxSessionId, ask) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.CMD);
           const url = apiUrl(`/sessions/${encodeURIComponent(sandboxSessionId)}/cmd`, asked.teamId);
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({
@@ -751,16 +907,16 @@ export function vercelSandboxApi(
               logs: true,
             }),
           );
-          const ran = yield* callApi(client, request);
+          const ran = yield* callApi(client, SANDBOX_CALL.CMD, request);
           const run = commandRunOf(ran.text);
           if (!succeeded(ran.status) || run === undefined) {
-            return yield* new SandboxUnavailable({ status: ran.status });
+            return yield* refused(SANDBOX_CALL.CMD, ran);
           }
           return run;
         }),
       readFile: (sandboxSessionId, path, maxBytes) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.FS_READ);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/fs/read`,
             asked.teamId,
@@ -772,19 +928,26 @@ export function vercelSandboxApi(
             Effect.flatMap((response) => {
               if (response.status === NOT_FOUND_STATUS) return Effect.succeed(undefined);
               if (!succeeded(response.status)) {
-                return Effect.fail(new SandboxUnavailable({ status: response.status }));
+                return Effect.fail(
+                  new SandboxUnavailable({ call: SANDBOX_CALL.FS_READ, status: response.status }),
+                );
               }
               return boundedBytes(response, maxBytes + 1);
             }),
             Effect.scoped,
             Effect.mapError((failure) =>
-              failure instanceof SandboxUnavailable ? failure : new SandboxUnavailable({}),
+              failure instanceof SandboxUnavailable
+                ? failure
+                : new SandboxUnavailable({
+                    call: SANDBOX_CALL.FS_READ,
+                    detail: causeDetail(failure),
+                  }),
             ),
           );
         }),
       openInteractive: (sandboxSessionId) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.INTERACTIVE);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/interactive`,
             asked.teamId,
@@ -792,35 +955,36 @@ export function vercelSandboxApi(
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({}),
           );
-          const minted = yield* callApi(client, request);
+          const minted = yield* callApi(client, SANDBOX_CALL.INTERACTIVE, request);
           const read = readInteractive(jsonOf(minted.text));
           if (!succeeded(minted.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: minted.status });
+            return yield* refused(SANDBOX_CALL.INTERACTIVE, minted);
           }
           if (!isSandboxShellAddress(read.success.url)) {
             yield* Effect.logWarning("a minted PTY address was not on Vercel's sandbox domain");
-            return yield* new SandboxUnavailable({});
+            return yield* new SandboxUnavailable({ call: SANDBOX_CALL.INTERACTIVE });
           }
           return { url: read.success.url, token: Redacted.make(read.success.token) };
         }),
       getSession: (sandboxSessionId) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.SESSION);
           const url = apiUrl(`/sessions/${encodeURIComponent(sandboxSessionId)}`, asked.teamId);
           const found = yield* callApi(
             client,
+            SANDBOX_CALL.SESSION,
             HttpClientRequest.get(url, { headers: asked.headers }),
           );
           if (found.status === NOT_FOUND_STATUS) return undefined;
           const lifetime = lifetimeOf(found.text);
           if (!succeeded(found.status) || lifetime === undefined) {
-            return yield* new SandboxUnavailable({ status: found.status });
+            return yield* refused(SANDBOX_CALL.SESSION, found);
           }
           return lifetime;
         }),
       extendTimeout: (sandboxSessionId, durationMs) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.EXTEND);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/extend-timeout`,
             asked.teamId,
@@ -828,16 +992,16 @@ export function vercelSandboxApi(
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({ duration: durationMs }),
           );
-          const extended = yield* callApi(client, request);
+          const extended = yield* callApi(client, SANDBOX_CALL.EXTEND, request);
           const lifetime = lifetimeOf(extended.text);
           if (!succeeded(extended.status) || lifetime === undefined) {
-            return yield* new SandboxUnavailable({ status: extended.status });
+            return yield* refused(SANDBOX_CALL.EXTEND, extended);
           }
           return lifetime;
         }),
       updateNetworkPolicy: (sandboxSessionId, policy) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.NETWORK_POLICY);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/network-policy`,
             asked.teamId,
@@ -845,14 +1009,14 @@ export function vercelSandboxApi(
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe(policy),
           );
-          const updated = yield* callApi(client, request);
+          const updated = yield* callApi(client, SANDBOX_CALL.NETWORK_POLICY, request);
           if (!succeeded(updated.status)) {
-            return yield* new SandboxUnavailable({ status: updated.status });
+            return yield* refused(SANDBOX_CALL.NETWORK_POLICY, updated);
           }
         }),
       create: (ask) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.CREATE);
           const url = new URL(SANDBOX_API.CREATE_PATH, SANDBOX_API.ORIGIN);
           url.searchParams.set("teamId", asked.teamId);
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
@@ -870,10 +1034,10 @@ export function vercelSandboxApi(
               networkPolicy: { mode: "allow-all" },
             }),
           );
-          const created = yield* callApi(client, request);
+          const created = yield* callApi(client, SANDBOX_CALL.CREATE, request);
           const read = readCreated(jsonOf(created.text));
           if (!succeeded(created.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: created.status });
+            return yield* refused(SANDBOX_CALL.CREATE, created);
           }
           const { sandbox, session } = read.success;
           return {
@@ -884,19 +1048,20 @@ export function vercelSandboxApi(
         }),
       getNamed: (name) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.GET);
           const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
             projectId: asked.projectId,
             resume: "false",
           });
           const found = yield* callApi(
             client,
+            SANDBOX_CALL.GET,
             HttpClientRequest.get(url, { headers: asked.headers }),
           );
           if (found.status === NOT_FOUND_STATUS) return undefined;
           const read = readFound(jsonOf(found.text));
           if (!succeeded(found.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: found.status });
+            return yield* refused(SANDBOX_CALL.GET, found);
           }
           const { sandbox, session } = read.success;
           // The session's own status is the live one; the sandbox's record of it can lag.
@@ -906,25 +1071,28 @@ export function vercelSandboxApi(
         }),
       listNamed: (prefix) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.LIST);
           const url = apiUrl("", asked.teamId, {
             project: asked.projectId,
             limit: String(SANDBOX_API.PAGE),
+            // Note that the API takes a name prefix only under a sort by name, and refuses it with a 400 otherwise.
+            sortBy: "name",
             namePrefix: prefix,
           });
           const listed = yield* callApi(
             client,
+            SANDBOX_CALL.LIST,
             HttpClientRequest.get(url, { headers: asked.headers }),
           );
           const page = readListed(jsonOf(listed.text));
           if (!succeeded(listed.status) || Result.isFailure(page)) {
-            return yield* new SandboxUnavailable({ status: listed.status });
+            return yield* refused(SANDBOX_CALL.LIST, listed);
           }
           return page.success.sandboxes;
         }),
       createFromImage: (ask) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.CREATE);
           const url = new URL(SANDBOX_API.CREATE_PATH, SANDBOX_API.ORIGIN);
           url.searchParams.set("teamId", asked.teamId);
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
@@ -940,10 +1108,10 @@ export function vercelSandboxApi(
               networkPolicy: { mode: "allow-all" },
             }),
           );
-          const created = yield* callApi(client, request);
+          const created = yield* callApi(client, SANDBOX_CALL.CREATE, request);
           const read = readCreated(jsonOf(created.text));
           if (!succeeded(created.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: created.status });
+            return yield* refused(SANDBOX_CALL.CREATE, created);
           }
           const { sandbox, session } = read.success;
           return {
@@ -954,7 +1122,7 @@ export function vercelSandboxApi(
         }),
       snapshot: (sandboxSessionId) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.SNAPSHOT);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/snapshot`,
             asked.teamId,
@@ -962,46 +1130,47 @@ export function vercelSandboxApi(
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({ expiration: 0 }),
           );
-          const taken = yield* callApi(client, request);
+          const taken = yield* callApi(client, SANDBOX_CALL.SNAPSHOT, request);
           const read = readSnapshot(jsonOf(taken.text));
           if (!succeeded(taken.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: taken.status });
+            return yield* refused(SANDBOX_CALL.SNAPSHOT, taken);
           }
           return read.success.snapshot.id;
         }),
       updateTimeout: (name, timeoutMs) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.TIMEOUT);
           const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
             projectId: asked.projectId,
           });
           const request = HttpClientRequest.patch(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({ timeout: timeoutMs }),
           );
-          const updated = yield* callApi(client, request);
+          const updated = yield* callApi(client, SANDBOX_CALL.TIMEOUT, request);
           if (!succeeded(updated.status)) {
-            return yield* new SandboxUnavailable({ status: updated.status });
+            return yield* refused(SANDBOX_CALL.TIMEOUT, updated);
           }
         }),
       updateTags: (name, tags) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.TAGS);
           const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
             projectId: asked.projectId,
           });
           const request = HttpClientRequest.patch(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({ tags }),
           );
-          const updated = yield* callApi(client, request);
+          const updated = yield* callApi(client, SANDBOX_CALL.TAGS, request);
           if (!succeeded(updated.status)) {
-            return yield* new SandboxUnavailable({ status: updated.status });
+            return yield* refused(SANDBOX_CALL.TAGS, updated);
           }
         }),
       writeFiles: (sandboxSessionId, files) =>
         Effect.gen(function* () {
           const archive = tarOf(files);
-          if (archive === undefined) return yield* new SandboxUnavailable({});
-          const asked = yield* credentials;
+          if (archive === undefined)
+            return yield* new SandboxUnavailable({ call: SANDBOX_CALL.FS_WRITE });
+          const asked = yield* credentials(SANDBOX_CALL.FS_WRITE);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/fs/write`,
             asked.teamId,
@@ -1009,14 +1178,14 @@ export function vercelSandboxApi(
           const request = HttpClientRequest.post(url, {
             headers: { ...asked.headers, "x-cwd": "/" },
           }).pipe(HttpClientRequest.bodyUint8Array(archive, "application/gzip"));
-          const written = yield* callApi(client, request);
+          const written = yield* callApi(client, SANDBOX_CALL.FS_WRITE, request);
           if (!succeeded(written.status)) {
-            return yield* new SandboxUnavailable({ status: written.status });
+            return yield* refused(SANDBOX_CALL.FS_WRITE, written);
           }
         }),
       start: (sandboxSessionId, ask) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.CMD);
           const url = apiUrl(`/sessions/${encodeURIComponent(sandboxSessionId)}/cmd`, asked.teamId);
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({
@@ -1028,34 +1197,42 @@ export function vercelSandboxApi(
               attachStdin: true,
             }),
           );
-          const started = yield* callApi(client, request);
-          const read = readCommand(jsonOf(started.text));
-          if (!succeeded(started.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: started.status });
-          }
-          return read.success.command.id;
+          // Note that a start Vercel refused in passing is tried again, as the SDK's 3.8.0 client
+          // tries it, though a 502 or a 504 may stand for a start that went through.
+          return yield* retryingPassing(
+            Effect.flatMap(callApi(client, SANDBOX_CALL.CMD, request), (started) => {
+              const read = readCommand(jsonOf(started.text));
+              return succeeded(started.status) && Result.isSuccess(read)
+                ? Effect.succeed(read.success.command.id)
+                : Effect.fail(refused(SANDBOX_CALL.CMD, started));
+            }),
+          );
         }),
       writeStdin: (sandboxSessionId, commandId, text) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.STDIN);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/cmd/${encodeURIComponent(commandId)}/stdin`,
             asked.teamId,
           );
+          // A write Vercel refused in passing is tried again, which the offset makes safe.
           const post = (body: object) =>
-            Effect.flatMap(
-              callApi(
-                client,
-                HttpClientRequest.post(url, { headers: asked.headers }).pipe(
-                  HttpClientRequest.bodyJsonUnsafe(body),
+            retryingPassing(
+              Effect.flatMap(
+                callApi(
+                  client,
+                  SANDBOX_CALL.STDIN,
+                  HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+                    HttpClientRequest.bodyJsonUnsafe(body),
+                  ),
                 ),
+                (answered) => {
+                  const read = readStdin(jsonOf(answered.text));
+                  return succeeded(answered.status) && Result.isSuccess(read)
+                    ? Effect.succeed(read.success.bytesWritten)
+                    : Effect.fail(refused(SANDBOX_CALL.STDIN, answered));
+                },
               ),
-              (answered) => {
-                const read = readStdin(jsonOf(answered.text));
-                return succeeded(answered.status) && Result.isSuccess(read)
-                  ? Effect.succeed(read.success.bytesWritten)
-                  : Effect.fail(new SandboxUnavailable({ status: answered.status }));
-              },
             );
           // Note that the offset is where the stdin stands now, asked first, so a write the API
           // already took in part is never taken twice: the API skips the bytes it holds.
@@ -1069,7 +1246,7 @@ export function vercelSandboxApi(
         }),
       commandExit: (sandboxSessionId, commandId) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.CMD);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/cmd/${encodeURIComponent(commandId)}`,
             asked.teamId,
@@ -1079,6 +1256,7 @@ export function vercelSandboxApi(
           url.searchParams.set("wait", "true");
           const waited = yield* callApi(
             client,
+            SANDBOX_CALL.CMD,
             HttpClientRequest.get(url, { headers: asked.headers }),
           ).pipe(Effect.timeoutOption(SANDBOX_API.EXIT_WAIT));
           if (Option.isNone(waited)) return null;
@@ -1086,13 +1264,13 @@ export function vercelSandboxApi(
           if (found.status === NOT_FOUND_STATUS) return COMMAND_GONE;
           const read = readCommand(jsonOf(found.text));
           if (!succeeded(found.status) || Result.isFailure(read)) {
-            return yield* new SandboxUnavailable({ status: found.status });
+            return yield* refused(SANDBOX_CALL.CMD, found);
           }
           return read.success.command.exitCode;
         }),
       kill: (sandboxSessionId, commandId) =>
         Effect.gen(function* () {
-          const asked = yield* credentials;
+          const asked = yield* credentials(SANDBOX_CALL.KILL);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/cmd/${encodeURIComponent(commandId)}/kill`,
             asked.teamId,
@@ -1100,9 +1278,9 @@ export function vercelSandboxApi(
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
             HttpClientRequest.bodyJsonUnsafe({ signal: SIGTERM }),
           );
-          const killed = yield* callApi(client, request);
+          const killed = yield* callApi(client, SANDBOX_CALL.KILL, request);
           if (!succeeded(killed.status) && killed.status !== NOT_FOUND_STATUS) {
-            return yield* new SandboxUnavailable({ status: killed.status });
+            return yield* refused(SANDBOX_CALL.KILL, killed);
           }
         }),
     };

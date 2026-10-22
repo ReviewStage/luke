@@ -61,7 +61,6 @@ import {
   runListAgents,
   runListModels,
   runListTasks,
-  runMessageAgent,
   runReadAgent,
   runReadPage,
   runStartAgent,
@@ -117,7 +116,6 @@ export interface AgentToolCall {
   readonly tool:
     | typeof CODER_TOOL.LIST_AGENTS
     | typeof CODER_TOOL.READ_AGENT
-    | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
     | typeof CODER_TOOL.STOP_AGENT
     | typeof CODER_TOOL.UPDATE_AGENT
@@ -137,7 +135,6 @@ export interface AgentToolCall {
 const AGENT_TOOL_RUN = {
   [CODER_TOOL.LIST_AGENTS]: runListAgents,
   [CODER_TOOL.READ_AGENT]: runReadAgent,
-  [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
   [CODER_TOOL.STOP_AGENT]: runStopAgent,
   [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
