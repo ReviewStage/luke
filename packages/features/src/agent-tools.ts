@@ -42,6 +42,11 @@ export const AGENT_TOOL = {
   DELETE_SECTION: "delete_section",
   // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
   UPDATE_TASK: "update_task",
+  // The workspace's automations, listed, made, changed, and deleted for the member an agent acts for.
+  LIST_AUTOMATIONS: "list_automations",
+  CREATE_AUTOMATION: "create_automation",
+  UPDATE_AUTOMATION: "update_automation",
+  DELETE_AUTOMATION: "delete_automation",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's: eve's provider-run search on the agent's own model call, and the page read.

@@ -928,6 +928,14 @@ function tasksToolView(
       return namedCall(CALL_KIND.CREATE_SECTION, input, output, "title");
     case AGENT_TOOL.DELETE_SECTION:
       return answeredCall(CALL_KIND.DELETE_SECTION, input, output, "section", "title");
+    case AGENT_TOOL.LIST_AUTOMATIONS:
+      return namedCall(CALL_KIND.LIST_AUTOMATIONS, input, output, undefined);
+    case AGENT_TOOL.CREATE_AUTOMATION:
+      return namedCall(CALL_KIND.CREATE_AUTOMATION, input, output, "name");
+    case AGENT_TOOL.UPDATE_AUTOMATION:
+      return answeredCall(CALL_KIND.UPDATE_AUTOMATION, input, output, "automation", "name");
+    case AGENT_TOOL.DELETE_AUTOMATION:
+      return answeredCall(CALL_KIND.DELETE_AUTOMATION, input, output, "automation", "name");
     case RETIRED_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:
