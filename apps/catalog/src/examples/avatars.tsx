@@ -7,6 +7,7 @@ import {
   Stack,
   TerminalIcon,
   Text,
+  UnassignedAvatar,
   WingFace,
 } from "@luke/ui";
 import type { Example } from "../examples";
@@ -14,7 +15,8 @@ import { CatalogSection } from "../section";
 
 /**
  * avatars.tsx -- every size with a picture, a letter, a picture that fails,
- * and a name with no letter, side by side so their boxes line up; an app's
+ * a name with no letter, and no one's dashed outline, side by side so their
+ * boxes line up; an app's
  * square by its picture, its glyph bare and tiled, and its letter; the six
  * hues; and discs beside the names they stand for in a narrow column.
  */
@@ -39,7 +41,7 @@ const NAMES = [
 function Avatars(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="avatar-states" title="Picture, letter, failed picture, no letter">
+      <CatalogSection id="avatar-states" title="Picture, letter, failed picture, no letter, no one">
         <Stack gap={GAP.CONTROL}>
           {Object.values(AVATAR_SIZE).map((size) => (
             <Inline key={size} gap={GAP.CONTROL} align="center">
@@ -47,6 +49,7 @@ function Avatars(): React.JSX.Element {
               <Avatar name="Ada Lovelace" size={size} />
               <Avatar name="Ada Lovelace" src={BROKEN} size={size} />
               <Avatar name="" size={size} />
+              <UnassignedAvatar size={size} />
             </Inline>
           ))}
         </Stack>

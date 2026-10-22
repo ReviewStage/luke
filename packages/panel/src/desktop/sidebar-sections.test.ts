@@ -665,8 +665,9 @@ const pointer = (type: string, y: number) =>
 
 /** Drags the row named `name` from its middle to `y` down the column and lets it go there. */
 function drag(sidebar: HTMLElement, name: string, y: number): void {
+  // Note that a row's name is its title's first words, before what only a screen reader hears of it.
   const label = [...sidebar.querySelectorAll<HTMLElement>(".luke-list-row-title")].find(
-    (each) => each.textContent === name,
+    (each) => each.firstChild?.textContent === name,
   );
   const row = label?.closest("li") ?? assert.fail(`no ${name} in the sidebar`);
   const top = row.getBoundingClientRect().top + ROW_HEIGHT / 2;

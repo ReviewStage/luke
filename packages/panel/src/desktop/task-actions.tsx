@@ -25,13 +25,7 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import {
-  type Actor,
-  accountActor,
-  creatorActor,
-  personActor,
-  teammateCreator,
-} from "@luke/ui/actor-model";
+import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import {
   DOCUMENT_REGION,
@@ -44,7 +38,14 @@ import {
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef, AssigneeHeard, CreatorHeard } from "../actor-ref.js";
+import {
+  ACTOR_SIZE,
+  ActorMark,
+  ActorRef,
+  AssigneeHeard,
+  UnassignedHeard,
+  UnassignedMark,
+} from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -533,8 +534,9 @@ export function TaskActions({
 
 /**
  * Which faces a row may wear: its creator's, which a list holding one
- * creator's tasks or grouped by creator already says, and its assignee's,
- * which a list holding the tasks assigned to one member already says.
+ * creator's tasks or grouped by creator already says, and only an agent's
+ * row with no task wears; and its assignee's, which a list holding the
+ * tasks assigned to one member or grouped by assignee already says.
  */
 export interface RowFaces {
   readonly creator: boolean;
@@ -544,47 +546,29 @@ export interface RowFaces {
 /** Every face a row may wear, as a list naming nobody draws it. */
 const EVERY_FACE: RowFaces = { creator: true, assignee: true };
 
-/** The face a task's row wears, whether it is its assignee's rather than its creator's, and the member Luke or an agent made it for, on its corner. */
+/** The face a task's row wears: its assignee's, or, where no one is assigned, the unassigned mark (`assignee` undefined). */
 interface RowFace {
-  readonly actor: Actor;
-  readonly assigned: boolean;
-  readonly forWhom?: Actor | undefined;
+  readonly assignee: Actor | undefined;
 }
 
 /**
  * Who a task's row names by face: the member it is assigned to where that
- * is someone other than the reader; otherwise Luke or the agent that made
- * it (`origin`), the reader's own task included, with the member it was
- * made for on its corner; and on a task no one is assigned to, whoever else
- * created it (`teammateCreator`); each only where `faces` lets the row wear
- * that kind, the list saying it already otherwise.
+ * is someone other than the reader, and the unassigned mark where no one
+ * is; a task assigned to the reader wears nothing. Who made it, a teammate,
+ * Luke, or an agent, is never its face, since it is not who is on it, and
+ * stays on its card and its menu's Created by. Nothing where `faces` keeps
+ * the assignee off the row, the list saying it already.
  */
 function rowFaceOf(
   task: TaskSummary,
   reader: ReturnType<typeof useMemberDirectory>,
   faces: RowFaces,
-  origin: Actor | undefined,
 ): RowFace | undefined {
   const { assignee } = task;
-  if (assignee === undefined || assignee.userId === reader.readerId || !faces.assignee) {
-    // Note that Luke or an agent wears its square on the reader's own task too, so it never passes for one they made by hand.
-    if (origin !== undefined) {
-      return {
-        actor: origin,
-        assigned: false,
-        ...(faces.creator ? { forWhom: creatorActor(task, reader, undefined) } : undefined),
-      };
-    }
-  }
-  if (assignee === undefined) {
-    const creator = faces.creator ? teammateCreator(task, reader) : undefined;
-    return creator === undefined ? undefined : { actor: creator, assigned: false };
-  }
-  if (assignee.userId === reader.readerId || !faces.assignee) return undefined;
-  return {
-    actor: personActor(assignee, reader.members, reader.readerId, reader.former),
-    assigned: true,
-  };
+  if (!faces.assignee) return undefined;
+  if (assignee === undefined) return { assignee: undefined };
+  if (assignee.userId === reader.readerId) return undefined;
+  return { assignee: personActor(assignee, reader.members, reader.readerId, reader.former) };
 }
 
 /**
@@ -614,10 +598,9 @@ function SidebarTaskCard({
  * waits in one of its boxes and it is not the plan open, whose boxes show
  * their own words (`draft-mark.tsx`), and before that the face of who
  * is on it (`rowFaceOf`): its assignee's, where someone other than the
- * reader is assigned, or, on a task no one is assigned to, the face of
- * whoever else created it (`teammateCreator`), each read against the members
- * of the directory around the list; a task assigned to the reader, and the
- * reader's own task no one is on, wear none. Its repository's name, muted, where the list hands one (in one run),
+ * reader is assigned, read against the members of the directory around the
+ * list, or the dashed unassigned mark where no one is; a task assigned to
+ * the reader wears none. Its repository's name, muted, where the list hands one (in one run),
  * and no face where its group is its creator's. Its time is the one the
  * list's order chooses. Pin
  * and Mark done stand in place of all of it while the row is hovered or
@@ -653,7 +636,7 @@ export function SidebarTask({
   at?: number;
   /** The repository's name the row says, muted before its time, where the list hands one. */
   repository?: string | undefined;
-  /** Which faces the row may wear (`rowFaceOf`): a group by creator, or a filter by person, says the one it names instead. */
+  /** Which faces the row may wear (`rowFaceOf`): a group by assignee, or a filter by assignee, says the one it names instead. */
   faces?: RowFaces;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -663,7 +646,7 @@ export function SidebarTask({
     drawn: true,
     unread,
   });
-  const worn = rowFaceOf(task, useMemberDirectory(), faces, useTaskOrigin()(task));
+  const worn = rowFaceOf(task, useMemberDirectory(), faces);
   const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
@@ -711,10 +694,10 @@ export function SidebarTask({
               <>
                 {task.name}
                 {unread ? <span className="visually-hidden">(unread)</span> : null}
-                {worn === undefined ? null : worn.assigned ? (
-                  <AssigneeHeard actor={worn.actor} />
+                {worn === undefined ? null : worn.assignee === undefined ? (
+                  <UnassignedHeard />
                 ) : (
-                  <CreatorHeard actor={worn.actor} />
+                  <AssigneeHeard actor={worn.assignee} />
                 )}
               </>
             )
@@ -726,8 +709,10 @@ export function SidebarTask({
                 {repository === undefined ? null : (
                   <FadingWords className="sidebar-task-repository" words={repository} />
                 )}
-                {worn === undefined ? null : (
-                  <ActorMark actor={worn.actor} size={ACTOR_SIZE.MARK} forWhom={worn.forWhom} />
+                {worn === undefined ? null : worn.assignee === undefined ? (
+                  <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />
+                ) : (
+                  <ActorMark actor={worn.assignee} size={ACTOR_SIZE.MARK} />
                 )}
                 {drafted ? <DraftMark /> : null}
                 <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />

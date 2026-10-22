@@ -1,7 +1,7 @@
 /* avatar.css -- a person's disc or an app's square: one box per size, the
    picture filling it once loaded, their letter on one of the six identity
    hues until then, an app's glyph bare or on a quiet tile, or the figure on
-   a quiet tile. */
+   a quiet tile; or no one, on a dashed outline of the same box. */
 
 @layer components {
   .luke-avatar {
@@ -147,5 +147,27 @@
 
   .luke-avatar[data-hue="6"] {
     background: var(--luke-color-identity-6);
+  }
+
+  /* No one stands on no ground, by an outline dashed as Linear draws a task
+     with no assignee: the subtle ink on every ground, a hairline at every
+     size, as a disc's edge is, its ten dashes laid evenly round it
+     (`pathLength`). */
+  .luke-avatar[data-unassigned="true"] {
+    background: none;
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-avatar[data-unassigned="true"]::after {
+    content: none;
+  }
+
+  .luke-avatar-unassigned {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    stroke-width: 1.25px;
+    stroke-dasharray: 2.4 1.6;
+    vector-effect: non-scaling-stroke;
   }
 }

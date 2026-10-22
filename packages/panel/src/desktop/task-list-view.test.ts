@@ -111,6 +111,15 @@ const TASKS = [
   task("t-4", "Release checklist", "acme/relay", DEAN, { createdAt: 5, updatedAt: 5 }, 900),
 ];
 
+/** `TASKS` with Dean on Fix flaky deploy and Charles on Retry webhooks, Billing empty states with no one on it. */
+const ASSIGNED = TASKS.map((each) =>
+  each.id === "t-2"
+    ? { ...each, assignee: { userId: DEAN, name: "Dean Stratakos" } }
+    : each.id === "t-1"
+      ? { ...each, assignee: { userId: CHARLES, name: "Charles Pan" } }
+      : each,
+);
+
 /** An agent an automation of `starter`'s started with no task, on `repository`, last moving at `activityAt`. */
 function oneOff(
   id: string,
@@ -245,24 +254,17 @@ function taskRows(
   }));
 }
 
-test("a shared workspace's tasks group by repository until View options groups them by creator, yours first, each row wearing no face and naming no repository, which its card names", () => {
+test("a shared workspace's tasks group by repository until View options groups them by creator, yours first, each row wearing who is on it and naming no repository, which its card names", () => {
   const sidebar = mountSidebar(ACME);
   assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
-  assert.deepEqual(
-    taskRows(sidebar).map((row) => [row.name, row.face]),
-    [
-      ["Billing empty states", true],
-      ["Retry webhooks", false],
-      ["Fix flaky deploy", true],
-    ],
-  );
 
   choose(sidebar, "Group by", "Creator");
   assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
+  // No one is on any of them, which each row's unassigned mark says.
   assert.deepEqual(taskRows(sidebar), [
-    { name: "Retry webhooks", repository: undefined, face: false },
-    { name: "Billing empty states", repository: undefined, face: false },
-    { name: "Fix flaky deploy", repository: undefined, face: false },
+    { name: "Retry webhooks", repository: undefined, face: true },
+    { name: "Billing empty states", repository: undefined, face: true },
+    { name: "Fix flaky deploy", repository: undefined, face: true },
   ]);
   const row = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-tasks > li > button`)].find(
     (each) =>
@@ -274,14 +276,14 @@ test("a shared workspace's tasks group by repository until View options groups t
   assert.match(document.querySelector(".luke-tooltip-card")?.textContent ?? "", /acme\/console/);
 });
 
-test("grouped by none, the tasks run in one list, each row naming its repository and a teammate's wearing their face", () => {
-  const sidebar = mountSidebar(ACME);
+test("grouped by none, the tasks run in one list, each row naming its repository and wearing who is on it", () => {
+  const sidebar = mountSidebar(ACME, ASSIGNED);
   choose(sidebar, "Group by", "None");
   assert.deepEqual(groupNames(sidebar), []);
   assert.deepEqual(taskRows(sidebar), [
     { name: "Billing empty states", repository: "console", face: true },
-    { name: "Retry webhooks", repository: "relay", face: false },
-    { name: "Fix flaky deploy", repository: "relay", face: true },
+    { name: "Retry webhooks", repository: "relay", face: true },
+    { name: "Fix flaky deploy", repository: "relay", face: false },
   ]);
 });
 
@@ -363,13 +365,13 @@ function chipWords(sidebar: HTMLElement): string | undefined {
   return chip(sidebar)?.querySelector(".luke-chip-name")?.textContent ?? undefined;
 }
 
-test("Created by › Me lists only your tasks, wearing no faces, says so in a chip and a dot, and the chip's × lists everyone's again", async () => {
+test("Created by › Me lists only your tasks, says so in a chip and a dot, and the chip's × lists everyone's again", async () => {
   const pinnedTheirs = task("t-5", "Onboarding rewrite", "acme/console", CHARLES, undefined, 950);
   const sidebar = await mountRead(ACME, [...TASKS, pinnedTheirs]);
   choose(sidebar, "Created by", "Me");
 
   assert.deepEqual(taskRows(sidebar), [
-    { name: "Retry webhooks", repository: undefined, face: false },
+    { name: "Retry webhooks", repository: undefined, face: true },
   ]);
   assert.equal(chipWords(sidebar), "Created by me");
   const options = sidebar.querySelector('button[aria-label="View options"]');
@@ -797,14 +799,6 @@ test("a task from a service before statuses stands whatever the filter", () => {
 });
 
 /** The tasks with Charles's Fix flaky deploy assigned to Dean, and Retry webhooks to Charles. */
-const ASSIGNED = TASKS.map((each) =>
-  each.id === "t-2"
-    ? { ...each, assignee: { userId: DEAN, name: "Dean Stratakos" } }
-    : each.id === "t-1"
-      ? { ...each, assignee: { userId: CHARLES, name: "Charles Pan" } }
-      : each,
-);
-
 /** What a reader of the screen hears each row of the Tasks section say of whose face it wears, by the row's name. */
 function heardFaces(sidebar: HTMLElement): [string, string | undefined][] {
   const tasks = sidebar.querySelector(TASK_LIST);
@@ -815,12 +809,12 @@ function heardFaces(sidebar: HTMLElement): [string, string | undefined][] {
   ]);
 }
 
-test("a row wears its assignee's face where someone else is on it, none where you are, and its creator's where no one is", async () => {
+test("a row wears its assignee's face where someone else is on it, none where you are, and the unassigned mark, never its creator's, where no one is", async () => {
   const sidebar = await mountRead(ACME, ASSIGNED);
   choose(sidebar, "Group by", "None");
 
   assert.deepEqual(heardFaces(sidebar), [
-    ["Billing empty states", "(created by Charles Pan)"],
+    ["Billing empty states", "(unassigned)"],
     ["Retry webhooks", "(assigned to Charles Pan)"],
     ["Fix flaky deploy", undefined],
   ]);
@@ -876,7 +870,7 @@ test("⌘K's Show my tasks lists the tasks you are on, whoever created them, and
   assert.equal(chip(sidebar), null);
 });
 
-test("a list that names the creator, by its filter or its groups, still wears the face of whoever else is assigned", async () => {
+test("a list that names the creator, by its filter or its groups, still wears who is on each row", async () => {
   const assignedToMaya = TASKS.map((each) =>
     each.id === "t-2" ? { ...each, assignee: { userId: "user-maya", name: "Maya Okafor" } } : each,
   );
@@ -884,14 +878,108 @@ test("a list that names the creator, by its filter or its groups, still wears th
   choose(sidebar, "Created by", "Charles Pan");
 
   assert.deepEqual(heardFaces(sidebar), [
-    ["Billing empty states", undefined],
+    ["Billing empty states", "(unassigned)"],
     ["Fix flaky deploy", "(assigned to Maya Okafor)"],
   ]);
 
   choose(sidebar, "Created by", "Anyone");
   choose(sidebar, "Group by", "Creator");
+  assert.deepEqual(heardFaces(sidebar), [
+    ["Retry webhooks", "(unassigned)"],
+    ["Billing empty states", "(unassigned)"],
+    ["Fix flaky deploy", "(assigned to Maya Okafor)"],
+  ]);
+});
+
+test("grouped by assignee, your tasks come first, then each teammate's by name, then Unassigned on the dashed mark, each row wearing no face", async () => {
+  const assigned = [
+    ...ASSIGNED,
+    task("t-6", "Audit logs", "acme/console", CHARLES),
+    {
+      ...task("t-7", "Rate limits", "acme/relay", DEAN),
+      assignee: { userId: "user-maya", name: "Maya Okafor" },
+    },
+  ];
+  const sidebar = await mountRead(ACME, assigned);
+  choose(sidebar, "Group by", "Assignee");
+
+  assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan", "Maya Okafor", "Unassigned"]);
   assert.deepEqual(
-    heardFaces(sidebar).filter(([, heard]) => heard !== undefined),
-    [["Fix flaky deploy", "(assigned to Maya Okafor)"]],
+    taskRows(sidebar).map((row) => [row.name, row.face]),
+    [
+      ["Fix flaky deploy", false],
+      ["Retry webhooks", false],
+      ["Rate limits", false],
+      ["Billing empty states", false],
+      ["Audit logs", false],
+    ],
   );
+  const headers = sidebar.querySelectorAll(`${TASK_LIST} .sidebar-repository-header`);
+  assert.equal(
+    headers[3]?.querySelector('.actor-mark[data-kind="unassigned"]') === null,
+    false,
+    "Unassigned is headed by the dashed mark",
+  );
+});
+
+test("an assignee's group folds, and stays folded across launches", async () => {
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  choose(sidebar, "Group by", "Assignee");
+  const fold = [
+    ...sidebar.querySelectorAll<HTMLButtonElement>(
+      `${TASK_LIST} .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])`,
+    ),
+  ].find((button) => heardName(button) === "Unassigned");
+  assert.ok(fold, "Unassigned has a fold");
+  act(() => fold.click());
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Fix flaky deploy", "Retry webhooks"],
+  );
+  unmountAll();
+
+  const again = await mountRead(ACME, ASSIGNED);
+  assert.deepEqual(
+    taskRows(again).map((row) => row.name),
+    ["Fix flaky deploy", "Retry webhooks"],
+  );
+});
+
+test("View options offers Assignee above Creator, and Assigned to above Created by, whose chips stand in that order", async () => {
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(button, "the Tasks head offers View options");
+  act(() => button.click());
+  const top = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].map(
+    itemLabel,
+  );
+  assert.deepEqual(top.slice(-2), ["Assigned to", "Created by"]);
+  act(() => menuItem("Group by").click());
+  const groupBy = [...document.querySelectorAll('[role="menu"]')].at(-1);
+  assert.deepEqual(
+    [...(groupBy?.querySelectorAll('[role="menuitemcheckbox"]') ?? [])].map(
+      (item) => item.textContent,
+    ),
+    ["Repository", "Assignee", "Creator", "None"],
+  );
+  unmountAll();
+
+  const filtered = await mountRead(ACME, ASSIGNED);
+  choose(filtered, "Created by", "Charles Pan");
+  choose(filtered, "Assigned to", "Me");
+  assert.deepEqual(
+    [...filtered.querySelectorAll(".sidebar-view-chips .luke-chip-name")].map(
+      (name) => name.textContent,
+    ),
+    ["Assigned to me", "Created by Charles Pan"],
+  );
+});
+
+test("an assignee grouping kept for a workspace nobody shares now is drawn by repository", async () => {
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({ [PERSONAL.id]: { grouping: "assignee", order: "updated" } }),
+  );
+  const sidebar = await mountRead(PERSONAL);
+  assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
 });
