@@ -207,4 +207,94 @@
       z-index: 1;
     }
   }
+
+  .luke-settings-row-mark {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: var(--luke-settings-row-mark-size, 20px);
+    height: var(--luke-settings-row-mark-size, 20px);
+  }
+
+  .luke-settings-row-mark > :is(svg, img) {
+    width: 100%;
+    height: 100%;
+  }
+
+  .luke-settings-row-state {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-space-6);
+  }
+
+  .luke-settings-row-state[data-block] {
+    display: flex;
+    width: fit-content;
+  }
+
+  .luke-settings-row-state[data-wrap] {
+    flex-wrap: wrap;
+    white-space: nowrap;
+  }
+
+  .luke-settings-row-state[data-state="connected"]::before {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--luke-color-complete);
+    content: "";
+  }
+
+  .luke-settings-row-state[data-state="attention"] {
+    color: var(--luke-color-attention);
+  }
+
+  .luke-settings-row-value {
+    min-width: 64px;
+    flex: none;
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-align: right;
+  }
+
+  .luke-settings-row-act-slot {
+    width: var(--luke-control-height);
+    flex: none;
+  }
+
+  .luke-settings-saved-mark {
+    display: inline-flex;
+    color: var(--luke-color-complete);
+  }
+
+  .luke-settings-saved-mark > svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* Note that the check follows a button's words, which sit in an inline
+     span with no gap of their own. */
+  .luke-button .luke-settings-saved-mark {
+    margin-left: var(--luke-space-4);
+  }
+
+  .luke-settings-changed-mark {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-settings-attention-mark {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--luke-color-attention);
+  }
+
+  .luke-settings-attention-mark > svg {
+    width: 16px;
+    height: 16px;
+  }
 }

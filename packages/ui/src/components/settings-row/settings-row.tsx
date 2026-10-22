@@ -1,4 +1,8 @@
 import { type ReactNode, useId } from "react";
+import { AlertIcon, CheckIcon } from "../../face/glyphs.js";
+import { GAP, type Gap, Inline } from "../layout/layout.js";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
+import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
  * settings-row.tsx -- one setting on a line: its name and what it does on the left, the control that sets it at the end, and what went wrong with its last write under both.
@@ -204,5 +208,100 @@ export function SettingsRow({
         </p>
       </div>
     </div>
+  );
+}
+
+/** The box a provider's or a service's mark leads its row in, one size whatever the artwork's proportions. */
+export function SettingsRowMark({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="luke-settings-row-mark">{children}</span>;
+}
+
+/** Where a row's subject stands, as its line under the name says it. */
+export const SETTINGS_ROW_STATE = {
+  CONNECTED: "connected",
+  ATTENTION: "attention",
+  PLAIN: "plain",
+} as const;
+
+export type SettingsRowState = (typeof SETTINGS_ROW_STATE)[keyof typeof SETTINGS_ROW_STATE];
+
+/**
+ * Where a row's subject stands, under its name: connected with the dot a
+ * finished session wears, what needs a hand in the attention tint, or plain.
+ * `block` stands it on a line of its own under the row's description, and
+ * `wrap` lets its parts break between each other, never inside one.
+ */
+export function SettingsRowStateLine({
+  state = SETTINGS_ROW_STATE.PLAIN,
+  block = false,
+  wrap = false,
+  role,
+  children,
+}: {
+  state?: SettingsRowState;
+  block?: boolean;
+  wrap?: boolean;
+  role?: "alert" | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <span
+      className="luke-settings-row-state"
+      data-state={state}
+      data-block={block ? "" : undefined}
+      data-wrap={wrap ? "" : undefined}
+      role={role}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** A value a row ends in, in a column of its own: a member's role, as the shortcuts page sets a chord. */
+export function SettingsRowValue({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="luke-settings-row-value">{children}</span>;
+}
+
+/** The room of a row's ⋯ on a row with none, so every row's value ends in one column. */
+export function SettingsRowActSlot(): React.JSX.Element {
+  return <span className="luke-settings-row-act-slot" aria-hidden="true" />;
+}
+
+/** What is true of a saved credential, on one muted line beside its presses: its hint, its login, its status, wrapping between facts, never inside one. */
+export function SettingsFacts({
+  gap = GAP.CONTROL,
+  children,
+}: {
+  gap?: Gap;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.INHERIT} tone={TEXT_TONE.MUTED}>
+      <Inline gap={gap}>{children}</Inline>
+    </Text>
+  );
+}
+
+/** The complete green's check a saved credential or a connected row ends in. */
+export function SettingsSavedMark(): React.JSX.Element {
+  return (
+    <span className="luke-settings-saved-mark">
+      <CheckIcon />
+    </span>
+  );
+}
+
+/** The word beside a row's name while its value differs from the default: a fact about a preference, never an urgency. */
+export function SettingsChangedMark(): React.JSX.Element {
+  return <span className="luke-settings-changed-mark">Modified</span>;
+}
+
+/** The small mark beside a name while the feature it belongs to still needs a hand, its `note` the hover's and the screen reader's words. */
+export function SettingsAttentionMark({ note }: { note: string }): React.JSX.Element {
+  return (
+    <span className="luke-settings-attention-mark" title={note}>
+      <AlertIcon />
+      <VisuallyHidden>({note})</VisuallyHidden>
+    </span>
   );
 }

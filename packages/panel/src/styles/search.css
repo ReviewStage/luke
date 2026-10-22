@@ -1,0 +1,33 @@
+/* The search's landing marks: what a query matched, and the row or thread a result landed on. */
+
+/* Where the query's words landed, so a result says why it matched. A wash
+   rather than the engine's yellow: the mark identifies text, and the row's
+   own colours keep saying everything else. No padding — these lines
+   ellipsize, and a mark that widened its text would push the truncation
+   around as the query changed. */
+.search-match {
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-match);
+  color: inherit;
+}
+
+/* The row a search result just landed on, ringed once so the eye finds it
+   after the view moved. An outline rather than a fill, so it draws over
+   whatever the row already wears and takes no room; it fades out on its own
+   and leaves nothing behind. Held long enough to read, on the shared
+   vocabulary so a capture and reduced motion settle it at once. */
+[data-search-landed] {
+  outline-offset: 3px;
+  animation: search-landed calc(var(--luke-duration-shape) * 3) var(--luke-motion-exit);
+}
+
+@keyframes search-landed {
+  from,
+  40% {
+    outline: 2px solid var(--luke-color-border-selected);
+  }
+
+  to {
+    outline: 2px solid transparent;
+  }
+}

@@ -3,6 +3,7 @@ import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
 import entry from "@luke/panel/styles/index.css?raw";
 import markdown from "@luke/panel/styles/markdown.css?raw";
+import search from "@luke/panel/styles/search.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
 import shell from "@luke/panel/styles/shell.css?raw";
 import shortcut from "@luke/panel/styles/shortcut.css?raw";
@@ -45,6 +46,7 @@ import tokens from "@luke/ui/tokens.css?inline";
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
 const SHEET_BY_IMPORT = {
   "@luke/ui/tokens.css": tokens,
+  "./search.css": search,
   "./settings.css": settings,
   "./base.css": base,
   "@luke/ui/styles.css": ui,
@@ -171,7 +173,9 @@ export function layContainersAt(
   const resolution: Resolution = { widths, layout, layers: new Map() };
   const unlayered = SHEETS.map((css) => resolvedAt(css, resolution));
   const style = document.head.appendChild(document.createElement("style"));
-  style.textContent = [...[...resolution.layers.values()].flat(), ...unlayered, STILL_MOTION].join("\n");
+  style.textContent = [...[...resolution.layers.values()].flat(), ...unlayered, STILL_MOTION].join(
+    "\n",
+  );
   return style;
 }
 

@@ -665,7 +665,7 @@ const rowNamed = (page: HTMLElement, name: string) =>
 
 /** The Members row naming `name`, the reader's own beside its You. */
 const memberNamed = (page: HTMLElement, name: string) =>
-  [...page.querySelectorAll<HTMLElement>(".workspace-member > .menu-row")].find(
+  [...page.querySelectorAll<HTMLElement>(".menu-row")].find(
     (row) => row.querySelector('[id$="label"]')?.firstChild?.firstChild?.textContent === name,
   ) ?? assert.fail(`no ${name} member`);
 
@@ -983,7 +983,7 @@ test("the chosen team workspace's members are listed with their email and role, 
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
     ["Dana", "Sam"].map(
-      (name) => memberNamed(page, name).querySelector(".settings-row-value")?.textContent,
+      (name) => memberNamed(page, name).querySelector(".luke-settings-row-value")?.textContent,
     ),
     ["Owner", "Member"],
   );
@@ -1121,7 +1121,7 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
     [{ workspaceId: ACME.id, userId: MEMBER.userId }],
   );
   assert.equal(
-    [...page.querySelectorAll(".workspace-member")].some((each) =>
+    [...page.querySelectorAll(".menu-row")].some((each) =>
       each.textContent?.includes("Sam"),
     ),
     false,
@@ -1189,7 +1189,7 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
       { workspaceId: ACME.id, userId: MEMBER.userId, role: WORKSPACE_ROLE.ADMIN },
     ],
   ]);
-  assert.equal(memberNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
+  assert.equal(memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent, "Admin");
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
 });
 
@@ -1212,7 +1212,7 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
-  assert.equal(memberNamed(page, "Ola").querySelector(".settings-row-value")?.textContent, "Owner");
+  assert.equal(memberNamed(page, "Ola").querySelector(".luke-settings-row-value")?.textContent, "Owner");
 });
 
 test("an admin of the account's own first workspace is never offered Make owner, since it is named for its creator", async () => {
@@ -1383,7 +1383,7 @@ test("a members read sent before a role change and landing after it does not put
   release();
   await settle();
 
-  assert.equal(memberNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
+  assert.equal(memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent, "Admin");
 });
 
 test("an admin's leave says the invitations they sent stay valid, and a member's, who sends none, says nothing of them", async () => {
@@ -1544,7 +1544,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
 
     assert.equal(group.querySelector("h2")?.textContent, "Integrations");
     assert.equal(
-      row.querySelector(".settings-row-mark")?.innerHTML,
+      row.querySelector(".luke-settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
     assert.deepEqual(
@@ -1831,7 +1831,7 @@ function chooseRole(form: HTMLElement, words: string): void {
 
 /** Types an address, chooses a role, and presses Invite in the page's form, as many times as asked before any answer. */
 async function invite(page: HTMLElement, email: string, role: string, presses = 1): Promise<void> {
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   const address = form.querySelector("input") ?? assert.fail("no address field");
   const roleWords = role === WORKSPACE_ROLE.ADMIN ? "Admin" : "Member";
   act(() => {
@@ -1921,7 +1921,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   const before = roleChip(form).textContent;
   act(() => roleChip(form).click());
   const offered = roleItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
@@ -1944,7 +1944,7 @@ test("an invitation's role is a field chip, Member by default, whose menu checks
 
 test("an admin's role menu offers Admin dimmed, since only the owner invites admins, and an admin invites a member", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   act(() => roleChip(form).click());
   const admin = roleItems().find((item) => item.textContent?.startsWith("Admin"));
   const offered = [
