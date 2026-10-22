@@ -2374,7 +2374,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.deepEqual(asked.shownAgents, []);
 });
 
-test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its transcript beside the item", async () => {
+test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
   listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
   let { page, asked } = mount();
   await settle();
@@ -2400,8 +2400,9 @@ test("an archived agent is still named by its name, its card saying it was archi
   reach(named);
   assert.deepEqual(standingCard(), ["Coding agent", "Not found"]);
   act(() => named.click());
-  assert.deepEqual(asked.previewedAgents, [AGENT.id], "the agent reads beside the item");
-  assert.deepEqual(asked.shownAgents, []);
+  // An agent the task does not list, as an archived one, is drawn on its task alone, so its name goes there.
+  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+  assert.deepEqual(asked.previewedAgents, []);
 });
 
 test("an item's row hangs the thread's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own: its task, its title, where it stands, how it ended, and the agent that asked at its foot with the spinner while it works; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
