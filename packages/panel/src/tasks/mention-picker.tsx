@@ -1090,7 +1090,7 @@ export interface MentionChannels {
 
 /** One of the task's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
 export interface MentionablePullRequest
-  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks"> {
+  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks" | "queued"> {
   readonly agent: string | undefined;
 }
 
