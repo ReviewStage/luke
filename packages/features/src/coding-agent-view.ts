@@ -45,7 +45,7 @@ import {
   inboxReadAllSchema,
   inboxReadStateSchema,
 } from "./inbox-wire.js";
-import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
+import { catalogModelSchema, modelChoiceSchema, modelProviderSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
   planTemplateRevisionAnswerSchema,
@@ -130,6 +130,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
   /** The agent runs on its starter's plan, which its provider said is not eligible to run it. */
   AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
+  /** The account keeps neither the model provider's subscription nor its API key, so no coding agent on that provider starts or takes a message until one is connected in Settings › Agents. */
+  AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -140,11 +142,12 @@ const failureSchema = EffectSchema.Literals(Object.values(CODING_AGENT_CALL_FAIL
 /** A failed call, as every answer below spells one. */
 const failed = EffectSchema.Struct({ failure: failureSchema });
 
-/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), and when a plan's reached limit resets where it is that. */
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, and the provider whose credential is missing where it is that. */
 const failedReaching = EffectSchema.Struct({
   failure: failureSchema,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+  provider: EffectSchema.optionalKey(modelProviderSchema),
 });
 
 /** The models the service offers, as the window hears them: the list, or why there is none. */

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { readCodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
 import type {
   EarlierCallLine,
   HeldVoiceAgent,
@@ -25,6 +26,7 @@ import {
 } from "@luke/live";
 import { Effect, Option, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
+import { messageCredentialMissing } from "../agents/coder-host/agent-runtime-choice.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -118,6 +120,19 @@ type Opened =
 function refused(reason: HostedApiError): Refusal {
   return { refusal: reason };
 }
+
+/** Whether the agent a call names, on eve, has no credential of its starter's to run its turns on (`messageCredentialMissing`). */
+const callCredentialMissing = (accountId: string, agentId: string) =>
+  Effect.gen(function* () {
+    const agent = yield* readCodingAgent(accountId, agentId);
+    if (Option.isNone(agent)) return false;
+    const routing = yield* readCodingAgentRouting(accountId, agentId);
+    const missing = yield* messageCredentialMissing(agent.value, {
+      runtime: Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE,
+      payer: Option.isSome(routing) ? routing.value.payer : null,
+    });
+    return missing !== undefined;
+  });
 
 /**
  * What one session's own effect may fail with: the `voice_sessions` writes
@@ -436,6 +451,11 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // counted, so eve never answers its conversation beside the harness that does.
       if (agent.runtime !== CONVERSATION_RUNTIME.EVE) {
         return refused(HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE);
+      }
+      // Note that a call's turns run on the agent's starter's key, and Luke's pays for no coding
+      // agent, so one Luke's key paid for, or whose starter keeps no API key now, is refused first.
+      if (yield* callCredentialMissing(accountId, agentId)) {
+        return refused(HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING);
       }
       yield* accounts.spend(accountId);
       return { accountId, task, agent };

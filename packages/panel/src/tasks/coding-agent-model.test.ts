@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_PAYER,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
@@ -30,6 +31,7 @@ import {
   choiceOn,
   delegates,
   effortFor,
+  LUKE_PAID_REFUSAL,
   messageFailureNote,
   messageFailureWords,
   messageWords,
@@ -46,6 +48,7 @@ import {
   settledPlanEdits,
   sidebarCallIds,
   startedAgentOf,
+  startFailureNote,
   transcriptRowKey,
   unreadSentLines,
   withAgentRun,
@@ -642,6 +645,37 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
       "Your Claude plan has reached its usage limit. It waits until the limit resets.",
       `The plan paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
       messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
+    ],
+  );
+});
+
+test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Luke's key paid for says to continue in a new one, Settings mending nothing", () => {
+  const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) => ({
+    failure: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+    ...(provider === undefined ? undefined : { provider }),
+  });
+
+  assert.deepEqual(
+    [
+      startFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null),
+      startFailureNote(missing(MODEL_PROVIDER.OPENAI), "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10"),
+      messageFailureNote(missing(MODEL_PROVIDER.OPENAI), null, CODING_AGENT_PAYER.API_KEY),
+      messageFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null, CODING_AGENT_PAYER.LUKE),
+    ],
+    [
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Connect Claude Code in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Connect Codex in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Connect Codex in Settings to message this agent.",
+      },
+      { reason: FAILURE_REASON.OTHER, text: LUKE_PAID_REFUSAL },
     ],
   );
 });

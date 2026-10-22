@@ -220,6 +220,7 @@
     "./terminal/relay": "./src/terminal/relay.js",
     "./terminal/service": "./src/terminal/service.js",
     "./testing/agent-browser-fake": "./src/testing/agent-browser-fake.js",
+    "./testing/agent-credentials": "./src/testing/agent-credentials.js",
     "./testing/clock-driven": "./src/testing/clock-driven.js",
     "./testing/coder-scripted-model": "./src/testing/coder-scripted-model.js",
     "./testing/content-policy": "./src/testing/content-policy.js",

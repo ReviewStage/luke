@@ -19,6 +19,7 @@ import {
 } from "../agents/brain-host/eve-sessions.js";
 import { cancelledTurn } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { githubReaching } from "../testing/github-app-fake.js";
 import { NATIVE_WAKEUP_SWEEP, sweepNativeWakeups } from "./native-wakeup-sweep.js";
 
@@ -78,6 +79,7 @@ const openAgent = Effect.gen(function* () {
   const db = yield* Database;
   const owner = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
+  yield* connectAgentApiKeys(owner);
   const task = yield* startTask(owner, { name: "Invitations" });
   const started = yield* createCodingAgent(owner, {
     taskId: task.id,

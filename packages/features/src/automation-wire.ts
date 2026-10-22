@@ -400,6 +400,8 @@ export const AUTOMATION_RUN_REASON = {
   GITHUB_SIGN_IN: "github-sign-in",
   /** The model or effort named is no longer offered. */
   MODEL: "model",
+  /** Its creator connected neither a subscription nor an API key for the model's provider, and Luke's key pays for no coding agent. */
+  CREDENTIAL_MISSING: "credential-missing",
   /** The coding agents' service could not be reached. */
   UNAVAILABLE: "unavailable",
   /** The task moved to another repository after this run's GitHub event was queued. */

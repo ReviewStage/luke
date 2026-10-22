@@ -264,6 +264,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
 import { tasksProcedures } from "../tasks/tasks-procedures.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
@@ -866,6 +867,9 @@ const openTask = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* otherAccount(options.otherToken);
+    // Luke's key pays for no coding agent, so both accounts start and message theirs on their own keys.
+    yield* connectAgentApiKeys(owner);
+    yield* connectAgentApiKeys(other);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,

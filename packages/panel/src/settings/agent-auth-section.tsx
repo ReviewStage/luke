@@ -67,7 +67,8 @@ import { useCapability } from "../use-app-state.js";
  * default is the plan's `forAgents`: Subscription checked is on, API key
  * checked is off, and every agent Start makes on that provider's models
  * runs on the credential checked; there is no choice at Start. A radio is pressable only once its credential is saved; with
- * neither saved, agents run on Luke's key as before.
+ * neither saved, no agent starts on that provider's models, since Luke's key
+ * pays for no coding agent.
  *
  * The service never answers a key or a token, so nothing here holds one but
  * what is being pasted: it stands in the open field alone, is sent once on
@@ -924,7 +925,7 @@ function ApiKeyPanel({
         confirm={removal}
         question={{
           title: `Remove your ${name} API key?`,
-          body: `Agents on ${name} models will run on Luke's key.`,
+          body: `Agents on ${name} models won't start without a subscription.`,
           verb: "Remove key",
           running: "Removing…",
         }}

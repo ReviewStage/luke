@@ -147,6 +147,8 @@ export const LIVE_SESSION_OUTCOME = {
   HOSTED_UNAVAILABLE: "hosted-unavailable",
   /** The call named an agent that runs on Claude Code or Codex, which takes no call yet; nothing was charged. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
+  /** The call named an agent no credential of its starter's pays for now, since Luke's key pays for no coding agent; nothing was charged. */
+  AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
 } as const;
 
 export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE_SESSION_OUTCOME];

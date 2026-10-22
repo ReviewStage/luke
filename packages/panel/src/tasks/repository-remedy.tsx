@@ -13,7 +13,8 @@ import { useOpenSettings } from "../open-settings.js";
  * installation's settings page on GitHub, the task's repository chip, or
  * the task moved to the workspace whose GitHub reaches it, after which the
  * same send goes again by itself. A member's own GitHub token is replaced
- * in Settings › Profile, through the window's Settings opener, or
+ * in Settings › Profile, through the window's Settings opener, and a
+ * missing subscription or API key connected in Settings › Agents, or
  * authorized for an organization's SAML SSO on GitHub. Outside the window, as in a test of one
  * surface, every door does nothing.
  */
@@ -64,6 +65,8 @@ export function useRepositoryRemedy(): (
         return () => openSettings({ page: SETTINGS_VIEW.ACCOUNT });
       case FAILURE_REASON.AUTHORIZE_TOKEN:
         return () => doors.openGitHub(failure.authorizeUrl);
+      case FAILURE_REASON.CONNECT_AGENTS:
+        return () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS });
       case FAILURE_REASON.CHOOSE_REPOSITORY:
         return () => doors.chooseRepository(failure.taskId);
       case FAILURE_REASON.MOVE_TASK:

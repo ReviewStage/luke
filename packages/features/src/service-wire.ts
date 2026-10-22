@@ -107,6 +107,14 @@ export const HOSTED_API_ERROR = {
    */
   AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
   /**
+   * The account keeps no credential that pays for a coding agent on the
+   * model's provider: neither that provider's subscription (a Claude
+   * setup-token, a ChatGPT sign-in) nor its API key. Luke's own key pays for
+   * no coding agent, so nothing was written; the refusal names the provider,
+   * which the account connects in Settings › Agents.
+   */
+  AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
+  /**
    * The task is archived: it is read, and takes nothing — no edit, no call,
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.

@@ -14,10 +14,13 @@ const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try aga
 
 const NATIVE_AGENT_CALL_NOTE = "This agent runs in Claude Code or Codex and can't take calls yet.";
 
+const CREDENTIAL_MISSING_CALL_NOTE = "Connect an API key in Settings to call this agent.";
+
 /**
  * A plain customer-facing answer when the service refuses a session for a
- * reason the developer can read: the hosted emergency brake, or a call into
- * an agent that runs natively, which takes no call yet.
+ * reason the developer can read: the hosted emergency brake, a call into
+ * an agent that runs natively, which takes no call yet, or one into an
+ * agent no credential of its starter's pays for.
  */
 export function hostedVoiceUnavailableNote(
   diagnostics: LiveDiagnostics | undefined,
@@ -27,6 +30,8 @@ export function hostedVoiceUnavailableNote(
       return HOSTED_VOICE_UNAVAILABLE_NOTE;
     case LIVE_SESSION_OUTCOME.NATIVE_AGENT_NOT_HERE:
       return NATIVE_AGENT_CALL_NOTE;
+    case LIVE_SESSION_OUTCOME.AGENT_CREDENTIAL_MISSING:
+      return CREDENTIAL_MISSING_CALL_NOTE;
     default:
       return undefined;
   }

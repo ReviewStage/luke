@@ -29,6 +29,10 @@ import {
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
+import {
+  listProviderKeyRows,
+  setProviderKeyFastAccess,
+} from "@luke/database/models/provider-key-store";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   createTask,
@@ -68,7 +72,11 @@ import { INBOX_ASK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import {
+  FAST_ACCESS,
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+} from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
@@ -106,6 +114,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -602,8 +611,11 @@ function tailMessageIds(read: WireRecord): readonly string[] {
  */
 async function openWorkspaces() {
   const alice = await database.createUser();
+  await database.run(connectAgentApiKeys(alice));
   const bob = await database.createUser();
+  await database.run(connectAgentApiKeys(bob));
   const carol = await database.createUser();
+  await database.run(connectAgentApiKeys(carol));
   const invitations = await database.run(
     startTask(alice, { name: "Teammate invitations", repository: RELAY_FULL_NAME }),
   );
@@ -630,6 +642,7 @@ async function openWorkspaces() {
   const otherWorkspaces = await agentOn(carol, elsewhereTask.id);
 
   const stranger = await database.createUser();
+  await database.run(connectAgentApiKeys(stranger));
   const strangersTask = await database.run(
     startTask(stranger, { name: "Stranger's plan", repository: RELAY_FULL_NAME }),
   );
@@ -1198,8 +1211,21 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
     },
     { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
   ];
-  // Luke's own Anthropic key, which the starter's agents run on, was never granted fast mode.
-  const catalog = modelCatalogOf(offered, FAST_ACCESS.NOT_ENABLED);
+  // The starter's own Anthropic key, which its agents run on, was never granted fast mode.
+  const owner = agents.caller.userId;
+  const [anthropicRow] = (
+    await database.run(listProviderKeyRows(owner, PROVIDER_KEY_KIND.API_KEY))
+  ).filter((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
+  assert.ok(anthropicRow !== undefined);
+  await database.run(
+    setProviderKeyFastAccess(
+      owner,
+      PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      anthropicRow.sealedKey,
+      FAST_ACCESS.NOT_ENABLED,
+    ),
+  );
+  const catalog = modelCatalogOf(offered);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services, catalog);
 
   const listed = await call(CODER_TOOL.LIST_MODELS, {});

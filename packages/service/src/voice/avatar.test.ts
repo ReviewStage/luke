@@ -24,6 +24,7 @@ import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { asc, eq } from "drizzle-orm";
 import { Effect, Exit, Layer, Option, Scope } from "effect";
 import { afterAll } from "vitest";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connect,
   fakeAccounts,
@@ -121,6 +122,7 @@ interface Stand {
 /** The service for one account holding one plan, with the avatar on the Keyframe given, or none. */
 async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand> {
   const userId = await database.createUser();
+  await database.run(connectAgentApiKeys(userId));
   const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
   const { agent } = Option.getOrThrow(
     await database.run(
@@ -437,6 +439,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
+      await database.run(connectAgentApiKeys(userId));
       const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
       const record = voiceSessionRecord();
       const voiceSessionId = await database.run(
@@ -483,6 +486,7 @@ it.effect(
       const startedAt = 1_800_000_000_000;
       const record = voiceSessionRecord(() => startedAt);
       const userId = await database.createUser();
+      await database.run(connectAgentApiKeys(userId));
       const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
       const sessionId = `live_orphan_${userId}`;
       const voiceSessionId = await database.run(

@@ -41,6 +41,7 @@ import {
   FAST_WORD,
   fastRestingNote,
   longWindowNote,
+  MODEL_NOT_CONNECTED,
   modelLabel,
   offeredModels,
   readModelChoice,
@@ -122,8 +123,8 @@ const WRITE_REFUSED: ActionResult = {
  * What the model row says under its name, where the key it runs on is the
  * account's own: that it runs there while the provider last accepted it, and
  * that the key needs a hand where it did not, since such a key fails the
- * agent's steps rather than letting them fall back to Luke's. On Luke's key
- * the row says nothing, there being nothing the developer did to remember.
+ * agent's steps. Without an API key the row says nothing: a subscription
+ * pays, or the model is drawn disabled where nothing does.
  */
 function modelRowNote(
   provider: ModelProvider | undefined,
@@ -213,6 +214,9 @@ function DefaultRows({
                 icon: <HarnessMark provider={model.provider} />,
                 terms: [model.name, model.provider],
                 searchOnly: !unsearched.has(model.id),
+                ...(model.credentialMissing === true
+                  ? { disabled: MODEL_NOT_CONNECTED }
+                  : undefined),
               }))
         }
         placeholder="Search models"

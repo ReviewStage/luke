@@ -25,7 +25,7 @@ import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
 } from "@luke/database/schemas/coding-agent";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
   type NoteFiles,
@@ -71,6 +71,7 @@ import { githubReachOrRefusal } from "../../github/github-refusal.js";
 import { readBranchHead } from "../../github/repository-file.js";
 import { workspaceRepository } from "../../github/workspace-repository.js";
 import {
+  credentialMissing,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
@@ -96,9 +97,12 @@ import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
-  type AgentRuntimeChoice,
+  AgentCredentialMissing,
   accountFastOffer,
   agentRuntimeChoice,
+  markedUnconnected,
+  onApiKey,
+  providerOfModel,
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
@@ -448,10 +452,10 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
       ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
-  return {
-    offered: offeredToAccount(read, fastOffer),
-    defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE,
-  };
+  const offered = yield* hostedStoreOrUnavailable(
+    markedUnconnected(userId, offeredToAccount(read, fastOffer)),
+  );
+  return { offered, defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE };
 });
 
 /**
@@ -887,22 +891,25 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The runtime a new agent's conversation is recorded on. A blank Start, and
- * one a Call opens a call into as it lands (`call`), is always eve's,
- * whatever the account's routing would choose: a call reaches eve alone
- * (`voice/opening.ts` refuses an agent on any other runtime). Every
- * other Start is decided by the account's routing (`agentRuntimeChoice`),
- * with its payer, after the blank case: the credential Settings chose, a
- * continue and a fork alike.
+ * The runtime a new agent's conversation is recorded on, with its payer,
+ * by the account's routing (`agentRuntimeChoice`): the credential Settings
+ * chose, a blank Start, a continue and a fork alike. A Start a Call opens a
+ * call into as it lands (`call`) is eve's whatever the routing would choose,
+ * since a call reaches eve alone (`voice/opening.ts` refuses an agent on any
+ * other runtime), so it runs on the account's own API key. Where no
+ * credential of the account's pays, the Start is refused by name, the
+ * provider beside it, and nothing is written.
  */
 function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
-  if (ask.blank === true || ask.call === true) {
-    return Effect.succeed<AgentRuntimeChoice>({
-      runtime: CONVERSATION_RUNTIME.EVE,
-      payer: undefined,
-    });
-  }
-  return agentRuntimeChoice(userId, model);
+  const choice =
+    ask.call === true
+      ? Effect.flatMap(providerOfModel(model), (provider) => onApiKey(userId, provider))
+      : agentRuntimeChoice(userId, model);
+  return Effect.catch(choice, (failure) =>
+    failure instanceof AgentCredentialMissing
+      ? Effect.fail(credentialMissing(failure.provider))
+      : hostedStoreOrUnavailable(Effect.fail(failure)),
+  );
 }
 
 /**
@@ -1038,7 +1045,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
-  const runtime = yield* hostedStoreOrUnavailable(startRuntimeOf(userId, ask, choice.model));
+  const runtime = yield* startRuntimeOf(userId, ask, choice.model);
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
