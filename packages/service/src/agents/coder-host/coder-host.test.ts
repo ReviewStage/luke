@@ -29,14 +29,18 @@ import {
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listJournalsCalling } from "@luke/database/models/message-reads";
-import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
+import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import {
+  CONVERSATION_KIND,
+  MESSAGE_SENDER,
+  OPERATOR_NOTICE_KIND,
+} from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
@@ -2308,6 +2312,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         for (let index = 0; index < 9; index += 1) own.push(yield* started(userId));
         const teammates = yield* started(teammate);
         const operator = yield* openOperator(host, userId, task.workspaceId);
+        // Each of the member's agents opened an ask, the oldest first, so nine rows stand for the notices' eight.
+        for (const [index, each] of own.entries()) {
+          yield* writeOperatorNotice(
+            { agentId: each.id },
+            OPERATOR_NOTICE_KIND.INBOX_ASK,
+            new Date(Date.UTC(2026, 9, 22, 9, index)),
+          );
+        }
 
         const desk =
           (yield* host.turnMessage(
@@ -2321,6 +2333,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(own.slice(1).every(named), desk);
         assert.ok(!named(own[0] ?? teammates), "the oldest is the one counted");
         assert.ok(!named(teammates), "a teammate's agent is no row of the desk");
+        // The notice only counted stays unread for the next turn; the eight shown are read.
+        const left = yield* unreadOperatorNotices(operator.agent.id, 20);
+        assert.deepEqual(
+          left.map(({ agentId }) => agentId),
+          [own[0]?.id],
+        );
       }),
   );
 

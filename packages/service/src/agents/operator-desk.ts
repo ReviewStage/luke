@@ -22,7 +22,8 @@
  * failed, a pull request merged or closed, a new ask in the member's inbox,
  * one row per agent with what happened to it, newest first and bounded
  * (`readOperatorDesk`). Notices are handed once: the turn's message marks
- * read those it carried (`markDeskNoticesRead`), and whether the desk is
+ * read those its rows showed (`markDeskNoticesRead`), and those of agents
+ * past the rows' cap, only counted, wait for the next turn; and whether the desk is
  * handed again is keyed on its standing sections alone, so a desk whose
  * notices were all read and whose work stands as it did hands nothing new
  * and the history stays cached.
@@ -292,8 +293,22 @@ function noticesSection(notices: readonly UnreadOperatorNotice[], step: string):
   return {
     heading: DESK_HEADING.NOTICES,
     rows,
-    more: `${AGENT_TOOL.READ_AGENT} reads each agent's.`,
+    more: "the rest are handed on your next turn.",
   };
+}
+
+/**
+ * The notices the desk shows by row: those of the agents its section's
+ * first `OPERATOR_DESK.ROWS` rows name, every kind of each. The rest are
+ * only counted, so they stay unread and are handed on the next turn.
+ */
+function shownNotices(notices: readonly UnreadOperatorNotice[]): readonly UnreadOperatorNotice[] {
+  const shown = new Set<string>();
+  for (const { agentId } of notices) {
+    if (shown.size === OPERATOR_DESK.ROWS) break;
+    shown.add(agentId);
+  }
+  return notices.filter(({ agentId }) => shown.has(agentId));
 }
 
 /** The operator's desk as a turn opens, with what of it the turn's message hands once. */
@@ -302,7 +317,7 @@ export interface OperatorDesk {
   readonly text: string;
   /** The standing sections alone, which say whether the desk changed since it was last handed. */
   readonly standing: string;
-  /** The notices the desk carries, as read, which are marked read once it is handed unless an event moved one since. */
+  /** The notices the desk shows by row, as read, which are marked read once it is handed unless an event moved one since; those only counted stay unread. */
   readonly notices: readonly UnreadOperatorNotice[];
 }
 
@@ -322,7 +337,7 @@ export const readOperatorDesk = (
     return {
       text: deskText([noticesSection(notices, step), ...sections]),
       standing: deskText(sections),
-      notices,
+      notices: shownNotices(notices),
     };
   });
 
