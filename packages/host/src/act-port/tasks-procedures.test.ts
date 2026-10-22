@@ -556,7 +556,6 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     `pin:${TASK_ID}:true`,
     "pin-repository:acme/relay:false",
     `section:${TASK_SECTION_WRITE.PLACE}`,
-    `archive:${TASK_ID}:true`,
     "repositories:workspace-acme",
     `repository:${TASK_ID}:acme/relay`,
     `move:${TASK_ID}:workspace-relay`,
