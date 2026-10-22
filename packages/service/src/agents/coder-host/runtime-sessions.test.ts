@@ -7,6 +7,7 @@ import {
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -992,6 +993,50 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               each.name,
             );
           }
+        }),
+    );
+
+    it.effect(
+      "a Start's first message stands in a native agent's transcript as the line awaiting its turn, its id handed to the runner, which names it back as it takes it, on Claude Code and Codex alike; eve writes its own",
+      () =>
+        Effect.gen(function* () {
+          const layers = (native: ReturnType<typeof runtimes>["native"]) =>
+            Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native);
+          const cases = [
+            {
+              name: "Claude Code",
+              token: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+            },
+            { name: "Codex", token: false, chatGpt: "signed_in", model: "openai/gpt-5.5" },
+          ] as const;
+          for (const each of cases) {
+            const { owner, workspaceId } = yield* openStarter(each.token, each.chatGpt);
+            const { eve, claudeCode, codex, native } = runtimes();
+            const started = yield* startCodingAgent(
+              routedSessions(eve.sessions, owner),
+              owner,
+              startIn(workspaceId, each.model),
+            ).pipe(Effect.provide(layers(native)));
+
+            const [handed] = [...claudeCode.messages, ...codex.messages];
+            assert.ok(handed?.lineId !== undefined, each.name);
+            assert.ok(
+              yield* sentLineStands(owner, started.agent.conversationId, handed.lineId),
+              each.name,
+            );
+          }
+
+          const keyed = yield* openStarter(false);
+          yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+          const onEve = runtimes();
+          yield* startCodingAgent(
+            routedSessions(onEve.eve.sessions, keyed.owner),
+            keyed.owner,
+            startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"),
+          ).pipe(Effect.provide(layers(onEve.native)));
+          assert.equal(onEve.eve.messages[0]?.lineId, undefined);
         }),
     );
 
