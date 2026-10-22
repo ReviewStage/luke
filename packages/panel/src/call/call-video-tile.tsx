@@ -151,7 +151,12 @@ function AvatarStill({
   return (
     <div className="call-video-still">
       <span className="call-video-face" aria-hidden="true">
-        <WingFace motion={waiting ? FACE_MOTION.MONITORING : undefined} repeat={waiting} />
+        <WingFace
+          motion={waiting ? FACE_MOTION.MONITORING : undefined}
+          repeat={waiting}
+          muted
+          fill
+        />
       </span>
       {children}
     </div>

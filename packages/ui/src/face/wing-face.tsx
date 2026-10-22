@@ -14,6 +14,10 @@ interface WingFaceProps {
   motion?: FaceMotion | undefined;
   /** Set for the motions that say something for as long as it stays true. */
   repeat?: boolean;
+  /** Draws the face in the muted text colour, as a still frame stands behind what is said over it. */
+  muted?: boolean;
+  /** Fills the box that holds it rather than standing at the font's size. */
+  fill?: boolean;
 }
 
 /** Nothing beyond the smile and the eyes, which is what a still face draws. */
@@ -44,7 +48,12 @@ const EYE_CLASS = { LEFT: "luke-face-eye-left", RIGHT: "luke-face-eye-right" } a
  * in what order they nest. `luke-face-part` marks everything the artwork moves,
  * which is what the wiring in `face.css` plays, pauses, and repeats as one set.
  */
-export function WingFace({ motion, repeat = false }: WingFaceProps): React.JSX.Element {
+export function WingFace({
+  motion,
+  repeat = false,
+  muted = false,
+  fill = false,
+}: WingFaceProps): React.JSX.Element {
   const parts = motion === undefined ? RESTING_PARTS : FACE_MOTION_PARTS[motion];
 
   return (
@@ -52,6 +61,8 @@ export function WingFace({ motion, repeat = false }: WingFaceProps): React.JSX.E
       className="luke-face"
       data-motion={motion}
       data-repeat={String(repeat)}
+      data-muted={String(muted)}
+      data-fill={String(fill)}
       viewBox={FACE_ART.VIEW_BOX}
       aria-hidden="true"
       focusable="false"

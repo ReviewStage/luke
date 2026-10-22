@@ -2099,7 +2099,6 @@ ul.actor-stack {
 }
 
 .agent-call-video-frame {
-  position: relative;
   width: min(
     100%,
     calc(var(--call-video-height) * var(--call-video-aspect)),
@@ -2110,7 +2109,7 @@ ul.actor-stack {
 
 /* The tile fills the frame, which stands at the picture's own aspect, so
    the picture fills the tile whole and needs no blurred fill beside it. */
-.agent-call-video-frame > .call-video-tile {
+.agent-call-video-frame .call-video-tile {
   width: 100%;
   height: 100%;
   max-height: none;
@@ -2131,56 +2130,6 @@ ul.actor-stack {
   max-width: 56px;
   height: auto;
   aspect-ratio: 1;
-}
-
-/* How the video resizes, brought out while the pointer is over it, a drag
-   is under way, or the keyboard is on one of them (`AgentCallVideo`): a
-   bracket on each top corner, since the video grows upward. */
-.agent-call-video-corner {
-  opacity: 0;
-  transition: opacity var(--luke-duration-hover) ease;
-}
-
-.agent-call-video[data-reveal="true"] .agent-call-video-corner,
-.agent-call-video:focus-within .agent-call-video-corner {
-  opacity: 1;
-}
-
-/* A touch screen has no hover to bring them out, so there they always stand. */
-@media (hover: none) {
-  .agent-call-video .agent-call-video-corner {
-    opacity: 1;
-  }
-}
-
-.agent-call-video-corner {
-  position: absolute;
-  z-index: 1;
-  top: calc(-1 * var(--luke-space-6));
-  width: var(--luke-space-16);
-  height: var(--luke-space-16);
-  box-sizing: border-box;
-  border-top: 2px solid var(--luke-color-border-strong);
-  outline: none; /* no ring: the bracket lights in the focus colour */
-  touch-action: none;
-}
-
-.agent-call-video-corner[data-corner="left"] {
-  left: calc(-1 * var(--luke-space-6));
-  border-left: 2px solid var(--luke-color-border-strong);
-  border-top-left-radius: var(--luke-radius-6);
-  cursor: nwse-resize;
-}
-
-.agent-call-video-corner[data-corner="right"] {
-  right: calc(-1 * var(--luke-space-6));
-  border-right: 2px solid var(--luke-color-border-strong);
-  border-top-right-radius: var(--luke-radius-6);
-  cursor: nesw-resize;
-}
-
-.agent-call-video-corner:is(:hover, :active, :focus-visible) {
-  border-color: var(--luke-color-accent);
 }
 
 /* Anywhere no call's tab is drawn (Settings, the home page, a panel
