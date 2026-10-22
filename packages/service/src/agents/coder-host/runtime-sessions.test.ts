@@ -1166,7 +1166,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start a Call opens a call into routes by credential as any Start does: an account whose Claude plan pays records Claude Code, one on an API key eve, and one with neither is refused by name",
+      "a Start a Call opens a call into routes by credential as any Start does: an account whose Claude plan or API key pays records Claude Code, and one with neither is refused by name",
       () =>
         Effect.gen(function* () {
           const layers = (native: ReturnType<typeof runtimes>["native"]) =>
@@ -1204,9 +1204,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const eveRouting = Option.getOrThrow(
             yield* readCodingAgentRouting(keyed.owner, onEve.agent.id),
           );
+          // An API key pays a Claude model's agent on Claude Code too, as any Start on one does.
           assert.deepEqual(
             [eveRouting.runtime, eveRouting.payer],
-            ["eve", CODING_AGENT_PAYER.API_KEY],
+            ["claude_code", CODING_AGENT_PAYER.API_KEY],
           );
 
           const none = yield* openStarter(false);
