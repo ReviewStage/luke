@@ -1,3 +1,4 @@
+import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
 import type { WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
@@ -30,7 +31,12 @@ import {
  * the turn opens at the first sign of work (the line Luke handed it, the
  * harness's start, or its first words) and ends with the launch, so a model
  * turn that ends with background work or a wakeup still to come leaves the
- * agent's turn running, as eve's parked turn does. Inside it each model call
+ * agent's turn running, as eve's parked turn does. A launch released to
+ * wait on wakeups (`RUNNER_END.RELEASED`) ends with its sandbox stopped but
+ * leaves the turn running too, as eve's `sleep` does: the agent reads at
+ * work, so Stop stops it and GitHub's every check finished wakes it, and the
+ * wakeup Luke delivers, or any message before it, relaunches the CLI into
+ * the same turn. Inside it each model call
  * is a step; its words are told the writer a finished sentence at a time
  * while they form, and whole once the step is over; each call stands in the
  * record before its answer and settles with it; reasoning joins under an id
@@ -47,6 +53,24 @@ import {
  * (`runner-events-app.ts`), so a test reads what a stream amounts to
  * without a database.
  */
+
+/**
+ * How a released wait holds its turn. A coding agent's turn is settled as
+ * abandoned once it has run `TURN_ABANDON.CODING_AGENT_AFTER_MS`, so a wait
+ * whose earliest wakeup comes later than `ROOM` before that bound ends the
+ * turn instead, done, its wakeups still delivered as a message of their own.
+ */
+const RELEASED_WAIT = {
+  /** How long the turn a wakeup resumes has left to run before the abandonment bound. */
+  ROOM: 60 * 60 * 1_000,
+} as const;
+
+/** Whether a released wait's wakeups hold the turn running: some wakeup comes, early enough for the turn's bound. */
+function holdsTurn(wakeups: readonly NativeWakeup[], turnOpenedAt: number): boolean {
+  if (wakeups.length === 0) return false;
+  const earliest = Math.min(...wakeups.map((wakeup) => wakeup.at));
+  return earliest - turnOpenedAt < TURN_ABANDON.CODING_AGENT_AFTER_MS - RELEASED_WAIT.ROOM;
+}
 
 /** A step's words: those it completed, those still forming, and how much of them the writer was told. */
 const DraftSchema = Schema.Struct({
@@ -357,6 +381,15 @@ class Fold {
     const held = this.state.turn;
     if (held === undefined) return;
     const turn = this.#closed(held);
+    // Note that a released wait is still under way, as eve's sleep is: its words are told whole and nothing ends.
+    if (
+      moment.ending === NATIVE_ENDING.DONE &&
+      moment.wakeups !== undefined &&
+      holdsTurn(moment.wakeups, turn.openedAt ?? this.#context.now)
+    ) {
+      this.#setTurn(turn);
+      return;
+    }
     const status = statusOf(moment.ending, turn.failure);
     const failed = status === BRAIN_REQUEST_STATUS.FAILED;
     const detail = [moment.detail, turn.failure, this.state.rateLimit]

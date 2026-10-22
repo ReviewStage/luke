@@ -18,6 +18,7 @@ import {
   type ProviderKeyRow,
   saveProviderKey,
 } from "@luke/database/models/provider-key-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { readTask, updateTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
@@ -38,6 +39,7 @@ import {
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
+import { noNetwork } from "@luke/wire/testing";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
@@ -46,7 +48,9 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { EVE_CANCEL_OUTCOME } from "../brain-host/eve-sessions.js";
 import { CODER } from "../coder-host/bounds.js";
+import { cancelledTurn } from "../coder-host/stop.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
@@ -641,15 +645,20 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a released wait ends its turn as done and keeps its wakeups for Luke to deliver, and a later Stop deletes them",
+    "a released wait keeps its turn running and its wakeups for Luke to deliver, the delivery goes on in that turn, and a Stop deletes them",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
-        const agent = yield* agentWithBearer;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, [
+          "Run the probe.",
+          "Check CI on the pull request again.",
+        ]);
+        const [, deliveredLineId = ""] = agent.lineIds;
         const top = { parent_tool_use_id: null, session_id: SESSION };
         const dueAt = "2026-10-21T12:17:00.000Z";
         const prompt = "Check CI on the pull request again.";
-        const messagesOfTurn = [
+        yield* TestClock.setTime(Date.parse("2026-10-21T12:05:00.000Z"));
+        const released = [
           { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
           { type: "system", subtype: "init", ...top },
           {
@@ -674,8 +683,20 @@ it.layer(getTestDB())("the runner events route", (it) => {
           },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.RELEASED, wakeups: [{ at: dueAt, prompt }] },
         ];
+        // The wakeup delivered: the CLI relaunched on the line Luke sent it, which it answers.
+        const delivered = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: deliveredLineId },
+          { type: "system", subtype: "init", ...top },
+          {
+            type: "assistant",
+            message: { content: [{ type: "text", text: "CI passed." }] },
+            ...top,
+          },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
         // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
-        const events = messagesOfTurn.map(
+        const events = [...released, ...delivered].map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
         const due = (at: Date) =>
@@ -683,22 +704,117 @@ it.layer(getTestDB())("the runner events route", (it) => {
             claimed.filter((each) => each.agentId === agent.agentId).map((each) => each.prompt),
           );
 
-        yield* post(agent.bearer, events);
-        const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
+        yield* post(agent.bearer, events.slice(0, released.length));
+        const waiting = yield* transcriptOf(agent.target.conversationId);
         assert.deepEqual(
-          ended.map((turn) => turn.status),
-          [TURN_STATUS.SETTLED],
+          waiting.turns.map((turn) => turn.status),
+          [TURN_STATUS.RUNNING],
         );
         assert.deepEqual(yield* due(new Date("2026-10-21T12:16:59Z")), [], "not yet due");
         assert.deepEqual(yield* due(new Date(dueAt)), [prompt]);
 
+        yield* post(agent.bearer, events.slice(released.length));
+        const resumed = yield* transcriptOf(agent.target.conversationId);
+        assert.deepEqual(
+          resumed.turns.map((turn) => turn.status),
+          [TURN_STATUS.SETTLED],
+        );
+        assert.equal(new Set(resumed.rows.map((row) => row.turnId)).size, 1);
+
         // A launch since, which the developer stopped: its wakeups end with it.
-        yield* post(agent.bearer, events);
-        const stopped = [{ type: RUNNER_EVENT.END, reason: RUNNER_END.STOPPED }].map(
+        const stopped = [...released, { type: RUNNER_EVENT.END, reason: RUNNER_END.STOPPED }].map(
           (message, index) => ({ sequence: events.length + index, message }) as RunnerEvent,
         );
         yield* post(agent.bearer, stopped);
         assert.deepEqual(yield* due(new Date("2026-10-22T00:00:00Z")), []);
+      }),
+  );
+
+  it.effect(
+    "a Stop of a released wait settles its turn stopped and deletes its wakeups, and the next launch opens a turn of its own",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Run the probe.", "Carry on."]);
+        const [, nextLineId = ""] = agent.lineIds;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const dueAt = "2026-10-21T12:17:00.000Z";
+        const prompt = "Check CI on the pull request again.";
+        yield* TestClock.setTime(Date.parse("2026-10-21T12:05:00.000Z"));
+        const launches = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.RELEASED, wakeups: [{ at: dueAt, prompt }] },
+          { type: RUNNER_EVENT.ACCEPTED, uuid: nextLineId },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = launches.map((message, sequence) => ({ sequence, message }) as RunnerEvent);
+        yield* post(agent.bearer, events.slice(0, 3));
+        yield* claimRuntimeSession(agent.target, "claude-code-session", new Date());
+        const read = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        // The released runner has ended, so the harness finds no turn under way to stop.
+        const noRunner = Effect.succeed({
+          cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const),
+        });
+
+        yield* cancelledTurn(noRunner, storeWriter({ tools: CODER_TOOL_SET }), read).pipe(
+          Effect.provide(noNetwork),
+        );
+        const stopped = yield* transcriptOf(agent.target.conversationId);
+        const claimed = yield* claimDueCodingAgentWakeups(new Date(dueAt), new Date(dueAt), 100, 3);
+        yield* post(agent.bearer, events.slice(3));
+        const after = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(
+          stopped.turns.map((turn) => turn.status),
+          [TURN_STATUS.CANCELLED],
+        );
+        assert.deepEqual(
+          claimed.filter((each) => each.agentId === agent.agentId),
+          [],
+        );
+        assert.deepEqual(after.turns.map((turn) => turn.status).sort(), [
+          TURN_STATUS.CANCELLED,
+          TURN_STATUS.SETTLED,
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a released wait whose wakeup comes past the turn's bound ends the turn as done and keeps its wakeup",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const dueAt = "2026-10-23T12:17:00.000Z";
+        const prompt = "Remind me to push the release branch.";
+        yield* TestClock.setTime(Date.parse("2026-10-21T12:05:00.000Z"));
+        const messagesOfTurn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...top },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.RELEASED, wakeups: [{ at: dueAt, prompt }] },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = messagesOfTurn.map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events);
+        const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
+        const claimed = yield* claimDueCodingAgentWakeups(new Date(dueAt), new Date(dueAt), 100, 3);
+
+        assert.deepEqual(
+          ended.map((turn) => turn.status),
+          [TURN_STATUS.SETTLED],
+        );
+        assert.deepEqual(
+          claimed.filter((each) => each.agentId === agent.agentId).map((each) => each.prompt),
+          [prompt],
+        );
       }),
   );
 

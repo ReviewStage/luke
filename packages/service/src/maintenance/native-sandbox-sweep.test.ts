@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, turns } from "@luke/database/schemas/storage";
@@ -247,6 +248,36 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         assert.equal(later.stopped, 1);
         assert.deepEqual(api.stopped, [dead.currentSessionId]);
         assert.equal(alive.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a released wait's run, its runner ended and its turn running on a wakeup, is not lost and its sandbox is stopped",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const db = yield* Database;
+        const waiting = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.RUNNING,
+          at: minutesBefore(10),
+        });
+        yield* replaceCodingAgentWakeups(waiting.id, [
+          { at: new Date(NOW.getTime() + 10 * 60_000), prompt: "Check CI again." },
+        ]);
+        const api = vercel();
+        api.commands.set("cmd_released", { id: "cmd_released", exitCode: 0 });
+        const released = nativeSandbox(waiting.id, "cmd_released");
+        api.sandboxes.push(released);
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.deepEqual(outcome, { stopped: 1, held: 0, failed: 0, deferred: 0, lost: 0 });
+        assert.deepEqual(api.stopped, [released.currentSessionId]);
+        const [turn] = yield* db
+          .select({ status: turns.status })
+          .from(turns)
+          .where(eq(turns.conversationId, waiting.conversationId));
+        assert.equal(turn?.status, TURN_STATUS.RUNNING);
       }),
   );
 

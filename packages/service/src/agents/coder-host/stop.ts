@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import {
   awaitingLinesOfReached,
   type CodingAgent,
@@ -9,7 +10,10 @@ import {
   nativeRuntimesOfReached,
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
-import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+import {
+  replaceCodingAgentWakeups,
+  waitingUntilOfReached,
+} from "@luke/database/models/coding-agent-wakeups";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
@@ -236,8 +240,9 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   key?: string,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
-  // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
-  // as a stopped CLI's own end with it, so they go whether or not a turn stands to cancel.
+  // A native agent's released wait left wakeups, which a Stop ends as a stopped CLI's own end with
+  // it, so they go whether or not a turn stands to cancel.
+  const waited = yield* hostedStoreOrUnavailable(waitingUntilOfReached([agent.conversationId]));
   yield* hostedStoreOrUnavailable(replaceCodingAgentWakeups(agent.id, []));
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
@@ -274,6 +279,16 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
   );
   if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // Note that a released wait's turn runs with no runner to end it, so it is settled stopped here,
+  // as eve's sleep ends on a Stop, rather than standing until the sweep's bound; the native
+  // projection's hold on it goes too, so the next launch opens a turn of its own.
+  if (!accepted && waited.size > 0) {
+    yield* hostedStoreOrUnavailable(
+      Effect.flatMap(writer, (write) =>
+        settleRunnerLostTurns(write, agent.conversationId, at.getTime()),
+      ),
+    );
+  }
   return accepted;
 });
 

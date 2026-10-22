@@ -9,8 +9,10 @@
  * sweep hands its prompt to the agent as a message from Luke, the one way a
  * message reaches an agent (`steerCodingAgent`), which relaunches the CLI on
  * the session it resumes, as the wakeup would have started a turn in the
- * CLI that waited. The message goes under a key of the wakeup's own, so a
- * delivery repeated after one that landed is told once.
+ * CLI that waited; the agent's turn ran on through the wait, so the CLI's
+ * work goes on in it, as eve's turn goes on past its `sleep`
+ * (`native-projection.ts`). The message goes under a key of the wakeup's
+ * own, so a delivery repeated after one that landed is told once.
  *
  * A delivery sends only a wakeup that still stands, so one a Stop or a
  * launch deleted since the claim is never sent, and deletes it once sent;

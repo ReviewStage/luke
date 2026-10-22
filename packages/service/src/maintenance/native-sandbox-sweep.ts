@@ -12,8 +12,11 @@
  * conversation is native, whose newest turn ended longer ago than a short
  * grace (which leaves the END's own stop to go first), and on which no
  * developer's Terminal holds a lease. eve's sandboxes are never looked at
- * past their name, and a run still going, or waiting on a wakeup (whose turn
- * stays running), keeps its sandbox, as does one a newer runner runs in. The
+ * past their name, and a run still going, or waiting on a wakeup in a CLI
+ * still up (whose turn stays running), keeps its sandbox, as does one a
+ * newer runner runs in. A run whose wait was released waits on a wakeup
+ * Luke keeps, its turn still running and its runner ended: it is not lost,
+ * and its sandbox is stopped as an ended run's is. The
  * stop is as the END's: the repository's credential taken off the firewall,
  * then the session stopped, its filesystem kept for a later resume; where the
  * credential would not come off, the sandbox is left for the next sweep.
@@ -34,6 +37,7 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { readNativeRunStanding } from "@luke/database/models/coding-agent-store";
+import { waitingUntilOfReached } from "@luke/database/models/coding-agent-wakeups";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
@@ -156,19 +160,37 @@ interface StopBudget {
   remaining: number;
 }
 
-/** Whether the run of the sandbox's agent still has a turn queued or running, read from the store. */
+/**
+ * Where the run of the sandbox's agent stands, read from the store: its
+ * conversation, when its newest turn ended, and whether it waits on a
+ * wakeup. A released wait's turn runs on with its runner ended and its
+ * sandbox stopped (`native-projection.ts`), so its run is neither lost nor
+ * going on here: the sandbox is the END's to stop, or this sweep's where
+ * that stop failed or a Terminal held it.
+ */
+const runStandingOf = (sandbox: NativeSandbox) =>
+  Effect.gen(function* () {
+    const standing = yield* readNativeRunStanding(sandbox.agentId);
+    if (Option.isNone(standing)) return Option.none();
+    const { conversationId } = standing.value;
+    const waiting = (yield* waitingUntilOfReached([conversationId])).has(conversationId);
+    return Option.some({ ...standing.value, waiting });
+  });
+
+/** Whether the run of the sandbox's agent still has a turn queued or running that waits on no wakeup, read from the store. */
 const runGoesOn = (sandbox: NativeSandbox) =>
-  Effect.map(readNativeRunStanding(sandbox.agentId), (standing) =>
-    Option.isSome(standing) && standing.value.endedAt === null
+  Effect.map(runStandingOf(sandbox), (standing) =>
+    Option.isSome(standing) && standing.value.endedAt === null && !standing.value.waiting
       ? Option.some(standing.value.conversationId)
       : Option.none(),
   );
 
-/** Whether the run of the sandbox's agent ended past the grace, read from the store. */
+/** Whether the run of the sandbox's agent ended past the grace, or waits on a wakeup, read from the store. */
 const runEnded = (sandbox: NativeSandbox, now: Date) =>
-  Effect.map(readNativeRunStanding(sandbox.agentId), (standing) => {
+  Effect.map(runStandingOf(sandbox), (standing) => {
     if (Option.isNone(standing)) return Option.none();
-    const { conversationId, endedAt } = standing.value;
+    const { conversationId, endedAt, waiting } = standing.value;
+    if (waiting && endedAt === null) return Option.some(conversationId);
     const endedBefore = now.getTime() - Duration.toMillis(NATIVE_SANDBOX_SWEEP.GRACE);
     return endedAt === null || endedAt.getTime() > endedBefore
       ? Option.none()

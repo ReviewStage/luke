@@ -20,9 +20,14 @@
  * is told once (`native-wakeup-sweep.ts`), until `attempts` reaches the bound
  * the claim is handed, when the claim deletes it instead. An archived agent
  * takes no wakeup, so the claim deletes its wakeups too.
+ *
+ * While an agent holds a wakeup it is waiting, as eve's agent waits in its
+ * `sleep`: its tab says until when, offers Stop, and GitHub's every check
+ * finished wakes it early, so a status read names the earliest wakeup each
+ * agent holds (`waitingUntilOfReached`).
  */
 
-import { asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { asc, eq, gte, inArray, isNotNull, lte, min, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -139,6 +144,23 @@ const standsOne = SqlSchema.findAll({
     ),
 });
 
+const earliestOf = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({ conversationId: Schema.String, dueAt: Schema.Date }),
+  execute: ({ conversationIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          conversationId: codingAgent.conversationId,
+          dueAt: min(codingAgentWakeup.dueAt),
+        })
+        .from(codingAgentWakeup)
+        .innerJoin(codingAgent, eq(codingAgent.id, codingAgentWakeup.agentId))
+        .where(inArray(codingAgent.conversationId, conversationIds))
+        .groupBy(codingAgent.conversationId),
+    ),
+});
+
 const deleteOne = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String }),
   execute: ({ id }) =>
@@ -191,4 +213,19 @@ export function codingAgentWakeupStands(id: string): WakeupEffect<boolean> {
 /** The wakeup delivered, so no claim takes it again. */
 export function deleteCodingAgentWakeup(id: string): WakeupEffect<void> {
   return deleteOne({ id });
+}
+
+/**
+ * When each of the conversations named next has a wakeup of its agent's
+ * delivered, by conversation id, read by id since the agents passed the
+ * task's gate; a conversation whose agent holds none is absent.
+ */
+export function waitingUntilOfReached(
+  conversationIds: readonly string[],
+): WakeupEffect<ReadonlyMap<string, Date>> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    earliestOf({ conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row.dueAt])),
+  );
 }

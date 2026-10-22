@@ -11,6 +11,7 @@ import {
   codingAgentWakeupStands,
   deleteCodingAgentWakeup,
   replaceCodingAgentWakeups,
+  waitingUntilOfReached,
 } from "../coding-agent-wakeups.js";
 
 /**
@@ -38,7 +39,8 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-const openAgent = (userId: string) =>
+/** An agent of the account's, by its id and its conversation's. */
+const openAgentWithConversation = (userId: string) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invitations", repository: "acme/relay" });
     const started = yield* createCodingAgent(userId, {
@@ -50,8 +52,11 @@ const openAgent = (userId: string) =>
       prompt: null,
       repository: "acme/relay",
     });
-    return Option.getOrThrow(started).agent.id;
+    const { id, conversationId } = Option.getOrThrow(started).agent;
+    return { id, conversationId };
   });
+
+const openAgent = (userId: string) => Effect.map(openAgentWithConversation(userId), ({ id }) => id);
 
 /** The prompts a claim at `now` took of the agents named, in the order claimed. */
 const claimedOf = (now: Date, agentIds: readonly string[]) =>
@@ -161,6 +166,27 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
           yield* claimedOf(new Date("2026-10-22T00:00:00Z"), [failing, archived]),
           [],
         );
+      }),
+  );
+
+  it.effect(
+    "an agent holding wakeups waits until its earliest, and one holding none, or stopped, waits on nothing",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const waiting = yield* openAgentWithConversation(owner);
+        const idle = yield* openAgentWithConversation(owner);
+        yield* replaceCodingAgentWakeups(waiting.id, [
+          { at: LATER, prompt: "Remind me to push." },
+          { at: NOW, prompt: "Check CI on #42." },
+        ]);
+
+        const read = yield* waitingUntilOfReached([waiting.conversationId, idle.conversationId]);
+        assert.deepEqual(read.get(waiting.conversationId), NOW);
+        assert.equal(read.has(idle.conversationId), false);
+
+        yield* replaceCodingAgentWakeups(waiting.id, []);
+        assert.equal((yield* waitingUntilOfReached([waiting.conversationId])).size, 0);
       }),
   );
 });
