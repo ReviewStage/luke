@@ -279,9 +279,9 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   // Note that a native turn whose runner is gone, a released wait's above all, has no runner to
   // end it, so it is settled stopped here, as eve's sleep ends on a Stop, rather than standing
-  // until the sweep's bound. Its harness answers no turn under way only once its runner lease
-  // found none running, so a launch under way is never cut off; a Stop whose cancel failed is
-  // settled by the next. What the turn ran up goes with it, and the projection's hold on it
+  // until the sweep's bound. Its harness answers no turn under way once its runner lease found
+  // none running, or found a newer turn, so only the turn this Stop named is settled, never one a
+  // launch began since; a Stop whose cancel failed is settled by the next. What the turn ran up goes with it, and the projection's hold on it
   // goes too, so the next launch opens a turn of its own.
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN && runtime !== undefined) {
     yield* hostedStoreOrUnavailable(
@@ -289,9 +289,10 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
         const held = yield* readNativeProjection(target);
         const spent = heldTurnSpent(Option.getOrNull(held), agent.model);
         const write = yield* writer;
-        yield* settleRunnerLostTurns(write, agent.conversationId, at.getTime(), (turnId) =>
-          spent?.turnId === turnId ? spent.spent : undefined,
-        );
+        yield* settleRunnerLostTurns(write, agent.conversationId, at.getTime(), {
+          turnId: turn.id,
+          spentOf: (turnId) => (spent?.turnId === turnId ? spent.spent : undefined),
+        });
       }),
     );
   }

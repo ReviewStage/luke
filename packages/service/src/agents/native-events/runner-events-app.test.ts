@@ -801,6 +801,46 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a Stop whose turn ended and gave way to a newer one before its cancel leaves the newer turn running",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Run the probe.", "Carry on."]);
+        const [, nextLineId = ""] = agent.lineIds;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        yield* TestClock.setTime(Date.parse("2026-10-21T12:05:00.000Z"));
+        const launches = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+          { type: RUNNER_EVENT.ACCEPTED, uuid: nextLineId },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = launches.map((message, sequence) => ({ sequence, message }) as RunnerEvent);
+        yield* post(agent.bearer, events.slice(0, 1));
+        yield* claimRuntimeSession(agent.target, "claude-code-session", new Date());
+        const read = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        // While the Stop is on its way the first turn ends and the next launch opens its own.
+        const raced = Effect.succeed({
+          cancel: () =>
+            Effect.as(post(agent.bearer, events.slice(1)), {
+              outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN,
+            } as const),
+        });
+
+        yield* cancelledTurn(raced, storeWriter({ tools: CODER_TOOL_SET }), read).pipe(
+          Effect.provide(noNetwork),
+        );
+        const { turns: after } = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(after.map((turn) => turn.status).sort(), [
+          TURN_STATUS.RUNNING,
+          TURN_STATUS.SETTLED,
+        ]);
+      }),
+  );
+
+  it.effect(
     "a released wait whose wakeup comes past the turn's bound ends the turn as done and keeps its wakeup",
     () =>
       Effect.gen(function* () {

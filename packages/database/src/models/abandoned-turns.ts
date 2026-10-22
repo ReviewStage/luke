@@ -361,16 +361,23 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
  * turn the native projection holds is dropped with them, so the next
  * launch's events open a turn of their own rather than one already ended.
  * `spentOf` names what a turn ran up where the caller read it from the
- * projection, whose shape is the service's, so its tokens still count.
+ * projection, whose shape is the service's, so its tokens still count; and
+ * `turnId` narrows the settle to the one turn a Stop named, so a turn a
+ * newer launch began since is never ended in its place.
  */
 export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunnerLostTurns")(
   function* (
     writer: Pick<StoreWriter, "consume">,
     conversationId: string,
     now: number,
-    spentOf: (turnId: string) => LostTurnUsage | undefined = () => undefined,
+    options: {
+      readonly spentOf?: (turnId: string) => LostTurnUsage | undefined;
+      readonly turnId?: string;
+    } = {},
   ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
-    const lost = yield* agentRunningTurns({ conversationId });
+    const running = yield* agentRunningTurns({ conversationId });
+    const lost =
+      options.turnId === undefined ? running : running.filter((turn) => turn.id === options.turnId);
     let settled = 0;
     for (const { cancelRequestedAt, ...turn } of lost) {
       const written = yield* settledLost(
@@ -384,7 +391,7 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
             }
           : { status: BRAIN_REQUEST_STATUS.CANCELLED },
         now,
-        spentOf(turn.id),
+        options.spentOf?.(turn.id),
       );
       if (written) settled += 1;
     }
