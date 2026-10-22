@@ -681,7 +681,7 @@ test("a row dragged out of its section onto a status the service refuses stays i
   ]);
   assert.deepEqual(written, [], "the row keeps its section");
   assert.deepEqual(marked, [], "the row keeps its pin");
-  assert.match(document.body.textContent ?? "", /Couldn't change the task/);
+  assert.match(document.body.textContent ?? "", /The task could not be changed/);
 });
 
 test("a section holding no task stands in the List, empty, and a row dragged into it is kept there", async () => {

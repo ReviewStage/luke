@@ -398,7 +398,7 @@ test("a card dragged onto Done whose change the service refused says so", async 
   await act(async () => undefined);
 
   assert.deepEqual(sent, [["t-42", { status: TASK_STATUS.DONE }]]);
-  assert.match(newestToastSays() ?? "", /Couldn't change the task\. Try again\./);
+  assert.match(newestToastSays() ?? "", /The task could not be changed\. Try again\./);
 });
 
 /** What a reader hears of a narrow board's tabs: their names, and the one chosen. */

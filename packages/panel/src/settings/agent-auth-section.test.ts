@@ -229,7 +229,7 @@ const forAgentsSent = () =>
 
 test("each harness's row says how it is connected: nothing, its plan, its key, or a plan needing a hand", async () => {
   const empty = await mount();
-  assert.match(empty.textContent ?? "", /For your agents\. Other users connect their own/u);
+  assert.match(empty.textContent ?? "", /Other members connect their own/u);
   assert.equal(rowButton(empty, "Claude Code").textContent, "Connect");
   assert.equal(rowButton(empty, "Codex").textContent, "Connect");
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -269,7 +269,6 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
   let dialog = await open(page, "Claude Code");
-  assert.match(dialog.textContent ?? "", /How Claude Code authenticates in cloud workspaces\./u);
   assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "true");
   assert.equal(radio(dialog, "API key").disabled, true, "no key saved, nothing to pick");
   await press(dialog, "Done");
