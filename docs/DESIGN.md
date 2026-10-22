@@ -33,7 +33,11 @@ timed to a generated face gesture may also use the gesture's literal phase,
 but it must answer `--luke-face-motion`, live beside a comment naming the generated
 cycle and phase it follows, and do no work when that gesture is not selected.
 A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@luke/ui`'s `hint.tsx`)
-names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors.
+names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors. A wait drawn
+over its own length, a toast's countdown bar draining over the hold its
+host hands it (`--luke-toast-hold`), takes that hold rather than a token,
+because it shows time passing rather than moving anything, and answers
+`--luke-loop-motion` as a loop does, so those runs hold it still.
 
 ## Layout lands at once; motion is transform and opacity
 

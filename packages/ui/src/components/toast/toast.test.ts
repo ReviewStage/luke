@@ -11,8 +11,11 @@ import { ToastStack } from "./toast-stack.js";
 /**
  * toast.test.ts -- a toast with an action holds under the pointer and focus
  * apart, dismisses on Escape and on its ×, and presses its action after
- * dismissing; one without is never held; the stack names itself and says
- * the newest words through its two live regions.
+ * dismissing; one without is never held; its countdown stops while it is
+ * held; a turn of tone keeps the glyph it led with to fade under the new
+ * one; a drag or a trackpad sweep past the threshold sends it away and one
+ * short of it puts it back; the stack names itself and says the newest words
+ * through its two live regions.
  */
 
 declare global {
@@ -36,10 +39,16 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-function acting(onHold: (holding: boolean) => void, onEscape: () => void, onPress: () => void) {
+function acting(
+  onHold: (holding: boolean) => void,
+  onEscape: () => void,
+  onPress: () => void,
+  countdown?: number,
+) {
   return createElement(Toast, {
     tone: TOAST_TONE.DONE,
     words: "Task archived",
+    countdown,
     onHold,
     onEscape,
     actions: createElement(ToastActions, {
@@ -132,4 +141,137 @@ test("the stack is a named landmark with a polite and an alert region", () => {
   assert.equal(view.querySelector("section")?.getAttribute("aria-label"), "Notifications");
   assert.equal(view.querySelector('[role="status"]')?.textContent, "Link copied");
   assert.equal(view.querySelector('[role="alert"]')?.textContent, "Couldn't save");
+});
+
+/** A pointer's press, travel, or release on `target`, at `x` across and `y` down. */
+function pointer(target: Element, type: string, x: number, y = 0): void {
+  act(() =>
+    target.dispatchEvent(
+      new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }),
+    ),
+  );
+}
+
+/** A toast with an action that records each dismissal in `dismissed`. */
+function swipeable(dismissed: string[]): HTMLLIElement {
+  const view = render(
+    createElement(
+      "ol",
+      null,
+      acting(
+        () => undefined,
+        () => dismissed.push("dismiss"),
+        () => undefined,
+      ),
+    ),
+  );
+  const toast = view.querySelector("li");
+  assert.ok(toast !== null);
+  return toast;
+}
+
+test("a toast's countdown drains over the hold it is handed, and stops while the toast is held", () => {
+  const view = render(
+    createElement(
+      "ol",
+      null,
+      acting(
+        () => undefined,
+        () => undefined,
+        () => undefined,
+        5000,
+      ),
+    ),
+  );
+  const toast = view.querySelector("li");
+  const bar = view.querySelector<HTMLElement>(".luke-toast-countdown");
+  assert.ok(toast !== null && bar !== null);
+
+  act(() => toast.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+  const held = toast.dataset.held;
+  act(() => toast.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+
+  assert.equal(bar.style.getPropertyValue("--luke-toast-hold"), "5000ms");
+  assert.equal(held, "true");
+  assert.equal(toast.dataset.held, undefined);
+});
+
+test("a toast whose tone turns keeps the glyph it led with beside the new one, and its words change in place", () => {
+  const container = document.body.appendChild(document.createElement("ol"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Toast, { tone: TOAST_TONE.WORKING, words: "Saving…" })));
+  const toast = container.querySelector("li");
+  const before = [...container.querySelectorAll<HTMLElement>(".luke-toast-glyph > span")];
+
+  act(() => root.render(createElement(Toast, { tone: TOAST_TONE.DONE, words: "Saved" })));
+  const after = [...container.querySelectorAll<HTMLElement>(".luke-toast-glyph > span")];
+
+  assert.deepEqual(
+    before.map((glyph) => glyph.dataset.tone),
+    [TOAST_TONE.WORKING],
+  );
+  assert.deepEqual(
+    after.map((glyph) => [glyph.dataset.tone, glyph.dataset.turn]),
+    [
+      [TOAST_TONE.WORKING, "was"],
+      [TOAST_TONE.DONE, "now"],
+    ],
+  );
+  assert.equal(container.querySelector("li"), toast, "the same card");
+  assert.equal(toast?.dataset.tone, TOAST_TONE.DONE);
+  assert.equal(container.querySelector(".luke-toast-words")?.textContent, "Saved");
+});
+
+test("a toast dragged sideways past the threshold is sent away off that side, and one let go short of it goes back", () => {
+  const dismissed: string[] = [];
+  const toast = swipeable(dismissed);
+
+  pointer(toast, "pointerdown", 0);
+  pointer(toast, "pointermove", 30);
+  const following = toast.style.getPropertyValue("--luke-toast-drag");
+  pointer(toast, "pointerup", 30);
+  const back = toast.style.getPropertyValue("--luke-toast-drag");
+  const shortOf = [...dismissed];
+  pointer(toast, "pointerdown", 0);
+  pointer(toast, "pointermove", 120);
+  pointer(toast, "pointerup", 120);
+
+  assert.equal(following, "30px");
+  assert.equal(back, "0px");
+  assert.deepEqual(shortOf, []);
+  assert.deepEqual(dismissed, ["dismiss"]);
+  assert.equal(toast.dataset.swiped, "right");
+});
+
+test("a press that travels up or down, or not at all, is no swipe", () => {
+  const dismissed: string[] = [];
+  const toast = swipeable(dismissed);
+
+  pointer(toast, "pointerdown", 0, 0);
+  pointer(toast, "pointermove", 10, 120);
+  pointer(toast, "pointermove", 120, 120);
+  pointer(toast, "pointerup", 120, 120);
+
+  assert.deepEqual(dismissed, []);
+  assert.equal(toast.style.getPropertyValue("--luke-toast-drag"), "");
+});
+
+test("a trackpad's sideways sweep sends the toast away once it passes the threshold, and an up-and-down scroll is no sweep", () => {
+  const dismissed: string[] = [];
+  const toast = swipeable(dismissed);
+  const sweep = (deltaX: number, deltaY = 0) =>
+    act(() => toast.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaX, deltaY })));
+
+  sweep(4, 40);
+  const scrolled = toast.style.getPropertyValue("--luke-toast-drag");
+  sweep(20);
+  sweep(20);
+  const before = [...dismissed];
+  sweep(40);
+
+  assert.equal(scrolled, "", "an up-and-down scroll is no sweep");
+  assert.deepEqual(before, []);
+  assert.deepEqual(dismissed, ["dismiss"]);
+  assert.equal(toast.dataset.swiped, "left");
 });

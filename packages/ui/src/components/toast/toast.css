@@ -5,7 +5,10 @@
    its hold, and one with something to press can always be dismissed to reach
    what is under it. The folded sidebar's call card holds the other corner,
    and the window is never narrow enough for the two to meet.
-   Each rises in on the spring and fades first on its way out; the stack
+   Each rises in on the spring and fades first on its way out, or flies off
+   the side it was swiped to; one whose hold runs down by itself drains a
+   bar along its foot, and a working one turns into what came of its work
+   in place, its glyphs crossfading in one cell. The stack
    itself takes no pointer, so only a card with something to press stands in
    the way of what is under it, and that card is always one the developer
    can dismiss. */
@@ -76,35 +79,109 @@
       0 1px 2px var(--luke-color-shadow-soft),
       0 12px 36px var(--luke-color-shadow);
     pointer-events: none;
+    /* Its sideways offset while it is dragged or swept, which a drag writes
+       alone and nothing transitions, so the card stays under the finger. */
+    translate: var(--luke-toast-drag, 0px) 0;
     animation:
       luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit),
       luke-toast-rise var(--luke-duration-fast) var(--luke-spring-fast);
-    transition:
-      opacity var(--luke-duration-exit) var(--luke-motion-exit),
-      transform var(--luke-duration-exit) var(--luke-motion-exit);
+  }
+
+  /* A finger's sideways drag is the toast's; its up and down stay the page's. */
+  .luke-toast[data-action="true"] {
+    touch-action: pan-y;
   }
 
   .luke-toast[data-leaving="true"] {
     opacity: 0;
     transform: translateX(var(--luke-space-8));
+    transition:
+      opacity var(--luke-duration-exit) var(--luke-motion-exit),
+      transform var(--luke-duration-exit) var(--luke-motion-exit),
+      translate var(--luke-duration-exit) var(--luke-motion-exit);
   }
 
-  .luke-toast > svg {
+  /* One swiped away goes on off the side it was sent to, from where the
+     drag let go of it, rather than back past where it stood. */
+  .luke-toast[data-leaving="true"][data-swiped="right"] {
+    transform: none;
+    translate: calc(100% + var(--luke-space-16)) 0;
+  }
+
+  .luke-toast[data-leaving="true"][data-swiped="left"] {
+    transform: none;
+    translate: calc(-100% - var(--luke-space-16)) 0;
+  }
+
+  /* Its glyphs share one cell, so the one it led with fades out under the
+     one it now leads with as its tone turns, the card unmoved. */
+  .luke-toast-glyph {
+    display: grid;
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
     flex: none;
     margin-top: calc((var(--luke-toast-row) - var(--luke-control-icon)) / 2);
+  }
+
+  .luke-toast-glyph > span {
+    display: flex;
+    grid-area: 1 / 1;
     color: var(--luke-color-complete);
   }
 
-  .luke-toast[data-tone="failed"] > svg {
+  .luke-toast-glyph svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .luke-toast-glyph > [data-tone="failed"] {
     color: var(--luke-color-danger-text);
   }
 
-  /* An ask is the developer's to answer, not news of something done, so its
-     tray stands in the muted ink rather than the success green. */
-  .luke-toast[data-tone="ask"] > svg {
+  /* An ask is the developer's to answer, and work under way is not done
+     yet, so neither stands in the success green: both take the muted ink. */
+  .luke-toast-glyph > [data-tone="ask"],
+  .luke-toast-glyph > [data-tone="working"] {
     color: var(--luke-color-text-muted);
+  }
+
+  .luke-toast-glyph > [data-turn="was"] {
+    animation: luke-toast-glyph-out var(--luke-duration-quick) var(--luke-motion-exit) forwards;
+  }
+
+  .luke-toast[data-turned="true"] .luke-toast-glyph > [data-turn="now"] {
+    animation:
+      luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit),
+      luke-toast-glyph-in var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  /* Its words, turned with its tone, fade in anew in the place they held. */
+  .luke-toast[data-turned="true"] .luke-toast-text {
+    animation: luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit);
+  }
+
+  /* How much of its hold is left, as a bar along its foot that drains
+     toward its start over the hold the host hands it, a wait rather than a
+     motion, so its length is the hold's own; it stops while the card is held
+     and holds still on --luke-loop-motion under reduced motion and a capture
+     run, as every wait with a literal of its own does. */
+  .luke-toast-countdown {
+    position: absolute;
+    right: var(--luke-space-12);
+    bottom: 0;
+    left: var(--luke-space-12);
+    height: var(--luke-space-2);
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-text-muted);
+    opacity: 0.4;
+    transform-origin: left center;
+    animation: luke-toast-drain var(--luke-toast-hold) linear forwards;
+    animation-play-state: var(--luke-loop-motion);
+    pointer-events: none;
+  }
+
+  .luke-toast[data-held="true"] .luke-toast-countdown {
+    animation-play-state: paused;
   }
 
   /* Its words, and the line under them that says where or what, a title's
@@ -207,6 +284,25 @@
   @keyframes luke-toast-fade {
     from {
       opacity: 0;
+    }
+  }
+
+  @keyframes luke-toast-glyph-out {
+    to {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+
+  @keyframes luke-toast-glyph-in {
+    from {
+      transform: scale(0.6);
+    }
+  }
+
+  @keyframes luke-toast-drain {
+    to {
+      transform: scaleX(0);
     }
   }
 
