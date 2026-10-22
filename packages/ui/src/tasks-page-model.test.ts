@@ -187,7 +187,7 @@ test("a filter keeps the tasks holding one of each field's values, its fields an
   ).toEqual({ [TASKS_FILTER_FIELD.PRIORITY]: [TASK_PRIORITY.NONE] });
 });
 
-test("a status filter narrows the status groups, and empty groups stand only for the values the filter and the display let in", () => {
+test("a status filter narrows the status groups, and empty groups stand only for the values the filter lets in", () => {
   const tasks = [task("Under way", { status: TASK_STATUS.IN_PROGRESS })];
   const filter = toggledFilter(
     toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.STATUS, TASK_STATUS.IN_PROGRESS),
@@ -197,13 +197,36 @@ test("a status filter narrows the status groups, and empty groups stand only for
 
   expect(listed(tasks, { emptyGroups: true }, filter)).toEqual([
     [["status", "in-progress"], ["Under way"]],
-  ]);
-  expect(
-    listed(tasks, { emptyGroups: true, completed: COMPLETED_WINDOW.PAST_WEEK }, filter),
-  ).toEqual([
-    [["status", "in-progress"], ["Under way"]],
     [["status", "done"], []],
   ]);
+  expect(listed(tasks, { emptyGroups: true })).toEqual([
+    [["status", "in-progress"], ["Under way"]],
+    [["status", "todo"], []],
+    [["status", "backlog"], []],
+  ]);
+});
+
+test("a settled status the filter names stands in full whatever the completed window, on the List and the Board alike", () => {
+  const tasks = [
+    task("Under way", { status: TASK_STATUS.IN_PROGRESS }),
+    task("Shipped Monday", { status: TASK_STATUS.DONE, completedAt: NOW - 2 * DAY }),
+    task("Shipped in spring", { status: TASK_STATUS.DONE, completedAt: NOW - 90 * DAY }),
+    task("Dropped in spring", { status: TASK_STATUS.CANCELED, completedAt: NOW - 90 * DAY }),
+  ];
+  const done = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.STATUS, TASK_STATUS.DONE);
+
+  expect(listed(tasks, { order: TASKS_ORDER.NAME }, done)).toEqual([
+    [
+      ["status", "done"],
+      ["Shipped in spring", "Shipped Monday"],
+    ],
+  ]);
+  const board = tasksBoardColumns(tasks, {
+    filter: done,
+    display: { ...DEFAULT_BOARD_DISPLAY, order: TASKS_ORDER.NAME, emptyGroups: false },
+    now: NOW,
+  }).map((column) => [headOf(column.head), column.tasks.map((each) => each.name), column.older]);
+  expect(board).toEqual([[["status", "done"], ["Shipped in spring", "Shipped Monday"], undefined]]);
 });
 
 test("grouped by repository the groups run by name and the tasks with none last; by creator the reader's own first, then teammates by name, then nobody's", () => {
