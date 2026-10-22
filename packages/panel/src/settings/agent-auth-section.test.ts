@@ -412,7 +412,7 @@ test("Codex's subscription signs in with ChatGPT on the desktop, meets the first
   const page = await mount();
   const dialog = await open(page, "Codex");
   assert.ok(dialog.querySelector('a[href="https://platform.openai.com/api-keys"]'));
-  await press(card(dialog, "Subscription"), "Continue with ChatGPT");
+  await press(card(dialog, "Subscription"), "Sign in with ChatGPT");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN).length, 1);
   assert.ok(
     [...document.querySelectorAll('[role="dialog"]')].some((each) =>

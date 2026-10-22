@@ -402,7 +402,7 @@ service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
-**Your ChatGPT plan.** Where Settings offers it, Continue with ChatGPT signs
+**Your ChatGPT plan.** Where Settings offers it, Sign in with ChatGPT signs
 Luke in to your ChatGPT account through OpenAI's own page in your browser,
 which hands a one-time code back to Luke on your Mac over a connection that
 never leaves it (`127.0.0.1`). Your Mac trades that code with OpenAI for an
