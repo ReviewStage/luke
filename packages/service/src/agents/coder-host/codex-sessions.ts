@@ -151,6 +151,9 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
       return yield* new LaunchRefused({
         reason: `ChatGPT sign-in ${access.outcome}`,
         planRefusal: REFUSAL_OF_ACCESS[access.outcome],
+        ...(access.outcome === CHATGPT_ACCESS.LIMIT_REACHED
+          ? { planResetsAt: access.limitResetsAt }
+          : undefined),
       });
     }
     const held: HeldToken = {

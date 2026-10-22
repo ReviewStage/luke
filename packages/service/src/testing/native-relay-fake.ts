@@ -22,6 +22,7 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  type EveFailed,
 } from "../agents/brain-host/eve-sessions.js";
 import { nativeRelayLayer } from "../agents/coder-host/native-relay.js";
 import { nativeRelayApp } from "../agents/coder-host/native-relay-app.js";
@@ -62,6 +63,8 @@ export interface NativeRelayFakeOptions {
    * kept beside the call as `seen`.
    */
   readonly onLaunch?: (conversationId: string) => Effect.Effect<unknown, unknown, DatabaseServices>;
+  /** The plan's refusal the harness answers every open and send with, as a launch the starter's plan refused answers, in place of taking it. */
+  readonly planRefused?: Pick<EveFailed, "planRefusal" | "planResetsAt">;
 }
 
 /** The deployment's environment, holding the eve secret given, and nothing else. */
@@ -90,7 +93,12 @@ export function relayEnvironment(secret: string | undefined): Layer.Layer<Hosted
 function recordingHarness(
   heard: HeardCall[],
   onLaunch: NativeRelayFakeOptions["onLaunch"],
+  planRefused: NativeRelayFakeOptions["planRefused"],
 ): NativeAgentSessionsService {
+  const refused =
+    planRefused === undefined
+      ? undefined
+      : ({ outcome: EVE_SEND_OUTCOME.FAILED, status: 422, ...planRefused } as const);
   /** What `onLaunch` reads of the conversation, on the store the route answers on; nothing without it. */
   const seenOf = (conversationId: string) =>
     Effect.gen(function* () {
@@ -114,6 +122,7 @@ function recordingHarness(
         open: (message) =>
           Effect.map(seenOf(message.conversationId), (seen) => {
             write("open", message.conversationId, message.message, seen);
+            if (refused !== undefined) return refused;
             return {
               outcome: EVE_SEND_OUTCOME.ACCEPTED,
               sessionId: `${NATIVE_SESSION_PREFIX[runtime]}000000000001-${randomUUID()}`,
@@ -122,6 +131,7 @@ function recordingHarness(
         send: (sessionId, message) =>
           Effect.map(seenOf(message.conversationId), (seen) => {
             write("send", sessionId, message.message, seen);
+            if (refused !== undefined) return refused;
             return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: randomUUID() };
           }),
         cancel: (sessionId, turnId) =>
@@ -173,7 +183,7 @@ export const nativeRelayFake = (options: NativeRelayFakeOptions = {}) =>
     const eveSecret = "eveSecret" in options ? options.eveSecret : NATIVE_RELAY_FAKE.SECRET;
     const webSecret = "webSecret" in options ? options.webSecret : NATIVE_RELAY_FAKE.SECRET;
     const web = HttpRouter.toWebHandler(nativeRelayApp(), { disableLogger: true });
-    const harness = recordingHarness(heard, options.onLaunch);
+    const harness = recordingHarness(heard, options.onLaunch, options.planRefused);
     /** The route's answer on the services given, with the web's environment and harness beside them. */
     const answer = async (request: Request, services: Context.Context<DatabaseServices>) => {
       const withEnvironment = Context.add(
