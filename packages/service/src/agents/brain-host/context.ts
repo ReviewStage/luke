@@ -1,5 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { fileMark, keptImageLine, keptImageOf } from "@luke/database/models/attached-file-parts";
+import { keptImageOf } from "@luke/database/models/attached-file-parts";
 import { listRecentMessages } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { type FileUIPart, isFileUIPart, isTextUIPart, isToolUIPart, type ToolSet } from "ai";
@@ -27,17 +27,22 @@ function speakerOf(message: StoredUIMessage): string {
   return SPEAKER.NOTE;
 }
 
+/** The most characters of a file's name its line spells, so a message's files, at most ten, stay near the bound its words keep. */
+const FILE_NAME_CHARS = 80;
+
 /**
- * A file a stored message carried, as its line names it: its mark, then the
- * attachment its image was kept as, in the words the agent was first handed
+ * A file a stored message carried, as its line names it: its name, cut to
+ * its bound, its type, and the attachment its image was kept as, whole
  * (`attached-file-parts.ts`). Note that a line is words alone, so a session
  * seeded from the rows is told the file was there, and how to name a kept
  * image again, rather than handed its bytes.
  */
 function fileWords(part: FileUIPart): string {
-  const mark = fileMark(part.filename, part.mediaType);
+  const name = part.filename ?? "";
+  const shown = name.length > FILE_NAME_CHARS ? `${name.slice(0, FILE_NAME_CHARS)}…` : name;
   const kept = keptImageOf(part);
-  return kept === undefined ? mark : `${mark} ${keptImageLine(part.filename ?? "", kept)}`;
+  const id = kept !== undefined && "id" in kept ? `, attachment ${kept.id}` : "";
+  return `[file: ${shown} (${part.mediaType})${id}]`;
 }
 
 /** One stored message as a line: its speaker, its words, the files it carried by name, and the tools it called by name. */

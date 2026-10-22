@@ -1198,7 +1198,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(seed !== undefined);
         assert.ok(
           seed.includes(
-            `Match these. [file: flow.png (image/png)] Image flow.png is attachment ${kept.kept.id} [file: old.png (image/png)]`,
+            `Match these. [file: flow.png (image/png), attachment ${kept.kept.id}] [file: old.png (image/png)]`,
           ),
           seed,
         );
