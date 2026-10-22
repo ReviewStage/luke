@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Deferred, Effect, Option, Result } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
@@ -7,7 +8,6 @@ import { Database } from "../../core/query.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { openHostedStoreTestDatabase } from "../../testing/index.js";
-import { sentLineId } from "../ids.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_REFUSAL, storeWriter } from "../writer.js";
 
