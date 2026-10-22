@@ -115,7 +115,7 @@ export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.
  * The doors this project's authored files open onto the agent runtime
  * (`packages/service/src/agents/agent-runtime/edge.ts`), run here on the edge's runner. A
  * session is offered skills only once its conversation is read as an
- * agent's, whose repository they are read from.
+ * agent's, whose repository and member they are read for.
  */
 const edge = edgeKit(runAgent, {
   host,
@@ -544,8 +544,9 @@ export function runResearchTool(
 
 /**
  * The skills the session is offered as it starts, for the agent's own
- * `skills/repository.ts`: the ones its repository keeps, or none for a
- * session the host does not admit or whose conversation is no agent's.
+ * `skills/repository.ts`: the ones its repository keeps and its member
+ * installed, or none for a session the host does not admit or whose
+ * conversation is no agent's.
  */
 export function sessionSkills(
   auth: SessionAuth,
