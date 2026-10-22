@@ -251,6 +251,7 @@ export const PRODUCT_EXPERIMENT = {
   /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   GITHUB_TOKEN: "github-token",
   INBOX_FIRST: "inbox-first",
+  OPERATOR: "operator",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];

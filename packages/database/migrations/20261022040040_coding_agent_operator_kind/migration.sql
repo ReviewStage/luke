@@ -1,0 +1,2 @@
+ALTER TABLE "coding_agent" ADD COLUMN IF NOT EXISTS "kind" text DEFAULT 'coder' NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "coding_agent_member_operator" ON "coding_agent" ("organization_id","user_id") WHERE "kind" = 'operator' and "archived_at" is null;

@@ -1,8 +1,10 @@
 import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_KIND,
   CONTEXT_WINDOW,
   type CodingAgentArchiver,
   type CodingAgentAuthor,
+  type CodingAgentKind,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type ContextWindow,
@@ -99,11 +101,20 @@ import { task } from "./task.js";
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
  *
+ * `kind` is what the agent is (`CODING_AGENT_KIND`): a coder, as every agent
+ * started on work is and every row from before the column reads, or its
+ * member's operator, started blank with no task and no repository, of which
+ * a member holds at most one standing per workspace; a Reset archives it,
+ * transcript kept, and ensures a fresh one.
+ *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
  * starting a second. The row goes with its task, its account, and its
  * conversation alike.
  */
+/** A literal in an index's predicate, which Postgres takes no parameter in. */
+const literal = (value: string) => sql.raw(`'${value}'`);
+
 /**
  * The newest model step of an agent's own conversation, as the coder host
  * relayed it: the tokens its provider counted, the share of them its
@@ -265,6 +276,8 @@ export const codingAgent = pgTable(
      * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
      */
     runnerTokenHash: text("runner_token_hash"),
+    /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
+    kind: text("kind").$type<CodingAgentKind>().notNull().default(CODING_AGENT_KIND.CODER),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },
@@ -290,6 +303,12 @@ export const codingAgent = pgTable(
     uniqueIndex("coding_agent_runner_token_hash")
       .on(table.runnerTokenHash)
       .where(sql`${table.runnerTokenHash} is not null`),
+    // A member holds one standing operator per workspace, so two ensures that race make one row.
+    uniqueIndex("coding_agent_member_operator")
+      .on(table.organizationId, table.userId)
+      .where(
+        sql`${table.kind} = ${literal(CODING_AGENT_KIND.OPERATOR)} and ${table.archivedAt} is null`,
+      ),
   ],
 );
 

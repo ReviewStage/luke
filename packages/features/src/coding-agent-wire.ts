@@ -190,6 +190,18 @@ export const NATIVE_CODING_AGENT_RUNTIMES = [
 
 export type NativeCodingAgentRuntime = (typeof NATIVE_CODING_AGENT_RUNTIMES)[number];
 
+/**
+ * What kind of agent a row is: a coder, which every agent started on work is,
+ * or a member's operator, the one agent per member per workspace that
+ * manages their other agents, started blank with no task and no repository.
+ */
+export const CODING_AGENT_KIND = {
+  CODER: "coder",
+  OPERATOR: "operator",
+} as const;
+
+export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGENT_KIND];
+
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
@@ -777,6 +789,26 @@ export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
   agent: codingAgentSummarySchema,
   txid: EffectSchema.optionalKey(EffectSchema.String),
 });
+
+/**
+ * The asking member's operator in a workspace ensured (PUT
+ * `/api/workspaces/{id}/operator`): the one standing, or a fresh one made
+ * blank where none stands, or, with `reset`, the standing one archived, its
+ * transcript kept, and a fresh one made in its place.
+ */
+export const operatorEnsureRequestSchema = EffectSchema.Struct({
+  reset: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type OperatorEnsureRequest = typeof operatorEnsureRequestSchema.Type;
+
+/** The operator an ensure answers, by its id, and the transaction its row went in where this ensure made it. */
+export const operatorEnsureAnswerSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
+
+export type OperatorEnsureAnswer = typeof operatorEnsureAnswerSchema.Type;
 
 /** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
 export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({

@@ -4,10 +4,12 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_KIND,
   CODING_AGENT_PAYER,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
   type CodingAgentBrief,
+  type CodingAgentKind,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
@@ -140,6 +142,11 @@ import type { ConversationTarget } from "./writer.js";
  * (`agent-pin.ts`), as a plan's is, so one member's pin reads pinned for
  * them alone, and is kept apart from the archive, so an agent archived and
  * brought back is pinned again.
+ * A member's operator is an agent of kind operator with no task and no
+ * repository, started blank, of which the member holds at most one standing
+ * per workspace: a Start of one under the workspace's lock answers the one
+ * standing, and the partial unique index on the row holds it to one where
+ * anything else inserted it first (`ensureOperator` in the coder host).
  * Who the agent writes as on GitHub is settled once, by its first session,
  * and a later session's word is answered with the one standing rather than
  * written over it; it is written over only where the developer's token was
@@ -196,6 +203,8 @@ export interface CodingAgent {
   readonly author: CodingAgentAuthor | null;
   /** How its repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
   readonly githubAccess: GitHubAccess;
+  /** What the agent is: a coder, or its member's operator. */
+  readonly kind: CodingAgentKind;
   readonly createdAt: Date;
 }
 
@@ -261,15 +270,28 @@ export type CodingAgentBriefText =
  * Where a Start puts the agent: on a task, whose workspace it joins and
  * whose text or the developer's prompt it is handed, or in a workspace with
  * no task, as an automation's run puts one, handed a prompt, since there is
- * no plan to hand it.
+ * no plan to hand it; or, as the member's operator alone, in a workspace
+ * with no task and handed nothing.
  */
 export type CodingAgentPlace =
-  | (CodingAgentBriefText & { readonly taskId: string; readonly organizationId?: undefined })
+  | (CodingAgentBriefText & {
+      readonly taskId: string;
+      readonly organizationId?: undefined;
+      readonly kind?: typeof CODING_AGENT_KIND.CODER | undefined;
+    })
   | {
       readonly taskId: null;
       readonly organizationId: string;
       readonly planSnapshot: null;
       readonly prompt: string;
+      readonly kind?: typeof CODING_AGENT_KIND.CODER | undefined;
+    }
+  | {
+      readonly taskId: null;
+      readonly organizationId: string;
+      readonly planSnapshot: null;
+      readonly prompt: null;
+      readonly kind: typeof CODING_AGENT_KIND.OPERATOR;
     };
 
 /** A Start: where it goes, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
@@ -345,6 +367,7 @@ const CODING_AGENT_COLUMNS = {
   disabledServers: codingAgent.disabledServers,
   author: codingAgent.author,
   githubAccess: codingAgent.githubAccess,
+  kind: codingAgent.kind,
   createdAt: codingAgent.createdAt,
 };
 
@@ -383,6 +406,7 @@ const CODING_AGENT_LINE_COLUMNS = {
   disabledServers: codingAgent.disabledServers,
   author: codingAgent.author,
   githubAccess: codingAgent.githubAccess,
+  kind: codingAgent.kind,
   createdAt: codingAgent.createdAt,
 } as const;
 
@@ -487,6 +511,7 @@ const CodingAgentRowSchema = Schema.Struct({
   disabledServers: DisabledServersColumnSchema,
   author: Schema.NullOr(AuthorColumnSchema),
   githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
+  kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
   createdAt: InstantColumnSchema,
 });
 
@@ -613,7 +638,36 @@ const CommittedAgentRowSchema = Schema.Struct({
 /** The transaction a pin's write committed in; none where the pin stood as asked already. */
 const TxidRowSchema = Schema.Struct({ txid: Schema.String });
 
-const insertAgent = SqlSchema.findOne({
+/** The member's operator standing in the workspace, archived ones left out. */
+function liveOperatorOf(userId: string, organizationId: string): SQL | undefined {
+  return and(
+    eq(codingAgent.organizationId, organizationId),
+    eq(codingAgent.userId, userId),
+    eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
+    isNull(codingAgent.archivedAt),
+  );
+}
+
+/** Read under the workspace's lock a Start takes, by the member alone, since only they reach their operator. */
+const findLiveOperator = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(liveOperatorOf(userId, organizationId))
+        .limit(1),
+    ),
+});
+
+/**
+ * Note that a row the partial unique index already holds is answered as no
+ * row rather than a failure, because the operator a concurrent Start made
+ * first is the answer, which the Start then reads.
+ */
+const insertAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
@@ -636,6 +690,7 @@ const insertAgent = SqlSchema.findOne({
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
     payer: Schema.NullOr(PayerColumnSchema),
+    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
     now: Schema.Date,
   }),
   Result: CommittedAgentRowSchema,
@@ -665,8 +720,14 @@ const insertAgent = SqlSchema.findOne({
           mentionedServers: write.mentionedServers,
           githubAccess: write.githubAccess,
           payer: write.payer,
+          kind: write.kind,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
+        })
+        .onConflictDoNothing({
+          target: [codingAgent.organizationId, codingAgent.userId],
+          // Note that the predicate spells its literal, because Postgres infers the index from it at plan time.
+          where: sql`${codingAgent.kind} = ${sql.raw(`'${CODING_AGENT_KIND.OPERATOR}'`)} and ${codingAgent.archivedAt} is null`,
         })
         .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
@@ -1647,6 +1708,10 @@ const deleteConversationRow = SqlSchema.void({
  * the plan text or the prompt, the repository, and the automation whose run
  * started it with that run, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
+ * A Start of the member's operator answers the one standing in the
+ * workspace where there is one, whatever its key, and writes nothing; one
+ * the index finds another Start made first meanwhile is answered too, the
+ * conversation opened for it taken back.
  * Nothing where the account reaches no such task or is no member of the
  * workspace.
  */
@@ -1666,6 +1731,13 @@ export function createCodingAgent(
         if (Option.isSome(existing)) {
           return Option.some({ agent: existing.value, created: false });
         }
+        const organizationId = reached.value.organizationId;
+        // A member's operator is one per workspace, so a Start of it answers the one standing.
+        if (started.kind === CODING_AGENT_KIND.OPERATOR) {
+          const standing = yield* findLiveOperator({ userId, organizationId });
+          if (Option.isSome(standing))
+            return Option.some({ agent: standing.value, created: false });
+        }
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({
           userId,
@@ -1675,11 +1747,11 @@ export function createCodingAgent(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
-        const { txid, ...row } = yield* insertAgent({
+        const inserted = yield* insertAgent({
           userId,
           conversationId: conversation.id,
           taskId: started.taskId,
-          organizationId: reached.value.organizationId,
+          organizationId,
           automationId: started.automationId ?? null,
           automationOrigin: started.automationOrigin ?? null,
           startedFrom: started.startedFrom ?? null,
@@ -1697,9 +1769,20 @@ export function createCodingAgent(
           mentionedServers: storedServers(started.mentionedServers ?? []),
           githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
           payer: started.payer ?? null,
+          kind: started.kind ?? CODING_AGENT_KIND.CODER,
           now,
-        }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
-        return Option.some({ agent: row, created: true, txid });
+        });
+        if (Option.isSome(inserted)) {
+          const { txid, ...row } = inserted.value;
+          return Option.some({ agent: row, created: true, txid });
+        }
+        // Only the operator's index answers an insert with no row: the one another Start made stands.
+        yield* deleteConversationRow(conversation.id);
+        const made = yield* findLiveOperator({ userId, organizationId });
+        // A row the index refused and no read then finds is the database breaking its own contract.
+        if (Option.isNone(made))
+          return yield* Effect.die(new Error("operator conflict found no row"));
+        return Option.some({ agent: made.value, created: false });
       }),
     ),
   );
@@ -2232,6 +2315,52 @@ export function archiveCodingAgent(
   return Effect.map(
     archiveCodingAgentCommitted(userId, agentId, archived, archivedBy),
     Option.map(agentOf),
+  );
+}
+
+const updateLiveOperatorArchived = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    archivedAt: Schema.Date,
+    archivedBy: ArchivedByColumnSchema,
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, organizationId, archivedAt, archivedBy }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ archivedAt, archivedBy })
+        .where(
+          and(
+            liveOperatorOf(userId, organizationId),
+            workspaceReachableBy(userId, codingAgent.organizationId),
+          ),
+        )
+        .returning({ id: codingAgent.id }),
+    ),
+});
+
+/**
+ * The member's operator standing in the workspace archived by the member,
+ * its conversation kept, as a Reset does before it ensures a fresh one;
+ * answers the id of the one archived, or none where none stood or the
+ * member is no member of the workspace.
+ */
+export function archiveOperatorAgent(
+  userId: string,
+  organizationId: string,
+): CodingAgentStoreEffect<Option.Option<string>> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      updateLiveOperatorArchived({
+        userId,
+        organizationId,
+        archivedAt: now,
+        archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+      }),
+      ([archived]) => Option.fromNullishOr(archived?.id),
+    ),
   );
 }
 
