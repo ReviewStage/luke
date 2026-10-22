@@ -15,7 +15,7 @@ import { CatalogSection } from "../section";
 /**
  * avatars.tsx -- every size with a picture, a letter, a picture that fails,
  * and a name with no letter, side by side so their boxes line up; an app's
- * square by its picture, its glyph bare and tiled, and its letter; the six
+ * square by its picture, its glyph bare and tiled, and its letter; a workspace's tile, plain or edged and blank as a repository's owner is; the six
  * hues; and discs beside the names they stand for in a narrow column.
  */
 
@@ -70,6 +70,22 @@ function Avatars(): React.JSX.Element {
                 tiled
               />
               <Avatar name="Vercel" shape={AVATAR_SHAPE.SQUARE} size={size} />
+            </Inline>
+          ))}
+        </Stack>
+      </CatalogSection>
+      <CatalogSection
+        id="avatar-tiles"
+        title="Tile: picture, letter, failed picture, edged and blank until loaded"
+      >
+        <Stack gap={GAP.CONTROL}>
+          {Object.values(AVATAR_SIZE).map((size) => (
+            <Inline key={size} gap={GAP.CONTROL} align="center">
+              <Avatar name="Acme" src={PICTURE} shape={AVATAR_SHAPE.TILE} size={size} />
+              <Avatar name="Acme" shape={AVATAR_SHAPE.TILE} size={size} />
+              <Avatar name="Acme" src={BROKEN} shape={AVATAR_SHAPE.TILE} size={size} />
+              <Avatar name="" src={PICTURE} shape={AVATAR_SHAPE.TILE} size={size} edged blank />
+              <Avatar name="" shape={AVATAR_SHAPE.TILE} size={size} edged blank />
             </Inline>
           ))}
         </Stack>

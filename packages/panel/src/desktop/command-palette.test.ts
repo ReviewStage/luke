@@ -1065,8 +1065,9 @@ test("Search lists the listed workspace's plans first, then every other workspac
   assert.deepEqual(listed, ["Dotfiles sync", "Checkout retries · Northwind · northwind/shop"]);
   assert.deepEqual(rows(), ["Checkout retries · Northwind · northwind/shop"]);
   assert.equal(
-    document.querySelector(".luke-combobox-option-detail .workspace-ref .workspace-tile")
-      ?.textContent,
+    document.querySelector(
+      ".luke-combobox-option-detail .workspace-ref .luke-avatar[data-shape='tile']",
+    )?.textContent,
     "N",
     "the other workspace is named by its tile and its name",
   );

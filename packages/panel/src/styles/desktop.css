@@ -259,82 +259,6 @@ body,
   left: auto;
 }
 
-/* A workspace's tile: a square of its hue with its first letter as its text,
-   at a row's glyph size. Note that its corner is a share of its edge, so it
-   reads as one shape at every size, squarer than a person's square face
-   (`@luke/ui`'s Avatar) and never mistaken for a person's circle. A loaded picture drops the hue (`data-hue`) and the
-   letter, so the square has no fill of its own and a transparent photo shows
-   the surface it sits on. */
-.workspace-tile {
-  display: inline-grid;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 25%;
-  color: var(--luke-color-on-identity);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  line-height: 1;
-}
-
-/* A photo or a picture fills the tile's square, cropped rather than
-   stretched, hidden until it has loaded, so the letter stands while it loads
-   and where it fails (workspace-tile.tsx). */
-.workspace-tile:has(.workspace-tile-picture) {
-  position: relative;
-  overflow: hidden;
-}
-
-.workspace-tile-picture {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.workspace-tile-picture[data-loaded="false"] {
-  visibility: hidden;
-}
-
-.workspace-tile[data-hue="1"] {
-  background: var(--luke-color-identity-1);
-}
-
-.workspace-tile[data-hue="2"] {
-  background: var(--luke-color-identity-2);
-}
-
-.workspace-tile[data-hue="3"] {
-  background: var(--luke-color-identity-3);
-}
-
-.workspace-tile[data-hue="4"] {
-  background: var(--luke-color-identity-4);
-}
-
-.workspace-tile[data-hue="5"] {
-  background: var(--luke-color-identity-5);
-}
-
-.workspace-tile[data-hue="6"] {
-  background: var(--luke-color-identity-6);
-}
-
-/* In a line of words, the tile keeps to the line's height. */
-.workspace-tile[data-size="inline"] {
-  width: 14px;
-  height: 14px;
-  font-size: var(--luke-type-caption-size);
-}
-
-.workspace-tile[data-size="head"] {
-  width: 32px;
-  height: 32px;
-  font-size: var(--luke-type-dialog-size);
-}
-
 /* A workspace named (`workspace-ref.tsx`): its tile and its name as one
    object in the ink of the place it stands in, the name cut short rather
    than wrapped; with a line under the name, the two stand in a column
@@ -1192,12 +1116,6 @@ ul.actor-stack {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
-/* An owner's picture stands in the fold's glyph cell at a glyph's size. */
-.sidebar-repository-header .repository-picture {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
    Each is dragged among the others by its header, on the rows' own timing,
    and carried as a copy while held as a row is. */
@@ -1450,18 +1368,6 @@ ul.actor-stack {
   .sidebar-repository-actions {
     opacity: 1;
   }
-}
-
-/* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
-   slot sizes it, and its corners are rounded, a share of its edge as a
-   workspace's tile's are, and edged so a logo drawn on white does not bleed
-   into the ground around it. */
-.repository-picture {
-  flex: 0 0 auto;
-  border-radius: 25%;
-  outline: 1px solid var(--luke-color-border);
-  outline-offset: -1px; /* off-scale */
-  object-fit: cover;
 }
 
 /* A side panel tab pinned to the sidebar, in a plan row's shape: the tab's
@@ -7249,11 +7155,6 @@ ul.actor-stack {
   height: var(--luke-control-icon);
 }
 
-.home-row-picture .repository-picture {
-  width: 16px;
-  height: 16px;
-}
-
 /* A finger opens a row on Home, so on a coarse pointer each row stands a
    touch target tall, its words centred in it as at the pointer's height. */
 @media (pointer: coarse) {
@@ -8505,15 +8406,10 @@ button.tasks-list-press:focus-visible::after {
 
 /* A row's repository is led by its owner's picture, or a folder's glyph
    where it has none to draw, at a caption's size. */
-.tasks-list-cell[data-cell="repository"] > :is(.repository-picture, .tasks-list-repository-glyph) {
+.tasks-list-cell[data-cell="repository"] > .tasks-list-repository-glyph {
   flex: none;
   width: var(--luke-space-16);
   height: var(--luke-space-16);
-}
-
-.tasks-list-glyph > .repository-picture {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
 }
 
 /* Who made a row's task where its member did not by hand, Luke or an

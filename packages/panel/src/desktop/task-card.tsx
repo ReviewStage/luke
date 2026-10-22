@@ -4,6 +4,7 @@ import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
+  AVATAR_SIZE,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -119,6 +120,7 @@ export function RepositoryDetail({
           repository={repository}
           pictures={pictures}
           fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+          size={AVATAR_SIZE.MARK}
         />
       }
       label={repository}

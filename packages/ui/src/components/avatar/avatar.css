@@ -42,6 +42,10 @@
     --luke-avatar-size: 16px;
   }
 
+  .luke-avatar[data-size="glyph"] {
+    --luke-avatar-size: var(--luke-control-icon);
+  }
+
   .luke-avatar[data-size="stack"] {
     --luke-avatar-size: 18px;
   }
@@ -70,6 +74,32 @@
      shape at every size, and rounder than a workspace's tile of its size. */
   .luke-avatar[data-shape="square"] {
     border-radius: 36%;
+  }
+
+  /* A tile, a workspace's or a repository's: its corner a quarter of its
+     edge, squarer than an app's square, with no edge of its own unless it is
+     `edged`. Its letter is a caption's size, a head's a dialog's, rather than
+     a share of the box, so the small tiles keep a readable letter. */
+  .luke-avatar[data-shape="tile"] {
+    border-radius: 25%;
+    font-size: var(--luke-type-caption-size);
+  }
+
+  .luke-avatar[data-shape="tile"][data-size="card"] {
+    font-size: var(--luke-type-dialog-size);
+  }
+
+  .luke-avatar[data-shape="tile"]:not([data-edged="true"])::after {
+    content: none;
+  }
+
+  .luke-avatar[data-shape="tile"][data-edged="true"]::after {
+    box-shadow: inset 0 0 0 1px var(--luke-color-border);
+  }
+
+  /* A blank tile has no ground until its picture has loaded. */
+  .luke-avatar[data-blank="true"]:not([data-hue]) {
+    background: none;
   }
 
   /* An app's glyph stands alone on the ground beneath it, in the ink around

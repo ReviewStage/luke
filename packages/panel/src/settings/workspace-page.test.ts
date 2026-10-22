@@ -1539,9 +1539,13 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     );
     for (const name of ["acme-org", "acme-labs"]) {
       const account = rowNamed(group, name);
-      assert.equal(account.querySelector(".workspace-tile")?.textContent, "A", `${name}'s tile`);
       assert.equal(
-        account.querySelector<HTMLImageElement>(".workspace-tile-picture")?.getAttribute("src"),
+        account.querySelector(".luke-avatar[data-shape='tile']")?.textContent,
+        "A",
+        `${name}'s tile`,
+      );
+      assert.equal(
+        account.querySelector<HTMLImageElement>(".luke-avatar-picture")?.getAttribute("src"),
         `https://github.com/${name}.png?size=32`,
         `${name}'s picture is its own on GitHub`,
       );

@@ -414,14 +414,6 @@
   height: 20px;
 }
 
-/* A workspace's GitHub account, an indented row under GitHub's: its mark is
-   a tile a step smaller than a provider's. */
-.workspace-github-account-mark > .workspace-tile {
-  width: 18px;
-  height: 18px;
-  font-size: var(--luke-type-caption-size);
-}
-
 /* Where a row's subject stands, under its name: connected with the dot a
    finished session wears, and what needs a hand in the attention tint. */
 .settings-state {

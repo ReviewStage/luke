@@ -146,3 +146,26 @@ test("a picture the browser had drawn before the page took over is shown without
   assert.equal(container.textContent, "");
   assert.equal(picture(container)?.getAttribute("src"), PICTURE);
 });
+
+test("a blank tile draws nothing until its picture loads, lazily, and says where the picture fails", () => {
+  const failed = vi.fn();
+  const { container } = drawn({
+    name: "",
+    src: PICTURE,
+    shape: AVATAR_SHAPE.TILE,
+    decorative: true,
+    edged: true,
+    blank: true,
+    lazy: true,
+    onFail: failed,
+  });
+  const tile = container.firstElementChild;
+  assert.equal(tile?.getAttribute("data-shape"), "tile");
+  assert.equal(tile?.getAttribute("data-edged"), "true");
+  assert.equal(tile?.hasAttribute("data-hue"), false);
+  assert.equal(container.textContent, "");
+  assert.equal(tile?.querySelector("svg"), null);
+  assert.equal(picture(container)?.getAttribute("loading"), "lazy");
+  answer(container, "error");
+  assert.equal(failed.mock.calls.length, 1);
+});
