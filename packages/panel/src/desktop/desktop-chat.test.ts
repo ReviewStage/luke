@@ -170,9 +170,18 @@ function mount(
           { value: (link: ReadLink) => opened.push(link) },
           createElement(Page),
         );
-  act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
+  const registry = AtomRegistry.make();
+  act(() => root?.render(onRegistry(registry, page)));
+  // Chat closed and opened again in the same window: the page drawn anew over the window's registry.
+  reopen = () => {
+    act(() => root?.render(onRegistry(registry, createElement("div"))));
+    act(() => root?.render(onRegistry(registry, page)));
+  };
   return container;
 }
+
+/** Closes the mounted Chat and opens it again in the same window. */
+let reopen: () => void = () => undefined;
 
 /** The rail as a reader hears it: each group's name, then each place's name, `▸ ` where shown and ` •` where something waits unread in it. */
 function rail(page: HTMLElement): string[] {
@@ -2444,6 +2453,12 @@ function heldPosts() {
   return {
     page,
     box,
+    /** Chat closed and opened again on the channel, the box drawn anew. */
+    reopen: () => {
+      reopen();
+      act(() => railRow(page, "teammate-invitations").click());
+      return boxNamed(page, "Message #teammate-invitations");
+    },
     /** The words of each post handed to the service, in the order handed. */
     posted: () => held.map((each) => each.post.text),
     /** The key each post handed to the service went under, in the order handed. */
@@ -2580,4 +2595,37 @@ test("two posts of the same words go under keys of their own, and one taken back
   pressInComposer(chat.box, "Enter");
   await settle();
   assert.equal(chat.keys()[3], chat.keys()[2]);
+});
+
+test("a refused post left in the stream waits there while Chat is closed and opened again, and Discard asks before it lets it go", async () => {
+  const chat = heldPosts();
+  await chat.send("Keep me.");
+  typeInComposer(chat.box, "Newer");
+  await chat.refuse(0, "Chat could not be reached.");
+  assert.ok(chat.page.querySelector(".chat-message[data-unsent]"));
+
+  const box = chat.reopen();
+  assert.equal(boxWords(box), "Newer");
+  const unsent =
+    chat.page.querySelector<HTMLElement>(".chat-message[data-unsent]") ??
+    assert.fail("the refused post still stands");
+  assert.match(unsent.textContent ?? "", /Keep me\./u);
+
+  const discard =
+    [...unsent.querySelectorAll("button")].find((each) => each.textContent === "Discard") ??
+    assert.fail("with Discard");
+  act(() => discard.click());
+  assert.ok(
+    chat.page.querySelector(".chat-message[data-unsent]"),
+    "nothing goes before the answer",
+  );
+  const confirm =
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[role="alertdialog"] button, [role="dialog"] button',
+      ),
+    ].find((each) => each.textContent === "Discard") ?? assert.fail("Discard asks first");
+  await act(async () => confirm.click());
+  await settle();
+  assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
 });

@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { FileChip } from "@luke/features/attachment-model";
 import {
   CHANNEL_KIND,
@@ -14,7 +16,18 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { EmptyState, TEXT_BUTTON_TONE, TEXT_ELEMENT, TEXT_TONE, Text, TextButton } from "@luke/ui";
+import {
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogQuestion,
+  EmptyState,
+  TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  Text,
+  TextButton,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
 import {
   CHAT_PLACE,
@@ -37,8 +50,11 @@ import {
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import type { SkillOption } from "@luke/ui/skill-mention";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { AtSignIcon, CircleAlertIcon, HashIcon } from "lucide-react";
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
 import {
   Conversation,
@@ -338,6 +354,15 @@ const UNSENT = "Not sent";
 const RETRY_POST = "Retry";
 const DISCARD_POST = "Discard";
 
+/** What Discard asks before a refused post is let go. */
+const DISCARD_QUESTION: DialogQuestion = {
+  title: "Discard this post?",
+  body: "Its words and pictures are kept nowhere else.",
+  verb: "Discard",
+  running: "Discarding…",
+  tone: DIALOG_TONE.DANGER,
+};
+
 /**
  * The reader's posts on their way, drawn in the stream as theirs at once,
  * each under the key it goes under, and drawn no more once the chat holds a
@@ -356,24 +381,46 @@ function postWords(entry: PendingPlace & { readonly post: ChatPost }): string {
   return JSON.stringify([entry.channelId, entry.replyTo ?? null, entry.post]);
 }
 
+/**
+ * Each window's posts still on their way or refused, kept past the pane, so
+ * a refused post with its pictures waits where it went while Chat is closed
+ * and opened again. Note that each window's registry holds its own.
+ */
+const pendingPostsAtom = Atom.keepAlive(Atom.make<readonly PendingPost[]>([]));
+
+/** What a window's posts go out through, kept past the pane as its posts are: the queue they go in, and the key of each post taken back into its box, by its place and words. */
+interface Outbox {
+  queue: Promise<void>;
+  readonly refusedKeys: Map<string, string>;
+  /** How a post is sent, as the pane last handed it, which a post sent before the pane closed still goes through. */
+  onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>;
+}
+
+const outboxes = new WeakMap<AtomRegistry.AtomRegistry, Outbox>();
+
 function usePendingPosts(
   chat: ChatAnswer,
   onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>,
 ) {
-  const [pending, setPending] = useState<readonly PendingPost[]>([]);
-  // The key of each post taken back into its box, by its place and words, which the same post sent again goes under.
-  const refusedKeys = useRef(new Map<string, string>());
-  const latest = useRef(onPost);
-  latest.current = onPost;
-  const queue = useRef<Promise<void>>(Promise.resolve());
+  const registry = useContext(RegistryContext);
+  const pending = useAtomValue(pendingPostsAtom);
+  const outbox: Outbox = outboxes.get(registry) ?? {
+    queue: Promise.resolve(),
+    refusedKeys: new Map(),
+    onPost,
+  };
+  outboxes.set(registry, outbox);
+  outbox.onPost = onPost;
+  const change = (next: (was: readonly PendingPost[]) => readonly PendingPost[]) =>
+    registry.set(pendingPostsAtom, next(registry.get(pendingPostsAtom)));
   const go = (entry: PendingPost, takeBack: (refused: string) => boolean) => {
-    queue.current = queue.current.then(async () => {
-      const refused = await latest
-        .current(entry.post, entry.id)
+    outbox.queue = outbox.queue.then(async () => {
+      const refused = await outbox
+        .onPost(entry.post, entry.id)
         .catch((failed: unknown) => (failed instanceof Error ? failed.message : UNSENT));
       const back = refused !== undefined && takeBack(refused);
-      if (back) refusedKeys.current.set(postWords(entry), entry.id);
-      setPending((was) =>
+      if (back) outbox.refusedKeys.set(postWords(entry), entry.id);
+      change((was) =>
         refused === undefined || back
           ? was.filter((each) => each.id !== entry.id)
           : was.map((each) => (each.id === entry.id ? { ...each, refused } : each)),
@@ -382,20 +429,20 @@ function usePendingPosts(
   };
   const send = (place: PendingPlace, post: ChatPost, takeBack: (refused: string) => boolean) => {
     const words = postWords({ ...place, post });
-    const id = refusedKeys.current.get(words) ?? crypto.randomUUID();
-    refusedKeys.current.delete(words);
+    const id = outbox.refusedKeys.get(words) ?? crypto.randomUUID();
+    outbox.refusedKeys.delete(words);
     const entry: PendingPost = { ...place, id, post, at: Date.now() };
-    setPending((was) => [...was, entry]);
+    change((was) => [...was, entry]);
     go(entry, takeBack);
   };
   const onRetryPost = (id: string) => {
-    const entry = pending.find((each) => each.id === id);
+    const entry = registry.get(pendingPostsAtom).find((each) => each.id === id);
     if (entry?.refused === undefined) return;
     const { refused: _refused, ...again } = entry;
-    setPending((was) => was.map((each) => (each.id === id ? again : each)));
+    change((was) => was.map((each) => (each.id === id ? again : each)));
     go(again, () => false);
   };
-  const onDiscardPost = (id: string) => setPending((was) => was.filter((each) => each.id !== id));
+  const onDiscardPost = (id: string) => change((was) => was.filter((each) => each.id !== id));
   // Note that a post the chat already holds is drawn as the chat's message alone, whether its answer has landed or not.
   const held = new Set(chat.messages.flatMap((message) => message.clientKey ?? []));
   const shown = pending.filter((each) => !held.has(each.id));
@@ -415,6 +462,14 @@ function PendingRow({
 }): React.JSX.Element {
   const actor = context.actorOf(context.chat.self);
   const { text, attachments } = entry.post;
+  // Note that Discard asks first, since the post's words and pictures are kept nowhere else.
+  const discard = useConfirmDialog(
+    { subject: entry.refused !== undefined, surfaceOpen: true },
+    () => {
+      context.onDiscardPost(entry.id);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
   return (
     <li
       className={reply ? "chat-reply" : "chat-message"}
@@ -440,14 +495,12 @@ function PendingRow({
             >
               {RETRY_POST}
             </TextButton>
-            <TextButton
-              tone={TEXT_BUTTON_TONE.QUIET}
-              onClick={() => context.onDiscardPost(entry.id)}
-            >
+            <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
               {DISCARD_POST}
             </TextButton>
           </p>
         )}
+        <ConfirmDialog confirm={discard} question={DISCARD_QUESTION} />
       </div>
     </li>
   );
