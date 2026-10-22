@@ -7540,27 +7540,37 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   order: 6;
 }
 
-.tasks-list-cell[data-cell="creator"] {
+.tasks-list-cell[data-cell="assignee"] {
   order: 7;
 }
 
-.tasks-list-cell[data-cell="agents"] {
+.tasks-list-cell[data-cell="creator"] {
   order: 8;
+}
+
+.tasks-list-cell[data-cell="agents"] {
+  order: 9;
 }
 
 /* The time ends on its last letter, so times of any length line up at
    their ends down the column. */
 .tasks-list-cell[data-cell="updated"] {
-  order: 9;
+  order: 10;
   justify-content: flex-end;
 }
 
 .tasks-list-cell[data-cell="more"] {
-  order: 10;
+  order: 11;
 }
 
-/* The chips and the ⋯ stand over the row's press and take their own presses. */
-.tasks-list-cell:is([data-cell="priority"], [data-cell="status"], [data-cell="more"]) {
+/* The chips and the ⋯ stand over the row's press and take their own presses;
+   an assignee's cell left empty under its group's head leaves the press its own. */
+.tasks-list-cell:is(
+  [data-cell="priority"],
+  [data-cell="status"],
+  [data-cell="assignee"]:not(:empty),
+  [data-cell="more"]
+) {
   position: relative;
   z-index: 1;
   pointer-events: auto;
