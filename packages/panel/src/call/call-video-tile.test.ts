@@ -18,6 +18,8 @@ class FakeMediaStream {
 
 // SAFETY: the tile only hands a track to a stream, never reads one, so a track's identity is all it needs.
 const VIDEO = { kind: "video", id: "avatar-video" } as MediaStreamTrack;
+// SAFETY: as above; a fresh avatar, as Restart video puts up, publishes a fresh track.
+const FRESH_VIDEO = { kind: "video", id: "avatar-video-fresh" } as MediaStreamTrack;
 // SAFETY: as above, the tile reads nothing of a track.
 const AUDIO = { kind: "audio", id: "avatar-audio" } as MediaStreamTrack;
 
@@ -82,16 +84,43 @@ test("no call in progress, or the experiment off, draws nothing", () => {
 
 test("a connecting avatar says so and offers video off, not a restart", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.STARTING }));
-  assert.match(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.CONNECTING));
+  assert.equal(waitingSays(container), CALL_VIDEO_LABEL.CONNECTING);
   assert.ok(button(container, CALL_VIDEO_LABEL.VIDEO_OFF));
   assert.equal(button(container, CALL_VIDEO_LABEL.RESTART), undefined);
   assert.equal(container.querySelector("video"), null);
 });
 
+/** What the tile says to a reader as it waits, if it still waits. */
+function waitingSays(container: HTMLElement): string | undefined {
+  const status = container.querySelector('[role="status"]');
+  return status?.closest('[aria-hidden="true"]') ? undefined : (status?.textContent ?? undefined);
+}
+
+/** The video draws its first frame, which the element says with `loadeddata`. */
+function drawFirstFrame(container: HTMLElement): void {
+  act(() => {
+    container.querySelector(".call-video-frame")?.dispatchEvent(new Event("loadeddata"));
+  });
+}
+
 test("a live avatar plays its video track", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
   assert.deepEqual(playing(container.querySelector("video")), [VIDEO]);
-  assert.doesNotMatch(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.CONNECTING));
+});
+
+test("a live avatar still says it is connecting until its video draws a first frame, then stops", () => {
+  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
+  assert.equal(waitingSays(container), CALL_VIDEO_LABEL.CONNECTING);
+  drawFirstFrame(container);
+  assert.equal(waitingSays(container), undefined);
+});
+
+test("a fresh avatar's track waits on its own first frame again", () => {
+  const { container, root } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
+  drawFirstFrame(container);
+  act(() => root.render(tile({ status: AVATAR_STATUS.LIVE, video: FRESH_VIDEO })));
+  assert.deepEqual(playing(container.querySelector(".call-video-frame")), [FRESH_VIDEO]);
+  assert.equal(waitingSays(container), CALL_VIDEO_LABEL.CONNECTING);
 });
 
 test("a live avatar's picture is filled out by a blurred copy of the same track, hidden from a reader", () => {
