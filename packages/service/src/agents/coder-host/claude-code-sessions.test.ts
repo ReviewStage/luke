@@ -805,6 +805,61 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect(
+    "a runner Vercel would not read is neither relaunched beside itself nor stopped in silence",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const turnId = yield* turnUnderWay(userId, agent);
+        const before = linesOf(api.commands[0]).length;
+        api.failCommandReads.remaining = 3;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
+        const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
+        const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(cancelled, { outcome: "failed", status: 503 });
+        assert.equal(retuned, RUNNER_CHOICE.FAILED);
+        assert.equal(api.commands.length, 1);
+        assert.equal(linesOf(api.commands[0]).length, before);
+      }),
+  );
+
+  it.effect(
+    "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        api.failPolicy.remaining = 1;
+
+        const ended = yield* Effect.result(
+          runnerEnded({
+            target: { userId, conversationId: agent.conversationId },
+            sessionId: opened.sessionId,
+            sequence: 5,
+          }).pipe(Effect.provide(api.layer)),
+        );
+
+        assert.ok(Result.isFailure(ended));
+        assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
   it.effect("a launch's end leaves the sandbox up while a developer's Terminal holds it", () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());

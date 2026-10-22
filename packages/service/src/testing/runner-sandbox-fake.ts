@@ -52,6 +52,40 @@ export interface FakeCommand {
   readonly sudo: boolean;
   stdin: string;
   exitCode: number | null;
+  /** Whether Vercel recorded the exit, which it does only once a read that waits for it saw it. */
+  recorded?: boolean;
+}
+
+/** A command as a read of its exit finds it: its id, the exit it has, and whether Vercel recorded it. */
+export interface ReadCommand {
+  readonly id: string;
+  readonly exitCode: number | null;
+  recorded?: boolean;
+}
+
+/**
+ * A read of a command, as Vercel answers it: a plain read answers no exit
+ * until a read that waits (`wait=true`) has seen the command exit, and one
+ * that waits records the exit it sees. A command still running holds a
+ * waiting read until the reader gives up where `hold` is set, and answers it
+ * at once with no exit otherwise, as a hold past the reader's wait ends.
+ */
+export async function commandRead(
+  command: ReadCommand,
+  url: URL,
+  init: RequestInit,
+  hold: boolean,
+): Promise<Response> {
+  const waits = url.searchParams.get("wait") === "true";
+  if (waits && command.exitCode !== null) command.recorded = true;
+  if (waits && command.exitCode === null && hold) {
+    await new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new Error("the reader gave up")));
+    });
+  }
+  return Response.json({
+    command: { id: command.id, exitCode: command.recorded === true ? command.exitCode : null },
+  });
 }
 
 /** The files a gzipped tar holds, by path. */
@@ -90,6 +124,12 @@ export function runnerSandboxApi() {
   const uploads: Map<string, string>[] = [];
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const runs: { readonly session: string; readonly args: readonly string[] }[] = [];
+  /** How many reads of a command the API refuses next, as a passing outage. */
+  const failCommandReads = { remaining: 0 };
+  /** How many network policy updates the API refuses next, as a passing outage. */
+  const failPolicy = { remaining: 0 };
+  /** Whether a read that waits for a running command's exit is held until the reader gives up. */
+  const waits = { hold: false };
   /** What a test does the moment a detached command has started, before the API answers. */
   const hooks: { onStart?: ((command: FakeCommand) => Promise<void>) | undefined } = {};
   let next = 0;
@@ -182,6 +222,10 @@ export function runnerSandboxApi() {
       }
       return Response.json({ session: { id: sessionId } });
     }
+    if (rest === "network-policy" && failPolicy.remaining > 0) {
+      failPolicy.remaining -= 1;
+      return new Response(null, { status: 503 });
+    }
     if (rest === "network-policy") {
       policies.push({ session: sessionId, policy: await body() });
       return Response.json({});
@@ -236,11 +280,15 @@ export function runnerSandboxApi() {
         command.stdin = Buffer.concat([bytes.subarray(0, asked.offset), data]).toString("utf8");
       }
       return Response.json({
-        command: { id: command.id, exitCode: command.exitCode },
+        command: { id: command.id, exitCode: command.recorded === true ? command.exitCode : null },
         bytesWritten: Buffer.byteLength(command.stdin),
       });
     }
-    return Response.json({ command: { id: command.id, exitCode: command.exitCode } });
+    if (failCommandReads.remaining > 0) {
+      failCommandReads.remaining -= 1;
+      return new Response(null, { status: 503 });
+    }
+    return commandRead(command, parsed, init, waits.hold);
   };
   return {
     layer: fakeHttpClientLayer(respond),
@@ -252,6 +300,9 @@ export function runnerSandboxApi() {
     runs,
     failStdin,
     failDelete,
+    failCommandReads,
+    failPolicy,
+    waits,
     hooks,
   };
 }
