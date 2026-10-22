@@ -42,7 +42,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
-import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
+import { CHANNEL_KIND, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
@@ -3542,6 +3542,7 @@ test("list_open_asks lists every ask waiting on the operator's member across the
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: LIST_OPEN_ASKS_REFUSAL.NOT_OPERATOR,
   });
+});
 
 test("a teammate's agent lists, reads, messages, stops, updates, continues, and forks none of a member's operator, while the member's own agent does each and both still reach each other's coders", async () => {
   const { workspaceId, agents } = await openWorkspaces();
@@ -3609,4 +3610,39 @@ test("a teammate's agent lists, reads, messages, stops, updates, continues, and 
   }
   const sent = await directMessage(host, own, operator, eve.services);
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+});
+
+test("an operator's post_chat with no place lands in its DM with its member, which its read lists as its home, and #general takes nothing of it", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const operator = await operatorOn(agents.teammates.userId, workspaceId);
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const admitted = await database.run(host.admit(seat(operator), operator.sessionId));
+  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
+  const chat = (tool: (typeof CHAT_TOOL)[keyof typeof CHAT_TOOL], input: WireBoundaryInput) =>
+    database.run(
+      host
+        .chat(admitted.success, {
+          tool,
+          input: unparsedWire(input),
+          clientKey: `call-${randomUUID()}`,
+          postsInTurn: 0,
+          sandbox: () => Promise.reject(new Error("a post with words alone opens no sandbox")),
+        })
+        .pipe(Effect.provide(Layer.mergeAll(eve.services, ANALYTICS.layer))),
+    );
+
+  const posted = await chat(CHAT_TOOL.POST, { text: "Two PRs wait on you." });
+  assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+  assert.equal(
+    (await chat(CHAT_TOOL.POST, { text: "Hi all.", to: "#general" })).status,
+    ACTION_RESULT_STATUS.REJECTED,
+  );
+  const read = await chat(CHAT_TOOL.READ, {});
+  assert.ok("channels" in read, JSON.stringify(read));
+  assert.deepEqual(
+    read.channels.map((channel) => channel.kind),
+    [CHANNEL_KIND.DM],
+    "its DM with its member is its one channel, listed first as its home",
+  );
 });

@@ -52,6 +52,7 @@ import {
   moveTaskChat,
   openAsksOf,
   openTopicChannel,
+  operatorHome,
   peekUnread,
   postAsk,
   postMessage,
@@ -2358,6 +2359,19 @@ it.layer(getTestDB())("the chat store's operator, private to its member", (it) =
           [],
           "a mention in a channel it never reads names no one",
         );
+
+        // It opens no DM a teammate could never read, and its home is its DM with its member.
+        assert.ok(Option.isNone(yield* findOrMakeDm(owner, workspace, operator.id, grace.id)));
+        assert.ok(Option.isNone(yield* findOrMakeDm(owner, workspace, operator.id, coder.id)));
+        assert.deepEqual(
+          Option.map(yield* operatorHome(owner, workspace, operatorId), (home) => [
+            home.channel.id,
+            home.with.id,
+          ]),
+          Option.some([dm.id, ada.id]),
+        );
+        assert.ok(Option.isNone(yield* operatorHome(teammate, workspace, operatorId)));
+        assert.ok(Option.isNone(yield* operatorHome(teammate, workspace, coderId)));
       }),
   );
 });

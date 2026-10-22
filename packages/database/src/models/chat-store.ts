@@ -470,6 +470,45 @@ const findSeenMemberInWorkspace = SqlSchema.findOneOption({
     ),
 });
 
+/** The account a member stands for: a person's own, or the account that started an agent; none for an agent whose row is gone. */
+const findMemberAccount = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, memberId: Schema.String }),
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ userId: sql<string>`coalesce(${chatMember.userId}, ${codingAgent.userId})` })
+        .from(chatMember)
+        .leftJoin(codingAgent, eq(codingAgent.id, chatMember.agentId))
+        .where(
+          and(
+            eq(chatMember.organizationId, key.organizationId),
+            eq(chatMember.id, key.memberId),
+            or(isNotNull(chatMember.userId), isNotNull(codingAgent.userId)),
+          ),
+        ),
+    ),
+});
+
+/** The member's operator, where the agent is one the account started; nothing for a coder or another member's operator. */
+const findOwnOperator = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(
+          and(
+            eq(codingAgent.id, key.agentId),
+            eq(codingAgent.userId, key.userId),
+            eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
+          ),
+        ),
+    ),
+});
+
 /** Whether the account may name the agent, its row standing or not: it is no teammate's operator (`agentNoTeammatesOperator`). */
 const findTeammatesOperator = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
@@ -1812,6 +1851,20 @@ export function findOrMakeDm(
     if (Option.isNone(to) || from.value.leftAt !== null || to.value.leftAt !== null) {
       return Option.none();
     }
+    // Note that the other side must name the first too, so an operator opens no DM a teammate could never read.
+    const toAccount = yield* findMemberAccount({ organizationId, memberId: toMemberId });
+    if (
+      Option.isSome(toAccount) &&
+      Option.isNone(
+        yield* findSeenMemberInWorkspace({
+          organizationId,
+          userId: toAccount.value.userId,
+          memberId: fromMemberId,
+        }),
+      )
+    ) {
+      return Option.none();
+    }
     // Note that the pair is stored in uuid order, because that is what makes one pair one row.
     const [dmAMemberId, dmBMemberId] = [fromMemberId, toMemberId].toSorted();
     if (dmAMemberId === undefined || dmBMemberId === undefined) return Option.none();
@@ -1828,6 +1881,34 @@ export function findOrMakeDm(
       now,
     });
     return yield* madeOrStanding(made, findDm(pair));
+  });
+}
+
+/** Where an operator talks unless told otherwise: its DM with its member, and that member. */
+export interface ChatOperatorHome {
+  readonly channel: ChatChannelRow;
+  readonly with: ChatMemberRow;
+}
+
+/**
+ * The operator's home, its DM with the member who started it, made the
+ * first time it is asked for: an operator talks in its DMs alone
+ * (`TASKLESS_CODER`), so its default place is the one its member reads.
+ * Nothing for an agent that is no operator of the account's, or a
+ * workspace the account is not in.
+ */
+export function operatorHome(
+  userId: string,
+  organizationId: string,
+  agentId: string,
+): ChatStoreEffect<Option.Option<ChatOperatorHome>> {
+  return Effect.gen(function* () {
+    if ((yield* findOwnOperator({ userId, agentId })).length === 0) return Option.none();
+    const person = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
+    const self = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId });
+    if (Option.isNone(person) || Option.isNone(self)) return Option.none();
+    const channel = yield* findOrMakeDm(userId, organizationId, self.value.id, person.value.id);
+    return Option.map(channel, (row) => ({ channel: row, with: person.value }));
   });
 }
 
