@@ -147,6 +147,8 @@ export const LIVE_SESSION_OUTCOME = {
   HOSTED_UNAVAILABLE: "hosted-unavailable",
   /** The call named an agent that runs on Claude Code or Codex, which takes no call yet; nothing was charged. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
+  /** The account saved no OpenAI API key, which a call runs on; nothing was charged. */
+  OPENAI_KEY_MISSING: "openai-key-missing",
 } as const;
 
 export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE_SESSION_OUTCOME];

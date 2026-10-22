@@ -1,10 +1,12 @@
+import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
 import { recordVoiceSeconds, spendHostedMeter } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { ownApiKeyOf } from "@luke/service/accounts/own-api-key";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
 import { eveDeploymentSecretIn } from "@luke/service/environment";
 import { standReported } from "@luke/service/observability/sentry";
-import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
 import type { VoiceAccounts } from "@luke/service/voice/accounts";
 import { deploymentExchange } from "@luke/service/voice/deployment-exchange";
 import { Keyframe } from "@luke/service/voice/keyframe";
@@ -23,9 +25,10 @@ import { runWeb } from "../runtime.js";
 /**
  * The deployment's real seams handed to the voice service, once per function
  * instance. The `api/voice/sessions` function exports the server this
- * builds. A missing `OPENAI_API_KEY` leaves the service refusing every
- * upgrade with 503, the hosted tier's kill switch, rather than failing to
- * load.
+ * builds. Every call runs on its caller's own OpenAI API key, sealed in
+ * the account's provider keys and opened under the deployment's ring; a
+ * caller who saved none is refused as missing one, and Luke spends no key of
+ * its own on a call.
  *
  * The exchange is passed here: with it, every call's asks are answered by
  * the hosted brain and its record written by the service, on the same
@@ -38,7 +41,6 @@ import { runWeb } from "../runtime.js";
  */
 
 const VOICE_FUNCTION_ENVIRONMENT = {
-  API_KEY: HOSTED_OPENAI_ENVIRONMENT.API_KEY,
   /** A deployment-pinned model; `LIVE_DEFAULTS.MODEL` otherwise. */
   LIVE_MODEL: "LUKE_LIVE_MODEL",
   /** Luke's Keyframe Labs key, which mints each call's avatar session. */
@@ -54,7 +56,7 @@ const deploymentAccounts: VoiceAccounts = {
   recordSeconds: (input) => Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
 };
 
-/** A secret as the environment holds it, sealed: nothing where it is absent or blank, the one absence the kill switch reads. */
+/** A secret as the environment holds it, sealed: nothing where it is absent or blank. */
 function configured(name: string): Redacted.Redacted | undefined {
   const named = process.env[name]?.trim();
   return named ? Redacted.make(named) : undefined;
@@ -103,7 +105,12 @@ export function voiceFunctionOptions(
 ): VoiceServiceOptions {
   return {
     server,
-    apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
+    openAiKeyOf: (accountId) =>
+      ownApiKeyOf(
+        accountId,
+        PROVIDER_KEY_PROVIDER.OPENAI,
+        configured(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
+      ),
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,
     record: voiceSessionRecord(),
@@ -127,8 +134,8 @@ let standing: VoiceServer | undefined;
  * runtime closes — which is what a Vercel function gets, since it is frozen
  * between invocations and discarded with no shutdown hook to end a service
  * with. An instance whose runtime cannot be built stands none, and its server
- * keeps answering every upgrade with the 503 a deployment missing the project
- * key answers with; either way what ended the service is reported to Sentry.
+ * keeps answering every upgrade with 503; either way what ended the service
+ * is reported to Sentry.
  */
 function standService(voice: VoiceServer): void {
   void standReported(

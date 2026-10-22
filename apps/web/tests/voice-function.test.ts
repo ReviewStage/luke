@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  PROVIDER_KEY_ENCRYPTION_ENVIRONMENT,
+  parseKeyRing,
+  sealProviderKey,
+} from "@luke/database/models/provider-key-seal";
+import { saveProviderKey } from "@luke/database/models/provider-key-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { noDatabase } from "@luke/database/testing/no-database";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { LIVE_VOICE } from "@luke/live";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "@luke/service/agents/brain-host/bounds";
 import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
@@ -19,7 +26,7 @@ import {
 import type { AttachedSession } from "@luke/service/voice/live-exchange";
 import { listening, VoiceService, voiceServer } from "@luke/service/voice/service";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Cause, Deferred, Effect, Exit, Option, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Option, Redacted, Result, Scope } from "effect";
 import { afterAll, afterEach, test, vi } from "vitest";
 import { voiceFunctionOptions } from "../server/voice/function";
 
@@ -43,6 +50,10 @@ import { voiceFunctionOptions } from "../server/voice/function";
  * the plan's first call explores it. OpenAI is a fake on loopback, eve a
  * fake at the exchange's HTTP boundary, and the store PGlite. Synthetic
  * accounts and secrets.
+ *
+ * Every call runs on its caller's own OpenAI API key, which the function
+ * opens from the account's sealed keys under the deployment's ring; a caller
+ * who saved none has no key, whatever `OPENAI_API_KEY` the deployment holds.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -77,6 +88,33 @@ const SESSION = {
   started: false,
 } as unknown as AttachedSession;
 
+/** The deployment's ring, fixed bytes written for this file, which the function's environment holds. */
+const RING = `1:${Buffer.alloc(32, 5).toString("base64")}`;
+const CALLER_KEY = "sk-proj-caller-own-key-0000";
+
+/** The caller's own OpenAI API key, saved as Settings saves one, under the ring the function's environment holds. */
+async function saveCallerKey(userId: string): Promise<void> {
+  vi.stubEnv(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS, RING);
+  const ring = parseKeyRing(Redacted.make(RING));
+  assert.ok(Result.isSuccess(ring));
+  const owner = {
+    userId,
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    kind: PROVIDER_KEY_KIND.API_KEY,
+  } as const;
+  await database.run(
+    saveProviderKey(
+      userId,
+      owner.provider,
+      owner.kind,
+      sealProviderKey(ring.success, owner, Redacted.make(CALLER_KEY)),
+      "sk-…0000",
+      null,
+      new Date(0),
+    ),
+  );
+}
+
 /** The function's environment holding eve's origin and the two secrets given. */
 function stubSecrets(secrets: {
   readonly cron: string | undefined;
@@ -107,6 +145,20 @@ test("the voice function's options carry the exchange", () => {
   assert.notEqual(options.exchange, undefined);
 });
 
+test("a call runs on its caller's own OpenAI key, and a caller who saved none has none, whatever key the deployment holds", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "sk-proj-luke-deployment-key-0000");
+  const keyed = await database.createUser();
+  const keyless = await database.createUser();
+  await saveCallerKey(keyed);
+  const { openAiKeyOf } = voiceFunctionOptions(voiceServer());
+
+  const own = await database.run(openAiKeyOf(keyed));
+  const none = await database.run(openAiKeyOf(keyless));
+
+  assert.equal(own === undefined ? undefined : Redacted.value(own), CALLER_KEY);
+  assert.equal(none, undefined);
+});
+
 it.effect(
   "the voice function's exchange stands under nothing where the deployment holds the cron's secret alone, or an eve secret that is the cron's own value",
   () =>
@@ -125,6 +177,7 @@ it.effect(
       Effect.gen(function* () {
         yield* Effect.sync(() => stubSecrets({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET }));
         const userId = yield* Effect.promise(() => database.createUser());
+        yield* Effect.promise(() => saveCallerKey(userId));
         const task = yield* Effect.promise(() =>
           database.run(startTask(userId, { name: "Teammate invitations" })),
         );
@@ -175,7 +228,6 @@ it.effect(
                 const listener = yield* listening(voice, 0, "127.0.0.1");
                 yield* VoiceService.make({
                   ...voiceFunctionOptions(voice, { httpClient }),
-                  apiKey: "sk-test-project-key",
                   accounts: { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(userId) },
                   record: voiceSessionRecord(),
                   avatar: undefined,

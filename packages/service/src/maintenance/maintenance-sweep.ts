@@ -26,7 +26,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * deleted task's call that was still open when the task went is removed
  * once it has ended, a turn whose end eve never told the relay is settled as
  * abandoned, a voice session whose device detached and never came back is
- * ended on Luke's key, as a connection would have ended it, the Vercel
+ * ended on its owner's key, as a connection would have ended it, the Vercel
  * Sandboxes of the eve sessions Luke let go of are deleted, a coding agent's
  * sandbox no developer's terminal holds any more is stopped, a native
  * agent's sandbox whose run ended and no terminal holds is stopped where the

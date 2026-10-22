@@ -44,6 +44,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -115,6 +116,8 @@ export const HOSTED_REFUSAL = {
   AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
   /** The agent runs on a native harness this function cannot reach (neither launched nor relayed from it); nothing was written, and nothing fell through to eve. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
+  /** The account saved no OpenAI API key, which a voice call or a dictated clip runs on. */
+  OPENAI_KEY_MISSING: { error: HOSTED_API_ERROR.OPENAI_KEY_MISSING },
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_SIGNED_OUT: { error: HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT },
   /** The agent runs on its starter's plan, whose provider did not answer; nothing was written, and the same request later may be taken. */

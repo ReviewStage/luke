@@ -8,6 +8,7 @@
     "./accounts/account-seams": "./src/accounts/account-seams.js",
     "./accounts/models-procedures": "./src/accounts/models-procedures.js",
     "./accounts/workspace-invitations-procedures": "./src/accounts/workspace-invitations-procedures.js",
+    "./accounts/own-api-key": "./src/accounts/own-api-key.js",
     "./accounts/provider-key-rewrap": "./src/accounts/provider-key-rewrap.js",
     "./accounts/provider-keys-app": "./src/accounts/provider-keys-app.js",
     "./accounts/workspace-members": "./src/accounts/workspace-members.js",

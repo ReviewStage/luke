@@ -82,6 +82,12 @@ export const HOSTED_API_ERROR = {
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /**
+   * What was asked runs on OpenAI (a voice call, a dictated clip) and the
+   * account saved no OpenAI API key of its own, which Luke spends none of its
+   * own in place of; nothing was sent or charged. The key is added in Settings.
+   */
+  OPENAI_KEY_MISSING: "openai-key-missing",
+  /**
    * The agent runs on its starter's plan (a ChatGPT plan, on Codex), and the
    * starter's sign-in cannot launch it: none is kept, the provider signed it
    * out, or the service cannot open it. The starter signs in again in

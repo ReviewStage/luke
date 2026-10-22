@@ -5,8 +5,10 @@ import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments"
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
+import { ownApiKeyOf } from "../accounts/own-api-key.js";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -24,7 +26,6 @@ import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { createLiveUpstream } from "../voice/openai.js";
 import {
-  NOTHING_ORPHANED,
   sweepVoiceOrphans,
   VOICE_ORPHAN_SWEEP,
   VOICE_SESSION_LIMIT_MS,
@@ -81,12 +82,18 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sessionSandboxesLayer,
     Layer.succeed(HttpClient.HttpClient, httpClient),
   );
-  const voiceUpstream = environment.openAiKey
-    ? createLiveUpstream({
-        apiKey: Redacted.value(environment.openAiKey),
-        attachTimeoutMs: VOICE_ORPHAN_SWEEP.ATTACH_TIMEOUT_MS,
-      })
-    : undefined;
+  // Each orphan is ended on its owner's own OpenAI key, the one its call was created on.
+  const voiceUpstreamOf = (userId: string) =>
+    Effect.map(
+      ownApiKeyOf(userId, PROVIDER_KEY_PROVIDER.OPENAI, environment.providerKeyEncryptionKeys),
+      (key) =>
+        key === undefined
+          ? undefined
+          : createLiveUpstream({
+              apiKey: Redacted.value(key),
+              attachTimeoutMs: VOICE_ORPHAN_SWEEP.ATTACH_TIMEOUT_MS,
+            }),
+    );
   return yield* handleMaintenanceSweep({
     request,
     cronSecret: environment.cronSecret,
@@ -129,17 +136,15 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
     sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
     sweepVoice: (now) =>
-      voiceUpstream === undefined
-        ? Effect.succeed(NOTHING_ORPHANED)
-        : sweepVoiceOrphans(
-            {
-              upstream: voiceUpstream,
-              record: voiceSessionRecord(),
-              recordSeconds: (input) =>
-                Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
-            },
-            { now },
-          ),
+      sweepVoiceOrphans(
+        {
+          upstreamOf: voiceUpstreamOf,
+          record: voiceSessionRecord(),
+          recordSeconds: (input) =>
+            Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
+        },
+        { now },
+      ),
   });
 });
 
