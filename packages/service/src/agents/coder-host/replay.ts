@@ -378,8 +378,8 @@ function filesBytes(files: readonly CodingAgentAttachment[]): number {
 /**
  * A file of the source's first message as a Start attaches it again: its
  * bytes where the row keeps them, or else the picture it was kept as beside
- * the source's conversation, which a first message eve's receipt wrote
- * names by id with no bytes; nothing where neither stands.
+ * the source's conversation, which a row names by id with no bytes once it
+ * was kept (`attached-file-parts.ts`); nothing where neither stands.
  */
 const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
   Effect.gen(function* () {

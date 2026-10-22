@@ -5,6 +5,8 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   CONVERSATION_PICTURE_BOUNDS,
+  KEPT_IMAGE_PROVIDER_KEY,
+  keptImageMetadataSchema,
   PICTURE_OMISSION,
   type PictureOmission,
 } from "@luke/features/conversation-picture-wire";
@@ -26,7 +28,8 @@ import { Schema as EffectSchema, Option } from "effect";
  * The journal keeps the words as the row's first part, empty where there
  * are none, and every file after it as the SDK's file part over a `data:`
  * URL, a text file under `text/plain`, so the transcript draws a thumbnail
- * or a name for each from the row alone. eve is handed each text file
+ * or a name for each from the row alone; an image kept beside the
+ * conversation is the one exception, below. eve is handed each text file
  * inlined under a heading and a fence (`packages/service/src/agents/attached-files.ts`),
  * and its receipt lists a line's parts the way it was handed them, so a
  * line is matched by its words, each text file inlined, and each image and
@@ -47,7 +50,13 @@ import { Schema as EffectSchema, Option } from "effect";
  * no provider reads (`keptImageMetadata`), rather than as a part of its
  * own, so the transcript draws and counts the same files it always did; a
  * receipt is matched by the line in the place eve was handed it, and a
- * receipt's own row reads the id back from it.
+ * receipt's own row reads the id back from it. Note that a kept image's part
+ * carries an empty URL rather than its bytes, as `relay-pictures.ts` names
+ * a tool's pictures, because bytes in the row ride every transcript read,
+ * journal amend, and long poll: each reader takes the bytes from the kept
+ * picture by its id instead (`/api/agents/picture`, `replay.ts`). An image
+ * not kept, a PDF, a text file, and every row written before keep their
+ * `data:` URL, so a reader takes both.
  */
 
 /** What heads the part a line's mentions are handed to eve in, which the receipt is read back by. */
@@ -86,18 +95,8 @@ export type KeptImage = { readonly id: string } | { readonly omitted: PictureOmi
 /** A file as eve is handed it and the journal keeps it: an image with what was kept of it, where it was kept or refused. */
 export type HandedFile = CodingAgentAttachment & { readonly kept?: KeptImage | undefined };
 
-/** The provider key a file part keeps what was kept of its image under, which no provider reads. */
-const KEPT_IMAGE_KEY = "luke";
-
 /** What was kept of an image as its file part keeps it. */
-const readKeptMetadata = EffectSchema.decodeUnknownOption(
-  EffectSchema.Struct({
-    [KEPT_IMAGE_KEY]: EffectSchema.Union([
-      EffectSchema.Struct({ attachmentId: EffectSchema.String }),
-      EffectSchema.Struct({ omitted: EffectSchema.Literals(Object.values(PICTURE_OMISSION)) }),
-    ]),
-  }),
-);
+const readKeptMetadata = EffectSchema.decodeUnknownOption(keptImageMetadataSchema);
 
 /** An attachment's id as the store mints it. */
 const ATTACHMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -112,7 +111,7 @@ const OMISSION_WORDS = {
 /** What was kept of an image as its file part keeps it. */
 export function keptImageMetadata(kept: KeptImage): ProviderMetadata {
   return {
-    [KEPT_IMAGE_KEY]: "id" in kept ? { attachmentId: kept.id } : { omitted: kept.omitted },
+    [KEPT_IMAGE_PROVIDER_KEY]: "id" in kept ? { attachmentId: kept.id } : { omitted: kept.omitted },
   };
 }
 
@@ -120,7 +119,7 @@ export function keptImageMetadata(kept: KeptImage): ProviderMetadata {
 export function keptImageOf(part: FileUIPart): KeptImage | undefined {
   const read = Option.getOrUndefined(readKeptMetadata(part.providerMetadata));
   if (read === undefined) return undefined;
-  const kept = read[KEPT_IMAGE_KEY];
+  const kept = read[KEPT_IMAGE_PROVIDER_KEY];
   return "attachmentId" in kept ? { id: kept.attachmentId } : { omitted: kept.omitted };
 }
 
@@ -178,7 +177,17 @@ export function textOf(base64: string): string {
   return Buffer.from(base64, "base64").toString("utf8");
 }
 
-/** The parts the journal keeps for a developer's line: the words, what it mentioned where it did, then each file it carried, in the order attached, an image naming what was kept of it. */
+/**
+ * The URL a line's file is kept under in the journal: its bytes as a
+ * `data:` URL, or none for an image kept beside the conversation, which its
+ * part names by id instead (`keptImageMetadata`), as eve's receipt names a
+ * staged one, so the row carries no image twice.
+ */
+function keptUrl(file: HandedFile): string {
+  return file.kept !== undefined && "id" in file.kept ? "" : dataUrl(file.mediaType, file.data);
+}
+
+/** The parts the journal keeps for a developer's line: the words, what it mentioned where it did, then each file it carried, in the order attached, an image naming what was kept of it and, where kept, carrying no bytes. */
 export function lineParts(
   text: string,
   attachments: readonly HandedFile[],
@@ -192,7 +201,7 @@ export function lineParts(
         type: "file",
         mediaType: file.mediaType,
         filename: file.name,
-        url: dataUrl(file.mediaType, file.data),
+        url: keptUrl(file),
         ...(file.kept === undefined
           ? undefined
           : { providerMetadata: keptImageMetadata(file.kept) }),

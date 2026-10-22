@@ -21,9 +21,12 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
  * fold and reads each picture once through the door it is given; two calls
  * one after another are one set; an integration's call keeps its row and
  * gains its pictures as chips under it, one left out saying so; a refused
- * call is a row where its error is read; and a picture written in the
- * agent's words is a link, never an image; and a WebM it showed plays in a
- * player of its own, from a `blob:` address let go of as the player goes.
+ * call is a row where its error is read; a picture written in the
+ * agent's words is a link, never an image; a WebM it showed plays in a
+ * player of its own, from a `blob:` address let go of as the player goes;
+ * and an image a line handed the agent, which its row names by id, is read
+ * through the door as a chip, while one a row keeps the bytes of is drawn
+ * from them.
  *
  * Synthetic turns and pictures throughout: the door answers a PNG's first
  * bytes for every picture it is asked for.
@@ -496,4 +499,35 @@ test("a recording a finished browser call kept plays under its row, out of the t
     URL.createObjectURL = own.create;
     URL.revokeObjectURL = own.revoke;
   }
+});
+
+test("an image a line's row names by the picture it was kept as is read through the door and drawn as its chip, and one an older row keeps the bytes of is drawn from them with no read", async () => {
+  const kept = picture(2, 1);
+  const { container, read } = await drawn({
+    id: "line",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      text("Match these."),
+      {
+        type: "file",
+        mediaType: INBOX_IMAGE_TYPE.PNG,
+        filename: "flow.png",
+        url: "",
+        providerMetadata: { luke: { attachmentId: kept.id } },
+      },
+      {
+        type: "file",
+        mediaType: INBOX_IMAGE_TYPE.PNG,
+        filename: "old.png",
+        url: "data:image/png;base64,AAAA",
+      },
+    ],
+  });
+
+  const chips = [...container.querySelectorAll('ul[aria-label="Attached files"] > li')];
+  assert.deepEqual(
+    chips.map((chip) => chip.querySelector("img")?.getAttribute("src")),
+    ["data:image/png;base64,iVBORw==", "data:image/png;base64,AAAA"],
+  );
+  assert.deepEqual(read, [kept.id]);
 });

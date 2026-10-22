@@ -46,6 +46,7 @@ import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -81,7 +82,7 @@ import { Clock, Duration, Effect, Layer, Option, Redacted, Result, Schema } from
 import { Base64 } from "effect/encoding";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import type { MessageStreamEvent } from "eve/client";
+import type { MessageReceivedPart, MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { SandboxNetworkPolicy } from "eve/sandbox";
 import {
@@ -106,6 +107,7 @@ import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { added } from "../../testing/task-contents.js";
+import { eveContent, keptHandedImages } from "../attached-files.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_AUTHENTICATOR,
@@ -352,6 +354,12 @@ const composedPrompt = (host: CoderHost, ...composed: Parameters<CoderHost["prom
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
   stampedEveEvent(event, NOW);
+
+/** A PNG whose header states its size, 2 by 1, as a conversation keeps a picture. */
+const SIZED_PNG = Uint8Array.from([
+  ...[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13],
+  ...[0x49, 0x48, 0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0],
+]);
 
 /** One coding turn as eve emits it: the plan received, a shell call answered, a thought, words, and the end given. */
 function codingTurn(
@@ -1126,6 +1134,81 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.match(seed, /Invite a teammate by email/u);
         assert.match(seed, /The guide is read; the plan fits the code\./u);
         assert.ok(!seed.includes("settings page"), seed);
+      }),
+  );
+
+  it.effect(
+    "a session opened afresh is seeded with the files the agent was handed by name, an image its row names by id with the attachment it was kept as, one not kept saying so, and one a row keeps the bytes of by its name",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const shot = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(SIZED_PNG).toString("base64"),
+        };
+        // An image no picture was kept of, as every row written before keeps its bytes.
+        const old = {
+          name: "old.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: shot.data,
+        };
+        // An image whose header states no size, which no picture is kept of.
+        const broken = {
+          name: "broken.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(SIZED_PNG.slice(0, 12)).toString("base64"),
+        };
+        const [kept, refused] = yield* keptHandedImages(target, [shot, broken]);
+        assert.ok(kept?.kept !== undefined && "id" in kept.kept);
+        assert.ok(refused?.kept !== undefined && "omitted" in refused.kept);
+        const attachments = [kept, refused, old];
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "Match these.",
+            clientKey: "with-images",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+            attachments,
+          },
+          Effect.succeed(true),
+        );
+        const handed = eveContent("Match these.", attachments);
+        assert.ok(Array.isArray(handed));
+        const parts = handed.flatMap((part): MessageReceivedPart[] => {
+          if (part.type === "text") return [{ type: "text", text: part.text }];
+          if (part.type !== "file") return [];
+          const name = part.filename === undefined ? undefined : { filename: part.filename };
+          return [{ type: "file", mediaType: part.mediaType, ...name }];
+        });
+        const session = { id: sessionId, auth, turn: { id: "turn_1" } };
+        const state = memoryRelayState();
+        for (const event of [
+          stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 0 } }),
+          stamped({
+            type: "message.received",
+            data: { turnId: "turn_1", sequence: 0, message: "", parts },
+          }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_1", sequence: 0 } }),
+        ]) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const fresh = mintSession();
+        const starting = yield* host.admitStarting(auth, fresh);
+        assert.ok(Result.isSuccess(starting));
+        const seed = yield* host.seed(starting.success);
+
+        assert.ok(seed !== undefined);
+        assert.ok(
+          seed.includes(
+            `Match these. [file: flow.png (image/png), attachment ${kept.kept.id}] [file: broken.png (image/png), not kept as an attachment] [file: old.png (image/png)]`,
+          ),
+          seed,
+        );
       }),
   );
 

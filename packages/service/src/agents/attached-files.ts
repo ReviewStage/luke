@@ -173,10 +173,16 @@ function inlinedFileOf(text: string): FileUIPart | undefined {
   };
 }
 
-/** A receipt's image with what the text part right after it says was kept of it; nothing where that text says nothing of it. */
+/**
+ * A receipt's image with what the text part right after it says was kept of
+ * it, and no bytes where it was kept, as a line's row names one
+ * (`lineParts`); nothing where that text says nothing of it.
+ */
 function keptOnto(image: FileUIPart, text: string): FileUIPart | undefined {
   const kept = keptImageOfLine(image.filename ?? "", text);
-  return kept === undefined ? undefined : { ...image, providerMetadata: keptImageMetadata(kept) };
+  if (kept === undefined) return undefined;
+  const url = "id" in kept ? "" : image.url;
+  return { ...image, url, providerMetadata: keptImageMetadata(kept) };
 }
 
 /**
