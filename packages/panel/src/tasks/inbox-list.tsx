@@ -1550,9 +1550,9 @@ function ListHead({
   );
 }
 
-/** What a list its search left empty says. */
-function noMatch(searched: string): string {
-  return `No items match “${searched.trim()}”.`;
+/** What a list its search left empty says, under its rows, on the window's Inbox and a task's own alike. */
+export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
+  return <p className="sidebar-note">{`No items match “${searched.trim()}”.`}</p>;
 }
 
 /** What the list says where a task's read did not answer. */
@@ -1617,7 +1617,7 @@ export function InboxListNote({
   }
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
-  if (searched !== undefined) return <p className="sidebar-note">{noMatch(searched)}</p>;
+  if (searched !== undefined) return <SearchEmpty searched={searched} />;
   if (filteredOut !== undefined)
     return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
@@ -1649,7 +1649,7 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
-  /** The list's search, which its head's magnifier opens; none where the list offers none, as a task's own Inbox does. */
+  /** The list's search, which its head's magnifier opens, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
 }
 

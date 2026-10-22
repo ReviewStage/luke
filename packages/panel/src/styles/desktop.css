@@ -5795,7 +5795,7 @@ ul.actor-stack {
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
 .side-panel-content .draft-fork-dock,
-.side-panel-content .agent-composer:not(.chat-composer) {
+.side-panel-content .agent-tab-foot .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
 
