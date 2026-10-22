@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { RemoveIcon } from "../../face/glyphs.js";
+import { useRemoval } from "../../use-removal.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
 
@@ -12,7 +13,10 @@ import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
  * the file where `onOpen` is given, named "Open <name>"; a file with nothing
  * to open is drawn the same, pressing nothing. Where `onRemove` is given the
  * chip carries its way off on its corner, a real button named
- * "Remove <name>", unavailable while `removeDisabled` holds.
+ * "Remove <name>", unavailable while `removeDisabled` holds. A chip with a
+ * way off was added to what it comes along with, so it springs in as it
+ * arrives and, its way off pressed, scales out before its caller is asked to
+ * take it (`useRemoval`), so it is never taken on the frame of the press.
  *
  * A file whose bytes are still read stands as a thumbnail's place holding
  * the spinner, said to a reader as reading the file. One that failed to
@@ -107,6 +111,7 @@ export function AttachmentChip({
   failure?: string | undefined;
 }): React.JSX.Element {
   const ready = state === ATTACHMENT_CHIP_STATE.READY;
+  const removal = useRemoval(onRemove);
   const face = (
     <ChipFace
       state={state}
@@ -124,8 +129,12 @@ export function AttachmentChip({
     (state === ATTACHMENT_CHIP_STATE.FAILED && failure === undefined && detail === undefined);
   return (
     <li
+      ref={removal.ref}
       className="luke-attachment-chip"
       data-image={thumbnail ? "true" : undefined}
+      data-removable={onRemove === undefined ? undefined : "true"}
+      data-leaving={removal.leaving ? "true" : undefined}
+      inert={removal.leaving}
       data-state={state}
       title={name}
     >
@@ -147,7 +156,7 @@ export function AttachmentChip({
           className="luke-attachment-chip-remove"
           aria-label={`Remove ${name}`}
           disabled={removeDisabled === true}
-          onClick={onRemove}
+          onClick={removal.remove}
         >
           <RemoveIcon />
         </button>

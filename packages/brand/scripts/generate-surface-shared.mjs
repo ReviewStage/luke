@@ -58,6 +58,9 @@ const MOTION_DELAY_MS = {
   // How long a state that often heals at once (a dropped connection being
   // made again) holds before it is shown, so a blip is never seen.
   LATE: 1000,
+  // How long a confirmation that a write landed (an autosave's Saved)
+  // stands before it fades.
+  CONFIRM: 1200,
 };
 const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
 // The desktop window's panes (the sidebar, the side panel) open and close on
@@ -145,6 +148,7 @@ function uiMotionTokensCss() {
   --luke-row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
   --luke-hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
   --luke-late-delay: ${ms(MOTION_DELAY_MS.LATE)};
+  --luke-confirm-delay: ${ms(MOTION_DELAY_MS.CONFIRM)};
 }
 `;
 }

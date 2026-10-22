@@ -237,7 +237,17 @@ function InboxFormField({
     case INBOX_FIELD.TEXT:
       return (
         <div {...fieldFrame(field, readOnly)}>
-          <FormField label={<FieldLabel field={field} />}>
+          <FormField
+            label={<FieldLabel field={field} />}
+            count={
+              readOnly
+                ? undefined
+                : {
+                    length: value === undefined ? 0 : String(value).length,
+                    limit: INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS,
+                  }
+            }
+          >
             {(control) => {
               const words = value === undefined ? "" : String(value);
               const onChange = (typed: string | undefined) =>

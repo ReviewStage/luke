@@ -17,6 +17,7 @@ import {
   Button,
   EllipsisIcon,
   IconButton,
+  SavedTick,
   TEXT_BUTTON_LINES,
   TextButton,
   Tooltip,
@@ -321,11 +322,14 @@ function PlanByline({
   task,
   edit,
   place,
+  saves,
   onShowHistory,
 }: {
   task: Task;
   edit: PlanLastEdit | undefined;
   place: EditPlace;
+  /** How many of the reader's saves of this plan landed, which its Saved tick confirms. */
+  saves: number;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
@@ -353,6 +357,7 @@ function PlanByline({
           </>
         )
       }
+      saved={<SavedTick saves={saves} />}
     />
   );
 }
@@ -1339,7 +1344,13 @@ export const PlanBody = memo(function PlanBody({
                   <TaskStandingChips task={task} onSet={taskStanding.onSet} />
                 )}
                 {underTitle}
-                <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+                <PlanByline
+                  task={task}
+                  edit={edited}
+                  place={place}
+                  saves={editing.saves}
+                  onShowHistory={onShowHistory}
+                />
                 <ChangedLine looks={looks} marks={marks} />
               </>
             ) : null}

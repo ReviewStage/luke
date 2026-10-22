@@ -5,11 +5,13 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../../index.js";
+import { holdExits } from "../../testing/held-exits.js";
 
 /**
  * chip.test.ts -- a row of filter chips announces the one pressed, and a
  * press moves it there; a chip drawn as its mark alone keeps its words as
- * its name; a removable chip's × alone is a press, which lifts it; and a
+ * its name; a removable chip's × alone is a press, which lifts it once the
+ * chip has scaled out, and a lift its caller refuses leaves it standing; and a
  * compact count says it is busy while the change it made is out. A chip's
  * words fade out at their end only while the chip cuts them short, and a
  * long name cut in its middle keeps its end.
@@ -149,6 +151,46 @@ test("a removable chip is no press of its own, and its × named for what it does
   assert.ok(document.body.textContent?.includes("Created by me"));
   act(() => buttons[0]?.click());
   assert.equal(document.body.textContent, "");
+});
+
+test("a removable chip pressed off stays drawn, leaving and inert, until its exit is done, then is lifted", () => {
+  const exits = holdExits();
+  try {
+    render(createElement(Removable));
+    const chipBox = () => document.querySelector(".luke-chip");
+    act(() => document.querySelector("button")?.click());
+    assert.equal(chipBox()?.getAttribute("data-leaving"), "true");
+    assert.equal(chipBox()?.hasAttribute("inert"), true);
+    assert.ok(document.body.textContent?.includes("Created by me"), "drawn through its exit");
+    act(() => exits.finish());
+    assert.equal(document.body.textContent, "");
+  } finally {
+    exits.restore();
+  }
+});
+
+test("a removable chip whose caller keeps it after its exit stands again", () => {
+  const exits = holdExits();
+  const asked: string[] = [];
+  try {
+    render(
+      createElement(Chip, {
+        look: CHIP_LOOK.FILTER,
+        removeLabel: "Show everyone's tasks",
+        onRemove: () => asked.push("lift"),
+        children: "Created by me",
+      }),
+    );
+    act(() => document.querySelector("button")?.click());
+    assert.deepEqual(asked, []);
+    act(() => exits.finish());
+    assert.deepEqual(asked, ["lift"]);
+    const chipBox = document.querySelector(".luke-chip");
+    assert.equal(chipBox?.getAttribute("data-leaving"), null);
+    assert.equal(chipBox?.hasAttribute("inert"), false);
+  } finally {
+    exits.restore();
+  }
 });
 
 /** A reaction's count as a compact filter whose press gives the reader's own and waits until it is answered. */

@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { holdExits } from "../../testing/held-exits.js";
 import { ATTACHMENT_CHIP_STATE, AttachmentChip } from "./attachment-chip.js";
 
 /**
  * attachment-chip.test.ts -- a chip with an open opens its file on a press
  * or a key, one without presses nothing, its way off takes the file off by
- * pointer or keyboard and refuses while unavailable, a reader hears each
+ * pointer or keyboard, once the chip has scaled out, and refuses while
+ * unavailable, a reader hears each
  * control by the file's name, and a file still read or failed opens nothing.
  * A file's name fades out at its end only while the chip cuts it short.
  */
@@ -137,6 +139,23 @@ test("the way off takes the file off by pointer and by keyboard, without opening
   pressByKeyboard(button(list, "Remove shot.png"));
   assert.equal(removed, 2);
   assert.equal(opened, 0);
+});
+
+test("the way off holds the chip drawn and inert through its exit, and takes the file off once it is done", () => {
+  const exits = holdExits();
+  let removed = 0;
+  try {
+    const list = drawn({ name: "spec.pdf", onRemove: () => (removed += 1) });
+    act(() => button(list, "Remove spec.pdf").click());
+    const chip = list.querySelector("li");
+    assert.equal(chip?.getAttribute("data-leaving"), "true");
+    assert.equal(chip?.hasAttribute("inert"), true);
+    assert.equal(removed, 0, "not taken on the frame of the press");
+    act(() => exits.finish());
+    assert.equal(removed, 1);
+  } finally {
+    exits.restore();
+  }
 });
 
 test("an unavailable way off refuses its press", () => {

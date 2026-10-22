@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
 import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
+import { useDisclosure } from "../../use-disclosure.js";
 import type { ComboboxField } from "../combobox/use-combobox-field.js";
 
 /**
@@ -20,6 +21,10 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  * (`shortcut`) says how to summon the field while it is empty and the caret
  * elsewhere. And where the caller can clear the query (`onClear`), a clear
  * button stands at the very end while a query does, handing the caret back.
+ * The clear fades and grows in as the first character arrives and fades and
+ * shrinks out once the field is empty again, held through its exit
+ * (`useDisclosure`) and out of reach while it leaves; the chord takes the
+ * end back once it is gone.
  *
  * Its keys are the caller's: Enter, Shift-Enter, and Escape each answer
  * their callback where one is given, and never while an input method is
@@ -123,6 +128,7 @@ export function SearchField({
     [],
   );
   const empty = value.length === 0;
+  const clear = useDisclosure(onClear !== undefined && !empty);
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (combobox !== undefined) {
@@ -163,13 +169,16 @@ export function SearchField({
         </span>
       )}
       {trailing}
-      {onClear !== undefined && !empty ? (
+      {clear.mounted ? (
         <button
+          ref={clear.ref}
           type="button"
           className="luke-search-field-clear"
           aria-label="Clear search"
+          data-leaving={clear.leaving ? "true" : undefined}
+          inert={clear.leaving}
           onClick={() => {
-            onClear();
+            onClear?.();
             field.current?.focus();
           }}
         >

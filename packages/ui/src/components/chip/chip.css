@@ -232,6 +232,39 @@
     --luke-chip-ink: var(--luke-color-text);
   }
 
+  /* A removable chip was added to the field it stands in, so it springs in
+     from a smaller size as it arrives, its opacity over the quick beat and
+     its scale on the fast spring; its × pressed, it scales out over the
+     exit before its caller takes it (`use-removal.ts`). */
+  .luke-chip[data-removable="true"] {
+    animation:
+      luke-chip-fade-in var(--luke-duration-quick) ease-out backwards,
+      luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  .luke-chip[data-removable="true"][data-leaving="true"] {
+    animation: luke-chip-pop-out var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  }
+
+  @keyframes luke-chip-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-chip-pop {
+    from {
+      transform: scale(0.6);
+    }
+  }
+
+  @keyframes luke-chip-pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+
   .luke-chip-remove {
     display: grid;
     flex: none;

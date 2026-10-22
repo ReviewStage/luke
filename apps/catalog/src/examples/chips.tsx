@@ -1,6 +1,8 @@
 import {
   BADGE_TONE,
   Badge,
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_TONE,
@@ -23,7 +25,8 @@ import { CatalogSection } from "../section";
  * menu open, unavailable, and with a long name in a narrow column; a row of
  * filters, one pressed at a time; a row of compact counts, one pressed and
  * one busy; each tone, and each in a compact pill beside a badge of its size; each width; a chip drawn as
- * its mark alone; a name in the code face; and a removable filter.
+ * its mark alone; a name in the code face; and removable filters, each
+ * springing in as one is added and scaling out as its × lifts it.
  */
 
 const FILTERS = ["All", "Tasks", "Agents", "Files"] as const;
@@ -86,12 +89,28 @@ function CompactRow(): React.JSX.Element {
   );
 }
 
-/** A row of removable filters, each lifted by its ×, and all of them back once none stands. */
+/** The filters the removable row can stand, in the order Add one brings them. */
+const FILTER_NAMES = ["Created by me", "Archived", "Assigned to me", "Due this week"] as const;
+
+/**
+ * A row of removable filters, each springing in as Add one brings it and
+ * scaling out as its × lifts it, and the first two back once none stands.
+ */
 function RemovableRow(): React.JSX.Element {
-  const [standing, setStanding] = useState<readonly string[]>(["Created by me", "Archived"]);
-  const shown = standing.length === 0 ? ["Created by me", "Archived"] : standing;
+  const [standing, setStanding] = useState<readonly string[]>(FILTER_NAMES.slice(0, 2));
+  const shown = standing.length === 0 ? FILTER_NAMES.slice(0, 2) : standing;
+  const next = FILTER_NAMES.find((name) => !shown.includes(name));
   return (
     <Inline gap={GAP.TIGHT}>
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        disabled={next === undefined}
+        onClick={() => {
+          if (next !== undefined) setStanding([...shown, next]);
+        }}
+      >
+        Add one
+      </Button>
       {shown.map((each) => (
         <Chip
           key={each}
