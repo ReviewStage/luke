@@ -9,6 +9,8 @@ import {
   ListRow,
   PencilIcon,
   PinIcon,
+  RowHint,
+  RowHintOptions,
   UnarchiveIcon,
   UnpinIcon,
   useMenu,
@@ -28,7 +30,6 @@ import { RelativeTime } from "../tasks/relative-time.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
-import { RowHint, RowHintOptions } from "../tooltip.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";

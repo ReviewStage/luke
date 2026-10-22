@@ -10,6 +10,7 @@ import {
   NavItem,
   TaskStatusMark,
   TextButton,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
@@ -36,7 +37,6 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import type { CountNoun } from "./sidebar-group-header.js";
 import type { TaskListViewControl } from "./task-list-view.js";

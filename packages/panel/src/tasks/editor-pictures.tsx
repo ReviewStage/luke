@@ -3,7 +3,14 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, ErrorState, FormField, TextField, useFilePicker } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  ErrorState,
+  FoldingButton,
+  FormField,
+  TextField,
+  useFilePicker,
+} from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -11,7 +18,6 @@ import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { encodeImage } from "../feedback-images.js";
-import { FoldingButton } from "../folding-button.js";
 import { PictureBlock } from "../picture-block.js";
 import type {
   PictureNode,

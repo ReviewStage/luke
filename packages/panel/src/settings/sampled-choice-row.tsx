@@ -43,11 +43,11 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef, useState } from "react";
-import { Tooltip } from "../tooltip.js";
 import { ChangedMark } from "./marks.js";
 import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
 

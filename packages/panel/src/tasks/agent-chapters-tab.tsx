@@ -38,6 +38,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
 } from "@luke/ui";
 import {
   ArrowLeftIcon,
@@ -52,7 +53,6 @@ import {
 import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
   type ChangesReads,

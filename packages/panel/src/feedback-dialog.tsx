@@ -46,10 +46,12 @@ import {
   ErrorState,
   IconButton,
   ImageIcon,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
   TextArea,
+  Tooltip,
   useFilePicker,
 } from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -57,9 +59,7 @@ import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { Shortcut } from "./shortcut.js";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * Each kind in its own words: the title its dialog carries, the field's

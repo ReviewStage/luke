@@ -15,6 +15,7 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -26,7 +27,6 @@ import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
-import { Tooltip } from "../tooltip.js";
 import {
   GITHUB_ISSUES_STANDING,
   type GitHubIssuesStanding,

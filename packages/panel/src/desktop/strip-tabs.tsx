@@ -11,6 +11,7 @@ import {
   PlusIcon,
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
+  Tooltip,
   UnpinIcon,
   useMenu,
 } from "@luke/ui";
@@ -28,7 +29,6 @@ import {
   transcriptMarkdown,
 } from "../tasks/transcript-copy.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { MenuTab } from "./tab-strip.js";
 

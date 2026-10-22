@@ -14,15 +14,15 @@ import {
   MenuSurface,
   SEARCH_FIELD_LOOK,
   SearchField,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   useComboboxField,
 } from "@luke/ui";
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Shortcut } from "./shortcut.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * searchable-menu.tsx -- the one picker menu the repository chip, the Start button, and the side panel's "+" drop, and Settings' menus may.

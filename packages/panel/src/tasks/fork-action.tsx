@@ -1,13 +1,12 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { IconButton, TextButton } from "@luke/ui";
+import { IconButton, TextButton, Tooltip } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
 import { createContext, Fragment, type ReactNode, useContext } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { MessageAction } from "../ai-elements/message.js";
-import { Tooltip } from "../tooltip.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { agentActor, agentTabLabel } from "./coding-agent-model.js";
 import { type AgentFork, FORK_WORDS, type ForkCut, forksOf, messageOpening } from "./fork-model.js";

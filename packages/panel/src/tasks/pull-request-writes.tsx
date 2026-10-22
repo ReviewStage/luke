@@ -30,6 +30,7 @@ import {
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
@@ -44,7 +45,6 @@ import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
-import { Tooltip } from "../tooltip.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 

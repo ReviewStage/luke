@@ -1,8 +1,7 @@
 import type { Workspace } from "@luke/features/workspace-wire";
-import { HoverCard, HoverCardHead } from "@luke/ui";
+import { HoverCard, HoverCardHead, Tooltip } from "@luke/ui";
 import type { ReactNode } from "react";
 import { FadingWords } from "../fading-words.js";
-import { Tooltip } from "../tooltip.js";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
 /**

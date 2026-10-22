@@ -24,12 +24,15 @@ import {
   HoverCardRule,
   IconButton,
   INLINE_REF_LOOK,
+  InlineRef,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   LIST_ROW_META,
   List,
   ListRow,
+  RowHint,
+  RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
   SearchField,
@@ -38,6 +41,7 @@ import {
   Skeleton,
   SkeletonRegion,
   TaskStatusMark,
+  Tooltip,
   useMenu,
   VisuallyHidden,
 } from "@luke/ui";
@@ -97,10 +101,8 @@ import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
-import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { TaskChipCard } from "./chip-cards.js";

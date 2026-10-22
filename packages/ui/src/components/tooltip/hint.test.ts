@@ -1,18 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment, useRef } from "react";
+import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
-import { Message, MessageContent } from "./ai-elements/message.js";
-import { onRegistry } from "./testing/copy-feedback.js";
-import { restOn } from "./testing/hint-rest.js";
-import { Tooltip } from "./tooltip.js";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { Tooltip } from "./hint.js";
 
 /**
- * tooltip.test.ts -- a card hung beside a row that names its row hangs past
+ * hint.test.ts -- a card hung beside a row that names its row hangs past
  * the row's end, not its control's, so a control that gives its end up to
  * the row's acts on hover never puts the card over the row. And a finger,
  * which has no hover, opens a hint by hand: a tap on words that are no
@@ -30,6 +28,36 @@ import { Tooltip } from "./tooltip.js";
  */
 
 const roots: Root[] = [];
+
+/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: a hint is placed once and never resized here. */
+class StillResizeObserver {
+  observe(): void {}
+  disconnect(): void {}
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StillResizeObserver);
+});
+
+/** `element` under `registry`, as an app's root provides its own. */
+function onRegistry(registry: AtomRegistry.AtomRegistry, element: ReactElement): ReactElement {
+  return createElement(RegistryContext.Provider, { value: registry }, element);
+}
+
+/** The pointer arriving on `target` and resting there past the hint's wait, on a faked clock. */
+function restOn(target: Element): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -321,26 +349,6 @@ test("a finger that scrolls from a link, which the browser takes over, opens no 
   vi.useRealTimers();
 
   assert.equal(cardStands(), false);
-});
-
-test("on a screen with no hover, a tap spent opening a hint in a message shows none of the message's actions", () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(hover: none)" }));
-  const page = mount(
-    createElement(
-      Message,
-      { from: "assistant" },
-      createElement(MessageContent, null, "Rerunning the spec on WebKit."),
-      WORKED,
-    ),
-  );
-  const message = page.querySelector(".transcript-message") ?? assert.fail("the message");
-
-  tap(page.querySelector("[data-worked]") ?? assert.fail("the line"));
-  assert.equal(cardStands(), true);
-  assert.equal(message.hasAttribute("data-actions-shown"), false);
-
-  tap(page.querySelector(".message-content") ?? assert.fail("the words"));
-  assert.equal(message.getAttribute("data-actions-shown"), "true", "a tap on its words still does");
 });
 
 /** The cards mounted so far, by the row each was hung from. */

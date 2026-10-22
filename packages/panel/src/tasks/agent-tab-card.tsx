@@ -36,7 +36,7 @@ import { WorkingTime } from "./working-time.js";
 /**
  * agent-tab-card.tsx -- the card an agent's or a subagent's tab hangs while the pointer rests on it: its whole name, when it last moved, and one line of what it last did.
  *
- * The card stands in the tab's hint's place (`tooltip.tsx`), so it waits,
+ * The card stands in the tab's hint's place (`@luke/ui`'s `Tooltip`), so it waits,
  * warms, and goes as a hint does, and an agent's and a subagent's are laid
  * out alike. Its head is the name, wrapped to two lines, or, for a subagent
  * not yet titled, its task on one line faded where it is cut short, as a

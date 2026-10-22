@@ -45,6 +45,7 @@ import {
   Stack,
   TEXT_TONE,
   Text,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import {
@@ -69,7 +70,6 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TextLink } from "../text-link.js";
-import { Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   AgentActorRef,
@@ -1834,7 +1834,7 @@ function Crumbs({
   ].filter((crumb) => crumb !== undefined);
   return (
     <div className="inbox-crumbs">
-      <Breadcrumbs label="Path" crumbs={crumbs} hint={Tooltip} />
+      <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
 }

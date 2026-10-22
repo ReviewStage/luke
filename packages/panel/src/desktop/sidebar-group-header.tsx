@@ -1,6 +1,11 @@
-import { type ContextMenuProps, NAV_COUNT_SHOWN, NAV_ITEM_VARIANT, NavItem } from "@luke/ui";
+import {
+  type ContextMenuProps,
+  NAV_COUNT_SHOWN,
+  NAV_ITEM_VARIANT,
+  NavItem,
+  Tooltip,
+} from "@luke/ui";
 import type { ReactNode } from "react";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * sidebar-group-header.tsx -- the header a group of rows folds under: the sidebar's repositories and creators, the Inbox's plans, and the summary's archived agents alike.

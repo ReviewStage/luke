@@ -1,8 +1,7 @@
-import { DisclosureChevron, useDisclosureState } from "@luke/ui";
+import { DisclosureChevron, Tooltip, useDisclosureState } from "@luke/ui";
 import { MessageSquareIcon } from "lucide-react";
 import type { AnimationEvent, ReactNode } from "react";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * annotation-card.tsx -- one card for whatever is written on lines of code: a review thread in Files changed and in the Conversation, and an agent's note on lines of a File tab.

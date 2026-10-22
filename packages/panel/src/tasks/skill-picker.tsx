@@ -10,6 +10,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import {
   holdsSlashWord,
@@ -31,7 +32,6 @@ import type {
   ComposerEditorHandle,
   ComposerTrigger,
 } from "../plan-editor/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
 import { SkillCard } from "./skill-ref.js";
 

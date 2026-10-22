@@ -51,6 +51,7 @@ import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
+import { SHORTCUTS_EXAMPLE } from "./examples/shortcuts";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
@@ -119,6 +120,7 @@ export const EXAMPLES: readonly Example[] = [
   TEXT_LINKS_EXAMPLE,
   LINE_BUTTONS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
+  SHORTCUTS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
   TABS_EXAMPLE,

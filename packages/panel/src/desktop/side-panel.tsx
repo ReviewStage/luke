@@ -34,6 +34,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import {
   agentOfTab,
@@ -141,7 +142,6 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
-import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import type { MenuAction } from "./action-menu.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";

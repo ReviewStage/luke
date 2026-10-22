@@ -1,12 +1,11 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
-import { TEXT_ELEMENT, TEXT_VARIANT, Text, WaveformIcon } from "@luke/ui";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text, Tooltip, WaveformIcon } from "@luke/ui";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { PhoneOffIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { usePerson } from "../member-directory.js";
-import { Tooltip } from "../tooltip.js";
 import { callHeading, useMinute } from "./task-time.js";
 import { RUN_CARD, RunCard } from "./turn-card.js";
 import { WORKED_SEPARATOR, workingTime } from "./working-time.js";

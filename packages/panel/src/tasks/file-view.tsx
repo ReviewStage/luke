@@ -7,6 +7,7 @@ import {
   IconButton,
   ProviderMark,
   SidePanelIcon,
+  Tooltip,
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import {
@@ -34,7 +35,6 @@ import {
   useResizableEdge,
 } from "../desktop/use-resizable-edge.js";
 import type { ReadFolder } from "../file-tree/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileMenu } from "./file-menu.js";
 import type { FileNotes } from "./file-note.js";

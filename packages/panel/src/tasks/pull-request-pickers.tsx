@@ -15,12 +15,12 @@ import {
   Button,
   cssCustomProperties,
   dropBelowStart,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { PlusIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { Tooltip } from "../tooltip.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**

@@ -10,6 +10,7 @@ import {
   MicrophoneOffIcon,
   SpeakerIcon,
   SpeakerOffIcon,
+  Tooltip,
   VideoIcon,
   VideoOffIcon,
   WaveformIcon,
@@ -28,7 +29,6 @@ import { useAct } from "../act.js";
 import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
 import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
-import { Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";
 import { useStandingVoiceView } from "../use-voice-view.js";
 import { CALL_CONTROL_LABEL } from "./tasks-parts.js";

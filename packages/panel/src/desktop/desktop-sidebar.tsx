@@ -18,6 +18,7 @@ import {
   BUTTON_SIZE,
   Button,
   ComposeIcon,
+  commandKeyshortcuts,
   dropBelowStart,
   EllipsisIcon,
   ErrorState,
@@ -35,8 +36,10 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SearchIcon,
+  Shortcut,
   Skeleton,
   SkeletonRegion,
+  Tooltip,
   UnpinIcon,
   useMenu,
   useTouchHold,
@@ -103,7 +106,6 @@ import type { HistoryStep, NavigationHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Shortcut } from "../shortcut.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { useMinute } from "../tasks/task-time.js";
@@ -111,7 +113,6 @@ import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { welcomed } from "./desktop-welcome.js";

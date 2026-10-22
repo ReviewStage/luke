@@ -1,5 +1,5 @@
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
-import { IconButton } from "@luke/ui";
+import { IconButton, Tooltip } from "@luke/ui";
 import {
   BoldIcon,
   CodeIcon,
@@ -20,7 +20,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Tooltip } from "../tooltip.js";
 import {
   MARKDOWN_FORMAT,
   type MarkdownEdit,

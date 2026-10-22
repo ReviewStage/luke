@@ -10,10 +10,12 @@ import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
   BUTTON_SIZE,
+  commandKeyshortcuts,
   EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FoldingButton,
   IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -23,10 +25,12 @@ import {
   RetryRowLabel,
   SCROLL_FADE,
   ScrollArea,
+  Shortcut,
   Skeleton,
   SkeletonRegion,
   TEXT_BUTTON_LINES,
   TextButton,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -39,10 +43,8 @@ import { ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
-import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Shortcut } from "../shortcut.js";
 import { BusyLabel } from "../spinner.js";
 import { centreWithin } from "../tasks/code-pane.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
@@ -72,7 +74,6 @@ import {
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view.js";
-import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";

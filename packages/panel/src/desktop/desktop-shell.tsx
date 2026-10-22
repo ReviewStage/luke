@@ -8,6 +8,7 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   ComposeIcon,
+  commandKeyshortcuts,
   DetailPage,
   IconButton,
   NavItem,
@@ -15,8 +16,10 @@ import {
   ScrollArea,
   SettingsPage,
   SettingsSectionsSkeleton,
+  Shortcut,
   SidebarIcon,
   Skeleton,
+  Tooltip,
 } from "@luke/ui";
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -30,7 +33,6 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history.js"
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Shortcut } from "../shortcut.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
@@ -43,7 +45,6 @@ import {
   type AutomationsPlace,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import {
   useAdminAccess,
   useAdminAccessPending,

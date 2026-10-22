@@ -1,6 +1,6 @@
 import { useAtomSet } from "@effect/atom-react";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, Button, IconButton, MenuSurface } from "@luke/ui";
+import { BUTTON_SIZE, Button, IconButton, MenuSurface, Tooltip } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Duration, Effect } from "effect";
@@ -11,7 +11,6 @@ import { useAppCommand } from "../app-commands.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
 import type { ComposerQuote } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * reply-to-selection.tsx -- words selected in an agent's message answered from its message box: Reply over the selection, and the quote block it lays into the box.

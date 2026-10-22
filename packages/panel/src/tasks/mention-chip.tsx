@@ -32,6 +32,7 @@ import {
   HoverCardHead,
   HoverCardNote,
   INLINE_REF_LOOK,
+  InlineRef,
   ProviderMark,
   UserIcon,
 } from "@luke/ui";
@@ -52,7 +53,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { InlineRef } from "../inline-ref.js";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";

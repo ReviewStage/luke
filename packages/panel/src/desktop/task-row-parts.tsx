@@ -19,6 +19,7 @@ import {
   dropBelowStart,
   TaskPriorityMark,
   TaskStatusMark,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
@@ -28,7 +29,6 @@ import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mar
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 
 /**

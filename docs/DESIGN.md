@@ -32,7 +32,7 @@ and a loop that carries one must answer a play-state token. A finite companion
 timed to a generated face gesture may also use the gesture's literal phase,
 but it must answer `--luke-face-motion`, live beside a comment naming the generated
 cycle and phase it follows, and do no work when that gesture is not selected.
-A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `tooltip.tsx`)
+A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@luke/ui`'s `hint.tsx`)
 names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors.
 
 ## Layout lands at once; motion is transform and opacity

@@ -22,6 +22,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
@@ -36,7 +37,6 @@ import {
   useDraftWriter,
 } from "../composer-drafts.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
 import type { MentionMenuSide } from "./mention-picker.js";

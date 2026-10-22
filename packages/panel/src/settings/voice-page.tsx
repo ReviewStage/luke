@@ -12,6 +12,7 @@ import {
   IconButton,
   SettingsRow,
   SettingsSection,
+  Tooltip,
 } from "@luke/ui";
 import {
   MICROPHONE_UNGRANTED_NOTE,
@@ -19,7 +20,6 @@ import {
   VOICE_KEYLESS_NOTE,
 } from "@luke/voice/microphone-access";
 import type { MicrophoneControl } from "@luke/voice/settings-controls";
-import { Tooltip } from "../tooltip.js";
 import { AttentionMark } from "./marks.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";

@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { cssCustomProperties, IconButton, SearchField } from "@luke/ui";
+import { cssCustomProperties, IconButton, SearchField, Tooltip } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -8,7 +8,6 @@ import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
 import type { ResizableEdgeProps } from "../desktop/use-resizable-edge.js";
 import type { FileMark, FileTreeHandle, FolderEntry, ReadFolder } from "../file-tree/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { entriesOf } from "./folder-listings.js";
 
 /**

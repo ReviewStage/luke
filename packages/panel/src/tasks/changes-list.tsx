@@ -18,6 +18,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
 } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
@@ -33,7 +34,6 @@ import {
 } from "react";
 import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
 import {
   filterFiles,

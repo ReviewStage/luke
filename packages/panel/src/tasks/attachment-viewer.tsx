@@ -7,7 +7,7 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
-import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton } from "@luke/ui";
+import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton, Tooltip } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import {
   ChevronLeftIcon,
@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { useId } from "react";
 import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import {
   IMAGE_OPENING,
