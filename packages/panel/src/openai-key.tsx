@@ -1,4 +1,8 @@
-import { PROVIDER_KEY_PROVIDER, type ProviderKeySummary } from "@luke/features/provider-key-wire";
+import {
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeySummary,
+} from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
@@ -53,11 +57,16 @@ const UNKNOWN_STANDING: OpenAiKeyStanding = {
 
 const OpenAiKeyContext = createContext<OpenAiKeyStanding>(UNKNOWN_STANDING);
 
-/** Whether the keys hold an OpenAI API key, which is all the service asks before it opens a call or hears a clip. */
+/**
+ * Whether the keys hold an OpenAI API key the service can open, which is all
+ * it asks before it opens a call or hears a clip: one it can no longer
+ * decrypt is refused as none, while one OpenAI refused is still tried.
+ */
 function keyOf(keys: readonly ProviderKeySummary[]): OpenAiKey {
-  return keys.some((one) => one.provider === PROVIDER_KEY_PROVIDER.OPENAI)
-    ? OPENAI_KEY.SAVED
-    : OPENAI_KEY.MISSING;
+  const key = keys.find((one) => one.provider === PROVIDER_KEY_PROVIDER.OPENAI);
+  return key === undefined || key.status === PROVIDER_KEY_STATUS.UNREADABLE
+    ? OPENAI_KEY.MISSING
+    : OPENAI_KEY.SAVED;
 }
 
 /** Reads the signed-in account's keys and hands whether it has an OpenAI one to everything under it. */

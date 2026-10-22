@@ -139,6 +139,20 @@ test("with an OpenAI key saved, Call calls and Dictate is offered", async () => 
   assert.deepEqual(page.opened, []);
 });
 
+test("an OpenAI key the service can no longer open counts as none, while one OpenAI refused is still tried", async () => {
+  const unreadable = await mount(() =>
+    Promise.resolve({ keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.UNREADABLE }] }),
+  );
+  assert.equal(unreadable.button(HINT).length, 2);
+  act(() => roots.pop()?.unmount());
+
+  const refused = await mount(() =>
+    Promise.resolve({ keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.INVALID }] }),
+  );
+  assert.equal(refused.button(HINT).length, 0);
+  assert.equal(refused.button("Call").length, 1);
+});
+
 test("until the keys are read, when the read fails, and while no one is signed in, nothing is turned away", async () => {
   const unread = await mount(() => new Promise(ignore));
   assert.equal(unread.button(HINT).length, 0, "a read still out disables nothing");
