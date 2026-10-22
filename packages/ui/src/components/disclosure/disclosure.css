@@ -34,6 +34,7 @@
   .luke-disclosure-summary[data-look="row"] {
     box-sizing: border-box;
     height: 36px;
+    min-height: 36px;
     gap: var(--luke-space-8);
     padding: 0 var(--luke-space-12) 0 var(--luke-space-4);
     border-radius: 0;
