@@ -29,6 +29,10 @@
  * first event number of the launch are kept as the sandbox's tags, which is
  * how a later call finds the runner it writes to.
  *
+ * A message's words go as text and its images as image blocks; any other
+ * file it carries, such as a PDF, is written into the sandbox first, outside
+ * the checkout, and the line names its path (`runnerContent`).
+ *
  * `send` writes the harness's lines and then a message line to that runner
  * while it runs. Where the sandbox stopped or the runner ended, it resumes
  * the sandbox, sets the repository's credential at its firewall again, and
@@ -116,6 +120,7 @@ import {
   deploymentOidcToken,
   type ListedSandbox,
   type NetworkPolicy,
+  type SandboxFile,
   SandboxUnavailable,
   SESSION_TAG,
   SNAPSHOT_GONE_STATUS,
@@ -312,29 +317,73 @@ function sessionIdOf(prefix: string, mintedAt: number): string {
 /** The bearer's bytes before it is spelled, as many as a session key. */
 const BEARER_BYTES = 32;
 
-/** A message's content as the runner's lines carry it: words as text, an image as an image block, any other file named. */
-function runnerContent(message: string | UserContent, harness: string): readonly ContentBlock[] {
-  if (typeof message === "string") return [{ type: "text", text: message }];
-  return message.flatMap((part): ContentBlock[] => {
+/**
+ * Where a message's files that the harness takes no block of are written
+ * in its sandbox, one folder per message line: outside the checkout, so no
+ * commit picks them up, and readable by `agent`, since the API writes them
+ * as its default user with the mode below.
+ */
+const ATTACHMENT_DIRECTORY = "/tmp/luke-attachments";
+
+/** How a file written for the agent is kept: readable by every user, written by none but the API's. */
+const ATTACHMENT_MODE = 0o644;
+
+/** How long a written file's name may be, which a tar header holds whole (`vercel-sandbox-api.ts`'s `tarOf`). */
+const ATTACHMENT_NAME_CHARS = 80;
+
+/** A message line and the files it names, which are written into the running session before the line. */
+export interface RunnerMessage {
+  readonly line: InputLine & { readonly uuid: string };
+  readonly files: readonly SandboxFile[];
+}
+
+/** A file's name as the sandbox's path holds it: a single segment of safe characters, cut short, its extension kept. */
+function attachmentFileName(name: string, at: number): string {
+  const safe = name.replace(/[^A-Za-z0-9._-]+/gu, "-").replace(/^[.-]+/u, "");
+  const dot = safe.lastIndexOf(".");
+  const extension = dot > 0 ? safe.slice(dot).slice(0, 16) : "";
+  const stem = (dot > 0 ? safe.slice(0, dot) : safe).slice(
+    0,
+    ATTACHMENT_NAME_CHARS - extension.length,
+  );
+  return `${at + 1}-${stem === "" ? "attachment" : stem}${extension}`;
+}
+
+/**
+ * A message's content as the runner's lines carry it, and the files it
+ * names: words as text, an image as an image block, and any other file,
+ * such as a PDF, written into the sandbox under the line's own folder and
+ * named by its path, as eve stages a file part in its sandbox. A file whose
+ * bytes are not in the message, a URL elsewhere, is named as not passed.
+ */
+function runnerContent(
+  message: string | UserContent,
+  harness: string,
+  lineId: string,
+): { readonly content: readonly ContentBlock[]; readonly files: readonly SandboxFile[] } {
+  if (typeof message === "string") return { content: [{ type: "text", text: message }], files: [] };
+  const files: SandboxFile[] = [];
+  const content = message.flatMap((part, at): ContentBlock[] => {
     if (part.type === "text") return [{ type: "text" as const, text: part.text }];
-    if (part.type === "file" || part.type === "image") {
-      const mediaType = part.type === "file" ? part.mediaType : (part.mediaType ?? "");
-      const data = part.type === "file" ? part.data : part.image;
-      const base64 = base64Of(data);
-      if (IMAGE_TYPES.has(mediaType) && base64 !== undefined) {
-        return [
-          {
-            type: "image" as const,
-            source: {
-              type: "base64" as const,
-              // SAFETY: the type is one of the four the set holds, which are the protocol's image types.
-              media_type: mediaType as "image/png",
-              data: base64,
-            },
+    if (part.type !== "file" && part.type !== "image") return [];
+    const mediaType = part.type === "file" ? part.mediaType : (part.mediaType ?? "");
+    const data = part.type === "file" ? part.data : part.image;
+    const base64 = base64Of(data);
+    if (IMAGE_TYPES.has(mediaType) && base64 !== undefined) {
+      return [
+        {
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            // SAFETY: the type is one of the four the set holds, which are the protocol's image types.
+            media_type: mediaType as "image/png",
+            data: base64,
           },
-        ];
-      }
-      const name = part.type === "file" ? (part.filename ?? "a file") : "an image";
+        },
+      ];
+    }
+    const name = part.type === "file" ? (part.filename ?? "a file") : "an image";
+    if (base64 === undefined) {
       return [
         {
           type: "text" as const,
@@ -342,8 +391,20 @@ function runnerContent(message: string | UserContent, harness: string): readonly
         },
       ];
     }
-    return [];
+    const path = `${ATTACHMENT_DIRECTORY}/${lineId}/${attachmentFileName(name, at)}`;
+    files.push({
+      path,
+      contents: new Uint8Array(Buffer.from(base64, "base64")),
+      mode: ATTACHMENT_MODE,
+    });
+    return [
+      {
+        type: "text" as const,
+        text: `[${name} (${mediaType}) was attached: it is at ${path} in your sandbox, read it from there]`,
+      },
+    ];
   });
+  return { content, files };
 }
 
 /** A file part's data as base64: a `data:` URL's payload, a string as it stands, or bytes encoded; nothing for a URL elsewhere. */
@@ -604,11 +665,12 @@ export const runnerSessions = <
       sessionId: string,
       agent: CodingAgent,
       sandbox: { readonly name: string; readonly running: string },
-      first: InputLine,
+      first: RunnerMessage,
       resume: string | undefined,
     ) =>
       Effect.gen(function* () {
         const credential = yield* harness.launch(agent);
+        yield* filesWritten(sandbox.running, first);
         const bundle = yield* (yield* RunnerBundle).contents;
         const digest = createHash("sha256").update(bundle).digest("hex");
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
@@ -647,7 +709,7 @@ export const runnerSessions = <
           );
           const config = yield* harness.config(agent, resume, firstSequence);
           yield* api
-            .writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`)
+            .writeStdin(sandbox.running, commandId, `${line(config)}${line(first.line)}`)
             .pipe(
               Effect.tapError(() =>
                 diedAtStart(api, sandbox.running, commandId, [
@@ -678,12 +740,16 @@ export const runnerSessions = <
         );
       });
 
-    /** The message as a line, under Luke's id for it where the caller named one. */
-    const messageLine = (message: EveMessage<Turn>): InputLine & { readonly uuid: string } => ({
-      type: INPUT_LINE.MESSAGE,
-      uuid: message.lineId ?? randomUUID(),
-      content: runnerContent(message.message, harness.name),
-    });
+    /** The message as a line, under Luke's id for it where the caller named one, and the files it names. */
+    const messageLine = (message: EveMessage<Turn>): RunnerMessage => {
+      const uuid = message.lineId ?? randomUUID();
+      const { content, files } = runnerContent(message.message, harness.name, uuid);
+      return { line: { type: INPUT_LINE.MESSAGE, uuid, content }, files };
+    };
+
+    /** The files a message names written into the running session, before its line names them. */
+    const filesWritten = (running: string, message: RunnerMessage) =>
+      message.files.length === 0 ? Effect.void : api.writeFiles(running, message.files);
 
     /** A failure as the log says it and the caller reads it: a refusal's reason, a sandbox's own words, the kind alone for any other. */
     const failed = (call: string) => (failure: { readonly _tag: string }) =>
@@ -719,7 +785,7 @@ export const runnerSessions = <
      * whose launch failed is deleted again, since no conversation records the
      * session that would find it.
      */
-    const openedSandbox = (agent: CodingAgent, sessionId: string, first: InputLine) =>
+    const openedSandbox = (agent: CodingAgent, sessionId: string, first: RunnerMessage) =>
       Effect.gen(function* () {
         const image = yield* AgentSandboxImage;
         const snapshot = yield* image.snapshotId;
@@ -784,7 +850,7 @@ export const runnerSessions = <
         const accepted = {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
           sessionId,
-          deliveryId: sent.uuid,
+          deliveryId: sent.line.uuid,
         } as const;
         const live = yield* liveRunner(api, found.value);
         if (live !== undefined) {
@@ -795,10 +861,11 @@ export const runnerSessions = <
           // by `retune`, which holds the same lease, so it is written after this line, never
           // undone by it.
           const ahead = yield* harness.ahead(agent);
+          yield* filesWritten(live.sandboxSessionId, sent);
           yield* api.writeStdin(
             live.sandboxSessionId,
             live.commandId,
-            [...ahead.lines, sent].map(line).join(""),
+            [...ahead.lines, sent.line].map(line).join(""),
           );
           return accepted;
         }
