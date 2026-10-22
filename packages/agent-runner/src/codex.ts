@@ -515,9 +515,8 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
   if (launch.stopping) return ended(RUNNER_END.STOPPED);
   if (signal.status === "failed")
     return ended(RUNNER_END.FAILED, signal.error ?? "the turn failed");
-  if (signal.status === "interrupted") {
-    return ended(RUNNER_END.FAILED, signal.error ?? "the turn was interrupted");
-  }
+  // Note that a turn interrupted with no Stop of Luke's (Codex's own interrupt) ends as stopped, as eve's cancelled turn does, so it offers no Continue.
+  if (signal.status === "interrupted") return ended(RUNNER_END.STOPPED);
   const unanswered = [...launch.sent.values(), ...launch.waiting];
   launch.sent.clear();
   launch.waiting = [];

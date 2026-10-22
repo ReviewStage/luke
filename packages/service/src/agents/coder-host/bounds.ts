@@ -161,6 +161,15 @@ export const CODER = {
     WAIT: Duration.minutes(2),
     POLL: Duration.millis(250),
   },
+  /**
+   * How long a message sent while a Stop ends the runner's turn waits for
+   * that runner to end, checking every `POLL`, before it relaunches the
+   * session on the message; past it the message is refused as not ready.
+   */
+  STOPPING_RUNNER: {
+    WAIT: Duration.seconds(15),
+    POLL: Duration.millis(500),
+  },
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

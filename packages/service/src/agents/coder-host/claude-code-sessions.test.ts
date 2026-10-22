@@ -25,6 +25,7 @@ import { saveProviderKey, setPlanStatus } from "@luke/database/models/provider-k
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { turns } from "@luke/database/schemas/storage";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
   PROVIDER_KEY_KIND,
@@ -32,6 +33,7 @@ import {
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import {
   Clock,
   DateTime,
@@ -471,6 +473,56 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         { type: INPUT_LINE.STOP, launch: 0 },
       ]);
     }),
+  );
+
+  it.effect(
+    "a message sent while a Stop ends the turn waits for the runner to end and relaunches on it as a turn of its own, never joining the stopping turn",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        const stopping = yield* turnUnderWay(userId, agent);
+        const db = yield* Database;
+        yield* db
+          .update(turns)
+          .set({ cancelRequestedAt: yield* DateTime.nowAsDate })
+          .where(eq(turns.id, stopping));
+        const runner = api.commands[0] ?? assert.fail("the runner launched");
+
+        const sending = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Now the emails.")),
+        );
+        // The runner takes the Stop and ends, as the CLI's result lands.
+        const stopWritten = () =>
+          (linesOf(runner) as InputLine[]).some((each) => each.type === INPUT_LINE.STOP);
+        for (let turnOfLoop = 0; turnOfLoop < 1000 && !stopWritten(); turnOfLoop++) {
+          yield* Effect.promise(() => new Promise((settle) => setImmediate(settle)));
+        }
+        assert.ok(stopWritten(), "the send wrote the Stop again to the stopping runner");
+        runner.exitCode = 0;
+        yield* TestClock.adjust(CODER.STOPPING_RUNNER.POLL);
+        const sent = yield* Fiber.join(sending);
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(
+          (linesOf(runner) as InputLine[]).filter((each) => each.type === INPUT_LINE.MESSAGE)
+            .length,
+          1,
+          "the stopping runner took no message past its first",
+        );
+        assert.equal(api.commands.length, 2);
+        const [config, line] = linesOf(api.commands[1]) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(line.content, [{ type: "text", text: "Now the emails." }]);
+      }),
   );
 
   it.effect(

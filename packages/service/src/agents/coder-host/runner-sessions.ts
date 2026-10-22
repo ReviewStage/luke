@@ -87,7 +87,7 @@ import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wa
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { UserContent } from "ai";
-import { Clock, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
+import { Clock, Data, DateTime, Duration, Effect, Option, Result, Schedule, Stream } from "effect";
 import type { HostedEnvironment } from "../../environment.js";
 import {
   AgentSandboxImage,
@@ -769,6 +769,50 @@ export const runnerSessions = <
         }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
       });
 
+    /** Whether the conversation's turn under way has a Stop asked of it. */
+    const turnStopping = (conversationId: string) =>
+      Effect.map(latestTurnsOfReached([conversationId]), (turns) => {
+        const turn = turns.get(conversationId);
+        return (
+          turn !== undefined &&
+          turn.cancelRequestedAt !== null &&
+          RUNNING_TURN_STATUSES.has(turn.status)
+        );
+      });
+
+    /**
+     * The session's sandbox once a runner whose turn a Stop ends has ended:
+     * the Stop written again, which a runner already stopping takes as it
+     * took the first, the runner waited on, and the sandbox read afresh, as
+     * its END stopped it. The sandbox as it stood where no turn is stopping,
+     * and none where the runner outlived the wait.
+     */
+    const stoppedRunnerEnded = (
+      sessionId: string,
+      sandbox: ListedSandbox,
+      conversationId: string,
+    ) =>
+      Effect.gen(function* () {
+        const live = yield* liveRunner(api, sandbox);
+        if (live === undefined || !(yield* turnStopping(conversationId))) {
+          return Option.some(sandbox);
+        }
+        yield* api.writeStdin(
+          live.sandboxSessionId,
+          live.commandId,
+          line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
+        );
+        const ended = yield* api.commandExit(live.sandboxSessionId, live.commandId).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced(CODER.STOPPING_RUNNER.POLL),
+            until: (exit) => exit !== null,
+          }),
+          Effect.timeoutOption(CODER.STOPPING_RUNNER.WAIT),
+        );
+        if (Option.isNone(ended)) return Option.none();
+        return Option.some(Option.getOrElse(yield* sandboxOf(api, sessionId), () => sandbox));
+      });
+
     /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
     const sendHolding = (sessionId: string, message: EveMessage<Turn>) =>
       Effect.gen(function* () {
@@ -786,7 +830,12 @@ export const runnerSessions = <
           sessionId,
           deliveryId: sent.uuid,
         } as const;
-        const live = yield* liveRunner(api, found.value);
+        // Note that a runner whose turn a Stop ends would take the message into the turn it drops,
+        // so the message waits for that runner to end and opens a turn of its own.
+        const settled = yield* stoppedRunnerEnded(sessionId, found.value, agent.conversationId);
+        if (Option.isNone(settled)) return { outcome: EVE_SEND_OUTCOME.NOT_READY } as const;
+        const sandbox = settled.value;
+        const live = yield* liveRunner(api, sandbox);
         if (live !== undefined) {
           // The installation token lives an hour, so each message sets a fresh one; and the
           // harness's lines (the agent's model and effort as they stand) go ahead of the message, which a change since the launch takes effect from.
@@ -804,8 +853,8 @@ export const runnerSessions = <
         }
         // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
-        yield* capSandboxTimeout(api, found.value);
-        const resumed = yield* Effect.result(api.resume(found.value.name));
+        yield* capSandboxTimeout(api, sandbox);
+        const resumed = yield* Effect.result(api.resume(sandbox.name));
         if (Result.isFailure(resumed)) {
           if (resumed.failure.status !== SNAPSHOT_GONE_STATUS) return yield* resumed.failure;
           // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
@@ -818,7 +867,7 @@ export const runnerSessions = <
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
           yield* openedSandbox(agent, sessionId, sent);
           yield* api
-            .deleteSandbox(found.value.name)
+            .deleteSandbox(sandbox.name)
             .pipe(
               Effect.catch((failure) =>
                 Effect.logWarning(
@@ -835,7 +884,7 @@ export const runnerSessions = <
         const resume = Option.getOrUndefined(
           Option.flatMapNullishOr(routing, (read) => read.nativeSession),
         );
-        yield* launch(sessionId, agent, { name: found.value.name, running }, sent, resume);
+        yield* launch(sessionId, agent, { name: sandbox.name, running }, sent, resume);
         return accepted;
       });
 

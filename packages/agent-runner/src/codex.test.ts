@@ -311,6 +311,28 @@ it.effect("interrupts the running turn on a stop and ends the launch as stopped"
   }),
 );
 
+it.effect("ends the launch as stopped when Codex interrupts its turn with no stop of Luke's", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke("sleep 600");
+    // The `sleep 600` turn, its interrupted end told with no turn/interrupt asked for.
+    const interruptedEnd = exchange(FIRST, 6).reply.filter((line) => line.method !== undefined);
+    const sleep = exchange(FIRST, 5);
+    const script: Script = {
+      exchanges: [...OPEN, { ...sleep, reply: [...sleep.reply, ...interruptedEnd] }],
+    };
+    const { spawned, write, run } = yield* launch([script], luke);
+    yield* write(CONFIG);
+    yield* write(message("Run `sleep 600` and wait for it to finish."));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+    assert.deepEqual(received(spawned[0], "turn/interrupt"), []);
+    assert.deepEqual(luke.applied.at(-1)?.message, {
+      type: RUNNER_EVENT.END,
+      reason: RUNNER_END.STOPPED,
+    });
+  }),
+);
+
 it.effect(
   "resumes the thread it is given and sends a message the ended turn refused as the next turn",
   () =>
