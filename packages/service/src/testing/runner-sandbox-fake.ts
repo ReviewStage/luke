@@ -8,6 +8,7 @@
  */
 
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { gunzipSync } from "node:zlib";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { sandboxListRefusal, sandboxStopRefusal } from "./vercel-sandbox-fake.js";
@@ -79,9 +80,9 @@ export async function commandRead(
   const waits = url.searchParams.get("wait") === "true";
   if (waits && command.exitCode !== null) command.recorded = true;
   if (waits && command.exitCode === null && hold) {
-    await new Promise((_resolve, reject) => {
-      init.signal?.addEventListener("abort", () => reject(new Error("the reader gave up")));
-    });
+    assert.ok(init.signal, "a held read needs a reader that can give up");
+    await once(init.signal, "abort");
+    throw new Error("the reader gave up");
   }
   return Response.json({
     command: { id: command.id, exitCode: command.recorded === true ? command.exitCode : null },
