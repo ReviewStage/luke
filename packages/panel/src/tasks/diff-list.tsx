@@ -1,5 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button, cssCustomProperties, ScrollArea, TooltipPill } from "@luke/ui";
+import {
+  Button,
+  cssCustomProperties,
+  EmptyState,
+  ScrollArea,
+  TooltipPill,
+  useHintRest,
+} from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
@@ -31,7 +38,6 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
-import { useHintRest } from "../tooltip.js";
 
 /**
  * diff-list.tsx -- a pull request's files as Files changed draws them: one list, every file under a header of its own, drawn by Pierre's list (`../diff-view/`'s `mountList`), only the files near the view drawn at all.
@@ -436,7 +442,7 @@ export function PierreDiffList({
   }, [offered]);
 
   if (AsyncResult.isFailure(loaded)) {
-    return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
+    return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;
   }
   // Note that the area holds no React of its own, because Pierre draws the
   // list into it as the scroller it virtualizes over and empties it when

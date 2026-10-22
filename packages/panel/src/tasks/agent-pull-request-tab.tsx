@@ -70,9 +70,15 @@ import {
   ScrollArea,
   Skeleton,
   SkeletonRegion,
+  SpinnerRegion,
   TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextButton,
+  Tooltip,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
@@ -111,9 +117,7 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
-import { SpinnerRegion } from "../spinner.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -550,10 +554,15 @@ function Section({
   children: ReactNode;
 }): React.JSX.Element {
   const heading = (
-    <h3 className="pull-request-heading">
+    <Text
+      as={TEXT_ELEMENT.H3}
+      variant={TEXT_VARIANT.INHERIT}
+      truncate
+      className="pull-request-heading"
+    >
       {title}
       {count === undefined ? null : <span className="pull-request-count">{count}</span>}
-    </h3>
+    </Text>
   );
   if (fold === undefined) {
     return (
@@ -703,7 +712,7 @@ function CheckRow({
         <>
           {check.name}
           {/* Note that the glyph is the row's decoration, so its words are said here. */}
-          <span className="luke-visually-hidden">, {CHECK_WORDS[check.state]}</span>
+          <VisuallyHidden>, {CHECK_WORDS[check.state]}</VisuallyHidden>
         </>
       }
       description={check.app ?? undefined}
@@ -932,12 +941,22 @@ function ThreadWhere({
     <span className="annotation-where">
       {path === undefined ? null : (
         <>
-          <span className="annotation-where-folder">
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="annotation-where-folder"
+          >
             <bdi>{path.slice(0, cut + 1)}</bdi>
-          </span>
-          <span className="annotation-where-file">
+          </Text>
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="annotation-where-file"
+          >
             <bdi>{path.slice(cut + 1)}</bdi>
-          </span>
+          </Text>
         </>
       )}
       {lines === undefined ? null : <span className="annotation-where-lines">{lines}</span>}
@@ -1106,12 +1125,17 @@ function PendingList({
     <ol className="pull-request-pending-list" aria-label={PENDING_WORDS.PENDING}>
       {drafts.map((draft) => (
         <li key={draft.id} className="pull-request-thread-comment">
-          <span className="pull-request-quiet pull-request-pending-where">
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="pull-request-quiet pull-request-pending-where"
+          >
             {draft.path}
             {draft.line === null
               ? ""
               : ` · ${threadLines({ ...draft, originalLine: draft.line, originalStartLine: draft.startLine })}`}
-          </span>
+          </Text>
           <PendingComment
             draft={draft}
             head={
@@ -2442,7 +2466,6 @@ function PullRequestTabBody({
                   <ChoiceBar<PullRequestView>
                     label="Pull request"
                     items={tabsOf(parts, published, held, changes, chapters)}
-                    hint={Tooltip}
                     value={view}
                     onChange={onView}
                     look={CHOICE_BAR_LOOK.FILL}
@@ -2505,7 +2528,7 @@ function PullRequestTabBody({
                 >
                   {chaptersSeen ? (
                     <Suspense
-                      fallback={<SpinnerRegion label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
+                      fallback={<SpinnerRegion delay label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
                     >
                       <AgentChaptersTab
                         agentId={agentId}

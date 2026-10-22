@@ -1,59 +1,42 @@
-import {
-  BUTTON_VARIANT,
-  Button,
-  GAP,
-  Inline,
-  TEXT_TONE,
-  Text,
-  TooltipCard,
-  TooltipPill,
-} from "@luke/ui";
-import { type ReactNode, useId, useState } from "react";
+import { APP_COMMAND, SHORTCUT_KEY } from "@luke/settings/shortcuts";
+import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_TONE, Text, Tooltip } from "@luke/ui";
+import { useRef } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * tooltips.tsx -- a pill naming a control, with and without its chord, a
- * long one held inside the window, and a card in a pill's place, under its
- * control and beside it. Each shows once the pointer rests on its control
- * or the keyboard reaches it, and goes when either leaves or on Escape: the
- * catalog's own stand-in for the timing an app gives its hints.
+ * tooltips.tsx -- the window's tooltip: a pill naming a control, with the
+ * chord of a command and of a key the control's own surface answers, a long
+ * one held inside the window, and a card in a pill's place, under its
+ * control, beside it, and beside a whole row it counts as its control. Each
+ * shows once the pointer has rested on its control for the hint's wait, or
+ * the keyboard reaches it, at once while the pointer moves on from a pill
+ * seen, and goes when the pointer leaves, on a press, a key, or a scroll; a
+ * card lingers for the pointer to cross onto it.
  */
 
-/** A control showing `hint` for itself while the pointer rests on it or it has the keyboard's focus. */
-function Hinted({
-  label,
-  hint,
-}: {
-  label: string;
-  hint: (props: { id: string; anchor: HTMLElement }) => ReactNode;
-}): React.JSX.Element {
-  const id = useId();
-  const [anchor, setAnchor] = useState<HTMLElement | undefined>(undefined);
-  const show = (event: { currentTarget: HTMLElement }) => setAnchor(event.currentTarget);
-  const hide = () => setAnchor(undefined);
+/** A row whose name hangs its card beside the whole row, the row's other act part of its control. */
+function CardedRow(): React.JSX.Element {
+  const row = useRef<HTMLSpanElement>(null);
   return (
-    <>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper hears the pointer and the focus its button's own events bubble, because a shared button takes no handlers but its press. */}
-      <span
-        className="catalog-hinted"
-        onPointerEnter={show}
-        onPointerLeave={hide}
-        onFocus={show}
-        onBlur={hide}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") hide();
-        }}
+    <span ref={row} className="catalog-carded-row">
+      <Tooltip
+        label="Teammate invitations"
+        card={
+          <>
+            <Text>Teammate invitations</Text>
+            <Text tone={TEXT_TONE.MUTED}>Hung beside the row, so it covers none under it.</Text>
+          </>
+        }
+        cardBeside
+        cardRegion={row}
       >
-        <Button
-          variant={BUTTON_VARIANT.OUTLINE}
-          aria-describedby={anchor === undefined ? undefined : id}
-        >
-          {label}
-        </Button>
-      </span>
-      {anchor === undefined ? null : hint({ id, anchor })}
-    </>
+        <Button variant={BUTTON_VARIANT.QUIET}>Teammate invitations</Button>
+      </Tooltip>
+      <Tooltip label="Archive">
+        <Button variant={BUTTON_VARIANT.QUIET}>Archive</Button>
+      </Tooltip>
+    </span>
   );
 }
 
@@ -62,46 +45,48 @@ function Tooltips(): React.JSX.Element {
     <>
       <CatalogSection id="tooltip-pills" title="Pills">
         <Inline gap={GAP.CONTROL}>
-          <Hinted
-            label="Archive"
-            hint={(props) => (
-              <TooltipPill {...props} label="Archive task" shortcut={<kbd>⌘E</kbd>} />
-            )}
-          />
-          <Hinted label="Share" hint={(props) => <TooltipPill {...props} label="Copy link" />} />
-          <Hinted
-            label="Long address"
-            hint={(props) => (
-              <TooltipPill
-                {...props}
-                label="https://example.com/a/very/long/address/that/is/wider/than/a/narrow/window/and/breaks/where/it/must"
-              />
-            )}
-          />
+          <Tooltip label="New task" command={APP_COMMAND.NEW_TASK}>
+            <Button variant={BUTTON_VARIANT.OUTLINE}>New</Button>
+          </Tooltip>
+          <Tooltip label="Zoom in" chord={{ key: SHORTCUT_KEY.EQUALS, bare: true }}>
+            <Button variant={BUTTON_VARIANT.OUTLINE}>Zoom</Button>
+          </Tooltip>
+          <Tooltip label="Copy link">
+            <Button variant={BUTTON_VARIANT.OUTLINE}>Share</Button>
+          </Tooltip>
+          <Tooltip label="https://example.com/a/very/long/address/that/is/wider/than/a/narrow/window/and/breaks/where/it/must">
+            <Button variant={BUTTON_VARIANT.OUTLINE}>Long address</Button>
+          </Tooltip>
         </Inline>
       </CatalogSection>
       <CatalogSection id="tooltip-cards" title="Cards">
         <Inline gap={GAP.CONTROL}>
-          <Hinted
+          <Tooltip
             label="Launch plan"
-            hint={(props) => (
-              <TooltipCard {...props}>
+            card={
+              <>
                 <Text>Launch plan</Text>
                 <Text tone={TEXT_TONE.MUTED}>
                   Draft the announcement, confirm the date with the team, and schedule the post.
                 </Text>
-              </TooltipCard>
-            )}
-          />
-          <Hinted
+              </>
+            }
+          >
+            <Button variant={BUTTON_VARIANT.OUTLINE}>Launch plan</Button>
+          </Tooltip>
+          <Tooltip
             label="Beside"
-            hint={(props) => (
-              <TooltipCard {...props} beside>
-                <Text>A row's card</Text>
-                <Text tone={TEXT_TONE.MUTED}>Hung beside the row, so it covers none under it.</Text>
-              </TooltipCard>
-            )}
-          />
+            card={
+              <>
+                <Text>A control's card</Text>
+                <Text tone={TEXT_TONE.MUTED}>Hung past the control's end.</Text>
+              </>
+            }
+            cardBeside
+          >
+            <Button variant={BUTTON_VARIANT.OUTLINE}>Beside</Button>
+          </Tooltip>
+          <CardedRow />
         </Inline>
       </CatalogSection>
     </>

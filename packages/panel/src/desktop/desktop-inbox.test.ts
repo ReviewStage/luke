@@ -652,7 +652,7 @@ const ROW_TITLE = ".luke-list-row-title";
  */
 function needsYouMark(row: HTMLElement): string {
   const mark = row.querySelector(".luke-list-row-meta .attention-mark") !== null;
-  const said = [...row.querySelectorAll(".luke-list-row-meta .visually-hidden")].some(
+  const said = [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
     (each) => each.textContent === "Needs you",
   );
   if (mark && said) return "*";
@@ -5567,7 +5567,7 @@ test("the attention mark stands before the time on the reader's own open item al
     return {
       mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
-      said: meta?.querySelector(".visually-hidden")?.textContent,
+      said: meta?.querySelector(".luke-visually-hidden")?.textContent,
       dot: row.querySelector(".inbox-row-unread") !== null,
       unread: row.closest("li")?.dataset.unread === "true",
     };
@@ -5615,7 +5615,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".luke-list-row-meta");
   assert.equal(meta?.querySelector(".attention-mark"), null);
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
-  assert.equal(meta?.querySelector(".visually-hidden")?.textContent, "Waiting on Charles Pan");
+  assert.equal(meta?.querySelector(".luke-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
   showScope(page, "To do");
   assert.equal(
@@ -5640,7 +5640,7 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const marks = [
     row.querySelector(".inbox-row-gutter .inbox-row-unread") !== null,
     row.closest("li")?.dataset.unread === "true",
-    [...row.querySelectorAll(".luke-list-row-meta .visually-hidden")].some(
+    [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
       (each) => each.textContent === "Unread",
     ),
   ];

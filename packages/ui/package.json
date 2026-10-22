@@ -63,6 +63,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/atom-react": "catalog:",
     "@luke/brand": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/live": "workspace:*",

@@ -4,6 +4,7 @@ import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { type ViewportBox, visibleViewport } from "../../visible-viewport.js";
 import { SwitchMark } from "../switch/switch.js";
+import { MenuGlyph } from "./menu-surface.js";
 import { useTouchHold } from "./touch-hold.js";
 
 /**
@@ -458,7 +459,7 @@ export function MenuItem({
   const label = <span className="luke-menu-item-label">{action.label}</span>;
   const body = (
     <>
-      <span className="luke-menu-item-glyph">{action.icon}</span>
+      <MenuGlyph>{action.icon}</MenuGlyph>
       {action.detail === undefined ? (
         label
       ) : (
@@ -608,7 +609,7 @@ function SubmenuItem({
         onOpen(event.currentTarget, true);
       }}
     >
-      <span className="luke-menu-item-glyph">{entry.icon}</span>
+      <MenuGlyph>{entry.icon}</MenuGlyph>
       <span className="luke-menu-item-label">{entry.label}</span>
       <span className="luke-menu-item-end">
         <ChevronRightIcon />

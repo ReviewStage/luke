@@ -13,7 +13,15 @@ import {
   type PlanSectionEdit,
   type Task,
 } from "@luke/features/task-wire";
-import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
+import {
+  Button,
+  EllipsisIcon,
+  IconButton,
+  TextButton,
+  Tooltip,
+  useMenu,
+  VisuallyHidden,
+} from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { LinkIcon } from "lucide-react";
@@ -33,7 +41,6 @@ import {
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { Tooltip } from "../tooltip.js";
 import { prefersReducedMotion } from "../use-reduced-motion.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
@@ -372,9 +379,9 @@ function ChangedLine({
         {editors.length === 0 ? null : (
           <>
             <ActorStack actors={editors} />
-            <span className="visually-hidden">
+            <VisuallyHidden>
               {editors.map((actor) => actorName(actor, { sentence: true })).join(", ")}
-            </span>
+            </VisuallyHidden>
           </>
         )}
       </span>

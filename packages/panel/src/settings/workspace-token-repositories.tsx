@@ -9,7 +9,7 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { WorkspaceTile } from "../desktop/workspace-tile.js";
+import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
 
@@ -200,13 +200,14 @@ function TokenRepositoryRow({
     <SettingsRow
       indent={SETTINGS_ROW_INDENT.MARK}
       leading={
-        <span className="settings-row-mark workspace-github-account-mark">
+        <span className="settings-row-mark">
           <WorkspaceTile
             workspace={{
               id: `github:${owner}`,
               name: owner,
               pictureUrl: githubAccountPictureUrl(owner),
             }}
+            size={TILE_SIZE.NESTED}
           />
         </span>
       }

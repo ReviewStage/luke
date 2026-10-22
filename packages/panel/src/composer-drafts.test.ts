@@ -217,10 +217,10 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
     /** Whether an agent's tab in the plan's column wears the Draft pencil. */
     tabDrafted: (label: string) => {
       const tab =
-        [...container.querySelectorAll<HTMLElement>(".tab")].find(
-          (each) => each.querySelector(".tab-label")?.textContent === label,
+        [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
+          (each) => each.querySelector(".luke-tab-label")?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`);
-      return tab.querySelector(`.tab-end-mark [aria-label="${DRAFT_WORD}"]`) !== null;
+      return tab.querySelector(`.luke-tab-end-mark [aria-label="${DRAFT_WORD}"]`) !== null;
     },
   };
 }
@@ -635,11 +635,11 @@ async function columnOn(
     rowDrafted: () => container.querySelector(`ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
-        [...container.querySelectorAll<HTMLElement>(".tab")].find(
+        [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
           // Note that the label's own words are read apart from what follows them, the Inbox's count.
-          (each) => each.querySelector(".tab-label")?.firstChild?.textContent === label,
+          (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`)
-      ).querySelector(`.tab-end-mark ${pencil}`) !== null,
+      ).querySelector(`.luke-tab-end-mark ${pencil}`) !== null,
     unmount: () => {
       for (const each of roots.splice(0)) act(() => each.unmount());
     },

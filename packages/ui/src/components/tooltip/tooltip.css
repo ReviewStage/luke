@@ -106,6 +106,17 @@
     transform-origin: top left;
   }
 
+  /* A hint is never part of the desktop window's drag region, wherever it hangs. */
+  [data-luke-profile="desktop"] .luke-tooltip {
+    -webkit-app-region: no-drag;
+  }
+
+  /* The pill's chord (`hint.tsx`), muted against its own dark fill rather
+     than the window's. */
+  .luke-tooltip-chord {
+    --luke-shortcut-ink: var(--luke-color-tooltip-chord);
+  }
+
   @keyframes luke-tooltip-fade {
     from {
       visibility: hidden;

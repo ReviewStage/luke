@@ -26,18 +26,21 @@ import {
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  MarkStrip,
   NAV_CURRENT,
   NavItem,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
   SkeletonRegion,
+  SpinnerRegion,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
 } from "@luke/ui";
 import {
   ArrowLeftIcon,
@@ -51,8 +54,6 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
-import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -419,7 +420,7 @@ function ChapterRail({
   );
 }
 
-/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's colour, dimmed once viewed, the one shown standing out; a press shows the rail. A picture of the rail, hidden from assistive technology, which reaches the rail through its toggle. */
+/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's colour, dimmed once viewed, the one shown standing out; a press shows the rail (`MarkStrip`). Its box is the stylesheet's to draw only while the rail is hidden. */
 function ChapterStrip({
   rows,
   at,
@@ -432,16 +433,15 @@ function ChapterStrip({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <div className="chapter-strip" aria-hidden="true" onClick={onOpen}>
-      {rows.map((row, index) => (
-        <span
-          key={index}
-          className="chapter-strip-mark"
-          data-risk={row.chapter.risk ?? undefined}
-          data-viewed={viewed(row.paths) ? "" : undefined}
-          data-current={index === at ? "" : undefined}
-        />
-      ))}
+    <div className="chapter-strip">
+      <MarkStrip
+        marks={rows.map((row, index) => ({
+          tone: row.chapter.risk ? RISK_TONES[row.chapter.risk] : undefined,
+          viewed: viewed(row.paths),
+          current: index === at,
+        }))}
+        onPress={onOpen}
+      />
     </div>
   );
 }
@@ -800,7 +800,7 @@ function chaptersState(
 ): ReactNode {
   switch (state.kind) {
     case CHAPTERS_SHOWN.READING:
-      return <SpinnerRegion label={CHAPTERS_WORDS.READING} />;
+      return <SpinnerRegion delay label={CHAPTERS_WORDS.READING} />;
     case CHAPTERS_SHOWN.FAILED:
       return (
         <ErrorState onRetry={read.ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -882,7 +882,7 @@ export function AgentChaptersTab({
   // The chapters wait on the files as Files changed does: a failure gives way to the wait once asked again.
   const { answer, out, pullRequest } = changes;
   if (answer === undefined || (out && "failure" in answer)) {
-    return <SpinnerRegion label={CHANGES_WORDS.READING} />;
+    return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
   if ("failure" in answer) {
     return (

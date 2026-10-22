@@ -1,7 +1,7 @@
 import type { PullRequestStackEntry } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
-import { BUTTON_VARIANT, Button, dropBelowStart, useMenu } from "@luke/ui";
+import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@luke/ui";
 import {
   GitMergeIcon,
   GitPullRequestDraftIcon,
@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { Tooltip } from "../tooltip.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**

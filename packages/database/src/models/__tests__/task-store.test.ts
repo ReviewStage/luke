@@ -655,6 +655,44 @@ it.layer(getTestDB())("a task's assignee", (it) => {
     }),
   );
 
+  it.effect("is the member who moves a task no one is assigned to into progress", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId, workspace } = yield* openSharedTask;
+      const taken = yield* createTask(dean, { organizationId: workspace, assigneeId: dean });
+      const named = yield* createTask(dean, { organizationId: workspace });
+      const cleared = yield* createTask(dean, { organizationId: workspace });
+      const filed = yield* createTask(dean, { organizationId: workspace });
+
+      yield* updateTask(charles, taskId, { status: TASK_STATUS.IN_PROGRESS });
+      yield* updateTask(charles, taken.id, { status: TASK_STATUS.IN_PROGRESS });
+      yield* updateTask(charles, named.id, { status: TASK_STATUS.IN_PROGRESS, assigneeId: dean });
+      yield* updateTask(charles, cleared.id, { status: TASK_STATUS.IN_PROGRESS, assigneeId: null });
+      yield* updateTask(charles, filed.id, { status: TASK_STATUS.BACKLOG });
+      yield* updateTask(charles, filed.id, { status: TASK_STATUS.DONE });
+
+      assert.equal(yield* assigneeReadBy(dean, taskId), charles);
+      assert.equal(yield* assigneeReadBy(dean, taken.id), dean);
+      assert.equal(yield* assigneeReadBy(dean, named.id), dean);
+      assert.equal(yield* assigneeReadBy(dean, cleared.id), undefined);
+      assert.equal(yield* assigneeReadBy(dean, filed.id), undefined);
+    }),
+  );
+
+  it.effect("stays off a task in progress it was taken off, through the next change", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      yield* updateTask(charles, taskId, { status: TASK_STATUS.IN_PROGRESS });
+
+      yield* updateTask(charles, taskId, { assigneeId: null });
+      yield* updateTask(dean, taskId, {
+        status: TASK_STATUS.IN_PROGRESS,
+        priority: TASK_PRIORITY.HIGH,
+      });
+
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+    }),
+  );
+
   it.effect("is the starter of an agent on a task no one is assigned to, and only then", () =>
     Effect.gen(function* () {
       const { dean, charles, taskId, workspace } = yield* openSharedTask;

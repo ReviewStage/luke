@@ -47,5 +47,5 @@ test("a plan's link opened on a Mac by an account that chose the Mac app is hand
   window.dispatchEvent(new Event("focus"));
   await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
   assert.equal(opened.length, 1);
-  assert.equal(root.querySelector("section.sign-in-gate"), null, "no sign-in is drawn");
+  assert.equal(root.querySelector("section.luke-auth-card"), null, "no sign-in is drawn");
 });

@@ -17,6 +17,7 @@ import {
   SUBMIT_STATE,
   TEXT_TONE,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -39,7 +40,6 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";

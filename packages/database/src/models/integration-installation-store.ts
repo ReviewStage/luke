@@ -124,9 +124,14 @@ const upsertInstallation = SqlSchema.findAll({
 });
 
 const writeDeleted = SqlSchema.findAll({
-  Request: Schema.Struct({ provider: ProviderSchema, externalId: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({
+    provider: ProviderSchema,
+    externalId: Schema.String,
+    organizationId: Schema.optionalKey(Schema.String),
+    now: Schema.Date,
+  }),
   Result: Schema.Struct({ externalId: Schema.String }),
-  execute: ({ provider, externalId, now }) =>
+  execute: ({ provider, externalId, organizationId, now }) =>
     Database.use((db) =>
       db
         .update(integrationInstallation)
@@ -136,6 +141,9 @@ const writeDeleted = SqlSchema.findAll({
             eq(integrationInstallation.provider, provider),
             eq(integrationInstallation.externalId, externalId),
             eq(integrationInstallation.status, INTEGRATION_INSTALLATION_STATUS.ACTIVE),
+            organizationId === undefined
+              ? undefined
+              : eq(integrationInstallation.organizationId, organizationId),
           ),
         )
         .returning({ externalId: integrationInstallation.externalId }),
@@ -252,13 +260,28 @@ export function linkIntegrationInstallation(
   );
 }
 
-/** Marks the installation uninstalled, as its provider said; false where no active installation stands under the id. */
+/**
+ * Marks the installation uninstalled; false where no active installation
+ * stands under the id. A provider's uninstall names no workspace, since it
+ * ends the installation wherever it is linked; a workspace's own disconnect
+ * names its `organizationId`, so it never ends one another workspace has
+ * linked since it last read.
+ */
 export function markIntegrationInstallationDeleted(
   provider: TriggerProvider,
   externalId: string,
+  organizationId?: string,
 ): TaskStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(writeDeleted({ provider, externalId, now }), (rows) => rows.length > 0),
+    Effect.map(
+      writeDeleted({
+        provider,
+        externalId,
+        now,
+        ...(organizationId === undefined ? undefined : { organizationId }),
+      }),
+      (rows) => rows.length > 0,
+    ),
   );
 }
 

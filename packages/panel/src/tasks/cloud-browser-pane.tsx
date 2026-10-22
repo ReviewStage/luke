@@ -13,11 +13,14 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  SPINNER_SIZE,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { Duration } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -36,8 +39,6 @@ import {
 } from "react";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { SPINNER_SIZE, Spinner } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
@@ -490,7 +491,7 @@ export function CloudBrowserPane({
         </div>
         {notice === undefined ? null : notice.waiting ? (
           <div className="cloud-browser-notice">
-            <Spinner label={notice.label} size={SPINNER_SIZE.REGION} />
+            <Spinner delay label={notice.label} size={SPINNER_SIZE.REGION} />
           </div>
         ) : (
           <div className="cloud-browser-notice" role="status">

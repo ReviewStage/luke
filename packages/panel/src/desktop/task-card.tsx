@@ -4,6 +4,7 @@ import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
+  AVATAR_SIZE,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -13,6 +14,7 @@ import {
   ProviderMark,
   TaskPriorityMark,
   TaskStatusMark as TaskStatusGlyph,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -23,6 +25,7 @@ import { useCreator, useMemberDirectory } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
+import { WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { RelativeTime } from "../tasks/relative-time.js";
@@ -85,7 +88,7 @@ export function TaskStatusMark({
     return (
       <span className="task-mark-attention">
         <AttentionMark />
-        <span className="visually-hidden">{`(repository belongs to ${stranded.name})`}</span>
+        <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
       </span>
     );
   }
@@ -119,6 +122,7 @@ export function RepositoryDetail({
           repository={repository}
           pictures={pictures}
           fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+          size={AVATAR_SIZE.MARK}
         />
       }
       label={repository}
@@ -437,5 +441,25 @@ export function taskCardOf(
       onOpenGitHub={tasks.repositories.openGitHub}
       onShowAgent={(agentId) => tasks.onShowAgent(task.id, agentId)}
     />
+  );
+}
+
+/**
+ * The task's card as a place standing in any workspace hangs it, a chip or
+ * a ⌘K row: `taskCardOf`'s, naming its creator as the task's own workspace
+ * holds them, whatever workspace the place stands in.
+ */
+export function homeTaskCardOf(
+  tasks: Parameters<typeof taskCardOf>[0],
+  task: TaskSummary,
+  now: number,
+  focus?: React.ComponentProps<typeof TaskCard>["focus"],
+): React.JSX.Element {
+  const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+  const card = taskCardOf(tasks, task, now, focus);
+  return home === undefined ? (
+    card
+  ) : (
+    <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
   );
 }

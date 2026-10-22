@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
+import { VisuallyHidden } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -251,7 +252,7 @@ export function EditedBy({
     <>
       <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />
       {!edit.duringCall ? null : faceOnly ? (
-        <span className="visually-hidden">{` during ${callWords(editCallOwner(edit, place.reader))}`}</span>
+        <VisuallyHidden>{` during ${callWords(editCallOwner(edit, place.reader))}`}</VisuallyHidden>
       ) : (
         <CallOwner edit={edit} place={place} />
       )}

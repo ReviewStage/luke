@@ -31,9 +31,12 @@ import {
   LineButton,
   LineSummary,
   ProviderMark,
+  Shimmer,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   useDisclosureState,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
@@ -102,7 +105,6 @@ import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning.js";
-import { Shimmer } from "../ai-elements/shimmer.js";
 import {
   TOOL_BLOCK,
   TOOL_STATE,
@@ -117,10 +119,8 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool.js";
-import { InlineRef as HintedInlineRef } from "../inline-ref.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
-import { Tooltip } from "../tooltip.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip } from "./mention-chip.js";
@@ -902,6 +902,7 @@ function AgentCallChip({
         look={INLINE_REF_LOOK.PILL}
         glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
         label={actorName(agent)}
+        hint={false}
         data-tool-agent-ref=""
       />
     );
@@ -913,7 +914,7 @@ function AgentCallChip({
     opens.onOpen();
   };
   return (
-    <HintedInlineRef
+    <InlineRef
       look={INLINE_REF_LOOK.PILL}
       glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
       label={actorName(agent)}
@@ -1316,7 +1317,16 @@ export function TranscriptTodosDock({
       <FoldSummary className="todos-dock-head">
         <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
         <span className="todos-dock-summary">{summary}</span>
-        {focus === undefined ? null : <span className="todos-dock-focus">{focus}</span>}
+        {focus === undefined ? null : (
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="todos-dock-focus"
+          >
+            {focus}
+          </Text>
+        )}
         <span className="todos-dock-chevron">
           <DisclosureChevron />
         </span>

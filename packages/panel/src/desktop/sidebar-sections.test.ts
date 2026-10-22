@@ -610,7 +610,7 @@ interface Asked {
  * stands over its own rows and no other's.
  */
 function layOutRows(): void {
-  const slots = () => [...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-empty")];
+  const slots = () => [...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-slot")];
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const all = slots();
     const own = all.indexOf(this);
@@ -757,7 +757,7 @@ test("a pinned task dragged into a section is unpinned and lands where it was le
 test("Pinned stands while nothing is pinned and takes the first pin", async () => {
   const asked = noneAsked();
   const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked);
-  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"] .sidebar-section-empty'));
+  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"] .sidebar-section-slot'));
 
   drag(sidebar, "Retry audit", 4);
 

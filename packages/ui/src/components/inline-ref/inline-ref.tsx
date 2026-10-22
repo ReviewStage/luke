@@ -7,6 +7,7 @@ import type {
   ReactNode,
 } from "react";
 import { useLinkAddress } from "../menu/link-address.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * inline-ref.tsx -- a thing named inside a line of words: its glyph, its name, and where it stands, as one target that hangs its card and, where it can, opens it.
@@ -27,7 +28,8 @@ import { useLinkAddress } from "../menu/link-address.js";
  * its end, or at its start for a path, so a file's own name stays in sight.
  *
  * What is drawn here is the token. Its hint, the pill or card hung while the
- * pointer rests on it and when that shows and goes, is the app's (`hint`):
+ * pointer rests on it and when that shows and goes, is the window's tooltip
+ * (`Tooltip`, `hint.tsx`), or one the caller hangs in its place (`hint`):
  * it is handed the words and the card and wraps the token, which takes what
  * the hint hands it on its own root.
  */
@@ -156,23 +158,23 @@ function InlineRefRoot({
   );
 }
 
-/** A thing named in a line: its glyph, name, and standing as one target, hanging `card` or its name through the app's `hint`. */
+/** A thing named in a line: its glyph, name, and standing as one target, hanging `card` or its name through its `hint`. */
 export function InlineRef({
-  hint: Hint,
+  hint: Hint = Tooltip,
   hintLabel,
   card,
   ...token
 }: InlineRefFace &
   DataAttributes & {
-    /** The app's hint, which hangs the token's card, or its name in a pill. */
-    hint?: InlineRefHint | undefined;
+    /** The hint, which hangs the token's card, or its name in a pill: the window's tooltip, unless the caller hangs one of its own, or `false` for none, as a token whose pill would only repeat its words. */
+    hint?: InlineRefHint | false | undefined;
     /** What the hint's pill says, where it is not the name: a file's whole path. */
     hintLabel?: string | undefined;
     /** The card the hint hangs in place of a pill. */
     card?: ReactNode;
   }): React.JSX.Element {
   const root = <InlineRefRoot {...token} />;
-  if (Hint === undefined) return root;
+  if (Hint === false) return root;
   return (
     <Hint label={hintLabel ?? token.label} card={card}>
       {root}

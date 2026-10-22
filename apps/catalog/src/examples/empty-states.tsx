@@ -40,6 +40,11 @@ function EmptyStates(): React.JSX.Element {
           <EmptyState icon={<UserIcon />}>No agents at work</EmptyState>
         </div>
       </CatalogSection>
+      <CatalogSection id="empty-state-no-glyph" title="No glyph">
+        <div className="catalog-frame catalog-empty-room">
+          <EmptyState>The history could not be read.</EmptyState>
+        </div>
+      </CatalogSection>
       <CatalogSection id="empty-state-narrow" title="Narrow pane, long words">
         <div className="catalog-frame catalog-empty-room catalog-empty-room-narrow">
           <EmptyState

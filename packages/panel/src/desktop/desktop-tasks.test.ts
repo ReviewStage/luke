@@ -523,6 +523,45 @@ test("a task's Inbox heads its list with the Inbox's name and a view's menu offe
   window.localStorage.clear();
 });
 
+test("a task's Inbox's magnifier opens the window's Inbox's search, which narrows its list to the items saying every word typed and says when none does, the item shown keeping its place", async () => {
+  const items = [
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  const inbox = await narrowTaskInbox(items, 1_200);
+  const tab = document.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
+  assert.ok(tab, "the plan's Inbox tab");
+  const shown = inbox.title();
+  const magnifier = tab.querySelector<HTMLButtonElement>(
+    '.inbox-tasks button[aria-label="Search inbox"]',
+  );
+  assert.ok(magnifier, "the head offers the search");
+
+  act(() => magnifier.click());
+  const field = tab.querySelector<HTMLInputElement>(
+    '.inbox-tasks input[aria-label="Search inbox"]',
+  );
+  assert.ok(field, "the search stands open");
+  assert.equal(document.activeElement, field);
+  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const type = (words: string) =>
+    act(() => {
+      setValue?.call(field, words);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+  type("bounce");
+  assert.deepEqual(inbox.rows(), ["Resend on bounce?"]);
+  assert.equal(inbox.title(), shown, "the item shown keeps its place");
+
+  type("zzz");
+  assert.deepEqual(inbox.rows(), []);
+  assert.ok(tab.querySelector(".inbox-tasks")?.textContent?.includes("No items match “zzz”."));
+  assert.equal(inbox.filteredOut(), null, "a search found nothing is not a scope left empty");
+  inbox.unmount();
+});
+
 test("a task's Inbox whose Needs you was pressed before the tabs opens on To do, and one left off on All; a tab kept before the scopes opens on the scope that lists what it did", async () => {
   const items = [
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),

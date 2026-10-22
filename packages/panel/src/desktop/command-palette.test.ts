@@ -123,6 +123,7 @@ function openPalette(
     Promise.reject(new Error("no repository is open")),
   page?: { agentId: string; workspaceId: string },
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
+  tab: PanelTab = PANEL_TAB.TASKS,
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
@@ -133,7 +134,7 @@ function openPalette(
     root.render(
       createElement(WindowPalette, {
         available: true,
-        tab: PANEL_TAB.TASKS,
+        tab,
         onTabChange: (tab) => sent.tabs.push(tab),
         tasks,
         settings: {
@@ -838,7 +839,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
   const board = rows().filter((row) => row.startsWith("Show board"));
   chooseFilter("Files");
   type("index");
-  const notice = document.querySelector(".command-palette-empty")?.textContent;
+  const notice = document.querySelector(".luke-note-line")?.textContent;
 
   assert.deepEqual([changes, board], [[], []]);
   assert.deepEqual(read, [], "the hidden task's files are not read");
@@ -1027,6 +1028,80 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   assert.deepEqual(opened, [[{ path }], [{ path }]]);
 });
 
+test("a task's row hangs the task's card beside it while the pointer rests on it, as its sidebar row does", () => {
+  openPalette(
+    tasksControl({
+      tasks: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: "acme/billing",
+        },
+      ],
+    }),
+  );
+  chooseFilter("Tasks");
+  const row = document.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "the task is listed");
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.ok(card, "the task's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Billing usage alerts");
+});
+
+test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
+  const shown: [string, string][] = [];
+  const sent = openPalette(
+    tasksControl({
+      tasks: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: null,
+          agents: {
+            total: 1,
+            working: 1,
+            agents: [
+              {
+                id: "agent-7",
+                title: "Invoice export",
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                status: CODING_AGENT_STATUS.RUNNING,
+              },
+            ],
+            pullRequestTotal: 0,
+            pullRequests: [],
+          },
+        },
+      ],
+      onShowAgent: (taskId, agentId) => shown.push([taskId, agentId]),
+    }),
+    undefined,
+    undefined,
+    DESKTOP_CAPABILITIES,
+    PANEL_TAB.SETTINGS,
+  );
+  chooseFilter("Tasks");
+  const row = document.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "the task is listed");
+  restOn(row);
+  const agent = document.querySelector<HTMLElement>(
+    ".luke-tooltip-card [data-task-card-agent] button",
+  );
+  assert.ok(agent, "the task's card names its agent");
+  act(() => agent.click());
+  assert.deepEqual(shown, [["plan-1", "agent-7"]]);
+  assert.deepEqual(sent.tabs, [PANEL_TAB.TASKS], "the window leaves Settings for the tasks");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "the palette is put away");
+});
+
 test("Search lists the listed workspace's plans first, then every other workspace's, each naming its workspace by its tile and name and found by it", () => {
   const personal = {
     id: "workspace-personal",
@@ -1065,8 +1140,9 @@ test("Search lists the listed workspace's plans first, then every other workspac
   assert.deepEqual(listed, ["Dotfiles sync", "Checkout retries · Northwind · northwind/shop"]);
   assert.deepEqual(rows(), ["Checkout retries · Northwind · northwind/shop"]);
   assert.equal(
-    document.querySelector(".luke-combobox-option-detail .workspace-ref .workspace-tile")
-      ?.textContent,
+    document.querySelector(
+      ".luke-combobox-option-detail .workspace-ref .luke-avatar[data-shape='tile']",
+    )?.textContent,
     "N",
     "the other workspace is named by its tile and its name",
   );
@@ -1482,7 +1558,10 @@ test("People lists the listed workspace's members by name and role, the reader a
 
 /** What the list says where no row stands: its notice, or "Nothing matches.". */
 function emptyLine(): string | undefined {
-  return document.querySelector(".command-palette-empty")?.textContent ?? undefined;
+  return (
+    document.querySelector(".luke-note-line, .command-palette-notice-slot")?.textContent ??
+    undefined
+  );
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -1530,7 +1609,7 @@ test("under All, a query nothing else matches says the repository's files are st
 
   assert.deepEqual(rows(), []);
   assert.equal(emptyLine(), "Reading the repository's files…");
-  assert.equal(document.querySelector(".command-palette-empty")?.getAttribute("role"), "status");
+  assert.equal(document.querySelector(".luke-note-line")?.getAttribute("role"), "status");
 
   await act(async () =>
     answer({
@@ -1571,7 +1650,7 @@ test("People says the members are being read until they answer, and a refused re
 
   await act(async () => answers.shift()?.refuse());
   await settle();
-  const alert = document.querySelector(".command-palette-empty [role=alert]");
+  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
   assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
 
@@ -1608,7 +1687,7 @@ test("Tasks says a refused list with a Retry that reads it again", () => {
     }),
   );
   chooseFilter("Tasks");
-  const alert = document.querySelector(".command-palette-empty [role=alert]");
+  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === "Retry",

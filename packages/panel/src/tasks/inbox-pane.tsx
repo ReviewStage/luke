@@ -45,6 +45,7 @@ import {
   Stack,
   TEXT_TONE,
   Text,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import {
@@ -69,7 +70,6 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TextLink } from "../text-link.js";
-import { Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   AgentActorRef,
@@ -121,6 +121,7 @@ import {
   inboxCommentFiles,
   inboxFileChips,
   inboxThreadOf,
+  inboxWaitsOn,
   isUnread,
   itemWorkspaceId,
   knownAsk,
@@ -1283,8 +1284,8 @@ function useScrollToOwnMessage(
 const NEWER_LUKE_ASK = "Answer this in a newer Luke.";
 
 /**
- * Who an open ask waits on where that is a teammate: the one who started
- * its agent, in the muted ink, as the list's Waiting on others does,
+ * Who an open ask waits on where that is a teammate (`inboxWaitsOn`): its
+ * task's assignee, else the one who started its agent, in the muted ink, as the list's Waiting on others does,
  * though any member may still answer. Where the item is the reader's
  * (`readersItem`) it draws nothing: the draft reply under the thread,
  * holding the ask's controls, already says the answer is theirs.
@@ -1833,7 +1834,7 @@ function Crumbs({
   ].filter((crumb) => crumb !== undefined);
   return (
     <div className="inbox-crumbs">
-      <Breadcrumbs label="Path" crumbs={crumbs} hint={Tooltip} />
+      <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
 }
@@ -1894,8 +1895,8 @@ export function InboxPane({
   useScrollToOwnMessage(board, item, readerId);
   const [heading, setHeading] = useState<HTMLElement | null>(null);
   const headingAway = useHeadingAway(board, heading, item.id);
-  // An open ask waits on whoever started its agent, as the list says, though any member may answer it.
-  const waitingOn = readersItem(item, readerId) ? undefined : item.startedBy;
+  // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
+  const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
   const by: ItemAgent = {
     subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
     models: agents.models,

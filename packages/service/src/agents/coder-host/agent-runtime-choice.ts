@@ -10,16 +10,17 @@
  *   (`NativeAgentSessions`: a web function's own, or the eve app's relay to
  *   one, so a Start from an eve agent decides as the panel's does).
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
- *   GPT model; Codex has no fast mode, so an account whose ChatGPT plan pays
- *   is offered no GPT fast version (`accountFastOffer`), where the account
+ *   GPT model; Codex runs no fast mode on the plan, so an account whose
+ *   ChatGPT plan pays is offered no GPT fast version (`accountFastOffer`), where the account
  *   keeps a ChatGPT sign-in (`chatgpt_oauth`)
  *   that OpenAI has not signed out and the deployment can still open.
  *
  * Settings' choice for that harness decides: the plan where its row's
  * `forAgents` is on (Subscription) and the plan is offered, the account's
- * own API key for the model's provider otherwise: on Claude Code, as its
- * documented `ANTHROPIC_API_KEY`, for a Claude model where this function
- * reaches a harness, and on eve for anything else. Luke's own key
+ * own API key for the model's provider otherwise: where this function
+ * reaches a harness, on Claude Code, as its documented `ANTHROPIC_API_KEY`,
+ * for a Claude model, and on Codex, as its provider's `env_key`, for a GPT
+ * model; on eve where it reaches none. Luke's own key
  * pays for no coding agent: an account with neither is refused by name
  * (`AgentCredentialMissing`, which names the provider), and connects one in
  * Settings › Agents. A brand-new account starts no coding agent until it
@@ -79,6 +80,12 @@ const ON_CLAUDE_CODE_API_KEY: AgentRuntimeChoice = {
   payer: CODING_AGENT_PAYER.API_KEY,
 };
 
+/** Codex on the account's own OpenAI API key, through its provider's documented `env_key`. */
+const ON_CODEX_API_KEY: AgentRuntimeChoice = {
+  runtime: CONVERSATION_RUNTIME.CODEX,
+  payer: CODING_AGENT_PAYER.API_KEY,
+};
+
 const ON_CODEX: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CODEX,
   payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
@@ -127,7 +134,7 @@ const onPlanOf = (provider: string): AgentRuntimeChoice =>
   provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
 
 /** Whether the account saved its own API key for the provider, which pays for its agents on eve. */
-export const keepsApiKey = (
+const keepsApiKey = (
   userId: string,
   provider: ModelProvider,
 ): Effect.Effect<boolean, StoreFailure, DatabaseServices> =>
@@ -136,7 +143,7 @@ export const keepsApiKey = (
   );
 
 /** eve on the account's own API key for the provider, or refused by name where it saved none, since Luke's key pays for no coding agent. */
-export const onApiKey = Effect.fnUntraced(function* (
+const onApiKey = Effect.fnUntraced(function* (
   userId: string,
   provider: ModelProvider,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
@@ -147,7 +154,7 @@ export const onApiKey = Effect.fnUntraced(function* (
 });
 
 /** The provider of a model the catalog offers; every model a Start accepted has one, so none is a defect. */
-export const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
+const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
   const named = providerModelOf(model);
   return named === undefined
     ? Effect.die(new Error(`no provider for the model ${model}`))
@@ -165,7 +172,8 @@ const providerRuntimeChoice = Effect.fnUntraced(function* (
   const plan = harness ? yield* keptPlan(userId, provider, ring) : undefined;
   if (plan?.forAgents === true) return onPlanOf(provider);
   const onKey = yield* onApiKey(userId, provider);
-  return harness && provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE_API_KEY : onKey;
+  if (!harness) return onKey;
+  return provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE_API_KEY : ON_CODEX_API_KEY;
 });
 
 /** The runtime and payer of a new agent of the account's on the model given, as above. */
@@ -233,7 +241,7 @@ export const markedUnconnected = /* @__PURE__ */ Effect.fnUntraced(function* <
 /**
  * Which fast versions the account is offered (`offeredToAccount`): by the
  * Anthropic key its steps run on, and whether its ChatGPT plan pays for its
- * GPT agents, as Start would choose it here, since Codex runs no fast mode
+ * GPT agents, as Start would choose it here, since Codex runs no fast mode on the plan
  * and a Fast it cannot run is never offered.
  */
 export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (

@@ -13,11 +13,14 @@ import {
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackIcon,
+  commandKeyshortcuts,
+  FoldingButton,
   NAV_CURRENT,
   NavItem,
   SCROLL_FADE,
   ScrollArea,
   SettingsPage,
+  Shortcut,
   useMenu,
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
@@ -27,7 +30,6 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { AttentionMark } from "../settings/marks.js";
 import {
@@ -54,8 +56,6 @@ import {
   settingsSearchEntries,
 } from "../settings-search.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Shortcut } from "../shortcut.js";
-import { commandKeyshortcuts } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";

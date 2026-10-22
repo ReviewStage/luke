@@ -5,7 +5,7 @@ import type {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule, VisuallyHidden } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import {
   ACTOR_SIZE,
@@ -36,7 +36,7 @@ import { WorkingTime } from "./working-time.js";
 /**
  * agent-tab-card.tsx -- the card an agent's or a subagent's tab hangs while the pointer rests on it: its whole name, when it last moved, and one line of what it last did.
  *
- * The card stands in the tab's hint's place (`tooltip.tsx`), so it waits,
+ * The card stands in the tab's hint's place (`@luke/ui`'s `Tooltip`), so it waits,
  * warms, and goes as a hint does, and an agent's and a subagent's are laid
  * out alike. Its head is the name, wrapped to two lines, or, for a subagent
  * not yet titled, its task on one line faded where it is cut short, as a
@@ -335,7 +335,7 @@ export function AgentTabCard({
       )}
       {corner.kind === CARD_CORNER.WORKING ? (
         // Note that the word is a reader's alone, because the tile that shows the work hides its mark from a reader and nothing drawn says it.
-        <span className="visually-hidden">{glyphStateWords(GLYPH_STATE.WORKING, false)}</span>
+        <VisuallyHidden>{glyphStateWords(GLYPH_STATE.WORKING, false)}</VisuallyHidden>
       ) : null}
       <StartedBy by={startedBy} automationId={automationId} />
       {archivedBy === undefined ? null : <ArchivedByNote archivedBy={archivedBy} />}

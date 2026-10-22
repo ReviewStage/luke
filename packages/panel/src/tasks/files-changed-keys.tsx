@@ -13,9 +13,9 @@ import {
   SETTINGS_ROW_DENSITY,
   SettingsRow,
   SettingsSection,
+  Shortcut,
 } from "@luke/ui";
 import { useRef } from "react";
-import { Shortcut } from "../shortcut.js";
 
 /**
  * files-changed-keys.tsx -- the sheet `?` opens inside Files changed: every one of the view's keys under its group, as stage-cli's sheet lists its own.
@@ -71,13 +71,7 @@ export function FilesChangedKeysSheet({ onDismiss }: { onDismiss: () => void }):
                   density={SETTINGS_ROW_DENSITY.LIST}
                   label={FILES_CHANGED_SHORTCUTS[key].label}
                 >
-                  {() => (
-                    <Shortcut
-                      className="shortcut-value"
-                      chord={FILES_CHANGED_SHORTCUTS[key].chord}
-                      spoken
-                    />
-                  )}
+                  {() => <Shortcut value chord={FILES_CHANGED_SHORTCUTS[key].chord} spoken />}
                 </SettingsRow>
               ))}
             </SettingsSection>

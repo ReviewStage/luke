@@ -1,6 +1,6 @@
 import type { Experiment } from "@luke/settings";
+import { FoldingButton } from "@luke/ui";
 import { MessageSquareIcon } from "lucide-react";
-import { FoldingButton } from "./folding-button.js";
 import { useOpenFeedback } from "./open-feedback.js";
 
 /**

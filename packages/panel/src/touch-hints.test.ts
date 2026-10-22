@@ -2,12 +2,11 @@
 
 import assert from "node:assert/strict";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { NavItem, SearchField, TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
+import { NavItem, SearchField, Shortcut, TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SwitchRow } from "./settings/switch-row.js";
-import { Shortcut } from "./shortcut.js";
 import { layContainersAt, shown } from "./testing/container-width.js";
 
 /**
@@ -71,7 +70,7 @@ function hintsOn(touch: boolean) {
     createElement(
       "div",
       null,
-      createElement(Shortcut, { chord: CHORD, className: "tooltip-chord" }),
+      createElement(Shortcut, { chord: CHORD, className: "luke-tooltip-chord" }),
       createElement(
         "div",
         { className: "home-row" },
@@ -108,17 +107,17 @@ function hintsOn(touch: boolean) {
       createElement(
         "div",
         { className: "value-row" },
-        createElement(Shortcut, { chord: CHORD, className: "shortcut-value", spoken: true }),
+        createElement(Shortcut, { chord: CHORD, value: true, spoken: true }),
       ),
     ),
   );
   return {
-    chord: shown(found(page, ".tooltip-chord")),
+    chord: shown(found(page, ".luke-tooltip-chord")),
     rowChord: shown(found(page, ".home-row .luke-nav-item-shortcut")),
     rowCount: shown(found(page, ".luke-nav-item-count")),
-    fieldChord: shown(found(page, ".luke-search-field .shortcut")),
+    fieldChord: shown(found(page, ".luke-search-field .luke-shortcut")),
     paletteFoot: shown(found(page, ".command-palette-footer")),
-    value: shown(found(page, ".value-row .shortcut")),
+    value: shown(found(page, ".value-row .luke-shortcut")),
     menuChord: shown(found(page, ".chord-hint")),
     menuWords: shown(found(page, ".words-hint")),
   };

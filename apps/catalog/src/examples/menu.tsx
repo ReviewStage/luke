@@ -2,18 +2,26 @@ import {
   ArchiveIcon,
   BUTTON_VARIANT,
   Button,
+  ComboboxList,
   CopyIcon,
+  DocumentIcon,
   dropBelowStart,
   EllipsisIcon,
+  FolderIcon,
   GAP,
   IconButton,
   Inline,
   MENU_ITEM_MARK,
+  MENU_SURFACE_INSET,
   Menu,
   type MenuEntry,
+  MenuGlyph,
   MenuItem,
+  MenuSurface,
   PencilIcon,
+  TEXT_ELEMENT,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
   TrashIcon,
   UserIcon,
@@ -27,8 +35,11 @@ import { CatalogSection } from "../section";
  * menu.tsx -- a menu dropped from a ⋯ with glyphs, shortcuts, a dimmed item
  * and a red one ruled apart; one of settings in submenus; one with a heading
  * and a footer, its long words cut short; one a right-click hangs at the
- * pointer; and a searchable menu's pinned rows, steered from its field: one
- * opening a list beside it, a switch, and one that does not apply now.
+ * pointer; a searchable menu's pinned rows, steered from its field: one
+ * opening a list beside it, a switch, and one that does not apply now; and
+ * the menu's surface under lists an app hangs and keys itself: an `@` list
+ * narrowed under its kind's crumb, edge to edge, and one press inset, as
+ * one offered over selected words is.
  */
 
 const ignore = () => undefined;
@@ -174,6 +185,41 @@ function PinnedRows(): React.JSX.Element {
   );
 }
 
+/** A narrowed `@` list on the menu's surface, under its kind's crumb, as an editor hangs one. */
+function NarrowedList(): React.JSX.Element {
+  const [active, setActive] = useState(0);
+  return (
+    <MenuSurface className="catalog-menu-surface" inset={MENU_SURFACE_INSET.NONE}>
+      <div className="catalog-menu-crumb">
+        <Inline gap={GAP.ICON}>
+          <MenuGlyph>
+            <FolderIcon aria-hidden="true" />
+          </MenuGlyph>
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+            Files and folders
+          </Text>
+        </Inline>
+      </div>
+      <ComboboxList
+        label="Mention"
+        groups={[
+          {
+            options: [
+              { id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" },
+              { id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" },
+            ],
+          },
+        ]}
+        active={active}
+        onActiveChange={setActive}
+        onChoose={setActive}
+        headed={false}
+        empty="Nothing matches"
+      />
+    </MenuSurface>
+  );
+}
+
 function MenuExample(): React.JSX.Element {
   return (
     <>
@@ -189,6 +235,16 @@ function MenuExample(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="menu-pinned" title="Pinned rows steered from a field">
         <PinnedRows />
+      </CatalogSection>
+      <CatalogSection id="menu-surface" title="The surface under a list an app keys">
+        <Inline gap={GAP.CONTROL}>
+          <NarrowedList />
+          <MenuSurface>
+            <Button icon={<CopyIcon />} onClick={ignore}>
+              Copy
+            </Button>
+          </MenuSurface>
+        </Inline>
       </CatalogSection>
     </>
   );

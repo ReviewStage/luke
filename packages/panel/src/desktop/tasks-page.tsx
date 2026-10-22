@@ -198,6 +198,7 @@ export function TasksPage({
           filter={filter}
           onFilter={onFilter}
           shared={shared}
+          pictures={tasks.repositories.pictures}
         />
         <TasksViewOptions
           shown={tasks.shown}

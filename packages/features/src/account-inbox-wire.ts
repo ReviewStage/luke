@@ -72,6 +72,13 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
    * which the desktop reads as the reader's own, as it told everyone before.
    */
   startedBy: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The account the item waits on, the one the desktop badges and tells: the
+   * task's assignee, or the agent's starter where the task has nobody
+   * assigned. Absent from a service before it, which the desktop reads as
+   * waiting on `startedBy`.
+   */
+  waitsOn: EffectSchema.optionalKey(EffectSchema.String),
   title: EffectSchema.String,
   revision: countedNumber,
   /** When the agent first posted the item under its key. */
@@ -90,7 +97,7 @@ export const accountInboxTaskSchema = EffectSchema.Struct({
   items: countedNumber,
   /**
    * How many of the task's items the Inbox's To do lists for the reader:
-   * their own (their agent's), open or unread for them; none on an archived
+   * those that wait on them (`waitsOn`), open or unread for them; none on an archived
    * task. Absent from a service before it, which the desktop counts as it
    * did before, by the open items alone.
    */

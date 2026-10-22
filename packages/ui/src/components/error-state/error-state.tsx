@@ -88,6 +88,8 @@ type Placed =
     })
   | {
       placement: typeof ERROR_STATE_PLACEMENT.CENTRED;
+      /** The way out of the place the failure left empty, under Retry. */
+      exit?: ErrorStateRemedy | undefined;
       children: ReactNode;
       remedy?: undefined;
       onRemove?: undefined;
@@ -124,6 +126,7 @@ export function ErrorState(
             ? undefined
             : { label: WORDS.RETRY, icon: <RetryIcon />, onClick: onRetry }
         }
+        secondary={props.placement === ERROR_STATE_PLACEMENT.CENTRED ? props.exit : undefined}
       >
         {children}
       </EmptyState>

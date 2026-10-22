@@ -20,6 +20,8 @@ import {
   MARK_PROVIDER,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  SIGN_IN_FAILURE,
+  SocialSignInChoices,
   TEXT_LINK_LOOK,
   TextLink,
 } from "@luke/ui";
@@ -28,7 +30,7 @@ import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BACK_TO_LUKE, CONNECT_RETURN, useConnectReturn } from "./connect-return";
 import { ConnectionGraphic } from "./connection-graphic";
-import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
+import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 /**
@@ -197,7 +199,7 @@ function ConnectGitHub(): React.JSX.Element {
       error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
     >
       {view.kind === VIEW.SIGN_IN ? (
-        <ProviderChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
+        <SocialSignInChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
       ) : null}
       {back.kind === CONNECT_RETURN.ELSEWHERE ? null : (
         <ButtonLink href={back.href} variant={BUTTON_VARIANT.PRIMARY} onClick={onBack}>

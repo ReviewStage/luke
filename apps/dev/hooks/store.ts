@@ -25,7 +25,7 @@ import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { defineState } from "eve/context";
 import { defineHook, type HookContext } from "eve/hooks";
-import { host, seams } from "../host.js";
+import { host, recordSandboxOpened, seams } from "../host.js";
 import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
 import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
@@ -103,27 +103,6 @@ async function terminalHolds(ctx: HookContext): Promise<boolean> {
         Effect.as(
           Effect.logWarning(
             `The terminal lease of session ${ctx.session.id} was not read: ${failure._tag}`,
-          ),
-          false,
-        ),
-      ),
-    ),
-  );
-}
-
-/** Whether the agent's credential is its starter's own GitHub token; a session the host does not admit, and a read that fails, are not. */
-async function onMemberToken(ctx: HookContext): Promise<boolean> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-      if (Result.isFailure(admitted)) return false;
-      const agent = yield* host.agent(admitted.success);
-      return Result.isSuccess(agent) && agent.success.githubAccess === GITHUB_ACCESS.TOKEN;
-    }).pipe(
-      Effect.catch((failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `The GitHub access of session ${ctx.session.id} was not read: ${failure._tag}`,
           ),
           false,
         ),
@@ -253,11 +232,7 @@ export default defineHook({
       if (event.type === "compaction.completed") {
         pinnedState(turnHanded).update(handedAfterCompaction);
       }
-      if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
-        const openedAt = seams.now();
-        const memberToken = await onMemberToken(ctx);
-        sandbox.update((held) => ({ ...held, openedAt, openedShallow: true, memberToken }));
-      }
+      if (opensSandbox(event)) await recordSandboxOpened(sandbox, ctx.session.auth, ctx.session.id);
       // The first write deepens the shallow checkout and sets the credential, which the policy renews from then on.
       if (deepensSandbox(event) && sandbox.get().deepenedAt === undefined) {
         const deepenedAt = seams.now();

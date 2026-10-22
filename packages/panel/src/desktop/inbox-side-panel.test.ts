@@ -46,6 +46,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -313,7 +314,8 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
 
 /** How many tabs of the panel beside the Inbox stand as its preview. */
 function previewTabs(container: HTMLElement): number {
-  return container.querySelectorAll('aside[aria-label="Panel"] .tab[data-preview="true"]').length;
+  return container.querySelectorAll('aside[aria-label="Panel"] .luke-tab[data-preview="true"]')
+    .length;
 }
 
 /** The panel beside the Inbox as a reader hears it: each tab's label, `▸ ` before the one shown; nothing where no panel stands. */
@@ -521,4 +523,15 @@ test("an agent the item names reads beside the Inbox as the panel's preview, its
   } finally {
     stop();
   }
+});
+
+test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the task's column does", async () => {
+  const { container } = await inbox();
+  await pressChip(container, "Batch the invitations");
+  const tab = container.querySelector<HTMLElement>('aside[aria-label="Panel"] [role="tab"]');
+  assert.ok(tab, "the agent's tab stands beside the Inbox");
+  restOn(tab);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.ok(card, "the agent's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Batch the invitations");
 });

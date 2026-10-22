@@ -40,6 +40,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -74,7 +75,6 @@ import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 import { useTaskMenu } from "./task-actions.js";
 import {
   AssigneeChip,
@@ -257,7 +257,14 @@ function TaskBoardCard({
         {drawn(TASK_PROPERTY.CREATOR) ? (
           <span className="tasks-board-face">
             {maker === undefined ? null : (
-              <span className="tasks-board-maker">{actorName(maker.actor)}</span>
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="tasks-board-maker"
+              >
+                {actorName(maker.actor)}
+              </Text>
             )}
             <ActorMark
               actor={maker?.actor ?? creator}
@@ -327,7 +334,14 @@ function TaskBoardCard({
           <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
         ) : null}
         {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
-          <span className="tasks-board-repository">{repositoryName(task.repository)}</span>
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="tasks-board-repository"
+          >
+            {repositoryName(task.repository)}
+          </Text>
         )}
         {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMarks task={task} /> : null}
         <span className="tasks-board-card-more">

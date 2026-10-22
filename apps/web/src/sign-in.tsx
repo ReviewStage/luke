@@ -1,13 +1,19 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { type SocialProvider, socialProviderFromState } from "@luke/features/sign-in-provider";
-import { AuthPage, PROVIDER_MARK_SIZE, ProviderMark } from "@luke/ui";
+import {
+  AuthPage,
+  PROVIDER_MARK_SIZE,
+  ProviderMark,
+  SIGN_IN_FAILURE,
+  SocialProviderButton,
+} from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
-import { SocialProviderButton } from "./sign-in-choices";
+import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 // The provider client forwards the authorization server's signed `oauth_query`
@@ -27,33 +33,17 @@ function providerHint(): SocialProvider | undefined {
  */
 function SignIn(): React.JSX.Element {
   const [provider] = useState(providerHint);
-  const [pending, setPending] = useState<SocialProvider>();
-  const [failure, setFailure] = useState<string>();
+  const { pending, failed, begin } = useSocialSignIn(authClient, {
+    callbackURL: () => undefined,
+    onBegin: () => captureSiteEvent(SITE_EVENT.SIGN_IN_START),
+  });
   const startedFromHint = useRef(false);
 
   useEffect(() => {
     if (!provider || startedFromHint.current) return;
     startedFromHint.current = true;
-    setPending(provider);
-    captureSiteEvent(SITE_EVENT.SIGN_IN_START);
-    void authClient.signIn.social({ provider }).then((result) => {
-      if (!result.error) return;
-      setPending(undefined);
-      setFailure("Sign-in could not start. Try again.");
-    });
-  }, [provider]);
-
-  const begin = async () => {
-    if (!provider || pending) return;
-    setPending(provider);
-    setFailure(undefined);
-    captureSiteEvent(SITE_EVENT.SIGN_IN_START);
-    const result = await authClient.signIn.social({ provider });
-    if (result.error) {
-      setPending(undefined);
-      setFailure("Sign-in could not start. Try again.");
-    }
-  };
+    begin(provider);
+  }, [provider, begin]);
 
   return (
     <AuthPage
@@ -74,11 +64,15 @@ function SignIn(): React.JSX.Element {
           ? undefined
           : "Luke could not verify which provider you chose. Return to Luke and try again."
       }
-      error={failure}
+      error={failed ? SIGN_IN_FAILURE : undefined}
       footnote="You can close this window after Luke confirms the sign-in."
     >
       {provider ? (
-        <SocialProviderButton provider={provider} pending={pending} onPress={() => void begin()} />
+        <SocialProviderButton
+          provider={provider}
+          pending={pending}
+          onPress={() => begin(provider)}
+        />
       ) : null}
     </AuthPage>
   );

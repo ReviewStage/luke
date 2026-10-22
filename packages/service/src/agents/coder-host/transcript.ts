@@ -44,6 +44,7 @@ import {
   type CodingAgentContext,
   type CodingAgentDelegationStart,
   type CodingAgentFailure,
+  type CodingAgentPayer,
   type CodingAgentSender,
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
@@ -160,6 +161,8 @@ export interface TranscriptPage {
   readonly failureReason?: CodingAgentFailure;
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
   readonly usage?: CodingAgentUsage;
+  /** Who pays for the agent, on its own transcript where its row records one; absent on a worker's. */
+  readonly payer?: CodingAgentPayer;
   /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
   readonly context?: CodingAgentContext;
   /** The delegations its newest turn still waits on, with when each worker began, on its own transcript; absent while none runs and on a worker's. */
@@ -520,6 +523,7 @@ const withUsage = (
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
+      ...(payer === null ? undefined : { payer }),
       ...(context === undefined ? undefined : { context }),
       ...(delegations.length === 0 ? undefined : { delegations }),
       ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),

@@ -22,6 +22,7 @@ import {
   GAP,
   Inline,
   POPOVER_ALIGN,
+  PopoverPanel,
   SETTINGS_ROW_DENSITY,
   SettingsRow,
   Stack,
@@ -39,7 +40,6 @@ import {
   useState,
 } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
-import { PopoverPanel } from "../popover-panel.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { SwitchRow } from "../settings/switch-row.js";
 import { useMinute } from "./task-time.js";

@@ -1,9 +1,8 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { ErrorState } from "@luke/ui";
+import { ErrorState, SpinnerRegion } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
-import { SpinnerRegion } from "../spinner.js";
 import { CodeCardHeader } from "./code-pane.js";
 import { CodeSnippet } from "./code-snippet.js";
 import type { ReadFileWindow } from "./file-tab.js";
@@ -98,7 +97,7 @@ export function InboxCodeCard({
       {shown.kind === CODE_READ.READY ? (
         <CodeSnippet code={shown.code} />
       ) : shown.kind === CODE_READ.READING ? (
-        <SpinnerRegion label="Loading lines" />
+        <SpinnerRegion delay label="Loading lines" />
       ) : (
         <div className="file-tab-notice">
           {shown.again ? (

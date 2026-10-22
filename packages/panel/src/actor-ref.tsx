@@ -18,12 +18,15 @@ import {
   HoverCardNote,
   HoverCardRule,
   INLINE_REF_LOOK,
+  InlineRef,
   SCROLL_SIZE,
   ScrollArea,
   TEXT_BUTTON_LINES,
   TextButton,
+  Tooltip,
   UNASSIGNED_WORDS,
   UnassignedAvatar,
+  VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import {
@@ -42,13 +45,11 @@ import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "
 import { type ReactNode, useEffect } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
 import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
-import { InlineRef } from "./inline-ref.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
 import { RelativeTime } from "./tasks/relative-time.js";
 import { AgentMark } from "./tasks/tab-look.js";
 import { useMinute } from "./tasks/task-time.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
@@ -283,7 +284,7 @@ const LEFT_WORDS = " (former member)";
 
 /** What a screen reader hears after the name of a member who left, set beside it; nothing for anyone else. */
 export function LeftWords({ actor }: { actor: Actor }): React.JSX.Element | null {
-  return leftWithFace(actor) ? <span className="visually-hidden">{LEFT_WORDS}</span> : null;
+  return leftWithFace(actor) ? <VisuallyHidden>{LEFT_WORDS}</VisuallyHidden> : null;
 }
 
 /** An actor's circle or square alone, at a size. */
@@ -358,7 +359,7 @@ export function UnassignedMark({
 
 /** What a screen reader hears of a row no one is assigned to, whose dashed mark says it on screen. */
 export function UnassignedHeard(): React.JSX.Element {
-  return <span className="visually-hidden">{`(${UNASSIGNED_WORDS.toLowerCase()})`}</span>;
+  return <VisuallyHidden>{`(${UNASSIGNED_WORDS.toLowerCase()})`}</VisuallyHidden>;
 }
 
 /**
@@ -369,13 +370,13 @@ export function UnassignedHeard(): React.JSX.Element {
  */
 export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
-  return <span className="visually-hidden">{`(created by ${actorName(actor)}${left})`}</span>;
+  return <VisuallyHidden>{`(created by ${actorName(actor)}${left})`}</VisuallyHidden>;
 }
 
 /** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
 export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
-  return <span className="visually-hidden">{`(assigned to ${actorName(actor)}${left})`}</span>;
+  return <VisuallyHidden>{`(assigned to ${actorName(actor)}${left})`}</VisuallyHidden>;
 }
 
 /** The quiet badge the reader's own account wears beside its name. */

@@ -17,6 +17,7 @@ import {
   type ButtonSize,
   type ButtonVariant,
 } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * folding-button.tsx -- a toolbar's labelled button whose words a narrow toolbar folds away, leaving its glyph, named by its hint.
@@ -36,8 +37,9 @@ import {
  * hands the focus back to; one whose name says more than its words, a count
  * its glyph wears, is named by `name`, which holds its words.
  *
- * What is drawn here is the button, and whether its words are folded. The
- * hint, when it shows and goes, is the app's (`hint`): it is handed the
+ * What is drawn here is the button, and whether its words are folded. Its
+ * hint is the window's tooltip (`Tooltip`, `hint.tsx`), or one the caller
+ * hangs in its place (`hint`): it is handed the
  * words while they are folded and nothing while they are drawn, and wraps
  * the button's box, which hands what the hint gives it on to the button.
  */
@@ -163,7 +165,7 @@ export function FoldingButton({
   disabled,
   onClick,
   trailing,
-  hint: Hint,
+  hint: Hint = Tooltip,
   ...doors
 }: FoldingButtonDoors & {
   /** Its words, and so its name, folded or not. */
@@ -180,7 +182,7 @@ export function FoldingButton({
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** A count after its words, inside the button's fill; it stays drawn when the words fold. */
   trailing?: ReactNode;
-  /** The app's hint, raising the words while they are folded. */
+  /** The hint raising the words while they are folded: the window's tooltip, unless the caller hangs one of its own. */
   hint?: FoldingButtonHint | undefined;
 }): React.JSX.Element {
   const [measured, folded] = useFolded();
@@ -199,5 +201,5 @@ export function FoldingButton({
       doors={doors}
     />
   );
-  return Hint === undefined ? box : <Hint label={folded ? label : undefined}>{box}</Hint>;
+  return <Hint label={folded ? label : undefined}>{box}</Hint>;
 }

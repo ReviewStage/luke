@@ -46,7 +46,12 @@ import {
   ErrorState,
   IconButton,
   ImageIcon,
+  Shortcut,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextArea,
+  Tooltip,
   useFilePicker,
 } from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -54,9 +59,7 @@ import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { Shortcut } from "./shortcut.js";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * Each kind in its own words: the title its dialog carries, the field's
@@ -435,11 +438,17 @@ export function FeedbackDialog({
             >
               Include my name and email
             </Checkbox>
-            <span id={signatureId} className="feedback-dialog-identity">
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              id={signatureId}
+              className="feedback-dialog-identity"
+            >
               {draft.signed
                 ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
                 : null}
-            </span>
+            </Text>
           </div>
         ) : null}
         {rejection === undefined ? null : <ErrorState>{rejection}</ErrorState>}

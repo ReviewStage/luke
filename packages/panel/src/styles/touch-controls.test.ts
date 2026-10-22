@@ -113,16 +113,19 @@ const HOVER_ONLY: readonly {
   {
     name: "a tab's × other than the chosen tab's",
     piece: {
-      className: "tab-strip",
+      className: "luke-tabs",
       children: [
         {
-          className: "tab",
+          className: "luke-tab",
           data: { selected: "false", closable: "true", marked: "false" },
-          children: [{ tag: "span", className: "tab-button" }, { className: "tab-close" }],
+          children: [
+            { tag: "span", className: "luke-tab-button" },
+            { className: "luke-tab-close" },
+          ],
         },
       ],
     },
-    control: ".tab-close",
+    control: ".luke-tab-close",
   },
   {
     name: "a plan section's byline",
@@ -252,16 +255,19 @@ test("on a touch screen a failed agent's tab keeps its mark rather than its ×",
   layFor(true);
   const close = drawn(
     {
-      className: "tab-strip",
+      className: "luke-tabs",
       children: [
         {
-          className: "tab",
+          className: "luke-tab",
           data: { selected: "false", closable: "true", marked: "true" },
-          children: [{ tag: "span", className: "tab-end-mark" }, { className: "tab-close" }],
+          children: [
+            { tag: "span", className: "luke-tab-end-mark" },
+            { className: "luke-tab-close" },
+          ],
         },
       ],
     },
-    ".tab-close",
+    ".luke-tab-close",
   );
 
   assert.ok(faded(close));

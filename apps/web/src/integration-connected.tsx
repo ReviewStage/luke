@@ -51,6 +51,10 @@ function titleOf({ provider, status }: Landing): string {
       return "This link has expired";
     case INTEGRATION_LANDING_STATUS.UNAVAILABLE:
       return name === undefined ? "Could not connect" : `Could not connect ${name}`;
+    case INTEGRATION_LANDING_STATUS.ALREADY_CONNECTED:
+      return name === undefined
+        ? "Already connected to another workspace"
+        : `${name} is already connected to another workspace`;
   }
 }
 

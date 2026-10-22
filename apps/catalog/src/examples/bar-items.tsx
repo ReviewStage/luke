@@ -5,7 +5,8 @@ import { CatalogSection } from "../section";
 
 /**
  * bar-items.tsx -- a phone's bar of places: glyphs over names, the place
- * shown in the accent's ink, and a last item that opens a drawer and says
+ * shown in the accent's ink, counts of what waits on the reader on their
+ * glyphs, short and long, and a last item that opens a drawer and says
  * whether it stands open.
  */
 
@@ -20,6 +21,7 @@ function Bar(): React.JSX.Element {
       <BarItem
         icon={<FolderIcon />}
         current={place === PLACE.INBOX}
+        count={{ value: 3, noun: "need you" }}
         onPress={() => setPlace(PLACE.INBOX)}
       >
         Inbox
@@ -27,6 +29,7 @@ function Bar(): React.JSX.Element {
       <BarItem
         icon={<GearIcon />}
         current={place === PLACE.TASKS}
+        count={{ value: 128, noun: "need you" }}
         onPress={() => setPlace(PLACE.TASKS)}
       >
         Tasks
@@ -40,7 +43,10 @@ function Bar(): React.JSX.Element {
 
 function BarItems(): React.JSX.Element {
   return (
-    <CatalogSection id="bar-item-places" title="Places in a bar, one shown, More opening a drawer">
+    <CatalogSection
+      id="bar-item-places"
+      title="Places in a bar, one shown, two counting what waits, More opening a drawer"
+    >
       <Bar />
     </CatalogSection>
   );

@@ -14,8 +14,11 @@ import {
   EllipsisIcon,
   IconButton,
   MarkDoneIcon,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PencilIcon,
   TextField,
+  Tooltip,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -39,7 +42,6 @@ import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
@@ -461,7 +463,9 @@ function SidebarSection({
       )}
       {rows.length === 0 ? (
         folded ? null : (
-          <p className="sidebar-section-empty">Drag tasks here</p>
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
+          </div>
         )
       ) : (
         // A folded section's rows are only the open one, so a drop over it lands on top rather than among them.

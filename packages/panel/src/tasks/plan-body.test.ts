@@ -148,7 +148,7 @@ function editedLines(view: HTMLElement): (string | undefined)[] {
 function shownWords(line: Element | null): string | undefined {
   const copy = line?.cloneNode(true);
   if (!(copy instanceof Element)) return undefined;
-  for (const hidden of copy.querySelectorAll(".visually-hidden, .luke-visually-hidden"))
+  for (const hidden of copy.querySelectorAll(".luke-visually-hidden, .luke-visually-hidden"))
     hidden.remove();
   return lineWords(copy);
 }
@@ -403,7 +403,7 @@ test("the sections changed since the last look are counted beside a face for eac
     ),
     ["person", "luke"],
   );
-  assert.equal(line.querySelector(".visually-hidden")?.textContent, "Charles Pan, Luke");
+  assert.equal(line.querySelector(".luke-visually-hidden")?.textContent, "Charles Pan, Luke");
   act(() => line.querySelector("button")?.click());
   assert.equal(dismissed, 1);
 });

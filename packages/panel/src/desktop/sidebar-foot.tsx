@@ -22,6 +22,10 @@ import {
   NavItem,
   ProviderMark,
   riseAbove,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Tooltip,
   UpdateIcon,
   useConfirmDialog,
   useMenu,
@@ -44,7 +48,6 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useOpenPerson } from "../person-door.js";
-import { Tooltip } from "../tooltip.js";
 import { useCapability } from "../use-app-state.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { OfflineMark } from "./offline-mark.js";
@@ -163,9 +166,23 @@ function AccountHeading({
   return (
     <>
       {account.name === undefined ? null : (
-        <span className="account-menu-name">{account.name}</span>
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="account-menu-name"
+        >
+          {account.name}
+        </Text>
       )}
-      <span className="account-menu-email">{account.email}</span>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="account-menu-email"
+      >
+        {account.email}
+      </Text>
     </>
   );
 }

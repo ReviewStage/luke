@@ -1166,41 +1166,60 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start a Call opens a call into runs on eve on the account's API key with its words as the prompt, for an account the routing would otherwise send to Claude Code, and is refused by name where it saved no API key, the plan never paying for eve",
+      "a Start a Call opens a call into routes by credential as any Start does: an account whose Claude plan or API key pays records Claude Code, and one with neither is refused by name",
       () =>
         Effect.gen(function* () {
           const layers = (native: ReturnType<typeof runtimes>["native"]) =>
             Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native);
-          const keyed = yield* openStarter(true);
-          yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
-          const onKey = runtimes();
-          const started = yield* startCodingAgent(
-            routedSessions(onKey.eve.sessions, keyed.owner),
-            keyed.owner,
-            { ...startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"), call: true },
-          ).pipe(Effect.provide(layers(onKey.native)));
+          const callIn = (workspaceId: string) => ({
+            ...startIn(workspaceId, "anthropic/claude-opus-5.5"),
+            call: true,
+          });
 
+          const planned = yield* openStarter(true);
+          const onPlan = runtimes();
+          const started = yield* startCodingAgent(
+            routedSessions(onPlan.eve.sessions, planned.owner),
+            planned.owner,
+            callIn(planned.workspaceId),
+          ).pipe(Effect.provide(layers(onPlan.native)));
           const routing = Option.getOrThrow(
-            yield* readCodingAgentRouting(keyed.owner, started.agent.id),
+            yield* readCodingAgentRouting(planned.owner, started.agent.id),
           );
-          assert.deepEqual([routing.runtime, routing.payer], ["eve", CODING_AGENT_PAYER.API_KEY]);
-          assert.deepEqual([heard(onKey.eve), heard(onKey.claudeCode)], [["open"], []]);
+          assert.deepEqual(
+            [routing.runtime, routing.payer],
+            ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
+          );
+          assert.deepEqual([heard(onPlan.eve), heard(onPlan.claudeCode)], [[], ["open"]]);
           assert.equal(started.agent.prompt, "Fix the flaky test.");
 
-          const planOnly = yield* openStarter(true);
+          const keyed = yield* openStarter(false);
+          yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+          const onKey = runtimes();
+          const onEve = yield* startCodingAgent(
+            routedSessions(onKey.eve.sessions, keyed.owner),
+            keyed.owner,
+            callIn(keyed.workspaceId),
+          ).pipe(Effect.provide(layers(onKey.native)));
+          const eveRouting = Option.getOrThrow(
+            yield* readCodingAgentRouting(keyed.owner, onEve.agent.id),
+          );
+          // An API key pays a Claude model's agent on Claude Code too, as any Start on one does.
+          assert.deepEqual(
+            [eveRouting.runtime, eveRouting.payer],
+            ["claude_code", CODING_AGENT_PAYER.API_KEY],
+          );
+
+          const none = yield* openStarter(false);
           const refusedOn = runtimes();
           const refused = yield* Effect.result(
             startCodingAgent(
-              routedSessions(refusedOn.eve.sessions, planOnly.owner),
-              planOnly.owner,
-              {
-                ...startIn(planOnly.workspaceId, "anthropic/claude-opus-5.5"),
-                call: true,
-              },
+              routedSessions(refusedOn.eve.sessions, none.owner),
+              none.owner,
+              callIn(none.workspaceId),
             ).pipe(Effect.provide(layers(refusedOn.native))),
           );
-          assertCredentialMissing(refused, MODEL_PROVIDER.ANTHROPIC, "a plan and no API key");
-          assert.deepEqual([heard(refusedOn.eve), heard(refusedOn.claudeCode)], [[], []]);
+          assertCredentialMissing(refused, MODEL_PROVIDER.ANTHROPIC, "no credential");
         }),
     );
 
@@ -1485,7 +1504,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex, and API key runs on eve on the OpenAI API key, and the Start is refused where none was saved",
+      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex on the plan, and API key on Codex on the OpenAI API key, and the Start is refused where none was saved",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1510,14 +1529,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
               model: "openai/gpt-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
-            },
-            {
-              name: "API key, a fast version on eve",
-              forAgents: false,
-              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
-              model: "openai/gpt-5.5-fast",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["codex", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "the plan off, only an Anthropic API key saved",
@@ -1575,7 +1587,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before",
+      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before, Codex running it on its fast tier",
       () =>
         Effect.gen(function* () {
           for (const forAgents of [true, false]) {

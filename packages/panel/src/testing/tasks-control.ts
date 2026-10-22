@@ -131,6 +131,7 @@ export function codingAgentsControl(
     onDraftChange: ignore,
     onHandDraft: ignore,
     onTaskStarted: ignore,
+    opening: undefined,
     onDraftAttachments: ignore,
     onDiscardDraft: ignore,
     startPrompt: () => Promise.resolve(undefined),
@@ -197,6 +198,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
   return {
     page: TASKS_PAGE.HOME,
     restoring: false,
+    starting: undefined,
     resting: false,
     shown: true,
     signedIn: true,

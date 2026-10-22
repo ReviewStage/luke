@@ -467,11 +467,6 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const task =
         named ?? (agent.taskId === null ? undefined : yield* admitTask(accountId, agent.taskId));
       if (task !== undefined && "refusal" in task) return task;
-      // A call runs on eve alone: an agent on a native harness is refused before anything is
-      // counted, so eve never answers its conversation beside the harness that does.
-      if (agent.runtime !== CONVERSATION_RUNTIME.EVE) {
-        return refused(HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE);
-      }
       // Note that a call's turns run on the agent's starter's key, and Luke's pays for no coding
       // agent, so one Luke's key paid for, or whose starter keeps no API key now, is refused first.
       if (yield* callCredentialMissing(accountId, agentId)) {

@@ -226,6 +226,9 @@ export type IntegrationTrigger = Extract<
   { kind: typeof AUTOMATION_TRIGGER.INTEGRATION }
 >;
 
+/** What an integration trigger filters its events by. */
+export type IntegrationTriggerFilters = NonNullable<IntegrationTrigger["filters"]>;
+
 /** A coding agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
 const codingAgentActionSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_ACTION.CODING_AGENT),
@@ -276,6 +279,9 @@ export const AUTOMATION_DEFAULT_GUARDS: AutomationGuards = {
   maxConcurrentRuns: 1,
   dailyRunCap: 10,
 };
+
+/** How long an integration trigger waits before the same subject fires it again, where its guards name no cooldown: a day. */
+export const AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS = 24;
 
 /** Who an automation belongs to: its owner alone, or the workspace it was made in. */
 export const AUTOMATION_SCOPE = {

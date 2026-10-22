@@ -33,6 +33,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ConfirmDialog,
+  commandKeyshortcuts,
   ErrorState,
   INLINE_EDIT_LOOK,
   InlineEdit,
@@ -43,6 +44,9 @@ import {
   SettingsLine,
   SettingsSection,
   SettingsSectionsSkeleton,
+  Shortcut,
+  SPINNER_SIZE,
+  SpinnerRing,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -73,9 +77,6 @@ import {
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
 import { focusSearchField, Highlighted } from "../search-field.js";
-import { Shortcut } from "../shortcut.js";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner.js";
-import { commandKeyshortcuts } from "../tooltip.js";
 import { MenuRow } from "./menu-row.js";
 
 /**

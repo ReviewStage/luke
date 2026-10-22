@@ -28,6 +28,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   INLINE_REF_LOOK,
+  InlineRef,
   LineSummary,
   TaskStatusMark,
   TEXT_LINK_LOOK,
@@ -77,7 +78,6 @@ import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { FadingWords } from "../fading-words.js";
 import { useFindOpen } from "../find-in-tab.js";
-import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
@@ -85,7 +85,6 @@ import {
   AgentCallControls,
   type AgentCallDoors,
   AgentCallFoot,
-  takesCalls,
   useAgentOnCall,
 } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -100,7 +99,7 @@ import { type PublishedDoors, PublishedRow } from "./agent-published.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
-import { AgentTabSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
@@ -138,6 +137,7 @@ import {
   planPayerOf,
   providerOf,
   SENT_LINE_STATE,
+  type SentLine,
   type SpokenMessage,
   settledPlanEdits,
   sidebarCallIds,
@@ -146,6 +146,7 @@ import {
   teammateStarter,
   transcriptRowKey,
   turnStretches,
+  unreadOpeningLine,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -2147,8 +2148,7 @@ function AgentTabView({
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
-  // Note that an agent on a provider's own harness takes no call, so its tab draws neither the button nor the foot.
-  const call = takesCalls(agent) ? offeredCall : undefined;
+  const call = offeredCall;
   const onCall = useAgentOnCall(agent.id) && call !== undefined;
   const lines = useMemo(
     () => agentLines(transcript.messages, composer.sent),
@@ -2302,6 +2302,7 @@ function AgentTabView({
             models={models}
             readModels={readModels}
             usage={transcript.usage}
+            payer={transcript.payer}
             servers={servers}
             context={transcript.context}
             brief={agent.brief}
@@ -2366,6 +2367,37 @@ type AgentTabProps = AgentTabDoors &
     | { agent: CodingAgentSummary; agentId?: undefined }
     | { agent: CodingAgentSummary | undefined; agentId: string }
   );
+
+/** Nothing to retry on a tab whose agent is not made yet. */
+const NO_RETRY = () => undefined;
+
+/**
+ * The tab of an agent New task is still starting, before the service has
+ * made it: the developer's words as its first line, as the agent's own
+ * transcript will draw them, and its working line saying it is starting,
+ * over the composer's card, which the agent's own tab takes the place of
+ * once the start answers, its first line drawn in the same place.
+ */
+export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
+  const messages = useMemo(() => agentLines([], [line]), [line]);
+  return (
+    <section className="agent-tab ph-no-capture">
+      <AgentTranscriptView
+        messages={messages}
+        brief={CODING_AGENT_BRIEF.PROMPT}
+        reading={false}
+        failed={false}
+        working
+        sessionStarting
+        onRetry={NO_RETRY}
+        overComposer
+      />
+      <footer className="agent-tab-foot">
+        <ComposerSkeleton />
+      </footer>
+    </section>
+  );
+}
 
 /**
  * An agent's tab, by the agent's id alone: its transcript is followed and
@@ -2498,8 +2530,20 @@ function AgentTabBody({
   const surroundsLanded =
     publishedSettled &&
     (callsSettled || !messages.some((message) => callOfLine(message) !== undefined));
+  // An agent New task just started draws the words it was started on as its
+  // first line until its transcript reads one back (`unreadOpeningLine`).
+  const opening = unreadOpeningLine(
+    control.opening?.agentId === agent.id ? control.opening.line : undefined,
+    messages,
+  );
+  const sent = useMemo(
+    () => (opening === undefined ? composer.sent : [opening, ...composer.sent]),
+    [opening, composer.sent],
+  );
   const opened = useRef(false);
-  if (surroundsLanded) opened.current = true;
+  // Note that a log already drawn on its opening line is never held back again, because
+  // an agent just started has published nothing and been called by no one, so nothing would move it.
+  if (surroundsLanded || opening !== undefined) opened.current = true;
   const holding = messages.length > 0 && !opened.current;
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => appPlatform().openGitHub(url);
@@ -2570,7 +2614,7 @@ function AgentTabBody({
         models={control.models}
         readModels={control.readModels}
         transcript={transcript}
-        composer={composer}
+        composer={sent === composer.sent ? composer : { ...composer, sent }}
         model={model}
         servers={servers}
         published={published}

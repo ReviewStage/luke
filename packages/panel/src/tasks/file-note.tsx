@@ -1,11 +1,10 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import { DisclosureAction, IconButton, useMenu, WingFace } from "@luke/ui";
+import { DisclosureAction, IconButton, Tooltip, useMenu, WingFace } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
-import { Tooltip } from "../tooltip.js";
 import { AnnotationCard, AnnotationComment, AnnotationComments } from "./annotation-card.js";
 import type { FileNote } from "./file-tab-model.js";
 import { chipPress, MinimizedChip } from "./minimized-threads.js";

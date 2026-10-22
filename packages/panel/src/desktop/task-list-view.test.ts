@@ -805,7 +805,8 @@ function heardFaces(sidebar: HTMLElement): [string, string | undefined][] {
   assert.ok(tasks, "the Tasks section stands");
   return [...tasks.querySelectorAll(".sidebar-tasks > li > button")].map((row) => [
     row.querySelector(".luke-list-row-title")?.firstChild?.textContent ?? "",
-    row.querySelector(".luke-list-row-title .visually-hidden:last-child")?.textContent ?? undefined,
+    row.querySelector(".luke-list-row-title .luke-visually-hidden:last-child")?.textContent ??
+      undefined,
   ]);
 }
 

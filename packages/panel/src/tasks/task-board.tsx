@@ -4,7 +4,7 @@ import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, SpinnerRegion } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -12,7 +12,6 @@ import { Fragment, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
 import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { SpinnerRegion } from "../spinner.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import type { WhiteboardHandle, WhiteboardModule } from "../whiteboard/contract.js";
 
@@ -176,7 +175,7 @@ export function TaskBoard({
         </Fragment>
       ) : null}
       {!AsyncResult.isFailure(loaded) && (module === undefined || board === undefined) ? (
-        <SpinnerRegion label="Loading board" />
+        <SpinnerRegion delay label="Loading board" />
       ) : null}
     </section>
   );

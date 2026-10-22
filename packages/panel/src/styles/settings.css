@@ -391,14 +391,6 @@
   margin-top: var(--luke-space-4);
 }
 
-/* A chord that is a Keyboard shortcuts row's whole value: set at the row's
-   label size in the value's ink, the way System Settings lists its keyboard
-   shortcuts. */
-.shortcut-value {
-  --shortcut-text: var(--luke-type-label-size);
-  --shortcut-ink: var(--luke-color-text-muted);
-}
-
 /* What leads a row that stands for something of its own, a provider's or a
    service's mark, in one box whatever the artwork's proportions. */
 .settings-row-mark {
@@ -412,14 +404,6 @@
 .settings-row-mark > :is(svg, img) {
   width: 20px;
   height: 20px;
-}
-
-/* A workspace's GitHub account, an indented row under GitHub's: its mark is
-   a tile a step smaller than a provider's. */
-.workspace-github-account-mark > .workspace-tile {
-  width: 18px;
-  height: 18px;
-  font-size: var(--luke-type-caption-size);
 }
 
 /* Where a row's subject stands, under its name: connected with the dot a

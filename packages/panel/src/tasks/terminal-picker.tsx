@@ -7,8 +7,10 @@ import {
   COMBOBOX_LIST_HEIGHT,
   ComboboxListBox,
   ComboboxOptionItem,
+  NoteLine,
   PlusIcon,
   SearchIcon,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -16,7 +18,6 @@ import {
 } from "@luke/ui";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { Shortcut } from "../shortcut.js";
 import { agentTabLabel } from "./coding-agent-model.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -158,10 +159,12 @@ export function TerminalPicker({
       <Command.List asChild label="Coding agents">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
           {read ? (
-            <Command.Empty className="command-palette-empty">No agents match.</Command.Empty>
+            <Command.Empty>
+              <NoteLine>No agents match.</NoteLine>
+            </Command.Empty>
           ) : null}
           {!read ? (
-            <div className="command-palette-empty">Reading the task’s agents…</div>
+            <NoteLine status>Reading the task’s agents…</NoteLine>
           ) : listed.length === 0 ? (
             <Command.Item
               asChild

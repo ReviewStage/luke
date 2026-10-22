@@ -135,6 +135,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
+| Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`, `SkillChip`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click, a pill in a box's words) |
 | Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
