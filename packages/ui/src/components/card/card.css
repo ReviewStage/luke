@@ -29,6 +29,11 @@
     border-color: var(--luke-color-border-strong);
     border-radius: var(--luke-radius-8);
     background: var(--luke-color-overlay);
+    /* Note that a raised card lets what it holds stand past its edge, because
+       its fields open their suggestion menus over its top and a clip would
+       hide their rows; what it holds draws no ground of its own to square
+       its corners. */
+    overflow: visible;
   }
 
   .luke-card-head {
