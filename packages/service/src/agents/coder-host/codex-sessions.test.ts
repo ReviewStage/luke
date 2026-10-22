@@ -196,6 +196,7 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
     eventsUrl: EVENTS_URL,
     mcpUrl: MCP_URL,
     instructions: () => Effect.succeed(INSTRUCTIONS),
+    seed: () => Effect.succeed(undefined),
     nextSequence: () => Effect.sync(() => sequence.next),
     tokenUrl: TOKEN_URL,
     run: (effect) => Effect.runPromise(effect),

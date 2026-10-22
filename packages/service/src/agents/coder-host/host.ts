@@ -15,11 +15,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
-import {
-  listRecentMessages,
-  type StoredMessageRecord,
-  turnsBefore,
-} from "@luke/database/models/message-reads";
+import { turnsBefore } from "@luke/database/models/message-reads";
 import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
@@ -36,7 +32,7 @@ import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
+import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
@@ -53,12 +49,7 @@ import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { type ChatSince, standingContext } from "../agent-runtime/standing-context.js";
 import { turnKindOf } from "../brain-host/auth.js";
-import {
-  BRAIN_HOST,
-  BRAIN_HOST_TURN,
-  type BrainHostTurn,
-  RELAY_TURN,
-} from "../brain-host/bounds.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn, RELAY_TURN } from "../brain-host/bounds.js";
 import {
   type AdmittedConversation,
   admitConversation,
@@ -78,7 +69,6 @@ import {
   type RelayStateStore,
   StreamRelay,
 } from "../brain-host/relay.js";
-import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import {
@@ -132,10 +122,11 @@ import { type CoderModelSelection, coderModel } from "./model.js";
 import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import type { PullRequestToolResult } from "./pull-request.js";
+import { conversationSeed } from "./seed.js";
 import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import { CODER_TOOL } from "./tool-set.js";
 import {
   contentKey,
   savedByAnotherSince,
@@ -538,16 +529,6 @@ function asksTitle(event: MessageStreamEvent): boolean {
   );
 }
 
-/** Whether a stored row is a line awaiting its turn: a user's words no turn has taken yet (`writer.ts`'s `takeAwaitingLine`). */
-function awaitsTurn(record: StoredMessageRecord): boolean {
-  return record.message.role === MESSAGE_ROLE.USER && record.turnId === undefined;
-}
-
-/** A stored row's message, as the seed renders it. */
-function messageOf(record: StoredMessageRecord) {
-  return record.message;
-}
-
 /** The host over the deployment's seams. */
 export function coderHost(seams: CoderHostSeams): CoderHost {
   const research = new ResearchBudget();
@@ -925,20 +906,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     skills: (admitted, agent) =>
       hasRepository(agent) ? agentSkills(admitted.target, agent) : Effect.succeed([]),
 
-    seed: (admitted) =>
-      Effect.map(
-        listRecentMessages(
-          admitted.target.userId,
-          admitted.target.conversationId,
-          CODER_TOOL_SET,
-          BRAIN_HOST.SEED_MESSAGES,
-        ),
-        (read) =>
-          rotationSeedText(
-            read.ok ? read.value.filter((record) => !awaitsTurn(record)).map(messageOf) : [],
-            seams.now(),
-          ),
-      ),
+    seed: (admitted) => conversationSeed(admitted.target, seams.now()),
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>

@@ -183,13 +183,18 @@ const savePlan = (userId: string) =>
 /** An account with one agent on a task with no repository, on its Claude plan. */
 const openAgent = Effect.tap(openAgentWithoutPlan, ({ userId }) => savePlan(userId));
 
-/** The sessions for the account, the next event number read from the counter given. */
-function sessionsFor(userId: string, sequence: { next: number }) {
+/** The sessions for the account, the next event number read from the counter given, a fresh session seeded with what `seed` answers: nothing unless named. */
+function sessionsFor(
+  userId: string,
+  sequence: { next: number },
+  seed: ClaudeCodeSessionsOptions["seed"] = () => Effect.succeed(undefined),
+) {
   const options: ClaudeCodeSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
     mcpUrl: MCP_URL,
     instructions: () => Effect.succeed(INSTRUCTIONS),
+    seed,
     nextSequence: () => Effect.sync(() => sequence.next),
     run: (effect) => Effect.runPromise(effect),
   };
@@ -648,6 +653,67 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a line opens with the conversation so far wherever the CLI's session opens afresh: at open, on a relaunch with no session to resume, and after an expired snapshot, never to a running runner or one that resumes",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const target = { userId, conversationId: agent.conversationId };
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence, () =>
+          Effect.succeed("[so far]"),
+        ).pipe(Effect.provide(services(api)));
+        const ended = (sessionId: string) =>
+          Effect.gen(function* () {
+            sequence.next += 10;
+            yield* runnerEnded({ target, sessionId, sequence: sequence.next - 1 }).pipe(
+              Effect.provide(api.layer),
+            );
+          });
+        /** The words each launch's message lines carried, in order. */
+        const carried = () =>
+          api.commands.flatMap((command) =>
+            (linesOf(command) as InputLine[]).flatMap((each) =>
+              each.type === INPUT_LINE.MESSAGE
+                ? [
+                    each.content
+                      .map((block) => (block.type === "text" ? block.text : ""))
+                      .join(" | "),
+                  ]
+                : [],
+            ),
+          );
+
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // Stopped before the CLI named its session: the relaunch opens a new one, seeded.
+        yield* ended(opened.sessionId);
+        yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
+        // To the runner while it runs: nothing seeded.
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        yield* sessions.send(opened.sessionId, message(agent, "And the tests."));
+        // Stopped with a CLI session to resume: the relaunch resumes it, so nothing is seeded.
+        yield* ended(opened.sessionId);
+        yield* sessions.send(opened.sessionId, message(agent, "Now the reminders."));
+        // The snapshot expires: the fresh sandbox's CLI starts a new session, seeded.
+        yield* ended(opened.sessionId);
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+        yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+
+        assert.deepEqual(carried(), [
+          "[so far] | Fix the invitations.",
+          "[so far] | Also the emails.",
+          "And the tests.",
+          "Now the reminders.",
+          "[so far] | And the docs.",
+        ]);
       }),
   );
 

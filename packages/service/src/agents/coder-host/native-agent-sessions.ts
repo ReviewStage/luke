@@ -11,6 +11,9 @@
  * and runs under Luke's coder instructions, worded for the harness, which
  * names the tools it owns by its own names (`instructions.ts`): Claude
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
+ * A harness's session opened afresh, a snapshot expired or a sandbox
+ * retired, is handed the conversation so far, as eve seeds a new session
+ * (`seed.ts`), so the agent goes on knowing what was said.
  */
 
 import { chatEnabledFor } from "@luke/database/models/account-store";
@@ -20,7 +23,7 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import { LUKE_MCP_PATH } from "../luke-mcp/app.js";
@@ -33,6 +36,7 @@ import { codexSessions } from "./codex-sessions.js";
 import { CODER_HARNESS, type CoderHarness, coderInstructions } from "./instructions.js";
 import type { RunnerServices, RunnerSessionsOptions, SandboxRunner } from "./runner-sessions.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
+import { conversationSeed } from "./seed.js";
 
 export interface NativeAgentSessionsOptions {
   /** Runs one effect on the function's runtime, which the checkout reaches the sandbox through. */
@@ -102,6 +106,15 @@ export function nativeAgentSessionsLayer(
         mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
         instructions: (agent) =>
           nativeCoderInstructions(account, agent, harness).pipe(Effect.provideContext(context)),
+        // A seed that cannot be read is logged and hands nothing, so the message still goes.
+        seed: (agent) =>
+          Effect.flatMap(Clock.currentTimeMillis, (now) =>
+            conversationSeed({ userId: account, conversationId: agent.conversationId }, now),
+          ).pipe(
+            Effect.tapError(logStoreFailure),
+            Effect.orElseSucceed(() => undefined),
+            Effect.provideContext(context),
+          ),
         // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.
         nextSequence: (conversationId) =>
           readNativeSequence({ userId: account, conversationId }).pipe(
