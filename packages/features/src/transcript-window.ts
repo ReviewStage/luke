@@ -179,6 +179,7 @@ function windowMessageOf(
     const sentBy = senderOf(row);
     return {
       ...message,
+      clientId: row.clientId,
       ...(sentBy === undefined ? undefined : { sentBy }),
       sentAt: row.placedAt,
       ...(row.journalId === null || row.afterStep === null

@@ -28,19 +28,12 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * The environment the runner reads. The bearer authenticates it to Luke, its
  * events and its MCP server alike. The plan token is never read by the runner
  * itself: the CLI it launches inherits it, and the command sandbox denies it,
- * with the bearer, to every command the agent runs. An Anthropic API key
- * stands in its place for a launch in test mode, on the same terms.
+ * with the bearer, to every command the agent runs. Codex's token is never
+ * in it: app-server asks Luke for it through the runner's token command.
  */
 export const RUNNER_ENV = {
   BEARER: "LUKE_RUNNER_TOKEN",
   CLAUDE_TOKEN: "CLAUDE_CODE_OAUTH_TOKEN",
-  /**
-   * The ChatGPT plan's OAuth access token, which `codex app-server` reads under
-   * this name (OpenAI's documented provider's `env_key`), and which no
-   * command Codex runs inherits.
-   */
-  CODEX_TOKEN: "ACCESS_TOKEN",
-  API_KEY: "ANTHROPIC_API_KEY",
 } as const;
 
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
@@ -81,7 +74,6 @@ export const INPUT_LINE = {
   MESSAGE: "message",
   STOP: "stop",
   MODEL: "model",
-  TOKEN: "token",
 } as const;
 
 /**
@@ -168,14 +160,12 @@ export const CodexConfigSchema = Schema.Struct({
   mcpUrl: Schema.String,
   /**
    * Where the runner asks Luke for the plan's access token, under its bearer
-   * (`/api/agents/runner-token`). Where it is given, app-server takes its
-   * token from the runner's `codex-token` command (Codex's provider `auth`),
-   * which Codex runs again as its cached token ages and after a 401, so a
-   * turn outlives any one token; `ACCESS_TOKEN` is then neither read nor
-   * handed to app-server. Absent, app-server reads `ACCESS_TOKEN` once as
-   * it starts, as for test mode's API key.
+   * (`/api/agents/runner-token`). App-server takes its token from the
+   * runner's `codex-token` command (Codex's provider `auth`), which Codex runs
+   * again as its cached token ages and after a 401, so a turn outlives any
+   * one token.
    */
-  tokenUrl: Schema.optionalKey(Schema.String),
+  tokenUrl: Schema.String,
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 
@@ -234,24 +224,8 @@ const ModelLineSchema = Schema.Struct({
   effort: Schema.optionalKey(Schema.Union([EffortSchema, CodexEffortSchema])),
   fast: Schema.optionalKey(Schema.Boolean),
 });
-/**
- * A refreshed ChatGPT access token, for a Codex launch that reads
- * `ACCESS_TOKEN` (no `tokenUrl`): the runner restarts app-server with it and
- * resumes the thread before the next turn it starts, never during one. A
- * launch with a `tokenUrl` withholds it and takes nothing from it. The one line that carries a secret: never logged, echoed
- * or posted, and taken out of every event. A Claude Code launch skips it.
- */
-const TokenLineSchema = Schema.Struct({
-  type: Schema.Literal(INPUT_LINE.TOKEN),
-  accessToken: Schema.String,
-});
 
-export const InputLineSchema = Schema.Union([
-  MessageLineSchema,
-  StopLineSchema,
-  ModelLineSchema,
-  TokenLineSchema,
-]);
+export const InputLineSchema = Schema.Union([MessageLineSchema, StopLineSchema, ModelLineSchema]);
 export type InputLine = typeof InputLineSchema.Type;
 
 /**
@@ -280,7 +254,7 @@ export const RUNNER_END = {
   STOPPED: "stopped",
   /** Luke closed stdin, or the CLI ended its stream, before a turn ended. */
   INPUT_CLOSED: "input_closed",
-  /** The CLI or app-server failed, or Codex's turn did; the turn shows as interrupted, and Continue relaunches with `resume`. */
+  /** The CLI or app-server failed, or Codex's turn did; the turn shows as failed, and the next message relaunches with `resume`. */
   FAILED: "failed",
   /**
    * A wait released (`RUNNER_RELEASE`): the agent waited on wakeups alone,

@@ -10,7 +10,6 @@ import {
   readCodingAgentRouting,
   taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import {
   claimRuntimeSession,
@@ -28,6 +27,7 @@ import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-voc
 import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { MESSAGE_CHANNEL } from "../../core.js";
@@ -94,8 +94,8 @@ import { codingAgentStatusOf } from "./status.js";
  * exactly this message (`coder-host/channel.ts`). An archived agent takes
  * no message, and is refused as one that names nothing, since every list
  * leaves it out until it is brought back; it is read again under the
- * conversation's lock just before the send, the lock its archive takes, so
- * a send that waited on the archive is refused. A
+ * conversation's dispatch lock just before the send, the lock its archive
+ * waits out, so a send that waited on the archive is refused. A
  * session eve answers it no longer runs has ended for good, and nothing
  * will end the turn it was running, so that turn, as read before eve was
  * asked, is settled failed for its session's end
@@ -138,6 +138,18 @@ type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
 /** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and a failure is read by `failedCallRefusal`, an outage unless a native harness said why. A session eve no longer runs is no refusal: the message opens a fresh one. */
 const REFUSAL_OF_SEND_OUTCOME = {
   [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
+} as const;
+
+/**
+ * Why a line was not written, in the route's words: a conversation gone is
+ * the agent gone, a conversation whose lock another write held past the
+ * send's wait for it is an outage the same key may retry, since eve was told
+ * nothing, and words the vocabulary refused are the request's own fault.
+ */
+const REFUSAL_OF_UNWRITTEN_LINE = {
+  [STORE_WRITE_REFUSAL.NO_CONVERSATION]: HOSTED_REFUSAL.NOT_FOUND,
+  [STORE_WRITE_REFUSAL.BUSY]: HOSTED_REFUSAL.UNAVAILABLE,
+  [STORE_WRITE_REFUSAL.MESSAGE_REFUSED]: HOSTED_REFUSAL.INVALID_REQUEST,
 } as const;
 
 /**
@@ -354,14 +366,14 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       refused = failedCallRefusal(opened);
       return false;
     }
-    // Note that the fresh session claims the record here, still under the conversation's lock, rather
+    // Note that the fresh session claims the record here, still under the conversation's dispatch lock, rather
     // than only as its own start runs, because a message sent in between would read the ended session,
     // open a second fresh one, and the newer claim would refuse the first, words and all.
     yield* claimedFor(target, opened.sessionId);
     return true;
   });
-  // Note that the archive is read again here, under the conversation's lock, because a plan's archive
-  // takes that lock to archive the agent, so the two never cross.
+  // Note that the archive is read again here, under the conversation's dispatch lock, because a plan's
+  // archive waits that lock out to archive the agent, so the two never cross.
   const handOver = Effect.flatMap(refusalNow(userId, agent), (refusal) => {
     if (refusal === undefined) return send;
     refused = refusal;
@@ -381,8 +393,8 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   // Note that a native agent's servers are written just after its harness takes the words rather than
   // just before, still in this transaction, because a harness this function relays to (`native-relay.ts`)
   // writes the agent's row on its own connection as it launches, and would wait on this transaction's lock
-  // on it until the hand-over gave up. Its runner's first events take them under the conversation's lock,
-  // which waits for this transaction all the same, so the turn they are for still finds them.
+  // on it until the hand-over gave up. Its runner's first events wait out the conversation's dispatch lock,
+  // which this transaction holds, all the same, so the turn they are for still finds them.
   const native = isNativeRuntime(yield* hostedStoreOrUnavailable(runtimeOf(userId, agent)));
   const handing = native
     ? Effect.flatMap(handOver, (taken) =>
@@ -407,13 +419,8 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       write.writeAwaitingLine(target, { ...line, mentioned }, dispatch),
     ),
   );
-  if (Result.isFailure(written)) {
-    return yield* Effect.fail(
-      written.failure.refusal === STORE_WRITE_REFUSAL.NO_CONVERSATION
-        ? HOSTED_REFUSAL.NOT_FOUND
-        : HOSTED_REFUSAL.INVALID_REQUEST,
-    );
-  }
+  if (Result.isFailure(written))
+    return yield* Effect.fail(REFUSAL_OF_UNWRITTEN_LINE[written.failure.refusal]);
   // The turn the ended session was running is settled whether or not the fresh session took the words.
   if (ended && running !== undefined) yield* settledEnded(writer, agent, running);
   if (Option.isNone(written.success))

@@ -67,6 +67,7 @@ import {
   MESSAGE_SENDER,
 } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
+import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import {
   awaitingLinesOf,
   awaitingLinesOfReached,
@@ -193,7 +194,7 @@ export interface CodingAgent {
   readonly startBranch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
-  /** The human name the agent was given as it was created; null for an agent from before names were given. */
+  /** The human name the agent was given as it was created; null for an agent from before names were given, and for an operator, which is Luke. */
   readonly personaName: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
@@ -721,7 +722,7 @@ const insertAgent = SqlSchema.findOneOption({
     automationOrigin: AutomationOriginColumnSchema,
     startedFrom: StartedFromColumnSchema,
     title: Schema.NullOr(Schema.String),
-    personaName: Schema.String,
+    personaName: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -1806,7 +1807,11 @@ export function createCodingAgent(
           automationOrigin: started.automationOrigin ?? null,
           startedFrom: started.startedFrom ?? null,
           title: started.title ?? null,
-          personaName: started.personaName ?? (yield* newPersonaName(started.taskId)),
+          // The operator is Luke, never a teammate with a first name, so it is given none (`agentTabLabel`).
+          personaName:
+            started.kind === CODING_AGENT_KIND.OPERATOR
+              ? null
+              : (started.personaName ?? (yield* newPersonaName(started.taskId))),
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
@@ -1915,8 +1920,10 @@ const deleteAgentCallWords = SqlSchema.void({
  * task's delete does; none where the account reaches no such agent.
  *
  * Everything runs under the agent's conversation lock, the one every write
- * of its lines and turns takes, and the agent is read again under it, so a
- * message handed over after the caller stopped it either landed first, and
+ * of its lines and turns takes, taken once any hand-over to eve under way
+ * has been waited out (`dispatch-lock.ts`), and the agent is read again
+ * under it, so a message handed over after the caller stopped it either
+ * landed first, and
  * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
  * waits on the lock and finds no agent.
  */
@@ -1934,6 +1941,8 @@ export function deleteCodingAgent<R = never>(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return Option.none();
+        // A hand-over to eve under way is waited out first, so its line stands awaiting when the guard reads.
+        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });
@@ -2259,7 +2268,7 @@ export function updateCodingAgentServers(
  * took the message. The row is locked, the servers added, the hand-over
  * run, and the servers as they stood put back for one that answered
  * nothing, so a refused send leaves no server for a later turn. Note that
- * the caller runs this as the dispatch under the conversation's lock
+ * the caller runs this as the dispatch under the conversation's dispatch lock
  * (`writeAwaitingLine`), after its repeat check, so a send's servers are
  * added only for a send eve hears, and no other send's hand-over stands
  * between this one's servers and its message. Nothing is added for no
@@ -2522,6 +2531,8 @@ export function archiveIdleCodingAgent(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return IDLE_ARCHIVE.NOT_FOUND;
+        // A hand-over to eve under way is waited out first, so its line stands awaiting when `idle` reads.
+        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });

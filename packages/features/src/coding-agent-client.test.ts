@@ -598,6 +598,44 @@ it.effect(
 );
 
 it.effect(
+  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to eve, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
+  () =>
+    Effect.gen(function* () {
+      const request = { text: "Also the emails.", clientKey: "key-1" };
+      const ran = { agent: AGENT };
+      let answer: (response: Response) => void = () => undefined;
+      const slow = recordingHttpClient(
+        () =>
+          new Promise<Response>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const asked = yield* Effect.forkChild(
+        Effect.provide(client().message(AGENT_ID, request), slow.layer),
+      );
+      yield* TestClock.adjust("40 seconds");
+      answer(
+        new Response(JSON.stringify(ran), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      assert.deepEqual(yield* Fiber.join(asked), ran);
+
+      const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
+      const unanswered = yield* Effect.forkChild(
+        Effect.provide(client().message(AGENT_ID, request), silent.layer),
+      );
+      yield* TestClock.adjust("44 seconds");
+      assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
+      yield* TestClock.adjust("1 second");
+      assert.deepEqual(yield* Fiber.join(unanswered), {
+        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      });
+    }),
+);
+
+it.effect(
   "a Start from an agent travels to that agent's own path with the body a task's Start carries, and one naming no agent travels nowhere",
   () =>
     Effect.gen(function* () {

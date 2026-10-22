@@ -15,6 +15,7 @@ import type {
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
+  type CodingAgentKind,
   type CodingAgentStatus,
   type CodingAgentSummary,
   type TasklessAgent,
@@ -370,6 +371,8 @@ interface HeldAgent {
   model: string;
   /** The agent's title, said in the model's place where it has one. */
   title: string | null;
+  /** What kind of agent it is: an operator is said as Luke (`agentTabLabel`); none for a coder. */
+  kind?: CodingAgentKind | undefined;
   /** The human name the agent was given, said ahead of its title (`agentTabLabel`); none for one from before names were given. */
   personaName?: string | undefined;
   /** The automation whose run started it, which an untitled agent goes by (`agentTabLabel`). */
@@ -424,6 +427,7 @@ function noticeText(input: {
   subject: string | undefined;
   model: string;
   title: string | null;
+  kind?: CodingAgentKind | undefined;
   personaName?: string | undefined;
   automationName?: string | undefined;
   status: CodingAgentStatus;
@@ -720,6 +724,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             : taskName(end.agent.taskId),
         model: end.agent.model,
         title: end.agent.title,
+        kind: end.agent.kind,
         personaName: end.agent.personaName,
         automationName: end.agent.automationName,
         status: end.agent.status,
@@ -1049,6 +1054,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         | "planId"
         | "model"
         | "title"
+        | "kind"
         | "personaName"
         | "automationName"
         | "status"
@@ -1060,6 +1066,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         taskId: agent.planId,
         model: agent.model,
         title: agent.title,
+        kind: agent.kind,
         personaName: agent.personaName,
         automationName: agent.automationName,
         status: agent.status,

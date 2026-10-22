@@ -6,6 +6,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { asks, conversations, messages } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
+import { holdConversationDispatch } from "./dispatch-lock.js";
 import { recordedRuntimeSession } from "./recorded-session.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -104,7 +105,7 @@ export interface AskRecord {
   /** The newest eve session any of the conversation's asks was handed to, by eve's own sortable ids, ahead of the conversation row recording it. */
   latestSession(userId: string, conversationId: string): AskEffect<string | undefined>;
   /**
-   * Runs the dispatch under the conversation's lock unless a session is already written, handing it
+   * Runs the dispatch under the conversation's dispatch lock unless a session is already written, handing it
    * the conversation's newest session as read under that lock, and writes what eve answered; answers
    * the row after, or `NO_CONVERSATION` when the conversation no longer stands, so a deletion landing
    * between the ask's admission and its dispatch is the caller's refusal and not a failure.
@@ -555,8 +556,8 @@ const ConversationLockSchema = Schema.Struct({
   conversationId: Schema.String,
 });
 
-/** The conversation row under its own lock, the lock the writer and Clear take, so one dispatch at a time runs in a conversation. */
-const lockConversation = SqlSchema.findOneOption({
+/** The conversation row, unless Clear stamped it, read under the conversation's dispatch lock rather than its row lock. */
+const readConversation = SqlSchema.findOneOption({
   Request: ConversationLockSchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: (target) =>
@@ -570,8 +571,7 @@ const lockConversation = SqlSchema.findOneOption({
             eq(conversations.userId, target.userId),
             isNull(conversations.deletedAt),
           ),
-        )
-        .for("update"),
+        ),
     ),
 });
 
@@ -583,18 +583,22 @@ const readAsk = SqlSchema.findOneOption({
 });
 
 /**
- * One dispatch at a time per conversation: the conversation row is locked,
- * the ask row is read under it, a session already written ends the call
- * with nothing dispatched, and otherwise the caller's dispatch runs under
- * the lock and what eve answered is written before it is released. The lock
- * is the conversation's rather than the ask's on purpose: two first asks of
- * different client ids on a conversation with no session would each open
- * one, and the ask bound to the session the forward-only claim loses would
- * never read a turn; under the conversation's lock the second waits, reads
- * the session the first opened, and sends into it. A dispatch that answers
- * nothing leaves the row as it was, for a retry. The order is the one every
- * lock here keeps: the user's row, then the conversation's, and never an
- * ask's row held while a conversation's is wanted.
+ * One dispatch at a time per conversation: the conversation's dispatch lock
+ * is held (`dispatch-lock.ts`), the ask row is read under it, a session
+ * already written ends the call with nothing dispatched, and otherwise the
+ * caller's dispatch runs under the lock and what eve answered is written
+ * before it is released. The lock is the conversation's rather than the
+ * ask's on purpose: two first asks of different client ids on a conversation
+ * with no session would each open one, and the ask bound to the session the
+ * forward-only claim loses would never read a turn; under the conversation's
+ * lock the second waits, reads the session the first opened, and sends into
+ * it. It is the dispatch lock rather than the row lock so the journal of the
+ * turn under way keeps landing while eve answers; the relay's take of a line
+ * into a turn waits it out, so the binding after it reads the delivery
+ * written here. A dispatch that answers nothing leaves the row as it was, for
+ * a retry. The order is the one every lock here keeps: the user's row, then
+ * the conversation's dispatch lock, then its row, and never an ask's row
+ * held while a conversation's is wanted.
  */
 function dispatchAskOnce(
   target: ConversationTarget,
@@ -604,8 +608,9 @@ function dispatchAskOnce(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const locked = yield* lockConversation(target);
-        if (Option.isNone(locked)) return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
+        yield* holdConversationDispatch(target.conversationId);
+        const standingConversation = yield* readConversation(target);
+        if (Option.isNone(standingConversation)) return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
         const read = yield* readAsk(id);
         if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
         const standing = askRow(read.value);

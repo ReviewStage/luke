@@ -105,6 +105,40 @@ GitHub Dean is `dastratakos`, Dana `danamoreno`, Jordan `jordanlee`. The product
 mockups an agent shows are Relay's Members page, invite dialog, and accept page
 (`relay-pictures.ts`).
 
+## #214 as a pull request (0.18.0 on)
+
+`pr-214.ts` in `staging/releases/v0.18.0.patch` writes #214 out file by file:
+nine files of acme/relay (the memberships migration and schema, `invite.ts`,
+`accept.ts`, the invites route, the three reads filtered to active members, and
+the invite tests), each patch line by line so its counts are its own, read at
+head `4f1c2a9e…`. Dana's review thread sits on `invite.ts` line 21, the
+withdraw that clears `invite_token`. 0.19.0's chapters of it, told by Opus 5.5:
+Pending memberships (medium risk), Invite, withdraw, accept (high), Count active
+members (low), and Other changes (the tests).
+
+## Later agents and questions (0.18.0 on)
+
+- **Expire invite links** (Claude Opus 5.5, high), forked from Add teammate
+  invitations at one of its messages, 6 of its 31 steps kept beside Luke's
+  summary of 25, on `luke/expire-invite-links`.
+- The Inbox thread "Who may withdraw a pending invite?": Dean answered "The
+  sender or any admin" quoting the agent, with Dana's `member-roles.pdf`
+  attached, then the agent's reply naming #214, Dana's follow-up, and the
+  agent's last word.
+- The Invite emails agent's ask "Which invite email should ship?": two Relay
+  emails side by side (`invite-email-pictures.ts`: the card with acme's mark
+  and Join acme, and the plain one), #216's card, and a Pick one of three,
+  "The card, plain text as its fallback" recommended.
+
+## Task keys and the Board (0.19.0 on)
+
+acme's tasks are `ACME-34` to `ACME-53`; Teammate invitations is ACME-42, in
+progress, high. `board.ts` in `staging/releases/v0.19.0.patch` gives every task
+a status and priority and adds twelve: Expire invite links after 7 days
+(ACME-46), Resend an expired invite, Handle Postmark bounces, Rotate webhook
+signing secrets, Retry Postmark sends on a 429, and others across the three
+repositories.
+
 ## Automations
 
 From 0.14.0 (behind its experiment): **Morning Sentry triage**, acme's

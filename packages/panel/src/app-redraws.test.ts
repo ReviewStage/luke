@@ -7,8 +7,8 @@
  * each document as main would, a new tree each time. What is drawn again is
  * read through wrappers around four surfaces that draw the real ones:
  * ⌘K, which reads the settings, the sidebar's foot, under the sidebar, the
- * page with no task open, under the Tasks column, and each section of the open plan's
- * words. Synthetic tasks.
+ * page with no task open, under the Tasks column, each section of the open plan's
+ * words, and an agent's words, which a chat message draws. Synthetic tasks.
  */
 
 import assert from "node:assert/strict";
@@ -72,6 +72,17 @@ vi.mock("./markdown-message.js", async (importOriginal) => {
         draws.set("section", (draws.get("section") ?? 0) + 1);
       }
       return draw(actual.MarkdownMessage, props);
+    },
+  };
+});
+vi.mock("./tasks/transcript-blocks.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./tasks/transcript-blocks.js")>();
+  const { createElement: draw } = await import("react");
+  return {
+    ...actual,
+    TranscriptWords: (props: Parameters<typeof actual.TranscriptWords>[0]) => {
+      draws.set("words", (draws.get("words") ?? 0) + 1);
+      return draw(actual.TranscriptWords, props);
     },
   };
 });
@@ -263,4 +274,42 @@ test("a call's words growing and its turns changing hands draw neither the sideb
 
   assert.equal(draws.get("sidebar") ?? 0, 0, "the sidebar is not drawn again");
   assert.equal(draws.get("section") ?? 0, 0, "no section of the plan is drawn again");
+});
+
+test("a delivery that moves what waits in the Inbox, and nothing of the chat, draws no message of Chat again", async () => {
+  const onChat = (version: number, holding: number): AppStateSnapshot => ({
+    ...FIRST,
+    version,
+    run: { ...FIRST.run, fixtureMode: true, profile: RUN_PROFILE.CHAT },
+    inbox: {
+      ...FIRST.inbox,
+      tasks: Array.from({ length: holding }, (_, at) => ({
+        taskId: `task-${at}`,
+        items: 1,
+        updatedAt: AT,
+      })),
+    },
+  });
+  await drawWindow(onChat(1, 0));
+  // Chat opens on For you, its rows drawn once the run's synthetic chat lands.
+  await vi.waitFor(async () => {
+    act(() => {
+      runAppCommand(APP_COMMAND.CHAT);
+    });
+    await settle();
+    assert.ok(document.querySelector(".chat-stream .chat-message"), "Chat's messages stand");
+  });
+  for (let turn = 0; turn < 10; turn += 1) {
+    await act(async () => {
+      await new Promise((settled) => setTimeout(settled, 20));
+    });
+    await settle();
+  }
+  draws.clear();
+
+  await deliver(onChat(2, 1));
+  await deliver(onChat(3, 2));
+
+  assert.ok(document.querySelector(".chat-stream"), "Chat's place still stands");
+  assert.equal(draws.get("words") ?? 0, 0, "no message of Chat is drawn again");
 });

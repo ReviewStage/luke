@@ -659,11 +659,14 @@ function composed(
           params,
           "messaging an agent names the agent, its words, and the send's key",
         );
-        // A line with words, typed while this Mac's call is up on the agent, is the call's: the
-        // service answers it aloud and writes it down as typed. Its files ride nowhere, since the
-        // call hands on words alone; a line of files alone steers as it would with no call up.
+        // A line of words alone, typed while this Mac's call is up on the agent, is the call's: the
+        // service answers it aloud and writes it down as typed. Note that a line carrying files
+        // steers as it would with no call up, because the call hands on words alone and its files
+        // would otherwise be lost.
+        const files = request.attachments ?? [];
         if (
           request.text !== "" &&
+          files.length === 0 &&
           dependencies.typeIntoCall?.(agentId, request.text, request.clientKey) === true
         ) {
           return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));

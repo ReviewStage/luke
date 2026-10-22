@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
@@ -496,6 +497,8 @@ const taskAgentLineSchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** The human name the agent was given, which names it ahead of its title; absent for an agent from before names were given, and from a service before them. */
   personaName: EffectSchema.optionalKey(EffectSchema.String),
+  /** What kind of agent it is, said only of a member's operator, which every window names Luke (`agentTabLabel`); absent for a coder, and from a service before it was said. */
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
@@ -529,6 +532,8 @@ const taskPullRequestLineSchema = EffectSchema.Struct({
   url: EffectSchema.optionalKey(EffectSchema.String),
   /** The newest of the task's agents that opened it, whose Pull request tab a press on it opens; absent from a service before it was sent. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** True where it is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;

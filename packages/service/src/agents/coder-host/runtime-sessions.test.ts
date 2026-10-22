@@ -7,7 +7,6 @@ import {
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -30,6 +29,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Option, Redacted, Result, Stream } from "effect";
 import { TestClock } from "effect/testing";

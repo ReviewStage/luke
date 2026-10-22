@@ -44,6 +44,10 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.16.0 | `v0.16.0` | `luke-at-any-width.png` | `shot-width` | 1 | `1060,-60,600,1120` |
 | 0.17.0 | `v0.17.0` (`3489acc5`) | `pull-request-tab.png` | `shot-pull-request-tab` | 1 | `690,-60,970,1120` |
 | 0.17.0 | `v0.17.0` (`3489acc5`) | `cards-on-every-chip.png` | `shot-chip-card` | 2 | `395,120,760,507` |
+| 0.18.0 | `v0.18.0` (`ea04463d`) | `continue-and-fork-an-agent.png` | `shot-continue-fork` | 2 | `530,125,750,500` |
+| 0.18.0 | `v0.18.0` (`ea04463d`) | `review-in-the-pull-request-tab.png`, `inbox-threads.png` | `shot-review`, `shot-inbox-threads` | 1 | whole window |
+| 0.19.0 | `v0.19.0` (`f9ba4ff5`) | `pull-request-chapters.png`, `task-status-priority-and-the-board.png` | `shot-chapters`, `shot-board` | 1 | whole window |
+| 0.19.0 | `v0.19.0` (`f9ba4ff5`) | `inbox-asks.png` | `shot-inbox-asks` | 2 | `592,54,750,760` |
 
 0.14.0 was shot from `2ec91a61`, the head of its version pull request (#2871) before its pictures landed; `v0.14.0.patch` carries 0.13.0's module onto it, with 0.14.0's five shots beside the earlier ones.
 
@@ -52,6 +56,10 @@ adjusting, and capture with the same profile, zoom, and crop.
 0.16.0 renamed plans to tasks in the wire, the host's state, and the view; `v0.16.0.patch` carries the module with those names, and hooks `use-link-standing.ts` and `use-known-names.ts` so link chips read the shot's own workspaces.
 
 0.17.0 was shot from its tag, which was moved after the version commit (`59e77c5f`) to `3489acc5`; `v0.17.0.patch` carries the module onto 0.17.0's `tasks/` paths (`TasksControl` aliased as `PlansControl`). Its chip card is held open by dispatching `pointerover` on the chip whenever the card is not drawn.
+
+0.18.0 and 0.19.0 were shot from their tags, both moved after their version commits (to `ea04463d` and `f9ba4ff5`); a clone that fetched the tags before the move holds the old ones. 0.18.0 moved the renderer into `packages/panel/src/`, so `v0.18.0.patch` carries the module to `packages/panel/src/shots/` with only the shared world and that release's shots, plus `pr-214.ts` (#214 written out file by file) and `dom-steps.ts` (steps that act on what draws after the App's renders: the reply's actions held drawn and its Fork to new agent held under the pointer). 0.19.0 sends acts over an oRPC port and reads the app state in slices, so `v0.19.0.patch` answers acts in `act.ts`'s `portAct` (`canned-acts.ts`'s `cannedResult`, with no runtime guard left to check an answer) and stages the snapshot itself where the window adopts it (`shot-state.ts`), and hooks the Chapters tab's chosen chapter (`ShotSpec.chapter`). Luke in your browser and on your phone has no picture: the web app's phone layout is no macOS window, and a phone picture waits for one taken in an iOS Simulator on the Mac. Files changed, reworked has none either, since it read as 0.18.0's Files changed again.
+
+Every shot can be checked before the Mac: on Linux, Electron runs under `xvfb-run -a` once `node node_modules/electron/install.js` has fetched it, launched as `electron . --disable-gpu --no-sandbox --disable-dev-shm-usage --fixture smoke --profile shot-<name>` (without `--disable-dev-shm-usage` a small `/dev/shm` fails the renderer's chunks with `ERR_FAILED`), and screenshotted with Playwright's `_electron`; only the fonts differ from the Mac's.
 
 0.12.0 was shot from `6d47d20f`, the head of its version pull request (#2421), before the tag existed; `v0.12.0` itself is `0dec8cda`.
 

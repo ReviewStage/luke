@@ -8,7 +8,9 @@
  * name a person would call them. The name is stored on the agent's row
  * (`coding_agent.persona_name`) and kept when the agent is continued; an
  * agent from before names were given has none and is named as it was
- * (`agentTabLabel`).
+ * (`agentTabLabel`). A member's operator is given none either, since it is
+ * Luke wherever it is named (`model-label.ts`'s `agentGivenName`), and,
+ * standing on no task, it takes no first name from a task's agents.
  */
 
 /** The first names an agent is given, varied and short enough for a tab. */

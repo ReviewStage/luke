@@ -64,7 +64,7 @@ import {
   githubRepositoryFullNameSchema,
 } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { modelLabel } from "@luke/features/model-label";
+import { agentGivenName, modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -1129,7 +1129,7 @@ const readAgent = (
       id: agent.id,
       ...task,
       archived: agent.archivedAt !== null,
-      ...(agent.personaName === null ? undefined : { name: agent.personaName }),
+      ...givenNameOf(agent),
       title: agent.title ?? agent.model,
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
@@ -1249,9 +1249,15 @@ function choiceRefusal(
   return `${lead}: ${refused}. The choices are: ${choices}.`;
 }
 
-/** An agent by the name its tab shows: its human name, else its title, or its model's id where it has none yet. */
+/** An agent by the name its tab shows: Luke for an operator, its human name, else its title, or its model's id where it has none yet. */
 function agentName(agent: CodingAgent): string {
-  return agent.personaName ?? agent.title ?? agent.model;
+  return agentGivenName(agent) ?? agent.title ?? agent.model;
+}
+
+/** The name an answer names an agent by, Luke for an operator and its human name for any other, where it goes by one. */
+function givenNameOf(agent: CodingAgent): { name?: string } {
+  const name = agentGivenName(agent);
+  return name === undefined ? {} : { name };
 }
 
 /** The agent's mention under the workspace's step: under its task where it has one, else under the workspace, named as its tab is. */
@@ -1325,7 +1331,7 @@ const startedReading = (
     const workspace = yield* workspaceStepOf(agent.userId, agent.organizationId);
     return {
       id: agent.id,
-      ...(agent.personaName === null ? undefined : { name: agent.personaName }),
+      ...givenNameOf(agent),
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
       effort: agent.effort,
@@ -2177,7 +2183,7 @@ export function runStopAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
           id: agent.id,
-          ...(agent.personaName === null ? undefined : { name: agent.personaName }),
+          ...givenNameOf(agent),
           title: agent.title ?? agent.model,
           task: task.task === null ? null : { ...task.task },
           onYourTask: task.onYourTask,
@@ -2332,7 +2338,7 @@ export function runUpdateAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
           id: agent.id,
-          ...(agent.personaName === null ? undefined : { name: agent.personaName }),
+          ...givenNameOf(agent),
           title: agent.title ?? agent.model,
           model: agent.model,
           modelName: modelLabel(agent.model, offered),

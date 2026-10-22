@@ -15,12 +15,10 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
-import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useDraftedAgents } from "../composer-drafts.js";
-import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -32,8 +30,7 @@ import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-age
 import { RowHint, RowHintOptions } from "../tooltip.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
-import { useAgentDelete } from "./agent-delete.js";
+import { rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
@@ -61,7 +58,10 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
  * own sections, as a task's (`sidebar-sections.tsx`); and last and alone,
  * Permanently delete, always asked first (`agent-delete.tsx`), which leaves
- * the agent's page where it is the one standing. An archived agent
+ * the agent's page where it is the one standing. Its agent's actions are the
+ * ones its tab and its page offer (`useAgentActions`), but for those a row
+ * leaves out by name (`NOT_ON_A_ROW`), and the row adds only its own: the
+ * read mark, the pin, and the section. An archived agent
  * offers neither a pin, a rename, nor a section, as an archived task. Note that the agent is read again
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
@@ -161,38 +161,45 @@ export function SidebarAgent({
   }, []);
   const menu = useMenu(shown);
   const place = useRowPlace();
-  const copyLink = useCopyLinkItem()(agentPlace(agent));
   const { act } = useAct();
   const reads = useAgentReadMarks();
   const isUnread = unread || reads.markedUnread(agent.id);
-  const archive = useAgentArchive(
+  // The agent's own actions, as its tab and its page offer them, read again by its own id before an archive.
+  const actions = useAgentActions(
     agent,
     { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
-    shown,
+    { label: name, shown, terminals: { onOpenTerminal: undefined }, onDeleted },
   );
-  const unarchive = useAgentUnarchive(agent.id, agents);
-  const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
+  const { copyLink, onRename, archive, deletion } = rowDoors(actions.doors);
   const archived = agent.archivedAt !== undefined;
   // A draft waiting in its box wears the pencil while its page is not the one open, as a task's row does.
   const drafted = useDraftedAgents().includes(agent.id) && !current;
-  const rename = useInlineRename(agent.id, agents.onRename);
+  const { rename } = actions;
+  const editing = rename?.editing ?? false;
   const refocus = useRef(false);
   useEffect(() => {
-    if (rename.editing || !refocus.current) return;
+    if (editing || !refocus.current) return;
     refocus.current = false;
     row.current?.focus();
-  }, [rename.editing]);
-  const renameItem: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: rename.begin };
+  }, [editing]);
+  const renameItem: MenuAction | undefined =
+    onRename === undefined
+      ? undefined
+      : { label: "Rename", icon: <PencilIcon />, onSelect: onRename };
   const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
-  const put = archived ? unarchive : archive.action;
+  // Note that the row lays the agent's actions out in a task's row's groups, its own items among them.
   const groups: MenuEntry[][] = [
     [
       ...(copyLink === undefined ? [] : [copyLink]),
       markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) }),
-      ...(archived ? [] : [renameItem]),
+      ...(renameItem === undefined ? [] : [renameItem]),
     ],
-    [...(pin === undefined ? [] : [pin]), put, ...(section === undefined ? [] : [section])],
-    [deletion.action],
+    [
+      ...(pin === undefined ? [] : [pin]),
+      ...(archive === undefined ? [] : [archive]),
+      ...(section === undefined ? [] : [section]),
+    ],
+    ...(deletion === undefined ? [] : [[deletion]]),
   ].filter((group) => group.length > 0);
   // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const pinned = agent.pinnedAt !== undefined;
@@ -207,9 +214,23 @@ export function SidebarAgent({
             onSelect: () => onPin(!pinned),
           },
         ]),
-    archived
-      ? { key: "unarchive", label: "Unarchive", icon: <UnarchiveIcon />, onSelect: put.onSelect }
-      : { key: "archive", label: "Archive", icon: <ArchiveIcon />, onSelect: put.onSelect },
+    ...(archive === undefined
+      ? []
+      : [
+          archived
+            ? {
+                key: "unarchive",
+                label: "Unarchive",
+                icon: <UnarchiveIcon />,
+                onSelect: archive.onSelect,
+              }
+            : {
+                key: "archive",
+                label: "Archive",
+                icon: <ArchiveIcon />,
+                onSelect: archive.onSelect,
+              },
+        ]),
   ];
   const card = useMemo(() => <SidebarAgentCard agent={agent} agents={agents} />, [agent, agents]);
   return (
@@ -226,7 +247,7 @@ export function SidebarAgent({
             </span>
           }
           title={
-            rename.editing ? (
+            editing && rename !== undefined ? (
               <InlineEdit
                 value={name}
                 label="Agent name"
@@ -245,7 +266,7 @@ export function SidebarAgent({
             )
           }
           meta={
-            rename.editing ? null : (
+            editing ? null : (
               <span className="sidebar-task-time">
                 {repository === undefined ? null : (
                   <FadingWords className="sidebar-task-repository" words={repository} />
@@ -262,18 +283,18 @@ export function SidebarAgent({
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={isUnread}
           menuOpen={menu.open !== undefined}
-          hint={rename.editing ? undefined : { Hint: RowHint, label: name }}
+          hint={editing ? undefined : { Hint: RowHint, label: name }}
           onPress={
-            rename.editing
+            editing
               ? undefined
               : () => {
                   menu.close(false);
                   onOpen();
                 }
           }
-          contextMenu={rename.editing ? undefined : menu.contextMenu(row)}
+          contextMenu={editing ? undefined : menu.contextMenu(row)}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
-          actions={rename.editing ? null : <RowMarks marks={marks} />}
+          actions={editing ? null : <RowMarks marks={marks} />}
         />
       </RowHintOptions>
       {menu.drawn === undefined ? null : (
@@ -284,8 +305,7 @@ export function SidebarAgent({
           onClose={menu.close}
         />
       )}
-      {archive.dialog}
-      {deletion.dialog}
+      {actions.dialog}
     </>
   );
 }

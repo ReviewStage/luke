@@ -864,7 +864,11 @@ export class HostedCodingAgentClient {
     const admitted = Result.getOrUndefined(readEither(codingAgentMessageRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
-      askHosted(this.#hosted.messages.send, { params: { id: agentId }, body: admitted }),
+      askHosted(
+        this.#hosted.messages.send,
+        { params: { id: agentId }, body: admitted },
+        HOSTED_DEADLINE.STEER,
+      ),
       MESSAGE_REFUSALS,
     );
   }
@@ -1377,7 +1381,7 @@ export class HostedCodingAgentClient {
     const body = wireRequestOf(inboxAnswerRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
-      askHosted(this.#hosted.inbox.answer, { params: { id: itemId }, body }),
+      askHosted(this.#hosted.inbox.answer, { params: { id: itemId }, body }, HOSTED_DEADLINE.STEER),
       INBOX_ANSWER_REFUSALS,
     );
   }
@@ -1395,7 +1399,7 @@ export class HostedCodingAgentClient {
     const body = wireRequestOf(inboxCloseRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
-      askHosted(this.#hosted.inbox.close, { params: { id: itemId }, body }),
+      askHosted(this.#hosted.inbox.close, { params: { id: itemId }, body }, HOSTED_DEADLINE.STEER),
       INBOX_ANSWER_REFUSALS,
     );
   }
@@ -1413,7 +1417,11 @@ export class HostedCodingAgentClient {
     const body = wireRequestOf(inboxMessageRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
-      askHosted(this.#hosted.inbox.message, { params: { id: itemId }, body }),
+      askHosted(
+        this.#hosted.inbox.message,
+        { params: { id: itemId }, body },
+        HOSTED_DEADLINE.STEER,
+      ),
       INBOX_ANSWER_REFUSALS,
     );
   }

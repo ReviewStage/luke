@@ -8,7 +8,13 @@
  * calls Luke makes of Vercel Sandbox itself (`../vercel-sandbox-api.ts`):
  * the sandbox carrying the agent's session id as its tag, as every agent's
  * sandbox does, and the one file asked for, read from its running session.
- * Nothing is resumed: the agent calling the tool runs in that sandbox, so a
+ * The file is read by a command run with every capability dropped
+ * (`../sandbox-capabilities.ts`), as a Terminal's shell runs, never through
+ * Vercel's own file read, which reads as root: the agent names any path,
+ * and a model talked into naming `/proc/<runner pid>/environ`, a file under
+ * `agent`'s private home, or a link to either in the checkout would
+ * otherwise hand its harness's token to a page, a picture, or the inbox.
+ * Under the drop such a path reads as no file. Nothing is resumed: the agent calling the tool runs in that sandbox, so a
  * sandbox not up has nothing to read from, and the read is unavailable.
  *
  * `show_code` runs its reads as commands rather than file reads, so the
@@ -27,10 +33,14 @@ import type { HttpClient } from "effect/http";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import type { RepositorySandbox, RepositorySandboxDoor } from "../repository-shell.js";
+import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { type OidcTokenRead, SandboxUnavailable, vercelSandboxApi } from "../vercel-sandbox-api.js";
 
 /** The most of one file a door reads: past every bound a tool holds a file to, a page's HTML and a kept picture among them. */
 export const SANDBOX_DOOR_MAX_BYTES = 8 * 1024 * 1024;
+
+/** How the read exits where the path is no regular file the sandbox's user may read. */
+const READ_EXIT = { NO_FILE: 3 } as const;
 
 /** The states a sandbox is up in, which a file can be read from. */
 const UP_STATUSES: ReadonlySet<string> = new Set(["pending", "running"]);
@@ -59,14 +69,48 @@ function runningSession(readToken: OidcTokenRead, sessionId: string) {
   });
 }
 
-/** One file of the running sandbox tagged with the session, bounded; nothing where there is no such file. */
+/**
+ * The read, run by bash: the file named as `$1`, at most `$2` bytes of it,
+ * printed in base64 on one line, since a command's output reaches Luke as
+ * text. A path that is no regular file the sandbox's user may read exits
+ * apart, before anything is printed.
+ */
+const READ_SCRIPT = [
+  "set -o pipefail",
+  `[ -f "$1" ] && [ -r "$1" ] || exit ${READ_EXIT.NO_FILE}`,
+  `head -c "$2" -- "$1" | base64 | tr -d '\\n'`,
+].join("\n");
+
+/** The read as one command: bash, every capability dropped, the path and bound as its positional arguments. */
+function readFileCommand(path: string, maxBytes: number) {
+  return {
+    command: WITHOUT_CAPABILITIES.COMMAND,
+    args: [
+      ...WITHOUT_CAPABILITIES.ARGS,
+      "bash",
+      "-c",
+      READ_SCRIPT,
+      "luke-read-file",
+      path,
+      String(maxBytes),
+    ],
+  };
+}
+
+/**
+ * One file of the running sandbox tagged with the session, read one byte
+ * past the widest bound so a caller still sees a file larger than it;
+ * nothing where the sandbox's user, capabilities dropped, reads no such file.
+ */
 function readSessionFile(
   readToken: OidcTokenRead,
   sessionId: string,
   path: string,
 ): Effect.Effect<Uint8Array | undefined, SandboxUnavailable, HttpClient.HttpClient> {
   return Effect.flatMap(runningSession(readToken, sessionId), ({ api, running }) =>
-    api.readFile(running, path, SANDBOX_DOOR_MAX_BYTES),
+    Effect.map(api.run(running, readFileCommand(path, SANDBOX_DOOR_MAX_BYTES + 1)), (ran) =>
+      ran.exitCode === 0 ? new Uint8Array(Buffer.from(ran.stdout, "base64")) : undefined,
+    ),
   );
 }
 

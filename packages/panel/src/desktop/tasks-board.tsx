@@ -303,10 +303,10 @@ function TaskBoardCard({
       <div className="tasks-board-card-foot">
         {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
         {drawn(TASK_PROPERTY.PRIORITY) ? (
-          <PriorityChip task={task} look={CHIP_LOOK.FIELD} onStanding={onStanding} />
+          <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
         ) : null}
         {drawn(TASK_PROPERTY.STATUS) ? (
-          <StatusChip task={task} look={CHIP_LOOK.FIELD} named={narrow} onStanding={onStanding} />
+          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} named={narrow} onStanding={onStanding} />
         ) : null}
         {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
           <span className="tasks-board-repository">{repositoryName(task.repository)}</span>
