@@ -19,15 +19,18 @@
  * terms (`agent-browser-tabs-procedures.ts`): a member who controls the
  * agent takes the tab for `BROWSER_TAKEOVER_HOLD_MS`, and their input moves
  * the takeover on, written at most every `RENEW_EVERY`, so the takeover
- * always stands well past their last input. Input from a member whose
- * takeover does not stand is refused and goes nowhere. Every point is in
+ * always stands well past their last input. A takeover is the member's
+ * rather than a socket's, so any of their sockets drives while it stands,
+ * one that reconnected or another window among them, and its first input
+ * moves it on in the store before it reaches the page. Input from a member
+ * whose takeover does not stand is refused and goes nowhere. Every point is in
  * the panel's own pixels at the viewport it last sent, and is mapped onto
  * the page's CSS pixels. Mouse moves that queue behind a slower browser are
  * folded into the last of each run, so the pointer never lags behind the
  * member's hand. The tab is read again every `TAB_CHECK_EVERY`, so a
  * driver change another window made reaches this one, and a tab that closed
  * or that the member no longer reaches closes the socket; as the socket
- * closes, however it closes, a takeover it took is handed back, unless
+ * closes, however it closes, a takeover it took or moved on is handed back, unless
  * another window of the same member moved it on since, and a hand-back the
  * store did not take is tried again. Input still queued when a takeover
  * ends goes nowhere, a renewal the store could not answer keeps input going
@@ -343,7 +346,7 @@ interface LiveView {
   readonly deps: BrowserLiveDependencies;
   /** Whether the member may drive the tab: one who controls the coding agent whose browser holds it. */
   readonly drivable: boolean;
-  /** The instant this socket last took or moved on its takeover; none while it holds none. */
+  /** The instant this socket last took or moved on the member's takeover; none while it has written none that stands. */
   readonly driving: Ref.Ref<number | undefined>;
   /** Whether a hand-back the member asked for has yet to reach the store, which the close tries again. */
   readonly releasePending: Ref.Ref<boolean>;
@@ -418,6 +421,11 @@ function openView(
 const send = (view: LiveView, message: BrowserLiveServerMessage) =>
   sendMessage(view.viewer, message);
 
+/** Whether the driver given is this socket's member, who may drive the tab: what the panel is told as `yours`, and what lets a socket drive a takeover it did not write. */
+function isYours(view: LiveView, driver: { readonly userId: string } | null | undefined): boolean {
+  return view.drivable && driver?.userId === view.ask.userId;
+}
+
 /** The driver as the tab now stands, sent where it changed; a takeover that is no longer this member's is no longer this socket's. */
 function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<void> {
   return Effect.gen(function* () {
@@ -435,7 +443,7 @@ function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<vo
     yield* send(view, {
       type: BROWSER_LIVE_SERVER.DRIVER,
       driver,
-      yours: driver?.userId === view.ask.userId,
+      yours: isYours(view, driver),
     });
   });
 }
@@ -506,12 +514,12 @@ function standsAt(view: LiveView, at: number): Effect.Effect<boolean> {
   );
 }
 
-/** The member hands back the takeover this socket holds: input stops at once, and a hand-back the store did not take is tried again as the socket closes. */
-function handBack(view: LiveView): Effect.Effect<void> {
+/** The member hands back the takeover this socket holds or stands on, one it reconnected to among them: input stops at once, and a hand-back the store did not take is tried again as the socket closes. */
+function handBack(view: LiveView, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
-    if ((yield* Ref.get(view.driving)) === undefined && !(yield* Ref.get(view.releasePending))) {
-      return;
-    }
+    const wrote = (yield* Ref.get(view.driving)) !== undefined;
+    const pending = yield* Ref.get(view.releasePending);
+    if (!wrote && !pending && !(yield* adoptable(view, at))) return;
     yield* Ref.set(view.driving, undefined);
     const released = yield* Effect.result(view.deps.handBack(view.reached.tab.id, view.ask.userId));
     yield* Ref.set(view.releasePending, Result.isFailure(released));
@@ -542,19 +550,36 @@ function releaseOnClose(view: LiveView): Effect.Effect<void> {
   });
 }
 
-/** Whether the member's takeover stands, moved on where its last write is `RENEW_EVERY` old. */
+/** Whether the member's takeover stood as the tab was last read, where this socket has no write of its own and no hand-back waits. */
+function adoptable(view: LiveView, at: Date): Effect.Effect<boolean> {
+  return Effect.gen(function* () {
+    if (yield* Ref.get(view.releasePending)) return false;
+    const driver = yield* Ref.get(view.lastDriver);
+    return driver != null && isYours(view, driver) && at.getTime() < driver.heldUntil;
+  });
+}
+
+/**
+ * Whether the member's takeover stands, moved on where this socket's last
+ * write is `RENEW_EVERY` old. A socket with no write of its own, one that
+ * reconnected or another window of the member, drives the takeover the tab
+ * was last read with, once the store moves it on for this socket's first
+ * input, so a hand-back or another member's take since is never driven past.
+ */
 function holding(view: LiveView, at: Date): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const renewedAt = yield* Ref.get(view.driving);
-    if (renewedAt === undefined) return false;
-    if (at.getTime() - renewedAt < Duration.toMillis(BROWSER_LIVE_BOUNDS.RENEW_EVERY)) return true;
+    if (renewedAt === undefined && !(yield* adoptable(view, at))) return false;
+    const fresh = Duration.toMillis(BROWSER_LIVE_BOUNDS.RENEW_EVERY);
+    if (renewedAt !== undefined && at.getTime() - renewedAt < fresh) return true;
     const heldUntil = new Date(at.getTime() + BROWSER_TAKEOVER_HOLD_MS);
     const renewed = yield* Effect.result(
       view.deps.renew(view.reached.tab.id, view.ask.userId, heldUntil, at),
     );
     // Note that a store that could not say leaves the takeover standing only until its last write lapses,
     // since no other member can take the row before then.
-    if (Result.isFailure(renewed)) return at.getTime() < lapsesAt(renewedAt);
+    if (Result.isFailure(renewed))
+      return renewedAt !== undefined && at.getTime() < lapsesAt(renewedAt);
     if (renewed.success) {
       yield* Ref.set(view.driving, at.getTime());
       return true;
@@ -587,7 +612,7 @@ function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Ef
       case BROWSER_LIVE_CLIENT.TAKE_OVER:
         return yield* takeOver(view, at);
       case BROWSER_LIVE_CLIENT.HAND_BACK:
-        return yield* handBack(view);
+        return yield* handBack(view, at);
       case BROWSER_LIVE_CLIENT.VIEWPORT:
         return yield* Ref.set(view.viewport, { width: message.width, height: message.height });
       default:
