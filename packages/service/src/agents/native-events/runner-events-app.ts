@@ -1,5 +1,6 @@
 import { RUNNER_EVENT } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import {
   type CodingAgent,
   readCodingAgentOfConversation,
@@ -142,6 +143,9 @@ interface Applying {
   /** The plan or prompt the agent was handed first, whose share of its context the ring estimates. */
   readonly brief: string;
 }
+
+/** The asks a call made, bound to the native turn that took each one's line. */
+const ASKS = askRecord();
 
 /** The row each plan is kept in, which a turn's word on the plan is written to; a key's payer has none. */
 const PLAN_ROW: Partial<
@@ -326,9 +330,20 @@ function landWrite(
         (result) => reportRefused("a turn's queueing", result),
       );
     case NATIVE_WRITE.TAKE_LINE:
+      // A typed line awaits its turn as a row; a call's ask has none and is bound by its delivery,
+      // the line's id the ask named (`brain-host/brain-ask.ts`), so the call follows the turn.
       return Effect.flatMap(
-        writer.takeAwaitingLine(target, { clientId: write.clientId, turnId: write.turnId }),
-        (result) => reportRefused("a line's taking", result),
+        ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
+        (bound) =>
+          bound.length > 0
+            ? // The call's own rows, written before its line was taken, go into the turn too.
+              Effect.flatMap(writer.attachAskLines(target, write.turnId), (attached) =>
+                reportRefused("a call's lines' attaching", attached),
+              )
+            : Effect.flatMap(
+                writer.takeAwaitingLine(target, { clientId: write.clientId, turnId: write.turnId }),
+                (result) => reportRefused("a line's taking", result),
+              ),
       );
     case NATIVE_WRITE.SESSION:
       return Effect.asVoid(
