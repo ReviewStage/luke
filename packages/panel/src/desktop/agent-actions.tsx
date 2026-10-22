@@ -61,8 +61,8 @@ type AgentDoors = Pick<
  * placed on the row or is named here, or that test fails.
  */
 export const NOT_ON_A_ROW = {
-  onOpenTerminal: "It shows the agent's Terminal tab in a side panel, and a row has none.",
-  onCopy: "A transcript is copied from where it is read, the agent's tab or page, not its row.",
+  onOpenTerminal: "The terminal opens in a side panel, and a sidebar row has none.",
+  onCopy: "A task's sidebar row offers no transcript copy either, so an agent's row offers none.",
 } as const satisfies Partial<Record<keyof AgentDoors, string>>;
 
 /** The doors an agent's sidebar row offers: every one but those `NOT_ON_A_ROW` names. */
