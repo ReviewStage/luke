@@ -1682,7 +1682,7 @@ export interface PlacedMessage {
   readonly arrived: readonly CodingAgentMessage[];
 }
 
-/** Whether a turn's reply is a member's operator's quiet reply alone, a heartbeat that found nothing, which leaves the developer nothing to read. */
+/** Whether a turn's reply is the operator's quiet reply alone, a heartbeat that found nothing, which leaves the developer nothing to read. */
 function isQuietReply(message: CodingAgentMessage): boolean {
   return (
     message.role === MESSAGE_ROLE.ASSISTANT && messageWords(message).trim() === OPERATOR_QUIET_REPLY
@@ -1695,12 +1695,16 @@ function isQuietReply(message: CodingAgentMessage): boolean {
  * order the service keeps, where the journal closed behind it. A line whose
  * journal is not among the rows, as when its page is still to land, stands
  * where the order puts it, as every line does from a service older than it.
- * A turn whose reply is the operator's quiet reply alone is left out, so a
- * heartbeat that found nothing draws no reply, and a line it took in stands
- * where the order puts it.
+ * In a member's operator's transcript (`quiet`), a turn whose reply is its
+ * quiet reply alone is left out, so a heartbeat that found nothing draws no
+ * reply, and a line it took in stands where the order puts it; every other
+ * agent's reply is placed whatever it says.
  */
-export function placedMessages(messages: readonly CodingAgentMessage[]): readonly PlacedMessage[] {
-  const shown = messages.filter((message) => !isQuietReply(message));
+export function placedMessages(
+  messages: readonly CodingAgentMessage[],
+  quiet = false,
+): readonly PlacedMessage[] {
+  const shown = quiet ? messages.filter((message) => !isQuietReply(message)) : messages;
   const journals = new Set(
     shown.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
   );

@@ -2,6 +2,7 @@ import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_KIND,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
@@ -1708,6 +1709,7 @@ function transcriptPlacing(
   working: boolean,
   undelivered: ReadonlySet<string>,
   replayed: boolean,
+  quietReplies: boolean,
 ) {
   const todos = todosPlace(messages, working);
   const first = messages.find(
@@ -1720,7 +1722,7 @@ function transcriptPlacing(
   const opening = !replayed || first === undefined ? undefined : replayOpening(first);
   // A line that reached a turn while it ran is drawn inside that turn, where it arrived, and the
   // voice's line reading a turn aloud on a call ahead of it, the turn folded behind it.
-  const placed = spokenMessages(placedMessages(messages));
+  const placed = spokenMessages(placedMessages(messages, quietReplies));
   const open = openReply(messages, working);
   return { todos, first, opening, placed, open };
 }
@@ -1728,6 +1730,7 @@ function transcriptPlacing(
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
 function AgentTranscriptView({
   messages,
+  quietReplies = false,
   brief,
   lead = AGENT_LEAD,
   delegation,
@@ -1764,6 +1767,8 @@ function AgentTranscriptView({
   calls?: readonly TranscriptCallRow[];
   /** What the agent was handed first: the plan, drawn as the plan's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the plan. */
   brief?: CodingAgentBrief | undefined;
+  /** Whether this is a member's operator's transcript, which draws no reply of a heartbeat that found nothing (`placedMessages`). */
+  quietReplies?: boolean;
   /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
   lead?: TranscriptLead;
   /** What a delegation's row draws from; with none, a row says the pair its part carries and opens no tab. */
@@ -1812,8 +1817,8 @@ function AgentTranscriptView({
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
   const placing = useMemo(
-    () => transcriptPlacing(messages, working, undelivered, replayed),
-    [messages, working, undelivered, replayed],
+    () => transcriptPlacing(messages, working, undelivered, replayed, quietReplies),
+    [messages, working, undelivered, replayed, quietReplies],
   );
   // Each line that reached a turn, with who sent it, kept from draw to draw while neither moved.
   const arrivals = useArrivals(placing.placed, readerId, members, former);
@@ -2187,6 +2192,7 @@ function AgentTabView({
               <UndeliveredLines value={undelivered}>
                 <AgentTranscriptView
                   messages={lines}
+                  quietReplies={agent.kind === CODING_AGENT_KIND.OPERATOR}
                   brief={agent.brief}
                   briefSender={starter === undefined ? undefined : starterActor}
                   origin={origin}

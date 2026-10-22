@@ -9,6 +9,7 @@ import {
   draftNextRuns,
   draftProblems,
   presetDraft,
+  repositoryHeld,
   SCHEDULE_KIND,
   sameDraft,
   scheduleDraftOf,
@@ -65,6 +66,38 @@ const SAVED: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
   repositories: ["acme/ledger"],
 };
+
+test("an automation the service took with no repository, aimed at one agent, saves a new schedule with none chosen, until its runs go elsewhere", () => {
+  const operator = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  const heartbeat: AutomationSummary = {
+    ...SAVED,
+    name: "Luke's heartbeat",
+    scope: AUTOMATION_SCOPE.PERSONAL,
+    repositories: [],
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: operator },
+  };
+  const opened = automationDraft(heartbeat, DEFAULTS);
+  const later = { ...opened, schedule: scheduleDraftOf("0 10,17 * * 1-5") };
+  const elsewhere = { ...later, target: AUTOMATION_TARGET.NEW_AGENT };
+
+  assert.deepEqual(draftProblems(later, repositoryHeld(later, heartbeat), NOW), {});
+  assert.deepEqual(changeOf(later, heartbeat, DEFAULTS), {
+    trigger: {
+      kind: AUTOMATION_TRIGGER.SCHEDULE,
+      cron: "0 10,17 * * 1-5",
+      timezone: "America/Los_Angeles",
+    },
+  });
+  assert.equal(
+    draftProblems(elsewhere, repositoryHeld(elsewhere, heartbeat), NOW)[DRAFT_FIELD.REPOSITORY],
+    "Choose the repository it works in.",
+  );
+  assert.equal(
+    repositoryHeld(later, SAVED),
+    false,
+    "one on a repository holds none once its draft drops it",
+  );
+});
 
 test("a cron the picker writes reads back as its kind and time, and any other is kept as it was", () => {
   for (const cron of ["15 * * * *", "30 7 * * *", "0 9 * * 1-5", "0 9 * * 3"]) {

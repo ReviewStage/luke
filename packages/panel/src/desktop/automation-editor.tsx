@@ -20,6 +20,7 @@ import {
   draftTrigger,
   type GitHubTriggerSettings,
   presetDraft,
+  repositoryHeld,
   SCHEDULE_KIND,
   type ScheduleDraft,
   type ScheduleKind,
@@ -1715,7 +1716,7 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const problems = draftProblems(draft, taskBacked, new Date());
+  const problems = draftProblems(draft, repositoryHeld(draft, automation), new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
