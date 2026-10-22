@@ -85,6 +85,14 @@ Review places a module and a component alike under this rule.
   trace, a counted event, a fixture, or the voice window, and session replay masks
   the live view and the transcript's screenshots; the cookies a member types into
   it stay in that agent's sandbox, and its snapshots, for the sandbox's life.
+  Amended, approved by Dean on 2026-10-22: an agent may record its browser as a
+  video (`record` and `stop_recording`), whose frames the recorder in its
+  sandbox writes to that sandbox's disk until the next recording clears them,
+  and whose WebM the service keeps beside the transcript the call is written to
+  as it keeps a screenshot (`packages/service/src/agents/browser/browser-tool.ts`),
+  shown and deleted on the same terms; the model is never handed the video, the
+  transcript's player is left out of session replay, and none of it goes into a
+  trace, a counted event, a fixture, or the voice window.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
   roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web

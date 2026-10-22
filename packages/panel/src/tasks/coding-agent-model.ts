@@ -1,3 +1,4 @@
+import { recordedVideosOf } from "@luke/features/agent-pictures-model";
 import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
@@ -1535,6 +1536,11 @@ function isShownSet(part: AgentPart): part is ToolPart {
   );
 }
 
+/** Whether a part is a browser call that kept a recording, which a reader watches as a shown set and never folds away. */
+function keptRecording(part: AgentPart): boolean {
+  return part.kind === AGENT_PART.TOOL && recordedVideosOf(part.tool, part.output).length > 0;
+}
+
 /**
  * A `show_image` call its tool refused, as the call that failed it is: the
  * service answers a refusal as an output carrying why, so the row reads
@@ -1664,7 +1670,9 @@ export function agentRows(
       part.kind === AGENT_PART.TOOL &&
       (workers.get(part.callId) ?? part.state) === TOOL_STATE.OUTPUT_ERROR,
     kept: (part) =>
-      (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) || isShownSet(part),
+      (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) ||
+      isShownSet(part) ||
+      keptRecording(part),
   };
   return turnRows(parts, reading, {
     key: message.id,

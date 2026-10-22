@@ -72,6 +72,16 @@ import {
   browserStartOf,
   startBrowser,
 } from "./sandbox-browser.js";
+import {
+  RECORDING_FAILURE,
+  type RecordingFailure,
+  type RecordingStart,
+  recordingStartOf,
+  recordingStopOf,
+  SANDBOX_RECORDING,
+  startRecording,
+  stopRecording,
+} from "./sandbox-recorder.js";
 
 const AGENT_BROWSER = {
   /** How often a resuming sandbox is asked whether it runs yet, and how many times before it is given up on: a minute in all. */
@@ -145,9 +155,25 @@ export interface BrowserStanding {
   readonly started: boolean;
 }
 
+/** A recording stopped, as the sandbox answered it: the video's length and bytes, or why there is none. */
+export type BrowserRecordingRead =
+  | { readonly ok: true; readonly seconds: number; readonly bytes: Uint8Array }
+  | { readonly ok: false; readonly reason: RecordingFailure; readonly bytes?: number };
+
 export interface AgentBrowserService {
   /** Makes sure the browser runs in the sandbox tagged with the session, resuming the sandbox where it stopped. */
   readonly ensure: (sessionId: string) => Effect.Effect<BrowserStanding, BrowserUnreachable>;
+  /** Makes sure of the browser, then starts recording it for at most the seconds and bytes given, where no recording runs. */
+  readonly startRecording: (
+    sessionId: string,
+    maxSeconds: number,
+    maxBytes: number,
+  ) => Effect.Effect<RecordingStart, BrowserUnreachable>;
+  /** Stops the recording that runs, waits on its video, and reads it back up to the bytes given. */
+  readonly stopRecording: (
+    sessionId: string,
+    maxBytes: number,
+  ) => Effect.Effect<BrowserRecordingRead, BrowserUnreachable>;
   /** Makes sure of the browser, then opens a CDP session with it for the caller's scope. */
   readonly connect: (
     sessionId: string,
@@ -425,7 +451,7 @@ export function browserSessionOf(session: {
 /** The calls of Vercel Sandbox's API the browser makes: a sandbox found, resumed, run in, and its PTY minted. */
 export type BrowserSandboxApi = Pick<
   VercelSandboxApi,
-  "listTagged" | "resume" | "run" | "openInteractive" | "updateTimeout"
+  "listTagged" | "resume" | "run" | "openInteractive" | "updateTimeout" | "readFile"
 >;
 
 /** The service over the REST calls the API makes and the PTY the sandbox serves. */
@@ -477,8 +503,36 @@ export function agentBrowserOver(
       );
     });
 
+  const startRecordingIn = (sessionId: string, maxSeconds: number, maxBytes: number) =>
+    Effect.gen(function* () {
+      const { sandboxSessionId } = yield* ensure(sessionId);
+      const run = yield* api
+        .run(sandboxSessionId, startRecording(maxSeconds, maxBytes))
+        .pipe(Effect.mapError(sandboxUnavailable));
+      return recordingStartOf(run);
+    });
+
+  const stopRecordingIn = (sessionId: string, maxBytes: number) =>
+    Effect.gen(function* () {
+      const { sandboxSessionId } = yield* ensure(sessionId);
+      const run = yield* api
+        .run(sandboxSessionId, stopRecording())
+        .pipe(Effect.mapError(sandboxUnavailable));
+      const stopped = recordingStopOf(run);
+      if (!stopped.ok) return stopped;
+      const bytes = yield* api
+        .readFile(sandboxSessionId, SANDBOX_RECORDING.VIDEO, maxBytes)
+        .pipe(Effect.mapError(sandboxUnavailable));
+      if (bytes === undefined) {
+        return { ok: false, reason: RECORDING_FAILURE.ENCODER } satisfies BrowserRecordingRead;
+      }
+      return { ok: true, seconds: stopped.seconds, bytes } satisfies BrowserRecordingRead;
+    });
+
   return {
     ensure,
+    startRecording: startRecordingIn,
+    stopRecording: stopRecordingIn,
     connect: (sessionId) =>
       // Note that the browser is made sure of once ahead of the bound, since a resume may take a minute,
       // so the bound holds the bridge's attempts alone, each of which makes sure of it again quickly.

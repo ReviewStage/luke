@@ -1068,7 +1068,16 @@ agent or its task marks the transcript deleted and removes it, with its
 screenshots, thirty days later, and deleting your account removes them at
 once. Our service keeps the task's list of cloud
 tabs, each one's address and title, with the agent whose browser holds it,
-until that agent's conversation is removed. The page and its live-view frames
+until that agent's conversation is removed. The agent can also record the
+browser as a video, for up to two minutes at a time, to show you a flow it
+built or tested: a recorder in its sandbox writes what the browser draws to the
+sandbox's disk, where it stays until the next recording replaces it or the
+sandbox's snapshot is deleted, and once the agent stops it our service keeps the
+video, a WebM of up to 4 MB, beside the transcript as it keeps a screenshot,
+shown to the same members, readable by our operators, and deleted with the
+transcript on the same terms; the model is told it was kept, never handed the
+video, and the screen recording leaves out its player. Apart from such a
+recording, the page and its live-view frames
 are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can
 watch the tab and take it over by clicking and typing in it, and the agent's

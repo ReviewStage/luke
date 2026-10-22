@@ -187,6 +187,8 @@ const BROWSER_ACTION_WORDS: Readonly<Record<string, string>> = {
   snapshot: "read the page",
   console: "read the console",
   close: "closed",
+  record: "started recording",
+  stop_recording: "stopped recording",
 };
 
 /**
