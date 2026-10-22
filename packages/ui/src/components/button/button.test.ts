@@ -27,7 +27,8 @@ import {
  * mark is a button named by its label like any other, its right-click heard
  * so it can offer its row's menu, and an unavailable one is pressed to no
  * effect, as is an unavailable compact labelled button, which is named by
- * its words. A submit sends its form while it takes a press, sends nothing
+ * its words. An unavailable button that keeps its Tab stop shakes at a
+ * press it refuses, and stops once the shake ends. A submit sends its form while it takes a press, sends nothing
  * while it is unavailable, and made a Stop does its own act without
  * sending the form.
  */
@@ -345,6 +346,42 @@ test("a compact labelled button is named by its words, pressed, and refuses its 
   expect(restart?.textContent).toBe("Restart");
   expect(download?.disabled).toBe(true);
   expect(pressed).toEqual(["Restart"]);
+});
+
+test("an unavailable button that keeps its Tab stop shakes at a refused press, until the shake ends; a busy one and an available one do not", () => {
+  const pressed: string[] = [];
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(Button, {
+        disabled: true,
+        focusableWhenDisabled: true,
+        onClick: () => pressed.push("Merge"),
+        children: "Merge",
+      }),
+      createElement(Button, {
+        busy: true,
+        busyLabel: "Saving",
+        onClick: () => pressed.push("Save"),
+        children: "Save",
+      }),
+      createElement(Button, { onClick: () => pressed.push("Open"), children: "Open" }),
+    ),
+  );
+  const [merge, save, open] = [...container.querySelectorAll("button")];
+
+  act(() => merge?.click());
+  act(() => save?.click());
+  act(() => open?.click());
+
+  expect(pressed).toEqual(["Open"]);
+  expect(merge?.getAttribute("data-denied")).toBe("true");
+  expect(save?.hasAttribute("data-denied")).toBe(false);
+  expect(open?.hasAttribute("data-denied")).toBe(false);
+
+  act(() => merge?.dispatchEvent(new Event("animationend")));
+  expect(merge?.hasAttribute("data-denied")).toBe(false);
 });
 
 /** Draws a form holding `submit`, and answers how many times the form was sent. */

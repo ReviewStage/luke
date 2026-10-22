@@ -40,7 +40,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  *
  * A button unavailable is out of the tab order, unless it is
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
- * why, and refuses its press instead. A busy button keeps its width, its
+ * why, and refuses its press instead, with a shake. A busy button keeps its width, its
  * words standing hidden under a turning ring, refuses its press, and is
  * named by `busyLabel` ("Saving") for as long as the ring stands. The ring
  * holds still on `--luke-loop-motion`, as every endless loop does under reduced
@@ -190,6 +190,23 @@ function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
+/**
+ * Shakes a button whose press it refused, once per press: the attribute is
+ * taken off and set again, so a second press restarts the shake rather than
+ * landing on one still running, and it leaves as the shake ends. It is the element's own, which React never draws, so no
+ * render clears it mid-shake.
+ */
+function shakeDenied(button: HTMLButtonElement): void {
+  button.removeAttribute("data-denied");
+  // Note that reading the layout here makes the engine see the attribute
+  // gone before it is set again, which is what starts the shake anew.
+  void button.offsetWidth;
+  button.setAttribute("data-denied", "true");
+  button.addEventListener("animationend", () => button.removeAttribute("data-denied"), {
+    once: true,
+  });
+}
+
 /** The attributes and handler a button carries for its state, shared by both kinds. */
 function stateProps(props: ButtonBase, name: string | undefined) {
   const refusing =
@@ -225,6 +242,8 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     onClick: (event: MouseEvent<HTMLButtonElement>) => {
       if (refusing) {
         event.preventDefault();
+        // Note that a busy button's ring already says why it takes no press.
+        if (props.busy !== true) shakeDenied(event.currentTarget);
         return;
       }
       props.onClick?.(event);

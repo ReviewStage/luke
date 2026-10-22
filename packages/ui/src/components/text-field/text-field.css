@@ -102,6 +102,26 @@
 
   .luke-text-field[aria-invalid="true"] {
     border-color: var(--luke-color-danger);
+    animation: luke-text-field-shake var(--luke-duration-fast) var(--luke-motion-exit);
+  }
+
+  /* A field that turns wrong shakes once as its edge turns red, so the eye
+     finds which field is wrong; the animation runs as the selector starts
+     matching, so it plays each time the field turns wrong and never while it
+     stays so. */
+  @keyframes luke-text-field-shake {
+    20% {
+      transform: translateX(-3px);
+    }
+    40% {
+      transform: translateX(3px);
+    }
+    60% {
+      transform: translateX(-2px);
+    }
+    80% {
+      transform: translateX(2px);
+    }
   }
 
   .luke-text-field:disabled {

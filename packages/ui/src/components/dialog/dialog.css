@@ -134,6 +134,24 @@
     outline: none; /* no ring: a dialog holding focus for its controls */
   }
 
+  /* Asked away while at work, the card swells and settles back on the
+     spring, so the press is answered though the card stays (`dialog.tsx`). */
+  /* Note that the entrance stays listed, because a name dropped and named
+     again replays, so leaving it out would replay the entrance as the nudge
+     ends. */
+  .luke-dialog[data-nudge="true"] {
+    animation:
+      luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
+      luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast),
+      luke-dialog-nudge var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @keyframes luke-dialog-nudge {
+    40% {
+      transform: scale(1.02);
+    }
+  }
+
   @keyframes luke-dialog-fade {
     from {
       opacity: 0;

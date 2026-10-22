@@ -32,7 +32,8 @@
       background-color var(--luke-duration-hover) ease,
       color var(--luke-duration-hover) ease,
       filter var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease;
+      opacity var(--luke-duration-hover) ease,
+      transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -308,6 +309,36 @@
 
   .luke-button[data-variant="ink"]:active:not(:disabled, [aria-disabled="true"]) {
     opacity: 0.7;
+  }
+
+  /* A press sinks the button a little under the finger and lets it spring
+     back as the press leaves, by transform alone, so nothing beside it
+     moves. A row is a menu's row, lit rather than pressed, so it holds
+     still; an unavailable or busy one takes no press, so it gives none. */
+  .luke-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"]) {
+    transform: scale(0.97);
+  }
+
+  /* A press an unavailable button refuses shakes it, once per press, so the
+     refusal reads as an answer rather than a press that went nowhere
+     (`button.tsx` restarts `data-denied` on each). */
+  .luke-button[data-denied="true"] {
+    animation: luke-button-deny var(--luke-duration-fast) var(--luke-motion-exit);
+  }
+
+  @keyframes luke-button-deny {
+    20% {
+      transform: translateX(-3px);
+    }
+    40% {
+      transform: translateX(3px);
+    }
+    60% {
+      transform: translateX(-2px);
+    }
+    80% {
+      transform: translateX(2px);
+    }
   }
 
   /* Unavailable, a button fades to 45%: a disabled one whole, one that

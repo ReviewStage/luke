@@ -12,7 +12,8 @@ import { DIALOG_ROLE, Dialog } from "./dialog.js";
  * window, or its owner taking it away puts it away and hands focus back to
  * the button; a press dragged out of the card puts nothing away; an input
  * method's keys stay the method's; no key or press inside reaches the window
- * behind; a busy dialog holds focus on its card until it is done; and one
+ * behind; a busy dialog holds focus on its card until it is done, and
+ * nudges its card when asked away meanwhile; and one
  * given a title and actions is named by the title, its answers after what
  * it holds.
  */
@@ -225,6 +226,30 @@ test("a busy dialog holds focus on its card, and Tab from there comes back onto 
   expect(dialog.getAttribute("aria-busy")).toBe("true");
   key("Tab");
   expect(holds(field)).toBe(true);
+});
+
+test("asked away while busy, by the dimmed window or Escape, the card nudges each time and its owner still hears it", () => {
+  let dismissals = 0;
+  draw(
+    createElement(Dialog, {
+      title: "Deleting plan",
+      busy: true,
+      onDismiss: () => {
+        dismissals += 1;
+      },
+      children: createElement("p", null, "Deleting."),
+    }),
+  );
+  const dialog = card() ?? expect.fail("the dialog opens");
+  const backdrop = dialog.parentElement ?? expect.fail("no dimmed window");
+
+  press(backdrop, backdrop);
+  expect(dialog.getAttribute("data-nudge")).toBe("true");
+  act(() => dialog.dispatchEvent(new Event("animationend")));
+  expect(dialog.hasAttribute("data-nudge")).toBe(false);
+  key("Escape");
+  expect(dialog.getAttribute("data-nudge")).toBe("true");
+  expect(dismissals).toBe(2);
 });
 
 test("a question that must be answered is an alert dialog, named by its title and described by what it asks", () => {

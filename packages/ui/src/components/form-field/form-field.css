@@ -36,6 +36,26 @@
     color: var(--luke-color-danger-text);
   }
 
+  /* An error arriving fades in and drops into its line from just above, the
+     pair every arriving element rides. */
+  .luke-field-error:not(:empty) {
+    animation:
+      luke-field-error-fade var(--luke-duration-quick) ease-out,
+      luke-field-error-drop var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @keyframes luke-field-error-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-field-error-drop {
+    from {
+      transform: translateY(-4px);
+    }
+  }
+
   /* Empty, it keeps its place in the tree, so its live region is standing
      when an error arrives, and gives back the gap before it. */
   .luke-field-error:empty {
