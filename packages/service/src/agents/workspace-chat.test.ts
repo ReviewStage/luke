@@ -279,6 +279,8 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
           [self?.kind, self?.name, self?.userId],
           [MEMBER_KIND.HUMAN, "Ada Lovelace", room.owner],
         );
+        // A desktop up to v0.18.0 refuses a member with no handle, so each is handed its name under that key.
+        assert.ok(first.members.every((member) => member.handle === member.name));
         assert.deepEqual(
           first.channels.map((channel) => [channel.kind, channel.name]),
           [[CHANNEL_KIND.GENERAL, "general"]],
@@ -560,7 +562,14 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
         }
         const statements = workspaceChatLiveStatements(room.owner, ada);
         const live = workspaceChatOfLiveRows(yield* liveRowsOf(statements));
-        assert.deepEqual(live, { ...held, messages: newestOfEachChannel(messages), cursor: "" });
+        // Note that the live rows reach only windows past v0.18.0, so they carry no stand-in handle.
+        const members = held.members.map(({ handle: _standIn, ...member }) => member);
+        assert.deepEqual(live, {
+          ...held,
+          members,
+          messages: newestOfEachChannel(messages),
+          cursor: "",
+        });
         // Each channel's newest, and the one ask still open behind them.
         assert.equal(
           live?.messages.filter((each) => each.channelId === general.id).length,

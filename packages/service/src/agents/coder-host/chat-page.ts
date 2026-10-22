@@ -16,6 +16,7 @@ import {
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CHANNEL_KIND,
+  CHAT_MEMBER_LABEL,
   type ChatAnswer,
   type ChatChannel,
   type ChatMember,
@@ -65,10 +66,17 @@ function memberOnWire(
   const agent = row.agentId === null ? undefined : agents.get(row.agentId);
   const planId = agent?.taskId;
   const name = row.userId === null ? agent?.name : people.get(row.userId);
+  // Note that a desktop up to v0.18.0 refuses a member with no handle, and draws it where newer windows draw the name.
+  const handle =
+    name ??
+    (row.kind === MEMBER_KIND.AGENT
+      ? CHAT_MEMBER_LABEL.FORMER_AGENT
+      : CHAT_MEMBER_LABEL.FORMER_PERSON);
   return {
     id: row.id,
     kind: row.kind,
     ...(name === undefined ? undefined : { name }),
+    handle,
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
     ...(planId === undefined ? undefined : { planId }),

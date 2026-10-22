@@ -532,6 +532,13 @@ export const chatMemberSchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
   /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a member whose account or agent is gone. */
   name: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The member's name again, under the key a desktop up to v0.18.0 requires
+   * on every member, from before members were named by their links; no
+   * newer window reads it. Absent from a service once no such desktop
+   * stands.
+   */
+  handle: EffectSchema.optionalKey(EffectSchema.String),
   userId: EffectSchema.optionalKey(EffectSchema.String),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** The plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
