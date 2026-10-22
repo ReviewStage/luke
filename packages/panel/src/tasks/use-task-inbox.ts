@@ -285,6 +285,16 @@ function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxI
     : [item, ...items];
 }
 
+/**
+ * Whether a read holds the draft's item at an older revision than the draft
+ * was written against, as one reader of a plan does while another has heard
+ * the agent's newer post first; such a reader leaves the draft be, since its
+ * read is what is out of date.
+ */
+function behind(items: readonly InboxItem[], place: InboxPlace): boolean {
+  return items.some((item) => item.id === place.itemId && item.revision < place.revision);
+}
+
 /** A card's draft as the drafts keep it. */
 function keptDraft(draft: InboxDraft): Draft {
   return {
@@ -650,7 +660,9 @@ export function useTaskInbox(input: {
       (kept) =>
         (ownTask !== undefined || kept.place.agentId === readAgent) &&
         !held.items.some((item) => draftOfItem(kept.place, item)) &&
-        !settled.some((item) => draftOfItem(kept.place, item)),
+        !settled.some((item) => draftOfItem(kept.place, item)) &&
+        !behind(held.items, kept.place) &&
+        !behind(settled, kept.place),
     );
     if (stale.length === 0) return;
     for (const kept of stale) {

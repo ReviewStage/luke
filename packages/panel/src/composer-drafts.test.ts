@@ -889,6 +889,19 @@ test("an agent with no plan carries its own outdated answers' words to the item 
   assert.equal(kept.draftOf(theirs).note, "Weekly");
 });
 
+test("a reader still holding an item's older revision leaves the answer carried to its newer one", async () => {
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const reposted = { ...mine, revision: 2 };
+  const ahead = await tasklessInbox(INVITES.agent.id, [reposted]);
+  act(() =>
+    ahead.onDraft(reposted, { choices: [], values: [], note: "Check guests", attachments: [] }),
+  );
+
+  await tasklessInbox(INVITES.agent.id, [mine]);
+  const caughtUp = await tasklessInbox(INVITES.agent.id, [reposted]);
+  assert.equal(caughtUp.draftOf(reposted).note, "Check guests");
+});
+
 test("another item landing in the inbox leaves the answer being written on one as it was", async () => {
   const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
   const first = await tasklessInbox(INVITES.agent.id, [mine]);
