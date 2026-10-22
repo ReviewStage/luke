@@ -146,6 +146,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   settledAt: EffectSchema.NullOr(countedNumber),
   turnSessionEnded: EffectSchema.NullOr(EffectSchema.Boolean),
   awaitingLineAt: EffectSchema.NullOr(countedNumber),
+  /** Whether the newest turn's reply is a member's operator's quiet reply alone; absent from a statement before heartbeats. */
+  quietTurn: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Boolean)),
 });
 
 /** One issue a plan links as its row delivers it: its tag, the plan it is of, and when it was linked. */
@@ -410,6 +412,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
     ...(row.kind === CODING_AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
     createdAt: row.createdAt,
     status: statusOf(row, now),
+    ...(row.quietTurn === true ? { quietTurn: true } : undefined),
     turnId: row.turnId,
     brief: row.brief,
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt }),

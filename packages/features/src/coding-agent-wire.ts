@@ -202,6 +202,17 @@ export const CODING_AGENT_KIND = {
 
 export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGENT_KIND];
 
+/**
+ * The whole of what an operator answers a heartbeat that found nothing for
+ * its member: a turn whose reply is exactly this, and nothing more, is a
+ * quiet turn, which leaves its member no unseen dot and no notice, and whose
+ * reply the panel does not draw. A reply that only mentions it is no quiet one.
+ */
+export const OPERATOR_QUIET_REPLY = "HEARTBEAT_OK";
+
+/** The most characters of the time zone an operator's ensure names, an IANA zone's name. */
+const OPERATOR_TIME_ZONE_MAX_CHARS = 64;
+
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
@@ -681,6 +692,14 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
   /**
+   * True where the agent is a member's operator whose newest turn's reply is
+   * its quiet reply alone (`OPERATOR_QUIET_REPLY`): a heartbeat that found
+   * nothing, whose end leaves no unseen dot and no notice. Absent for every
+   * other turn, from the held reads, which do not read it, and from a service
+   * before heartbeats.
+   */
+  quietTurn: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /**
    * The newest turn the status is read from, by the service's own id for
    * it; nothing before the first turn. A message that opens a new turn moves
    * it once eve starts that turn, so a reader keying an agent's run by
@@ -796,10 +815,15 @@ export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
  * The asking member's operator in a workspace ensured (PUT
  * `/api/workspaces/{id}/operator`): the one standing, or a fresh one made
  * blank where none stands, or, with `reset`, the standing one archived, its
- * transcript kept, and a fresh one made in its place.
+ * transcript kept, and a fresh one made in its place. `timeZone` is the
+ * IANA zone the client runs in, which the heartbeat an ensure that makes the
+ * operator aims at it is read in; UTC where it is absent or does not read.
  */
 export const operatorEnsureRequestSchema = EffectSchema.Struct({
   reset: EffectSchema.optionalKey(EffectSchema.Boolean),
+  timeZone: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(OPERATOR_TIME_ZONE_MAX_CHARS)),
+  ),
 });
 
 export type OperatorEnsureRequest = typeof operatorEnsureRequestSchema.Type;

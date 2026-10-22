@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask } from "@luke/database/models/task-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
@@ -39,7 +39,11 @@ import {
   automationRunsAnswerSchema,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
+  CODING_AGENT_STATUS,
+} from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -531,6 +535,118 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         const gone = yield* ask(automationPath(automation.id), owner);
         assert.equal(gone.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+      }),
+  );
+
+  it.effect(
+    "an automation aimed at its owner's operator needs no repository, made on a workspace naming none or a plan with none, and run there; every other automation still needs one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, bare, ask } = yield* openAccounts;
+        const agentOf = (kind: "operator" | "coder") =>
+          Effect.map(
+            createCodingAgent(
+              owner,
+              kind === "operator"
+                ? {
+                    taskId: null,
+                    organizationId: task.workspaceId,
+                    planSnapshot: null,
+                    prompt: null,
+                    kind: CODING_AGENT_KIND.OPERATOR,
+                    idempotencyKey: randomUUID(),
+                    model: CODING_AGENT_DEFAULT_CHOICE.model,
+                    effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+                    repository: null,
+                  }
+                : {
+                    taskId: null,
+                    organizationId: task.workspaceId,
+                    planSnapshot: null,
+                    prompt: PROMPT,
+                    idempotencyKey: randomUUID(),
+                    model: CODING_AGENT_DEFAULT_CHOICE.model,
+                    effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+                    repository: `${RELAY.owner}/${RELAY.name}`,
+                  },
+            ),
+            (made) => Option.getOrThrow(made).agent,
+          );
+        const opened = yield* agentOf("operator");
+        const operator = opened.id;
+        const coder = (yield* agentOf("coder")).id;
+        // Its opening turn ended, as an ensure's does, so it is at work on nothing a run must wait for.
+        yield* Database.use((db) =>
+          db.insert(turns).values({
+            userId: owner,
+            conversationId: opened.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.SETTLED,
+            settledAt: new Date(0),
+          }),
+        );
+        const aimed = (agentId: string) => ({ kind: AUTOMATION_TARGET.SAME_AGENT, agentId });
+        const { repositories: _none, ...noRepositories } = onWorkspace(task.workspaceId, []);
+        const make = (body: WireBoundaryInput) =>
+          ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
+
+        const heartbeat = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* make({ ...noRepositories, target: aimed(operator) }),
+        ).automation;
+        const onBarePlan = yield* make({ ...weekdays(bare.id), target: aimed(operator) });
+        const coderNoRepositories = yield* make({ ...noRepositories, target: aimed(coder) });
+        const newAgentNoRepositories = yield* make(noRepositories);
+        const coderOnBarePlan = yield* make({ ...weekdays(bare.id), target: aimed(coder) });
+        const toNewAgent = yield* ask(automationPath(heartbeat.id), owner, {
+          method: "PATCH",
+          body: { target: { kind: AUTOMATION_TARGET.NEW_AGENT } },
+        });
+        const toCoder = yield* ask(automationPath(heartbeat.id), owner, {
+          method: "PATCH",
+          body: { target: aimed(coder) },
+        });
+        const { run } = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(automationRunPath(heartbeat.id), owner, {
+            method: "POST",
+            body: { idempotencyKey: randomUUID() },
+          }),
+        );
+
+        assert.deepEqual(
+          [heartbeat.repositories, heartbeat.target],
+          [[], aimed(operator)],
+          "made on the workspace with no repository, aimed at the operator",
+        );
+        assert.equal(
+          onBarePlan.status,
+          HOSTED_HTTP_STATUS.CREATED,
+          JSON.stringify(onBarePlan.body),
+        );
+        assert.deepEqual(
+          [
+            coderNoRepositories.body,
+            newAgentNoRepositories.body,
+            coderOnBarePlan.body,
+            toNewAgent.body,
+            toCoder.body,
+          ],
+          [
+            { error: HOSTED_API_ERROR.INVALID_REQUEST },
+            { error: HOSTED_API_ERROR.INVALID_REQUEST },
+            { error: HOSTED_API_ERROR.NO_REPOSITORY },
+            { error: HOSTED_API_ERROR.NO_REPOSITORY },
+            { error: HOSTED_API_ERROR.NO_REPOSITORY },
+          ],
+        );
+        assert.deepEqual(
+          [run.status, run.agent?.id],
+          [AUTOMATION_RUN_STATUS.STARTED, operator],
+          "its run is handed to the operator",
+        );
       }),
   );
 

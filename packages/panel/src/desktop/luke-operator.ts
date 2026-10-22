@@ -4,6 +4,7 @@ import {
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
+import { readerZone } from "@luke/features/date-mention";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -94,7 +95,10 @@ export interface LukeOperator {
 function ensuredId(workspaceId: string, reset: boolean): Promise<string | undefined> {
   return askAct(
     ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR,
-    reset ? { workspaceId, reset } : { workspaceId },
+    // The zone this window reads in, which the heartbeat an ensure that makes Luke aims at him is read in.
+    reset
+      ? { workspaceId, reset, timeZone: readerZone() }
+      : { workspaceId, timeZone: readerZone() },
   ).then(
     (answer) => ("agentId" in answer ? answer.agentId : undefined),
     () => undefined,

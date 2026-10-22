@@ -29,6 +29,7 @@ import {
   type CodingAgentTodos,
   type CodingAgentUsage,
   type ContextWindow,
+  OPERATOR_QUIET_REPLY,
   PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -1681,24 +1682,35 @@ export interface PlacedMessage {
   readonly arrived: readonly CodingAgentMessage[];
 }
 
+/** Whether a turn's reply is a member's operator's quiet reply alone, a heartbeat that found nothing, which leaves the developer nothing to read. */
+function isQuietReply(message: CodingAgentMessage): boolean {
+  return (
+    message.role === MESSAGE_ROLE.ASSISTANT && messageWords(message).trim() === OPERATOR_QUIET_REPLY
+  );
+}
+
 /**
  * A transcript's rows with each line that reached a turn under way moved
  * into that turn's journal, which draws it where it arrived, out of the
  * order the service keeps, where the journal closed behind it. A line whose
  * journal is not among the rows, as when its page is still to land, stands
  * where the order puts it, as every line does from a service older than it.
+ * A turn whose reply is the operator's quiet reply alone is left out, so a
+ * heartbeat that found nothing draws no reply, and a line it took in stands
+ * where the order puts it.
  */
 export function placedMessages(messages: readonly CodingAgentMessage[]): readonly PlacedMessage[] {
+  const shown = messages.filter((message) => !isQuietReply(message));
   const journals = new Set(
-    messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
+    shown.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
   );
   const arrived = new Map<string, CodingAgentMessage[]>();
-  for (const message of messages) {
+  for (const message of shown) {
     const journal = message.arrivedIn?.journalId;
     if (journal === undefined || !journals.has(journal)) continue;
     arrived.set(journal, [...(arrived.get(journal) ?? []), message]);
   }
-  return messages.flatMap((message) => {
+  return shown.flatMap((message) => {
     const journal = message.arrivedIn?.journalId;
     if (journal !== undefined && journals.has(journal)) return [];
     return [{ message, arrived: arrived.get(message.id) ?? [] }];

@@ -39,6 +39,7 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
+  OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
@@ -637,6 +638,80 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.ok(
           !(seen?.agents?.agents ?? []).some((line) => line.id === hidden.id),
           "the teammate's list leaves out the agent they do not see",
+        );
+      }),
+  );
+
+  it.effect(
+    "say an operator's newest turn is quiet only where its reply is the quiet reply alone, and never a coder's",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        /** An agent whose one settled turn replied with the parts given. */
+        const replied = (
+          kind: "operator" | "coder",
+          parts: readonly { readonly type: string; readonly text?: string }[],
+        ) =>
+          Effect.gen(function* () {
+            const agent =
+              kind === "operator"
+                ? Option.getOrThrow(
+                    yield* createCodingAgent(owner, {
+                      taskId: null,
+                      organizationId: yield* openWorkspace(owner),
+                      planSnapshot: null,
+                      prompt: null,
+                      kind: CODING_AGENT_KIND.OPERATOR,
+                      idempotencyKey: randomUUID(),
+                      model: "anthropic/claude-opus-5.5",
+                      effort: "high",
+                      repository: null,
+                    }),
+                  ).agent
+                : yield* openAgent(owner, { workspaceId: plan.workspaceId }, 60_000);
+            const turnId = yield* turnOf(agent, TURN_STATUS.SETTLED, 30_000, { settled: true });
+            yield* db.insert(messages).values({
+              userId: owner,
+              conversationId: agent.conversationId,
+              seq: 1,
+              clientId: turnId,
+              turnId,
+              role: MESSAGE_ROLE.ASSISTANT,
+              parts: [...parts] as never,
+              placedAt: new Date(NOW - 20_000),
+              createdAt: new Date(NOW - 20_000),
+            });
+            return agent.id;
+          });
+        const quiet = yield* replied("operator", [
+          { type: "step-start" },
+          { type: "text", text: `${OPERATOR_QUIET_REPLY}\n` },
+        ]);
+        const busy = yield* replied("operator", [
+          { type: "step-start" },
+          { type: "text", text: "Stopped Ana: it retried the same migration for an hour." },
+          { type: "step-start" },
+          { type: "text", text: OPERATOR_QUIET_REPLY },
+        ]);
+        const mentions = yield* replied("operator", [
+          { type: "text", text: `Nothing needs you, so ${OPERATOR_QUIET_REPLY}.` },
+        ]);
+        const coder = yield* replied("coder", [{ type: "text", text: OPERATOR_QUIET_REPLY }]);
+
+        const read = yield* liveListOf(owner, NOW);
+        const quietOf = (id: string) =>
+          (read.planlessAgents ?? []).find((agent) => agent.id === id)?.quietTurn;
+        assert.deepEqual([quiet, busy, mentions, coder].map(quietOf), [
+          true,
+          undefined,
+          undefined,
+          undefined,
+        ]);
+        assert.equal(
+          (read.planlessAgents ?? []).find((agent) => agent.id === quiet)?.status,
+          CODING_AGENT_STATUS.COMPLETED,
         );
       }),
   );
