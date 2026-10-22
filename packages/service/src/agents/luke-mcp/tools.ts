@@ -302,12 +302,13 @@ function executedContent(result: LukeMcpToolResult): readonly McpContent[] {
 
 /**
  * What the agent is shown of a browser call: its JSON with every
- * screenshot's picture taken out (`storedBrowserOutput`) as one text block,
- * then each screenshot as an image, in the order its steps name them. Note
+ * screenshot's base64 taken out and its kept full-size copy named by id
+ * (`storedBrowserOutput`) as one text block, then each screenshot's
+ * bounded copy as an image, in the order its steps name them. Note
  * that no caption stands between them, because the native transcript joins
  * a Luke tool's text blocks and reads them as one JSON value
  * (`../native-events/runner-moments.ts`), so the one block keeps the result
- * whole there.
+ * whole there, the kept copies' ids among it for the window to draw.
  */
 function browserContent(result: LukeMcpToolResult): readonly McpContent[] {
   const output = unparsedWire(result);
@@ -334,6 +335,8 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
   const call = {
     browserSession: session,
     conversationId: admitted.target.conversationId,
+    // Note that the native transcript is the conversation's own, so its screenshots are kept beside it.
+    transcript: admitted.target,
     openSandbox: () => Promise.resolve(),
   };
   return runBrowserTool(call, input);
