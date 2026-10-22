@@ -2202,7 +2202,7 @@ ul.actor-stack {
   bottom: calc(
     max(
       0px,
-      min(var(--column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height))
+      min(var(--luke-column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height))
     ) +
     var(--luke-space-12)
   );
