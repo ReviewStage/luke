@@ -18,6 +18,7 @@ import {
 import { Effect, Layer, Redacted } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
+import { nativeAgents } from "../native-agents.js";
 import { runWeb } from "../runtime.js";
 
 /**
@@ -133,7 +134,12 @@ let standing: VoiceServer | undefined;
 function standService(voice: VoiceServer): void {
   void standReported(
     runWeb,
-    Effect.scoped(Effect.andThen(VoiceService.make(voiceFunctionOptions(voice)), Effect.never)),
+    Effect.scoped(
+      Effect.andThen(VoiceService.make(voiceFunctionOptions(voice)), Effect.never),
+    ).pipe(
+      // A call's asks reach an agent's native harness as a typed message's do, launched from here.
+      Effect.provide(nativeAgents),
+    ),
   );
 }
 

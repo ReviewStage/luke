@@ -6,7 +6,8 @@
  * (`packages/service/src/agents/coder-host/runtime-sessions.ts`). The
  * functions whose routes reach an agent's session provide the harnesses
  * here: the default function's oRPC router and its GitHub and automation
- * webhooks, the scheduled sweep, and Luke's MCP server. Importing this
+ * webhooks, the scheduled sweep, Luke's MCP server, and the voice
+ * function, whose calls speak into an agent. Importing this
  * module is what reaches `runner-bundle.ts`, so the web build ships the
  * runner's bundle in each of those functions' `.func`
  * (`scripts/bundle-functions.ts`), where the bundle is read beside the
