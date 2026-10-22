@@ -161,6 +161,15 @@ export const CODER = {
     WAIT: Duration.minutes(2),
     POLL: Duration.millis(250),
   },
+  /**
+   * How a native agent's open, run past its Start's answer, waits on an image
+   * still being prepared: asked again every `IMAGE_POLL` for at most
+   * `IMAGE_WAIT`, inside the runner lease's `HOLD` and the function's duration.
+   */
+  NATIVE_LAUNCH: {
+    IMAGE_POLL: Duration.seconds(15),
+    IMAGE_WAIT: Duration.minutes(3),
+  },
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

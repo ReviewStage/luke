@@ -370,25 +370,16 @@ export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolde
 });
 
 /**
- * The agent's shallow checkout deepened, as its first write asks: a write
- * token minted and set at the firewall in the session's own shape
- * (`credentialPolicy`), where it stands from then on for the session's `gh`
- * and `git`; the rest of the history fetched through it; the commit
- * identity set; and the deepen's record written last. A sandbox whose
- * record stands is left as it is. Note that the credential is set ahead of
- * the fetch and never taken off after it, so two writes deepening at once
- * each leave it standing whatever order they end in, the fetch itself
- * running once (`deepenRepository`); that a deepen cut short anywhere
- * writes no record, so the next write runs it again whole; and that the
- * identity is read ahead of the fetch, so an account GitHub cannot name
- * costs no fetch.
+ * The write token minted and set at the firewall in the session's own
+ * shape (`credentialPolicy`), where it stands from then on for the
+ * session's `gh` and `git`; answers the commit identity, read ahead of the
+ * firewall, so an account GitHub cannot name sets no credential.
  */
-export const deepenAgentCheckout = /* @__PURE__ */ Effect.fn("web/deepenAgentCheckout")(function* (
+const writeCredentialSet = Effect.fnUntraced(function* (
   target: ConversationTarget,
   agent: WithRepository<CodingAgent>,
   sandbox: RepositorySandbox,
-): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
-  if (yield* checkoutDeepened(sandbox).pipe(Effect.mapError(refusedWith))) return;
+): Effect.fn.Return<CheckoutIdentity, CheckoutRefused | StoreFailure, CheckoutServices> {
   const setNetworkPolicy = sandbox.setNetworkPolicy;
   if (setNetworkPolicy === undefined) {
     return yield* new CheckoutRefused({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
@@ -402,8 +393,58 @@ export const deepenAgentCheckout = /* @__PURE__ */ Effect.fn("web/deepenAgentChe
     try: () => setNetworkPolicy(credentialPolicy(credential)),
     catch: () => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
   });
+  return identity;
+});
+
+/**
+ * The agent's shallow checkout deepened, as its first write asks: a write
+ * token set at the firewall (`writeCredentialSet`); the rest of the history
+ * fetched through it; the commit identity set; and the deepen's record
+ * written last. A sandbox whose record stands is left as it is. Note that
+ * the credential is set ahead of the fetch and never taken off after it,
+ * so two writes deepening at once each leave it standing whatever order
+ * they end in, the fetch itself running once (`deepenRepository`); and
+ * that a deepen cut short anywhere writes no record, so the next write
+ * runs it again whole.
+ */
+export const deepenAgentCheckout = /* @__PURE__ */ Effect.fn("web/deepenAgentCheckout")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
+  if (yield* checkoutDeepened(sandbox).pipe(Effect.mapError(refusedWith))) return;
+  const identity = yield* writeCredentialSet(target, agent, sandbox);
   yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
   yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refusedWith));
+  yield* markDeepened(sandbox).pipe(Effect.mapError(refusedWith));
+});
+
+/**
+ * A native agent's fresh checkout armed for its writes before its runner
+ * starts, as a deepen arms one, its history left shallow: the write token
+ * at the firewall and the commit identity set, since the harness's own
+ * shell has no hook for a first write. `deepenAgentHistory` fetches the
+ * rest once the runner runs.
+ */
+export const armAgentCheckout = /* @__PURE__ */ Effect.fn("web/armAgentCheckout")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
+  const identity = yield* writeCredentialSet(target, agent, sandbox);
+  yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refusedWith));
+});
+
+/**
+ * The rest of an armed checkout's history fetched through the credential
+ * `armAgentCheckout` set, and the deepen's record written last, so a fetch
+ * cut short writes no record; the fetch runs once however many ask at once
+ * (`deepenRepository`).
+ */
+export const deepenAgentHistory = /* @__PURE__ */ Effect.fn("web/deepenAgentHistory")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, CheckoutRefused> {
+  yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
   yield* markDeepened(sandbox).pipe(Effect.mapError(refusedWith));
 });
 

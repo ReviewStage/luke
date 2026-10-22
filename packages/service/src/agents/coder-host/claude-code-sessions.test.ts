@@ -16,6 +16,7 @@ import {
 import {
   type CodingAgent,
   createCodingAgent,
+  latestTurnsOfReached,
   readCodingAgentRouting,
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
@@ -26,6 +27,7 @@ import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -46,8 +48,9 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { TURN_ORIGIN } from "../../core.js";
+import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { keptAfterResponse } from "../../http/after-response.js";
 import {
   connectWorkspaceGitHub,
   GITHUB_APP_WITH_TOKENS,
@@ -78,6 +81,7 @@ import {
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
+import { codingAgentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -251,6 +255,32 @@ const raceThrough = <A, E>(held: { open: () => void }, fibers: readonly Fiber.Fi
       yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
     }
     return yield* Effect.forEach(fibers, Fiber.join);
+  });
+
+/**
+ * The work run, the clock moved on by `step` a time at a time, `times`
+ * times, each after the event loop turned enough for a wait the work armed
+ * to stand, and the work joined.
+ */
+const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times: number) =>
+  Effect.gen(function* () {
+    const fiber = yield* Effect.forkChild(work);
+    for (let move = 0; move < times; move += 1) {
+      yield* Effect.promise(async () => {
+        for (let turn = 0; turn < 50; turn += 1) {
+          await new Promise<void>((settle) => setImmediate(settle));
+        }
+      });
+      yield* TestClock.adjust(step);
+    }
+    return yield* Fiber.join(fiber);
+  });
+
+/** The agent's newest turn, as its status reads it, and the word its failure is read as. */
+const newestTurn = (agent: CodingAgent) =>
+  Effect.map(latestTurnsOfReached([agent.conversationId]), (turns) => {
+    const turn = turns.get(agent.conversationId);
+    return { status: turn?.status, failure: codingAgentFailureOf(turn) };
   });
 
 afterEach(() => {
@@ -704,7 +734,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a template snapshot Vercel answers gone (410 snapshot_not_found) is handed back to the image, and the launch answers as preparing",
+    "a template snapshot Vercel answers gone (410 snapshot_not_found) is handed back to the image, and the open waits for the image made again and launches on its new snapshot",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -712,22 +742,32 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         api.goneSnapshots.add(SNAPSHOT);
         const { userId, agent } = yield* openAgent;
         const handedBack: string[] = [];
+        const current = { snapshot: SNAPSHOT };
         const image = Layer.succeed(AgentSandboxImage, {
-          snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
-          snapshotGone: (snapshotId) => Effect.sync(() => handedBack.push(snapshotId)),
+          snapshotId: Effect.sync(() => Option.some(current.snapshot)),
+          snapshotGone: (snapshotId) =>
+            Effect.sync(() => {
+              handedBack.push(snapshotId);
+              current.snapshot = "snap_fixture_image_again";
+            }),
         });
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(Layer.merge(services(api), image)),
         );
 
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        const opened = yield* across(
+          sessions.open(message(agent, "Fix the invitations.")),
+          CODER.NATIVE_LAUNCH.IMAGE_POLL,
+          2,
+        );
 
-        assert.deepEqual(opened, {
-          outcome: EVE_SEND_OUTCOME.FAILED,
-          status: IMAGE_PREPARING_STATUS,
-        });
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.deepEqual(handedBack, [SNAPSHOT]);
-        assert.equal(api.sandboxes.length, 0);
+        assert.deepEqual(
+          api.sandboxes.map((sandbox) => sandbox.snapshotId),
+          ["snap_fixture_image_again"],
+        );
+        assert.equal(api.commands.length, 1);
       }),
   );
 
@@ -814,7 +854,45 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch while the image is still being prepared fails as preparing and opens nothing",
+    "an open answers at once while the image is still being prepared, opens nothing until it is ready, then launches with no ask again",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const preparing = { remaining: 2 };
+        const kept = keptAfterResponse();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(api),
+              Layer.succeed(AgentSandboxImage, {
+                snapshotId: Effect.suspend(() => {
+                  if (preparing.remaining === 0) return Effect.succeed(Option.some(SNAPSHOT));
+                  preparing.remaining -= 1;
+                  return Effect.fail(new ImagePreparing());
+                }),
+                snapshotGone: () => Effect.void,
+              }),
+            ),
+          ),
+        );
+
+        const opened = yield* sessions
+          .open(message(agent, "Fix the invitations."))
+          .pipe(Effect.provide(kept.layer));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 0);
+        yield* across(kept.run, CODER.NATIVE_LAUNCH.IMAGE_POLL, 3);
+        assert.equal(api.sandboxes.length, 1);
+        assert.equal(api.commands.length, 1);
+        assert.equal((yield* newestTurn(agent)).status, undefined);
+      }),
+  );
+
+  it.effect(
+    "an image still being prepared past the open's wait opens nothing, and the agent's first turn reads failed for its sandbox",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -831,14 +909,65 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             ),
           ),
         );
+        const polls =
+          Duration.toMillis(CODER.NATIVE_LAUNCH.IMAGE_WAIT) /
+            Duration.toMillis(CODER.NATIVE_LAUNCH.IMAGE_POLL) +
+          2;
 
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        const opened = yield* across(
+          sessions.open(message(agent, "Fix the invitations.")),
+          CODER.NATIVE_LAUNCH.IMAGE_POLL,
+          polls,
+        );
 
-        assert.deepEqual(opened, {
-          outcome: EVE_SEND_OUTCOME.FAILED,
-          status: IMAGE_PREPARING_STATUS,
-        });
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 0);
+        assert.deepEqual(yield* newestTurn(agent), {
+          status: TURN_STATUS.FAILED,
+          failure: CODING_AGENT_FAILURE.SANDBOX,
+        });
+      }),
+  );
+
+  it.effect(
+    "a Start's open answers before any sandbox is made, the launch running once the answer has left, and a plan signed out is refused at once with nothing left to run",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const kept = keptAfterResponse();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+
+        const opened = yield* sessions
+          .open(message(agent, "Fix the invitations."))
+          .pipe(Effect.provide(kept.layer));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.deepEqual([api.sandboxes.length, api.commands.length], [0, 0]);
+        yield* kept.run;
+        assert.deepEqual([api.sandboxes.length, api.commands.length], [1, 1]);
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes[0]?.tags.sessionId, opened.sessionId);
+
+        const unplanned = yield* openAgentWithoutPlan;
+        const refusedApi = runnerSandboxApi();
+        const refusedKept = keptAfterResponse();
+        const unplannedSessions = yield* sessionsFor(unplanned.userId, { next: 0 }).pipe(
+          Effect.provide(services(refusedApi)),
+        );
+        const refused = yield* unplannedSessions
+          .open(message(unplanned.agent, "Go."))
+          .pipe(Effect.provide(refusedKept.layer));
+        assert.deepEqual(refused, {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+        });
+        yield* refusedKept.run;
+        assert.deepEqual(refusedApi.sandboxes, []);
       }),
   );
 
@@ -1195,7 +1324,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch Vercel refused logs the call, its status, and Vercel's error, and no secret",
+    "a launch Vercel refused after the open answered logs the call, its status, and Vercel's error, and no secret, deletes its sandbox, and reads as the agent's failed turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1217,10 +1346,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .open(message(agent, "Fix the invitations."))
           .pipe(Effect.provide(logger));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.ok(
           logged.includes(
-            "A Claude Code open failed: Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused",
+            "A Claude Code launch failed after its Start: Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused",
           ),
           logged.join("\n"),
         );
@@ -1230,6 +1359,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         for (const secret of [PLAN_TOKEN, bearer, fixtureToken()]) {
           assert.equal(written.includes(secret), false);
         }
+        assert.ok(api.sandboxes.every((sandbox) => sandbox.deleted));
+        assert.deepEqual(yield* newestTurn(agent), {
+          status: TURN_STATUS.FAILED,
+          failure: CODING_AGENT_FAILURE.SANDBOX,
+        });
       }),
   );
 
@@ -1275,9 +1409,19 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ),
         );
 
+        const runsAtStart: number[] = [];
+        api.hooks.onStart = async () => {
+          runsAtStart.push(api.runs.length);
+        };
+
         const opened = yield* sessions.open(message(agent, "Push a branch."));
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        // The shallow clone runs before the runner starts, and the rest of its history is fetched after.
+        const ran = (words: string) =>
+          api.runs.findIndex((run) => run.args.join(" ").includes(words));
+        assert.ok(ran("clone") >= 0 && ran("clone") < (runsAtStart[0] ?? -1));
+        assert.ok(ran("--unshallow") >= (runsAtStart[0] ?? Number.POSITIVE_INFINITY));
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
         assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
         assert.equal(api.commands.length, 1);

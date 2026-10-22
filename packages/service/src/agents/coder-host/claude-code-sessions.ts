@@ -179,6 +179,8 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
   return {
     name: "Claude Code",
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CLAUDE_CODE],
+    // The plan's row asked and its token opened, as a launch reads them, so a Start refuses at once.
+    admit: Effect.asVoid(credential),
     launch: () => credential,
     config,
     ahead,

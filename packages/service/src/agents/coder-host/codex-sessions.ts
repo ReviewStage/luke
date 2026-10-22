@@ -172,6 +172,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
   return {
     name: "Codex",
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CODEX],
+    admit: standingPlan,
     launch,
     config,
     ahead,
