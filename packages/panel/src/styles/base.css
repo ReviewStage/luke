@@ -492,6 +492,8 @@ body:has(.app-stage[data-capture="true"]) {
      hold still for exactly the same reason. */
   --loop-motion: paused;
   --luke-loop-motion: paused;
+  /* A toast's countdown says time passing, which a still frame cannot. */
+  --luke-wait-motion: paused;
   --luke-face-motion: paused;
   --luke-scroll-glide: auto;
 }

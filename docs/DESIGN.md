@@ -36,8 +36,9 @@ A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@luke/ui`'s `hint
 names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors. A wait drawn
 over its own length, a toast's countdown bar draining over the hold its
 host hands it (`--luke-toast-hold`), takes that hold rather than a token,
-because it shows time passing rather than moving anything, and answers
-`--luke-loop-motion` as a loop does, so those runs hold it still.
+because it shows time passing rather than moving anything. Reduced motion
+keeps it, since the time left is information, but in whole-second steps rather
+than a glide; only a capture run holds it still, through `--luke-wait-motion`.
 
 ## Layout lands at once; motion is transform and opacity
 

@@ -41,6 +41,9 @@ export const TOAST_TONE = {
 
 export type ToastTone = (typeof TOAST_TONE)[keyof typeof TOAST_TONE];
 
+/** A second, in milliseconds: the notch a countdown drains by under reduced motion. */
+const SECOND_MS = 1000;
+
 /** Which of a toast's glyphs is which: the one it leads with now, and the one it led with before its tone last changed. */
 const GLYPH_TURN = {
   NOW: "now",
@@ -174,7 +177,10 @@ export function Toast({
         <span
           className="luke-toast-countdown"
           aria-hidden="true"
-          style={cssCustomProperties({ "--luke-toast-hold": `${countdown}ms` })}
+          style={cssCustomProperties({
+            "--luke-toast-hold": `${countdown}ms`,
+            "--luke-toast-seconds": Math.max(1, Math.round(countdown / SECOND_MS)),
+          })}
         />
       )}
     </li>

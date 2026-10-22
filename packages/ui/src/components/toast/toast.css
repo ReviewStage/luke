@@ -163,8 +163,9 @@
   /* How much of its hold is left, as a bar along its foot that drains
      toward its start over the hold the host hands it, a wait rather than a
      motion, so its length is the hold's own; it stops while the card is held
-     and holds still on --luke-loop-motion under reduced motion and a capture
-     run, as every wait with a literal of its own does. */
+     and holds still on --luke-wait-motion on a capture run. Under reduced
+     motion it still says the time left, a notch a second rather than a
+     glide. */
   .luke-toast-countdown {
     position: absolute;
     right: var(--luke-space-12);
@@ -176,8 +177,14 @@
     opacity: 0.4;
     transform-origin: left center;
     animation: luke-toast-drain var(--luke-toast-hold) linear forwards;
-    animation-play-state: var(--luke-loop-motion);
+    animation-play-state: var(--luke-wait-motion);
     pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .luke-toast-countdown {
+      animation-timing-function: steps(var(--luke-toast-seconds), end);
+    }
   }
 
   .luke-toast[data-held="true"] .luke-toast-countdown {

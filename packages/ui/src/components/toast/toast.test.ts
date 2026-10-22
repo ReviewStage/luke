@@ -192,6 +192,7 @@ test("a toast's countdown drains over the hold it is handed, and stops while the
   act(() => toast.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
 
   assert.equal(bar.style.getPropertyValue("--luke-toast-hold"), "5000ms");
+  assert.equal(bar.style.getPropertyValue("--luke-toast-seconds"), "5", "a notch a second");
   assert.equal(held, "true");
   assert.equal(toast.dataset.held, undefined);
 });
