@@ -16,6 +16,7 @@ import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  BUTTON_VARIANT,
   CHIP_LOOK,
   COLLECTION_STATE,
   CollectionPage,
@@ -26,6 +27,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FoldChevronIcon,
+  FoldingButton,
   IconButton,
   InlineEdit,
   PAGE_FRAME,
@@ -731,25 +733,29 @@ function TasksListGroup({
       {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
       {titled ? (
         <h2 className="tasks-list-head">
-          <button
-            type="button"
-            className="tasks-list-fold"
+          <FoldingButton
+            variant={BUTTON_VARIANT.ROW}
+            label={head.name}
             aria-expanded={!folded}
             onClick={onToggle}
-          >
-            <span className="tasks-list-chevron" aria-hidden="true">
-              <FoldChevronIcon />
-            </span>
-            <span className="tasks-list-glyph" aria-hidden="true">
-              {head.icon}
-            </span>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
-              {head.name}
-            </Text>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {group.tasks.length}
-            </Text>
-          </button>
+            icon={
+              <>
+                <span
+                  className="tasks-list-chevron"
+                  data-open={folded ? undefined : "true"}
+                  aria-hidden="true"
+                >
+                  <FoldChevronIcon />
+                </span>
+                <span className="tasks-list-glyph" aria-hidden="true">
+                  {head.icon}
+                </span>
+              </>
+            }
+          />
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            {group.tasks.length}
+          </Text>
         </h2>
       ) : null}
       {folded ? null : group.tasks.length === 0 ? (
