@@ -660,6 +660,27 @@ function placeRefusal(
 }
 
 /**
+ * Where a post goes when it names no place: the agent's home. A DM home, an
+ * operator's with its member, is named as any DM is, by its member's link,
+ * and refused where that member has Chat off, as a DM to them is
+ * (`dmMemberOf`), since they would never read it.
+ */
+function homePlace(
+  seat: ChatSeat,
+  name: string | undefined,
+): Effect.Effect<Result.Result<PostPlace, string>, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const to = { channelId: seat.home.id };
+    const person = seat.homeWith;
+    if (person === undefined) return Result.succeed({ to, named: { in: name ?? "" } });
+    if (person.userId !== null && !(yield* chatEnabledFor(person.userId))) {
+      return Result.fail(CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF);
+    }
+    return Result.succeed({ to, named: { with: person, to: "" } });
+  });
+}
+
+/**
  * Where a post goes: the thread of the message it replies to, the agent's
  * own channel, which a `to` may name, or the DM with the member a `to`
  * names by its mention link; refused where `to` names any other channel,
@@ -678,11 +699,7 @@ function placeOf(
   const name = homeName(seat);
   const to = post.to;
   if (to === undefined || to === name) {
-    const home = { channelId: seat.home.id };
-    // A DM home is named as any DM is, by its member's link.
-    const named =
-      seat.homeWith === undefined ? { in: name ?? "" } : { with: seat.homeWith, to: "" };
-    return Effect.succeed(Result.succeed({ to: home, named }));
+    return homePlace(seat, name);
   }
   if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
     return Effect.succeed(Result.fail(CHAT_TOOL_REFUSAL.ELSEWHERE));
@@ -1142,8 +1159,14 @@ export function readAsAgent(
       }
       const { messages, more } = yield* messagesOf(agent, seat, query, named?.id);
       const members = yield* roster(userId, seat.organizationId);
-      // The roster a read lists is the task's chat alone: its people and its agents, archived ones among them, and a Luke minted while the task had one.
-      const team = yield* homeRoster(userId, seat.home);
+      // The roster a read lists is the task's chat alone: its people and its agents, archived ones among them, and a Luke minted while the task had one;
+      // for a DM home, an operator's, the DM's two members alone.
+      const team =
+        seat.homeWith === undefined
+          ? yield* homeRoster(userId, seat.home)
+          : [seat.homeWith, seat.self].flatMap((row) =>
+              members.filter((each) => each.id === row.id),
+            );
       const byId = new Map(members.map((row) => [row.id, row]));
       const self = byId.get(seat.self.id) ?? seat.self;
       const past = yield* chatPast(userId, seat.organizationId, self.id, self.readSeq);

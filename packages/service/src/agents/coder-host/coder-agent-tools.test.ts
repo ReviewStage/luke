@@ -62,6 +62,7 @@ import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -126,6 +127,7 @@ import {
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "./channel.js";
+import { CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
@@ -3612,7 +3614,7 @@ test("a teammate's agent lists, reads, messages, stops, updates, continues, and 
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
 });
 
-test("an operator's post_chat with no place lands in its DM with its member, which its read lists as its home, and #general takes nothing of it", async () => {
+test("an operator's post_chat with no place lands in its DM with its member once that member has Chat on, which its read lists as its home with the two of them alone, and #general takes nothing of it", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const operator = await operatorOn(agents.teammates.userId, workspaceId);
   const eve = await fakeCoderEve(workspaceId);
@@ -3632,6 +3634,14 @@ test("an operator's post_chat with no place lands in its DM with its member, whi
         .pipe(Effect.provide(Layer.mergeAll(eve.services, ANALYTICS.layer))),
     );
 
+  // A member with Chat off would never read the DM, so the post is refused rather than lost.
+  assert.deepEqual(await chat(CHAT_TOOL.POST, { text: "Two PRs wait on you." }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF,
+  });
+  await database.run(
+    writeAccountPreferences(agents.teammates.userId, { experiments: { [EXPERIMENT.CHAT]: true } }),
+  );
   const posted = await chat(CHAT_TOOL.POST, { text: "Two PRs wait on you." });
   assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
   assert.equal(
@@ -3644,5 +3654,10 @@ test("an operator's post_chat with no place lands in its DM with its member, whi
     read.channels.map((channel) => channel.kind),
     [CHANNEL_KIND.DM],
     "its DM with its member is its one channel, listed first as its home",
+  );
+  assert.deepEqual(
+    read.members.map((member) => member.kind).toSorted(),
+    [MEMBER_KIND.AGENT, MEMBER_KIND.HUMAN].toSorted(),
+    "its read names the DM's two members alone, not the workspace's other people",
   );
 });
