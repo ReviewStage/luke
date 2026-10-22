@@ -44,6 +44,7 @@ import {
   TextField,
   TrashIcon,
   useConfirmDialog,
+  useFilePicker,
   useMenu,
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
@@ -1403,7 +1404,6 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   const [uploading, setUploading] = useState(false);
   const [refusal, setRefusal] = useState<string>();
   const button = useRef<HTMLButtonElement | null>(null);
-  const picker = useRef<HTMLInputElement | null>(null);
   const refocus = useRef(false);
   const set = workspace.photoVersion !== undefined;
   const remove = useConfirmDialog({ subject: manages && set, surfaceOpen: true }, () =>
@@ -1445,6 +1445,12 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
       )
       .finally(() => setUploading(false));
   };
+  const picker = useFilePicker({
+    accept: PHOTO_ACCEPT,
+    onFiles: ([picked]) => {
+      if (picked !== undefined) upload(picked);
+    },
+  });
   const actions = manages
     ? [
         [
@@ -1454,7 +1460,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
             disabled: uploading || remove.busy,
             onSelect: () => {
               setRefusal(undefined);
-              picker.current?.click();
+              picker.open();
             },
           },
         ],
@@ -1486,20 +1492,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         Rename
       </Button>
     ) : null;
-  const photoPicker = manages ? (
-    <input
-      ref={picker}
-      type="file"
-      accept={PHOTO_ACCEPT}
-      hidden
-      onChange={(event) => {
-        const [picked] = Array.from(event.currentTarget.files ?? []);
-        // Cleared so the same file can be picked again after it was refused.
-        event.currentTarget.value = "";
-        if (picked !== undefined) upload(picked);
-      }}
-    />
-  ) : null;
+  const photoPicker = manages ? picker.input : null;
   return (
     <div className="workspace-identity">
       <MenuRow

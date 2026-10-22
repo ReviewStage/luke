@@ -50,7 +50,7 @@ import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
-import { AttachFilesButton } from "./attach-files-button.js";
+import { AttachFilesButton, type AttachPicker } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
@@ -425,7 +425,7 @@ export function AgentComposer({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
-  const picker = useRef<HTMLInputElement>(null);
+  const picker = useRef<AttachPicker>(null);
   const foot = useRef<HTMLDivElement>(null);
   const footWidth = useFootWidth(card);
   const folds = (below: number) => footWidth !== undefined && footWidth < below;
@@ -614,7 +614,7 @@ export function AgentComposer({
         label: BUTTON.ATTACH,
         icon: <PlusIcon />,
         disabled: held,
-        onSelect: () => picker.current?.click(),
+        onSelect: () => picker.current?.open(),
       },
     },
     ...(servers === undefined

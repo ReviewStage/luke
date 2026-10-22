@@ -47,6 +47,7 @@ import {
   IconButton,
   ImageIcon,
   TextArea,
+  useFilePicker,
 } from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration } from "effect";
@@ -222,7 +223,6 @@ export function FeedbackDialog({
   const showToast = useToast();
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
-  const picker = useRef<HTMLInputElement | null>(null);
   const signatureId = useId();
   const signature = accountSignature(account);
 
@@ -293,6 +293,12 @@ export function FeedbackDialog({
     if (shownKind.current === of) setRejection(taken.refusal);
   };
 
+  const picker = useFilePicker({
+    accept: "image/*",
+    multiple: true,
+    onFiles: (picked) => void attach(imageFiles(picked)),
+  });
+
   const send = async () => {
     if (kind === undefined) return;
     const current = latestDrafts()[kind];
@@ -357,22 +363,10 @@ export function FeedbackDialog({
               icon={<ImageIcon />}
               label="Attach screenshot"
               disabled={busy || full}
-              onClick={() => picker.current?.click()}
+              onClick={picker.open}
             />
           </Tooltip>
-          <input
-            ref={picker}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(event) => {
-              const picked = imageFiles(event.currentTarget.files);
-              // Cleared so the same file can be picked again after a removal.
-              event.currentTarget.value = "";
-              void attach(picked);
-            }}
-          />
+          {picker.input}
         </>
       }
       actions={

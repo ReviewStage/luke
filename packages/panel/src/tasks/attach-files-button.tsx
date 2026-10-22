@@ -1,6 +1,6 @@
-import { IconButton } from "@luke/ui";
+import { IconButton, useFilePicker } from "@luke/ui";
 import { PlusIcon } from "lucide-react";
-import { type RefObject, useRef } from "react";
+import { type Ref, useImperativeHandle } from "react";
 import { Tooltip } from "../tooltip.js";
 
 /**
@@ -12,11 +12,16 @@ import { Tooltip } from "../tooltip.js";
  * own: each reads them into what it carries (`attached-files.ts`). The
  * picker is cleared after each pick, so the same file can be picked again
  * once it was taken off. A box whose overflow menu opens the picker too
- * hands in its own ref to it.
+ * hands in a ref to open it by.
  */
 
 /** The words a + that takes any file says. */
 const ATTACH_FILES = "Attach files";
+
+/** What a box holds to open the button's picker from elsewhere. */
+export interface AttachPicker {
+  open: () => void;
+}
 
 export function AttachFilesButton({
   onFiles,
@@ -32,34 +37,17 @@ export function AttachFilesButton({
   label?: string;
   /** The types the picker offers, as an input's `accept` spells them; any file where none is given. */
   accept?: string | undefined;
-  /** The picker itself, for a box that opens it from elsewhere too; the button keeps its own where none is handed. */
-  picker?: RefObject<HTMLInputElement | null> | undefined;
+  /** Filled with a way to open the picker, for a box that opens it from elsewhere too. */
+  picker?: Ref<AttachPicker> | undefined;
 }): React.JSX.Element {
-  const own = useRef<HTMLInputElement>(null);
-  const picker = handed ?? own;
+  const picker = useFilePicker({ accept, multiple: true, onFiles });
+  useImperativeHandle(handed, () => ({ open: picker.open }));
   return (
     <>
       <Tooltip label={label}>
-        <IconButton
-          icon={<PlusIcon />}
-          label={label}
-          disabled={disabled}
-          onClick={() => picker.current?.click()}
-        />
+        <IconButton icon={<PlusIcon />} label={label} disabled={disabled} onClick={picker.open} />
       </Tooltip>
-      <input
-        ref={picker}
-        type="file"
-        accept={accept}
-        multiple
-        hidden
-        onChange={(event) => {
-          const picked = Array.from(event.currentTarget.files ?? []);
-          // Cleared so the same file can be picked again after it was taken off.
-          event.currentTarget.value = "";
-          onFiles(picked);
-        }}
-      />
+      {picker.input}
     </>
   );
 }
