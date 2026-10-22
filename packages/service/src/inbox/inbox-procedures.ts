@@ -19,7 +19,6 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { ACCOUNT_INBOX_ARCHIVED } from "@luke/features/account-inbox-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
@@ -63,7 +62,6 @@ import {
   INBOX_ASK_ANSWER,
   INBOX_MESSAGE_OUTCOME,
   type InboxItemWritten,
-  inboxItemArchived,
   markInboxItemRead,
   markInboxItemUnread,
   markInboxRead,
@@ -163,10 +161,6 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
   if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  // An item put away with its task is read but not answered, whether or not its agent would hear it, until the task is back.
-  if (yield* hostedStoreOrUnavailable(inboxItemArchived(userId, itemId))) {
-    return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
-  }
   const { clientKey, attachments } = asked;
   // An answer sent again under the key it was taken under is the same answer, counted once.
   const counted =
@@ -248,10 +242,6 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   },
 ) {
   const { text, clientKey, attachments, answers } = sent;
-  // An item put away with its task is read but not answered, as an answer by revision is not, until the task is back.
-  if (yield* hostedStoreOrUnavailable(inboxItemArchived(userId, itemId))) {
-    return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
-  }
   const answered = yield* hostedStoreOrUnavailable(
     answerInboxAsk(userId, itemId, { answers, text, clientKey, files: attachments }),
   );
@@ -323,10 +313,6 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
   if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  // An item put away with its task is read but not closed, as it is not answered, until the task is back.
-  if (yield* hostedStoreOrUnavailable(inboxItemArchived(userId, itemId))) {
-    return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
-  }
   const { revision, clientKey } = asked;
   const { item, answerKey } = stored.value;
   // A close sent again is the one taken only while the item still stands as that close left it, never once its agent moved it on.
@@ -473,10 +459,10 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   const signedIn = hosted.inbox.use(accountMiddleware(seams.resolveUserId));
   return {
+    // Note that the query's `archived=include`, which an older build still sends, is taken and changes nothing: no task is archived any more, so there is none to list.
     account: signedIn.account.effect(function* ({ input, context }) {
       const after = input.after ?? INBOX_CURSOR_START;
-      const archived = input.archived === ACCOUNT_INBOX_ARCHIVED.INCLUDE;
-      return yield* hostedStoreOrUnavailable(accountInboxPast(context.userId, after, { archived }));
+      return yield* hostedStoreOrUnavailable(accountInboxPast(context.userId, after));
     }),
     task: signedIn.task.effect(function* ({ input, context }) {
       const taskId = yield* rowIdOf(input.id);

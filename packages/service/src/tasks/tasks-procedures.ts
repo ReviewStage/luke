@@ -15,14 +15,14 @@
  * nothing: the list stands newest started first whatever is opened. Its
  * `DELETE` stops every coding agent of the plan first, through the one Stop
  * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes
- * the plan, as its archive stops them before it archives them with the plan.
+ * the plan.
  * Each row of the list carries what the plan's coding agents are doing and
  * what they published, in brief, where it has any
- * (`packages/service/src/agents/task-agents.ts`). A pin and an archive are
- * changes like a rename, though a pin is the asking member's own and reads
- * pinned for no one else, and the list leaves the archived plans out unless
- * `archived=include` asks for them, so a build from before archiving, which
- * never asks, draws none of them rather than all of them.
+ * (`packages/service/src/agents/task-agents.ts`). A pin is a change like a
+ * rename, though it is the asking member's own and reads pinned for no one
+ * else. A plan is archived no longer: the list's `archived=include`, which
+ * an older build still sends, lists no plan more, and an archive asked for
+ * settles the plan instead (`archive-settle.ts`).
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
@@ -99,7 +99,6 @@ import { workspaceRepository } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
-  hostedStoreOrArchived,
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -385,29 +384,16 @@ const startedAgentOn = (
 /** The link a path names: an id that is no UUID names no link, and answers as none. */
 const linkIdOf = taskIdOf;
 
-/**
- * The account's plan, where it is not archived: refused as archived where
- * it is, and as not found where the account does not reach it. The store
- * holds a link's write to the same terms under the plan's lock.
- */
-const liveTask = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, taskId: string) {
-  const stored = yield* reachedTask(userId, taskId);
-  if (stored.archived) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
-  return stored;
-});
-
 /** What a restore that saved nothing answers, by why; the store out of reach is any other. */
 const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
   [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
   [PLAN_SAVE_REFUSAL.NO_REVISION, HOSTED_REFUSAL.NOT_FOUND],
   [PLAN_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
-  [PLAN_SAVE_REFUSAL.ARCHIVED, HOSTED_REFUSAL.TASK_ARCHIVED],
 ]);
 
 /** What an edit that saved nothing answers, by why, where it is not answered in band; the store out of reach is any other. */
 const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
   [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
-  [PLAN_SAVE_REFUSAL.ARCHIVED, HOSTED_REFUSAL.TASK_ARCHIVED],
 ]);
 
 /** The plans resource, every procedure to a signed-in caller. */
@@ -419,13 +405,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * The account's plans, and beside them the agents with no plan in its
      * workspaces; a teammate's plan or agent on their own GitHub token among
      * them where the account's own token reads its repository, asked of
-     * GitHub first where the answer kept is older than the hour.
+     * GitHub first where the answer kept is older than the hour. The query's
+     * `archived=include`, which an older build still sends, lists the
+     * archived agents with no plan among the rest, as it did, and no plan
+     * more: a plan is archived no longer.
      */
     list: plans.list.effect(function* ({ input, context }) {
       const includeArchived = input.archived === TASK_LIST_ARCHIVED.INCLUDE;
       yield* refreshRepositoryReads(context.userId);
       const tasks = yield* hostedStoreOrUnavailable(
-        Effect.flatMap(listTasks(context.userId, { includeArchived }), (listed) =>
+        Effect.flatMap(listTasks(context.userId), (listed) =>
           withTaskAgents(context.userId, listed),
         ),
       );
@@ -513,7 +502,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * The plan's name, its repository, its pin, its archive, its workspace,
+     * The plan's name, its repository, its pin, its workspace,
      * where it stands, its assignee, or any of them changed, answered with
      * its document; an assignee who is no member of the plan's workspace, or
      * of the one it moves to, is refused as an invalid request. A repository and a
@@ -610,11 +599,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         Effect.catch((failure) =>
           failure._tag === "MoveRefused"
             ? Effect.fail(failure.refusal)
-            : failure._tag === "TaskAgentUnstopped"
-              ? Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)
-              : failure._tag === "TaskAssigneeNotMember"
-                ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
-                : hostedStoreOrArchived(Effect.fail(failure)),
+            : failure._tag === "TaskAssigneeNotMember"
+              ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
+              : hostedStoreOrUnavailable(Effect.fail(failure)),
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -623,8 +610,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * Every coding agent of the plan stopped for good first, as a Stop and an
-     * archive stop one, so none works on for a plan that is gone; then the
+     * Every coding agent of the plan stopped for good first, as a Stop stops
+     * one, so none works on for a plan that is gone; then the
      * plan's eve sessions and its agents' retired (`retire-sessions.ts`);
      * then the plan. An eve that refuses a Stop, an agent with a turn still
      * coming that no Stop can name yet, or an agent started while the others
@@ -677,7 +664,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     saveBoard: plans.saveBoard.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const save = input.body;
-      const written = yield* hostedStoreOrArchived(
+      const written = yield* hostedStoreOrUnavailable(
         writeScene(context.userId, taskId, save.elements, save.appliedDrawing, save.image),
       );
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -688,8 +675,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * The developer's edit of the plan's document: answered with the plan as
      * saved, with the text as it now stands where the edit conflicts with
      * it, or as refused where the plan would be longer than a plan may be.
-     * An archived plan is refused outright, as no plan is, since a desktop
-     * that knows archiving draws no editor on one.
      */
     edit: plans.edit.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
@@ -766,13 +751,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * An issue linked to the plan, read from its provider through the plan's
      * workspace first, so what is kept of it is the provider's: answered
      * with the link, or in band with why none was made, the plan linking
-     * the issue already or as many as it may. An archived plan takes none,
-     * as it takes no rename.
+     * the issue already or as many as it may.
      */
     linkIssue: plans.linkIssue.effect(function* ({ input, context }) {
       const { userId } = context;
       const taskId = yield* taskIdOf(input.params.id);
-      const stored = yield* liveTask(userId, taskId);
+      const stored = yield* reachedTask(userId, taskId);
       const read = yield* linkedIssue(userId, stored.workspaceId, input.body);
       const made = yield* linkTaskIssue(userId, taskId, read).pipe(
         Effect.map(
@@ -783,7 +767,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           TaskIssuesFull: () => Effect.succeedSome({ refused: TASK_ISSUE_LINK_REFUSAL.FULL }),
           TaskIssueLinked: () => Effect.succeedSome({ refused: TASK_ISSUE_LINK_REFUSAL.LINKED }),
         }),
-        hostedStoreOrArchived,
+        hostedStoreOrUnavailable,
       );
       if (Option.isNone(made)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return made.value;
@@ -793,7 +777,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     relateIssue: plans.relateIssue.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const linkId = yield* linkIdOf(input.params.link);
-      const related = yield* hostedStoreOrArchived(
+      const related = yield* hostedStoreOrUnavailable(
         relateTaskIssue(context.userId, taskId, linkId, input.body.relation),
       );
       if (Option.isNone(related)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -804,7 +788,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     unlinkIssue: plans.unlinkIssue.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.id);
       const linkId = yield* linkIdOf(input.link);
-      const unlinked = yield* hostedStoreOrArchived(
+      const unlinked = yield* hostedStoreOrUnavailable(
         unlinkTaskIssue(context.userId, taskId, linkId),
       );
       if (!unlinked) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

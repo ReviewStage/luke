@@ -139,14 +139,13 @@ function accountStamps(userId: string): InboxStoreEffect<readonly InboxCursorSta
 export function accountInboxPast(
   userId: string,
   after: string,
-  { archived = false }: { readonly archived?: boolean } = {},
 ): InboxStoreEffect<AccountInboxAnswer> {
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
     // Note that the cursor is read before what it stands for, so a change landing between them wakes the reader again rather than being lost.
     const cursor = cursorOf(yield* accountStamps(userId));
     const rows = yield* accountWaitingItems(userId);
-    const tasks = yield* accountInboxTasks(userId, { archived });
+    const tasks = yield* accountInboxTasks(userId);
     const tasklessRows = yield* accountTasklessItems(userId);
     const automations = yield* accountInboxAutomations(userId);
     const failedRuns = yield* failedRunsOf(userId);

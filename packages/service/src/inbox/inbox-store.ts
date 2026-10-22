@@ -167,7 +167,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * whole, its first message and the ask it holds open however long it runs,
  * each ask as it stands on the item, so one a deployment from before
  * version 5 left open while it closed the item reads withdrawn. What waits across
- * the account, every open item on a task it has not archived, is read on
+ * the account, every open item on its tasks, is read on
  * its own index, so a desktop can hold that read whichever task is open.
  * Every read of an item says whether it is unread for the member reading
  * it, by that member's own marker (`@luke/database/schemas/inbox-item-read`):
@@ -1135,16 +1135,15 @@ const findSettledStamps = SqlSchema.findAll({
 });
 
 /**
- * The open items on the tasks of the account's workspaces it has not
- * archived, whichever member's agent posted each: the rows the account's
- * read of what waits names.
+ * The open items on the tasks of the account's workspaces, whichever
+ * member's agent posted each: the rows the account's read of what waits
+ * names.
  */
 function accountWaiting(userId: string) {
   return and(
     taskReachableBy(userId),
     itemAgentSeenBy(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
-    isNull(task.archivedAt),
   );
 }
 
@@ -1175,12 +1174,12 @@ const WITHIN_SETTLED_READ = sql<boolean>`((select count(*) from (select 1 from $
 /**
  * Whether the item is the reader's to do, as the Inbox's To do lists it:
  * posted by an agent they started, and open, or unread for them and among
- * the settled items its task's read carries (`WITHIN_SETTLED_READ`), on a
- * task they have not archived. Note that a settled item counts while it is
- * unread, such as a thread its agent wrote on again after it was answered.
+ * the settled items its task's read carries (`WITHIN_SETTLED_READ`). Note
+ * that a settled item counts while it is unread, such as a thread its agent
+ * wrote on again after it was answered.
  */
 function toDoFor(userId: string): SQL<boolean> {
-  return sql<boolean>`(${eq(inboxItem.userId, userId)} and ${isNull(task.archivedAt)} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or (${unreadFor(userId)} and ${WITHIN_SETTLED_READ})))`;
+  return sql<boolean>`(${eq(inboxItem.userId, userId)} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or (${unreadFor(userId)} and ${WITHIN_SETTLED_READ})))`;
 }
 
 /** How many of a group's items are the reader's to do (`toDoFor`), as a number rather than a `bigint`. */
@@ -1190,9 +1189,9 @@ function toDoCount(userId: string): SQL<number> {
 
 /**
  * The reader's own settled items still unread on the tasks of their
- * workspaces they have not archived: what To do lists beside the open items,
- * so their read marks and their agents' new messages move the account's
- * cursor as an open item's change does.
+ * workspaces: what To do lists beside the open items, so their read marks
+ * and their agents' new messages move the account's cursor as an open
+ * item's change does.
  */
 function accountUnreadSettled(userId: string) {
   return and(
@@ -1200,7 +1199,6 @@ function accountUnreadSettled(userId: string) {
     taskReachableBy(userId),
     eq(inboxItem.userId, userId),
     ne(inboxItem.status, INBOX_STATUS.OPEN),
-    isNull(task.archivedAt),
     unreadFor(userId),
   );
 }
@@ -1341,14 +1339,12 @@ const LATEST_ITEM = max(inboxItem.updatedAt);
 /**
  * Every task of the account's workspaces that holds an item, open or
  * settled, whichever member's agent posted it, with how many of them are
- * the reader's to do (`toDoFor`), the task whose item changed latest first:
- * those it has not archived, and the archived ones too where `archived`
- * asks.
+ * the reader's to do (`toDoFor`), the task whose item changed latest first.
  */
 const findTasksWithItems = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, archived: Schema.Boolean }),
+  Request: Schema.Struct({ userId: Schema.String }),
   Result: TaskItemsRowSchema,
-  execute: ({ userId, archived }) =>
+  execute: ({ userId }) =>
     Database.use((db) =>
       db
         .select({
@@ -1359,7 +1355,7 @@ const findTasksWithItems = SqlSchema.findAll({
         })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
-        .where(and(taskReachableBy(userId), archived ? undefined : isNull(task.archivedAt)))
+        .where(taskReachableBy(userId))
         .groupBy(inboxItem.taskId)
         .orderBy(desc(LATEST_ITEM), desc(inboxItem.taskId)),
     ),
@@ -1410,7 +1406,7 @@ export interface AccountInboxLiveStatements extends ChatWaitingLiveStatements {
 /**
  * What waits on the developer across the account, written for Neon Realtime:
  * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
- * `accountTasklessItems`, `accountInboxTasks` with the archived tasks, and
+ * `accountTasklessItems`, `accountInboxTasks`, and
  * `accountInboxAutomations`, each item unread or not for the account as they say it, and what waits in
  * chat as `chat-waiting.ts` reads it (`chatWaitingLiveStatements`), each
  * column under the key `account-inbox-wire.ts` reads it by and each instant
@@ -1484,7 +1480,6 @@ export function accountInboxLiveStatements(
     })
     .from(inboxItem)
     .innerJoin(task, eq(task.id, inboxItem.taskId))
-    // The archived tasks too, as the held read lists them to a desktop that asks with `archived=include`, which every desktop following live does.
     .where(taskReachableBy(userId))
     .groupBy(inboxItem.taskId);
   const automations = queryBuilder
@@ -1852,15 +1847,12 @@ const findReachedItem = SqlSchema.findOneOption({
 
 /**
  * The items the account's Inbox lists, open or settled, whichever member's
- * agent posted each: those on the tasks of its workspaces it has not
- * archived, and those of agents with no task in its workspaces. Note that
- * the task is joined on the left, because an item with no task has none.
+ * agent posted each: those on the tasks of its workspaces, and those of
+ * agents with no task in its workspaces. Note that the task is joined on
+ * the left, because an item with no task has none.
  */
 function inboxListed(userId: string) {
-  return or(
-    and(taskReachableBy(userId), isNull(task.archivedAt)),
-    and(isNull(inboxItem.taskId), itemReachableBy(userId)),
-  );
+  return or(taskReachableBy(userId), and(isNull(inboxItem.taskId), itemReachableBy(userId)));
 }
 
 /** Every item the account's Inbox lists that is unread for it, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
@@ -2622,29 +2614,6 @@ export function readInboxItem(
   itemId: string,
 ): InboxStoreEffect<Option.Option<StoredInboxItem>> {
   return Effect.map(findItem({ userId, itemId }), Option.map(storedItem));
-}
-
-/** The item's task, where it stands on one the account reaches and it is archived. */
-const findArchivedItemTask = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
-  Result: Schema.Struct({ taskId: Schema.String }),
-  execute: ({ userId, itemId }) =>
-    Database.use((db) =>
-      db
-        .select({ taskId: task.id })
-        .from(inboxItem)
-        .innerJoin(task, eq(task.id, inboxItem.taskId))
-        .where(and(eq(inboxItem.id, itemId), taskReachableBy(userId), isNotNull(task.archivedAt))),
-    ),
-});
-
-/**
- * Whether the item stands on a task the account archived: put away with its
- * task, read but answered no longer until the task is brought back. An item
- * of an agent with no task, or one the account does not reach, is not.
- */
-export function inboxItemArchived(userId: string, itemId: string): InboxStoreEffect<boolean> {
-  return Effect.map(findArchivedItemTask({ userId, itemId }), Option.isSome);
 }
 
 /**
@@ -3541,7 +3510,7 @@ type AccountWaitingRow = AccountInboxEntry & Pick<InboxStamp, "status">;
 
 /**
  * Every item that waits on the developer across the account's tasks, the
- * latest changed first: open, and on a task the account has not archived.
+ * latest changed first: open.
  * Note that none is left out for being old, because one left unanswered
  * while many others changed must still be counted; the open bound per
  * agent keeps these few.
@@ -3589,18 +3558,13 @@ export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly 
 }
 
 /**
- * Every task the account has not archived that holds an inbox item,
- * waiting or settled, with how many, how many are the reader's to do, and
- * when the latest changed, the
- * task whose item changed latest first: what the desktop's Inbox lists;
- * the archived ones among them where `archived` asks, which its Archived
- * tab lists.
+ * Every task of the account's that holds an inbox item, waiting or settled,
+ * with how many, how many are the reader's to do, and when the latest
+ * changed, the task whose item changed latest first: what the desktop's
+ * Inbox lists.
  */
-export function accountInboxTasks(
-  userId: string,
-  { archived = false }: { readonly archived?: boolean } = {},
-): InboxStoreEffect<readonly AccountInboxTask[]> {
-  return Effect.map(findTasksWithItems({ userId, archived }), (rows) =>
+export function accountInboxTasks(userId: string): InboxStoreEffect<readonly AccountInboxTask[]> {
+  return Effect.map(findTasksWithItems({ userId }), (rows) =>
     rows.map(({ taskId, ...row }) => ({
       ...row,
       planId: taskId,

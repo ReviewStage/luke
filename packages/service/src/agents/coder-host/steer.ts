@@ -91,14 +91,11 @@ import { codingAgentStatusOf } from "./status.js";
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`). An archived task's agents
- * take no message, so a send to one is refused before eve is asked, and
- * read again under the conversation's lock just before, the lock a task's
- * archive takes to archive the agent with it: a send that waited on the
- * archive is refused, and an archive that waited on a send finds the line
- * awaiting its turn and is refused instead. An agent archived on its own
- * takes none either, and is refused as one that names nothing, since every
- * list leaves it out until it is brought back. A
+ * exactly this message (`coder-host/channel.ts`). An archived agent takes
+ * no message, and is refused as one that names nothing, since every list
+ * leaves it out until it is brought back; it is read again under the
+ * conversation's lock just before the send, the lock its archive takes, so
+ * a send that waited on the archive is refused. A
  * session eve answers it no longer runs has ended for good, and nothing
  * will end the turn it was running, so that turn, as read before eve was
  * asked, is settled failed for its session's end
@@ -222,17 +219,15 @@ const settledEnded = (
 
 /**
  * Why the agent takes no message now, read again as the hand-over runs:
- * its task archived, or the agent archived on its own or gone; nothing
- * while it still takes one.
+ * its task gone, or the agent archived or gone; nothing while it still
+ * takes one.
  */
 const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: CodingAgent,
 ) {
   const tasks = agent.taskId === null ? undefined : yield* taskNamesOf(userId, [agent.taskId]);
-  if (agent.taskId !== null && tasks?.get(agent.taskId)?.archived !== false) {
-    return tasks?.has(agent.taskId) ? HOSTED_REFUSAL.TASK_ARCHIVED : HOSTED_REFUSAL.NOT_FOUND;
-  }
+  if (agent.taskId !== null && tasks?.has(agent.taskId) !== true) return HOSTED_REFUSAL.NOT_FOUND;
   const now = yield* readCodingAgent(userId, agent.id);
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
@@ -292,8 +287,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   if (held !== undefined && Option.isNone(held))
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const task = held === undefined ? undefined : Option.getOrUndefined(held);
-  if (task?.task.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
-  // An agent archived with its task is refused as its task is, above; one archived on its own names nothing.
+  // An archived agent names nothing.
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const workspace = yield* hostedStoreOrUnavailable(agentWorkspace(userId, agent));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

@@ -11,7 +11,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
-import type { TaskArchivedAgent } from "@luke/database/models/task-store";
+import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
@@ -327,7 +327,7 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
  * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
  */
 export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agent: TaskArchivedAgent,
+  agent: TaskStandingAgent,
 ) {
   const turns = yield* latestTurnsOfReached([agent.conversationId]);
   const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);

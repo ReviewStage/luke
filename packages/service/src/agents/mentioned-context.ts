@@ -97,8 +97,8 @@ export interface MentionedAgent {
   readonly id: string;
   /** Its title, or its model's id where it has none yet. */
   readonly name: string;
-  /** The task it works on, and whether that task is archived, which takes its agents no message; null for an agent on none. */
-  readonly task: { readonly id: string; readonly name: string; readonly archived: boolean } | null;
+  /** The task it works on; null for an agent on none. */
+  readonly task: { readonly id: string; readonly name: string } | null;
   /** The repository it works in; null for an agent with none. */
   readonly repository: string | null;
   /** The branch its last turn ended on; null before one ended, or where it stood detached. */
@@ -255,9 +255,7 @@ function agentNoteOf(
       : `, whose pull request is #${agent.pullRequest.number} (${agent.pullRequest.url})`;
   const message = agent.archived
     ? ""
-    : agent.task?.archived === true
-      ? " Its task is archived, so it takes no message."
-      : ` To message it, send it a direct message: \`${CHAT_TOOL.POST}\` with \`to\` set to the link the developer pointed you at.`;
+    : ` To message it, send it a direct message: \`${CHAT_TOOL.POST}\` with \`to\` set to the link the developer pointed you at.`;
   return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived}${working}${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 

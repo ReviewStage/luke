@@ -76,7 +76,7 @@ const readAgents = (userId: string, workspaceId: string, named: readonly string[
         task:
           agent.taskId === null || task === undefined
             ? null
-            : { id: agent.taskId, name: task.name, archived: task.archived },
+            : { id: agent.taskId, name: task.name },
         repository: agent.repository,
         branch: agent.branch,
         pullRequest: published === null ? null : { number: published.number, url: published.url },
