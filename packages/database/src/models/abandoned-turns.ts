@@ -175,7 +175,7 @@ export const RUNNER_LOST_DETAIL = "the agent's runner stopped before its turn en
 /** The turns still queued or running of the standing coding agent's conversation named, oldest first. */
 const agentRunningTurns = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
-  Result: LostTurnSchema,
+  Result: AbandonedTurnRowSchema,
   execute: ({ conversationId }) =>
     Database.use((db) =>
       db
@@ -183,6 +183,7 @@ const agentRunningTurns = SqlSchema.findAll({
           id: turns.id,
           userId: turns.userId,
           conversationId: turns.conversationId,
+          cancelRequestedAt: turns.cancelRequestedAt,
         })
         .from(turns)
         .innerJoin(conversations, eq(conversations.id, turns.conversationId))
@@ -341,7 +342,7 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
 /**
  * Settles every turn still queued or running of the native coding agent's
  * conversation as failed, its runner gone with no end told, as a runner's
- * own failed end settles one, so the agent reads failed and offers Continue
+ * own failed end settles one, or as cancelled where a Stop was asked of it, so the agent reads failed and offers Continue
  * rather than running for a day; answers how many this call settled. The
  * turn the native projection holds is dropped with them, so the next
  * launch's events open a turn of their own rather than one already ended.
@@ -354,15 +355,17 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
   ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
     const lost = yield* agentRunningTurns({ conversationId });
     let settled = 0;
-    for (const turn of lost) {
+    for (const { cancelRequestedAt, ...turn } of lost) {
       const written = yield* settledLost(
         writer,
         turn,
-        {
-          status: BRAIN_REQUEST_STATUS.FAILED,
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
-          failureDetail: RUNNER_LOST_DETAIL,
-        },
+        cancelRequestedAt === null
+          ? {
+              status: BRAIN_REQUEST_STATUS.FAILED,
+              failure: BRAIN_REQUEST_FAILURE.MODEL,
+              failureDetail: RUNNER_LOST_DETAIL,
+            }
+          : { status: BRAIN_REQUEST_STATUS.CANCELLED },
         now,
       );
       if (written) settled += 1;

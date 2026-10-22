@@ -280,7 +280,7 @@ export const RUNNER_END = {
   STOPPED: "stopped",
   /** Luke closed stdin, or the CLI ended its stream, before a turn ended. */
   INPUT_CLOSED: "input_closed",
-  /** The CLI or app-server failed, or Codex's turn did; the turn shows as interrupted, and Continue relaunches with `resume`. */
+  /** The CLI or app-server failed, or Codex's turn did; the turn shows as failed, and the next message relaunches with `resume`. */
   FAILED: "failed",
   /**
    * A wait released (`RUNNER_RELEASE`): the agent waited on wakeups alone,

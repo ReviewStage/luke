@@ -133,21 +133,23 @@ const movedOn = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
   }).pipe(Effect.orElseSucceed(() => true));
 
 /**
- * Whether the sandbox, read afresh, still runs the session it was listed in
- * and the runner its tags name there has exited, or Vercel no longer knows
- * its command. A runner not yet tagged (a launch under way), or Vercel not
- * answering, counts as not exited.
+ * The command of the runner that exited, where the sandbox, read afresh,
+ * still runs the session it was listed in and the runner its tags name
+ * there has exited, or Vercel no longer knows its command. None for a
+ * runner not yet tagged (a launch under way, which clears the runner's tags
+ * first), or where Vercel does not answer.
  */
-const runnerExited = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
+const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
   Effect.gen(function* () {
     const [fresh] = yield* api.listTagged(sandbox.sessionId);
     if (fresh?.status !== RUNNING_STATUS || fresh.currentSessionId !== sandbox.running) {
-      return false;
+      return undefined;
     }
     const runner = taggedRunner(fresh);
-    if (runner === undefined || runner.sandboxSessionId !== sandbox.running) return false;
-    return (yield* api.commandExit(runner.sandboxSessionId, runner.commandId)) !== null;
-  }).pipe(Effect.orElseSucceed(() => false));
+    if (runner === undefined || runner.sandboxSessionId !== sandbox.running) return undefined;
+    const exit = yield* api.commandExit(runner.sandboxSessionId, runner.commandId);
+    return exit === null ? undefined : runner.commandId;
+  }).pipe(Effect.orElseSucceed(() => undefined));
 
 /** A count of stops taken, shared by the sandboxes one sweep reads at once. */
 interface StopBudget {
@@ -191,7 +193,11 @@ const endSandbox = (
   Effect.gen(function* () {
     const going = yield* runGoesOn(sandbox);
     if (Option.isSome(going)) {
-      if (!(yield* runnerExited(api, sandbox))) return SANDBOX_ENDING.LEFT;
+      const exited = yield* exitedRunner(api, sandbox);
+      if (exited === undefined) return SANDBOX_ENDING.LEFT;
+      // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
+      if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
+      if ((yield* exitedRunner(api, sandbox)) !== exited) return SANDBOX_ENDING.LEFT;
       yield* settleRunnerLostTurns(writer, going.value, now.getTime());
       return SANDBOX_ENDING.LOST;
     }

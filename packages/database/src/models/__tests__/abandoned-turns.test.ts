@@ -119,7 +119,6 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
             .where(eq(conversations.id, target.conversationId));
 
         const agent = yield* openAgentConversation;
-        yield* turnIn(writer, agent, TURN_STATUS.SETTLED);
         const running = yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
         yield* holding(agent, running);
         assert.equal(yield* lose(agent), 1);
@@ -139,6 +138,21 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           session: "cli",
           turn: { id: "a-newer-launch-turn" },
         });
+
+        const idle = yield* openAgentConversation;
+        yield* turnIn(writer, idle, TURN_STATUS.SETTLED);
+        assert.equal(yield* lose(idle), 0);
+        assert.deepEqual(yield* newestTurnOf(idle), [TURN_STATUS.SETTLED, null]);
+
+        // A turn a Stop was asked of ends cancelled, as the Stop asked.
+        const stopped = yield* openAgentConversation;
+        const stoppedTurn = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
+        yield* writer.requestTurnCancel(stopped, {
+          turnId: stoppedTurn,
+          at: new Date(STARTED_AT + 5),
+        });
+        assert.equal(yield* lose(stopped), 1);
+        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
 
         const brain = yield* openConversation(CONVERSATION_KIND.MAIN);
         yield* turnIn(writer, brain, TURN_STATUS.RUNNING);
