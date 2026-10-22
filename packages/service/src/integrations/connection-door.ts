@@ -264,7 +264,7 @@ function handedConnections(
 /** The refusal of a connection the member must connect: why, and plainly that the agent asks them to, since nothing here starts a sign-in. */
 function signInRefused(unavailable: UnavailableConnection): ConnectionRefusal {
   return refused(
-    `${unavailable.error} Luke cannot start a sign-in from here: ask the user to connect "${unavailable.connection}" in Luke's Settings, then try again.`,
+    `${unavailable.error} Luke cannot start a sign-in from here: ask the user to do what that says in Luke's Settings, then try again.`,
     { connection: unavailable.connection, requiresSignIn: true },
   );
 }
