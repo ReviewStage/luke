@@ -25,12 +25,16 @@ import {
   IconButton,
   INLINE_REF_LOOK,
   InlineRef,
+  LIST_LEAVING_SELECTOR,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   LIST_ROW_META,
   List,
+  ListMotion,
   ListRow,
+  motionKey,
+  motionRows,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
@@ -46,6 +50,7 @@ import {
   TaskStatusMark,
   Time,
   Tooltip,
+  useLeaving,
   useMenu,
   useMinute,
   VisuallyHidden,
@@ -166,13 +171,6 @@ import {
   useRowMediaAsks,
   useRowMediaReads,
 } from "./inbox-row-media.js";
-import {
-  type InboxLeaves,
-  InboxLeavesProvider,
-  InboxRowMotion,
-  LEAVING,
-  useLeaving,
-} from "./inbox-row-motion.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
@@ -839,6 +837,7 @@ export function InboxItemRow({
       >
         <ListRow
           ref={hold}
+          motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <>
@@ -1703,10 +1702,15 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
     const row = focusedRow.current;
     if (list === null || row === undefined || list.hidden) return;
     // Note that a row leaving, or one in a group leaving, is drawn on, out of reach, while it fades, so the keyboard still in it is in no row.
-    if (rows.find(row)?.closest(LEAVING) === null) return;
+    if (rows.find(row)?.closest(LIST_LEAVING_SELECTOR) === null) return;
     focusedRow.current = undefined;
     const active = document.activeElement;
-    if (active !== null && active !== document.body && active.closest(LEAVING) === null) return;
+    if (
+      active !== null &&
+      active !== document.body &&
+      active.closest(LIST_LEAVING_SELECTOR) === null
+    )
+      return;
     listHeadControl(list)?.focus();
   });
   return {
@@ -1720,23 +1724,23 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   };
 }
 
-/** A group's key, by which it leaves the list (`inbox-row-motion.tsx`). */
+/** A group's key, by which it leaves the list (`ListMotion`). */
 function groupKey({ key }: { readonly key: string }): string {
   return key;
 }
 
-/** A run of rows, each drawn on after it is no longer listed until its exit has played (`inbox-row-motion.tsx`). */
+/** A run of rows, each drawn on after it is no longer listed until its exit has played (`ListMotion`). */
 function InboxRows({
   items,
   row,
 }: {
   items: readonly InboxListed[];
-  row: (listed: InboxListed, leave?: React.RefCallback<HTMLElement>) => React.ReactNode;
+  row: (listed: InboxListed, leaving: boolean) => React.ReactNode;
 }): React.JSX.Element {
-  const { drawn, leave } = useLeaving(items, (listed) => listed.item.id);
+  const drawn = useLeaving(items, (listed) => listed.item.id);
   return (
-    <ul className="sidebar-tasks">
-      {drawn.map(({ key, value, leaving }) => row(value, leaving ? leave(key) : undefined))}
+    <ul className="sidebar-tasks" {...motionRows()}>
+      {drawn.map(({ value, leaving }) => row(value, leaving))}
     </ul>
   );
 }
@@ -1749,12 +1753,10 @@ function InboxGroups<G>({
 }: {
   groups: readonly G[];
   keyOf: (group: G) => string;
-  group: (group: G, leave: React.RefCallback<HTMLElement> | undefined) => React.ReactNode;
+  group: (group: G) => React.ReactNode;
 }): React.JSX.Element {
-  const { drawn, leave } = useLeaving(groups, keyOf);
-  return (
-    <>{drawn.map(({ key, value, leaving }) => group(value, leaving ? leave(key) : undefined))}</>
-  );
+  const drawn = useLeaving(groups, keyOf);
+  return <>{drawn.map(({ value }) => group(value))}</>;
 }
 
 /** The list: its head where it has one, then each task's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
@@ -1798,7 +1800,6 @@ export function InboxList({
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const [leaves] = useState<InboxLeaves>(() => ({ pending: [] }));
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
   // The reads hold the pictures of the items listed alone, and none while the rows show no media.
   const previews = head.view?.choices.mediaPreviews === true;
@@ -1817,8 +1818,8 @@ export function InboxList({
   const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
   // A row whose item is done with is drawn gray, the chosen row kept on To do and every such row on All alike.
-  // A row leaving the list hands itself to the list's motion rather than to the keyboard's rows (`inbox-row-motion.tsx`).
-  const row = (listed: InboxListed, leave?: React.RefCallback<HTMLElement>) => (
+  // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
+  const row = (listed: InboxListed, leaving: boolean) => (
     <InboxItemRow
       key={listed.item.id}
       listed={listed}
@@ -1832,7 +1833,7 @@ export function InboxList({
       line={head.view?.choices.secondLine !== false}
       muted={isDone(listed.item)}
       media={media}
-      ref={leave ?? rows.hold(listed.item.id)}
+      ref={leaving ? undefined : rows.hold(listed.item.id)}
       onChoose={onChoose}
       onMark={onMark}
       onClose={onClose}
@@ -1840,13 +1841,10 @@ export function InboxList({
   );
   const needingYou = (items: readonly InboxListed[]) =>
     items.filter((listed) => needsYouOf(listed, view.readerId)).length;
-  const statusSection = (
-    { key, status, items }: InboxStatusGroup,
-    leave: React.RefCallback<HTMLElement> | undefined,
-  ) => {
+  const statusSection = ({ key, status, items }: InboxStatusGroup) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
-      <div key={key} ref={leave} className="sidebar-repository">
+      <div key={key} className="sidebar-repository" {...motionKey(key)}>
         <StatusHeader
           status={status}
           folded={folded}
@@ -1857,13 +1855,10 @@ export function InboxList({
       </div>
     );
   };
-  const personSection = (
-    { key, person, items }: InboxPersonGroup,
-    leave: React.RefCallback<HTMLElement> | undefined,
-  ) => {
+  const personSection = ({ key, person, items }: InboxPersonGroup) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
-      <div key={key} ref={leave} className="sidebar-repository">
+      <div key={key} className="sidebar-repository" {...motionKey(key)}>
         <PersonHeader
           person={person}
           readerId={readerId}
@@ -1881,6 +1876,7 @@ export function InboxList({
       ref={bodyRef}
       className="inbox-tasks-body"
       data-empty={String(listedItems(view).length === 0)}
+      {...motionRows()}
     >
       {view.grouping === INBOX_GROUPING.NONE ? (
         <InboxRows items={view.items} row={row} />
@@ -1903,11 +1899,11 @@ export function InboxList({
           key={view.grouping}
           groups={view.groups}
           keyOf={({ holder }) => holderKey(holder)}
-          group={({ holder, items }, leave) => {
+          group={({ holder, items }) => {
             const key = holderKey(holder);
             const folded = head.view?.folds.folded(key) ?? false;
             return (
-              <div key={key} ref={leave} className="sidebar-repository">
+              <div key={key} className="sidebar-repository" {...motionKey(key)}>
                 <HolderHeader
                   holder={holder}
                   folded={folded}
@@ -1923,8 +1919,6 @@ export function InboxList({
         />
       )}
       {note}
-      {/* Note that the motion is drawn after the rows, so a row leaving has handed itself over by the time it plays. */}
-      <InboxRowMotion root={bodyRef} leaves={leaves} change={view} />
     </div>
   );
   // Note that in the sidebar the list scrolls with the sidebar's own scroller, under its pins, and takes the sidebar's width.
@@ -1940,9 +1934,9 @@ export function InboxList({
       style={sidebar ? undefined : { width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} placement={placement} />
-      <InboxLeavesProvider value={leaves}>
+      <ListMotion root={bodyRef} change={view}>
         {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
-      </InboxLeavesProvider>
+      </ListMotion>
       {!sidebar && columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
     </nav>
   );

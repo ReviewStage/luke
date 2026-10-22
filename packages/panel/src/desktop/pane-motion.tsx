@@ -22,6 +22,7 @@
  * frame with nothing easing behind it.
  */
 
+import { tokenTiming } from "@luke/ui";
 import { Component, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 /** The content that glides where a pane displaced it, each by its own left edge. */
@@ -71,13 +72,6 @@ interface PaneGlideProps {
 /** It holds no state of its own. */
 type PaneGlideState = Record<never, never>;
 
-/** A CSS time, `240ms` or `0.24s`, in milliseconds; anything else is none. */
-function milliseconds(value: string): number {
-  const match = /^\s*([\d.]+)(ms|s)\s*$/u.exec(value);
-  if (match === null) return 0;
-  return Number(match[1]) * (match[2] === "s" ? 1000 : 1);
-}
-
 /**
  * The timing every pane motion plays on, read from the motion tokens as they
  * stand at `element`, or nothing where there is to be no motion. Reduced
@@ -86,24 +80,6 @@ function milliseconds(value: string): number {
  */
 export function paneTiming(element: Element): KeyframeAnimationOptions | undefined {
   return tokenTiming(element, "--luke-duration-pane", "--luke-motion-pane");
-}
-
-/**
- * The timing a motion plays on, read from the duration and easing tokens
- * named as they stand at `element`, or nothing where there is to be no
- * motion, as `paneTiming` reads the pane's.
- */
-export function tokenTiming(
-  element: Element,
-  durationToken: string,
-  easingToken: string,
-): KeyframeAnimationOptions | undefined {
-  const style = getComputedStyle(element);
-  const duration = milliseconds(style.getPropertyValue(durationToken));
-  const easing = style.getPropertyValue(easingToken).trim();
-  // Note that reduced motion leaves 1ms rather than none, which is no motion either.
-  if (duration <= 1 || easing === "") return undefined;
-  return { duration, easing };
 }
 
 function sameLayout(a: PaneLayout, b: PaneLayout): boolean {

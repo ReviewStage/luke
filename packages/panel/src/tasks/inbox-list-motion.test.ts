@@ -21,7 +21,7 @@ import { InboxList } from "./inbox-list.js";
 import { INBOX_GROUPING, INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
 /**
- * inbox-row-motion.test.ts -- a row leaving the Inbox's list fades where it
+ * inbox-list-motion.test.ts -- a row leaving the Inbox's list fades where it
  * stood, though a row arriving above it in the same change moved it, and a
  * group leaving takes the room above the group after it with it, so what
  * glides up lands where the list stands once the group is gone. Synthetic
@@ -161,7 +161,7 @@ test("a row leaving as another arrives above it fades where it stood before the 
   assert.equal(leaving.hasAttribute("data-leaving"), true);
   assert.equal(leaving.style.top, `${ROW}px`, "where B stood, not under X");
   const glide = motions.played.find((each) => each.element === rowOf("A"));
-  assert.deepEqual(glide?.keyframes[0], { transform: `translateY(${-ROW}px)` });
+  assert.deepEqual(glide?.keyframes[0], { transform: `translate(0px, ${-ROW}px)` });
 });
 
 test("a group leaving takes the room above the group after it at once, so that group stands where it will once the leaving one is gone", () => {

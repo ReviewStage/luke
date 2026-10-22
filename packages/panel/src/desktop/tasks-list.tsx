@@ -33,6 +33,9 @@ import {
   FoldingButton,
   IconButton,
   InlineEdit,
+  ListMotion,
+  motionKey,
+  motionRows,
   OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
@@ -44,6 +47,7 @@ import {
   Text,
   Time,
   Tooltip,
+  useLeaving,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
@@ -68,6 +72,7 @@ import {
   type TasksGroup,
   type TasksGroupHead,
   type TasksSection,
+  taskIdOf,
   tasksListGroups,
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
@@ -626,6 +631,7 @@ function TaskListRow({
       ref={item}
       className="tasks-list-row"
       data-task-id={task.id}
+      {...motionKey(task.id)}
       data-menu-open={actions.open ? "true" : undefined}
       data-editing={rename.editing ? "true" : undefined}
     >
@@ -764,7 +770,7 @@ function TasksListGroup({
   drops,
   draggable,
   onShowOlder,
-  children,
+  row,
 }: {
   group: TasksGroup;
   head: GroupHead;
@@ -775,8 +781,10 @@ function TasksListGroup({
   draggable: boolean;
   /** Shows every settled task, as the group's "+ N older" line asks. */
   onShowOlder: () => void;
-  children: ReactNode;
+  /** Draws a task's row. */
+  row: (task: TaskSummary) => ReactNode;
 }): React.JSX.Element {
+  const drawn = useLeaving(group.tasks, taskIdOf);
   const move = folded ? undefined : drops.move(group);
   const drag = useRowDrag(move, {
     handle: ROW_HANDLE,
@@ -817,7 +825,7 @@ function TasksListGroup({
           />
         </h2>
       ) : null}
-      {folded ? null : group.tasks.length === 0 ? (
+      {folded ? null : drawn.length === 0 ? (
         group.older === undefined ? (
           <Text
             variant={TEXT_VARIANT.CAPTION}
@@ -832,9 +840,10 @@ function TasksListGroup({
           className="tasks-list-rows"
           aria-label={head.name}
           data-row-drop-rows={ordered(group.head) ? "" : undefined}
+          {...motionRows()}
           onPointerDown={draggable ? drag : undefined}
         >
-          {children}
+          {drawn.map(({ value }) => row(value))}
         </ul>
       )}
       {folded ? null : <OlderCompleted older={group.older} onShow={onShowOlder} />}
@@ -910,6 +919,7 @@ export function TasksList({
   );
   const workspaceName = tasks.workspace?.name ?? "";
   const drops = listDrops(tasks, groups, setStanding);
+  const list = useRef<HTMLDivElement>(null);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -926,50 +936,53 @@ export function TasksList({
         </ErrorState>
       }
     >
-      <div
-        className="tasks-list"
-        data-row-drop-scope=""
-        style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
-      >
-        {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
-        {groups.every((group) => group.tasks.length === 0) ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-list-none">
-            {NONE_STANDING}
-          </Text>
-        ) : null}
-        {groups.map((group) => (
-          <TasksListGroup
-            key={groupKey(group.head)}
-            group={group}
-            head={groupHead(group.head, tasks, repositories, people)}
-            folded={folds.folded(group.head)}
-            onToggle={() => folds.toggle(group.head)}
-            drops={drops}
-            draggable={!narrow}
-            onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
-          >
-            {group.tasks.map((task) => (
-              <TaskListRow
-                key={task.id}
-                tasks={tasks}
-                task={task}
-                workspaceName={workspaceName}
-                repositoryName={
-                  task.repository === null
-                    ? NO_REPOSITORY
-                    : repositoryLabel(task.repository, repositories)
-                }
-                waiting={waitingOn.get(task.id) ?? 0}
-                now={now}
-                properties={properties}
-                assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
-                onOpen={() => tasks.onSelect(task.id)}
-                onStanding={(standing) => setStanding(task, standing)}
-              />
-            ))}
-          </TasksListGroup>
-        ))}
-      </div>
+      <ListMotion root={list}>
+        <div
+          ref={list}
+          className="tasks-list"
+          data-row-drop-scope=""
+          {...motionRows()}
+          style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
+        >
+          {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
+          {groups.every((group) => group.tasks.length === 0) ? (
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-list-none">
+              {NONE_STANDING}
+            </Text>
+          ) : null}
+          {groups.map((group) => (
+            <TasksListGroup
+              key={groupKey(group.head)}
+              group={group}
+              head={groupHead(group.head, tasks, repositories, people)}
+              folded={folds.folded(group.head)}
+              onToggle={() => folds.toggle(group.head)}
+              drops={drops}
+              draggable={!narrow}
+              onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
+              row={(task) => (
+                <TaskListRow
+                  key={task.id}
+                  tasks={tasks}
+                  task={task}
+                  workspaceName={workspaceName}
+                  repositoryName={
+                    task.repository === null
+                      ? NO_REPOSITORY
+                      : repositoryLabel(task.repository, repositories)
+                  }
+                  waiting={waitingOn.get(task.id) ?? 0}
+                  now={now}
+                  properties={properties}
+                  assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
+                  onOpen={() => tasks.onSelect(task.id)}
+                  onStanding={(standing) => setStanding(task, standing)}
+                />
+              )}
+            />
+          ))}
+        </div>
+      </ListMotion>
     </CollectionPage>
   );
 }

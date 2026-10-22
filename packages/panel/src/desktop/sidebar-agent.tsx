@@ -240,6 +240,7 @@ export function SidebarAgent({
       <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
+          motionKey={agent.id}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
