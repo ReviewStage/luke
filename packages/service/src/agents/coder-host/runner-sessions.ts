@@ -474,6 +474,16 @@ function failedStatus(failure: { readonly _tag: string }): number {
     : FAILED_STATUS.UNAVAILABLE;
 }
 
+/**
+ * A failure as the log says it: a sandbox's own words, which name the call
+ * that failed, its status, and Vercel's error or the cause's, never what was
+ * sent; the kind alone for any other, since a store failure's message may
+ * name a statement.
+ */
+function describeFailure(failure: { readonly _tag: string }): string {
+  return failure instanceof SandboxUnavailable ? failure.message : failure._tag;
+}
+
 /** The sessions for one account on the harness given, over the calling fiber's services. */
 export const runnerSessions = <
   E extends { readonly _tag: string },
@@ -597,11 +607,11 @@ export const runnerSessions = <
       content: runnerContent(message.message, harness.name),
     });
 
-    /** A failure as the log says it and the caller reads it: the kind alone, never a value. */
+    /** A failure as the log says it and the caller reads it: a refusal's reason, a sandbox's own words, the kind alone for any other. */
     const failed = (call: string) => (failure: { readonly _tag: string }) =>
       Effect.as(
         Effect.logWarning(
-          `A ${harness.name} ${call} failed: ${failure instanceof LaunchRefused ? failure.reason : failure._tag}`,
+          `A ${harness.name} ${call} failed: ${failure instanceof LaunchRefused ? failure.reason : describeFailure(failure)}`,
         ),
         {
           outcome: EVE_SEND_OUTCOME.FAILED,
@@ -615,12 +625,15 @@ export const runnerSessions = <
         } as const,
       );
 
-    /** A cancel's or a reset's failure, as the log says it: the kind alone. */
+    /** A cancel's or a reset's failure, as the log says it: a sandbox's own words, the kind alone for any other. */
     const unavailable = (call: string) => (failure: { readonly _tag: string }) =>
-      Effect.as(Effect.logWarning(`A ${harness.name} ${call} failed: ${failure._tag}`), {
-        outcome: "failed" as const,
-        status: failedStatus(failure),
-      });
+      Effect.as(
+        Effect.logWarning(`A ${harness.name} ${call} failed: ${describeFailure(failure)}`),
+        {
+          outcome: "failed" as const,
+          status: failedStatus(failure),
+        },
+      );
 
     /**
      * A new sandbox opened under the session given, the agent's repository

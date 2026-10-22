@@ -82,8 +82,8 @@ function untar(archive: Uint8Array): Map<string, string> {
 /** Vercel Sandbox's REST API, as a store of the sandboxes and commands it was asked for. */
 export function runnerSandboxApi() {
   const sandboxes: FakeSandbox[] = [];
-  /** How many stdin writes with data the API refuses next, as a passing outage. */
-  const failStdin = { remaining: 0 };
+  /** How many stdin writes with data the API refuses next, and with what status: a passing outage by default. */
+  const failStdin = { remaining: 0, status: 502 };
   /** How many deletes the API refuses next, as a passing outage. */
   const failDelete = { remaining: 0 };
   const commands: FakeCommand[] = [];
@@ -228,7 +228,10 @@ export function runnerSandboxApi() {
       const asked = await body();
       if (asked.data !== undefined && failStdin.remaining > 0) {
         failStdin.remaining -= 1;
-        return new Response(null, { status: 502 });
+        return Response.json(
+          { error: { code: "stdin_refused", message: "the command's stdin was refused" } },
+          { status: failStdin.status },
+        );
       }
       if (asked.data !== undefined) {
         const bytes = Buffer.from(command.stdin, "utf8");
