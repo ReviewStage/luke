@@ -9,39 +9,51 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
+import { sentLineId } from "@luke/wire/host-ids";
 import { useEffect, useRef, useState } from "react";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import {
   type AgentRun,
   closesComposer,
-  knownDeveloperRows,
   messageFailureNote,
+  SENT_LINE_STATE,
   type SentLine,
   unreadSentLines,
 } from "./coding-agent-model.js";
 
 /**
- * use-agent-composer.ts -- the message box under an agent's transcript as one control: the words being written, a message on its way, why the last one did not go, and the lines sent that the transcript has not read back.
+ * use-agent-composer.ts -- the message box under an agent's transcript as one control: the words being written, the messages on their way, why the last one did not go, and the lines sent that the transcript has not read back.
  *
  * A send takes the words out of the box and shows them in the transcript
- * at once as the developer's own line, before the service answers, and
- * holds the box while the answer is out. The service's answer is the
- * agent as it then stands, which is running, and the tab's status takes
- * it, so a message to an agent that had finished turns its status back
- * and starts the transcript reading again; the row the service wrote for
- * the line arrives on that read, and the line is let go in its favour
- * (`unreadSentLines`). Every send goes under a key of its own, minted
- * here, and a message that did not go comes back into the box with why
- * under it and Retry, which sends the words again under the same key, so
- * a send whose answer was lost reaches the agent once; editing the words
- * is a new message under a new key, so Retry goes with the edit, as it
- * does with a file put on or taken off. The files go with the words and
- * come back into the box with them. A refusal
- * that is for good holds the box, disabled, with its reason under it, and
- * keeps the line where it went, marked as not delivered, the box drawing
- * none of the words its draft keeps for Continue, so they show once. The
- * mark is this tab's alone: a tab opened again draws the words in its box.
- * Another agent's tab starts from nothing of this one's.
+ * at once as the developer's own line, and the box takes the next message
+ * straight away: nothing holds it while the service answers. Every send goes
+ * under a key of its own, minted here, and the line is drawn under the id
+ * the service writes its row under, which the key names (`sentLineId`), so
+ * the row lands in the line's place, whichever of the row and the answer
+ * comes first (`unreadSentLines`). The service's answer is the agent as it
+ * then stands, which is running, and the tab's status takes it, so a
+ * message to an agent that had finished turns its status back and starts
+ * the transcript reading again.
+ *
+ * Messages go one at a time, in the order they were sent: the service writes
+ * a line and hands it to eve under the conversation's lock, so two sends out
+ * at once would take it in either order, and a line sent while one is out
+ * waits for its answer here.
+ *
+ * A message that did not go says why under the box, with Retry, which sends
+ * it again under the same key, so a send whose answer was lost reaches the
+ * agent once. Its words and files come back into the box where the box
+ * holds nothing newer, the line leaving the transcript, and an edit there
+ * is a new message under a new key, so Retry goes with the edit, as it does
+ * with a file put on or taken off; where the developer has written on
+ * meanwhile, the box keeps their words and the line stays where it went,
+ * marked as not sent, with a Retry of its own. A refusal that is for good
+ * holds the box, disabled, with its reason under it, and keeps the line
+ * where it went, marked as not delivered, as it does every line still
+ * waiting to go behind it, the box drawing none of the words its draft keeps
+ * for Continue, so they show once. The marks are this tab's alone: a tab
+ * opened again draws the words in its box. Another agent's tab starts from
+ * nothing of this one's, though a line sent from it still goes.
  *
  * The words and the files not yet sent are the agent's draft, kept apart from
  * the tab (`../composer-drafts.ts`), so they wait while another tab or task is
@@ -68,52 +80,58 @@ export interface AgentComposerControl {
   setAttachments: (
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => void;
-  /** Whether a message is on its way, during which the box takes nothing. */
+  /** Whether a send holds the box until it answers, during which the box takes nothing: New task's, whose send opens the task; an agent's box never holds. */
   sending: boolean;
   /** Why the last message did not go, said under the box beside what mends it; nothing while none failed. */
   note: Failure | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
-  /** Sends the words in the box, trimmed, and its files under a fresh key; nothing on an empty box, a send out, or a closed agent. */
+  /** Sends the words in the box, trimmed, and its files under a fresh key; nothing on an empty box or a closed agent. */
   send: () => void;
-  /** Sends the words in the box again under the failed message's key, so a send whose answer was lost reaches the agent once. */
+  /** Sends the message that did not go again under its key, so a send whose answer was lost reaches the agent once. */
   retry: () => void;
   /** The lines sent that the transcript has not read back yet, in order. */
   sent: readonly SentLine[];
 }
 
+/** The last message that did not go, which the note under the box is of and its Retry sends again. */
+interface Failed {
+  /** The line it went as, by its id. */
+  readonly lineId: string;
+  readonly clientKey: string;
+  /** Whether its words came back into the box, which Retry sends; else the line keeps them, marked as not sent. */
+  readonly inBox: boolean;
+  readonly note: Failure;
+}
+
 interface Held {
   agentId: string;
-  sending: boolean;
-  /**
-   * The last message that did not go: the key it went under, which Retry
-   * sends again, the developer's rows the transcript held as it first went,
-   * so the retry's line is read back by the row the first send may already
-   * have written, and why not.
-   */
-  failed: { clientKey: string; known: ReadonlySet<string>; note: Failure } | undefined;
+  failed: Failed | undefined;
   closed: string | undefined;
+  /** What the box held as it closed, newer than every line sent, which Continue carries after them. */
+  behind: Draft;
   sent: readonly SentLine[];
-  /** The service's rows that have answered a sent line, which no later line is read back by. */
-  taken: ReadonlySet<string>;
-  /** How many lines this tab has sent, which names the next. */
-  count: number;
 }
 
 function fresh(agentId: string): Held {
-  return {
-    agentId,
-    sending: false,
-    failed: undefined,
-    closed: undefined,
-    sent: [],
-    taken: new Set(),
-    count: 0,
-  };
+  return { agentId, failed: undefined, closed: undefined, behind: EMPTY_DRAFT, sent: [] };
 }
 
-/** What a sent line is named, apart from every row of the service's, which are UUIDs. */
-const SENT_LINE_PREFIX = "sent-";
+/**
+ * What a closed box's draft keeps for Continue, which carries it, and for the
+ * tab opened again, whose box draws it: the words and files of every line
+ * that did not go, in the order sent, then what the box held as it closed.
+ */
+function carried(sent: readonly SentLine[], behind: Draft): Draft {
+  const lines = sent.filter((line) => line.state !== SENT_LINE_STATE.PENDING);
+  return {
+    ...EMPTY_DRAFT,
+    text: [...lines.map((line) => line.text), behind.text]
+      .filter((text) => text !== "")
+      .join("\n\n"),
+    attachments: [...lines.flatMap((line) => line.attachments), ...behind.attachments],
+  };
+}
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
@@ -122,12 +140,23 @@ function holdsNothing(draft: Draft): boolean {
   return draft.text === "" && draft.attachments.length === 0;
 }
 
-/** The composer as an agent's tab holds it: what it draws, and the words and files its draft keeps, which a closed box draws none of and Continue carries. */
+/** The lines with the one by `id` in another state. */
+function marked(
+  sent: readonly SentLine[],
+  id: string,
+  state: SentLine["state"],
+): readonly SentLine[] {
+  return sent.map((each) => (each.id === id ? { ...each, state } : each));
+}
+
+/** The composer as an agent's tab holds it: what it draws, the words and files its draft keeps, which a closed box draws none of and Continue carries, and the Retry a line marked as not sent offers. */
 export interface HeldComposer extends AgentComposerControl {
   readonly unsent: {
     readonly words: string;
     readonly attachments: readonly CodingAgentAttachment[];
   };
+  /** Sends a line marked as not sent again under its key, from the line itself. */
+  readonly retryLine: (id: string) => void;
 }
 
 export function useAgentComposer(input: {
@@ -156,95 +185,143 @@ export function useAgentComposer(input: {
   // render is current.
   const latest = useRef(input);
   latest.current = input;
+  // Each agent's sends as one queue, the next going once the one before it answered.
+  const queues = useRef(new Map<string, Promise<void>>());
 
-  // A line the transcript has read back is let go in the service's favour,
-  // and the row that answered it stays taken.
-  const read = unreadSentLines(held.sent, messages, held.taken);
-  const sent = read.lines;
+  // A line the transcript has read back is let go in the service's favour.
+  const sent = unreadSentLines(held.sent, messages);
   useEffect(() => {
     if (sent.length === held.sent.length) return;
-    setHeld((was) => {
-      const again = unreadSentLines(was.sent, latest.current.messages, was.taken);
-      return { ...was, sent: again.lines, taken: again.taken };
-    });
+    setHeld((was) => ({ ...was, sent: unreadSentLines(was.sent, latest.current.messages) }));
   }, [sent.length, held.sent.length]);
 
-  const sendDraft = (
-    clientKey: string = crypto.randomUUID(),
-    known: ReadonlySet<string> = knownDeveloperRows(messages),
-  ) => {
+  // Note that the state is changed only while the tab still shows the agent the line went to.
+  const ours = (change: (was: Held) => Held) =>
+    setHeld((was) => (was.agentId === agentId ? change(was) : was));
+
+  const { update } = kept;
+  /** Sends one line once every line before it has answered, and takes its answer. */
+  const deliver = (line: SentLine) => {
+    const before = queues.current.get(agentId) ?? Promise.resolve();
+    const going = before.then(async () => {
+      const now = heldNow.current;
+      // A line behind one refused for good is refused with it, as the service would refuse it.
+      if (now.agentId === agentId && now.closed !== undefined) {
+        const sent = marked(now.sent, line.id, SENT_LINE_STATE.UNDELIVERED);
+        update(() => carried(sent, now.behind));
+        ours((was) => ({ ...was, sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED) }));
+        return;
+      }
+      const answer = await latest.current
+        .send(agentId, line.text, line.clientKey, line.attachments)
+        .catch((): CodingAgentAgentAnswer => UNANSWERED);
+      // An answer to another agent's tab, or to a tab since remounted, is nobody's.
+      if (latest.current.agentId !== agentId) return;
+      if (!("failure" in answer)) {
+        latest.current.onStatus(agentId, answer.agent);
+        return;
+      }
+      // A line a row has already read back reached the agent whatever the answer said: the
+      // row stands, so there is nothing to send again and nothing to put back in the box.
+      if (!heldNow.current.sent.some((each) => each.id === line.id)) return;
+      const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);
+      // A refusal for good closes the box, and the line stays where it went, marked as not
+      // delivered, its words kept in the agent's draft for Continue with every other line that
+      // did not go, ahead of what the box holds, which is newer.
+      if (closesComposer(answer.failure)) {
+        const sent = marked(heldNow.current.sent, line.id, SENT_LINE_STATE.UNDELIVERED);
+        // Note that the draft store takes a change at once, so the box as the refusal lands is what stands behind.
+        let behind: Draft = EMPTY_DRAFT;
+        update((draft) => {
+          behind = draft;
+          return carried(sent, draft);
+        });
+        ours((was) => ({
+          ...was,
+          failed: { lineId: line.id, clientKey: line.clientKey, inBox: true, note },
+          closed: note.text,
+          behind,
+          sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED),
+        }));
+        return;
+      }
+      // The words come back into the box only where it holds nothing newer; else the line keeps them.
+      // Note that the draft store takes a change at once, so the box as the change lands decides.
+      let inBox = false;
+      update((draft) => {
+        inBox = holdsNothing(draft);
+        return inBox ? { ...EMPTY_DRAFT, text: line.text, attachments: line.attachments } : draft;
+      });
+      ours((was) => ({
+        ...was,
+        failed: { lineId: line.id, clientKey: line.clientKey, inBox, note },
+        sent: inBox
+          ? was.sent.filter((each) => each.id !== line.id)
+          : marked(was.sent, line.id, SENT_LINE_STATE.FAILED),
+      }));
+    });
+    queues.current.set(agentId, going);
+  };
+
+  const sendDraft = (clientKey: string = crypto.randomUUID()) => {
     const text = kept.draft.text.trim();
     const { attachments } = kept.draft;
-    if (!hasWordsOrFiles(text, attachments) || held.sending || held.closed !== undefined) return;
-    const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
-    const line: SentLine = { id, text, attachments, known, steers: input.running === true };
-    const { update } = kept;
+    if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
+    const line: SentLine = {
+      id: sentLineId(clientKey),
+      clientKey,
+      text,
+      attachments,
+      steers: input.running === true,
+      state: SENT_LINE_STATE.PENDING,
+    };
     update(() => EMPTY_DRAFT);
+    setHeld((was) => ({ ...was, failed: undefined, sent: [...was.sent, line] }));
+    deliver(line);
+  };
+
+  /** Sends a line marked as not sent again, under its key, where it stands. */
+  const resend = (id: string) => {
+    const line = held.sent.find((each) => each.id === id);
+    if (line?.state !== SENT_LINE_STATE.FAILED || held.closed !== undefined) return;
     setHeld((was) => ({
       ...was,
-      sending: true,
-      failed: undefined,
-      sent: [...was.sent, line],
-      count: was.count + 1,
+      failed: was.failed?.lineId === id ? undefined : was.failed,
+      sent: marked(was.sent, id, SENT_LINE_STATE.PENDING),
     }));
-    latest.current
-      .send(agentId, text, clientKey, attachments)
-      .catch((): CodingAgentAgentAnswer => UNANSWERED)
-      .then((answer) => {
-        // An answer to another agent's tab, or to a tab since remounted, is nobody's.
-        if (latest.current.agentId !== agentId) return;
-        if ("failure" in answer) {
-          const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);
-          // A line a row has already read back reached the agent whatever the answer said: the
-          // row stands, so there is nothing to send again and nothing to put back in the box.
-          if (!heldNow.current.sent.some((each) => each.id === id)) {
-            setHeld((was) => ({ ...was, sending: false }));
-            return;
-          }
-          // The words come back into the agent's draft where it holds nothing newer; the line
-          // leaves the transcript, unless the refusal closed the box, when it stays where it
-          // went, marked as not delivered, and the box draws none of the words it holds.
-          const closes = closesComposer(answer.failure);
-          update((now) => (holdsNothing(now) ? { ...EMPTY_DRAFT, text, attachments } : now));
-          setHeld((was) => ({
-            ...was,
-            sending: false,
-            failed: { clientKey, known, note },
-            closed: closes ? note.text : was.closed,
-            sent: closes
-              ? was.sent.map((each) => (each.id === id ? { ...each, undelivered: true } : each))
-              : was.sent.filter((each) => each.id !== id),
-          }));
-          return;
-        }
-        setHeld((was) => ({ ...was, sending: false }));
-        latest.current.onStatus(agentId, answer.agent);
-      });
+    deliver({ ...line, state: SENT_LINE_STATE.PENDING });
   };
 
   // Note that a closed box draws none of its words, because they stand in the transcript as the
   // line not delivered, and the draft keeps them for Continue, which carries them (`unsent`).
   const shown = held.closed === undefined ? kept.draft : EMPTY_DRAFT;
+  // Note that an edit lets Retry go where Retry would send the box's words, because they are
+  // no longer the message that failed; a line that keeps its own words keeps its Retry.
+  const editLetsGo = (was: Held): Held =>
+    was.failed?.inBox === true ? { ...was, failed: undefined } : was;
   return {
     draft: shown.text,
-    // Note that an edit lets Retry go, because the words are no longer the message that failed.
     setDraft: (text) => {
-      if (text !== kept.draft.text) setHeld((was) => ({ ...was, failed: undefined }));
+      if (text !== kept.draft.text) setHeld(editLetsGo);
       kept.update((was) => ({ ...was, text }));
     },
     attachments: shown.attachments,
     // Note that a file put on or taken off lets Retry go too, since the message is another.
     setAttachments: (next) => {
-      setHeld((was) => ({ ...was, failed: undefined }));
+      setHeld(editLetsGo);
       kept.update((was) => ({ ...was, attachments: next(was.attachments) }));
     },
-    sending: held.sending,
+    sending: false,
     note: held.closed === undefined ? held.failed?.note : undefined,
     closed: held.closed,
     send: () => sendDraft(),
     retry: () => {
-      if (held.failed !== undefined) sendDraft(held.failed.clientKey, held.failed.known);
+      const { failed } = held;
+      if (failed === undefined) return;
+      if (failed.inBox) sendDraft(failed.clientKey);
+      else resend(failed.lineId);
     },
+    retryLine: resend,
     sent,
     unsent: { words: kept.draft.text, attachments: kept.draft.attachments },
   };

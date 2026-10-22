@@ -193,7 +193,7 @@ export interface CodingAgent {
   readonly startBranch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
-  /** The human name the agent was given as it was created; null for an agent from before names were given. */
+  /** The human name the agent was given as it was created; null for an agent from before names were given, and for an operator, which is Luke. */
   readonly personaName: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
@@ -721,7 +721,7 @@ const insertAgent = SqlSchema.findOneOption({
     automationOrigin: AutomationOriginColumnSchema,
     startedFrom: StartedFromColumnSchema,
     title: Schema.NullOr(Schema.String),
-    personaName: Schema.String,
+    personaName: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -1806,7 +1806,11 @@ export function createCodingAgent(
           automationOrigin: started.automationOrigin ?? null,
           startedFrom: started.startedFrom ?? null,
           title: started.title ?? null,
-          personaName: started.personaName ?? (yield* newPersonaName(started.taskId)),
+          // The operator is Luke, never a teammate with a first name, so it is given none (`agentTabLabel`).
+          personaName:
+            started.kind === CODING_AGENT_KIND.OPERATOR
+              ? null
+              : (started.personaName ?? (yield* newPersonaName(started.taskId))),
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,

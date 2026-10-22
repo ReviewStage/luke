@@ -20,6 +20,7 @@ import { getTestDB } from "../../testing/index.js";
 import {
   settleEndedSession,
   settleEndedSessionTurn,
+  settleRunnerLostTurns,
   sweepAbandonedTurns,
   TURN_ABANDON,
 } from "../abandoned-turns.js";
@@ -95,6 +96,71 @@ const newestTurnOf = (target: ConversationTarget) =>
   });
 
 it.layer(getTestDB())("a turn whose end is not coming", (it) => {
+  it.effect(
+    "a native agent whose runner went away has its open turns settled failed once and the projection's held turn dropped, and a settled turn, another projection turn, and a conversation no coding agent's are left",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const writer = yield* storeWriter({ tools: {} });
+        const lose = (target: ConversationTarget) =>
+          settleRunnerLostTurns(writer, target.conversationId, STARTED_AT + 10);
+        const projectionOf = (target: ConversationTarget) =>
+          Effect.map(
+            db
+              .select({ projection: conversations.nativeProjection })
+              .from(conversations)
+              .where(eq(conversations.id, target.conversationId)),
+            ([row]) => row?.projection,
+          );
+        const holding = (target: ConversationTarget, turnId: string) =>
+          db
+            .update(conversations)
+            .set({ nativeProjection: { session: "cli", turn: { id: turnId } } })
+            .where(eq(conversations.id, target.conversationId));
+
+        const agent = yield* openAgentConversation;
+        const running = yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
+        yield* holding(agent, running);
+        assert.equal(yield* lose(agent), 1);
+        assert.deepEqual(yield* newestTurnOf(agent), [
+          TURN_STATUS.FAILED,
+          BRAIN_REQUEST_FAILURE.MODEL,
+        ]);
+        assert.deepEqual(yield* projectionOf(agent), { session: "cli" });
+        assert.equal(yield* lose(agent), 0, "a second settle writes nothing");
+
+        // A projection holding a turn other than the one settled keeps it.
+        const other = yield* openAgentConversation;
+        yield* turnIn(writer, other, TURN_STATUS.QUEUED);
+        yield* holding(other, "a-newer-launch-turn");
+        assert.equal(yield* lose(other), 1);
+        assert.deepEqual(yield* projectionOf(other), {
+          session: "cli",
+          turn: { id: "a-newer-launch-turn" },
+        });
+
+        const idle = yield* openAgentConversation;
+        yield* turnIn(writer, idle, TURN_STATUS.SETTLED);
+        assert.equal(yield* lose(idle), 0);
+        assert.deepEqual(yield* newestTurnOf(idle), [TURN_STATUS.SETTLED, null]);
+
+        // A turn a Stop was asked of ends cancelled, as the Stop asked.
+        const stopped = yield* openAgentConversation;
+        const stoppedTurn = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
+        yield* writer.requestTurnCancel(stopped, {
+          turnId: stoppedTurn,
+          at: new Date(STARTED_AT + 5),
+        });
+        assert.equal(yield* lose(stopped), 1);
+        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
+
+        const brain = yield* openConversation(CONVERSATION_KIND.MAIN);
+        yield* turnIn(writer, brain, TURN_STATUS.RUNNING);
+        assert.equal(yield* lose(brain), 0);
+        assert.deepEqual(yield* newestTurnOf(brain), [TURN_STATUS.RUNNING, null]);
+      }),
+  );
+
   it.effect(
     "a running or queued turn is settled failed for its session's end once, and a turn that already ended keeps its own end",
     () =>

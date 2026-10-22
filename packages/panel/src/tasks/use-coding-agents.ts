@@ -1347,7 +1347,7 @@ export function useCodingAgents(input: {
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
     [act],
   );
-  const published = useTaskPullRequests(taskId, agents, readPullRequestOnce);
+  const published = useTaskPullRequests(taskId, agents, readPullRequestOnce, held);
 
   // A pull request a tab names by its number is kept by agent and number,
   // apart from the agents' own, so it never stands for what an agent

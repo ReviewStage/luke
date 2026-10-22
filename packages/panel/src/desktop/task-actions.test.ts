@@ -33,7 +33,7 @@ import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-import { SidebarTask } from "./task-actions.js";
+import { SidebarTask, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 
 const TASK: Task = {
@@ -700,4 +700,24 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   const labels = menuItems().map((item) => item.textContent);
   assert.equal(labels.includes("Mark done"), false);
   assert.equal(labels.includes("Cancel task"), true);
+});
+
+test("a task is found in the list the control hands down now, a renamed one by its new name and an added one at once, else in the open document", () => {
+  const listed = { ...OTHER, name: "Before" };
+  const first = tasksControl({ tasks: [listed] });
+  assert.equal(taskOf(first, OTHER.id)?.name, "Before");
+  assert.equal(taskOf(first, TASK.id), undefined, "a task neither holds is none");
+
+  const added: TaskSummary = {
+    ...OTHER,
+    id: "5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    name: "Added",
+  };
+  const next = tasksControl({ tasks: [{ ...listed, name: "After" }, added] });
+  assert.equal(taskOf(next, OTHER.id)?.name, "After", "the newer list's task, not the older's");
+  assert.equal(taskOf(next, added.id)?.name, "Added");
+  assert.equal(taskOf(first, OTHER.id)?.name, "Before", "the older list still answers as it stood");
+
+  const opened = tasksControl({ region: { kind: DOCUMENT_REGION.READY, task: TASK } });
+  assert.equal(taskOf(opened, TASK.id)?.id, TASK.id, "the open document's task");
 });

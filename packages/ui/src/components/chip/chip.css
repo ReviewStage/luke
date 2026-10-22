@@ -350,6 +350,15 @@
     font-weight: var(--luke-weight-regular);
   }
 
+  /* Compact and drawn as its mark alone, as a task's priority and status
+     on the Tasks page's rows and cards, a chip is a square of its own
+     height, its mark centred in it. */
+  .luke-chip[data-icon-only="true"][data-size="compact"] {
+    flex: none;
+    aspect-ratio: 1;
+    padding: 0;
+  }
+
   /* A compact pill says where a thing stands among a header's words, a pull
      request's state, beside a `Badge` that says the same of a state no menu
      changes, so it is drawn in the badge's box: its height, its side room

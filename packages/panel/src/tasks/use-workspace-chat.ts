@@ -406,7 +406,8 @@ export function useWorkspaceChat(input: {
   const onPost = useCallback(
     (post: ChatPost) => {
       const words = JSON.stringify([workspaceId, post]);
-      const request = { ...post, clientKey: keyFor(keys.current, words) };
+      // The window reads no receipt, so the post is answered once it is committed.
+      const request = { ...post, clientKey: keyFor(keys.current, words), receipt: false as const };
       return write(request).then((landed) => settledWords(keys.current, words, landed));
     },
     [workspaceId, write],

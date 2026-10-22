@@ -1,5 +1,6 @@
 import {
   type ComponentType,
+  createContext,
   type FocusEventHandler,
   type KeyboardEvent,
   type MouseEvent,
@@ -8,10 +9,8 @@ import {
   type ReactNode,
   type RefCallback,
   useCallback,
+  useContext,
   useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
@@ -97,14 +96,13 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
  * its metadata's end while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive. Where its metadata stands at its middle, the acts take
- * their own room as they come in, so the title is cut where they begin
- * rather than running under them.
+ * Pin and Archive. They are laid over the row's end on a backdrop of the
+ * row's own fill, faded in over the words they cover, so coming and going
+ * they move nothing: the title keeps its room, and the press its ring.
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
- * instead of ending in an ellipsis, as a browser's tab does, so the cut
- * moving as a row's acts come and go reads as the fade sliding rather than
- * the words cut again; one drawn whole ends on its last letter. A dense
+ * instead of ending in an ellipsis, as a browser's tab does; one drawn
+ * whole ends on its last letter. A dense
  * row's description, a label beside its title, fades the same way, and so
  * does the name of what a row belongs to (`lead`), while a fuller row's
  * description, a preview's prose, and its metadata end in an ellipsis.
@@ -207,10 +205,6 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
 }
 
-/** A dense row, by its `List`'s density or its own, as the stylesheet matches one. */
-const DENSE_ROW =
-  '.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"]';
-
 /**
  * The words a slot is measured by, where they are a plain string: a box whose
  * words are a tree is watched for any change under it instead, which a long
@@ -224,20 +218,11 @@ function plainWords(words: ReactNode): string | undefined {
 }
 
 /**
- * Writes how wide a row's acts stand onto the row (`--luke-list-row-acts`),
- * kept as they change, so a row whose metadata stands on the title's line
- * cuts its title where the acts begin while they are shown, as a row whose
- * metadata stands at its middle gives them their own room.
+ * The density of the `List` a row stands in, which its rows take as the
+ * stylesheet does, so a row knows it is dense in the render that draws it
+ * rather than by reading where it stands once drawn.
  */
-function holdActsRoom(element: HTMLElement | null): (() => void) | undefined {
-  const row = element?.closest<HTMLElement>(".luke-list-row");
-  if (element === null || row === null || row === undefined) return undefined;
-  const measure = () => row.style.setProperty("--luke-list-row-acts", `${element.offsetWidth}px`);
-  measure();
-  const resized = new ResizeObserver(measure);
-  resized.observe(element);
-  return () => resized.disconnect();
-}
+const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
 
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
@@ -261,7 +246,7 @@ export function List({
 }): React.JSX.Element {
   return (
     <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
-      {children}
+      <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
     </ul>
   );
 }
@@ -369,29 +354,19 @@ export function ListRow({
   }, [onTitleClipped, titleClipped]);
   const [descriptionMeasured, descriptionClipped] = useClipped(plainWords(description));
   // Note that only a dense row's description fades, so a fuller row's prose
-  // is never measured; whether the row is dense is read where it stands, its
-  // list's density or its own, as the stylesheet reads it, after every render,
-  // so a list made dense or regular again measures its rows' descriptions or
-  // lets them go.
-  const descriptionBox = useRef<HTMLElement | null>(null);
-  const [describedDense, setDescribedDense] = useState(false);
-  useLayoutEffect(() => {
-    setDescribedDense(descriptionBox.current?.closest(DENSE_ROW) != null);
-  });
+  // is never measured; the row is dense by its own density, else its list's,
+  // as the stylesheet reads it, so a list made dense or regular again
+  // measures its rows' descriptions or lets them go.
+  const listDensity = useContext(ListDensityContext);
+  const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
   const described = useCallback(
     (element: HTMLElement | null) => {
-      descriptionBox.current = element;
       if (element === null || !describedDense) return undefined;
       return descriptionMeasured(element);
     },
     [descriptionMeasured, describedDense],
   );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
-  // On the title's line the acts stand over the line's end rather than beside it, so the row learns how wide they are to keep the title clear of them.
-  const actsRoom =
-    actionsAt === LIST_ROW_ACTIONS.HOVER && metaAt === LIST_ROW_META.TITLE && said(actions)
-      ? holdActsRoom
-      : undefined;
   const heading = (
     <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
       {title}
@@ -478,11 +453,7 @@ export function ListRow({
       ) : (
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
-      {said(actions) ? (
-        <div ref={actsRoom} className="luke-list-row-actions">
-          {actions}
-        </div>
-      ) : null}
+      {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
     </>
   );
   const { view, item } = swiped;

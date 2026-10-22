@@ -10,7 +10,6 @@ import {
   readCodingAgentRouting,
   taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import {
   claimRuntimeSession,
@@ -28,6 +27,7 @@ import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-voc
 import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { MESSAGE_CHANNEL } from "../../core.js";

@@ -10,6 +10,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
@@ -82,6 +83,7 @@ function agentLine(
       id: agent.id,
       title: agent.title,
       ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
+      ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
       model: agent.model,
       effort: agent.effort,
       status,

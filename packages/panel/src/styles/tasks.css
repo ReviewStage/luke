@@ -869,6 +869,25 @@
       0 6px 16px var(--luke-color-shadow-soft);
     translate: -50% 0;
   }
+
+  /* The line saying a log's earlier messages could not be read, with Retry:
+     a fixed slot floating over the log's top on a ground of its own, as the
+     way back to the newest line floats over its foot, so it moves no row of
+     the virtualized log as it comes and goes. */
+  .conversation-older {
+    position: absolute;
+    z-index: 1;
+    top: var(--luke-space-8);
+    left: 50%;
+    max-width: calc(100% - var(--luke-space-32));
+    padding: var(--luke-space-4) var(--luke-space-12);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-well);
+    box-shadow:
+      inset 0 0 0 1px var(--luke-color-border),
+      0 6px 16px var(--luke-color-shadow-soft);
+    translate: -50% 0;
+  }
 }
 
 /* A transcript's messages (../ai-elements/message.tsx) and the quiet lines

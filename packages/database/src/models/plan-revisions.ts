@@ -24,6 +24,7 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { task } from "../schemas/task.js";
 import { voiceSessions } from "../schemas/voice.js";
+import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import { taskReachableBy } from "./workspace-store.js";
 
@@ -200,10 +201,10 @@ const findLastEdit = SqlSchema.findOneOption({
           at: planRevision.at,
           agentId: planRevision.agentId,
           agentModel: codingAgent.model,
-          // The name the agent goes by: its human name, else its title.
+          // The name the agent goes by: Luke for an operator, its human name, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
         })
         .from(planRevision)
         .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
@@ -251,10 +252,10 @@ const findRevisionLines = SqlSchema.findAll({
           liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           agentModel: codingAgent.model,
-          // The name the agent goes by: its human name, else its title.
+          // The name the agent goes by: Luke for an operator, its human name, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentId: planRevision.agentId,
           callId: voiceSessions.id,
           seq: planRevision.seq,

@@ -3661,3 +3661,27 @@ test("an operator's post_chat with no place lands in its DM with its member once
     "its read names the DM's two members alone, not the workspace's other people",
   );
 });
+
+test("list_agents and read_agent name the member's operator Luke, in its name and the mention it is named by, never a first name or the title it was given", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const operator = await operatorOn(agents.caller.userId, workspaceId);
+  assert.equal(
+    await database.run(fillCodingAgentTitle(agents.caller.userId, operator.id, "Desk sweep")),
+    true,
+  );
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+
+  const listed = await call(CODER_TOOL.LIST_AGENTS, {});
+  const read = await call(CODER_TOOL.READ_AGENT, { agentId: operator.id });
+
+  const listedOperator = (listed.agents as readonly WireRecord[]).find(
+    (agent) => agent.id === operator.id,
+  );
+  assert.ok(listedOperator !== undefined, JSON.stringify(listed));
+  const reading = read.agent as WireRecord;
+  for (const named of [listedOperator, reading]) {
+    assert.equal(named.name, "Luke");
+    assert.match(String(named.mention), /^\[@Luke\]\(/u);
+  }
+});

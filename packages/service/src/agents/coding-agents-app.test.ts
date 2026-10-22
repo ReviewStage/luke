@@ -48,7 +48,7 @@ import {
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import { childConversationId, sentLineId } from "@luke/database/models/ids";
+import { childConversationId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
 import { writePage } from "@luke/database/models/plan-pages";
@@ -197,6 +197,7 @@ import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq, sql } from "drizzle-orm";
@@ -11024,7 +11025,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         };
 
         const sent = yield* chat.wrote(send);
-        assert.ok("posted" in sent);
+        assert.ok("receipt" in sent);
         assert.deepEqual(sent.receipt, {
           told: [chat.agentLink],
           held: [],
@@ -11060,7 +11061,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         ]);
 
         const again = yield* chat.wrote(send);
-        assert.ok("posted" in again);
+        assert.ok("receipt" in again);
         assert.equal(again.posted.id, sent.posted.id);
         // Told again, the repeat finds the first notice's line under its key and steers nothing more.
         assert.deepEqual(again.receipt, {
@@ -11084,7 +11085,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           { text: "Use the new table.", to: chat.agentLink, clientKey: randomUUID() },
           chat.other,
         );
-        assert.ok("posted" in fromTeammate);
+        assert.ok("receipt" in fromTeammate);
         assert.deepEqual(fromTeammate.receipt.told, [chat.agentLink]);
         assert.deepEqual(
           eve.sent.map((each) => each.authorization),
@@ -11097,7 +11098,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         );
         // A plain post in a channel tells nobody.
         const plain = yield* chat.wrote({ text: "Morning, all.", clientKey: randomUUID() });
-        assert.ok("posted" in plain);
+        assert.ok("receipt" in plain);
         assert.deepEqual(plain.receipt.told, []);
         assert.equal(eve.sent.length, 2);
       }),
@@ -11165,7 +11166,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           to: `#${chat.channel.name ?? ""}`,
           clientKey: randomUUID(),
         });
-        assert.ok("posted" in sent);
+        assert.ok("receipt" in sent);
         assert.deepEqual(sent.receipt, {
           told: [chat.agentLink],
           held: [],
@@ -11197,7 +11198,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           { workspace: "acme", repository: null },
         );
         const unknown = yield* chat.wrote({ text: `${ghost}, anyone?`, clientKey: randomUUID() });
-        assert.ok("posted" in unknown);
+        assert.ok("receipt" in unknown);
         assert.deepEqual(unknown.receipt.unresolved, ["@Ghost"]);
 
         // A task the words link to is still noted beside them, while the member they name is not.

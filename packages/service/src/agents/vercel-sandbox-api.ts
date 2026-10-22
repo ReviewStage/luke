@@ -11,7 +11,9 @@
  * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`,
  * `updateNetworkPolicy`, `getSession`, `extendTimeout`, and `updateSandbox`
  * when it moves; `readFile` is Vercel's documented
- * `fs/read`), directly rather than through the SDK,
+ * `fs/read`, and a sandbox's snapshot retention is set by Vercel's documented
+ * "Update a sandbox" and checked against its documented "List snapshots"),
+ * directly rather than through the SDK,
  * because
  * the SDK bundled into a function fails it as it loads and carries a dozen
  * Node modules these calls never use.
@@ -105,6 +107,8 @@ export const SANDBOX_CALL = {
   INTERACTIVE: "interactive",
   SNAPSHOT: "snapshot",
   SNAPSHOT_LOOKUP: "snapshot-lookup",
+  SNAPSHOT_LIST: "snapshot-list",
+  RETENTION: "retention",
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
@@ -140,6 +144,26 @@ export interface ListedSandbox {
   readonly createdAt?: number | undefined;
   /** The timeout each session of the sandbox opens with, which Vercel reapplies at every resume. */
   readonly timeout?: number | undefined;
+  /** How many of its snapshots Vercel keeps and for how long; null where none was set, which keeps every one. */
+  readonly keepLastSnapshots?: SnapshotRetention | null | undefined;
+}
+
+/**
+ * A sandbox's snapshot retention as Vercel's "Update a sandbox" takes it
+ * (https://vercel.com/docs/rest-api/sandboxes/update-a-sandbox): the newest
+ * `count` kept, each for `expiration` milliseconds, and the rest deleted
+ * at once where `deleteEvicted`, which Vercel defaults to true.
+ */
+export interface SnapshotRetention {
+  readonly count: number;
+  readonly expiration?: number | undefined;
+  readonly deleteEvicted?: boolean | undefined;
+}
+
+/** A snapshot as a list of them names it: its id, and whether a sandbox can still open from it. */
+interface ListedSnapshot {
+  readonly id: string;
+  readonly usable: boolean;
 }
 
 /** A command the sandbox ran to its end: its exit code and what it printed on stdout and stderr. */
@@ -191,7 +215,8 @@ export interface CommandAsk {
 
 /**
  * A detached command: started as root where `sudo` asks it, which the
- * sandbox's API grants whatever the image's sudoers say, with its stdin held
+ * sandbox's API does by running the `sudo` binary as the default user, so
+ * it needs that user's sudoers entry, which the image keeps; its stdin held
  * open for `writeStdin`. Its `env` is handed to it by the API alone, so a
  * secret in it reaches no argv and no file.
  */
@@ -246,8 +271,8 @@ export const LIST_ORDER = { OLDEST_FIRST: "asc", NEWEST_FIRST: "desc" } as const
 
 export type ListOrder = (typeof LIST_ORDER)[keyof typeof LIST_ORDER];
 
-/** A page of the running sandboxes: the sandboxes, and the cursor of the next page where there is one. */
-interface RunningPage {
+/** A page of sandboxes: the sandboxes, and the cursor of the next page where there is one. */
+interface SandboxPage {
   readonly sandboxes: readonly ListedSandbox[];
   readonly next: string | undefined;
 }
@@ -272,7 +297,7 @@ export interface VercelSandboxApi {
   readonly listRunning: (
     cursor: string | undefined,
     order: ListOrder,
-  ) => Effect.Effect<RunningPage, SandboxUnavailable>;
+  ) => Effect.Effect<SandboxPage, SandboxUnavailable>;
   /** The named sandbox, resumed from its snapshot first where it was stopped. */
   readonly resume: (name: string) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /** Stops the sandbox session named, keeping its filesystem; one already gone counts as stopped. */
@@ -325,6 +350,11 @@ export interface VercelSandboxApi {
   readonly listNamed: (
     prefix: string,
   ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
+  /** One page of the project's sandboxes whose names start with the prefix, by name, from the cursor a page before answered. */
+  readonly listNamedPage: (
+    prefix: string,
+    cursor: string | undefined,
+  ) => Effect.Effect<SandboxPage, SandboxUnavailable>;
   /**
    * Opens a persistent sandbox of that name on the image, on the open
    * internet. A name already taken is refused with Vercel's 409, which is
@@ -349,6 +379,20 @@ export interface VercelSandboxApi {
     name: string,
     timeoutMs: number,
   ) => Effect.Effect<void, SandboxUnavailable>;
+  /**
+   * Sets the snapshot retention of the named sandbox. Note that Vercel
+   * applies it at once to the snapshots the sandbox holds, evicting all but
+   * the newest `count` by when they were made, whichever the sandbox resumes
+   * from, and leaves the expiry of each one it keeps as it was.
+   */
+  readonly updateRetention: (
+    name: string,
+    retention: SnapshotRetention,
+  ) => Effect.Effect<void, SandboxUnavailable>;
+  /** The newest snapshot the named sandbox made, deleted or not; none where it made none. */
+  readonly newestSnapshot: (
+    name: string,
+  ) => Effect.Effect<ListedSnapshot | undefined, SandboxUnavailable>;
   /** Replaces the named sandbox's tags whole. */
   readonly updateTags: (
     name: string,
@@ -393,6 +437,15 @@ const ListedSandboxSchema = Schema.Struct({
   currentSnapshotId: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.Number),
   timeout: Schema.optional(Schema.Number),
+  keepLastSnapshots: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        count: Schema.Number,
+        expiration: Schema.optional(Schema.Number),
+        deleteEvicted: Schema.optional(Schema.Boolean),
+      }),
+    ),
+  ),
 });
 
 /** A session's answer, a lookup's or an extension's: the session and its lifetime. */
@@ -407,6 +460,11 @@ const SessionSchema = Schema.Struct({
 
 /** A snapshot's answer: the snapshot taken. */
 const SnapshotTakenSchema = Schema.Struct({ snapshot: Schema.Struct({ id: Schema.String }) });
+
+/** A page of a sandbox's snapshots, the newest first as asked. */
+const SnapshotsListedSchema = Schema.Struct({
+  snapshots: Schema.Array(Schema.Struct({ id: Schema.String, status: Schema.String })),
+});
 
 /** A snapshot lookup's answer: where the snapshot stands. */
 const SnapshotFoundSchema = Schema.Struct({
@@ -497,6 +555,7 @@ const readCommand = readEither(CommandSchema, { excess: EXCESS_KEYS.DROP });
 const readStdin = readEither(StdinSchema, { excess: EXCESS_KEYS.DROP });
 const readSnapshot = readEither(SnapshotTakenSchema, { excess: EXCESS_KEYS.DROP });
 const readSnapshotFound = readEither(SnapshotFoundSchema, { excess: EXCESS_KEYS.DROP });
+const readSnapshotsListed = readEither(SnapshotsListedSchema, { excess: EXCESS_KEYS.DROP });
 const readSession = readEither(SessionSchema, { excess: EXCESS_KEYS.DROP });
 const readErrorAnswer = readEither(ErrorAnswerSchema, { excess: EXCESS_KEYS.DROP });
 
@@ -833,7 +892,7 @@ export function vercelSandboxApi(
           const url = apiUrl("", asked.teamId, {
             project: asked.projectId,
             limit: String(SANDBOX_API.PAGE),
-            // Note that the API takes a status filter only under a sort by creation.
+            // Note that the API takes a status filter only under a sort by creation, and `sortOrder` is `asc` or `desc`, `desc` where left out; its cursor is opaque, the `pagination.next` of the page before (https://vercel.com/docs/rest-api/sandboxes/list-sandboxes).
             sortBy: "createdAt",
             sortOrder: order,
             status: RUNNING_STATUS,
@@ -1088,6 +1147,31 @@ export function vercelSandboxApi(
             ? sandbox
             : { ...sandbox, status: session.status ?? sandbox.status };
         }),
+      listNamedPage: (prefix, cursor) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.LIST);
+          const url = apiUrl("", asked.teamId, {
+            project: asked.projectId,
+            limit: String(SANDBOX_API.PAGE),
+            // Note that the API takes a name prefix only under a sort by name, and refuses it with a 400 otherwise.
+            sortBy: "name",
+            namePrefix: prefix,
+            ...(cursor === undefined ? undefined : { cursor }),
+          });
+          const listed = yield* callApi(
+            client,
+            SANDBOX_CALL.LIST,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          const page = readRunning(jsonOf(listed.text));
+          if (!succeeded(listed.status) || Result.isFailure(page)) {
+            return yield* refused(SANDBOX_CALL.LIST, listed);
+          }
+          return {
+            sandboxes: page.success.sandboxes,
+            next: page.success.pagination?.next ?? undefined,
+          };
+        }),
       listNamed: (prefix) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.LIST);
@@ -1187,6 +1271,44 @@ export function vercelSandboxApi(
           if (!succeeded(updated.status)) {
             return yield* refused(SANDBOX_CALL.TIMEOUT, updated);
           }
+        }),
+      updateRetention: (name, retention) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.RETENTION);
+          const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
+            projectId: asked.projectId,
+          });
+          const request = HttpClientRequest.patch(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ keepLastSnapshots: retention }),
+          );
+          const updated = yield* callApi(client, SANDBOX_CALL.RETENTION, request);
+          if (!succeeded(updated.status)) {
+            return yield* refused(SANDBOX_CALL.RETENTION, updated);
+          }
+        }),
+      newestSnapshot: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.SNAPSHOT_LIST);
+          // Vercel's documented "List snapshots": one sandbox's by its name, by creation, newest first.
+          const url = apiUrl("/snapshots", asked.teamId, {
+            project: asked.projectId,
+            name,
+            limit: "1",
+            sortOrder: LIST_ORDER.NEWEST_FIRST,
+          });
+          const listed = yield* callApi(
+            client,
+            SANDBOX_CALL.SNAPSHOT_LIST,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          const read = readSnapshotsListed(jsonOf(listed.text));
+          if (!succeeded(listed.status) || Result.isFailure(read)) {
+            return yield* refused(SANDBOX_CALL.SNAPSHOT_LIST, listed);
+          }
+          const [newest] = read.success.snapshots;
+          return newest === undefined
+            ? undefined
+            : { id: newest.id, usable: !SNAPSHOT_UNUSABLE.has(newest.status) };
         }),
       updateTags: (name, tags) =>
         Effect.gen(function* () {

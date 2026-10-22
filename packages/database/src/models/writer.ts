@@ -35,6 +35,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -83,7 +84,6 @@ import {
   nullable,
   TurnUsageColumnSchema,
 } from "./columns.js";
-import { sentLineId } from "./ids.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 import { writeOperatorNotice } from "./operator-notices.js";
 

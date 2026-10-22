@@ -71,3 +71,29 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "every read of the checkout runs with every capability dropped, so a link swapped in reaches nothing the sandbox's user cannot",
+  () =>
+    Effect.gen(function* () {
+      const sandbox = sandboxDouble(() => undefined, { files: FILES });
+      sandbox.checkedOut = RELAY_FULL_NAME;
+      const checkout = Effect.succeed({ sandbox, repository: RELAY_FULL_NAME });
+
+      const shown = yield* showCodeIn(
+        checkout,
+        unparsedWire({ note: NOTE, path: "src/invite.ts", startLine: 3, endLine: 5 }),
+      );
+
+      assert.equal(shown.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(shown));
+      assert.equal(sandbox.runs.length, 2);
+      for (const run of sandbox.runs) {
+        assert.ok(
+          run.command.startsWith(
+            "exec setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all -- /bin/bash -c ",
+          ),
+          run.command,
+        );
+      }
+    }),
+);

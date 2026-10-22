@@ -6,8 +6,7 @@
  * harness shares (`runner-sessions.ts`). What is Claude Code's own: the
  * runner's config names the image's `claude` and appends Luke's coder
  * instructions to Claude Code's prompt; the plan's token, opened from the
- * account's sealed `claude_setup_token` row, or an Anthropic API key in test
- * mode, is the launch's credential, refused in its plan's words where the
+ * account's sealed `claude_setup_token` row, is the launch's credential, refused in its plan's words where the
  * row is gone, refused, unreadable, or at a limit whose named reset is
  * still ahead, so the agent waits on its plan and never turns to another
  * payer; and every message to a running runner
@@ -58,10 +57,7 @@ export { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
 /** What the sessions reach. */
 export type ClaudeCodeServices = RunnerServices;
 
-export interface ClaudeCodeSessionsOptions extends RunnerSessionsOptions {
-  /** An Anthropic API key the CLI runs on in place of the account's plan: test mode alone. */
-  readonly testApiKey?: Redacted.Redacted | undefined;
-}
+export type ClaudeCodeSessionsOptions = RunnerSessionsOptions;
 
 /** The hosts a command the agent runs may reach through Claude Code's command sandbox: GitHub and the package registries. */
 const ALLOWED_DOMAINS = [
@@ -115,11 +111,8 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
     return row;
   });
 
-  /** The CLI's credential and the variable it is read from: the test key, or the account's plan token opened. */
+  /** The CLI's credential and the variable it is read from: the account's plan token opened. */
   const credential = Effect.gen(function* () {
-    if (options.testApiKey !== undefined) {
-      return { env: { [RUNNER_ENV.API_KEY]: Redacted.value(options.testApiKey) } };
-    }
     const environment = yield* HostedEnvironment;
     const ring = environment.providerKeyEncryptionKeys;
     const parsed = ring === undefined ? undefined : parseKeyRing(ring);
@@ -172,8 +165,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
   const ahead = (agent: CodingAgent) => {
     const effort = effortOf(agent.effort);
     const model = providerModelOf(agent.model);
-    const asked = options.testApiKey === undefined ? Effect.asVoid(standingPlan) : Effect.void;
-    return Effect.as(asked, {
+    return Effect.as(standingPlan, {
       lines: [
         {
           type: INPUT_LINE.MODEL,

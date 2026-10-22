@@ -13,6 +13,7 @@ import {
   type QueryError,
   queryBuilder,
 } from "@luke/database/core/query";
+import { agentGivenNameSql } from "@luke/database/models/agent-name";
 import { automationReadableBy } from "@luke/database/models/automation-store";
 import {
   type ChatWaitingLiveStatements,
@@ -1238,10 +1239,10 @@ const findWaitingItems = SqlSchema.findAll({
           id: inboxItem.id,
           taskId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: its human name, else its title.
+          // The name the agent goes by: Luke for an operator, its human name, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           title: inboxItem.title,
@@ -1287,10 +1288,10 @@ const findTasklessWaitingItems = SqlSchema.findAll({
         .select({
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: its human name, else its title.
+          // The name the agent goes by: Luke for an operator, its human name, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           automationId: automation.id,
@@ -1430,10 +1431,10 @@ export function accountInboxLiveStatements(
           id: inboxItem.id,
           planId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: its human name, else its title.
+          // The name the agent goes by: Luke for an operator, its human name, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           title: inboxItem.title,
@@ -1453,10 +1454,10 @@ export function accountInboxLiveStatements(
         {
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: its human name, else its title.
+          // The name the agent goes by: Luke for an operator, its human name, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
           automationId: automation.id,
@@ -3669,8 +3670,10 @@ const findMemberOpenAsks = SqlSchema.findAll({
           key: inboxItem.key,
           title: inboxItem.title,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: its human name, else its title.
-          agentName: sql<string | null>`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          agentName: sql<
+            string | null
+          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           taskId: inboxItem.taskId,
           taskName: task.name,

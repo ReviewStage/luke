@@ -9,6 +9,7 @@
     "./app-settings": "./src/app-settings/index.js",
     "./conversation": "./src/conversation/conversation.js",
     "./effect": "./src/effect/index.js",
+    "./host-ids": "./src/host-ids.js",
     "./testing": "./src/testing/index.js",
     "./ui-messages": "./src/ui-messages/index.js",
     "./wire-guard": "./src/wire-guard.js"
@@ -19,6 +20,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@noble/hashes": "2.3.0",
     "ai": "catalog:",
     "effect": "catalog:"
   },
