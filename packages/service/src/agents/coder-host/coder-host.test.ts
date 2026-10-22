@@ -210,7 +210,6 @@ const hostOverStore = (titleModel?: LanguageModel, now: () => number = () => NOW
       keys: () => Effect.succeed(KEYS),
       fastRefused: async () => undefined,
       titleModel: () => titleModel,
-      research: () => ({ openAi: undefined, spend: Effect.void }),
       scriptedModel: () => false,
       now,
     };

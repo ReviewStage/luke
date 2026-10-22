@@ -244,7 +244,6 @@ function hostOf(acting: boolean, summaryModel?: SummaryModelOf): CoderHost {
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     fastRefused: async () => undefined,
     titleModel: () => undefined,
-    research: () => ({ openAi: undefined, spend: Effect.void }),
     scriptedModel: () => true,
     ...(summaryModel === undefined ? undefined : { summaryModel }),
     now: () => NOW,

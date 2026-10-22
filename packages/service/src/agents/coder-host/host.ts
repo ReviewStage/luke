@@ -81,13 +81,7 @@ import {
 import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
-import {
-  type ReadWebPageResult,
-  ResearchBudget,
-  runReadWebPage,
-  runSearchWeb,
-  type SearchWebResult,
-} from "../public-research.js";
+import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
 import { isOperator } from "../steward.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
@@ -426,18 +420,18 @@ export interface CoderHost extends HostAdmission {
     handed: TurnHanded,
   ): Effect.Effect<CoderTurnMessage, never, DatabaseServices>;
   /**
-   * Runs one of the agent's public reads, the brain's own
-   * (`../public-research.ts`): a search or a page read, under the turn's
-   * budget, the search on Luke's key and counted on the account's meter.
+   * Runs one of the agent's public page reads (`../public-research.ts`),
+   * under the turn's budget; its search is eve's provider-run `web_search`,
+   * inside its own model call.
    * The budget is the turn's own, named with its session, since eve numbers
    * every session's turns afresh.
    */
   research(
     admitted: AdmittedConversation,
-    tool: typeof CODER_TOOL.SEARCH_WEB | typeof CODER_TOOL.READ_WEB_PAGE,
+    tool: typeof CODER_TOOL.READ_WEB_PAGE,
     turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
-  ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
+  ): Effect.Effect<ReadWebPageResult, never, HttpClient.HttpClient>;
   /**
    * Runs one `look_at_picture` call (`../../plans/picture-look.ts`): one of
    * the pictures of the agent's plan, read as the member whose turn this is.
@@ -1117,14 +1111,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         yield* titleSubagent(model, admitted.target, childId, task);
       }),
 
-    research: (admitted, tool, turn, input) => {
-      const access = seams.research(admitted.target.userId);
-      const turnId = hostTurnId(turn.sessionId, turn.eveTurnId);
-      const call = { turnId, budget: research, openAi: access.openAi, spend: access.spend };
-      return tool === CODER_TOOL.SEARCH_WEB
-        ? runSearchWeb(call, input)
-        : runReadWebPage(call, input);
-    },
+    research: (_admitted, _tool, turn, input) =>
+      runReadWebPage(
+        { turnId: hostTurnId(turn.sessionId, turn.eveTurnId), budget: research },
+        input,
+      ),
 
     relaysQuietly: (event, state) =>
       event.type !== "compaction.completed" && foldedQuietly(event, state, seams.now()),

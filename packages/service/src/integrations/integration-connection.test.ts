@@ -136,7 +136,6 @@ const agentHost = Effect.gen(function* () {
     keys: () => Effect.die(new Error("no token read reads a provider key")),
     fastRefused: async () => undefined,
     titleModel: () => undefined,
-    research: () => ({ openAi: undefined, spend: Effect.void }),
     scriptedModel: () => false,
     now: () => NOW,
   });

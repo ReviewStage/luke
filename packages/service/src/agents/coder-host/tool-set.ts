@@ -20,8 +20,8 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  * The coding agent runs eve's own tools, authored one file each under
  * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
- * search, the hosted public search and page read the brain has
- * too (`../public-research.ts`), the delegation of a slice of its
+ * search, eve's provider-run web search on the agent's own model call and
+ * key, the hosted page read (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), the pull request the service
@@ -54,7 +54,7 @@ export const CODER_TOOL = {
   GLOB: AGENT_TOOL.GLOB,
   GREP: AGENT_TOOL.GREP,
   APPLY_PATCH: AGENT_TOOL.APPLY_PATCH,
-  SEARCH_WEB: AGENT_TOOL.SEARCH_WEB,
+  WEB_SEARCH: AGENT_TOOL.WEB_SEARCH,
   READ_WEB_PAGE: AGENT_TOOL.READ_WEB_PAGE,
   DELEGATE: AGENT_TOOL.DELEGATE,
   EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
@@ -221,8 +221,9 @@ export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindT
 
 /**
  * The tools a coding agent's transcript may name that no agent is offered
- * now: eve's provider-run web reads, which coding agents ran before they had
- * the hosted pair, the archive, unarchive, and move of a task into a
+ * now: eve's provider-run page fetch, which coding agents ran before they had
+ * the hosted page read, Luke's own hosted search on Luke's key, since
+ * replaced by eve's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
  * `post_to_inbox`, and `message_agent`, since folded into `post_chat`'s
@@ -231,7 +232,7 @@ export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindT
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
-  WEB_SEARCH: "web_search",
+  SEARCH_WEB: RETIRED_TOOL.SEARCH_WEB,
   ARCHIVE_AGENT: RETIRED_TOOL.ARCHIVE_AGENT,
   UNARCHIVE_AGENT: RETIRED_TOOL.UNARCHIVE_AGENT,
   MOVE_TASK: RETIRED_TOOL.MOVE_TASK,

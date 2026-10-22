@@ -667,8 +667,8 @@ function knownToolView(
         input: textBlock(stringAt(input, "url") ?? ""),
         output: output === undefined ? undefined : wordsOutput(output, "text"),
       };
-    case AGENT_TOOL.SEARCH_WEB:
-    case RETIRED_TOOL.WEB_SEARCH:
+    case AGENT_TOOL.WEB_SEARCH:
+    case RETIRED_TOOL.SEARCH_WEB:
       return {
         kind: CALL_KIND.WEB_SEARCH,
         subject: stringAt(input, "query") ?? "",

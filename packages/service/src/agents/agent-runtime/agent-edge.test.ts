@@ -77,7 +77,6 @@ async function openRoot(): Promise<{ host: CoderHost; edge: EdgeKit }> {
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     fastRefused: async () => undefined,
     titleModel: () => undefined,
-    research: () => ({ openAi: undefined, spend: Effect.void }),
     scriptedModel: () => false,
     now: () => NOW,
   });

@@ -112,7 +112,7 @@ function watched(input: WireValue | undefined): string {
  * a command as `bash`, a read as `read_file`, a whole file written as
  * `write_file`, an edit or a notebook cell as an `apply_patch` of the lines
  * it changed, a search as `glob` or `grep`, a page and a web search as
- * `read_web_page` and `search_web`, the list as `write_todos`, a skill as
+ * `read_web_page` and `web_search`, the list as `write_todos`, a skill as
  * `load_skill`, and a monitor as the command it watches. A subagent's
  * call and a scheduled wakeup keep their names.
  */
@@ -187,7 +187,7 @@ const CLAUDE_CODE_CALLS: Record<
     output: wordsUnder(output, "text"),
   }),
   [CLAUDE_CODE_TOOL.WEB_SEARCH]: ({ input, output }) => ({
-    tool: AGENT_TOOL.SEARCH_WEB,
+    tool: AGENT_TOOL.WEB_SEARCH,
     input: { query: inputString(input, "query") ?? "" },
     output,
   }),
@@ -318,7 +318,7 @@ function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefin
 /**
  * Codex's items, each read as the eve call that does what it does: a
  * command as `bash`, a file change as an `apply_patch` of its files, a web
- * search as `search_web`, and the turn's plan as `write_todos`. A call to
+ * search as `web_search`, and the turn's plan as `write_todos`. A call to
  * an MCP server other than Luke's is named by its server and its tool, which
  * the generic row draws, its arguments as its input. A spawn of a subagent
  * is read as Claude Code's `Agent`, the one name the tab draws a native
@@ -338,7 +338,7 @@ const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCa
     output: inputString(output, "status") ?? output,
   }),
   [CODEX_TOOL.WEB_SEARCH]: ({ input, output }) => ({
-    tool: AGENT_TOOL.SEARCH_WEB,
+    tool: AGENT_TOOL.WEB_SEARCH,
     input: { query: inputString(input, "query") ?? "" },
     output,
   }),
