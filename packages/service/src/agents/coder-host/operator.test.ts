@@ -10,10 +10,19 @@ import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing"
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option, Result, Stream } from "effect";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
+import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import {
+  type AgentSessions,
+  EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveTypedTurn,
+} from "../brain-host/eve-sessions.js";
 import { ensureOperator } from "./operator.js";
 import { type StartAsk, startCodingAgent } from "./start.js";
 
@@ -28,12 +37,40 @@ import { type StartAsk, startCodingAgent } from "./start.js";
  * outside the workspace, or one with the experiment off, ensures none. No
  * ensure opens a session. A blank Start with no task that is no operator's
  * is still refused, as is an operator's that is not blank or names a
- * repository or a task. eve fails if it is ever asked, the catalog is
- * fixed, and the store PGlite. Synthetic accounts throughout.
+ * repository or a task. An ensure that made an operator opens its session
+ * once, on its opening turn, and one that found it opens none; an eve that
+ * would not take the opening leaves no operator behind. eve writes down
+ * every session opened, the catalog is fixed, and the store PGlite.
+ * Synthetic accounts throughout.
  */
 
-/** eve as an ensure must never reach it: an operator is made with no session. */
-const unreachedEve = Effect.die(new Error("an operator's ensure reached eve"));
+/** eve as a refused Start must never reach it. */
+const unreachedEve = Effect.die(new Error("a refused Start reached eve"));
+
+/** eve's coding-agent service, writing down the first message of every session opened, and taking it unless `refusing` says not. */
+function recordingEve(refusing = false) {
+  const opened: EveMessage<EveTypedTurn>[] = [];
+  const sessions: AgentSessions<EveTypedTurn> = {
+    open: (message) =>
+      Effect.sync(() => {
+        opened.push(message);
+        return refusing
+          ? { outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }
+          : { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
+      }),
+    send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
+    cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
+    reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+    stream: () => Stream.empty,
+  };
+  /** The sessions opened over the conversation named. */
+  const openedOver = (conversationId: string) =>
+    opened.filter((message) => message.conversationId === conversationId);
+  return { eve: Effect.succeed(sessions), openedOver };
+}
+
+/** The eve every ensure here reaches but the one that says otherwise. */
+const EVE = recordingEve();
 
 /** What a Start reaches beside the store: GitHub, which an operator never asks, and the catalog. */
 const services = Layer.mergeAll(
@@ -64,10 +101,9 @@ const ensure = (
   workspaceId: string,
   reset = false,
   stopStanding: () => Effect.Effect<void, HostedRefusal> = nothingToStop,
+  eve = EVE.eve,
 ) =>
-  ensureOperator(unreachedEve, userId, workspaceId, { reset, stopStanding }).pipe(
-    Effect.provide(services),
-  );
+  ensureOperator(eve, userId, workspaceId, { reset, stopStanding }).pipe(Effect.provide(services));
 
 /** The member's operators in the workspace, archived ones included, newest first. */
 const operatorsOf = (userId: string, workspaceId: string) =>
@@ -218,6 +254,46 @@ it.layer(getTestDB())("the member's operator", (it) => {
           "the outsider's Reset archived nothing",
         );
         assert.equal((yield* ensure(member, workspaceId)).agent.id, standing.agent.id);
+      }),
+  );
+
+  it.effect(
+    "an ensure that made the operator opens its session once, on a typed opening turn, a repeat ensure opens none, and a Reset's fresh operator opens its own",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+
+        const first = yield* ensure(member, workspaceId);
+        const again = yield* ensure(member, workspaceId);
+        const reset = yield* ensure(member, workspaceId, true);
+
+        assert.equal(again.agent.id, first.agent.id);
+        const firstOpenings = EVE.openedOver(first.agent.conversationId);
+        assert.equal(firstOpenings.length, 1, "one opening, and none for the repeat ensure");
+        assert.equal(firstOpenings[0]?.turn, BRAIN_HOST_TURN.TYPED);
+        assert.equal(EVE.openedOver(reset.agent.conversationId).length, 1);
+        assert.equal(EVE.openedOver(first.agent.conversationId).length, 1);
+      }),
+  );
+
+  it.effect(
+    "an eve that will not take the opening leaves no operator, so the next ensure makes one and opens it",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        const refusing = recordingEve(true);
+
+        const refused = yield* Effect.result(
+          ensure(member, workspaceId, false, nothingToStop, refusing.eve),
+        );
+        assert.ok(Result.isFailure(refused));
+        assert.deepEqual(yield* operatorsOf(member, workspaceId), []);
+
+        const made = yield* ensure(member, workspaceId);
+        assert.equal(made.created, true);
+        assert.equal(EVE.openedOver(made.agent.conversationId).length, 1);
       }),
   );
 

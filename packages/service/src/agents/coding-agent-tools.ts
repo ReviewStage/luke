@@ -134,6 +134,7 @@ import {
 } from "./coder-host/status.js";
 import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { STEWARD_ACT, type StewardAct, stewardRefusal } from "./steward.js";
 import {
   assigneeIdOf,
   assigneeMentionOf,
@@ -1210,6 +1211,15 @@ export function agentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
+/** Why the caller may not act on the agent under Steward (`steward.ts`): an operator acts only on its member's own agents. */
+function stewardRefused(
+  caller: AgentCaller,
+  agent: CodingAgent,
+  act: StewardAct,
+): string | undefined {
+  return stewardRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, agent, act);
+}
+
 /** A refusal's words, with when a plan's reached limit resets where the provider said. */
 function withReset(words: string, refusal: HostedRefusal): string {
   return refusal.resetsAt === undefined
@@ -1530,6 +1540,8 @@ const sourceLanding = (
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
     const { agent: source, workspaceId } = found.value;
+    const steward = stewardRefused(caller, source, STEWARD_ACT.START_FROM);
+    if (steward !== undefined) return Result.fail(steward);
     if (!controlsAgent(callerUserId(caller), source)) {
       return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
     }
@@ -2145,6 +2157,8 @@ export function runStopAgent(
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
+      const steward = stewardRefused(caller, agent, STEWARD_ACT.STOP);
+      if (steward !== undefined) return agentToolRejected(steward);
       if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
       if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
         return agentToolRejected(
@@ -2252,6 +2266,8 @@ export function runUpdateAgent(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const steward = stewardRefused(caller, found.value.agent, STEWARD_ACT.CHANGE);
+      if (steward !== undefined) return agentToolRejected(steward);
       const { task, workspaceId } = found.value;
       const choices = yield* Effect.result(accountModelChoices(userId));
       if (Result.isFailure(choices)) return agentToolRejected(UPDATE_AGENT_REFUSAL.UNAVAILABLE);

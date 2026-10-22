@@ -68,11 +68,13 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
+import { runListOpenAsks } from "../operator-desk.js";
 import {
   REPOSITORY_REFUSAL,
   RepositoryRefusal,
   type RepositorySandbox,
 } from "../repository-shell.js";
+import { isOperator, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
@@ -115,6 +117,7 @@ export type AgentDoorSeams = Pick<
 export interface AgentToolCall {
   readonly tool:
     | typeof CODER_TOOL.LIST_AGENTS
+    | typeof CODER_TOOL.LIST_OPEN_ASKS
     | typeof CODER_TOOL.READ_AGENT
     | typeof CODER_TOOL.START_AGENT
     | typeof CODER_TOOL.STOP_AGENT
@@ -146,6 +149,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
   [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
   [CODER_TOOL.LIST_MODELS]: runListModels,
+  [CODER_TOOL.LIST_OPEN_ASKS]: runListOpenAsks,
 } as const;
 
 /** One call of the agent's chat tools, by the tool's name and the input its runtime held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
@@ -425,6 +429,10 @@ export function runAgentTools(
     if (Result.isFailure(found)) return agentToolRejected(found.failure);
     // The agent asking is the one the conversation is, and eve is reached as its starter.
     const sender = found.success;
+    // An operator deletes nothing: it is not offered the delete, and a native harness's call of it is refused.
+    if (call.tool === CODER_TOOL.DELETE_SECTION && isOperator(sender)) {
+      return agentToolRejected(STEWARD_DELETE_REFUSAL);
+    }
     const secret = seams.deploymentSecret();
     const origin = seams.eveOrigin();
     const compose = yield* eveSessionsComposer;

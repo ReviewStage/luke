@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
-import { CODING_AGENT_BRIEF, type CodingAgentBrief } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_BRIEF,
+  CODING_AGENT_KIND,
+  type CodingAgentBrief,
+} from "@luke/features/coding-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -777,6 +781,75 @@ test("with Chat off the instructions are the golden's, byte for byte, and messag
     assert.ok(!off.onTask.includes("## Your team's chat"), brief);
     assert.ok(!off.onTask.includes("message_agent") && !on.includes("message_agent"), brief);
   }
+});
+
+/** The member's operator's instructions, recorded byte for byte: an agent of kind operator, blank, on no task and no repository. */
+const OPERATOR_PATH = fileURLToPath(
+  new URL("../../../fixtures/coder-instructions/operator.json", import.meta.url),
+);
+
+/** An operator's instructions as its session composes them, with Chat on for its member where `chatOn` says. */
+function operatorInstructions(chatOn = false): string {
+  return coderInstructions(
+    null,
+    CODING_AGENT_BRIEF.BLANK,
+    false,
+    null,
+    undefined,
+    chatOn,
+    null,
+    false,
+    CODER_HARNESS.EVE,
+    CODING_AGENT_KIND.OPERATOR,
+  );
+}
+
+// Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
+if (process.env.LUKE_UPDATE_FIXTURES === "1") {
+  writeFileSync(
+    OPERATOR_PATH,
+    `${JSON.stringify({ operator: operatorInstructions() }, null, 2)}\n`,
+  );
+}
+
+const OPERATOR_GOLDEN = Schema.decodeUnknownSync(Schema.Struct({ operator: Schema.String }))(
+  JSON.parse(readFileSync(OPERATOR_PATH, "utf8")),
+);
+
+test("an operator's instructions are the golden's, byte for byte: its own job and Steward's rules in place of an agent's job and pull request, no team's chat even with Chat on, and no delete; a coder's are the same whatever the kind defaults to", () => {
+  const operator = operatorInstructions();
+  assert.equal(operator, OPERATOR_GOLDEN.operator);
+  assert.equal(operatorInstructions(true), operator, "an operator works on no task's chat");
+  for (const told of [
+    "You are Luke, the developer's operator in this workspace",
+    "## What you may do unasked",
+    "## Never",
+    "Never merge or close a pull request",
+    "Never delete anything.",
+    "Never answer an inbox ask for the developer",
+    "Never change Settings, keys, or integrations.",
+    "Never act on a teammate's agent beyond reading it and messaging it",
+    "Report each action you took unasked as a line of its own in your reply",
+    "ask the developer in their inbox",
+    "reports back to you in a direct message",
+    "## Your opening",
+    `\`${CODER_TOOL.LIST_OPEN_ASKS}\``,
+  ]) {
+    assert.ok(operator.includes(told), told);
+  }
+  for (const untold of [
+    "implement the plan",
+    `\`${CODER_TOOL.OPEN_PULL_REQUEST}\``,
+    `\`${CODER_TOOL.DELETE_SECTION}\``,
+    "## Your team's chat",
+  ]) {
+    assert.ok(!operator.includes(untold), untold);
+  }
+  // A coder on no repository is told the opposite on each, so the operator's words are its alone.
+  const coder = coderInstructions(null, CODING_AGENT_BRIEF.BLANK, false, null);
+  assert.ok(!coder.includes("## What you may do unasked"));
+  assert.ok(coder.includes(`\`${CODER_TOOL.DELETE_SECTION}\``));
+  assert.ok(!coder.includes(`\`${CODER_TOOL.LIST_OPEN_ASKS}\``));
 });
 
 test("with Chat on the session keeps the developer's inbox for what it needs of the developer, and is told of chat for the other agents, @luke, and people, with which to use when", () => {

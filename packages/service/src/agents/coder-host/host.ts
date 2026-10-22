@@ -80,6 +80,7 @@ import {
 } from "../brain-host/relay.js";
 import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
+import { operatorDesk } from "../operator-desk.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -88,6 +89,7 @@ import {
   type SearchWebResult,
 } from "../public-research.js";
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
+import { isOperator } from "../steward.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import {
@@ -125,7 +127,7 @@ import { type DelegationAsk, delegationChoice, recordDelegation } from "./delega
 import type { InboxToolResult } from "./inbox.js";
 import { type InboxCall, runAgentInbox } from "./inbox-door.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
-import { coderInstructions } from "./instructions.js";
+import { CODER_HARNESS, coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
 import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
@@ -410,7 +412,9 @@ export interface CoderHost extends HostAdmission {
    * the plan since its previous turn started, or the rest of it is not what
    * the session last handed (`handed`); and what the agent has not read in
    * its workspace's chat (`chat.ts`), where its starter turned Chat on and
-   * the digest is not the one last handed. Answers what the session has
+   * the digest is not the one last handed; and an operator's desk, its
+   * member's open work (`../operator-desk.ts`), where it is not the one last
+   * handed. Answers what the session has
    * handed once this message is, for the session to keep; nothing to hand
    * where the conversation is no agent's. A read that fails is logged and
    * leaves its part out, so the turn still opens.
@@ -620,6 +624,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       chatOn,
       agent.startBranch,
       agent.githubAccess === GITHUB_ACCESS.TOKEN,
+      CODER_HARNESS.EVE,
+      agent.kind,
     );
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
   };
@@ -682,6 +688,21 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.tapError(logStoreFailure),
       Effect.catch(() => Effect.succeed(undefined)),
     );
+
+  /**
+   * The operator's desk as its turn opens (`../operator-desk.ts`), its
+   * member's open work as it stands; nothing for any other agent, or where
+   * a read failed, which is logged, so the turn still opens.
+   */
+  const deskOf = (
+    agent: CodingAgent,
+  ): Effect.Effect<string | undefined, never, DatabaseServices> =>
+    isOperator(agent)
+      ? operatorDesk(agent).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.orElseSucceed(() => undefined),
+        )
+      : Effect.succeed(undefined);
 
   /**
    * When the agent's turn before the one opening started, or nothing for its
@@ -1031,8 +1052,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         if (Result.isFailure(found)) return { text: undefined, handed };
         const agent = found.success;
-        const [task, digest] = yield* Effect.all(
-          [taskOf(admitted, agent, turn, handed), digestOf(admitted, agent)],
+        const [task, digest, desk] = yield* Effect.all(
+          [taskOf(admitted, agent, turn, handed), digestOf(admitted, agent), deskOf(agent)],
           { concurrency: "unbounded" },
         );
         const clock = { now: seams.now(), timeZone: admitted.timeZone };
@@ -1041,15 +1062,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // The digest is handed again only where it holds what the last one did not.
         const chatKey = digest === undefined ? handed.chat : contentKey(digest);
         const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
+        // An operator's desk is handed again only where it changed since the session last handed it.
+        const deskKey = desk === undefined ? handed.desk : contentKey(desk);
+        const desked = desk !== undefined && deskKey !== handed.desk ? [desk] : [];
         const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
         const kind = turnKindWords(spoken, handed, agent.taskId !== null);
         const taskHanded = task === undefined ? handed.task : task.key;
         const next: TurnHanded = {
           ...(taskHanded === undefined ? undefined : { task: taskHanded }),
           ...(chatKey === undefined ? undefined : { chat: chatKey }),
+          ...(deskKey === undefined ? undefined : { desk: deskKey }),
           ...(spoken ? { spoken: true, callWords: true } : undefined),
         };
-        const parts = [...(kind === undefined ? [] : [kind]), standing, ...chat];
+        const parts = [...(kind === undefined ? [] : [kind]), standing, ...desked, ...chat];
         return { text: parts.join("\n\n"), handed: next };
       }),
 

@@ -3581,3 +3581,79 @@ export function accountInboxAutomations(
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }
+
+/** One open item of a member's own agent as an operator reads it: the item, its agent, its task, and the ask that waits where one does. */
+const MemberAskRowSchema = Schema.Struct({
+  id: Schema.String,
+  key: Schema.String,
+  title: Schema.String,
+  agentId: Schema.String,
+  agentName: Schema.NullOr(Schema.String),
+  agentModel: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
+  taskName: Schema.NullOr(Schema.String),
+  askType: Schema.NullOr(Schema.String),
+  askText: Schema.NullOr(Schema.String),
+  updatedAt: InstantColumnSchema,
+});
+
+/** One open item of a member's own agent, as `memberOpenAsks` answers it. */
+export type MemberOpenAsk = typeof MemberAskRowSchema.Type;
+
+const findMemberOpenAsks = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    workspaceId: Schema.String,
+    limit: Schema.Number,
+  }),
+  Result: MemberAskRowSchema,
+  execute: ({ userId, workspaceId, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: inboxItem.id,
+          key: inboxItem.key,
+          title: inboxItem.title,
+          agentId: inboxItem.agentId,
+          // The name the agent goes by: its human name, else its title.
+          agentName: sql<string | null>`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+          agentModel: codingAgent.model,
+          taskId: inboxItem.taskId,
+          taskName: task.name,
+          askType: sql<string | null>`${inboxMessage.ask}->>'type'`,
+          askText: inboxMessage.text,
+          updatedAt: inboxItem.updatedAt,
+        })
+        .from(inboxItem)
+        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .leftJoin(task, eq(task.id, inboxItem.taskId))
+        .leftJoin(inboxMessage, eq(inboxMessage.id, inboxItem.openAskMessageId))
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.organizationId, workspaceId),
+            itemReachableBy(userId),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+          ),
+        )
+        .orderBy(...LATEST_FIRST)
+        .limit(limit),
+    ),
+});
+
+/**
+ * Every item still open that one of the member's own agents posted in the
+ * workspace, whichever agent and task it is on, the latest changed first and
+ * at most `limit`: what the member's operator reads across their agents, as
+ * an agent's own read reads only its own threads. An item is the member's
+ * where an agent they started posted it, which is whose inbox it waits in;
+ * a teammate's agent's item is never among them, nor one of a workspace the
+ * member has left.
+ */
+export function memberOpenAsks(
+  userId: string,
+  workspaceId: string,
+  limit: number,
+): InboxStoreEffect<readonly MemberOpenAsk[]> {
+  return findMemberOpenAsks({ userId, workspaceId, limit });
+}

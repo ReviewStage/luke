@@ -2,8 +2,8 @@ import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { DELETE_SECTION_TOOL } from "@luke/service/agents/task-section-tools";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { defineTool } from "eve/tools";
-import { runAgentTool } from "../host.js";
+import { defineDynamic, defineTool } from "eve/tools";
+import { offeredKindTools, runAgentTool } from "../host.js";
 
 /**
  * delete_section.ts -- the agent deletes a sidebar section of the member who started it, its tasks back under Tasks.
@@ -12,15 +12,24 @@ import { runAgentTool } from "../host.js";
  * (`packages/service/src/agents/task-section-tools.ts`). The call reaches the
  * store through the host's door (`../host.ts`), under the agent its session
  * was admitted to, and acts on the sections of the member who started it.
+ * It is offered at each turn's start to every agent but its member's
+ * operator, which deletes nothing (`kindToolsOf`).
  */
-export default defineTool({
-  description: DELETE_SECTION_TOOL.description,
-  inputSchema: emitJsonSchema(DELETE_SECTION_TOOL.inputSchema),
-  execute: async (input, ctx) =>
-    // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-    runAgentTool(ctx.session.auth, ctx.session.id, {
-      tool: CODER_TOOL.DELETE_SECTION,
-      input: unparsedWire(input as WireBoundaryInput),
-      callId: ctx.callId,
-    }),
+export default defineDynamic({
+  events: {
+    "turn.started": async (_event, ctx) =>
+      (await offeredKindTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.DELETE_SECTION)
+        ? defineTool({
+            description: DELETE_SECTION_TOOL.description,
+            inputSchema: emitJsonSchema(DELETE_SECTION_TOOL.inputSchema),
+            execute: async (input, toolContext) =>
+              // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
+              runAgentTool(toolContext.session.auth, toolContext.session.id, {
+                tool: CODER_TOOL.DELETE_SECTION,
+                input: unparsedWire(input as WireBoundaryInput),
+                callId: toolContext.callId,
+              }),
+          })
+        : null,
+  },
 });

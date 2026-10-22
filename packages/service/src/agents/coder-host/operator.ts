@@ -15,8 +15,10 @@
  * first, refusing where it cannot, archives it as its member, its transcript
  * kept, and ensures a fresh one. The member's choice is checked against the
  * catalog before anything is archived, so a Reset the catalog would refuse
- * leaves the standing operator standing. Nothing runs: an operator is made
- * with its conversation and no session, and its first turn comes later.
+ * leaves the standing operator standing. An operator the ensure made runs
+ * one opening turn as it is made (`start.ts`), in which it reads its
+ * member's open work and says what stands; one the ensure found runs none,
+ * so a repeat ensure opens nothing.
  *
  * Only a member of the workspace who turned the operator experiment on
  * (`EXPERIMENT.OPERATOR`) ensures one; anyone else is answered as though
