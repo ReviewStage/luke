@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { causeKind } from "@luke/runtime/effect";
-import { Cause, Clock, Effect, type Redacted } from "effect";
+import { Cause, Clock, Data, Effect, type Redacted } from "effect";
 import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
@@ -136,6 +136,11 @@ export const SWEEP_FAILED = { failed: true } as const;
 
 type Swept<A> = A | typeof SWEEP_FAILED;
 
+/** A run in which at least one sweep failed: the cron check-in fails, and the answer still says what every sweep did. */
+class SweepsFailed extends Data.TaggedError("SweepsFailed")<{
+  readonly answer: MaintenanceSweepAnswer;
+}> {}
+
 /**
  * One sweep, kept from the others: a failure or a defect of its own is
  * logged by its kind and answered as `SWEEP_FAILED`, so the sweeps after it
@@ -198,7 +203,23 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
 
-    const answer = yield* options.monitor.run(sweepAll(options));
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+    // Note that a run in which any sweep failed fails its cron check-in, so the monitor still opens
+    // an issue on a sweep that keeps failing, while the sweeps after it ran and the answer says which.
+    const ran: MaintenanceSweepAnswer | SweepsFailed = yield* options.monitor
+      .run(
+        Effect.flatMap(sweepAll(options), (answer) =>
+          Object.values(answer).some((swept) => swept === SWEEP_FAILED)
+            ? Effect.fail(new SweepsFailed({ answer }))
+            : Effect.succeed(answer),
+        ),
+      )
+      .pipe(
+        Effect.catch((failure) =>
+          failure instanceof SweepsFailed ? Effect.succeed(failure) : Effect.fail(failure),
+        ),
+      );
+    return ran instanceof SweepsFailed
+      ? jsonResponse(HOSTED_HTTP_STATUS.INTERNAL_ERROR, ran.answer)
+      : jsonResponse(HOSTED_HTTP_STATUS.OK, ran);
   },
 );

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@luke/database/testing/no-database";
-import { Effect, Redacted } from "effect";
+import { Effect, Exit, Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
@@ -296,16 +296,27 @@ it.effect(
 );
 
 it.effect(
-  "a sweep that fails, or dies, answers failed in its place and the sweeps after it still run, the templates' last among them",
+  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the templates' last among them, and the run's cron check-in fails",
   () =>
     Effect.gen(function* () {
+      const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
         sweepVoice: () => Effect.fail(new Error("the voice upstream refused")),
         sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
+        // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
+        monitor: {
+          run: (run) =>
+            run.pipe(
+              Effect.onExit((exit) =>
+                Effect.sync(() => checkIns.push(Exit.isSuccess(exit) ? "ok" : "error")),
+              ),
+            ),
+        },
       });
       const answer = yield* sweep(options);
 
-      assert.equal(answer.status, 200);
+      assert.equal(answer.status, 500);
+      assert.deepEqual(checkIns, ["error"]);
       assert.deepEqual(answer.body.voice, SWEEP_FAILED);
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
