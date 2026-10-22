@@ -10,16 +10,14 @@ import {
   nativeRuntimesOfReached,
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
-import {
-  replaceCodingAgentWakeups,
-  waitingUntilOfReached,
-} from "@luke/database/models/coding-agent-wakeups";
+import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+import { readNativeProjection } from "@luke/database/models/native-projection-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { Clock, DateTime, Effect, Redacted, Result } from "effect";
+import { Clock, DateTime, Effect, Option, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -39,6 +37,7 @@ import {
   eveSessions,
 } from "../brain-host/eve-sessions.js";
 import { deploymentEve } from "../deployment-eve.js";
+import { heldTurnSpent } from "../native-events/native-projection.js";
 import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
@@ -242,9 +241,8 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   // A native agent's released wait left wakeups, which a Stop ends as a stopped CLI's own end with
   // it, so they go whether or not a turn stands to cancel.
-  const waited = yield* hostedStoreOrUnavailable(waitingUntilOfReached([agent.conversationId]));
   yield* hostedStoreOrUnavailable(replaceCodingAgentWakeups(agent.id, []));
-  const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
+  const { turn, runtime } = (yield* standingsOf([agent.conversationId]))(agent.conversationId);
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return false;
@@ -279,14 +277,22 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
   );
   if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  // Note that a released wait's turn runs with no runner to end it, so it is settled stopped here,
-  // as eve's sleep ends on a Stop, rather than standing until the sweep's bound; the native
-  // projection's hold on it goes too, so the next launch opens a turn of its own.
-  if (!accepted && waited.size > 0) {
+  // Note that a native turn whose runner is gone, a released wait's above all, has no runner to
+  // end it, so it is settled stopped here, as eve's sleep ends on a Stop, rather than standing
+  // until the sweep's bound. Its harness answers no turn under way only once its runner lease
+  // found none running, so a launch under way is never cut off; a Stop whose cancel failed is
+  // settled by the next. What the turn ran up goes with it, and the projection's hold on it
+  // goes too, so the next launch opens a turn of its own.
+  if (cancelled.outcome === EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN && runtime !== undefined) {
     yield* hostedStoreOrUnavailable(
-      Effect.flatMap(writer, (write) =>
-        settleRunnerLostTurns(write, agent.conversationId, at.getTime()),
-      ),
+      Effect.gen(function* () {
+        const held = yield* readNativeProjection(target);
+        const spent = heldTurnSpent(Option.getOrNull(held), agent.model);
+        const write = yield* writer;
+        yield* settleRunnerLostTurns(write, agent.conversationId, at.getTime(), (turnId) =>
+          spent?.turnId === turnId ? spent.spent : undefined,
+        );
+      }),
     );
   }
   return accepted;

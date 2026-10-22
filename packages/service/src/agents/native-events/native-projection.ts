@@ -1,4 +1,4 @@
-import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
+import { type LostTurnUsage, TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
 import type { WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
@@ -144,6 +144,28 @@ const readProjection = Schema.decodeUnknownOption(NativeProjectionSchema);
 /** The projection a conversation kept, or the empty one before its first save or for state no longer read. */
 export function heldProjection(saved: WireValue | null): NativeProjection {
   return Option.getOrElse(readProjection(saved), () => EMPTY_PROJECTION);
+}
+
+/**
+ * What the turn the saved projection holds ran up, by the turn's id, with
+ * the model the agent runs on, for a turn settled apart from its runner's
+ * end (a Stop of a released wait); none where it holds no turn or the turn
+ * ran up nothing yet.
+ */
+export function heldTurnSpent(
+  saved: WireValue | null,
+  model: string | undefined,
+): { readonly turnId: string; readonly spent: LostTurnUsage } | undefined {
+  const turn = heldProjection(saved).turn;
+  if (turn?.usage === undefined) return undefined;
+  const usage = turn.usage;
+  return {
+    turnId: turn.id,
+    spent: {
+      usage,
+      ...(model === undefined ? undefined : { usageByModel: [{ model, ...usage }] }),
+    },
+  };
 }
 
 /** The projection with the servers the turn under way took as it started, where that turn is the one named. */

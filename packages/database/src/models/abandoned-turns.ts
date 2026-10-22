@@ -1,4 +1,10 @@
-import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS, BRAIN_RUN_EVENT } from "@luke/features/brain";
+import {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_RUN_EVENT,
+  type BrainModelUsage,
+  type BrainRunUsage,
+} from "@luke/features/brain";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_STATUS } from "@luke/wire";
 import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
@@ -206,11 +212,18 @@ const agentRunningTurns = SqlSchema.findAll({
  * relay's count of what it told is not known here, and the writer settles
  * the row by the turn's id.
  */
+/** What a turn settled apart from its runner's end ran up, as the native projection held it, so its tokens still count. */
+export interface LostTurnUsage {
+  readonly usage: BrainRunUsage;
+  readonly usageByModel?: readonly BrainModelUsage[];
+}
+
 const settledLost = (
   writer: Pick<StoreWriter, "consume">,
   turn: LostTurn,
   end: LostTurnEnd,
   now: number,
+  spent?: LostTurnUsage,
 ) =>
   Effect.map(
     writer.consume(
@@ -221,6 +234,7 @@ const settledLost = (
         turnId: turn.id,
         sequence: 1,
         ...end,
+        ...spent,
         responseIds: [],
         at: now,
       },
@@ -346,12 +360,15 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
  * rather than running for a day; answers how many this call settled. The
  * turn the native projection holds is dropped with them, so the next
  * launch's events open a turn of their own rather than one already ended.
+ * `spentOf` names what a turn ran up where the caller read it from the
+ * projection, whose shape is the service's, so its tokens still count.
  */
 export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunnerLostTurns")(
   function* (
     writer: Pick<StoreWriter, "consume">,
     conversationId: string,
     now: number,
+    spentOf: (turnId: string) => LostTurnUsage | undefined = () => undefined,
   ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
     const lost = yield* agentRunningTurns({ conversationId });
     let settled = 0;
@@ -367,6 +384,7 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
             }
           : { status: BRAIN_REQUEST_STATUS.CANCELLED },
         now,
+        spentOf(turn.id),
       );
       if (written) settled += 1;
     }

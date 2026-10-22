@@ -37,7 +37,7 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { readNativeRunStanding } from "@luke/database/models/coding-agent-store";
-import { waitingUntilOfReached } from "@luke/database/models/coding-agent-wakeups";
+import { codingAgentWaits } from "@luke/database/models/coding-agent-wakeups";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
@@ -172,9 +172,7 @@ const runStandingOf = (sandbox: NativeSandbox) =>
   Effect.gen(function* () {
     const standing = yield* readNativeRunStanding(sandbox.agentId);
     if (Option.isNone(standing)) return Option.none();
-    const { conversationId } = standing.value;
-    const waiting = (yield* waitingUntilOfReached([conversationId])).has(conversationId);
-    return Option.some({ ...standing.value, waiting });
+    return Option.some({ ...standing.value, waiting: yield* codingAgentWaits(sandbox.agentId) });
   });
 
 /** Whether the run of the sandbox's agent still has a turn queued or running that waits on no wakeup, read from the store. */

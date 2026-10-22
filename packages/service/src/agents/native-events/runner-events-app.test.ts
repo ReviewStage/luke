@@ -731,7 +731,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a Stop of a released wait settles its turn stopped and deletes its wakeups, and the next launch opens a turn of its own",
+    "a Stop of a released wait, tried again past a cancel that failed, settles its turn stopped with what it ran up, and the next launch opens a turn of its own",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -743,7 +743,13 @@ it.layer(getTestDB())("the runner events route", (it) => {
         yield* TestClock.setTime(Date.parse("2026-10-21T12:05:00.000Z"));
         const launches = [
           { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
-          { type: "result", subtype: "success", is_error: false, ...top },
+          {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            usage: { input_tokens: 40, output_tokens: 7 },
+            ...top,
+          },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.RELEASED, wakeups: [{ at: dueAt, prompt }] },
           { type: RUNNER_EVENT.ACCEPTED, uuid: nextLineId },
           { type: "result", subtype: "success", is_error: false, ...top },
@@ -754,22 +760,34 @@ it.layer(getTestDB())("the runner events route", (it) => {
         yield* post(agent.bearer, events.slice(0, 3));
         yield* claimRuntimeSession(agent.target, "claude-code-session", new Date());
         const read = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
-        // The released runner has ended, so the harness finds no turn under way to stop.
-        const noRunner = Effect.succeed({
-          cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const),
-        });
+        const answering = (
+          outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN | typeof EVE_CANCEL_OUTCOME.FAILED,
+        ) =>
+          Effect.succeed({
+            cancel: () =>
+              Effect.succeed(
+                outcome === EVE_CANCEL_OUTCOME.FAILED
+                  ? ({ outcome, status: 502 } as const)
+                  : ({ outcome } as const),
+              ),
+          });
+        const stop = (outcome: Parameters<typeof answering>[0]) =>
+          cancelledTurn(answering(outcome), storeWriter({ tools: CODER_TOOL_SET }), read).pipe(
+            Effect.provide(noNetwork),
+            Effect.result,
+          );
 
-        yield* cancelledTurn(noRunner, storeWriter({ tools: CODER_TOOL_SET }), read).pipe(
-          Effect.provide(noNetwork),
-        );
+        // The first Stop's cancel fails; the second finds the released runner gone.
+        yield* stop(EVE_CANCEL_OUTCOME.FAILED);
+        yield* stop(EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
         const stopped = yield* transcriptOf(agent.target.conversationId);
         const claimed = yield* claimDueCodingAgentWakeups(new Date(dueAt), new Date(dueAt), 100, 3);
         yield* post(agent.bearer, events.slice(3));
         const after = yield* transcriptOf(agent.target.conversationId);
 
         assert.deepEqual(
-          stopped.turns.map((turn) => turn.status),
-          [TURN_STATUS.CANCELLED],
+          stopped.turns.map((turn) => [turn.status, turn.usage?.inputTokens]),
+          [[TURN_STATUS.CANCELLED, 40]],
         );
         assert.deepEqual(
           claimed.filter((each) => each.agentId === agent.agentId),

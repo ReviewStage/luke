@@ -8,10 +8,10 @@ import { getTestDB, startTask } from "../../testing/index.js";
 import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
 import {
   claimDueCodingAgentWakeups,
+  codingAgentWaits,
   codingAgentWakeupStands,
   deleteCodingAgentWakeup,
   replaceCodingAgentWakeups,
-  waitingUntilOfReached,
 } from "../coding-agent-wakeups.js";
 
 /**
@@ -39,8 +39,7 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** An agent of the account's, by its id and its conversation's. */
-const openAgentWithConversation = (userId: string) =>
+const openAgent = (userId: string) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invitations", repository: "acme/relay" });
     const started = yield* createCodingAgent(userId, {
@@ -52,11 +51,8 @@ const openAgentWithConversation = (userId: string) =>
       prompt: null,
       repository: "acme/relay",
     });
-    const { id, conversationId } = Option.getOrThrow(started).agent;
-    return { id, conversationId };
+    return Option.getOrThrow(started).agent.id;
   });
-
-const openAgent = (userId: string) => Effect.map(openAgentWithConversation(userId), ({ id }) => id);
 
 /** The prompts a claim at `now` took of the agents named, in the order claimed. */
 const claimedOf = (now: Date, agentIds: readonly string[]) =>
@@ -169,24 +165,18 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
       }),
   );
 
-  it.effect(
-    "an agent holding wakeups waits until its earliest, and one holding none, or stopped, waits on nothing",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount;
-        const waiting = yield* openAgentWithConversation(owner);
-        const idle = yield* openAgentWithConversation(owner);
-        yield* replaceCodingAgentWakeups(waiting.id, [
-          { at: LATER, prompt: "Remind me to push." },
-          { at: NOW, prompt: "Check CI on #42." },
-        ]);
+  it.effect("an agent holding a wakeup waits, and one holding none, or stopped, does not", () =>
+    Effect.gen(function* () {
+      const owner = yield* openAccount;
+      const waiting = yield* openAgent(owner);
+      const idle = yield* openAgent(owner);
+      yield* replaceCodingAgentWakeups(waiting, [{ at: NOW, prompt: "Check CI on #42." }]);
 
-        const read = yield* waitingUntilOfReached([waiting.conversationId, idle.conversationId]);
-        assert.deepEqual(read.get(waiting.conversationId), NOW);
-        assert.equal(read.has(idle.conversationId), false);
+      assert.equal(yield* codingAgentWaits(waiting), true);
+      assert.equal(yield* codingAgentWaits(idle), false);
 
-        yield* replaceCodingAgentWakeups(waiting.id, []);
-        assert.equal((yield* waitingUntilOfReached([waiting.conversationId])).size, 0);
-      }),
+      yield* replaceCodingAgentWakeups(waiting, []);
+      assert.equal(yield* codingAgentWaits(waiting), false);
+    }),
   );
 });
