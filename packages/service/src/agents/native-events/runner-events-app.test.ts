@@ -292,7 +292,7 @@ function drawn(part: StoredUIMessage["parts"][number]): readonly WireValue[] {
 
 it.layer(getTestDB())("the runner events route", (it) => {
   it.effect(
-    "a call's ask whose line a native runner takes is bound to the turn that took it, as its whole turn where it opened it and from the step it joined at where it joined one under way, so the call follows that turn",
+    "a call's ask whose line a native runner takes is bound to the turn that took it, as its whole turn where it opened it and from the step it joined at where it joined one under way, before its first step among them, so the call follows that turn",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -314,6 +314,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
             return ask.id;
           });
         const opening = yield* delivered("dl_1");
+        const early = yield* delivered("dl_3");
         const joining = yield* delivered("dl_2");
         const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
         const step = (text: string) => ({
@@ -323,6 +324,8 @@ it.layer(getTestDB())("the runner events route", (it) => {
         });
         const batch = [
           { type: RUNNER_EVENT.ACCEPTED, uuid: opening },
+          // Taken into the turn the first line opened, before its first step.
+          { type: RUNNER_EVENT.ACCEPTED, uuid: early },
           { type: "system", subtype: "init", ...envelope },
           step("Looking."),
           { type: RUNNER_EVENT.ACCEPTED, uuid: joining },
@@ -337,10 +340,14 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const [turn] = (yield* transcriptOf(agent.target.conversationId)).turns;
         assert.ok(turn !== undefined);
         const opened = yield* asks.named(agent.userId, opening);
+        const joinedEarly = yield* asks.named(agent.userId, early);
         const joined = yield* asks.named(agent.userId, joining);
         assert.ok(opened?.turnId !== undefined);
-        assert.equal(joined?.turnId, opened.turnId);
-        assert.deepEqual([opened.joinedAfterStep, joined?.joinedAfterStep], [undefined, 1]);
+        assert.deepEqual([joinedEarly?.turnId, joined?.turnId], [opened.turnId, opened.turnId]);
+        assert.deepEqual(
+          [opened.joinedAfterStep, joinedEarly?.joinedAfterStep, joined?.joinedAfterStep],
+          [undefined, 0, 1],
+        );
       }),
   );
 

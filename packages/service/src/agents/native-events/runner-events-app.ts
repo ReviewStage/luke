@@ -336,7 +336,10 @@ function landWrite(
         ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
         (bound) =>
           bound.length > 0
-            ? Effect.void
+            ? // The call's own rows, written before its line was taken, go into the turn too.
+              Effect.flatMap(writer.attachAskLines(target, write.turnId), (attached) =>
+                reportRefused("a call's lines' attaching", attached),
+              )
             : Effect.flatMap(
                 writer.takeAwaitingLine(target, { clientId: write.clientId, turnId: write.turnId }),
                 (result) => reportRefused("a line's taking", result),

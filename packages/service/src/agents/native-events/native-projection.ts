@@ -176,7 +176,7 @@ export type NativeWrite =
       readonly kind: typeof NATIVE_WRITE.TAKE_LINE;
       readonly turnId: string;
       readonly clientId: string;
-      /** How many steps of the turn had begun where the line joined one under way; none where it opened the turn. */
+      /** How many steps of the turn had begun where the line joined one under way, zero among them; none where it opened the turn. */
       readonly joinedAfterStep?: number;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
@@ -460,15 +460,16 @@ class Fold {
   fold(moment: NativeMoment): void {
     switch (moment.kind) {
       case NATIVE_MOMENT.LINE_ACCEPTED: {
-        // Note that a line taken into a turn whose steps have begun joined it there, which is where a
-        // call's ask that joined it is told from, as eve's relay binds one (`brain-host/relay.ts`).
+        // Note that a line taken into a turn already under way joined it at the steps begun so far, none
+        // among them, which is where a call's ask that joined it is told from and what keeps its Stop its
+        // own, as eve's relay binds one (`brain-host/relay.ts`); only the line that opens the turn has none.
         const joined = this.state.turn?.steps;
         const turn = this.turn();
         this.writes.push({
           kind: NATIVE_WRITE.TAKE_LINE,
           turnId: turn.id,
           clientId: moment.clientId,
-          ...(joined === undefined || joined === 0 ? undefined : { joinedAfterStep: joined }),
+          ...(joined === undefined ? undefined : { joinedAfterStep: joined }),
         });
         return;
       }
