@@ -35,7 +35,6 @@
  * out is still refused by its door where a harness calls it anyway.
  */
 
-import { LUKE_TOOL_RESULT } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
@@ -293,55 +292,15 @@ function remoteBlock(block: WireValue): readonly McpContent[] {
   return [];
 }
 
-/** What a result cut to its bound says in the place of what it left out. */
-function cutMarker(leftOut: number): string {
-  return `\n… ${leftOut} characters of this result were left out here …\n`;
-}
-
-/** A text cut to the characters given: its first and last characters, and between them the count left out; nothing where the count alone would not fit. */
-function cutText(text: string, budget: number): string | undefined {
-  const marker = cutMarker(text.length - budget);
-  const kept = budget - marker.length;
-  if (kept < 0) return undefined;
-  const head = Math.ceil(kept / 2);
-  return `${text.slice(0, head)}${marker}${text.slice(text.length - (kept - head))}`;
-}
-
-/**
- * A provider's answer bounded as Luke hands it on (`LUKE_TOOL_RESULT`'s
- * `PROVIDER_CHARS`): its text blocks kept in order while they fit the bound
- * together, the one that overflows cut to its two ends with what is left
- * of the bound, and any after it dropped; a picture kept wherever it
- * stands, since the harness holds those to its own token bound. Note that
- * only a provider's words are cut, because they are the one answer no door
- * of Luke's bounds and are text to the transcript, where Luke's own answers
- * are JSON a cut would break and each door bounds already, as eve's tools
- * bound theirs.
- */
-function boundedContent(content: readonly McpContent[]): readonly McpContent[] {
-  let left: number = LUKE_TOOL_RESULT.PROVIDER_CHARS;
-  return content.flatMap((block): readonly McpContent[] => {
-    if (block.type !== "text") return [block];
-    if (block.text.length <= left) {
-      left -= block.text.length;
-      return [block];
-    }
-    const text = cutText(block.text, left);
-    left = 0;
-    return text === undefined ? [] : [{ type: "text", text }];
-  });
-}
-
-/** What the agent is shown of a connection call: the tool's own content blocks where any is no text, its text, or its JSON, each bounded; the refusal's JSON otherwise. */
+/** What the agent is shown of a connection call: the tool's own content blocks where any is no text, its text, or its JSON; the refusal's JSON otherwise. */
 function executedContent(result: LukeMcpToolResult): readonly McpContent[] {
   if (!isExecuted(result)) return [{ type: "text", text: JSON.stringify(result) }];
   const { output } = result;
   if (Array.isArray(output)) {
     const blocks = output.flatMap(remoteBlock);
-    if (blocks.some((block) => block.type !== "text")) return boundedContent(blocks);
+    if (blocks.some((block) => block.type !== "text")) return blocks;
   }
-  const text = typeof output === "string" ? output : JSON.stringify(output);
-  return boundedContent([{ type: "text", text }]);
+  return [{ type: "text", text: typeof output === "string" ? output : JSON.stringify(output) }];
 }
 
 /**

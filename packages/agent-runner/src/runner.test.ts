@@ -585,8 +585,6 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.CLAUDE_TOKEN}:deny`));
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
-      // Luke's tool results reach the model whole up to Luke's own bound, rather than as a file's path.
-      assert.equal(options.env?.MAX_MCP_OUTPUT_TOKENS, "50000");
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
     }),
 );

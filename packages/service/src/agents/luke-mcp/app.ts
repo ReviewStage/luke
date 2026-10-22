@@ -25,7 +25,6 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { LUKE_TOOL_RESULT } from "@luke/agent-runner/protocol";
 import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
@@ -194,8 +193,14 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
   };
 }
 
-/** What each listed tool declares to the harness: the most of its result Claude Code is to take whole rather than save to a file. */
-const TOOL_META = { "anthropic/maxResultSizeChars": LUKE_TOOL_RESULT.MAX_CHARS } as const;
+/**
+ * What each listed tool declares to Claude Code: the most of its result it
+ * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
+ * characters it would save the result to a file and hand the model a path
+ * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). Eve
+ * hands its model a Luke tool's whole result, which each door bounds.
+ */
+const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
 /** What an agent whose row is gone is offered by: no task, no repository, and no operator's tools. */
 const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
