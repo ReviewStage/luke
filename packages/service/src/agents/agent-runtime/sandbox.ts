@@ -8,7 +8,10 @@
  * to need, which the base image carries or `prepare` installs, and
  * Playwright with its Chromium, which an agent screenshots what it built
  * with and which the agent's own browser runs headful, and GTK 3, the one library an Electron app needs beyond Chromium's,
- * so an agent runs a desktop app under Xvfb the same way. Node is the
+ * so an agent runs a desktop app under Xvfb the same way, and a C toolchain
+ * with Rust's stable toolchain shared read-only by every user, so an agent
+ * builds a native project, smol-machines/smolvm among them, though no KVM
+ * stands in the sandbox to run the VMs it builds. Node is the
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
  * rather than escape codes it has to strip. Every session starts from the

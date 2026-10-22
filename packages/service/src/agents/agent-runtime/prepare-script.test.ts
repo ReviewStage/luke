@@ -23,7 +23,9 @@ import { PREPARE_SCRIPT } from "./sandbox-image.js";
  * machine with, or that a test machine may lack, is a stand-in on the
  * search path that writes down how it was called: sudo and the package
  * managers among them, so nothing is installed and no sudoers file is
- * touched. The stand-ins answer as a fresh sandbox would: the default user
+ * touched. Rust's installer is downloaded to a path the stand-ins never
+ * write, so the proxies it would make are none, and no wrapper is written.
+ * The stand-ins answer as a fresh sandbox would: the default user
  * is not root and `agent` does not exist yet.
  */
 
@@ -57,6 +59,11 @@ const STOOD_IN = [
   "sed",
   "tee",
   "visudo",
+  "cc",
+  "cmake",
+  "pkg-config",
+  "cargo",
+  "rustc",
 ] as const;
 
 /**
@@ -77,6 +84,7 @@ const STAND_IN = [
   '  "codex --version") echo "codex-cli $CODEX_PRINTS" ;;',
   '  setpriv*) exit "$SETPRIV_EXIT" ;;',
   '  "sudo -n bash -c "*) exit "$SUDO_KEEPS_EXIT" ;;',
+  '  "cargo --version") exit "$CARGO_EXIT" ;;',
   "esac",
   "exit 0",
 ].join("\n");
@@ -88,6 +96,8 @@ interface Scenario {
   readonly codexPrints?: string;
   /** How the check that `sudo` keeps a variable exits: 0 where it keeps it. */
   readonly sudoKeepsExit?: number;
+  /** How `cargo --version` exits as the default user runs it: 0 where its wrapper finds the toolchain. */
+  readonly cargoExit?: number;
 }
 
 /** The script run once in a bash over the stand-ins: its exit, what it printed on stderr, and every call, in order. */
@@ -115,6 +125,7 @@ async function prepare(t: TestContext, scenario: Scenario) {
         SETPRIV_EXIT: String(scenario.setprivExit),
         CODEX_PRINTS: scenario.codexPrints ?? "0.163.0",
         SUDO_KEEPS_EXIT: String(scenario.sudoKeepsExit ?? 0),
+        CARGO_EXIT: String(scenario.cargoExit ?? 0),
       },
     },
   );
@@ -197,4 +208,35 @@ test("the image fails where sudo still drops a variable it was handed", async (t
   const { exitCode, stderr } = await prepare(t, { setprivExit: 0, sudoKeepsExit: 1 });
   assert.notEqual(exitCode, 0);
   assert.match(stderr, /sudo does not keep the environment/);
+});
+
+test("the image gets a C toolchain and Rust's stable toolchain as root, and checks as the default user that Cargo answers, before the capability check", async (t) => {
+  const { exitCode, stderr, calls } = await prepare(t, { setprivExit: 0 });
+  assert.equal(exitCode, 0, stderr);
+
+  const steps = [
+    "sudo -n dnf install -y gcc gcc-c++ make cmake pkgconf-pkg-config openssl-devel git-lfs",
+    "sudo -n git lfs install --system",
+    "curl -fsSL -o /tmp/rustup-init https://static.rust-lang.org/rustup/archive/1.29.2/x86_64-unknown-linux-gnu/rustup-init",
+    "sha256sum --check --quiet",
+    "sudo -n env HOME=/root RUSTUP_HOME=/opt/luke/rust/rustup CARGO_HOME=/opt/luke/rust/cargo /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain stable --component clippy,rustfmt",
+    "cargo --version",
+    "cargo clippy --version",
+    "cargo fmt --version",
+    "setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all -- grep ",
+  ].map((start) => indexOfCall(calls, start));
+  assert.deepEqual(
+    steps,
+    [...steps].sort((a, b) => a - b),
+  );
+  // Cargo is checked as the default user runs it, which no sudo stands in front of.
+  assert.deepEqual(
+    calls.filter((call) => /^sudo -n (cargo|rustc|rustup)/u.test(call)),
+    [],
+  );
+});
+
+test("the image fails where Cargo does not answer as the default user runs it", async (t) => {
+  const { exitCode } = await prepare(t, { setprivExit: 0, cargoExit: 1 });
+  assert.notEqual(exitCode, 0);
 });

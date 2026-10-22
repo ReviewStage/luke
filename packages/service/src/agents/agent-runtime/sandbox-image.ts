@@ -68,6 +68,78 @@ const INSTALL_GTK =
   "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y gtk3; else $SUDO apt-get install -y --no-install-recommends libgtk-3-0t64 || $SUDO apt-get install -y --no-install-recommends libgtk-3-0; fi";
 
 /**
+ * Installs a C and C++ toolchain, make, CMake, pkg-config, OpenSSL's
+ * headers, and Git LFS with the system's own package manager, `$SUDO` as
+ * `PREPARE_TMUX` set it, then turns LFS on for every user. A native build,
+ * a Rust crate's `build.rs` among them (`ring`, `aws-lc-sys`, `zstd-sys`),
+ * needs a compiler and a linker, and no shell of a sandbox's can install one
+ * itself, since each runs under the capability drop, which leaves it no sudo.
+ * Git LFS is what fetches the prebuilt libraries a repository such as
+ * smol-machines/smolvm keeps beside its source.
+ */
+const INSTALL_BUILD_TOOLS = [
+  "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y gcc gcc-c++ make cmake pkgconf-pkg-config openssl-devel git-lfs; else $SUDO apt-get install -y --no-install-recommends build-essential cmake pkg-config libssl-dev git-lfs; fi",
+  "$SUDO git lfs install --system",
+  // One check a line: under `set -e`, a failure before the last of an `&&` list stops nothing.
+  "cc --version",
+  "cmake --version",
+  "pkg-config --version",
+  "git lfs version",
+];
+
+/**
+ * Rust's stable toolchain with Clippy and rustfmt, installed by rustup as
+ * root under a directory only root writes, as Claude Code and Codex are, and
+ * shared by every user of the sandbox. rustup's installer is pinned to a
+ * release and to the SHA-256 rustup publishes for its Linux x86-64 binary.
+ * The channel is `stable` rather than a version, so a repository whose
+ * `rust-toolchain.toml` names `stable` (smol-machines/smolvm's does) finds
+ * its toolchain already installed; it is the stable of the day the image is
+ * prepared. Note that a repository pinning another toolchain cannot have
+ * rustup install it in this read-only home: its shell sets `RUSTUP_HOME` to
+ * one of its own, `~/.rustup`, which the wrappers below leave alone.
+ */
+const RUST = {
+  RUSTUP_VERSION: "1.29.2",
+  RUSTUP_INIT_SHA256: "5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4",
+  TOOLCHAIN: "stable",
+  COMPONENTS: "clippy,rustfmt",
+  RUSTUP_HOME: "/opt/luke/rust/rustup",
+  CARGO_HOME: "/opt/luke/rust/cargo",
+  /** Where each of rustup's proxies is linked, by a wrapper that names `RUSTUP_HOME`. */
+  LINK_DIRECTORY: "/usr/local/bin",
+} as const;
+
+/**
+ * Installs rustup and the toolchain where rustup does not already print the
+ * pin, then writes, for each proxy rustup made (`cargo`, `rustc`, `rustup`,
+ * `cargo-clippy`, `rustfmt`, ...), a wrapper on every user's search path
+ * that runs it with the shared `RUSTUP_HOME` unless the caller named its
+ * own, `$SUDO` as `PREPARE_TMUX` set it. Each user's `CARGO_HOME` stays its
+ * own `~/.cargo`, where Cargo keeps the registry it downloads and what
+ * `cargo install` builds. Last, it checks as the default user, without sudo,
+ * that Cargo, rustc, Clippy, and rustfmt answer from the read-only home.
+ */
+const INSTALL_RUST = [
+  `if ! RUSTUP_HOME=${RUST.RUSTUP_HOME} ${RUST.CARGO_HOME}/bin/rustup --version 2>/dev/null | grep -q '^rustup ${RUST.RUSTUP_VERSION} '; then`,
+  `  curl -fsSL -o /tmp/rustup-init https://static.rust-lang.org/rustup/archive/${RUST.RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init`,
+  `  echo '${RUST.RUSTUP_INIT_SHA256}  /tmp/rustup-init' | sha256sum --check --quiet`,
+  "  chmod 755 /tmp/rustup-init",
+  `  $SUDO env HOME=/root RUSTUP_HOME=${RUST.RUSTUP_HOME} CARGO_HOME=${RUST.CARGO_HOME} /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain ${RUST.TOOLCHAIN} --component ${RUST.COMPONENTS}`,
+  "  rm -f /tmp/rustup-init",
+  "fi",
+  `for proxy in ${RUST.CARGO_HOME}/bin/*; do`,
+  '  [ -e "$proxy" ] || continue',
+  `  printf '#!/bin/sh\\nexport RUSTUP_HOME="\${RUSTUP_HOME:-${RUST.RUSTUP_HOME}}"\\nexec %s "$@"\\n' "$proxy" | $SUDO tee "${RUST.LINK_DIRECTORY}/$(basename "$proxy")" >/dev/null`,
+  `  $SUDO chmod 755 "${RUST.LINK_DIRECTORY}/$(basename "$proxy")"`,
+  "done",
+  "cargo --version",
+  "rustc --version",
+  "cargo clippy --version",
+  "cargo fmt --version",
+];
+
+/**
  * Makes every `apt-get` after it wait up to ten minutes for dpkg's lock
  * rather than fail at once. A freshly booted image can have another
  * `apt-get` holding it as `prepare` starts, and Playwright's own
@@ -214,6 +286,9 @@ export const PREPARE_SCRIPT = [
   "playwright install --with-deps chromium",
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
+  // A compiler and Rust, so an agent builds a native project, smol-machines/smolvm among them.
+  ...INSTALL_BUILD_TOOLS,
+  ...INSTALL_RUST,
   ...INSTALL_GH_STACK,
   ...INSTALL_BUBBLEWRAP,
   ...INSTALL_CLAUDE_CODE,
