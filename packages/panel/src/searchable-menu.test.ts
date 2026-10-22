@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu.js";
 
 /**
@@ -13,7 +13,8 @@ import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu.js
  * Left open and close a pinned row's submenu, Escape closes the submenu
  * before the menu and never reaches what stands behind it, Enter picks with
  * or without Command, keys an input method is composing with pick and move
- * nothing, and a list too short to search reads the same keys itself.
+ * nothing, a list too short to search reads the same keys itself, and a
+ * submenu turns left where it would run past the room its menu keeps to.
  */
 
 declare global {
@@ -31,6 +32,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 const ROWS: readonly MenuRow[] = [
@@ -66,12 +68,13 @@ function footOf(said: string[]): FootRow[] {
 }
 
 /** The menu drawn over `rows`, with a field where `placeholder` is given, in a page that hears what Escape reaches. */
-function mount(options: { placeholder?: string; foot?: boolean } = {}) {
+function mount(options: { placeholder?: string; foot?: boolean; room?: boolean } = {}) {
   const asked: Asked = { said: [], escapedPast: [] };
   // Note that the page listens a box above React's root, because a press
   // kept from it still reaches the root's own listeners.
   const page = document.body.appendChild(document.createElement("div"));
   const container = page.appendChild(document.createElement("div"));
+  if (options.room === true) page.dataset.popoverRoom = "";
   page.addEventListener("keydown", (event) => {
     if (event.key === "Escape") asked.escapedPast.push("Escape");
   });
@@ -207,4 +210,24 @@ test("a list too short to search holds focus, names its highlight, and reads the
   assert.equal(document.activeElement, keys());
   assert.equal(moved, "Haiku");
   assert.deepEqual(asked.said, ["pick haiku"]);
+});
+
+test("a submenu that would run past the room its menu keeps to turns to the left, though the window has room", () => {
+  // jsdom lays nothing out, so the window, the room, and the submenu are answered as a side panel would lay them.
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1200);
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.dataset.popoverRoom !== undefined) return new DOMRect(0, 0, 400, 800);
+    if (this.classList.contains("task-compose-submenu")) return new DOMRect(300, 100, 200, 100);
+    return new DOMRect(0, 0, 0, 0);
+  });
+  mount({ placeholder: "Search models", foot: true, room: true });
+  press({ key: "ArrowUp" });
+  press({ key: "ArrowUp" });
+  press({ key: "ArrowRight" });
+
+  const submenu = document.querySelector<HTMLElement>(".task-compose-submenu");
+  assert.equal(submenu?.dataset.side, "left");
 });
