@@ -102,6 +102,7 @@
     "./agents/coder-host/usage": "./src/agents/coder-host/usage.js",
     "./agents/luke-mcp/app": "./src/agents/luke-mcp/app.js",
     "./agents/luke-mcp/sandbox-door": "./src/agents/luke-mcp/sandbox-door.js",
+    "./agents/native-events/native-title": "./src/agents/native-events/native-title.js",
     "./agents/native-events/runner-events-app": "./src/agents/native-events/runner-events-app.js",
     "./agents/native-events/runner-token-app": "./src/agents/native-events/runner-token-app.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",

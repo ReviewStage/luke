@@ -5,6 +5,7 @@ import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
 import {
   NATIVE_MOMENT,
+  type NativeContextUsage,
   type NativeHeld,
   type NativeMoment,
   PLAN_STATUS,
@@ -76,12 +77,23 @@ const readEnvelope = Schema.decodeUnknownOption(
 
 const readInit = Schema.decodeUnknownOption(Schema.Struct({ session_id: Schema.String }));
 
+const COUNT = Schema.optionalKey(Schema.NullOr(Schema.Number));
+
+/** A model call's usage as the Messages API counts it: the input apart from what the prefix cache read and wrote. */
+const MessageUsageSchema = Schema.Struct({
+  input_tokens: COUNT,
+  output_tokens: COUNT,
+  cache_read_input_tokens: COUNT,
+  cache_creation_input_tokens: COUNT,
+});
+
 const readAssistant = Schema.decodeUnknownOption(
   Schema.Struct({
     error: Schema.optionalKey(Schema.String),
     message: Schema.Struct({
       id: Schema.optionalKey(Schema.String),
       content: Schema.Array(WireValueSchema),
+      usage: Schema.optionalKey(Schema.NullOr(MessageUsageSchema)),
     }),
   }),
 );
@@ -106,20 +118,12 @@ const readStreamEvent = Schema.decodeUnknownOption(
   }),
 );
 
-const COUNT = Schema.optionalKey(Schema.NullOr(Schema.Number));
 const readResult = Schema.decodeUnknownOption(
   Schema.Struct({
     subtype: Schema.String,
     is_error: Schema.optionalKey(Schema.Boolean),
     errors: Schema.optionalKey(Schema.Array(Schema.String)),
-    usage: Schema.optionalKey(
-      Schema.Struct({
-        input_tokens: COUNT,
-        output_tokens: COUNT,
-        cache_read_input_tokens: COUNT,
-        cache_creation_input_tokens: COUNT,
-      }),
-    ),
+    usage: Schema.optionalKey(MessageUsageSchema),
   }),
 );
 
@@ -202,14 +206,33 @@ function settlementOf(
     : toolAnswerSettlement({ lukeTool: false, text, output: text }, isError);
 }
 
+/**
+ * What one model call read and wrote, as the context ring reads it. Note
+ * that the input the provider counts excludes what the prefix cache read and
+ * what was written to it, while the ring's input counts both, as eve's does.
+ */
+function contextOf(usage: typeof MessageUsageSchema.Type): NativeContextUsage {
+  const cachedInputTokens = counted(usage.cache_read_input_tokens);
+  const cacheWriteTokens = counted(usage.cache_creation_input_tokens);
+  return {
+    inputTokens: counted(usage.input_tokens) + cachedInputTokens + cacheWriteTokens,
+    outputTokens: counted(usage.output_tokens),
+    cachedInputTokens,
+    cacheWriteTokens,
+  };
+}
+
 /** A model call's answer, or the one block of it the SDK streams as a message: a step, and its words, reasoning, and calls. */
 function assistantMoments(message: WireValue): readonly NativeMoment[] {
   const read = readAssistant(message);
   if (Option.isNone(read)) return [];
-  const { id, content } = read.value.message;
+  const { id, content, usage } = read.value.message;
   const moments: NativeMoment[] = [
     id === undefined ? { kind: NATIVE_MOMENT.STEP } : { kind: NATIVE_MOMENT.STEP, key: id },
   ];
+  if (usage !== undefined && usage !== null) {
+    moments.push({ kind: NATIVE_MOMENT.CONTEXT, usage: contextOf(usage) });
+  }
   const { error } = read.value;
   if (error !== undefined && CREDENTIAL_REFUSED.has(error)) {
     moments.push({ kind: NATIVE_MOMENT.PLAN, status: PLAN_STATUS.INVALID });
