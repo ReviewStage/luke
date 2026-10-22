@@ -147,6 +147,30 @@
     --luke-button-ink: var(--luke-color-danger-text);
   }
 
+  /* A row, a card's act drawn as a menu's row: the row's width, height,
+     corner, and inset, its words at its start in the body's type, lit by
+     the menu row's fill under the pointer and the keyboard alike, never
+     ringed. */
+  .luke-button[data-variant="row"] {
+    display: flex;
+    width: 100%;
+    justify-content: flex-start;
+    height: var(--luke-menu-row-height);
+    padding: 0 var(--luke-space-8);
+    border-radius: var(--luke-menu-row-radius);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-button[data-variant="row"]:is(:hover, :focus-visible, [aria-expanded="true"]):not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    outline: none; /* no ring: the row's fill marks it, as a menu's does */
+    --luke-button-fill: var(--luke-color-fill-strong);
+  }
+
   /* Round, a glyph alone is a disc and words a pill, held off its round
      ends by half its height. */
   .luke-button[data-shape="round"] {

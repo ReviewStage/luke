@@ -3120,6 +3120,42 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/46"]);
 });
 
+test("a pull request of the stack GitHub's merge queue holds says Queued in the stack's menu, and one it does not says nothing of it", async () => {
+  const entry = (number: number, queued: boolean) => ({
+    number,
+    title: `Step ${number}`,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    draft: false,
+    ...(queued ? { queued: true as const } : undefined),
+  });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: { ...PULL_REQUEST, stack: [entry(40, true), entry(42, false)] },
+        }),
+    }),
+    PULL_REQUEST_VIEW.CONVERSATION,
+  );
+  const button =
+    tab.querySelector<HTMLButtonElement>(
+      '.pull-request-branch-row button[aria-label="Stack, 2 of 2"]',
+    ) ?? assert.fail("the stack stands beside the branches");
+
+  act(() => button.click());
+  const items = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      ':is([role="menuitem"], [role="menuitemcheckbox"])',
+    ),
+  ];
+
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["#42 Step 42", "#40 Step 40Queued · Opens on GitHub"],
+  );
+  act(() => button.click());
+});
+
 test("a pull request in no stack draws no stack", async () => {
   const tab = await draw(
     controlAnswering({

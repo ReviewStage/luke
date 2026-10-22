@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
 import {
   type CodingAgent,
   createCodingAgent,
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -20,8 +22,10 @@ import {
 } from "@luke/database/models/recorded-session";
 import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
@@ -31,6 +35,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
@@ -992,6 +997,77 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               each.name,
             );
           }
+        }),
+    );
+
+    it.effect(
+      "a Start's first message stands in a native agent's transcript as the line awaiting its turn, its id handed to the runner, which names it back as it takes it, on Claude Code and Codex alike; eve writes its own",
+      () =>
+        Effect.gen(function* () {
+          const layers = (native: ReturnType<typeof runtimes>["native"]) =>
+            Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native);
+          const cases = [
+            {
+              name: "Claude Code",
+              token: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+            },
+            { name: "Codex", token: false, chatGpt: "signed_in", model: "openai/gpt-5.5" },
+          ] as const;
+          for (const each of cases) {
+            const { owner, workspaceId } = yield* openStarter(each.token, each.chatGpt);
+            const { eve, claudeCode, codex, native } = runtimes();
+            const started = yield* startCodingAgent(
+              routedSessions(eve.sessions, owner),
+              owner,
+              startIn(workspaceId, each.model),
+            ).pipe(Effect.provide(layers(native)));
+
+            const [handed] = [...claudeCode.messages, ...codex.messages];
+            assert.ok(handed?.lineId !== undefined, each.name);
+            assert.ok(
+              yield* sentLineStands(owner, started.agent.conversationId, handed.lineId),
+              each.name,
+            );
+          }
+
+          // An automation's run says its prompt as the automation, never as its creator.
+          const automated = yield* openStarter(true);
+          const byAutomation = runtimes();
+          const run = yield* startCodingAgent(
+            routedSessions(byAutomation.eve.sessions, automated.owner),
+            automated.owner,
+            {
+              ...startIn(automated.workspaceId, "anthropic/claude-opus-5.5"),
+              automationOrigin: {
+                name: "Nightly checks",
+                firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+                prompt: "Fix the flaky test.",
+              },
+            },
+          ).pipe(Effect.provide(layers(byAutomation.native)));
+          const lineId = byAutomation.claudeCode.messages[0]?.lineId ?? "";
+          const db = yield* Database;
+          const [said] = yield* db
+            .select({ sender: messages.sender, senderName: messages.senderName })
+            .from(messages)
+            .where(eq(messages.clientId, lineId));
+          assert.deepEqual(said, {
+            sender: MESSAGE_SENDER.AUTOMATION,
+            senderName: "Nightly checks",
+          });
+          assert.ok(run.agent.conversationId !== "");
+
+          const keyed = yield* openStarter(false);
+          yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+          const onEve = runtimes();
+          yield* startCodingAgent(
+            routedSessions(onEve.eve.sessions, keyed.owner),
+            keyed.owner,
+            startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"),
+          ).pipe(Effect.provide(layers(onEve.native)));
+          assert.equal(onEve.eve.messages[0]?.lineId, undefined);
         }),
     );
 

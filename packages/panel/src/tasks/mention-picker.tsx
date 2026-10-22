@@ -1090,7 +1090,7 @@ export interface MentionChannels {
 
 /** One of the task's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
 export interface MentionablePullRequest
-  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks"> {
+  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks" | "queued"> {
   readonly agent: string | undefined;
 }
 
@@ -1497,14 +1497,14 @@ export function useMentionPicker({
     datePicker.open({
       at: word.rect,
       date: undefined,
-      onClose: ({ date, changed, how }: DatePicked) => {
+      onClose: ({ date, zone, changed, how }: DatePicked) => {
         const kept = how === DATE_PICKER_CLOSE.CLEAR || !changed ? undefined : date;
         if (
           (kept !== undefined || how !== DATE_PICKER_CLOSE.LEAVE) &&
           editing instanceof HTMLElement
         )
           editing.focus();
-        if (kept !== undefined) onChoose(dateMentionNode(kept, place));
+        if (kept !== undefined) onChoose(dateMentionNode(kept, place, zone));
       },
     });
   };

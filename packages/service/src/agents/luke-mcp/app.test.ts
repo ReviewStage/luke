@@ -13,7 +13,7 @@ import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
@@ -220,6 +220,30 @@ const agentWithBearer = Effect.gen(function* () {
   const bearer = randomBytes(32).toString("base64url");
   yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
   return { userId, taskId: task.id, agentId: agent.id, bearer };
+});
+
+/** A Codex agent on no task and in no repository, as an automation's run starts one, with a runner's bearer recorded for its conversation. */
+const agentOnNoTaskWithBearer = Effect.gen(function* () {
+  const db = yield* Database;
+  const userId = `user-${randomUUID()}`;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  const organizationId = yield* openWorkspace(userId);
+  const started = yield* createCodingAgent(userId, {
+    taskId: null,
+    organizationId,
+    planSnapshot: null,
+    prompt: "Chart the funnel",
+    idempotencyKey: randomUUID(),
+    model: "openai/gpt-5.5",
+    effort: "high",
+    repository: null,
+    runtime: CONVERSATION_RUNTIME.CODEX,
+    payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  });
+  const agent = Option.getOrThrow(started).agent;
+  const bearer = randomBytes(32).toString("base64url");
+  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+  return { userId, agentId: agent.id, bearer };
 });
 
 /** What a fake Chromium's page answers beside its targets, as Chrome does for a screenshot of it. */
@@ -583,7 +607,11 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         yield* Effect.promise(() => client.close());
 
         const names = listed.tools.map((tool) => tool.name);
-        assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
+        // Note that an operator's own read is the one tool eve offers no agent on a task.
+        assert.deepEqual(
+          [...names].sort(),
+          SERVED_TOOLS.filter((name) => name !== "list_open_asks").sort(),
+        );
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
           const served = LUKE_MCP_TOOLS.get(tool.name);
@@ -591,6 +619,37 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           assert.equal(tool.description, served.description);
           assert.deepEqual(tool.inputSchema, served.inputSchema);
         }
+      }),
+  );
+
+  it.effect(
+    "tools/list leaves out what eve offers no agent on no task and in no repository: the plan's, the board's, the comments', and the checkout's",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentOnNoTaskWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
+
+        const listed = yield* Effect.promise(() => client.listTools());
+        yield* Effect.promise(() => client.close());
+
+        const withheld = [
+          "edit_plan",
+          "look_at_picture",
+          "draw_on_board",
+          "look_at_board",
+          "read_comments",
+          "reply_to_comment",
+          "resolve_thread",
+          "reopen_thread",
+          "open_pull_request",
+          "show_code",
+          "list_open_asks",
+        ];
+        assert.deepEqual(
+          listed.tools.map((tool) => tool.name).sort(),
+          SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),
+        );
       }),
   );
 

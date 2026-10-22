@@ -1448,14 +1448,17 @@ const stackAgentSchema = EffectSchema.Struct({
 
 /**
  * One open pull request of the stack a pull request stands in: its number,
- * title, and page; whether it is a draft; and the agent of the workspace
- * whose branch is its head, where one is.
+ * title, and page; whether it is a draft, and whether GitHub's merge queue
+ * holds it; and the agent of the workspace whose branch is its head, where
+ * one is.
  */
 const stackEntrySchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
   url: EffectSchema.String,
   draft: EffectSchema.Boolean,
+  /** True where the merge queue holds it; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   agent: EffectSchema.optionalKey(stackAgentSchema),
 });
 

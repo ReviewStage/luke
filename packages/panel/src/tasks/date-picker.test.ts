@@ -369,6 +369,84 @@ test("Include time puts a time on the day, spelled with the offset the reader's 
   assert.equal(chipIn(container).textContent, "Friday 9:00 AM");
 });
 
+/** Time zone's field pressed, and the page of zones it turns the picker to. */
+async function openZones(container: HTMLElement, dialog: HTMLElement): Promise<HTMLElement> {
+  act(() => control(dialog, 'button[aria-label^="Time zone: "]').click());
+  await act(async () => undefined);
+  const zones = picker(container);
+  assert.ok(zones, "the picker stands on its zones");
+  return zones;
+}
+
+test("Time zone keeps the time as written, read in the zone picked, and names the date in its words", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="Include time"]').click());
+  const zones = await openZones(container, dialog);
+  typeWords(zones, "Search time zones", "tokyo");
+  await pressKey(zones, "Enter");
+  const card = picker(container);
+  assert.ok(card);
+  const field = control(card, 'button[aria-label^="Time zone: "]');
+  const focused = document.activeElement === field;
+  const time = fieldOf(card, "Start time").value;
+  await pressKey(card, "Escape");
+  const [mention] = mentionsIn(editor);
+
+  assert.equal(field.getAttribute("aria-label"), "Time zone: Asia/Tokyo");
+  assert.equal(focused, true, "the focus is back on Time zone's field");
+  assert.equal(time, "09:00");
+  assert.equal(mention?.target, "luke://date/2026-10-23T09:00+09:00");
+  assert.equal(mention?.name, "Oct 23, 2026, 9:00 AM GMT+9");
+});
+
+test("a zone of the same offset picked names the date anew in that zone's words", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="Include time"]').click());
+  let zones = await openZones(container, dialog);
+  typeWords(zones, "Search time zones", "los angeles");
+  await pressKey(zones, "Enter");
+  await pressKey(picker(container) ?? dialog, "Escape");
+  const again = await pressChip(container);
+  act(() => control(again, 'button[role="switch"][aria-label="Include time"]').click());
+  act(() => control(again, 'button[role="switch"][aria-label="Include time"]').click());
+  zones = await openZones(container, again);
+  typeWords(zones, "Search time zones", "phoenix");
+  await pressKey(zones, "Enter");
+  await pressKey(picker(container) ?? again, "Escape");
+  const [mention] = mentionsIn(editor);
+
+  assert.equal(mention?.target, "luke://date/2026-10-23T09:00-07:00");
+  assert.equal(mention?.name, "Oct 23, 2026, 9:00 AM MST");
+});
+
+test("Escape on the zones turns back to the date, which stays open and unchanged", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="Include time"]').click());
+  const zones = await openZones(container, dialog);
+  await pressKey(zones, "Escape");
+  const card = picker(container);
+
+  assert.ok(card, "the picker is still open");
+  assert.equal(fieldOf(card, "Start time").value, "09:00");
+  assert.deepEqual(mentionsIn(editor), [
+    { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
+  ]);
+});
+
+test("Time zone stands only while Include time is on", async () => {
+  const { container } = await opened();
+
+  const dialog = await pressChip(container);
+
+  assert.equal(dialog.querySelector('button[aria-label^="Time zone: "]'), null);
+});
+
 test("words typed in the picker that name a date are written as it on Enter", async () => {
   const { container, editor } = await opened();
 
