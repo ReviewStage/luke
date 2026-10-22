@@ -144,8 +144,9 @@
    the working ink: filled from its start to the share gone up on
    `transform`, so the bar never changes size, and easing to each new share
    as a pane does rather than springing past it; where no share is known, a
-   third of the track sweeps across it, an endless loop with no end to wait
-   for, so its duration is a literal held still on --luke-loop-motion. A file
+   third of the track sweeps across it from its middle, an endless loop
+   with no end to wait for, so its duration is a literal held still on
+   --luke-loop-motion. A file
    that lands takes a check on its corner, which springs in on the pair an
    arriving element rides and fades after a beat. */
 @layer components {
@@ -206,12 +207,22 @@
     color: inherit;
   }
 
+  /* Note that the sweep starts with its segment in the track's middle
+     third and wraps round off its ends, because a loop held still holds its
+     first frame, and a segment held off the track would leave reduced motion
+     and a capture with no sign of the upload at all. */
   @keyframes luke-attachment-chip-sweep {
-    from {
+    0% {
+      transform: translateX(100%);
+    }
+    50% {
+      transform: translateX(300%);
+    }
+    50.001% {
       transform: translateX(-100%);
     }
-    to {
-      transform: translateX(300%);
+    100% {
+      transform: translateX(100%);
     }
   }
 
