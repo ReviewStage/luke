@@ -70,8 +70,8 @@ import {
  * with problems never tickable; names the paste asked for that no folder
  * holds are listed after. For text, the name it declares, and a field for
  * a name or a description where it has none. Install for offers Just me,
- * and Everyone in the workspace to its owners and admins outside a
- * personal workspace. Install sends the paste again whole, as the service
+ * and Everyone in the workspace to any member outside a personal
+ * workspace. Install sends the paste again whole, as the service
  * reads it afresh; a refusal is said in plain words under the box.
  */
 

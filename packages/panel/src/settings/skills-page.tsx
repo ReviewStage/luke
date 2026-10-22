@@ -49,9 +49,9 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * badge, and under them its description, where its files came from, and who
  * installed it; at its end an Update available button where a GitHub
  * skill's folder moved at its ref, its switch, and a ⋯ with Remove, which
- * asks first. A row the account may not change, a workspace skill to a
- * member who is not an owner or admin, draws its switch unavailable and no
- * ⋯. A line at the top says where repository skills come from and that a
+ * asks first. A row the account may not change, a teammate's workspace
+ * skill to a member who is not an owner or admin, as the service says by
+ * `manageable`, draws its switch unavailable and no ⋯. A line at the top says where repository skills come from and that a
  * change reaches only agents started afterwards, which nothing else on the
  * page can say. Add skill opens the dialog (`add-skill-dialog.tsx`), whose
  * install lands in the list at once. The list is read when the page is

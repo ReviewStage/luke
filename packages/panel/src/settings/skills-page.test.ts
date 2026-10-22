@@ -30,8 +30,8 @@ import { SkillsPage } from "./skills-page.js";
  * first. In the dialog, a pasted command is previewed with its skills ticked
  * where it asked for them, a skill with problems never tickable; Install
  * sends the ticked ones; a refusal is said in words; text with no
- * description asks for one; and Everyone in the workspace is offered to its
- * owners and admins alone. Synthetic names and ids.
+ * description asks for one; and Everyone in the workspace is offered to
+ * every member, never in a personal workspace. Synthetic names and ids.
  */
 
 const READER = "user-ada";
@@ -416,8 +416,8 @@ test("a source on another host says only GitHub for now and asks the service not
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), []);
 });
 
-test("Everyone in the workspace is offered to an owner and installs there, and not to a member", async () => {
-  await mountDialog();
+test("Everyone in the workspace is offered to a member and installs there, and not in a personal workspace", async () => {
+  await mountDialog(workspace({ role: WORKSPACE_ROLE.MEMBER }));
   await paste(COMMAND);
   act(() => button("Everyone in Stage").click());
   act(() => button("Install").click());
@@ -428,7 +428,7 @@ test("Everyone in the workspace is offered to an owner and installs there, and n
   );
 
   for (const root of roots.splice(0)) act(() => root.unmount());
-  await mountDialog(workspace({ role: WORKSPACE_ROLE.MEMBER }));
+  await mountDialog(workspace({ personal: true }));
   assert.ok(!(document.body.textContent ?? "").includes("Everyone in Stage"));
 });
 

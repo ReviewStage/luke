@@ -27,7 +27,6 @@ import {
   type SkillPasteUnsupportedReason,
 } from "@luke/features/skill-paste";
 import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
-import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 
 /**
@@ -189,7 +188,7 @@ const FAILURE_WORDS = {
   [INSTALLED_SKILL_CALL_FAILURE.UNANSWERED]: "Luke couldn't reach the service. Try again.",
   [INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND]: "That skill or workspace is no longer yours to reach.",
   [INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED]:
-    "Only the workspace's owners and admins can change its skills.",
+    "Only whoever installed this skill, or the workspace's owners and admins, can change it.",
   [INSTALLED_SKILL_CALL_FAILURE.INVALID]: "Luke couldn't install that. Check what you pasted.",
   [INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN]: "A skill of that name is already installed there.",
   [INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED]: "The skill's files were refused.",
@@ -379,12 +378,12 @@ export function withRefusal(
   };
 }
 
-/** The scopes the dialog offers: the account's own, and the workspace's for its owners and admins outside a personal workspace. */
+/** The scopes the dialog offers: the account's own, and the workspace's to any member outside a personal workspace. */
 export function installScopes(
   workspace: Workspace,
 ): readonly { readonly value: InstalledSkillScope; readonly label: string }[] {
   const mine = { value: INSTALLED_SKILL_SCOPE.PERSONAL, label: SKILLS_LINE.JUST_ME };
-  if (workspace.personal === true || !managesWorkspace(workspace)) return [mine];
+  if (workspace.personal === true) return [mine];
   return [mine, { value: INSTALLED_SKILL_SCOPE.WORKSPACE, label: everyoneIn(workspace) }];
 }
 

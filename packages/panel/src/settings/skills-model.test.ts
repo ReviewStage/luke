@@ -150,10 +150,10 @@ test("a workspace skill whose installer is gone or unknown names nobody", () => 
   );
 });
 
-test("Everyone in the workspace is offered to its owners and admins alone, and never in a personal workspace", () => {
+test("Everyone in the workspace is offered to every member, and never in a personal workspace", () => {
   const labels = (shown: Workspace) => installScopes(shown).map((each) => each.label);
 
-  assert.deepEqual(labels(workspace()), ["Just me"]);
+  assert.deepEqual(labels(workspace()), ["Just me", "Everyone in Stage"]);
   assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.ADMIN })), [
     "Just me",
     "Everyone in Stage",
