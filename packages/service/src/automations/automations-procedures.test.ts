@@ -122,7 +122,7 @@ const RELAY = { owner: "Acme", name: "Relay" } as const;
  * since one installation connects to one workspace and the suite's tests
  * share a database.
  */
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 20 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 24 }, (_, index) => ({
   id: 7_000 + index,
   login: RELAY.owner,
   accountId: 70_000 + index,

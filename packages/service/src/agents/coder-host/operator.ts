@@ -91,7 +91,7 @@ export interface OperatorEnsured extends CodingAgentStart {
   readonly retired: CodingAgent | undefined;
 }
 
-export const OPERATOR_HEARTBEAT_SCHEDULE = {
+const OPERATOR_HEARTBEAT_SCHEDULE = {
   /** What the member's Automations lists it as. */
   NAME: "Luke's heartbeat",
   /** Weekdays at nine and five, read in the member's zone. */

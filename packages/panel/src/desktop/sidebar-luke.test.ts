@@ -31,6 +31,9 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
  * The service is a script at the act boundary; synthetic workspaces and agents throughout.
  */
 
+/** The zone this test's window reads in, which every ensure carries for the heartbeat it may make. */
+const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -198,11 +201,14 @@ test("with the operator on, Luke's row stands first and is ensured once per work
   assert.ok(lukeRow(sidebar), "Luke's row is drawn");
   assert.equal(rowNames(sidebar)[0], "Luke");
   await redraw(acme([SWEEP]));
-  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id }]);
+  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id, timeZone: ZONE }]);
 
   await redraw({ ...acme([SWEEP]), workspace: SIDE });
   await redraw(acme([SWEEP]));
-  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id }, { workspaceId: SIDE.id }]);
+  assert.deepEqual(ensures(sent), [
+    { workspaceId: ACME.id, timeZone: ZONE },
+    { workspaceId: SIDE.id, timeZone: ZONE },
+  ]);
 });
 
 test("another account signed in to the same workspace ensures its own Luke rather than opening the last one's", async () => {
@@ -215,7 +221,10 @@ test("another account signed in to the same workspace ensures its own Luke rathe
   const press = lukeRow(sidebar)?.querySelector<HTMLElement>("button") ?? assert.fail("Luke's row");
   act(() => press.click());
 
-  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id }, { workspaceId: ACME.id }]);
+  assert.deepEqual(ensures(sent), [
+    { workspaceId: ACME.id, timeZone: ZONE },
+    { workspaceId: ACME.id, timeZone: ZONE },
+  ]);
   assert.deepEqual(opened, [FRESH_ID]);
 });
 
@@ -245,7 +254,10 @@ test("a failed ensure leaves Luke's row standing with a quiet retry, which asks 
   act(() => button("Retry").click());
   await settle();
 
-  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id }, { workspaceId: ACME.id }]);
+  assert.deepEqual(ensures(sent), [
+    { workspaceId: ACME.id, timeZone: ZONE },
+    { workspaceId: ACME.id, timeZone: ZONE },
+  ]);
   assert.equal(
     [...document.querySelectorAll("button")].find(
       (each) => each.getAttribute("aria-label") === "Retry",
@@ -287,14 +299,14 @@ test("Reset asks first, and only then ensures a fresh Luke and opens him", async
   act(() => item("Reset Luke").click());
   assert.ok(document.querySelector('[role="alertdialog"]'), "the reset is asked first");
   assert.match(document.body.textContent ?? "", /Start a fresh Luke\?/u);
-  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id }]);
+  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id, timeZone: ZONE }]);
 
   act(() => button("Start fresh").click());
   await settle();
 
   assert.deepEqual(ensures(sent), [
-    { workspaceId: ACME.id },
-    { workspaceId: ACME.id, reset: true },
+    { workspaceId: ACME.id, timeZone: ZONE },
+    { workspaceId: ACME.id, reset: true, timeZone: ZONE },
   ]);
   assert.deepEqual(opened, [FRESH_ID]);
   assert.ok(lukeRow(sidebar), "Luke's row still stands");
