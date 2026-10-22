@@ -44,6 +44,7 @@ import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   CHAT_TOOL,
@@ -149,9 +150,12 @@ export const CHAT_TOOLS = {
       "blocks go under the words: link blocks naming a page, such as the GitHub settings page a task is done on; code " +
       "blocks pointing at the exact lines a decision is about, where repo is your repository as owner/name, path is from " +
       `its root, startLine to endLine spans at most ${CHAT_BOUNDS.MAX_CODE_LINES} lines, and sha is the full 40-character ` +
-      "commit you read them at, one already on GitHub; and image blocks showing a picture, such as a screenshot of a UI you " +
-      "rendered, where path is the file in your sandbox, relative to the checkout or absolute, a PNG, JPEG, or WebP of at " +
-      `most ${(CHAT_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt says in a sentence what it shows. ` +
+      "commit you read them at, one already on GitHub; and image blocks showing a picture, each naming it one way: path, " +
+      "the file in your sandbox of a picture you made, such as a screenshot of a UI you rendered, relative to the checkout " +
+      "or absolute; or attachmentId, the id of a picture you were told, such as one beside an image you received " +
+      '("Image <name> is attachment <id>") or one in a chat line ("[image: <alt> (attachment <id>)]"), which hands it on. ' +
+      `Either is a PNG, JPEG, or WebP of at most ${(CHAT_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt ` +
+      "says in a sentence what it shows. An image block reaches the agents a post tells as a real image. " +
       "ask makes the message something you need answered; an ask needs a key, your own short lowercase slug for it, such as " +
       "branch-protection: posting under a key you used before updates that ask where it was first posted and opens it " +
       "again, so keep an ask current under its key and never ask it twice. ask.response is what you ask: choice (two to " +
@@ -206,7 +210,7 @@ export const CHAT_TOOL_REFUSAL = {
     `Not posted: the post does not read. text is Markdown of at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters; ` +
     "to is #name for a channel, lowercase, or a member's mention link as read_chat lists it; replyTo is a message's number; " +
     "blocks are link, code, " +
-    "or image, a code block's sha the full 40-character lowercase commit, an image naming its path and alt; an ask " +
+    "or image, a code block's sha the full 40-character lowercase commit, an image naming its path or its attachmentId, and alt; an ask " +
     "needs a key, a lowercase slug of letters, digits, dots, dashes, and underscores, and its response, one of choice, " +
     `approval, text, task, form, or none; a choice and a select field offer between two and ${CHAT_BOUNDS.MAX_OPTIONS} options.`,
   UNREADABLE_RESOLVE: "Not resolved: name the ask's key and why you resolve it.",
@@ -218,6 +222,9 @@ export const CHAT_TOOL_REFUSAL = {
   EDIT_TOO_MANY_TOPICS: `Not edited: the workspace keeps ${CHAT_BOUNDS.MAX_TOPIC_CHANNELS} topic channels open already. Archive one first.`,
   UNREADABLE_READ:
     "Not read: channel is #name, lowercase, or a member's mention link as read_chat lists it, and thread and before are messages' numbers.",
+  IMAGE_SOURCE:
+    "Not posted: an image block names its picture one way, by path, a file in your sandbox, or by attachmentId, " +
+    "an attachment you were told, never both and never neither.",
   REPLY_AND_TO:
     "Not posted: a reply goes in the thread of the message it answers, in that message's channel; name replyTo or to, not both.",
   TOO_MANY_POSTS: `Not posted: you have posted ${CHAT_BOUNDS.MAX_POSTS_PER_TURN} times this turn already. Say the rest in one message next turn.`,
@@ -318,8 +325,9 @@ export interface ChatReader {
   readonly self: ChatSelf;
 }
 
-/** The agent a post is made for: its repository as `owner/name`, which its code blocks must name, nothing where it has none, and how its posts are told. */
+/** The agent a post is made for: its conversation, whose pictures it may hand on, its repository as `owner/name`, which its code blocks must name, nothing where it has none, and how its posts are told. */
 export interface ChatAgent extends ChatReader {
+  readonly conversationId: string;
   readonly repository: string | null;
   readonly telling: Omit<ChatTelling, "userId" | "organizationId">;
 }
@@ -413,9 +421,37 @@ function askWithoutKey(input: UnparsedWireValue): boolean {
   return Result.isSuccess(readAskWithoutKey(input));
 }
 
-/** Why a post that does not read was refused: naming both a reply and a target, an ask with no key, or otherwise not the post's shape. */
+/** A post's blocks as read for how each image names its picture, whatever else they hold. */
+const readImageSources = readEither(
+  Schema.Struct({
+    blocks: Schema.Array(
+      Schema.Struct({
+        type: Schema.String,
+        path: Schema.optionalKey(Schema.Unknown),
+        attachmentId: Schema.optionalKey(Schema.Unknown),
+      }),
+    ),
+  }),
+  { excess: EXCESS_KEYS.DROP },
+);
+
+/** Whether an image block of the post names its picture both ways or neither, which the input's JSON Schema cannot say it refuses. */
+function imageSourceUnnamed(input: UnparsedWireValue): boolean {
+  const read = readImageSources(input);
+  return (
+    Result.isSuccess(read) &&
+    read.success.blocks.some(
+      (block) =>
+        block.type === CHAT_BLOCK.IMAGE &&
+        (block.path === undefined) === (block.attachmentId === undefined),
+    )
+  );
+}
+
+/** Why a post that does not read was refused: naming both a reply and a target, an image named both ways or neither, an ask with no key, or otherwise not the post's shape. */
 function unreadPostRefusal(input: UnparsedWireValue): string {
   if (replyAndTarget(input)) return CHAT_TOOL_REFUSAL.REPLY_AND_TO;
+  if (imageSourceUnnamed(input)) return CHAT_TOOL_REFUSAL.IMAGE_SOURCE;
   if (askWithoutKey(input)) return ASK_REFUSAL.NEEDS_KEY;
   return CHAT_TOOL_REFUSAL.UNREADABLE_POST;
 }
@@ -830,7 +866,8 @@ export function agentAway(
 
 /**
  * Runs one post: its shape held to what a message carries, its place
- * found, its pictures read from the sandbox, the message or the ask
+ * found, its pictures read from the sandbox or handed on by their
+ * attachments' ids as the agent may read them, the message or the ask
  * written as the agent and told to the members it addresses, and the
  * receipt answered, with the agent's asks where it asked, or why not. A
  * turn that has posted its bound already posts nothing; the call's own id
@@ -863,7 +900,15 @@ export function postAsAgent(
     const misplaced = placeRefusal(seat.value, post);
     if (misplaced !== undefined) return chatRejected(misplaced);
     // The pictures are read before the place, since a DM the place makes must not stand where the post is refused.
-    const pictures = yield* postPictures(post, call.clientKey, call.sandbox);
+    const forwarder = {
+      userId: agent.userId,
+      conversationId: agent.conversationId,
+      chat: { organizationId: seat.value.organizationId, reader: agent.self },
+    };
+    const pictures = yield* postPictures(post, call.clientKey, {
+      sandbox: call.sandbox,
+      forwarder,
+    });
     if (Result.isFailure(pictures)) return chatRejected(pictures.failure);
     // A DM made for the post, and the member it seats, stand only with the post: one the store refuses undoes them.
     const written = yield* inTransaction(

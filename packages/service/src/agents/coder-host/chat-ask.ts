@@ -1,10 +1,11 @@
+import type { DatabaseServices } from "@luke/database/core/query";
 import type {
   ChatImageWrite,
   ChatMemberSubject,
   ChatMessageRow,
   ChatNamedSubject,
 } from "@luke/database/models/chat-store";
-import { chatAttachmentId } from "@luke/database/models/ids";
+import { chatAttachmentId, chatForwardedAttachmentId } from "@luke/database/models/ids";
 import { type ChatMemberMention, chatMentionsIn } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
@@ -20,13 +21,22 @@ import {
   type ChatReadResponse,
   type ChatReply,
   type ChatResponse,
+  chatImageTypeSchema,
   codeLinesReadable,
   MEMBER_KIND,
   type postChatAskInputSchema,
 } from "@luke/features/chat-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
+import type { StoreFailure } from "../../http/store-failure.js";
 import { CODER } from "./bounds.js";
+import {
+  FORWARDED_IMAGE_REFUSAL,
+  type ForwardedImageRefusal,
+  forwardedImageRefusalWords,
+  forwardedImages,
+  type ImageForwarder,
+} from "./forwarded-images.js";
 import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
 
 /**
@@ -40,10 +50,12 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * whose recommendation names none, a form whose labels repeat, whose
  * options sit on a field that takes none, or whose select recommends none
  * of its options, and lines of a repository other than the agent's own. An
- * image block names a file in the agent's
- * sandbox, read there (`inbox-image.ts`) and kept as an attachment of the
- * message's under an id named for the post and the path, so a post sent
- * again keeps the picture it kept. The agent reads its asks back whole
+ * image block names a file in the agent's sandbox, read there
+ * (`inbox-image.ts`), or an attachment it was told, a picture it was sent
+ * or one of a chat message it reads, read as it may hand one on
+ * (`forwarded-images.ts`); either is kept as an attachment of the
+ * message's under an id named for the post and the path or the attachment,
+ * so a post sent again keeps the picture it kept. The agent reads its asks back whole
  * while open, since compaction may have taken the call that posted one
  * out of its context, and settled ones by what came of them alone.
  */
@@ -200,18 +212,54 @@ export function namedIn(words: string): ChatNamed {
   };
 }
 
+/** Where a post's pictures are read from: the poster's sandbox for a path, and what the poster may hand on for an attachment's id. */
+export interface PictureSources {
+  readonly sandbox: InboxSandboxDoor;
+  readonly forwarder: ImageForwarder;
+}
+
+const isChatImageType = Schema.is(chatImageTypeSchema);
+
+/** A refusal of a picture handed on, as the post's own refusal reads. */
+function forwardRefusal(refusal: ForwardedImageRefusal): string {
+  return `Not posted: ${forwardedImageRefusalWords(refusal)}`;
+}
+
+/**
+ * The picture under an attachment's id as the poster may hand it on, held
+ * to one image's bound, which is a chat picture's too, or the sentence
+ * refusing it. Note that each id is read apart, since a post's pictures are
+ * held to one image's bound each rather than to one message's together.
+ */
+const handedOn = (forwarder: ImageForwarder, attachmentId: string) =>
+  Effect.map(forwardedImages(forwarder, [attachmentId]), (read) => {
+    if (Result.isFailure(read)) return Result.fail(forwardRefusal(read.failure));
+    const [file] = read.success;
+    // A forward answers one image file for the one id it was handed, or refused it.
+    if (file === undefined || !isChatImageType(file.mediaType)) {
+      return Result.fail(
+        forwardRefusal({ kind: FORWARDED_IMAGE_REFUSAL.UNREACHED, id: attachmentId }),
+      );
+    }
+    return Result.succeed({
+      contentType: file.mediaType,
+      bytes: new Uint8Array(Buffer.from(file.data, "base64")),
+    });
+  });
+
 /**
  * The post's blocks as the message keeps them, its words first, and each
- * image read from the sandbox, or the first refusal among them. Each
- * distinct path is read once, in the order first named, and the first path
- * refused ends the reading, so a post with a block to mend reads no
- * further file for it.
+ * picture read, from the sandbox by its path or from what the poster may
+ * hand on by its attachment's id, or the first refusal among them. Each
+ * distinct path and id is read once, in the order first named, and the
+ * first refused ends the reading, so a post with a block to mend reads no
+ * further picture for it.
  */
 export function postPictures(
   post: AskPost,
   clientKey: string,
-  sandbox: InboxSandboxDoor,
-): Effect.Effect<Result.Result<PostPictures, string>> {
+  sources: PictureSources,
+): Effect.Effect<Result.Result<PostPictures, string>, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const read = new Map<string, ChatImageWrite>();
     const blocks: ChatBlock[] = [{ type: CHAT_BLOCK.MARKDOWN, text: post.text }];
@@ -220,11 +268,19 @@ export function postPictures(
         blocks.push(block);
         continue;
       }
-      const id = chatAttachmentId(clientKey, block.path);
-      if (!read.has(block.path)) {
-        const image = yield* readInboxImage(sandbox, CODER.CHECKOUT_PATH, block.path);
+      // The input's schema holds an image block to exactly one of a path and an attachment's id.
+      const { path, attachmentId } = block;
+      const id =
+        path !== undefined
+          ? chatAttachmentId(clientKey, path)
+          : chatForwardedAttachmentId(clientKey, attachmentId ?? "");
+      if (!read.has(id)) {
+        const image =
+          path !== undefined
+            ? yield* readInboxImage(sources.sandbox, CODER.CHECKOUT_PATH, path)
+            : yield* handedOn(sources.forwarder, attachmentId ?? "");
         if (Result.isFailure(image)) return Result.fail(image.failure);
-        read.set(block.path, { id, ...image.success });
+        read.set(id, { id, ...image.success });
       }
       blocks.push({ type: CHAT_BLOCK.IMAGE, attachmentId: id, alt: block.alt });
     }

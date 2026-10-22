@@ -322,6 +322,11 @@
                 "minLength": 1,
                 "maxLength": 1024
               },
+              "attachmentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
               "alt": {
                 "type": "string",
                 "minLength": 1,
@@ -330,7 +335,6 @@
             },
             "required": [
               "type",
-              "path",
               "alt"
             ],
             "additionalProperties": false

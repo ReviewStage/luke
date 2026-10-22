@@ -8547,6 +8547,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           userId: opened.owner,
           taskId: opened.task.id,
           self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
+          conversationId: started.target.conversationId,
           repository: RELAY_FULL_NAME,
           telling,
         });
@@ -9413,6 +9414,80 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.ok(missing.status === ACTION_RESULT_STATUS.REJECTED && "reason" in missing);
         assert.ok(missing.reason.endsWith("missing.png"), missing.reason);
+      }),
+  );
+
+  it.effect(
+    "an image block naming an attachment hands on a picture kept beside the poster's own conversation in a DM, copied into a picture of the new message, and the sandbox is never opened",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const target = { userId: chat.owner, conversationId: chat.conversations[0] ?? "" };
+        const shown = Option.getOrThrow(
+          yield* keepConversationPicture(target, {
+            bytes: PNG,
+            contentType: CHAT_IMAGE_TYPE.PNG,
+            width: 1,
+            height: 1,
+          }),
+        );
+        const posted = yield* chat.post(chat.first, {
+          text: "The developer's screenshot of the invite form.",
+          to: chat.links.second,
+          blocks: [{ type: CHAT_BLOCK.IMAGE, attachmentId: shown.id, alt: "The invite form." }],
+        });
+        assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+        const poster = yield* chat.memberOf(chat.first);
+        const [message] = Option.getOrThrow(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+        );
+        const image = message?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
+        assert.ok(message !== undefined && image !== undefined && "attachmentId" in image);
+        assert.equal(image.alt, "The invite form.");
+        assert.notEqual(image.attachmentId, shown.id, "the message keeps a picture of its own");
+        const kept = Option.getOrThrow(
+          yield* readAttachment(chat.owner, chat.task.workspaceId, message.id, image.attachmentId),
+        );
+        assert.deepEqual([kept.contentType, kept.bytes], [CHAT_IMAGE_TYPE.PNG, PNG]);
+      }),
+  );
+
+  it.effect(
+    "an image block naming another agent's picture is refused in words that say so, and one naming both a path and an attachment, or neither, is refused, posting nothing",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const theirs = Option.getOrThrow(
+          yield* keepConversationPicture(
+            { userId: chat.owner, conversationId: chat.conversations[1] ?? "" },
+            { bytes: PNG, contentType: CHAT_IMAGE_TYPE.PNG, width: 1, height: 1 },
+          ),
+        );
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        const post = (block: Record<string, string>) =>
+          chat.post(chat.first, {
+            text: "See.",
+            to: chat.links.second,
+            blocks: [{ type: CHAT_BLOCK.IMAGE, alt: "The form.", ...block }],
+          });
+        assert.deepEqual(
+          yield* post({ attachmentId: theirs.id }),
+          refused(
+            `Not posted: attachment ${theirs.id} is no picture you can hand on. Name a picture of your own ` +
+              "conversation, such as one show_image kept, or one of a chat message you can read.",
+          ),
+        );
+        assert.deepEqual(
+          yield* post({ path: "shot.png", attachmentId: theirs.id }),
+          refused(CHAT_TOOL_REFUSAL.IMAGE_SOURCE),
+        );
+        assert.deepEqual(yield* post({}), refused(CHAT_TOOL_REFUSAL.IMAGE_SOURCE));
+        const poster = yield* chat.memberOf(chat.first);
+        assert.deepEqual(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+          Option.some([]),
+          "nothing was posted",
+        );
       }),
   );
 
