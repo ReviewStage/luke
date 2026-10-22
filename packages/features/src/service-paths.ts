@@ -404,6 +404,12 @@ export interface RepositoryPlace {
   readonly repository: string;
 }
 
+/** Where the skills a developer may choose are read: a workspace, and the repository whose skills lead them where there is one. */
+export interface SkillsPlace {
+  readonly workspaceId: string;
+  readonly repository?: string;
+}
+
 /** One plan's pictures, under which each is served as its bytes (`planAttachmentPath`). */
 function planAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;

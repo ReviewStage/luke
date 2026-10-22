@@ -8,6 +8,7 @@ import {
   TURN_ENDING,
 } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON } from "@luke/live";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
@@ -242,7 +243,12 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
   const skills: SkillSource = () =>
     Promise.resolve({
       skills: [
-        { name: "release", description: "Cut a release.", path: ".agents/skills/release/SKILL.md" },
+        {
+          name: "release",
+          description: "Cut a release.",
+          source: TASK_SKILL_SOURCE.REPOSITORY,
+          path: ".agents/skills/release/SKILL.md",
+        },
       ],
     });
   const message = drawn(
@@ -260,7 +266,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
     glyph: true,
     name: "/release",
     sub: undefined,
-    corner: undefined,
+    corner: "Repo",
   });
   assert.equal(
     skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,

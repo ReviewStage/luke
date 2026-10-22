@@ -150,7 +150,11 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
     }),
     skills: taskFiles.skills.effect(function* ({ input, context }) {
       const taskId = yield* namedRow(input.id);
-      return yield* found(yield* hostedStoreOrUnavailable(readTaskSkills(context.userId, taskId)));
+      return yield* found(
+        yield* hostedStoreOrUnavailable(
+          readTaskSkills(context.userId, taskId, input.installed !== undefined),
+        ),
+      );
     }),
     keepPicture: taskFiles.keepPicture.effect(function* ({ input, context }) {
       const taskId = yield* namedRow(input.params.id);

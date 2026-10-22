@@ -1517,15 +1517,20 @@ export function useCodingAgents(input: {
   // workspace it belongs to, once the read of it has named that workspace.
   const workspaceId = ours(list) ? list.workspaceId : undefined;
   const agentRepository = ours(list) ? list.repository : undefined;
+  // Note that a plan or an agent with no repository still reads its member's installed skills, and
+  // that the plan's repository stays a dependency, so a plan moved to another repository reads afresh.
   const readSkills = useMemo(() => {
     if (taskId !== undefined) {
-      return repository === null
-        ? undefined
-        : keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: taskId }));
+      return keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: taskId }));
     }
-    if (workspaceId === undefined || agentRepository === undefined) return undefined;
+    if (workspaceId === undefined) return undefined;
     return keptSkills(() =>
-      act(ACT_KIND.TASKS_SKILLS, { workspaceId, repository: agentRepository }),
+      act(
+        ACT_KIND.TASKS_SKILLS,
+        agentRepository === undefined
+          ? { workspaceId }
+          : { workspaceId, repository: agentRepository },
+      ),
     );
   }, [act, taskId, workspaceId, agentRepository, repository]);
 
