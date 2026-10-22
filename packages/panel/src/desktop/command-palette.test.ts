@@ -1134,6 +1134,35 @@ test("a task wears who is on it at its row's end, a teammate by face, no one on 
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
 });
 
+test("a task whose assignee and creator share a first name says the one the whole query names", () => {
+  const pan = { userId: "user-charles", name: "Charles Pan" };
+  const ward = { userId: "user-ward", name: "Charles Ward" };
+  openPalette(
+    tasksControl({
+      me: "user-dean",
+      tasks: [
+        {
+          id: "Audit trail",
+          workspaceId: "workspace-personal",
+          name: "Audit trail",
+          createdAt: 1,
+          updatedAt: 1,
+          repository: "acme/relay",
+          ownerId: pan.userId,
+          createdBy: pan,
+          assignee: ward,
+        },
+      ],
+    }),
+  );
+  chooseFilter("Tasks");
+
+  type("charles pan");
+  assert.deepEqual(rows(), ["Audit trail · acme/relay · Charles Pan"]);
+  type("charles");
+  assert.deepEqual(rows(), ["Audit trail · acme/relay · Charles Ward"]);
+});
+
 test("a task Luke or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const task = (id: string, origin?: TaskSummary["origin"]) => ({

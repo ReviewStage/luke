@@ -1083,9 +1083,9 @@ function settingRows(
 
 /**
  * The person whose name explains why the query found a row, its assignee
- * before its creator: the first whose name holds a word of the query, else,
- * where the query reaches the row only with the names among its words, as a
- * loose match on a name, or one running from the task's name into a
+ * before its creator: the one whose name holds the most words of the query,
+ * else, where the query reaches the row only with the names among its words,
+ * as a loose match on a name, or one running from the task's name into a
  * person's, does, the name it answers best; none where the row's own words
  * explain it.
  */
@@ -1096,8 +1096,11 @@ function personFound(
 ): string | undefined {
   const people = row.people ?? [];
   if (people.length === 0 || tokens.length === 0) return undefined;
-  const named = people.find((name) => matchRanges(name, tokens).length > 0);
-  if (named !== undefined) return named;
+  // The name holding the most of the query's words, so a first name two people share never hides the one the whole query names.
+  const held = (name: string) =>
+    tokens.filter((token) => matchRanges(name, [token]).length > 0).length;
+  const named = people.reduce((best, name) => (held(name) > held(best) ? name : best));
+  if (held(named) > 0) return named;
   const others = row.terms.filter((term) => !people.includes(term)).join(" ");
   if (defaultFilter(others, query) !== 0) return undefined;
   return people.toSorted((a, b) => defaultFilter(b, query) - defaultFilter(a, query))[0];
