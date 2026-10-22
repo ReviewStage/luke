@@ -594,8 +594,8 @@ export function TabCards({
  * dims the card of the screen already on show. `onPoint` hears the pointer
  * come onto it, and `onPick` a press on it: on the press itself where
  * `pickOnPress`, for a switcher held on ⌃, which a Mac makes a release a
- * right-click of, or on the click otherwise; and Return or Space while it
- * has the focus.
+ * right-click of, taking no Tab stop; or on the click otherwise, with a Tab
+ * stop of its own, and Return or Space while it has the focus.
  */
 export function TabCard({
   icon,
@@ -630,8 +630,10 @@ export function TabCard({
     <div
       role="option"
       aria-selected={chosen}
-      // Note that a card takes no stop of its own, because the keys stay where they were while a switcher is held.
-      tabIndex={-1}
+      // Note that a card picked on the press takes no stop of its own, because
+      // the keys stay where they were while a switcher is held; one picked on
+      // the click is a Tab stop, so the keys reach it.
+      tabIndex={pickOnPress ? -1 : 0}
       className="luke-tab-card"
       data-here={here}
       onPointerEnter={onPoint}

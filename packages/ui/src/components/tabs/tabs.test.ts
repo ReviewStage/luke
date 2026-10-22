@@ -15,7 +15,7 @@ import { Tab, TabCard, Tabs, type TabsControls } from "./tabs.js";
  * along, Delete closes the focused tab and hands focus to the one in its
  * place, and an owner's step moves the focused tab and says so; a preview
  * tab is kept by a double-click; and a switcher's card is picked on the
- * press or on the click, as asked. jsdom lays nothing out, so a test that
+ * press, or on the click or Return from a Tab stop of its own, as asked. jsdom lays nothing out, so a test that
  * scrolls lays the strip's boxes out itself. Synthetic throughout.
  */
 
@@ -312,7 +312,7 @@ test("a preview tab wears its preview, and a double-click keeps it, while a tab 
   assert.deepEqual(kept, ["Preview"]);
 });
 
-test("a card picked on the press is picked as the press lands, and one picked on the click is not picked by a press alone", async () => {
+test("a card picked on the press is picked as the press lands, and one picked on the click is not picked by a press alone but is a Tab stop Return picks", async () => {
   const picked: string[] = [];
   const container = await render(
     ["Held", "Clicked"].map((label) =>
@@ -336,4 +336,10 @@ test("a card picked on the press is picked as the press lands, and one picked on
   assert.deepEqual(picked, ["Held"]);
   act(() => clicked?.click());
   assert.deepEqual(picked, ["Held", "Clicked"]);
+  // Only the card picked on the click takes a Tab stop, and Return picks it there.
+  assert.deepEqual([held?.tabIndex, clicked?.tabIndex], [-1, 0]);
+  act(() => {
+    clicked?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  assert.deepEqual(picked, ["Held", "Clicked", "Clicked"]);
 });
