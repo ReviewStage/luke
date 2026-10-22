@@ -767,8 +767,11 @@ export function DesktopShell({
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
+  // A phone's task is headed by its three views, which stand for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
-    planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
+    (planToggle && room !== SHELL_ROOM.NARROW) ||
+    pageAgent !== undefined ||
+    (inboxOpen && tasks.inboxView.chosen !== undefined);
   // Note that the notice line rides the foot of the call's agent's
   // tab, or its own page, while that is on screen, and floats at the
   // window's foot otherwise.
@@ -876,6 +879,7 @@ export function DesktopShell({
                 looks={looks}
                 notice={noticeInColumn ? NOTICE_STRIP : undefined}
                 summary={summary}
+                room={room}
               />
             )}
           </ChipCards>

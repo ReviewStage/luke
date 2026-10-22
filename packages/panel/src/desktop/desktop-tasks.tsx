@@ -26,6 +26,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
@@ -93,6 +94,7 @@ import { useStrandedTaskBanner } from "./stranded-task-banner.js";
 import { useTabViews } from "./strip-tabs.js";
 import { TaskActions } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
+import { TASK_PANE, type TaskPane, TaskPaneSwitcher, taskPaneOf } from "./task-pane-switcher.js";
 import {
   SUMMARY_MODE,
   SummaryButton,
@@ -446,13 +448,21 @@ function PlanDocument({
   looks,
   notice,
   summary,
+  room,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
   notice: React.ReactNode;
   summary: SummaryPin;
+  room: ShellRoom;
 }): React.JSX.Element {
   const { region } = tasks;
+  // A phone's Activity lists the panel's tabs until one is chosen, from it or by anything else, such as
+  // an arrival the panel shows, on the task it was asked on alone (`task-pane-switcher.tsx`).
+  const [activityAsked, setActivityAsked] = useState<{
+    taskId: string;
+    tab: SidePanelTab | undefined;
+  }>();
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
   const chatOn = useChatOn();
@@ -916,6 +926,28 @@ function PlanDocument({
       }}
     />
   );
+  // A phone heads the task with its three views in place of the side panel's strip and toggle.
+  const switched = room === SHELL_ROOM.NARROW;
+  const activityListed =
+    activityAsked !== undefined &&
+    activityAsked.taskId === task.id &&
+    (activityAsked.tab === undefined
+      ? sidePanel.tab === undefined
+      : sidePanel.tab !== undefined && sameTab(activityAsked.tab, sidePanel.tab));
+  const onListed = (asked: boolean) =>
+    setActivityAsked(asked ? { taskId: task.id, tab: sidePanel.tab } : undefined);
+  const pane = taskPaneOf({ open: sidePanel.open, tab: sidePanel.tab, listed: activityListed });
+  const choosePane = (chosen: TaskPane) => {
+    if (chosen === TASK_PANE.AGENTS) {
+      onListed(false);
+      // Note that the panel's own toggle shuts it as a step back where the window keeps one, as its Close does.
+      if (sidePanel.open) sidePanel.onToggle();
+      return;
+    }
+    onListed(chosen === TASK_PANE.ACTIVITY);
+    if (chosen === TASK_PANE.PLAN) sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
+    else if (!sidePanel.open) sidePanel.onToggle();
+  };
   return (
     <LinkWorkspaceProvider value={workspace}>
       <PlanCommentsProvider value={comments}>
@@ -933,6 +965,14 @@ function PlanDocument({
             >
               <TaskMentions value={mentions}>
                 <OpenHereProvider value={openHere}>
+                  {switched ? (
+                    <TaskPaneSwitcher
+                      pane={pane}
+                      agents={agents.agents?.length ?? 0}
+                      waiting={inbox.board.open.length}
+                      onChoose={choosePane}
+                    />
+                  ) : null}
                   <div
                     ref={setArea}
                     className="desktop-task"
@@ -1095,6 +1135,7 @@ function PlanDocument({
                             </section>
                           ) : undefined
                         }
+                        activity={switched ? { listed: activityListed, onListed } : undefined}
                       />
                     ) : null}
                     {stranded.dialog}
@@ -1121,6 +1162,7 @@ export const DesktopTasks = memo(function DesktopTasks({
   looks,
   notice,
   summary,
+  room = SHELL_ROOM.WIDE,
 }: {
   tasks: TasksControl;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
@@ -1129,6 +1171,8 @@ export const DesktopTasks = memo(function DesktopTasks({
   notice?: React.ReactNode;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
+  /** The room the panel's stage gives; narrow, a task is headed by its three views (`task-pane-switcher.tsx`). */
+  room?: ShellRoom;
 }): React.JSX.Element {
   // The second call's question stands over either page: a Talk press on a
   // task's page asks it, and so does a task started from the New task dialog.
@@ -1144,7 +1188,7 @@ export const DesktopTasks = memo(function DesktopTasks({
           // so its tab stands on this task though Luke never showed it.
           onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
         >
-          <PlanDocument tasks={tasks} looks={looks} notice={notice} summary={summary} />
+          <PlanDocument tasks={tasks} looks={looks} notice={notice} summary={summary} room={room} />
           {secondCall}
         </SkillFiles>
       );

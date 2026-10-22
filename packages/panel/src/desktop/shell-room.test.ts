@@ -233,12 +233,27 @@ test("a stage narrowed below 640 stands the window as one pane, and only at 672 
   assert.equal(roomOf(page), "wide", "a stage narrowed within the band stays wide");
 });
 
-test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, and its toggle reads Close panel", () => {
+/** The phone's view of the task named `name`, from the bar heading it in the panel's toggle's place. */
+function paneView(page: HTMLElement, name: string): HTMLElement {
+  const view = [...page.querySelectorAll<HTMLElement>('.task-pane-switcher [role="radio"]')].find(
+    (each) => each.textContent === name,
+  );
+  assert.ok(view, `the task's ${name} view stands`);
+  return view;
+}
+
+test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, the task's views standing for its toggle", () => {
   const page = mount(PHONE);
   assert.equal(roomOf(page), "narrow");
   // A first launch opens the panel, which the narrow stage holds full screen.
   assert.deepEqual(panelOf(page), { fullScreen: true, resizable: false, fullScreenButton: false });
-  assert.equal(panelToggle(page).getAttribute("aria-label"), "Close panel");
+  assert.equal(
+    page.querySelector('.title-bar-controls[data-edge="end"]'),
+    null,
+    "the views stand for the toggle",
+  );
+  // Note that the panel opens on the board, which is a tab past the plan, so Activity is the view standing.
+  assert.equal(paneView(page, "Activity").getAttribute("aria-checked"), "true");
 
   resizeStage(WIDE);
   assert.deepEqual(
@@ -247,11 +262,12 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
     "a stage widened again hands the panel back beside the document",
   );
   assert.equal(panelToggle(page).getAttribute("aria-label"), "Hide panel");
+  assert.equal(page.querySelector(".task-pane-switcher"), null, "a wide stage draws no views");
 
   resizeStage(PHONE);
-  act(() => panelToggle(page).click());
-  assert.equal(page.querySelector("aside.side-panel"), null, "Close shuts the panel");
-  assert.equal(panelToggle(page).getAttribute("aria-label"), "Show panel");
+  act(() => paneView(page, "Agents").click());
+  assert.equal(page.querySelector("aside.side-panel"), null, "Agents shuts the panel");
+  assert.equal(paneView(page, "Agents").getAttribute("aria-checked"), "true");
 });
 
 test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggle opens it over the work, and a press outside puts it away", () => {
@@ -291,7 +307,7 @@ test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggl
   sheets.remove();
 });
 
-test("a phone's drawer is modal: while it stands over the work, the work and the panel's toggle are inert, and put away they answer again", () => {
+test("a phone's drawer is modal: while it stands over the work, the work and the task's views are inert, and put away they answer again", () => {
   const page = mount(PHONE);
   const main = page.querySelector<HTMLElement>("main.desktop-main") ?? assert.fail("the work");
   assert.equal(main.hasAttribute("inert"), false, "with the drawer away the work answers");
@@ -299,7 +315,7 @@ test("a phone's drawer is modal: while it stands over the work, the work and the
   act(() => sidebarToggle(page).click());
   assert.equal(sidebarStanding(page), "drawer");
   assert.equal(main.hasAttribute("inert"), true, "the work behind the drawer is inert");
-  assert.equal(panelToggle(page).closest<HTMLElement>("[inert]") !== null, true);
+  assert.equal(paneView(page, "Plan").closest<HTMLElement>("[inert]") !== null, true);
   assert.equal(
     sidebarToggle(page).closest("[inert]"),
     null,
