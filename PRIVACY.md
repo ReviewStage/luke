@@ -1034,17 +1034,28 @@ A Browser tab can also be a cloud browser, which an agent drives and you
 watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
 your Mac, so it reaches that sandbox's own `localhost` and holds none of your
 Mac's cookies or signed-in sites. What the agent does with it reaches the model:
-each page's address and title, a screenshot, and a text snapshot of the page. A
-screenshot goes to the model alone and is left out of the agent's stored
-transcript, as a picture an agent looks at is; the rest is kept in the
-transcript, under its terms. Our service keeps the task's list of cloud
+each page's address and title, a screenshot, and a text snapshot of the page;
+the transcript keeps these, under its terms. A screenshot is taken twice: the
+model is handed a small copy, which the stored transcript leaves out, and our
+service keeps a full-size copy, the page at its own size as a JPEG or a PNG of
+at most 1.5 MB, in our database beside the transcript the call is written to,
+the agent's or its worker's, as it keeps the pictures an agent shows you (see
+"Pictures in a tool's answer"), under the same 200 MB a transcript keeps. The
+transcript names it by an id and shows it as a thumbnail that opens full size,
+to Luke signed in as a member of the workspace who can read the agent, which
+is each member who can open the task. Kept screenshots are readable by our
+own operators, like the transcript, and are deleted with it: deleting the
+agent or its task marks the transcript deleted and removes it, with its
+screenshots, thirty days later, and deleting your account removes them at
+once. Our service keeps the task's list of cloud
 tabs, each one's address and title, with the agent whose browser holds it,
-until that agent's conversation is removed. The page, its live-view frames, and a tab's
-screenshots and text are not kept by us: the frames pass through our service
+until that agent's conversation is removed. The page and its live-view frames
+are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can
 watch the tab and take it over by clicking and typing in it, and the agent's
 actions on it wait while you do. Nothing of it reaches a trace, a counted event,
-a fixture, or the voice window, and the screen recording masks the live view.
+a fixture, or the voice window, and the screen recording masks the live view
+and the transcript's screenshots.
 The browser's profile, with the cookies and logins you type into it, lives on
 the sandbox's disk, so it stays in that sandbox while it runs and in the
 snapshot Vercel keeps when the sandbox stops, until thirty days after the

@@ -62,6 +62,7 @@ import {
   BROWSER_AGENT_LIMITS,
   BROWSER_CONSOLE_LEVEL,
   BROWSER_CURSOR_KIND,
+  BROWSER_KEPT_SCREENSHOT,
   BROWSER_KEYS,
   BROWSER_MODIFIER,
   BROWSER_SCREENSHOT,
@@ -108,6 +109,12 @@ const CURSOR_REPORT_TIMEOUT = Duration.seconds(1);
 export interface BrowserCursor<R = never> {
   readonly report: (move: BrowserCursorMove) => Effect.Effect<void, never, R>;
   readonly watched: boolean;
+}
+
+/** What a run is asked beside its actions: where it reports the agent's pointer, and whether it keeps a copy of each screenshot for the transcript. */
+export interface BrowserRunOptions<R = never> {
+  readonly cursor?: BrowserCursor<R>;
+  readonly keepScreenshots?: boolean;
 }
 
 /**
@@ -942,14 +949,72 @@ function capture(page: Page, params: CdpParams) {
   );
 }
 
+/** The visible area a screenshot clips at a scale, and the size in pixels a side of it is drawn at. */
+function clipAt(
+  view: {
+    readonly pageX: number;
+    readonly pageY: number;
+    readonly clientWidth: number;
+    readonly clientHeight: number;
+  },
+  ratio: number,
+  longestSide: number,
+) {
+  const longest = Math.max(view.clientWidth, view.clientHeight);
+  const scale = Math.min(1, longestSide / (longest * ratio));
+  const side = (css: number) => Math.min(longestSide, Math.max(1, Math.round(css * scale * ratio)));
+  return {
+    clip: {
+      x: view.pageX,
+      y: view.pageY,
+      width: view.clientWidth,
+      height: view.clientHeight,
+      scale,
+    },
+    width: side(view.clientWidth),
+    height: side(view.clientHeight),
+  };
+}
+
+type ScreenshotClip = ReturnType<typeof clipAt>;
+
+/**
+ * The transcript's copy of the visible page (`BROWSER_KEPT_SCREENSHOT`): at
+ * each JPEG quality in turn, the smaller of that JPEG and the PNG, the first
+ * that fits the byte cap; none where nothing does, or where a capture
+ * fails, since the model's copy stands without it.
+ */
+function keptScreenshot(page: Page, clip: ScreenshotClip["clip"], width: number, height: number) {
+  return Effect.gen(function* () {
+    const png = yield* capture(page, { format: "png", clip, captureBeyondViewport: false });
+    for (const quality of BROWSER_KEPT_SCREENSHOT.QUALITIES) {
+      const jpeg = yield* capture(page, {
+        format: "jpeg",
+        quality,
+        clip,
+        captureBeyondViewport: false,
+      });
+      const smaller =
+        bytesOf(png.data) < bytesOf(jpeg.data)
+          ? { mime: BROWSER_KEPT_SCREENSHOT.PNG, data: png.data }
+          : { mime: BROWSER_KEPT_SCREENSHOT.JPEG, data: jpeg.data };
+      if (bytesOf(smaller.data) <= BROWSER_KEPT_SCREENSHOT.MAX_BYTES) {
+        return { ...smaller, width, height };
+      }
+    }
+    return undefined;
+  }).pipe(Effect.orElseSucceed(() => undefined));
+}
+
 /**
  * The visible page as a JPEG no longer than the longest side and no larger
- * than the byte cap, trying each quality in turn. The tab is brought to the
- * front first, because a tab behind another draws no frame to capture.
- * Note that the clip's scale multiplies the page's own pixel ratio, so the
- * ratio is read and divided out.
+ * than the byte cap, trying each quality in turn: the model's copy; and,
+ * where `keep` asks, the transcript's copy beside it (`keptScreenshot`).
+ * The tab is brought to the front first, because a tab behind another draws
+ * no frame to capture. Note that the clip's scale multiplies the page's own
+ * pixel ratio, so the ratio is read and divided out.
  */
-function screenshot(cdp: CdpSession, page: Page) {
+function screenshot(cdp: CdpSession, page: Page, keep: boolean) {
   return Effect.gen(function* () {
     yield* cdp.send({ method: "Target.activateTarget", params: { targetId: page.targetId } });
     const metrics = yield* readMetrics(
@@ -968,34 +1033,27 @@ function screenshot(cdp: CdpSession, page: Page) {
         ? evaluated.result.value
         : 1;
     const view = metrics.cssVisualViewport;
-    const longest = Math.max(view.clientWidth, view.clientHeight);
-    if (longest <= 0)
+    if (Math.max(view.clientWidth, view.clientHeight) <= 0)
       return yield* failed("the tab shows nothing to capture; it has no visible area");
-    const scale = Math.min(1, BROWSER_SCREENSHOT.LONGEST_SIDE / (longest * ratio));
-    const side = (css: number) =>
-      Math.min(BROWSER_SCREENSHOT.LONGEST_SIDE, Math.max(1, Math.round(css * scale * ratio)));
-    const clip = {
-      x: view.pageX,
-      y: view.pageY,
-      width: view.clientWidth,
-      height: view.clientHeight,
-      scale,
-    };
+    const shown = clipAt(view, ratio, BROWSER_SCREENSHOT.LONGEST_SIDE);
     for (const quality of BROWSER_SCREENSHOT.QUALITIES) {
       const { data } = yield* capture(page, {
         format: "jpeg",
         quality,
-        clip,
+        clip: shown.clip,
         captureBeyondViewport: false,
       });
-      if (bytesOf(data) <= BROWSER_SCREENSHOT.MAX_BYTES) {
-        return {
-          mime: BROWSER_SCREENSHOT.MIME,
-          data,
-          width: side(view.clientWidth),
-          height: side(view.clientHeight),
-        };
-      }
+      if (bytesOf(data) > BROWSER_SCREENSHOT.MAX_BYTES) continue;
+      const image = {
+        mime: BROWSER_SCREENSHOT.MIME,
+        data,
+        width: shown.width,
+        height: shown.height,
+      };
+      if (!keep) return { image };
+      const full = clipAt(view, ratio, BROWSER_KEPT_SCREENSHOT.LONGEST_SIDE);
+      const kept = yield* keptScreenshot(page, full.clip, full.width, full.height);
+      return kept === undefined ? { image } : { image, kept };
     }
     return yield* failed(
       `the screenshot stayed over ${BROWSER_SCREENSHOT.MAX_BYTES} bytes at every quality; take a snapshot instead`,
@@ -1088,8 +1146,9 @@ function onPage<R>(
   pages: Pages,
   page: Page,
   action: BrowserAgentAction,
-  cursor: BrowserCursor<R> | undefined,
+  run: BrowserRunOptions<R>,
 ): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure, R> {
+  const cursor = run.cursor;
   const tab = page.targetId;
   switch (action.action) {
     case BROWSER_AGENT_ACTION.NAVIGATE:
@@ -1145,9 +1204,9 @@ function onPage<R>(
       );
     }
     case BROWSER_AGENT_ACTION.SCREENSHOT:
-      return Effect.map(screenshot(cdp, page), (image) => ({
+      return Effect.map(screenshot(cdp, page, run.keepScreenshots === true), (pictures) => ({
         ...actedOn(BROWSER_AGENT_ACTION.SCREENSHOT, tab),
-        image,
+        ...pictures,
       }));
     case BROWSER_AGENT_ACTION.SNAPSHOT:
       return Effect.map(snapshot(cdp, page), (tree) => ({
@@ -1195,7 +1254,7 @@ function stepOf<R>(
   action: BrowserAgentAction,
   tab: string | undefined,
   watched: boolean,
-  cursor: BrowserCursor<R> | undefined,
+  run: BrowserRunOptions<R>,
 ): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure, R> {
   if (action.action === BROWSER_AGENT_ACTION.LIST) {
     return Effect.map(cdp.pages, (listed) => ({
@@ -1222,7 +1281,7 @@ function stepOf<R>(
   return Effect.flatMap(pages.page(tab), (page) =>
     Effect.andThen(
       watched ? pages.watch(page) : Effect.void,
-      onPage(cdp, pages, page, action, cursor),
+      onPage(cdp, pages, page, action, run),
     ),
   );
 }
@@ -1248,10 +1307,10 @@ function boundedStep<R>(
   action: BrowserAgentAction,
   tab: string | undefined,
   watched: boolean,
-  cursor: BrowserCursor<R> | undefined,
+  run: BrowserRunOptions<R>,
 ) {
   const bound = boundOf(action);
-  return stepOf(cdp, pages, action, tab, watched, cursor).pipe(
+  return stepOf(cdp, pages, action, tab, watched, run).pipe(
     Effect.timeoutOrElse({
       duration: Duration.millis(bound.millis),
       orElse: () => failed(bound.reason),
@@ -1284,12 +1343,14 @@ function tabAfter(step: BrowserAgentStep, before: string | undefined): string | 
  * fails: every step that ran, the failed one last, and how many never ran.
  * It never fails itself; a browser that cannot be reached is the session's
  * own failure, before any action. A cursor, where given, hears each move
- * of the agent's pointer just before its input (`BrowserCursor`).
+ * of the agent's pointer just before its input (`BrowserCursor`), and
+ * `keepScreenshots` answers each screenshot with the transcript's copy
+ * beside the model's (`BROWSER_KEPT_SCREENSHOT`).
  */
 export function runBrowserActions<R = never>(
   cdp: CdpSession,
   actions: readonly BrowserAgentAction[],
-  options: { readonly cursor?: BrowserCursor<R> } = {},
+  options: BrowserRunOptions<R> = {},
 ): Effect.Effect<BrowserAgentRun, never, R> {
   return Effect.scoped(
     Effect.gen(function* () {
@@ -1302,9 +1363,7 @@ export function runBrowserActions<R = never>(
             ? undefined
             : (action.tab ?? tab);
         const watched = watchedFor(action, named, actions[at + 1]);
-        const ran = yield* Effect.result(
-          boundedStep(cdp, pages, action, named, watched, options.cursor),
-        );
+        const ran = yield* Effect.result(boundedStep(cdp, pages, action, named, watched, options));
         if (Result.isFailure(ran)) {
           const error = cutBrowserText(ran.failure, BROWSER_AGENT_LIMITS.ERROR_MAX_CHARS);
           const failedOn = named === undefined ? {} : { tab: named };

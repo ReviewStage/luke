@@ -72,13 +72,19 @@ Review places a module and a component alike under this rule.
   And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
   in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
   address, title, screenshots, and text snapshots to that agent and its workers,
-  the model, the agent's transcript (a screenshot reaches the model but is left
-  out of the stored conversation, as `look_at_picture`'s picture is,
-  `packages/service/src/tasks/picture-look.ts`), and the panels of the workspace
-  members who open the task; the service keeps the tab list, each tab's address
-  and title; none of it ever goes into a trace, a counted event, a fixture, or the
-  voice window, and session replay masks the live view; the cookies a member types
-  into it stay in that agent's sandbox, and its snapshots, for the sandbox's life.
+  the model, the agent's transcript, and the panels of the workspace members who
+  open the task; the service keeps the tab list, each tab's address and title.
+  Amended, approved by Dean on 2026-10-22: the model is handed a small copy of
+  each screenshot, whose base64 is left out of the stored conversation, and the
+  service keeps a full-size copy beside the transcript the call is written to,
+  the agent's or its worker's, as `show_image`'s pictures are
+  (`packages/service/src/agents/browser/browser-tool.ts`), which the stored
+  conversation names by id, which that transcript shows to the members who can
+  open the task, and which is deleted with the conversation, by its purge thirty
+  days after a delete or at once with the account. None of it ever goes into a
+  trace, a counted event, a fixture, or the voice window, and session replay masks
+  the live view and the transcript's screenshots; the cookies a member types into
+  it stay in that agent's sandbox, and its snapshots, for the sandbox's life.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
   roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web

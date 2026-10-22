@@ -190,6 +190,63 @@ test("an integration's call keeps its row and gains its pictures as chips, one l
   assert.equal(chips[1]?.textContent, "Not kept6.4 MB");
 });
 
+test("a browser call's screenshots are thumbnails in a strip under its row, masked from the replay, and a press opens the window's viewer walking them", async () => {
+  const [first, second] = [picture(1280, 800), picture(1280, 800)];
+  assert.ok(first && second);
+  const screenshot = (kept: ReturnType<typeof picture>) => ({
+    action: "screenshot",
+    status: "done",
+    tab: "tab-1",
+    image: { mime: "image/jpeg", width: 1280, height: 800 },
+    picture: kept,
+  });
+  const { container, read } = await drawn({
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      toolPart(
+        "browser",
+        "call-browser",
+        {
+          actions: [
+            { action: "screenshot", tab: "tab-1" },
+            { action: "click", tab: "tab-1", x: 40, y: 60 },
+            { action: "screenshot", tab: "tab-1" },
+          ],
+        },
+        {
+          status: "ran",
+          steps: [
+            screenshot(first),
+            { action: "click", status: "done", tab: "tab-1" },
+            screenshot(second),
+          ],
+          skipped: 0,
+          tabs: [{ tab: "tab-1", url: "http://localhost:3000/", title: "Shop" }],
+        },
+      ),
+    ],
+  });
+  const strip = container.querySelector('ul[aria-label="Pictures the call answered"]');
+  const thumbnails = [...(strip?.querySelectorAll("li img") ?? [])];
+
+  assert.ok(strip?.classList.contains("ph-no-capture"), "the strip is left out of the replay");
+  assert.deepEqual(
+    thumbnails.map((image) => [image.getAttribute("alt"), image.getAttribute("src")]),
+    [
+      ["screenshot-1", "data:image/png;base64,iVBORw=="],
+      ["screenshot-2", "data:image/png;base64,iVBORw=="],
+    ],
+  );
+  assert.deepEqual(read, [first.id, second.id]);
+  const open = strip?.querySelector<HTMLElement>("li button");
+  assert.ok(open);
+
+  await act(async () => open.click());
+
+  assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 2");
+});
+
 test("a refused show_image is a row where its error is read, and a picture in the agent's words is a link, never an image", async () => {
   const { container } = await drawn(
     {
