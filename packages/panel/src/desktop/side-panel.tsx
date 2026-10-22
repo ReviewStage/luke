@@ -26,6 +26,7 @@ import {
   ExpandIcon,
   FoldingButton,
   IconButton,
+  LIST_DENSITY,
   List,
   ListRow,
   SCROLL_SIZE,
@@ -1111,7 +1112,8 @@ function ActivityList({
             </Text>
           </div>
         ) : (
-          <List label="Activity">
+          // Note that the open tabs are dense rows, as the offers under them (`MenuRowList`) are, so both read down one edge in one type.
+          <List label="Activity" density={LIST_DENSITY.DENSE}>
             {open.map((entry) => (
               <ListRow
                 key={tabKey(entry.tab)}
