@@ -179,7 +179,7 @@ function runtimes() {
 }
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 32 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 64 }, (_, index) => ({
   id: 9_100 + index,
   login: RELAY.owner,
   accountId: 91_000 + index,
