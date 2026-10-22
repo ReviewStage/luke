@@ -777,3 +777,21 @@ test("a row leads its repository with its owner's picture, one address for every
   assert.equal(pictures.length, page.querySelectorAll(".tasks-list-row").length);
   assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
 });
+
+test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
+  const page = await mountPage();
+  const offered = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item')]
+      .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
+      .map((item) => item.querySelector("img.luke-avatar-picture")?.getAttribute("src"));
+
+  openOptions(page, "Filter");
+  choose("Repository");
+  assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);
+  closeMenus();
+
+  act(() => buttonNamed(page, "Board").click());
+  openOptions(page, "Filter");
+  choose("Repository");
+  assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);
+});
