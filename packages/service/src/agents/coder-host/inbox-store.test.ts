@@ -1850,6 +1850,34 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
       }),
   );
 
+  it.effect(
+    "a settled item still unread is counted in the account's read of whoever its task is assigned to, else of its agent's starter",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const taskId = agent.taskId ?? "";
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* updateTask(owner, taskId, { assigneeId: null });
+        const itemId = yield* postedId(agent, "settled");
+        // The owner's answer leaves it read for them and unread for the teammate.
+        assert.ok(Option.isSome(yield* answerInboxItem(owner, itemId, 1, DONE, randomUUID())));
+        const counted = (readerId: string) =>
+          Effect.map(accountWaitingStamps(readerId), (stamps) =>
+            stamps.some((stamp) => stamp.id === itemId),
+          );
+
+        const unassigned = yield* counted(teammate);
+        yield* updateTask(owner, taskId, { assigneeId: teammate });
+        const assigned = yield* counted(teammate);
+        yield* updateTask(owner, taskId, { assigneeId: owner });
+        const reassigned = yield* counted(teammate);
+
+        assert.deepEqual([unassigned, assigned, reassigned], [false, true, false]);
+      }),
+  );
+
   it.effect("an item of an agent with no task waits on the member who started it", () =>
     Effect.gen(function* () {
       const { agent, workspaceId } = yield* openTasklessAgent;

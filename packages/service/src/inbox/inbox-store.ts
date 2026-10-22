@@ -1224,13 +1224,18 @@ function toDoCount(userId: string): SQL<number> {
  * The settled items still unread that wait on the reader (`WAITS_ON`) on
  * the tasks of their workspaces: what To do lists beside the open items, so
  * their read marks and new messages on those items move the account's cursor
- * as an open item's change does.
+ * as an open item's change does. Note that who it waits on is spelled out
+ * against the joined task rather than read through `WAITS_ON`, because the
+ * starter's side then reaches the items by the reader's own index
+ * (`inbox_item_user_status_updated`) and the assignee's by the task's,
+ * where a `coalesce` would read every settled item of their workspaces on
+ * each look.
  */
 function accountUnreadSettled(userId: string) {
   return and(
     isNotNull(inboxItem.taskId),
     taskReachableBy(userId),
-    sql`${WAITS_ON} = ${userId}`,
+    or(and(eq(inboxItem.userId, userId), isNull(task.assigneeId)), eq(task.assigneeId, userId)),
     ne(inboxItem.status, INBOX_STATUS.OPEN),
     unreadFor(userId),
   );
