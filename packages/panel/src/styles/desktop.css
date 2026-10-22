@@ -3241,7 +3241,35 @@ ul.actor-stack {
 
 /* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
 .inbox-tasks-body {
+  /* Held as tall as the scroller shows it while a row leaves, so the rows in
+     sight stand still (`inbox-row-motion.tsx`). */
+  min-height: var(--inbox-held-height, 0);
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
+}
+
+/* A row or a group leaving is laid over the place it held as it fades
+   (`inbox-row-motion.tsx`), placed from its run or the body it stands in,
+   which scroll with it, and takes no pointer. */
+.inbox-tasks-body,
+.inbox-tasks-body .sidebar-tasks {
+  position: relative;
+}
+
+.inbox-tasks-body [data-leaving] {
+  pointer-events: none;
+}
+
+/* A group's room above it counts only the groups still in the layout, so a
+   group stands as it will once the one leaving before it is gone, and its
+   glide ends there rather than a margin short. */
+.inbox-tasks-body > [data-leaving] + .sidebar-repository {
+  margin-top: 0;
+}
+
+.inbox-tasks-body
+  > .sidebar-repository:not([data-leaving])
+  ~ .sidebar-repository:not([data-leaving]) {
+  margin-top: var(--luke-space-8);
 }
 
 /* The inbox-first sidebar's list (`sidebar-inbox.tsx`): the sidebar's own
@@ -3809,8 +3837,7 @@ ul.actor-stack {
 /* The ask closing the message that asks it, once it no longer waits: a
    bordered card, its head the ask's kind and where it stands. Once
    answered, its controls alone head the reply that answered it, as the
-   answer left them, with no card around them. A withdrawn ask is its head
-   alone. */
+   answer left them, with no card around them. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3857,10 +3884,10 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-4);
 }
 
-/* A replaced ask keeps its controls in the agent's message as it offered
-   them, nothing picked and taking nothing, dimmed so they read as what it
-   used to ask rather than something to answer, over the pill saying what
-   replaced it. */
+/* A replaced or withdrawn ask keeps its controls in the agent's message as
+   it offered them, nothing picked and taking nothing, dimmed so they read
+   as what it used to ask rather than something to answer, over the pill
+   saying what replaced it, or why it was withdrawn. */
 .inbox-ask-replaced {
   display: flex;
   min-width: 0;
@@ -3878,8 +3905,8 @@ ul.actor-stack {
 
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
-   complete ink; a replaced ask with the same pill saying so, in the muted
-   ink alone. */
+   complete ink; a replaced or withdrawn ask with the same pill saying so,
+   in the muted ink alone. */
 .inbox-ask-settled {
   display: inline-flex;
   max-width: 100%;

@@ -42,8 +42,9 @@ import {
   knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, readLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/luke-link";
 import { insideCode, linksIn } from "@luke/features/mention-link";
+import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
@@ -1162,7 +1163,7 @@ export function sentenceCased(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** What a row's media strip shows of an item: a picture by its attachment, or a page by its task and id. */
+/** What a row's media strip shows of an item: a picture by its attachment, or a page by its place, a task or an agent with no task, and id. */
 export const INBOX_MEDIA = {
   IMAGE: "image",
   PAGE: "page",
@@ -1175,7 +1176,8 @@ export type InboxMedia =
     }
   | {
       readonly kind: typeof INBOX_MEDIA.PAGE;
-      readonly taskId: string;
+      /** What the page stands on: a task, or an agent with no task. */
+      readonly place: PagePlace;
       readonly pageId: string;
     };
 
@@ -1184,6 +1186,25 @@ const MAX_ROW_MEDIA = 4;
 
 /** The picture types a file on the thread may be drawn as, the ones an image block's attachment is kept as. */
 const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+
+/** The page a link's place names as media: a task's, or an agent with no task's; none for a place that is no page. */
+function pageMediaOf(place: ReadLink["place"] | undefined): InboxMedia | undefined {
+  if (place?.kind !== LINK_PLACE.PAGE) return undefined;
+  const owner = "planId" in place ? { taskId: place.planId } : { agentId: place.agentId };
+  return { kind: INBOX_MEDIA.PAGE, place: owner, pageId: place.pageId };
+}
+
+/** Whether two media are one picture, or one page of one place. */
+function sameMedia(a: InboxMedia, b: InboxMedia): boolean {
+  if (a.kind === INBOX_MEDIA.IMAGE) {
+    return b.kind === INBOX_MEDIA.IMAGE && b.attachmentId === a.attachmentId;
+  }
+  return (
+    b.kind === INBOX_MEDIA.PAGE &&
+    b.pageId === a.pageId &&
+    pagePlaceId(b.place) === pagePlaceId(a.place)
+  );
+}
 
 /**
  * The media an item carries, as its row shows them, at most
@@ -1200,18 +1221,8 @@ export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
   if (thread !== undefined) return threadMedia(item, thread);
   const found: InboxMedia[] = [];
   const page = (target: string) => {
-    const place = readLink(target)?.place;
-    // A page of an agent on no task draws no card here, and its link opens it on the agent's page.
-    if (place?.kind !== LINK_PLACE.PAGE || !("planId" in place)) return;
-    const known = found.some(
-      (each) =>
-        each.kind === INBOX_MEDIA.PAGE &&
-        each.taskId === place.planId &&
-        each.pageId === place.pageId,
-    );
-    if (!known) {
-      found.push({ kind: INBOX_MEDIA.PAGE, taskId: place.planId, pageId: place.pageId });
-    }
+    const media = pageMediaOf(readLink(target)?.place);
+    if (media !== undefined && !found.some((each) => sameMedia(each, media))) found.push(media);
   };
   const pictures = (files: readonly { attachmentId: string; mediaType: string }[]) => {
     for (const file of files) {
@@ -1263,16 +1274,8 @@ function picturesDrawn(
  */
 function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly InboxMedia[] {
   const found: InboxMedia[] = [];
-  const known = (media: InboxMedia) =>
-    found.some((each) =>
-      each.kind === INBOX_MEDIA.IMAGE
-        ? media.kind === INBOX_MEDIA.IMAGE && media.attachmentId === each.attachmentId
-        : media.kind === INBOX_MEDIA.PAGE &&
-          media.taskId === each.taskId &&
-          media.pageId === each.pageId,
-    );
   const add = (media: InboxMedia) => {
-    if (!known(media)) found.push(media);
+    if (!found.some((each) => sameMedia(each, media))) found.push(media);
   };
   for (const message of thread) {
     const named: { readonly at: number; readonly media: InboxMedia }[] = [];
@@ -1280,10 +1283,8 @@ function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly
       named.push({ at, media: { kind: INBOX_MEDIA.IMAGE, attachmentId } });
     }
     for (const link of linksIn(message.text)) {
-      const place = readLink(link.target)?.place;
-      if (place?.kind !== LINK_PLACE.PAGE || !("planId" in place)) continue;
-      const media = { kind: INBOX_MEDIA.PAGE, taskId: place.planId, pageId: place.pageId } as const;
-      named.push({ at: link.start, media });
+      const media = pageMediaOf(readLink(link.target)?.place);
+      if (media !== undefined) named.push({ at: link.start, media });
     }
     for (const each of named.toSorted((a, b) => a.at - b.at)) add(each.media);
     for (const file of message.files ?? []) {

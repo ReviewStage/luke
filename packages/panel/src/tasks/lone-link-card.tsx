@@ -39,7 +39,8 @@ import { useOpenLink } from "./use-open-link.js";
  * hangs the card its chip hangs (`mention-chip.tsx`): a pull request's its
  * key, state, size, opener, branches, labels, and counts, and a page's
  * the page's own card, a preview of it (`page-card.tsx`), where the window
- * holds the page. Either opens what it names as its chip does. Lines
+ * holds the page, or, for a page of an agent on no task, where the agent's
+ * pages read as the card is hung hold it (`chip-cards.tsx`). Either opens what it names as its chip does. Lines
  * of a file are the card an Inbox code block draws (`inbox-code-card.tsx`),
  * read through the doors the place drawing the words hands
  * (`LoneLinkCards`); where it hands none, the link stays its chip. Any

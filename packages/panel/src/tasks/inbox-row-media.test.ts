@@ -173,3 +173,32 @@ test("a thread's row reads the pictures its messages' words draw and its replies
   assert.equal(hook.image(PICTURE_A), "data:image/png;base64,iVBORw0KGgoA");
   assert.equal(hook.image(PICTURE_B), "data:image/png;base64,iVBORw0KGgoB");
 });
+
+test("an agent with no task's pages are read by its own id, once, and held beside a task's under their own keys", async () => {
+  const asked: unknown[] = [];
+  const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  fakeActPort({
+    [ACT_KIND.TASKS_PAGES]: (payload) => {
+      asked.push(payload);
+      return Promise.resolve({ pages: [] });
+    },
+  });
+  let held: RowMediaReads | undefined;
+  function Harness() {
+    held = useRowMediaReads([ITEM_A]);
+    return null;
+  }
+  root = createRoot(document.createElement("div"));
+  const registry = AtomRegistry.make();
+  act(() => root?.render(onRegistry(registry, createElement(Harness))));
+  const hook = () => held ?? assert.fail("the hook stands");
+  await act(async () => {
+    hook().onPages({ agentId: AGENT }, 1_000);
+    hook().onPages({ agentId: AGENT }, 1_000);
+    hook().onPages({ taskId: "plan-billing" }, 1_000);
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.deepEqual(asked, [{ agentId: AGENT }, { taskId: "plan-billing" }]);
+  assert.deepEqual(hook().pages.get(AGENT), []);
+  assert.deepEqual(hook().pages.get("plan-billing"), []);
+});

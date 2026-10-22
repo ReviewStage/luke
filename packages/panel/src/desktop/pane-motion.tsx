@@ -85,9 +85,22 @@ function milliseconds(value: string): number {
  * here as everywhere else, without a check of their own.
  */
 export function paneTiming(element: Element): KeyframeAnimationOptions | undefined {
+  return tokenTiming(element, "--duration-pane", "--motion-pane");
+}
+
+/**
+ * The timing a motion plays on, read from the duration and easing tokens
+ * named as they stand at `element`, or nothing where there is to be no
+ * motion, as `paneTiming` reads the pane's.
+ */
+export function tokenTiming(
+  element: Element,
+  durationToken: string,
+  easingToken: string,
+): KeyframeAnimationOptions | undefined {
   const style = getComputedStyle(element);
-  const duration = milliseconds(style.getPropertyValue("--duration-pane"));
-  const easing = style.getPropertyValue("--motion-pane").trim();
+  const duration = milliseconds(style.getPropertyValue(durationToken));
+  const easing = style.getPropertyValue(easingToken).trim();
   // Note that reduced motion leaves 1ms rather than none, which is no motion either.
   if (duration <= 1 || easing === "") return undefined;
   return { duration, easing };

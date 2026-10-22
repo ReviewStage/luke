@@ -14,8 +14,9 @@
  * (`hiddenColumns`): the place opens on its list, a section chosen there
  * stands alone the whole width, its toolbar led by a way back to the list.
  * A view's toolbar stands in the title bar's row, as a page's does beside
- * the plans' sidebar, rather than under a drag strip of its own. The views
- * themselves are `admin/admin-place.tsx`'s.
+ * the plans' sidebar, rather than under a drag strip of its own, and ⌘F
+ * finds in the view standing (`PageFind`). The views themselves are
+ * `admin/admin-place.tsx`'s.
  */
 
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -28,6 +29,7 @@ import type { AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
+import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -58,6 +60,13 @@ function OpenInBrowserRow(): React.JSX.Element {
       {OPEN_IN_BROWSER}
     </NavItem>
   );
+}
+
+/** A view by the words a find's scope is keyed by, so moving to another view closes the bar. */
+function adminViewKey(view: AdminView): string {
+  if (view.kind === "account") return `account:${view.id}`;
+  if (view.kind === "day") return `day:${view.day}`;
+  return view.kind;
 }
 
 export interface DesktopAdminProps {
@@ -143,7 +152,10 @@ export function DesktopAdmin({
             ) : undefined
           }
         >
-          <AdminPlace view={view} onOpen={onOpen} />
+          {/* Each view is found in as one scope, its bar under the view's toolbar; another view closes it. */}
+          <PageFind page={FIND_PAGE.ADMIN} at={adminViewKey(view)} active={!hidden.item}>
+            <AdminPlace view={view} onOpen={onOpen} />
+          </PageFind>
         </AdminToolbarLead>
       </section>
     </div>

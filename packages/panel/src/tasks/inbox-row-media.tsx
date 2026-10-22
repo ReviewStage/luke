@@ -1,4 +1,4 @@
-import type { PageLine } from "@luke/features/page-wire";
+import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { AppWindowIcon, ImageOffIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -16,8 +16,8 @@ import type { InboxImage } from "./use-task-inbox.js";
  * reads its rows' media itself, once for the whole list and as each row is
  * first drawn: a picture by the attachment read the pane's takes
  * (`ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT`), held by its attachment, and
- * a page's newest version through its task's pages
- * (`ACT_KIND.TASKS_PAGES`), each task read once, and again once an item
+ * a page's newest version through its place's pages, a task's or an agent
+ * with no task's (`ACT_KIND.TASKS_PAGES`), each place read once, and again once an item
  * naming one of its pages changes, as an agent showing a page anew does. A
  * picture is let go once no listed item's row draws it, its item having left
  * the list or been reposted without it, as the task Inbox lets go of a
@@ -29,12 +29,12 @@ import type { InboxImage } from "./use-task-inbox.js";
  * under the same sandbox, taking no pointer and no focus, and left out of
  * the screen recording. Until a picture or a page's frame lands its tile
  * holds its place in a quiet ground; a picture whose read did not answer,
- * and a page its task does not list, wear their kind's glyph instead. The
+ * and a page its place does not list, wear their kind's glyph instead. The
  * strip is decoration: the row's words say what the item is, and its pane
  * shows the media whole.
  */
 
-/** A task's pages as read, or that the read did not answer. */
+/** A place's pages as read, or that the read did not answer. */
 type PageRead = readonly PageLine[] | "failed";
 
 /** The list's reads of its rows' media, shared by every row. */
@@ -42,10 +42,10 @@ export interface RowMediaReads {
   readonly images: ReadonlyMap<string, InboxImage>;
   /** Says which pictures an item's row draws now, asking for each that is neither held nor on its way, and letting go of those no listed row draws any longer. */
   readonly onImages: (itemId: string, attachmentIds: readonly string[]) => void;
-  /** Each task's pages as read, by the task's id. */
+  /** Each place's pages as read, by the id of the task or the agent with no task that holds them (`pagePlaceId`). */
   readonly pages: ReadonlyMap<string, PageRead>;
-  /** Asks for a task's pages for an item changed at `at`, where no read asked since it changed is held or on its way. */
-  readonly onPages: (taskId: string, at: number) => void;
+  /** Asks for a place's pages for an item changed at `at`, where no read asked since it changed is held or on its way. */
+  readonly onPages: (place: PagePlace, at: number) => void;
 }
 
 /** The pictures held but those under the attachments given. */
@@ -133,20 +133,21 @@ export function useRowMediaReads(
     letGo();
   }, [listed, letGo]);
   const onPages = useCallback(
-    (taskId: string, at: number) => {
-      const last = pagesAsked.current.get(taskId);
+    (place: PagePlace, at: number) => {
+      const key = pagePlaceId(place);
+      const last = pagesAsked.current.get(key);
       if (last !== undefined && last >= at) return;
-      pagesAsked.current.set(taskId, at);
-      act(ACT_KIND.TASKS_PAGES, { taskId }).then(
+      pagesAsked.current.set(key, at);
+      act(ACT_KIND.TASKS_PAGES, place).then(
         (answer) => {
           // Note that a read asked for since is the newer, so this one gives way to it.
-          if (pagesAsked.current.get(taskId) !== at) return;
+          if (pagesAsked.current.get(key) !== at) return;
           const read: PageRead = "pages" in answer ? answer.pages : "failed";
-          setPages((standing) => new Map(standing).set(taskId, read));
+          setPages((standing) => new Map(standing).set(key, read));
         },
         () => {
-          if (pagesAsked.current.get(taskId) === at) {
-            setPages((standing) => new Map(standing).set(taskId, "failed"));
+          if (pagesAsked.current.get(key) === at) {
+            setPages((standing) => new Map(standing).set(key, "failed"));
           }
         },
       );
@@ -173,13 +174,13 @@ function ImageTile({ image }: { image: InboxImage | undefined }): React.JSX.Elem
   );
 }
 
-/** One page's tile: its newest version drawn small and inert once its task's pages are read, its glyph where they hold no such page. */
+/** One page's tile: its newest version drawn small and inert once its place's pages are read, its glyph where they hold no such page. */
 function PageTile({
-  taskId,
+  place,
   pageId,
   read,
 }: {
-  taskId: string;
+  place: PagePlace;
   pageId: string;
   read: PageRead | undefined;
 }): React.JSX.Element {
@@ -194,7 +195,7 @@ function PageTile({
       </span>
     );
   }
-  const src = appPlatform().pageFrameUrl({ taskId, pageId, version: page.version });
+  const src = appPlatform().pageFrameUrl({ ...place, pageId, version: page.version });
   return (
     <span className="inbox-row-media-tile ph-no-capture" data-loaded={String(loadedFrom === src)}>
       <iframe
@@ -215,7 +216,7 @@ function PageTile({
 
 /**
  * Asks for the media an item's row shows, as it is first drawn and whenever the item changes: its pictures,
- * which lets go of any it no longer carries, and its tasks' pages. The row asks whether or not it draws a strip,
+ * which lets go of any it no longer carries, and its pages, by place. The row asks whether or not it draws a strip,
  * so an item reposted with no media says so too; it asks nothing where the rows show no media.
  */
 export function useRowMediaAsks(
@@ -232,7 +233,7 @@ export function useRowMediaAsks(
     const pictures: string[] = [];
     for (const each of media) {
       if (each.kind === INBOX_MEDIA.IMAGE) pictures.push(each.attachmentId);
-      else onPages(each.taskId, changedAt);
+      else onPages(each.place, changedAt);
     }
     onImages(itemId, pictures);
   }, [itemId, changedAt, media, onImages, onPages]);
@@ -253,10 +254,10 @@ export function RowMedia({
           <ImageTile key={each.attachmentId} image={reads.images.get(each.attachmentId)} />
         ) : (
           <PageTile
-            key={each.pageId}
-            taskId={each.taskId}
+            key={`${pagePlaceId(each.place)}/${each.pageId}`}
+            place={each.place}
             pageId={each.pageId}
-            read={reads.pages.get(each.taskId)}
+            read={reads.pages.get(pagePlaceId(each.place))}
           />
         ),
       )}

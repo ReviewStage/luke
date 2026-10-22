@@ -81,6 +81,7 @@ export const FIND_PAGE = {
   BOARD: "board",
   VERSION_HISTORY: "version-history",
   PERSON: "person",
+  ADMIN: "admin",
 } as const;
 
 type FindPage = (typeof FIND_PAGE)[keyof typeof FIND_PAGE];
@@ -430,7 +431,8 @@ export function FindScope({
 
 /**
  * A page standing in the plan's place, found in as one scope: the
- * window's Inbox, the Automations page, the Board, and a version history. It
+ * window's Inbox, the Automations page, the Board, a version history, and
+ * an Admin view. It
  * fills the place as the page did, its bar under the page's toolbar
  * (`.page-find`), and finds in the page's words, never in what a field
  * holds, since a field's value is no text of the page's; Settings keeps ⌘F

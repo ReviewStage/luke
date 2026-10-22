@@ -42,6 +42,7 @@ import {
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { TASK_STATUS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
@@ -83,7 +84,7 @@ import {
   fakeAppPlatform,
   QUIET_PANEL,
 } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handState, stateWith } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -96,6 +97,7 @@ import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { playMotions } from "../testing/pane-motion.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
@@ -216,6 +218,8 @@ const FUNNEL = {
 let root: Root | undefined;
 /** Each task's pages as a read of them answers. */
 let taskPages = new Map<string, readonly (typeof FUNNEL)[]>();
+/** Each agent with no task's own pages as a read of them answers, none for an agent the reader cannot reach. */
+let agentPages = new Map<string, readonly PageLine[]>();
 /** The task's agents as the service lists them, archived ones among them. */
 let listedAgents: readonly CodingAgentSummary[] = [AGENT];
 /** Each task's inbox as the service answers a read of it from the start. */
@@ -330,6 +334,7 @@ beforeEach(() => {
   ]);
   startRead = undefined;
   taskPages = new Map([[BILLING.id, [FUNNEL]]]);
+  agentPages = new Map();
   listedAgents = [AGENT];
   agentInboxes = new Map();
   agentReads = [];
@@ -406,7 +411,10 @@ beforeEach(() => {
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
           value: {
-            pages: "taskId" in request.payload ? (taskPages.get(request.payload.taskId) ?? []) : [],
+            pages:
+              "taskId" in request.payload
+                ? (taskPages.get(request.payload.taskId) ?? [])
+                : (agentPages.get(request.payload.agentId) ?? []),
           },
         });
       }
@@ -3336,6 +3344,106 @@ test("on To do, a focused row whose item is answered on another Mac leaves the k
   );
 });
 
+/** Gives the window the list's motion tokens beside the pane's, and an engine that records what is played; answers what was played. */
+function playListMotions() {
+  const motions = playMotions();
+  const root = document.documentElement.style;
+  const tokens = {
+    "--duration-exit": "90ms",
+    "--motion-exit": "ease",
+    "--duration-shape": "460ms",
+    "--spring": "ease-out",
+  };
+  for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
+  onTestFinished(() => {
+    motions.remove();
+    for (const name of Object.keys(tokens)) root.removeProperty(name);
+  });
+  return motions.played;
+}
+
+/** Answers the Invites item on another Mac, as main hears of it. */
+async function answerExpiryElsewhere(): Promise<void> {
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      status: INBOX_STATUS.ANSWERED,
+      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+      updatedAt: 6_000,
+    },
+  ]);
+  act(() =>
+    setHolding([
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+}
+
+test("on To do, an item answered on another Mac fades where its row stood, its task's group with it, out of reach while it fades, and leaves the list once the fade has played", async () => {
+  const played = playListMotions();
+  const { page } = mount();
+  await settle();
+  showScope(page, "To do");
+  await answerExpiryElsewhere();
+  // The settled row To do held leaves with it, from the group that stays.
+  const leaving = [...page.querySelectorAll<HTMLElement>("[data-leaving]")];
+  const group = leaving.find((each) => each.matches(".inbox-tasks-body > *"));
+  const row = leaving.find((each) => each.matches(".sidebar-tasks > li"));
+  assert.equal(leaving.length, 2);
+  assert.match(group?.textContent ?? "", /^Invites.*Expire after 7 days\?/);
+  assert.equal(row?.querySelector(ROW_TITLE)?.textContent, "How is a failed email retried?");
+  assert.ok(
+    leaving.every((each) => each.hasAttribute("inert")),
+    "each is drawn on out of reach",
+  );
+  const fades = played.filter((each) => leaving.includes(each.element as HTMLElement));
+  assert.deepEqual(
+    fades.map((each) => each.keyframes.at(-1)),
+    [{ opacity: 0 }, { opacity: 0 }],
+  );
+
+  act(() => {
+    for (const fade of fades) fade.finish();
+  });
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.equal(page.querySelector("[data-leaving]"), null);
+});
+
+test("a row leaving a list scrolled down holds the list as tall as its scroller shows it, so the rows in sight stand still, and gives the height back as the list is scrolled up, all of it at the top", async () => {
+  playListMotions();
+  const { page } = mount();
+  await settle();
+  showScope(page, "To do");
+  const body = page.querySelector<HTMLElement>(".inbox-tasks-body") ?? assert.fail("a body");
+  const scroller = body.parentElement ?? assert.fail("a scroller");
+  // Note that jsdom lays nothing out, so the scroller's place and the body's are given.
+  scroller.style.overflowY = "auto";
+  let scrolled = 120;
+  Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => scrolled });
+  Object.defineProperty(body, "offsetHeight", { configurable: true, value: 900 });
+  vi.spyOn(scroller, "getBoundingClientRect").mockImplementation(
+    () => ({ top: 0, bottom: 500 }) as DOMRect,
+  );
+  vi.spyOn(body, "getBoundingClientRect").mockImplementation(
+    () => ({ top: -scrolled, bottom: 900 - scrolled }) as DOMRect,
+  );
+  const held = () => body.style.getPropertyValue("--inbox-held-height");
+
+  await answerExpiryElsewhere();
+  assert.equal(held(), "620px", "as far down as the scroller shows it");
+  scrolled = 60;
+  act(() => scroller.dispatchEvent(new Event("scroll")));
+  assert.equal(held(), "560px");
+  scrolled = 90;
+  act(() => scroller.dispatchEvent(new Event("scroll")));
+  assert.equal(held(), "560px", "scrolling back down takes no height back");
+  scrolled = 0;
+  act(() => scroller.dispatchEvent(new Event("scroll")));
+  assert.equal(held(), "");
+});
+
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
   const { page } = mount();
   await settle();
@@ -4286,6 +4394,72 @@ test("an item of an agent with no plan stands under the automation that started 
   assert.match(crumbs, /Nightly flake sweep/u);
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Quarantine the flaky test?");
   assert.deepEqual(asked.shownTasks, [], "the automation's crumb opens no plan");
+});
+
+test("a link alone on its line to a page an agent with no plan showed stands as the page's row, hanging the card a plan's page hangs, its title, version and the agent that showed it, read as it is first hung; one of an agent the reader cannot reach keeps the chip's own card", async () => {
+  const ledger: PageLine = {
+    id: "4a5b6c7d-8e9f-4a0b-8c1d-2e3f4a5b6c7d",
+    title: "Flake ledger",
+    version: 3,
+    at: 1_000,
+    shownBy: { kind: PAGE_SHOWER.AGENT, agentId: SWEEP_AGENT },
+  };
+  agentPages = new Map([[SWEEP_AGENT, [ledger]]]);
+  const shown = linkOf({ kind: LINK_PLACE.PAGE, agentId: SWEEP_AGENT, pageId: ledger.id }, "acme");
+  const hidden = linkOf({ kind: LINK_PLACE.PAGE, agentId: STRAY_AGENT, pageId: ledger.id }, "acme");
+  const words = {
+    type: INBOX_BLOCK.MARKDOWN,
+    text: [shown, `[@Their ledger](${hidden})`].join("\n\n"),
+  };
+  agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, blocks: [words] }]]]);
+  const waiting: AppInboxTasklessItem = {
+    id: QUARANTINE.id,
+    agentId: SWEEP_AGENT,
+    title: QUARANTINE.title,
+    postedAt: QUARANTINE.postedAt,
+    agentTitle: "Sweep the flaky tests",
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: null,
+    automationName: null,
+    repository: "acme/relay",
+  };
+  // Main's document names the agent by what waits on it, as the window's names are read.
+  const held = stateWith({}, {});
+  handState({}, { inbox: { ...held.inbox, taskless: [waiting] } });
+  const { page } = mount([waiting]);
+  await settle();
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  const rows = [...page.querySelectorAll('[data-inbox-markdown] [data-lone-link="page"]')];
+  assert.equal(rows.length, 2, "each link alone on its line stands as a page's row");
+  const [mine, theirs] = rows.map((row) => row.querySelector("button.luke-list-row-main"));
+  assert.ok(mine && theirs);
+  restOn(mine);
+  await settle();
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  assert.ok(card, "the agent's page hangs the page's own card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
+  assert.equal(
+    card.querySelector(".luke-hover-card-sub")?.textContent,
+    "Version 3 · Shown by Sweep the flaky tests",
+  );
+  assert.equal(
+    card.querySelector(".page-card-frame")?.getAttribute("src"),
+    pageFrameUrl({ agentId: SWEEP_AGENT, pageId: ledger.id, version: 3 }),
+  );
+  act(() => {
+    mine.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+
+  restOn(theirs);
+  await settle();
+  assert.equal(document.querySelector(".luke-tooltip-card [data-page-card]"), null);
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-mention-card] .luke-hover-card-name")
+      ?.textContent,
+    "Their ledger",
+  );
 });
 
 /** The automation that started the agent with no task, as its workspace's list reads it. */
@@ -7302,18 +7476,20 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-test("a replaced ask draws no card: its controls as it offered them, dimmed, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
+test("a replaced or withdrawn ask draws no card: its controls as it offered them, dimmed, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or why it was withdrawn, or the member who closed the item where no reason was said", async () => {
+  const withdrawnId = "e1b2c3d4-0000-4000-8000-000000000020";
+  const closedId = "e1b2c3d4-0000-4000-8000-000000000021";
   const shown = threadItem(
     [
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
       askingMessage(EXPIRY_ASK, {
-        id: "e1b2c3d4-0000-4000-8000-000000000020",
+        id: withdrawnId,
         status: INBOX_ASK_STATUS.WITHDRAWN,
         withdrawnReason: "Product picked 14 days.",
         createdAt: 2_000,
       }),
       askingMessage(EXPIRY_ASK, {
-        id: "e1b2c3d4-0000-4000-8000-000000000021",
+        id: closedId,
         status: INBOX_ASK_STATUS.WITHDRAWN,
         createdAt: 3_000,
       }),
@@ -7322,59 +7498,51 @@ test("a replaced ask draws no card: its controls as it offered them, dimmed, not
   );
   const pane = await mountThread(shown);
 
-  assert.deepEqual(askBoxes(pane), [
-    ["withdrawn", "Pick oneWithdrawn: Product picked 14 days."],
-    ["withdrawn", "Pick oneCharles Pan · Resolved without an answer"],
-  ]);
-  assert.equal(
-    pane.querySelector(".inbox-ask [role='radio']"),
-    null,
-    "a settled ask offers nothing",
-  );
+  assert.deepEqual(askBoxes(pane), [], "no settled ask draws a card");
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
-  const replaced =
-    pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ??
-    assert.fail("the replaced ask's message");
-  assert.equal(replaced.querySelector(".inbox-ask"), null, "the replaced ask draws no card");
-  const offered =
-    replaced.querySelector<HTMLElement>("[data-inbox-replaced] .inbox-ask-replaced-controls") ??
-    assert.fail("the replaced ask keeps its controls");
-  const options = [...offered.querySelectorAll<HTMLElement>("[role='radio']")];
-  assert.deepEqual(
-    options.map((option) =>
-      ["1 day", "7 days", "30 days"].some((label) => wordsOf(option)?.includes(label)),
-    ),
-    [true, true, true],
-    "every option it offered still reads",
-  );
-  assert.ok(wordsOf(offered)?.includes("What most teams use."), "with its detail");
-  assert.deepEqual(
-    options.map((option) => option.getAttribute("aria-checked")),
-    ["false", "false", "false"],
-    "none of them picked",
-  );
-  act(() => options[1]?.click());
-  assert.equal(options[1]?.getAttribute("aria-checked"), "false", "and a press picks nothing");
-  assert.equal(
-    replaced
-      .querySelector("[data-inbox-replaced] > :last-child")
-      ?.getAttribute("data-inbox-settled"),
-    "replaced",
-    "the marker stands under them",
-  );
-  assert.deepEqual(
-    [...replaced.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
-      marker.dataset.inboxSettled,
-      wordsOf(marker),
-    ]),
-    [["replaced", "Replaced by a newer question"]],
-    "the agent's message ends with the marker saying so",
-  );
-  assert.equal(
-    pane.querySelectorAll("[data-inbox-settled]").length,
-    1,
-    "no withdrawn ask wears the marker",
-  );
+  for (const [id, settled, words] of [
+    [ASKING_ID, "replaced", "Replaced by a newer question"],
+    [withdrawnId, "withdrawn", "Withdrawn: Product picked 14 days."],
+    [closedId, "withdrawn", "Charles Pan · Resolved without an answer"],
+  ] as const) {
+    const message =
+      pane.querySelector(`[data-message-id="${id}"]`) ??
+      assert.fail(`the ${settled} ask's message`);
+    const offered =
+      message.querySelector<HTMLElement>("[data-inbox-replaced] .inbox-ask-replaced-controls") ??
+      assert.fail(`the ${settled} ask keeps its controls`);
+    const options = [...offered.querySelectorAll<HTMLElement>("[role='radio']")];
+    assert.deepEqual(
+      options.map((option) =>
+        ["1 day", "7 days", "30 days"].some((label) => wordsOf(option)?.includes(label)),
+      ),
+      [true, true, true],
+      "every option it offered still reads",
+    );
+    assert.ok(wordsOf(offered)?.includes("What most teams use."), "with its detail");
+    assert.deepEqual(
+      options.map((option) => option.getAttribute("aria-checked")),
+      ["false", "false", "false"],
+      "none of them picked",
+    );
+    act(() => options[1]?.click());
+    assert.equal(options[1]?.getAttribute("aria-checked"), "false", "and a press picks nothing");
+    assert.equal(
+      message
+        .querySelector("[data-inbox-replaced] > :last-child")
+        ?.getAttribute("data-inbox-settled"),
+      settled,
+      "the marker stands under them",
+    );
+    assert.deepEqual(
+      [...message.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
+        marker.dataset.inboxSettled,
+        wordsOf(marker),
+      ]),
+      [[settled, words]],
+      "the agent's message ends with the marker saying so",
+    );
+  }
 
   act(() => root?.unmount());
   root = undefined;
@@ -7439,6 +7607,28 @@ test("a replaced ask draws no card: its controls as it offered them, dimmed, not
     wordsOf(asked?.querySelector("[data-inbox-settled]") ?? null),
     "Replaced by a newer message",
     "and ends with the marker alone",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const taken = await mountThread(
+    threadItem([
+      askingMessage(
+        { type: INBOX_ASK.ANSWER },
+        { status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: "Found it in the README." },
+      ),
+    ]),
+  );
+  const takenBack = taken.querySelector(`[data-message-id="${ASKING_ID}"]`);
+  assert.equal(
+    takenBack?.querySelector(".inbox-ask"),
+    null,
+    "a withdrawn ask of words alone draws no card",
+  );
+  assert.equal(
+    wordsOf(takenBack?.querySelector('[data-inbox-settled="withdrawn"]') ?? null),
+    "Withdrawn: Found it in the README.",
+    "and ends with the withdrawn marker alone",
   );
 });
 

@@ -1045,6 +1045,23 @@ test("⌘K's Chat opens Chat only while the account has it on and a chat is avai
   assert.equal(count?.dataset.tone, NAV_COUNT_TONE.ACCENT);
 });
 
+test("⌘K's Admin opens the Admin place for an admin alone, and is offered nothing for anyone else", async () => {
+  let opened = 0;
+  const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
+  handState({}, { access: { admin: false } });
+  mount(false, false, { adminView });
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.ADMIN), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState({}, { access: { admin: true } });
+  mount(false, false, { adminView });
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.ADMIN), true);
+  assert.equal(opened, 1);
+});
+
 test("with Chat off for the account, its row stands nowhere, and Chat standing in the plan's place gives it back", async () => {
   handState({});
   const closed: string[] = [];
