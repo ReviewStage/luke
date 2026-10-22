@@ -8,6 +8,7 @@ import {
   IDLE_ARCHIVE,
   latestTurnsOfReached,
   nativeRuntimesOfReached,
+  operatorReplaced,
   pinCodingAgent,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
@@ -847,6 +848,9 @@ export const UPDATE_AGENT_REFUSAL = {
   WORKING:
     "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
     "Wait until it is idle, or ask the developer, who can stop and archive it. Nothing else asked was changed.",
+  REPLACED_OPERATOR:
+    "Not unarchived: that agent is an operator its member has since replaced with a fresh one, " +
+    "which stands in its place; its transcript is kept, and it stays archived.",
   REARCHIVED:
     "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
@@ -1763,6 +1767,8 @@ const archiveChange = (
       return outcome === IDLE_ARCHIVE.WORKING ? UPDATE_AGENT_REFUSAL.WORKING : undefined;
     }
     if (agent.archivedAt === null) return undefined;
+    // An operator a Reset replaced stays archived while the fresh one stands.
+    if (yield* operatorReplaced(userId, agent.id)) return UPDATE_AGENT_REFUSAL.REPLACED_OPERATOR;
     if (yield* unarchiveCodingAgentFrom(userId, agent.id, agent.archivedAt)) return undefined;
     const now = yield* readCodingAgent(userId, agent.id);
     return Option.isSome(now) && now.value.archivedAt === null

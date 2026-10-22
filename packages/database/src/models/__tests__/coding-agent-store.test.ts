@@ -7,6 +7,7 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_KIND,
   CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -41,6 +42,7 @@ import { VOICE_DELEGATION_MODE, VOICE_SEGMENT_ROLE } from "../../voice-vocabular
 import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
+  archiveOperatorAgent,
   archiveUnmovedCodingAgent,
   askTurnsOf,
   type CodingAgent,
@@ -62,6 +64,7 @@ import {
   listWorkspaceCodingAgents,
   type NewCodingAgent,
   nativeRuntimesOfReached,
+  operatorReplaced,
   pinCodingAgent,
   readCodingAgent,
   readCodingAgentHeaderOfConversation,
@@ -108,6 +111,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * runner's bearer digest, and who pays for it.
  * And the agent a conversation is, one at most, read by its header.
  * And an agent deleted for good by any member of its workspace, once it stands stopped.
+ * And the member's operator, one standing per workspace, and archived for a fresh one.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -2280,5 +2284,122 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
           .where(eq(voiceTranscriptSegments.voiceSessionId, call));
         assert.deepEqual(after, []);
       }),
+  );
+});
+
+/** A Start of the member's operator in the workspace, under a fresh key unless one is given. */
+const operatorStart = (organizationId: string, idempotencyKey = randomUUID()): NewCodingAgent => ({
+  taskId: null,
+  organizationId,
+  planSnapshot: null,
+  prompt: null,
+  kind: CODING_AGENT_KIND.OPERATOR,
+  idempotencyKey,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  repository: null,
+});
+
+it.layer(getTestDB())("the coding-agent store's operators", (it) => {
+  it.effect(
+    "a Start of the member's operator answers the one standing whatever its key, the index refuses a second standing one, and once it is archived a Start makes a fresh one",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const member = yield* openAccount;
+        const workspace = yield* openWorkspace(member);
+        const coder = yield* tasklessAgent(member, workspace);
+
+        const made = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const found = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const second = yield* db
+          .insert(codingAgent)
+          .values({
+            organizationId: workspace,
+            userId: member,
+            conversationId: yield* openConversation(member, CONVERSATION_KIND.CODING_AGENT),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+          })
+          .pipe(Effect.result);
+        const archived = yield* archiveOperatorAgent(member, workspace, made.agent.id);
+        const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const stale = yield* archiveOperatorAgent(member, workspace, made.agent.id);
+
+        assert.deepEqual(
+          [made.created, found.created, found.agent.id],
+          [true, false, made.agent.id],
+        );
+        assert.deepEqual(
+          [made.agent.kind, made.agent.taskId, made.agent.repository, made.agent.prompt],
+          [CODING_AGENT_KIND.OPERATOR, null, null, null],
+        );
+        assert.ok(Result.isFailure(second), "a second standing operator breaks the index");
+        assert.deepEqual(archived, Option.some(made.agent.id));
+        assert.ok(Option.isNone(stale), "an archive of the one read leaves the fresh one standing");
+        assert.equal(fresh.created, true);
+        assert.notEqual(fresh.agent.id, made.agent.id);
+        const old = Option.getOrThrow(yield* readCodingAgent(member, made.agent.id));
+        assert.deepEqual(old.archivedBy, { by: CODING_AGENT_ARCHIVER.MEMBER, userId: member });
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(member, coder.agentId)).kind,
+          CODING_AGENT_KIND.CODER,
+          "a row written without a kind reads as a coder",
+        );
+      }),
+  );
+
+  it.effect(
+    "an operator a fresh one replaced is not brought back while that one stands, by either unarchive, and is once it is archived",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openAccount;
+        const workspace = yield* openWorkspace(member);
+        const coder = yield* tasklessAgent(member, workspace);
+        const old = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        yield* archiveOperatorAgent(member, workspace, old.agent.id);
+        const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const archivedAt = Option.getOrThrow(
+          yield* readCodingAgent(member, old.agent.id),
+        ).archivedAt;
+        assert.ok(archivedAt !== null);
+        yield* archiveCodingAgent(member, coder.agentId, true);
+
+        const replaced = yield* operatorReplaced(member, old.agent.id);
+        const byHand = yield* archiveCodingAgent(member, old.agent.id, false);
+        const byTool = yield* unarchiveCodingAgentFrom(member, old.agent.id, archivedAt);
+        const coderBack = yield* archiveCodingAgent(member, coder.agentId, false);
+
+        assert.deepEqual([replaced, Option.isNone(byHand), byTool], [true, true, false]);
+        assert.notEqual(
+          Option.getOrThrow(yield* readCodingAgent(member, old.agent.id)).archivedAt,
+          null,
+        );
+        assert.equal(Option.getOrThrow(coderBack).archivedAt, null, "a coder comes back as before");
+        assert.equal(yield* operatorReplaced(member, fresh.agent.id), false);
+
+        yield* archiveOperatorAgent(member, workspace, fresh.agent.id);
+        const back = yield* archiveCodingAgent(member, old.agent.id, false);
+        assert.equal(Option.getOrThrow(back).archivedAt, null);
+      }),
+  );
+
+  it.effect("an account outside the workspace starts no operator there and archives none", () =>
+    Effect.gen(function* () {
+      const member = yield* openAccount;
+      const outsider = yield* openAccount;
+      const workspace = yield* openWorkspace(member);
+      yield* openWorkspace(outsider);
+      const made = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+
+      assert.ok(Option.isNone(yield* createCodingAgent(outsider, operatorStart(workspace))));
+      assert.ok(Option.isNone(yield* archiveOperatorAgent(outsider, workspace, made.agent.id)));
+      assert.equal(
+        Option.getOrThrow(yield* readCodingAgent(member, made.agent.id)).archivedAt,
+        null,
+      );
+    }),
   );
 });

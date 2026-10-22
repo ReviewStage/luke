@@ -37,8 +37,10 @@ import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_KIND,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
+  type CodingAgentKind,
   type CodingAgentStartFrom,
   type CodingAgentStartRequest,
   type CodingAgentSummary,
@@ -188,6 +190,12 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * stands, since no work was handed. It runs on the choice any Start does,
  * and on a task with no repository it works in none and asks nothing of
  * GitHub, where any other Start on such a task is refused.
+ * The member's operator is the one blank Start with no task: in a workspace
+ * the account is a member of, on no repository, from no other agent and
+ * with no prompt or note, and no other Start is an operator's. Every other
+ * Start with no task still names a repository and a prompt. The store
+ * answers the operator already standing where there is one
+ * (`createCodingAgent`), so a Start of it is an ensure.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An agent started is minted as a member
  * of its workspace's chat in the order agents were started, so it answers
@@ -369,8 +377,10 @@ export type StartPlace = StartWhere & {
   readonly noteHeading?: StartNoteHeading | undefined;
   /** Another agent of the same place to take over from, handed its brief and its transcript replayed in place of the plan or a prompt; none for an agent started afresh. */
   readonly from?: CodingAgentStartFrom | undefined;
-  /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start, on a task alone, names no prompt, note, or source. */
+  /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start, on a task or as the member's operator, names no prompt, note, or source. */
   readonly blank?: boolean | undefined;
+  /** What the agent is: a coder unless named, or the member's operator, which only a blank Start with no task and no repository makes. */
+  readonly kind?: CodingAgentKind | undefined;
 };
 
 /** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks, with that run. */
@@ -461,7 +471,7 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, none for a blank Start on a task with none, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
+/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, none for a blank Start on a task with none or the member's operator, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
 interface StartLanding {
   readonly workspaceId: string;
   readonly repository: string | null;
@@ -553,7 +563,20 @@ const handedOf = Effect.fnUntraced(function* (
   return { text: written(fitted?.replay), startedFrom: fitted?.startedFrom };
 });
 
-/** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** Whether the place asks for the member's operator as only it may be started: blank, with no task, no repository, no source, and no words. */
+function operatorPlace(place: StartPlace, fitter: ReplayFitter | undefined): boolean {
+  return (
+    place.blank === true &&
+    place.taskId === null &&
+    place.repository === null &&
+    place.prompt === undefined &&
+    place.note === undefined &&
+    place.from === undefined &&
+    fitter === undefined
+  );
+}
+
+/** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task or the member's operator. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -561,11 +584,35 @@ const landingOf = Effect.fnUntraced(function* (
   noteFiles: NoteFiles | undefined,
 ): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
   const brief = fitter === undefined ? place.prompt : fitter.prompt;
+  const operator = place.kind === CODING_AGENT_KIND.OPERATOR;
+  // The operator is started one way alone, and no other Start is an operator's.
+  if (operator && !operatorPlace(place, fitter)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   if (place.taskId === null) {
     const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
     if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    // An agent with no plan has only words to be handed, so a Start that names none starts nothing.
-    if (brief === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    if (operator) {
+      return {
+        workspaceId: place.organizationId,
+        repository: null,
+        task: undefined,
+        mover: undefined,
+        place: {
+          taskId: null,
+          organizationId: place.organizationId,
+          planSnapshot: null,
+          prompt: null,
+          kind: CODING_AGENT_KIND.OPERATOR,
+        },
+        startedFrom: undefined,
+      };
+    }
+    // An agent with no plan has only words to be handed, and a repository to work them in, so a
+    // Start that names either none starts nothing.
+    if (brief === undefined || place.repository === null) {
+      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    }
     const handed = yield* handedOf(brief, place, fitter, noteFiles);
     return {
       workspaceId: place.organizationId,
@@ -779,9 +826,10 @@ export function placeOfAgent(
 
 /** The place alone, as a Start from another agent reads its source against it. */
 function whereOf(place: StartWhere): StartWhere {
-  return place.taskId === null
-    ? { taskId: null, organizationId: place.organizationId, repository: place.repository }
-    : { taskId: place.taskId };
+  if (place.taskId !== null) return { taskId: place.taskId };
+  return place.repository === null
+    ? { taskId: null, organizationId: place.organizationId, repository: null }
+    : { taskId: null, organizationId: place.organizationId, repository: place.repository };
 }
 
 /** Whether an agent a retry found under its key stands in the place asked, and the account still reaches that place. */

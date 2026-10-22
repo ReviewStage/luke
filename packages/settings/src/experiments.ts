@@ -18,6 +18,8 @@ export const EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   /** The sidebar as the Inbox: its threads under their tasks where the task list stood, the tasks left to the Tasks page. */
   INBOX_FIRST: "inbox-first",
+  /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
+  OPERATOR: "operator",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -41,6 +43,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.OPERATOR,
+    name: "Luke, your operator",
+    detail:
+      "One Luke of your own in each workspace that keeps an eye on your agents, steers them, " +
+      "and tells you what needs you.",
+    owner: "Dean",
+    since: "2026-10-22",
+  },
   {
     key: EXPERIMENT.INBOX_FIRST,
     name: "Inbox-first sidebar",

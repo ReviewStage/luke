@@ -954,12 +954,14 @@ function transcriptSteps(
 
 /**
  * Where a Start puts its agent: a task, or a workspace with no task and the
- * repository the agent clones there; an agent it is started from must
- * stand in the same place.
+ * repository the agent clones there, or none, which only the member's
+ * operator stands in (`start.ts`'s `landingOf`); an agent it is started
+ * from must stand in the same place.
  */
 export type StartWhere =
   | { readonly taskId: string }
-  | { readonly taskId: null; readonly organizationId: string; readonly repository: string };
+  | { readonly taskId: null; readonly organizationId: string; readonly repository: string }
+  | { readonly taskId: null; readonly organizationId: string; readonly repository: null };
 
 /** The repository the new agent clones in the place: the task's as it stands now, or the workspace place's own; none where the task names none. */
 const placeRepository = (userId: string, place: StartWhere) =>
