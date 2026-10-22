@@ -8,6 +8,7 @@ import {
   Button,
   DISCLOSURE_BODY,
   Disclosure,
+  DisclosureAction,
   DisclosureBody,
   DisclosureSummary,
   Inline,
@@ -477,11 +478,11 @@ export function ReplayCard({
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {replayVerb(replay)}{" "}
             </Text>
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the chip's own press from also folding the card; the chip is the control. */}
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: the chip inside is a button, which takes the keys itself. */}
-            <span className="agent-origin-chip" onClick={(event) => event.stopPropagation()}>
-              <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} />
-            </span>
+            <DisclosureAction>
+              <span className="agent-origin-chip">
+                <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} />
+              </span>
+            </DisclosureAction>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {" "}
               · {replayCount(replay)}
