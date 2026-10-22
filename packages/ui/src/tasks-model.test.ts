@@ -100,6 +100,54 @@ test("an agent's Call button asks for the permission first, then calls the agent
   assert.equal(microphoneButton({ ...input, listening: true, call: other }).label, CALL_LABEL);
 });
 
+test("an account known to have no OpenAI API key is sent to add one before the microphone is asked for, unknown asks nothing, and its own standing call keeps its mute", () => {
+  const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
+  const own = { taskId: INVITES, agentId };
+  const input = {
+    voiceAvailable: true,
+    microphoneStatus: MICROPHONE_STATUS.GRANTED,
+    agentId,
+    listening: false,
+    call: undefined,
+    voiceStatus: LIVE_STATUS.IDLE,
+  };
+  const addKey = {
+    press: MICROPHONE_PRESS.ADD_OPENAI_KEY,
+    label: "Add an OpenAI API key in Settings",
+    muted: false,
+  };
+  assert.deepEqual(microphoneButton({ ...input, openAiKeyMissing: true }), addKey);
+  assert.deepEqual(
+    microphoneButton({
+      ...input,
+      microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED,
+      openAiKeyMissing: true,
+    }),
+    addKey,
+  );
+  // Signed out says so first, since no key of any account's is in reach.
+  assert.equal(
+    microphoneButton({ ...input, voiceAvailable: false, openAiKeyMissing: true }).press,
+    MICROPHONE_PRESS.NONE,
+  );
+  // A key saved, or not known either way, calls.
+  assert.equal(
+    microphoneButton({ ...input, openAiKeyMissing: false }).press,
+    MICROPHONE_PRESS.TALK,
+  );
+  assert.equal(microphoneButton(input).label, CALL_LABEL);
+  assert.deepEqual(
+    microphoneButton({
+      ...input,
+      listening: true,
+      call: own,
+      voiceStatus: LIVE_STATUS.LISTENING,
+      openAiKeyMissing: true,
+    }),
+    { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
+  );
+});
+
 /** A task's row of the list on a repository, last updated at `updatedAt`. */
 function _onRepository(name: string, repository: string | null, updatedAt: number) {
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };

@@ -296,7 +296,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
     "Its agent failed: its creator's API key was refused or can't be read",
     "another's automation names whose key, and no Settings the reader cannot mend",
   );
-  assert.match(automationRunLine(keyRefused), /check Settings › Coding agents › API keys$/u);
+  assert.match(automationRunLine(keyRefused), /check Settings › Agents$/u);
   const onTeammatesAgent = run({
     agent: {
       ...agent(CODING_AGENT_STATUS.FAILED),
@@ -320,7 +320,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
       }),
       "its creator",
     ),
-    /check Settings › Coding agents › API keys$/u,
+    /check Settings › Agents$/u,
     "the reader's own agent is the reader's key, even on another's automation",
   );
 });

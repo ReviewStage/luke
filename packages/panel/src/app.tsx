@@ -55,6 +55,7 @@ import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
+import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
@@ -785,96 +786,98 @@ function AppWindow(): React.JSX.Element {
 
   return (
     <OpenSettingsProvider value={openSettings}>
-      <OpenLinkProvider value={openLukeLink}>
-        <ListedPullRequestsProvider value={listedTasks}>
-          <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
-            <OpenPersonProvider value={openPerson}>
-              <OpenFeedbackProvider value={openFeedbackAbout}>
-                <RepositoryRemedyProvider value={repositoryRemedies}>
-                  <GitHubConnectProvider value={gitHubConnect}>
-                    <ListedAutomations tasks={tasks}>
-                      <CallChords />
-                      <WindowVoice available={!accountGated} agentShown={agentShown}>
-                        <div
-                          ref={stage.ref}
-                          className="app-stage"
-                          data-capture={String(run.captureMode)}
-                          // The panel is drawn as an ordinary app window's content; desktop.css
-                          // lays it out.
-                          data-surface="desktop"
-                          // The sidebar's width lays out the shell and Settings' page list, and
-                          // places the voice's notice line over the work column beside it.
-                          style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-                        >
-                          {/* The window's content. */}
-                          <div className="desktop-stage">
-                            <MessageRevealProvider value={messageReveal}>
-                              <ThreadRevealProvider value={threadReveal}>
-                                <SettingsShell
-                                  gates={gates}
-                                  tab={tab}
-                                  onTabChange={changeTab}
-                                  tasks={shellTasks}
-                                  history={history}
-                                  sidebar={sidebar}
-                                  room={room}
-                                  settingsStep={settingsStep}
-                                  doors={settingsDoors}
-                                />
-                              </ThreadRevealProvider>
-                            </MessageRevealProvider>
-                          </div>
-                          {/* A note to the people who make Luke, written in a dialog over the
+      <OpenAiKeyProvider account={accountKey}>
+        <OpenLinkProvider value={openLukeLink}>
+          <ListedPullRequestsProvider value={listedTasks}>
+            <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
+              <OpenPersonProvider value={openPerson}>
+                <OpenFeedbackProvider value={openFeedbackAbout}>
+                  <RepositoryRemedyProvider value={repositoryRemedies}>
+                    <GitHubConnectProvider value={gitHubConnect}>
+                      <ListedAutomations tasks={tasks}>
+                        <CallChords />
+                        <WindowVoice available={!accountGated} agentShown={agentShown}>
+                          <div
+                            ref={stage.ref}
+                            className="app-stage"
+                            data-capture={String(run.captureMode)}
+                            // The panel is drawn as an ordinary app window's content; desktop.css
+                            // lays it out.
+                            data-surface="desktop"
+                            // The sidebar's width lays out the shell and Settings' page list, and
+                            // places the voice's notice line over the work column beside it.
+                            style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+                          >
+                            {/* The window's content. */}
+                            <div className="desktop-stage">
+                              <MessageRevealProvider value={messageReveal}>
+                                <ThreadRevealProvider value={threadReveal}>
+                                  <SettingsShell
+                                    gates={gates}
+                                    tab={tab}
+                                    onTabChange={changeTab}
+                                    tasks={shellTasks}
+                                    history={history}
+                                    sidebar={sidebar}
+                                    room={room}
+                                    settingsStep={settingsStep}
+                                    doors={settingsDoors}
+                                  />
+                                </ThreadRevealProvider>
+                              </MessageRevealProvider>
+                            </div>
+                            {/* A note to the people who make Luke, written in a dialog over the
           window. */}
-                          <FeedbackDialog
-                            kind={feedbackKind}
-                            about={feedbackAbout}
-                            account={account}
-                            onClose={() => setFeedbackKind(undefined)}
-                          />
-                          {/* The window's passing notice: the thank-you after a note lands, what
+                            <FeedbackDialog
+                              kind={feedbackKind}
+                              about={feedbackAbout}
+                              account={account}
+                              onClose={() => setFeedbackKind(undefined)}
+                            />
+                            {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
-                          <ToastHost />
-                          {/* The menu a right-click on any link in the window hangs. */}
-                          <LinkMenu />
-                          <UpdatedToast />
-                          <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
-                          <ChatToasts onView={openChat} shown={tasks.chatShown} />
-                          {/* The plans, the open plan's agents and files, every command the
+                            <ToastHost />
+                            {/* The menu a right-click on any link in the window hangs. */}
+                            <LinkMenu />
+                            <UpdatedToast />
+                            <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
+                            <ChatToasts onView={openChat} shown={tasks.chatShown} />
+                            {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}
-                          <SettingsPalette
-                            available={!accountGated}
-                            tab={tab}
-                            onTabChange={changeTab}
-                            tasks={tasks}
-                            links={copyLink}
-                            doors={settingsDoors}
-                            readFiles={(taskId) =>
-                              act(ACT_KIND.TASKS_TREE, {
-                                planId: taskId,
-                                path: "",
-                                recursive: true,
-                              })
-                            }
-                          />
-                          {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in. */}
-                          <TabSwitcher
-                            available={!accountGated}
-                            tab={tab}
-                            onTabChange={changeTab}
-                            tasks={tasks}
-                          />
-                        </div>
-                      </WindowVoice>
-                    </ListedAutomations>
-                  </GitHubConnectProvider>
-                </RepositoryRemedyProvider>
-              </OpenFeedbackProvider>
-            </OpenPersonProvider>
-          </PageWorkspaceProvider>
-        </ListedPullRequestsProvider>
-      </OpenLinkProvider>
+                            <SettingsPalette
+                              available={!accountGated}
+                              tab={tab}
+                              onTabChange={changeTab}
+                              tasks={tasks}
+                              links={copyLink}
+                              doors={settingsDoors}
+                              readFiles={(taskId) =>
+                                act(ACT_KIND.TASKS_TREE, {
+                                  planId: taskId,
+                                  path: "",
+                                  recursive: true,
+                                })
+                              }
+                            />
+                            {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in. */}
+                            <TabSwitcher
+                              available={!accountGated}
+                              tab={tab}
+                              onTabChange={changeTab}
+                              tasks={tasks}
+                            />
+                          </div>
+                        </WindowVoice>
+                      </ListedAutomations>
+                    </GitHubConnectProvider>
+                  </RepositoryRemedyProvider>
+                </OpenFeedbackProvider>
+              </OpenPersonProvider>
+            </PageWorkspaceProvider>
+          </ListedPullRequestsProvider>
+        </OpenLinkProvider>
+      </OpenAiKeyProvider>
     </OpenSettingsProvider>
   );
 }

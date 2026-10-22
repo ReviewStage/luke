@@ -29,6 +29,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
@@ -640,7 +641,7 @@ export function AgentComposer({
     {
       press: OVERFLOW_PRESS.DICTATE,
       action: {
-        label: "Dictate",
+        label: dictation.keyMissing ? OPENAI_KEY_MISSING_NOTE : "Dictate",
         icon: <MicrophoneIcon />,
         disabled: held || module === undefined,
         onSelect: dictation.start,
