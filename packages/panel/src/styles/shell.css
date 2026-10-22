@@ -141,6 +141,64 @@
   overflow-y: clip;
 }
 
+/* A phone's places bar (`mobile-bar.tsx`) stands in the shell's last row,
+   under the work, which keeps the row above it whole, so nothing in it is
+   measured against the bar. The stage already stops above the home
+   indicator and the keyboard (desktop.css), so the bar needs no inset of
+   its own. While a field is being typed in, the keyboard takes the screen's
+   foot and the bar steps aside, giving the field's column the room. */
+.desktop-shell[data-room="narrow"][data-mobile-bar="true"] {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.mobile-bar {
+  display: flex;
+  border-top: 1px solid var(--luke-color-border);
+  background: var(--luke-color-ground);
+  padding: var(--luke-space-2) var(--luke-space-4);
+}
+
+.mobile-bar-item {
+  display: flex;
+  min-height: var(--luke-space-48);
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--luke-space-2);
+  border: 0;
+  background: none;
+  color: var(--luke-color-text-muted);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-bar-item[aria-current="page"] {
+  color: var(--luke-color-accent-text);
+}
+
+.mobile-bar-icon {
+  display: flex;
+}
+
+.mobile-bar-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.desktop-shell:has(
+    :is(
+        textarea,
+        input:not([type="checkbox"], [type="radio"], [type="range"]),
+        [contenteditable]:not([contenteditable="false"])
+      ):focus
+  )
+  .mobile-bar {
+  display: none;
+}
+
 /* Beside the traffic lights, centred on them, the sidebar toggle in the same
    place whichever way the sidebar is and New plan after it while folded;
    and

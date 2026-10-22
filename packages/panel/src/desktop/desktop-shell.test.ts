@@ -38,7 +38,7 @@ import { runAppCommand } from "../app-commands.js";
 import { CallCardContext, type CallCardInput, callControls } from "../call/call-card.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
@@ -601,6 +601,104 @@ test("in a narrow room the inbox-first Inbox lists its items on its own page, ac
     container.querySelector('main .inbox-tasks[data-placement="page"]'),
     "the Inbox's page lists its items",
   );
+});
+
+/** The shell in a narrow room, a phone's, over `overrides`, the sidebar patched as given. */
+async function mountNarrow(
+  overrides: Partial<TasksControl>,
+  sidebarPatch: Partial<SidebarCollapse> = {},
+  room: ShellRoom = SHELL_ROOM.NARROW,
+): Promise<HTMLElement> {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const tasks = tasksControl({ page: TASKS_PAGE.HOME, ...overrides });
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...shellProps(tasks, PANEL_TAB.TASKS, ignore, sidebarPatch),
+          room,
+        }),
+      ),
+    ),
+  );
+  await settle();
+  return container;
+}
+
+/** The places bar's items by their words, where the bar stands. */
+function barItems(page: HTMLElement): HTMLButtonElement[] {
+  return [...page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Places"] button')];
+}
+
+function barItem(page: HTMLElement, name: string): HTMLButtonElement {
+  const item = barItems(page).find((button) => button.textContent === name);
+  assert.ok(item, `the bar offers ${name}`);
+  return item;
+}
+
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox on its list", async () => {
+  const asked: string[] = [];
+  const page = await mountNarrow({
+    boardView: { ...tasksControl().boardView, open: true },
+    inboxView: {
+      ...tasksControl().inboxView,
+      onOpen: () => asked.push("open"),
+      onListed: (listed) => asked.push(`listed ${listed}`),
+    },
+  });
+  assert.deepEqual(
+    barItems(page).map((item) => item.textContent),
+    ["Inbox", "Tasks", "More"],
+  );
+  assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
+  assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
+  act(() => barItem(page, "Inbox").click());
+  assert.deepEqual(asked, ["open", "listed true"]);
+});
+
+test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {
+  let toggled = 0;
+  const page = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    { onToggle: () => (toggled += 1) },
+  );
+  act(() => barItem(page, "More").click());
+  assert.equal(toggled, 1);
+});
+
+test("the places bar stands only on a phone's lists: an open task, an Inbox item, and a wide window keep the whole screen", async () => {
+  const onTask = await mountNarrow({ page: TASKS_PAGE.DOCUMENT });
+  assert.deepEqual(barItems(onTask), [], "an open task keeps the screen");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const onItem = await mountNarrow({
+    inboxView: {
+      ...tasksControl().inboxView,
+      open: true,
+      listed: false,
+      chosen: { taskId: "task-1", itemId: "item-1" },
+    },
+  });
+  assert.deepEqual(barItems(onItem), [], "an item being read keeps the screen");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const onList = await mountNarrow({
+    inboxView: { ...tasksControl().inboxView, open: true, listed: true },
+  });
+  assert.equal(barItem(onList, "Inbox").getAttribute("aria-current"), "page");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const wide = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    {},
+    SHELL_ROOM.WIDE,
+  );
+  assert.deepEqual(barItems(wide), [], "a wide window keeps its sidebar");
 });
 
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {
