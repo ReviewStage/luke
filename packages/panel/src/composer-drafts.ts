@@ -92,7 +92,7 @@ const draftPlaceSchema = Schema.Union([
     /** The agent that posted the item, whose own inbox, where it has no plan, is all that reads it. */
     agentId: Schema.String,
     itemId: Schema.String,
-    /** The item's revision the answer was written against; the agent changing the item starts its card afresh. */
+    /** The item's revision the answer was written against; the agent changing the item starts its picks afresh, its words and files carried to the new revision (`use-task-inbox.ts`). */
     revision: Schema.Number,
     /** Set where the draft is a message on a settled item's thread rather than the answer to an open one, so neither is ever taken for the other. */
     thread: Schema.optionalKey(Schema.Literal(true)),
