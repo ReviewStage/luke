@@ -13,6 +13,8 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  SPINNER_SIZE,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_TONE,
@@ -490,7 +492,7 @@ export function CloudBrowserPane({
         </div>
         {notice === undefined ? null : notice.waiting ? (
           <div className="cloud-browser-notice">
-            <Spinner label={notice.label} size={SPINNER_SIZE.REGION} />
+            <Spinner delay label={notice.label} size={SPINNER_SIZE.REGION} />
           </div>
         ) : (
           <div className="cloud-browser-notice" role="status">

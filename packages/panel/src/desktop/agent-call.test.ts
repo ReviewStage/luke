@@ -235,7 +235,7 @@ test("on a call no line says what Luke is doing: no Listening, no Thinking, and 
   const tab = page.querySelector(".agent-tab");
   assert.ok(tab);
   assert.doesNotMatch(tab.textContent ?? "", /Thinking|Listening|Writing notes/u);
-  assert.equal(tab.querySelector(".thinking-dots"), null);
+  assert.equal(tab.querySelector(".luke-thinking-dots"), null);
   assert.equal(tab.querySelector(".call-status"), null);
 });
 

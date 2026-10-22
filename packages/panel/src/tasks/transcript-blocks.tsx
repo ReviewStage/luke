@@ -32,6 +32,7 @@ import {
   LineSummary,
   ProviderMark,
   TEXT_ELEMENT,
+  Shimmer,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -104,7 +105,6 @@ import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning.js";
-import { Shimmer } from "../ai-elements/shimmer.js";
 import {
   TOOL_BLOCK,
   TOOL_STATE,

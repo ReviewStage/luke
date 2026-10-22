@@ -32,6 +32,7 @@ import {
   TextButton,
   Tooltip,
   useMenu,
+  BusyLabel,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
@@ -418,7 +419,7 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
   return (
     <p className="version-earlier">
       <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={read}>
-        <BusyLabel busy={reading} label="Loading older versions">
+        <BusyLabel delay busy={reading} label="Loading older versions">
           {failed ? (
             <RetryRowLabel failure="Could not read older versions." />
           ) : (

@@ -1055,37 +1055,6 @@
     flex-direction: column;
     padding-top: var(--luke-section-gap);
   }
-
-  /* Words with a light passing along them (../ai-elements/shimmer.tsx): the
-     muted gray with the highlight in the text's own ink. Its duration is a
-     literal as DESIGN.md allows a loop with no end of its own, because it
-     answers `--loop-motion` with its play state. */
-  .shimmer {
-    display: inline-block;
-    background-image: linear-gradient(
-      90deg,
-      var(--luke-color-text-muted) 0%,
-      var(--luke-color-text-muted) 40%,
-      var(--luke-color-text) 50%,
-      var(--luke-color-text-muted) 60%,
-      var(--luke-color-text-muted) 100%
-    );
-    background-size: 300% 100%;
-    background-clip: text;
-    color: transparent;
-    animation: shimmer 2s linear infinite;
-    animation-play-state: var(--loop-motion);
-  }
-}
-
-@keyframes shimmer {
-  from {
-    background-position: 100% center;
-  }
-
-  to {
-    background-position: 0% center;
-  }
 }
 
 /* A replay card's head: what it is, the source's chip, and how many steps,
@@ -6487,10 +6456,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   font-weight: var(--luke-weight-semibold);
 }
 
-.terminal-shells-foot [data-agent-ref] .harness-mark,
-.terminal-shells-foot [data-agent-ref] .working-mark {
+.terminal-shells-foot [data-agent-ref] .harness-mark {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
+}
+
+.terminal-shells-foot [data-agent-ref] {
+  --luke-working-mark-size: var(--luke-control-icon);
 }
 
 .terminal-tab-screen[data-dim="true"] {

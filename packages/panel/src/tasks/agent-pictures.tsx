@@ -18,6 +18,8 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  Spinner,
+  SPINNER_SIZE,
 } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -265,7 +267,7 @@ function TileFace({ state, words }: { state: PictureState | undefined; words: st
     );
   }
   if (state?.kind === PICTURE_STATE.MISSING) return <ImageOffIcon aria-hidden="true" />;
-  return <Spinner label="Reading the picture" size={SPINNER_SIZE.INLINE} />;
+  return <Spinner delay label="Reading the picture" size={SPINNER_SIZE.INLINE} />;
 }
 
 /** A tile's picture read through the cache; none for a picture the call has not answered yet. */

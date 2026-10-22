@@ -10,6 +10,7 @@ import {
   FormField,
   TextField,
   useFilePicker,
+  Spinner,
 } from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
@@ -26,7 +27,6 @@ import type {
   PlanEditorHandle,
   PlanEditorPictures,
 } from "../plan-editor/contract.js";
-import { Spinner } from "../spinner.js";
 import { documentScrollerOf } from "./document-frame.js";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
 
@@ -149,7 +149,7 @@ function UploadingPicture({
       </span>
       {upload?.kind === UPLOAD.SENDING ? (
         <span className="picture-status">
-          <Spinner label={UPLOAD_WORDS.SENDING} />
+          <Spinner delay label={UPLOAD_WORDS.SENDING} />
           <span>{UPLOAD_WORDS.SENDING}</span>
         </span>
       ) : (

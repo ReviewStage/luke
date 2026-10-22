@@ -4,6 +4,7 @@ import {
   CloseIcon,
   IconButton,
   MicrophoneIcon,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -166,7 +167,7 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
     <div className="dictation-strip" data-phase={dictation.phase}>
       {transcribing ? (
         <span className="dictation-transcribing">
-          <Spinner label={LABEL.TRANSCRIBING} />
+          <Spinner delay label={LABEL.TRANSCRIBING} />
           <span aria-hidden="true">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
               Transcribing…

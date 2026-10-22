@@ -14,6 +14,7 @@ import {
   Text,
   Tooltip,
   VisuallyHidden,
+  ThinkingDots,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
 import { ThinkingDots } from "../thinking-dots.js";
@@ -76,7 +77,9 @@ function CallStatusLines({
       </Text>
       {brain !== undefined || notes ? (
         <span className="call-backend">
-          <ThinkingDots />
+          <span className="call-backend-dots">
+            <ThinkingDots />
+          </span>
           {brain === undefined ? null : (
             // Note that this keeps the system's title, because the floating call window is too short for a pill.
             <Text

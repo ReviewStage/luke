@@ -32,6 +32,7 @@ import {
   ScrollArea,
   Skeleton,
   SkeletonRegion,
+  SpinnerRegion,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -800,7 +801,7 @@ function chaptersState(
 ): ReactNode {
   switch (state.kind) {
     case CHAPTERS_SHOWN.READING:
-      return <SpinnerRegion label={CHAPTERS_WORDS.READING} />;
+      return <SpinnerRegion delay label={CHAPTERS_WORDS.READING} />;
     case CHAPTERS_SHOWN.FAILED:
       return (
         <ErrorState onRetry={read.ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -882,7 +883,7 @@ export function AgentChaptersTab({
   // The chapters wait on the files as Files changed does: a failure gives way to the wait once asked again.
   const { answer, out, pullRequest } = changes;
   if (answer === undefined || (out && "failure" in answer)) {
-    return <SpinnerRegion label={CHANGES_WORDS.READING} />;
+    return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
   if ("failure" in answer) {
     return (

@@ -8,7 +8,9 @@ import {
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton, Tooltip } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton, Tooltip,
+  SpinnerRegion,
+} from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
 import {
@@ -295,7 +297,7 @@ function PageSource({
     () => (read.kind === SOURCE_READ.READY ? sourceText(read.lines) : ""),
     [read],
   );
-  if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
+  if (read.kind === SOURCE_READ.READING) return <SpinnerRegion delay label="Loading source" />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>

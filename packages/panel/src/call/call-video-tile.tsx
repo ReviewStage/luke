@@ -34,13 +34,13 @@ import {
   ResetIcon,
   SKELETON_SHAPE,
   Skeleton,
+  ThinkingDots,
   VideoIcon,
   VideoOffIcon,
   WingFace,
 } from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ThinkingDots } from "../thinking-dots.js";
 
 /** What the tile says, for a reader and on screen. */
 export const CALL_VIDEO_LABEL = {
