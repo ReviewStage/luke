@@ -199,6 +199,7 @@ it("a native harness's calls replay named as eve's are, its edits by the files t
         changes: [
           { path: "src/c.ts", kind: { type: "update" }, diff: "" },
           { path: "src/d.ts", kind: { type: "add" }, diff: "" },
+          { path: "src/e.ts", kind: { type: "update", move_path: "src/f.ts" }, diff: "" },
         ],
       }),
       settled("ScheduleWakeup", { delaySeconds: 60 }),
@@ -210,7 +211,7 @@ it("a native harness's calls replay named as eve's are, its edits by the files t
       "Wrote: src/b.ts",
       "Searched: invite",
       "Ran: pnpm lint",
-      "Edited: src/c.ts, src/d.ts",
+      "Edited: src/c.ts, src/d.ts, src/e.ts, src/f.ts",
       "Used: ScheduleWakeup",
     ],
   );

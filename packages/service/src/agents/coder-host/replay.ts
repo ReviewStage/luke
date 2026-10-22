@@ -218,12 +218,14 @@ function patchFiles(input: UnparsedWireValue): readonly string[] {
   return patch.split("\n").flatMap((line) => PATCH_FILE_HEADER.exec(line.trimEnd())?.[1] ?? []);
 }
 
-/** The files a Codex file change names, each change's path in the order written. */
+/** The files a Codex file change names, each change's path and where an update moves it to, in the order written. */
 function changedFiles(input: UnparsedWireValue): readonly string[] {
   const changes = isRecord(input) && Array.isArray(input.changes) ? input.changes : [];
-  return changes.flatMap((change: UnparsedWireValue) =>
-    isRecord(change) && isWireString(change.path) ? [change.path] : [],
-  );
+  return changes.flatMap((change: UnparsedWireValue) => {
+    if (!isRecord(change) || !isWireString(change.path)) return [];
+    const moved = isRecord(change.kind) ? change.kind.move_path : undefined;
+    return isWireString(moved) ? [change.path, moved] : [change.path];
+  });
 }
 
 /** The files a patch or a Codex file change edits; none for any other call. */
