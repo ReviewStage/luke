@@ -3,6 +3,7 @@ import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -15,6 +16,11 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
  * task open, so a task, an agent's page, an item, or a channel being read
  * keeps the whole screen and is left by Back. The Inbox's press lands on its
  * list, not on the item last read, since on a phone the list is the place.
+ *
+ * The Inbox and Chat each count what waits on the developer there, the
+ * count the drawer's rows show, read from the one reading they draw from
+ * (`places-waiting.ts`), so the two never disagree, and said in the
+ * sidebar's words.
  */
 
 /** Whether the bar stands: a narrow room, signed in, on one of the places' lists. */
@@ -50,11 +56,13 @@ export function MobileBar({
   const inInbox = !inChat && inboxView.open;
   const inTasks = !inChat && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
+  const waiting = usePlacesWaiting(tasks);
   return (
     <nav className="mobile-bar" aria-label="Places">
       <BarItem
         icon={<InboxIcon />}
         current={inInbox}
+        count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
         inert={drawerOpen}
         onPress={inboxView.onOpenList}
       >
@@ -72,6 +80,7 @@ export function MobileBar({
         <BarItem
           icon={<MessagesSquareIcon />}
           current={inChat}
+          count={{ value: waiting.chat, noun: needsYouNoun(waiting.chat) }}
           inert={drawerOpen}
           onPress={chatView.onOpen}
         >
