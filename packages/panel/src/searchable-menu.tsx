@@ -234,9 +234,16 @@ function submenuOptions(open: Submenu): ComboboxOption[] {
 }
 
 /** One muted line pressed by nothing, under the pinned rows or a submenu's. */
-function FootNote({ words }: { words: React.ReactNode }): React.JSX.Element {
+function FootNote({
+  words,
+  aligned = false,
+}: {
+  words: React.ReactNode;
+  /** Whether the words start where a row's label does, past its glyph slot. */
+  aligned?: boolean;
+}): React.JSX.Element {
   return (
-    <div className="task-compose-menu-foot-note">
+    <div className="task-compose-menu-foot-note" data-aligned={aligned || undefined}>
       <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
         {words}
       </Text>
@@ -618,7 +625,7 @@ export function SearchableMenu(props: {
             );
           })}
           {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
-          {props.planNote === undefined ? null : <FootNote words={props.planNote} />}
+          {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
         </div>
       ) : null}
     </div>
