@@ -49,6 +49,6 @@ test("the inbox list's search unfolds from the magnifier as it opens, fading in 
   const animation = animationOf(search) ?? "";
 
   assert.match(animation, /inbox-search-unfold var\(--duration-pane\)/);
-  assert.match(animation, /popup-fade/);
+  assert.match(animation, /luke-menu-arrive/);
   assert.ok(keyframeNames().includes("inbox-search-unfold"), "its keyframes are laid");
 });

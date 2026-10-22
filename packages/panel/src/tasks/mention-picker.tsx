@@ -27,6 +27,9 @@ import {
   comboboxOptionId,
   DocumentIcon,
   IconButton,
+  MENU_SURFACE_INSET,
+  MenuGlyph,
+  MenuSurface,
   ProviderMark,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -955,9 +958,9 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
           onClick={back}
         />
       )}
-      <span className="mention-menu-crumb-glyph">
+      <MenuGlyph>
         {folder === undefined ? <KindGlyph kind={kind} /> : <FolderIcon aria-hidden="true" />}
-      </span>
+      </MenuGlyph>
       <span className="mention-menu-crumb-title">
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
           {folder ?? kind.name}
@@ -989,7 +992,11 @@ function MentionMenu({
 }): React.JSX.Element {
   const rows = groups.flatMap((group) => group.rows);
   return (
-    <div className="menu-surface searchable-menu mention-menu" style={place}>
+    <MenuSurface
+      className="searchable-menu mention-menu"
+      inset={MENU_SURFACE_INSET.NONE}
+      style={place}
+    >
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
       <ComboboxList
         id={id}
@@ -1017,7 +1024,7 @@ function MentionMenu({
           </Text>
         ))}
       </div>
-    </div>
+    </MenuSurface>
   );
 }
 

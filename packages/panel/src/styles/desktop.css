@@ -1521,7 +1521,7 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
-  animation: popup-fade var(--duration-quick) var(--motion-exit) backwards;
+  animation: luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards;
 }
 
 [data-luke-profile="desktop"] .offline-mark {
@@ -1740,36 +1740,6 @@ ul.actor-stack {
 
 .copy-glyph > [data-glyph="failed"] {
   color: var(--luke-color-danger-text);
-}
-
-/* Menus ----------------------------------------------------------------- */
-
-/* Every menu the window draws itself stands on one surface, the one
-   `@luke/ui`'s `Menu` draws for the window's own drop-down: the searchable
-   picker and its submenus (`searchable-menu.tsx`), the composer's `/` list,
-   the MCP popover, and a crumb's tree. Where it hangs and how wide it stands are each menu's own;
-   the ground, edge, corner, shadow, inset, and entrance are this, and so is
-   staying hidden for the one layout pass that measures where it fits.
-   Note that the entrance animates a transform, which makes a surface the
-   containing block of every fixed box inside it, so a flyout submenu, a
-   second surface standing beside the first, is drawn beside it at the body
-   and never inside it; a page drawn in a menu's place, as the MCP popover's
-   server page is, is the surface's own content. */
-.menu-surface {
-  display: flex;
-  flex-direction: column;
-  padding: var(--luke-menu-inset);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.menu-surface[data-placed="false"] {
-  visibility: hidden;
 }
 
 /* Plan actions ---------------------------------------------------------- */
@@ -2670,33 +2640,17 @@ ul.actor-stack {
   width: auto;
 }
 
-/* What pops up arrives on the pair every arriving element rides, its
+/* What pops up arrives on the pair every arriving element rides, the
+   menu's (`@luke/ui`'s `luke-menu-arrive` and `luke-menu-drop`), its
    opacity over `--duration-quick` and its travel on the spring, and leaves
-   first, fading over `--duration-exit` while its owner holds it drawn and
-   inert (`use-disclosure.ts`; the palette's Radix dialog holds its own on
-   `data-state`). A menu drops from where it hangs. */
-@keyframes popup-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes menu-drop {
-  from {
-    transform: translateY(calc(-1 * var(--luke-space-4)));
-  }
-}
-
-@keyframes popup-leave {
-  to {
-    opacity: 0;
-  }
-}
-
-:is(.menu-surface, .task-summary-card)[data-leaving="true"],
+   first on the menu's `luke-menu-leave`, fading over `--duration-exit`
+   while its owner holds it drawn and inert (`use-disclosure.ts`; the
+   palette's Radix dialog holds its own on `data-state`). A menu's own
+   surface (`MenuSurface`) draws all three itself. */
+.task-summary-card[data-leaving="true"],
 :is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
   pointer-events: none;
-  animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
+  animation: luke-menu-leave var(--duration-exit) var(--motion-exit) forwards;
   /* Note that the hold waits on every motion the element runs, and losing
      focus would start the scrollbar's own fade (above), so the exit is the
      one motion it has. */
@@ -3014,7 +2968,7 @@ ul.actor-stack {
   flex: 1;
   animation:
     inbox-search-unfold var(--duration-pane) var(--motion-pane),
-    popup-fade var(--duration-quick) var(--motion-pane);
+    luke-menu-arrive var(--duration-quick) var(--motion-pane);
 }
 
 /* Opening, the field unfolds leftward from where the magnifier stood at its
@@ -5038,8 +4992,8 @@ ul.actor-stack {
   background: var(--luke-color-overlay);
   box-shadow: var(--luke-menu-shadow);
   animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
+    luke-menu-arrive var(--duration-quick) var(--motion-exit) both,
+    luke-menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 [data-luke-profile="desktop"] .find-bar {
@@ -5471,7 +5425,7 @@ ul.actor-stack {
   outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
   animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
+    luke-menu-arrive var(--duration-quick) var(--motion-exit) both,
     summary-card-grow var(--duration-fast) var(--spring-fast) both;
 }
 
@@ -6215,7 +6169,7 @@ ul.actor-stack {
   overflow: clip;
   transform: translateX(-50%);
   animation:
-    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards,
     command-palette-rise var(--duration-fast) var(--spring-fast) backwards;
 }
 
@@ -6349,7 +6303,7 @@ ul.actor-stack {
   border-radius: 0 0 var(--luke-dialog-radius) var(--luke-dialog-radius);
   transform: none;
   animation:
-    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards,
     command-palette-drop var(--duration-fast) var(--spring-fast) backwards;
 }
 
@@ -6402,7 +6356,7 @@ ul.actor-stack {
   overflow: clip;
   transform: translate(-50%, -50%);
   animation:
-    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards,
     tab-switcher-rise var(--duration-fast) var(--spring-fast) backwards;
 }
 

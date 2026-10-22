@@ -887,3 +887,13 @@ body {
   width: 100%;
   height: 100%;
 }
+
+/* A list an app hangs on the menu's surface (`MenuSurface`), at an `@`
+   list's width, its crumb inset as the rows' words are. */
+.catalog-menu-surface {
+  width: 280px;
+}
+
+.catalog-menu-crumb {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+}
