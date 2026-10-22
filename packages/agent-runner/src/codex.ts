@@ -94,6 +94,16 @@ const TOKEN_COMMAND = {
 const MCP_SERVER = "luke";
 
 /**
+ * How long Codex waits on one Luke tool call, in seconds: the Luke MCP
+ * function's own duration (`luke-mcp/app.ts`'s `LUKE_MCP_FUNCTION`, the
+ * longest `run_on_mac` and two minutes around it), so Codex never gives up
+ * on a call Luke is still running. Note that Codex's default is 60 s, past
+ * which it fails the call while Luke carries it out, and the agent retries a
+ * call that already ran.
+ */
+const MCP_TOOL_TIMEOUT_SECONDS = 600;
+
+/**
  * Who the runner tells app-server it is. OpenAI asks that the name match the
  * `agent_name_hint` the sign-in sent, which is `Luke`. The version is the
  * package's, which the bundle's build writes in (`--define`); an unbundled
@@ -201,7 +211,7 @@ function providerAuth(provider: string, command: TokenCommand) {
  * runner's token command (`providerAuth`), the Luke MCP
  * server with its bearer read from the environment and its tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
- * every MCP call, as P16 found), the sandbox with network on and the
+ * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and the
  * checkout's `.git` writable, and commands inheriting the core variables
  * without the bearer. Nothing in argv is secret.
  *
@@ -225,6 +235,7 @@ function appServerArgs(config: CodexConfig, command: TokenCommand): string[] {
     [`${mcp}.url`, toml(config.mcpUrl)],
     [`${mcp}.bearer_token_env_var`, toml(RUNNER_ENV.BEARER)],
     [`${mcp}.default_tools_approval_mode`, toml("approve")],
+    [`${mcp}.tool_timeout_sec`, MCP_TOOL_TIMEOUT_SECONDS.toFixed(1)],
     ["approval_policy", toml("never")],
     ["sandbox_mode", toml("workspace-write")],
     ["sandbox_workspace_write.network_access", "true"],

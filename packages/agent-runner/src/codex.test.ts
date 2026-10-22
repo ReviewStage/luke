@@ -236,6 +236,7 @@ it.effect(
         'mcp_servers.luke.url="https://luke.test/runner/mcp"',
         'mcp_servers.luke.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
         'mcp_servers.luke.default_tools_approval_mode="approve"',
+        "mcp_servers.luke.tool_timeout_sec=600.0",
         'approval_policy="never"',
         'sandbox_mode="workspace-write"',
         "sandbox_workspace_write.network_access=true",
