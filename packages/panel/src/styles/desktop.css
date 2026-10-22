@@ -3319,15 +3319,9 @@ ul.actor-stack {
 }
 
 /* An Inbox item's task's status, its mark alone at the time's size before
-   it (`inbox-list.tsx`'s `TaskStatusChip`), and in words at the end of its
-   card's first line, kept whole while the task's chip gives way. */
+   it (`inbox-list.tsx`'s `TaskStatusChip`). */
 .inbox-row-task-status {
   display: inline-flex;
-}
-
-.inbox-card-task-status {
-  flex: none;
-  color: var(--luke-color-text-muted);
 }
 
 /* A task's card leads with where it stands (`task-card.tsx`): its key, its

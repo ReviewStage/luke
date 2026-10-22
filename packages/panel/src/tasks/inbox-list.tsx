@@ -449,9 +449,9 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
 /**
  * An Inbox row's card, hung beside the row as a sidebar task's row hangs
  * its task's, so the row's tile hangs none of its own: the card of the
- * thread. It leads with what holds it, a task as its key and its status
- * and name or an automation by its name, as a task's card leads with where
- * it stands; then the item's title and when it last moved; where it stands,
+ * thread. It leads with what holds it, a task as its key and its chip,
+ * which wears its status, or an automation by its name, as a task's card
+ * leads with where it stands; then the item's title and when it last moved; where it stands,
  * waiting on the reader, on a teammate, or settled;
  * the ask in full while one waits, every option with the recommended one
  * marked or every step as the reader's draft ticks it, or how it ended; and
@@ -531,10 +531,10 @@ const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
 
 /**
  * What holds an item, as its card leads with it, on one line: a task by its
- * key, as the task's own card leads with it (`TaskKey`), by its chip
- * as a mention of it is drawn (`HolderRef`), and by its status in words,
- * which the row's own chip draws as its mark alone (`TaskStatusChip`); an
- * automation, or the agents no automation names, by their chip alone.
+ * key, as the task's own card leads with it (`TaskKey`), and by its chip
+ * as a mention of it is drawn (`HolderRef`), which wears the task's status
+ * as its mark, so the card says no status in words; an automation, or the
+ * agents no automation names, by their chip alone.
  */
 function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const workspaces = useAppSlice(WORKSPACES);
@@ -548,9 +548,6 @@ function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
         <TaskKey workspaceName={workspaceName} number={holder.task.number} />
       ) : null}
       <HolderRef holder={holder} />
-      {holder.kind === INBOX_HOLDER.TASK && holder.task.status !== undefined ? (
-        <span className="inbox-card-task-status">{TASK_STATUS_WORDS[holder.task.status]}</span>
-      ) : null}
     </div>
   );
 }
