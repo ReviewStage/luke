@@ -151,7 +151,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * one place, so a row dragged out of Pinned is unpinned and one dragged out
  * of a section leaves it. A group of a repository or of a creator takes no
  * drop, since a drag cannot say either. A row under an assignee's group
- * leaves its own assignee's cell empty, as the group's head says it. A phone's List has no room for
+ * leaves its own assignee's cell empty, as the group's head says it, but on
+ * a phone, whose rows are changed by their chips alone. A phone's List has no room for
  * most columns beside a name, nor a drag beside its scrolling,
  * so it draws only a row's chips, its name, and its time, its rows changed
  * by their chips and menus, the rest on its card.
@@ -948,7 +949,7 @@ export function TasksList({
                 waiting={waitingOn.get(task.id) ?? 0}
                 now={now}
                 properties={properties}
-                assigneeHeld={group.head.kind === TASKS_GROUP.ASSIGNEE}
+                assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
                 onOpen={() => tasks.onSelect(task.id)}
                 onStanding={(standing) => setStanding(task, standing)}
               />

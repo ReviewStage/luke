@@ -8423,11 +8423,12 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   order: 11;
 }
 
-/* The chips and the ⋯ stand over the row's press and take their own presses. */
+/* The chips and the ⋯ stand over the row's press and take their own presses;
+   an assignee's cell left empty under its group's head leaves the press its own. */
 .tasks-list-cell:is(
   [data-cell="priority"],
   [data-cell="status"],
-  [data-cell="assignee"],
+  [data-cell="assignee"]:not(:empty),
   [data-cell="more"]
 ) {
   position: relative;

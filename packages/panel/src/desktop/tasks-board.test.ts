@@ -425,6 +425,20 @@ test("by assignee, the reader's column stands first, then each teammate's, then 
   ]);
 });
 
+test("in a narrow room grouped by assignee, a card keeps its Assignee chip, which moves it without a drag", async () => {
+  const deans = { ...(TASKS.find((each) => each.id === "t-40") ?? assert.fail("no t-40")) };
+  const board = await mountBoard(
+    [{ ...deans, assignee: { userId: DEAN, name: "Dean Stratakos" } }],
+    SHELL_ROOM.NARROW,
+    { ...DEFAULT_BOARD_DISPLAY, grouping: TASKS_GROUPING.ASSIGNEE },
+  );
+
+  act(() => chipOf(board, "t-40", "Assignee").click());
+  pick("Charles Pan");
+
+  assert.deepEqual(sent, [["t-40", { assigneeId: CHARLES }]]);
+});
+
 test("a card's Assignee chip drops No assignee and the members, the reader first, and sends the one picked", async () => {
   const board = await mountBoard([charles("t-39"), ...TASKS.filter((each) => each.id !== "t-39")]);
 

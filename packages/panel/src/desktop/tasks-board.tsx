@@ -403,7 +403,8 @@ function columnValue(head: TasksGroupHead): string {
  * is a drop zone of the board, and its cards are dragged out of it onto
  * another; dropped there, a card's task is sent that column's status or
  * priority, or assigned to its person. Under an assignee's column a card
- * leaves its assignee's chip off, as the column's head says who.
+ * leaves its assignee's chip off, as the column's head says who, but on a
+ * phone, where a card is moved by its chips alone.
  */
 function TaskBoardColumnView({
   tasks,
@@ -451,8 +452,9 @@ function TaskBoardColumnView({
   });
   const { mark, words } = columnHead(column.head, people);
   const value = columnValue(column.head);
+  // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another.
   const drawn =
-    column.head.kind === TASKS_GROUP.ASSIGNEE
+    column.head.kind === TASKS_GROUP.ASSIGNEE && !narrow
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   return (

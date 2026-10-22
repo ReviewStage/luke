@@ -21,7 +21,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -154,7 +154,10 @@ const WAITING: readonly AppInboxTask[] = [
 ];
 
 /** The Tasks page over Acme's tasks, or `tasks`, read by Dean, once the members have answered. */
-async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLElement> {
+async function mountPage(
+  tasks: readonly TaskSummary[] = TASKS,
+  room: ShellRoom = SHELL_ROOM.WIDE,
+): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -184,7 +187,7 @@ async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLEle
         createElement(
           Fragment,
           null,
-          createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE }),
+          createElement(TasksPage, { tasks: control, room }),
           createElement(ToastHost),
         ),
       ),
@@ -721,6 +724,26 @@ test("grouped by assignee, the reader's group leads and No assignee's ends, a ro
     ["t-40", { assigneeId: DEAN }],
     ["t-39", { assigneeId: null }],
   ]);
+});
+
+test("on a phone grouped by assignee, a row keeps its Assignee chip, which moves it without a drag", async () => {
+  window.localStorage.setItem(
+    "luke.tasksListDisplay",
+    JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
+  );
+  const page = await mountPage(
+    [deans(39), ...TASKS.filter((each) => each.number !== 39)],
+    SHELL_ROOM.NARROW,
+  );
+
+  // Note that a phone's row draws no key, so the row is found by its task.
+  const chip = page.querySelector<HTMLButtonElement>(
+    'li[data-task-id="t-39"] button[aria-label^="Assignee:"]',
+  );
+  act(() => (chip ?? assert.fail("the row keeps its Assignee chip")).click());
+  choose("No assignee");
+
+  assert.deepEqual(sent, [["t-39", { assigneeId: null }]]);
 });
 
 test("a Board display kept before its cards offered Agents and Needs you draws them, the rest as kept", async () => {
