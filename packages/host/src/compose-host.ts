@@ -12,6 +12,7 @@ import {
   type TaskActivityFrame,
   type TaskCodeFrame,
 } from "@luke/features";
+import { HostedInstalledSkillClient } from "@luke/features/installed-skill-client";
 import {
   carried,
   GATEWAY_METHOD,
@@ -31,6 +32,7 @@ import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
 import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
+import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
@@ -76,6 +78,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.INTEGRATIONS,
+  HOST_CONCERN.INSTALLED_SKILLS,
   HOST_CONCERN.MAC_COMMANDS,
 ];
 
@@ -301,6 +304,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         live.service.endSession(LIVE_SESSION_END_CAUSE.VOICE_CHANGED),
       ),
     });
+    const installedSkills = yield* composeInstalledSkills({
+      kernel,
+      account,
+      client: new HostedInstalledSkillClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        credential: account.credential,
+      }),
+    });
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
@@ -313,6 +324,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
+      [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,

@@ -79,7 +79,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Profile", "Agents", "Integrations", "Plan template", "Experimental"],
+    rows: ["Profile", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
   },
   {
     heading: "This Mac",

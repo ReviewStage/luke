@@ -244,6 +244,22 @@ export const CHAPTERS_ACT_KIND = {
 } as const;
 
 /**
+ * Settings' Skills: the skills the account sees in a workspace listed, a
+ * pasted `skills add` command or skill text previewed and installed for the
+ * account or its workspace, and one toggled, checked for an update,
+ * updated, or removed.
+ */
+export const INSTALLED_SKILL_ACT_KIND = {
+  INSTALLED_SKILLS_LIST: "installedSkills.list",
+  INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
+  INSTALLED_SKILLS_INSTALL: "installedSkills.install",
+  INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
+  INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
+  INSTALLED_SKILLS_UPDATE: "installedSkills.update",
+  INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
+} as const;
+
+/**
  * Settings' integration rows: where every one of the account's integrations
  * stands, a browser sign-in to one begun and opened by the host, and one
  * connection ended. The window hears whether the browser was sent, never the
@@ -570,6 +586,7 @@ export const PORT_ACT_KIND = {
   ...BROWSER_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
+  ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,

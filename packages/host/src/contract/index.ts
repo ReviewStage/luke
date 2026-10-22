@@ -13,6 +13,7 @@ import { avatarActsContract } from "./avatar.js";
 import { browserActsContract } from "./browser.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { chaptersActsContract } from "./chapters.js";
+import { installedSkillActsContract } from "./installed-skills.js";
 import { integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
@@ -48,6 +49,7 @@ export {
   BROWSER_ACT_KIND,
   BROWSER_LIVE_ACT_KIND,
   CHAPTERS_ACT_KIND,
+  INSTALLED_SKILL_ACT_KIND,
   INTEGRATION_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
@@ -86,6 +88,7 @@ export const actContract = {
   ...browserActsContract,
   ...browserLiveActsContract,
   ...chaptersActsContract,
+  ...installedSkillActsContract,
   ...integrationActsContract,
   ...macTerminalActsContract,
   ...settingsActsContract,
