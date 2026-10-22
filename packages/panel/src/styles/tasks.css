@@ -6555,15 +6555,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   padding: var(--luke-space-4);
 }
 
-.terminal-shells-none {
-  flex: 1;
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* The list's room while no read has listed the shells: the blocks standing
    for them, or the failure, with the foot kept at the list's end. */
 .terminal-shells-wait {

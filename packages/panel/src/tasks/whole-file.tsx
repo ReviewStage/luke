@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { ScrollArea } from "@luke/ui";
+import { EmptyState, ScrollArea } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -349,7 +349,7 @@ export function WholeFile({
   }
 
   if (AsyncResult.isFailure(loaded)) {
-    return <p className="side-panel-empty">{FILE_LOAD_FAILED}</p>;
+    return <EmptyState>{FILE_LOAD_FAILED}</EmptyState>;
   }
   return (
     <div className="whole-file">

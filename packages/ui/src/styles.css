@@ -43,6 +43,7 @@
 @import "./components/disclosure/disclosure.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/error-state/error-state.css";
+@import "./components/note-line/note-line.css";
 /* The wiring first, then the generated motions that assume it. */
 @import "./face/face.css";
 @import "./face/face-motion.css";

@@ -40,6 +40,7 @@ export * from "./components/menu/link-address.js";
 export * from "./components/menu/menu.js";
 export * from "./components/menu/touch-hold.js";
 export * from "./components/nav-item/nav-item.js";
+export * from "./components/note-line/note-line.js";
 export * from "./components/one-line/one-line.js";
 export * from "./components/page-frame/page-frame.js";
 export * from "./components/pagination/pagination.js";

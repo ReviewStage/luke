@@ -5,7 +5,6 @@ import type { TaskStanding } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  Button,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -840,17 +839,18 @@ function PlanDocument({
         {region.kind === DOCUMENT_REGION.MISSING ? (
           <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
         ) : (
-          <section className="desktop-empty">
+          <section className="desktop-empty-region">
             {region.kind === DOCUMENT_REGION.FAILED ? (
-              <ErrorState onRetry={tasks.onRetryDocument} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+              <ErrorState
+                onRetry={tasks.onRetryDocument}
+                placement={ERROR_STATE_PLACEMENT.CENTRED}
+                exit={close}
+              >
                 {line}
               </ErrorState>
             ) : (
-              <p role="alert">{line}</p>
+              <EmptyState>{line}</EmptyState>
             )}
-            {region.kind === DOCUMENT_REGION.FAILED ? (
-              <Button onClick={close.onClick}>{close.label}</Button>
-            ) : null}
           </section>
         )}
       </>
