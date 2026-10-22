@@ -418,31 +418,42 @@ const COMMAND_TOOLS: ReadonlySet<string> = new Set([
 /** The line Claude Code tells a command's non-zero exit in, among its words. */
 const EXIT_LINE = /^(?:Error: )?Exit code (\d+)$/u;
 
-/** A Claude Code command's failure, its words as the CLI told them, as eve's shell answers one: its output, and the exit code it named. */
-function claudeCodeFailure(words: string): WireValue {
+/** A Claude Code command's failure, its words as the CLI told them, as eve's shell answers one: its output, and the exit code its `Exit code N` line named; nothing where no such line says it exited. */
+function claudeCodeFailure(words: string): WireValue | undefined {
   const lines = words.split("\n");
   const exit = lines.findIndex((line) => EXIT_LINE.test(line.trim()));
-  const exitCode = Number(EXIT_LINE.exec(lines[exit]?.trim() ?? "")?.[1] ?? 1);
+  const code = EXIT_LINE.exec(lines[exit]?.trim() ?? "")?.[1];
+  if (code === undefined) return undefined;
   const stdout = lines.filter((_line, index) => index !== exit).join("\n");
-  return { stdout, stderr: "", exitCode };
+  return { stdout, stderr: "", exitCode: Number(code) };
+}
+
+/** Whether a Codex command's answer names the code it exited with: a stopped or interrupted one names none, or `-1`. */
+function codexExited(output: WireValue | undefined): boolean {
+  return isRecord(output) && isWireNumber(output.exitCode) && output.exitCode > 0;
 }
 
 /**
- * A native command that ended in error, as eve's shell answers a command
- * that exited non-zero: its output, ending in its exit code, as an answer
- * rather than a failed call, since a failing exit is what the command said
- * and not something the tool could not do. The words are the error's, which
- * the harness told the model in place of an answer; Codex's own answer
- * already holds its output and its exit. Nothing for any other call.
+ * A native command that exited non-zero, as eve's shell answers one: its
+ * output, ending in its exit code, as an answer rather than a failed call,
+ * since a failing exit is what the command said and not something the tool
+ * could not do. The words are the error's, which the harness told the model
+ * in place of an answer; Codex's own answer already holds its output and its
+ * exit. Nothing for any other call, or for a command that failed without
+ * naming an exit, such as one stopped or interrupted, which stays a failure.
  */
 export function failedCommandCall(
   call: DrawnCall,
   errorText: string | undefined,
 ): DrawnCall | undefined {
   if (!COMMAND_TOOLS.has(call.tool)) return undefined;
-  if (call.tool === CODEX_TOOL.COMMAND_EXECUTION && isRecord(call.output)) return drawnCall(call);
-  const words = errorText ?? answerWords(call.output) ?? "";
-  return { ...drawnCall({ ...call, output: undefined }), output: claudeCodeFailure(words) };
+  if (call.tool === CODEX_TOOL.COMMAND_EXECUTION) {
+    return codexExited(call.output) ? drawnCall(call) : undefined;
+  }
+  const answer = claudeCodeFailure(errorText ?? answerWords(call.output) ?? "");
+  return answer === undefined
+    ? undefined
+    : { ...drawnCall({ ...call, output: undefined }), output: answer };
 }
 
 /**

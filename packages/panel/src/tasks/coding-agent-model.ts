@@ -1312,9 +1312,15 @@ export function agentPart(part: WireValue): AgentPart {
       };
     }
     // A native harness's call is read as the eve call that draws it (`native-tool-calls.ts`).
+    const drawn = drawnCall(stored);
     return {
       kind: AGENT_PART.TOOL,
-      ...drawnCall(stored),
+      ...drawn,
+      // Note that a failed edit keeps the words it failed with, since the files an edit's answer lists are the ones it changed.
+      output:
+        state === TOOL_STATE.OUTPUT_ERROR && drawn.tool === AGENT_TOOL.APPLY_PATCH
+          ? stored.output
+          : drawn.output,
       callId: isWireString(part.toolCallId) ? part.toolCallId : "",
       state,
       errorText,

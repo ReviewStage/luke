@@ -308,3 +308,18 @@ test("Luke's read_inbox, called over its MCP server and stored under its own nam
   act(() => row.click());
   assert.deepEqual(targets, [{ kind: TOOL_TARGET.INBOX }]);
 });
+
+test("a command Codex stopped before it exited stays a failed call", () => {
+  const { container } = drawn({
+    type: "tool-commandExecution",
+    toolCallId: "item_stop",
+    state: "output-error",
+    input: { command: "sleep 600", cwd: CHECKOUT },
+    output: { output: "", exitCode: -1 },
+    errorText: "failed",
+  });
+  const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
+  act(() => line.click());
+  assert.ok(container.querySelector('[role="alert"]'), "the failure is drawn");
+  assert.ok(!container.textContent?.includes("exit 0"), container.textContent ?? "");
+});

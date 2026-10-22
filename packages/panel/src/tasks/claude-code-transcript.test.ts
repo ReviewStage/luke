@@ -389,3 +389,31 @@ test("an agent paid for by a plan says the plan where an agent on a key says dol
     "This agent: 1.2M tokens · ChatGPT plan",
   );
 });
+
+test("a Bash call that failed without exiting stays a failed call with its error, and a failed Edit names no file it updated", () => {
+  const stopped = opened({
+    type: "tool-Bash",
+    toolCallId: "toolu_Bash",
+    state: "output-error",
+    input: { command: "sleep 600" },
+    output: "Interrupted by the user",
+    errorText: "Interrupted by the user",
+  });
+  assert.ok(stopped.body.includes("Interrupted by the user"), stopped.body);
+  assert.ok(!stopped.body.includes("exit 1"), stopped.body);
+  const { container } = drawn({
+    type: "tool-Edit",
+    toolCallId: "toolu_Edit",
+    state: "output-error",
+    input: { file_path: `${CHECKOUT}/a.ts`, old_string: "a", new_string: "b" },
+    output: "File has not been read yet.",
+    errorText: "File has not been read yet.",
+  });
+  const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
+  act(() => line.click());
+  assert.ok(container.querySelector('[role="alert"]'), "the error is drawn");
+  assert.ok(
+    !container.textContent?.includes(`update ${CHECKOUT}/a.ts`),
+    container.textContent ?? "",
+  );
+});
