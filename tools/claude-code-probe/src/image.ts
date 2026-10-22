@@ -8,8 +8,8 @@
  * root-owned directory, and the `agent` user with a private home. The
  * checkout stays the default user's, shared with `agent` through the default
  * user's group, so a Terminal and the agent work on the same files. The
- * default user's sudo is dropped last, once everything that needed root is
- * in place.
+ * default user keeps its sudo, as the image does: the Sandbox API's `sudo`
+ * runs through it, and the capability drop is the boundary.
  *
  * Every script takes the default user's name as its first positional
  * argument (`bash -c <script> probe <user>`) rather than spliced into its
@@ -56,28 +56,6 @@ export const SHARE_CHECKOUT = [
   `git -C ${CHECKOUT} config core.sharedRepository group`,
   `chmod -R g+rwX ${CHECKOUT}`,
   `find ${CHECKOUT} -type d -exec chmod g+s {} +`,
-].join("\n");
-
-/**
- * The default user's sudo dropped, run as root last: every sudoers line or
- * file that names the user, and the admin groups it is in. What stood before
- * and what was removed is printed, which is the finding the plan records.
- */
-export const DROP_SUDO = [
-  "set -uo pipefail",
-  'DEFAULT_USER="$1"',
-  'echo "sudoers entries before:"',
-  'grep -rnE "^[^#]*($DEFAULT_USER|%wheel|%sudo|%admin)" /etc/sudoers /etc/sudoers.d 2>/dev/null',
-  'echo "groups before: $(id -nG "$DEFAULT_USER")"',
-  "for file in /etc/sudoers.d/*; do",
-  '  if [ -f "$file" ] && grep -q "$DEFAULT_USER" "$file"; then rm -f "$file"; echo "removed $file"; fi',
-  "done",
-  'sed -i "/^%\\?$DEFAULT_USER[[:space:]]/d" /etc/sudoers',
-  "for group in wheel sudo admin; do",
-  '  if gpasswd -d "$DEFAULT_USER" "$group" >/dev/null 2>&1; then echo "left group $group"; fi',
-  "done",
-  "visudo -c",
-  'echo "groups after: $(id -nG "$DEFAULT_USER")"',
 ].join("\n");
 
 /**
