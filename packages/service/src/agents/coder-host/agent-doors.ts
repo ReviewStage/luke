@@ -45,6 +45,12 @@ import {
   runLookAtPicture,
 } from "../../tasks/picture-look.js";
 import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
+import {
+  runCreateAutomation,
+  runDeleteAutomation,
+  runListAutomations,
+  runUpdateAutomation,
+} from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import {
   type AgentSessions,
@@ -129,6 +135,10 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.CREATE_SECTION
     | typeof CODER_TOOL.DELETE_SECTION
     | typeof CODER_TOOL.UPDATE_TASK
+    | typeof CODER_TOOL.LIST_AUTOMATIONS
+    | typeof CODER_TOOL.CREATE_AUTOMATION
+    | typeof CODER_TOOL.UPDATE_AUTOMATION
+    | typeof CODER_TOOL.DELETE_AUTOMATION
     | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -148,6 +158,10 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
   [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
+  [CODER_TOOL.LIST_AUTOMATIONS]: runListAutomations,
+  [CODER_TOOL.CREATE_AUTOMATION]: runCreateAutomation,
+  [CODER_TOOL.UPDATE_AUTOMATION]: runUpdateAutomation,
+  [CODER_TOOL.DELETE_AUTOMATION]: runDeleteAutomation,
   [CODER_TOOL.LIST_MODELS]: runListModels,
   [CODER_TOOL.LIST_OPEN_ASKS]: runListOpenAsks,
 } as const;
@@ -430,8 +444,11 @@ export function runAgentTools(
     if (Result.isFailure(found)) return agentToolRejected(found.failure);
     // The agent asking is the one the conversation is, and eve is reached as its starter.
     const sender = found.success;
-    // An operator deletes nothing: it is not offered the delete, and a native harness's call of it is refused.
-    if (call.tool === CODER_TOOL.DELETE_SECTION && isOperator(sender)) {
+    // An operator deletes nothing: it is not offered a delete, and a native harness's call of one is refused.
+    if (
+      (call.tool === CODER_TOOL.DELETE_SECTION || call.tool === CODER_TOOL.DELETE_AUTOMATION) &&
+      isOperator(sender)
+    ) {
       return agentToolRejected(STEWARD_DELETE_REFUSAL);
     }
     const secret = seams.deploymentSecret();

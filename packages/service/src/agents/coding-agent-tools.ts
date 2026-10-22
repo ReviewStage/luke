@@ -1267,7 +1267,7 @@ function startRefusalWords(refusal: HostedRefusal): string {
 }
 
 /** A choice the catalog refused, the one named or the member's stored default, said with every model offered and the efforts each lists, so the model can try again or ask. */
-function choiceRefusal(
+export function choiceRefusal(
   choice: ModelChoice | undefined,
   offered: readonly OfferedModel[],
   lead = "Not started",

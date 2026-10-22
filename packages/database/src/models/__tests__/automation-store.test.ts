@@ -858,4 +858,22 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
         ]);
       }),
   );
+
+  it.effect(
+    "an automation made under an id the caller names keeps it, and reads back under it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const taskId = yield* openTask(owner);
+        const id = randomUUID();
+
+        const made = Option.getOrThrow(yield* createAutomation(owner, { ...nightly(taskId), id }));
+
+        assert.equal(made.id, id);
+        assert.deepEqual(
+          Option.map(yield* readAutomation(owner, id), (read) => read.name),
+          Option.some("Nightly flaky-test sweep"),
+        );
+      }),
+  );
 });

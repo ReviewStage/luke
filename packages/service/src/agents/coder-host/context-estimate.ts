@@ -16,6 +16,12 @@ import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
+import {
+  CREATE_AUTOMATION_TOOL,
+  DELETE_AUTOMATION_TOOL,
+  LIST_AUTOMATIONS_TOOL,
+  UPDATE_AUTOMATION_TOOL,
+} from "../automation-tools.js";
 import { BROWSER_TOOL } from "../browser/browser-tool.js";
 import {
   CODER_READ_AGENT_TOOL,
@@ -173,6 +179,22 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.UPDATE_TASK]: {
     description: UPDATE_TASK_TOOL.description,
     inputSchema: emitJsonSchema(UPDATE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LIST_AUTOMATIONS]: {
+    description: LIST_AUTOMATIONS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_AUTOMATIONS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.CREATE_AUTOMATION]: {
+    description: CREATE_AUTOMATION_TOOL.description,
+    inputSchema: emitJsonSchema(CREATE_AUTOMATION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UPDATE_AUTOMATION]: {
+    description: UPDATE_AUTOMATION_TOOL.description,
+    inputSchema: emitJsonSchema(UPDATE_AUTOMATION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.DELETE_AUTOMATION]: {
+    description: DELETE_AUTOMATION_TOOL.description,
+    inputSchema: emitJsonSchema(DELETE_AUTOMATION_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,
