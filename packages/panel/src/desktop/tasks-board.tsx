@@ -56,14 +56,19 @@ import {
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { SquareKanbanIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { issueTagWords } from "../tasks/task-issue-links-model.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
+import {
+  NO_ASSIGNEE_WORDS,
+  TASK_PRIORITY_WORDS,
+  TASK_STATUS_WORDS,
+  TaskKey,
+} from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
@@ -72,6 +77,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
 import { useTaskMenu } from "./task-actions.js";
 import {
+  AssigneeChip,
   PriorityChip,
   StatusChip,
   standsAt,
@@ -79,11 +85,16 @@ import {
   useStandingDoor,
   WaitingBadge,
 } from "./task-row-parts.js";
-import { OlderCompleted, type TasksViewFrame } from "./tasks-page-options.js";
+import {
+  assigneeFor,
+  assigneeWords,
+  OlderCompleted,
+  type TasksViewFrame,
+} from "./tasks-page-options.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
- * tasks-board.tsx -- the Tasks page's Board: the listed workspace's tasks on a column for each status, or each priority, in the order work moves through them.
+ * tasks-board.tsx -- the Tasks page's Board: the listed workspace's tasks on a column for each status, or each priority, in the order work moves through them, or each assignee.
  *
  * It is one of the Tasks page's two views (`tasks-page.tsx`), which stands
  * in the plan's place beside the sidebar, as the Inbox does. A column is a quiet well headed by
@@ -91,16 +102,17 @@ import { useRowDrag } from "./use-row-drag.js";
  * its own cards, the most pressing first. A card is raised off the well:
  * its key, how many of its Inbox threads wait on the reader, when it last
  * moved, and its creator's face over its whole name, and at its foot the
- * chips that change its priority and its status where it stands, its
+ * chips that change its priority, its status, and its assignee where it
+ * stands, the assignee's left off under an assignee's column, its
  * repository, what its agents are doing and the pull requests they opened
  * (`task-row-parts.tsx`), and a ⋯ dropping the task's own menu, the sidebar
  * row's, which a right-click drops too and whose Rename makes the card's
  * name its field. A press anywhere else opens the task. A card hangs no
  * hover card, since it already says what its row's card would. A card dragged onto another column
- * is sent that column's status, or its priority, as the task page's chips
- * send them, and stands where it was until the list read again says
- * otherwise; a change the service did not keep says so, whether dragged or
- * picked. Which columns stand, what each holds, its order, and what a card
+ * is sent that column's status or priority, or assigned to its person, No
+ * assignee's assigning it to no one, as the task page's chips send them,
+ * and stands where it was until the list read again says otherwise; a
+ * change the service did not keep says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
  * draws are the Tasks page's filter and the Board's own display
  * (`tasks-page-model.ts`): Backlog, Todo, In progress, and Done at first,
  * Canceled once asked for. A task archived is off the board, as it is off
@@ -186,10 +198,10 @@ function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element | nul
 /**
  * One task's card: its key, what waits on the reader, when it last moved,
  * and its creator's face over its name, one press that opens it, and at its foot
- * the chips that change it where it stands, its priority and its status,
- * its repository, its agents' work and pull requests, and the ⋯ dropping
- * the task's own menu, which a right-click opens too. Renamed from that
- * menu, its name is its field until the edit ends. On a phone the status
+ * the chips that change it where it stands, its priority, its status, and
+ * its assignee, its repository, its agents' work and pull requests, and the
+ * ⋯ dropping the task's own menu, which a right-click opens too. Renamed
+ * from that menu, its name is its field until the edit ends. On a phone the status
  * chip says its status in words, since it is how a card moves there.
  */
 function TaskBoardCard({
@@ -311,6 +323,9 @@ function TaskBoardCard({
         {drawn(TASK_PROPERTY.STATUS) ? (
           <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} named={narrow} onStanding={onStanding} />
         ) : null}
+        {drawn(TASK_PROPERTY.ASSIGNEE) ? (
+          <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+        ) : null}
         {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
           <span className="tasks-board-repository">{repositoryName(task.repository)}</span>
         )}
@@ -339,8 +354,17 @@ interface ColumnHead {
   readonly words: string;
 }
 
+/** The value an assignee's column stands for where no one is assigned, apart from every account's id. */
+const NO_ASSIGNEE_COLUMN = "no-assignee";
+
+/** How the Board draws a person its column stands for: their face and their name, by account id. */
+interface ColumnPeople {
+  readonly mark: (userId: string) => React.JSX.Element;
+  readonly words: (userId: string) => string;
+}
+
 /** A column's head for the value it stands for. */
-function columnHead(head: TasksGroupHead): ColumnHead {
+function columnHead(head: TasksGroupHead, people: ColumnPeople): ColumnHead {
   if (head.kind === TASKS_GROUP.STATUS) {
     return { mark: <TaskStatusMark status={head.status} />, words: TASK_STATUS_WORDS[head.status] };
   }
@@ -350,20 +374,27 @@ function columnHead(head: TasksGroupHead): ColumnHead {
       words: TASK_PRIORITY_WORDS[head.priority],
     };
   }
+  if (head.kind === TASKS_GROUP.ASSIGNEE) {
+    return head.assigneeId === null
+      ? { mark: <UnassignedMark size={ACTOR_SIZE.MARK} decorative />, words: NO_ASSIGNEE_WORDS }
+      : { mark: people.mark(head.assigneeId), words: people.words(head.assigneeId) };
+  }
   return { mark: null, words: "" };
 }
 
-/** What a card dropped on a column is sent: the column's status, or its priority. */
+/** What a card dropped on a column is sent: the column's status or priority, or its assignee, null for No assignee's. */
 function columnStanding(head: TasksGroupHead): TaskStanding | undefined {
   if (head.kind === TASKS_GROUP.STATUS) return { status: head.status };
   if (head.kind === TASKS_GROUP.PRIORITY) return { priority: head.priority };
+  if (head.kind === TASKS_GROUP.ASSIGNEE) return { assigneeId: head.assigneeId };
   return undefined;
 }
 
-/** The value a column stands for, which names it among the Board's columns: a status, or a priority, as its grouping is. */
+/** The value a column stands for, which names it among the Board's columns: a status, a priority, or an assignee's account id, as its grouping is. */
 function columnValue(head: TasksGroupHead): string {
   if (head.kind === TASKS_GROUP.STATUS) return head.status;
   if (head.kind === TASKS_GROUP.PRIORITY) return head.priority;
+  if (head.kind === TASKS_GROUP.ASSIGNEE) return head.assigneeId ?? NO_ASSIGNEE_COLUMN;
   return head.kind;
 }
 
@@ -371,7 +402,8 @@ function columnValue(head: TasksGroupHead): string {
  * A column: its head, and its cards or the line saying it holds none. It
  * is a drop zone of the board, and its cards are dragged out of it onto
  * another; dropped there, a card's task is sent that column's status or
- * priority.
+ * priority, or assigned to its person. Under an assignee's column a card
+ * leaves its assignee's chip off, as the column's head says who.
  */
 function TaskBoardColumnView({
   tasks,
@@ -381,6 +413,7 @@ function TaskBoardColumnView({
   narrow,
   panelId,
   properties,
+  people,
   waitingOn,
   now,
   onOpen,
@@ -396,6 +429,7 @@ function TaskBoardColumnView({
   narrow: boolean;
   panelId: string;
   properties: readonly TaskProperty[];
+  people: ColumnPeople;
   /** How many of a task's Inbox threads wait on the reader, by its id. */
   waitingOn: ReadonlyMap<string, number>;
   now: number;
@@ -415,8 +449,12 @@ function TaskBoardColumnView({
       onStanding(task, standing);
     },
   });
-  const { mark, words } = columnHead(column.head);
+  const { mark, words } = columnHead(column.head, people);
   const value = columnValue(column.head);
+  const drawn =
+    column.head.kind === TASKS_GROUP.ASSIGNEE
+      ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
+      : properties;
   return (
     <section
       className="tasks-board-column"
@@ -459,7 +497,7 @@ function TaskBoardColumnView({
                   task={task}
                   workspaceName={workspaceName}
                   narrow={narrow}
-                  properties={properties}
+                  properties={drawn}
                   waiting={waitingOn.get(task.id) ?? 0}
                   now={now}
                   onOpen={() => onOpen(task)}
@@ -475,7 +513,7 @@ function TaskBoardColumnView({
   );
 }
 
-/** The Tasks page's Board: the listed workspace's tasks by status, or by priority, under the page's filter. */
+/** The Tasks page's Board: the listed workspace's tasks by status, by priority, or by assignee, under the page's filter. */
 export function TasksBoard({
   tasks,
   room,
@@ -498,7 +536,21 @@ export function TasksBoard({
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const { filter, display } = frame;
-  const columns = tasksBoardColumns(listed, { filter, display, now });
+  const directory = useMemberDirectory();
+  const people: ColumnPeople = {
+    mark: (userId) => (
+      <ActorMark actor={assigneeFor(userId, directory, listed)} size={ACTOR_SIZE.MARK} />
+    ),
+    words: (userId) => assigneeWords(userId, directory, listed),
+  };
+  const columns = tasksBoardColumns(listed, {
+    filter,
+    display,
+    readerId: tasks.me,
+    personName: people.words,
+    members: (directory.members ?? []).map((member) => member.userId),
+    now,
+  });
   const narrow = room === SHELL_ROOM.NARROW;
   const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
@@ -514,7 +566,7 @@ export function TasksBoard({
         <ChoiceBar
           label={COLUMN_TABS}
           items={columns.map((column) => {
-            const { mark, words } = columnHead(column.head);
+            const { mark, words } = columnHead(column.head, people);
             return {
               value: columnValue(column.head),
               label: words,
@@ -571,6 +623,7 @@ export function TasksBoard({
               narrow={narrow}
               panelId={panelId}
               properties={display.properties}
+              people={people}
               waitingOn={waitingOn}
               now={now}
               onOpen={(task) => tasks.onSelect(task.id)}

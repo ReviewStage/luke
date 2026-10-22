@@ -6,6 +6,7 @@ import {
   DEFAULT_BOARD_DISPLAY,
   DEFAULT_LIST_DISPLAY,
   EARLIER_BOARD_PROPERTIES,
+  EARLIER_LIST_PROPERTIES,
   filteredFields,
   keptTasksDisplay,
   NO_TASKS_FILTER,
@@ -16,7 +17,6 @@ import {
   type TaskProperty,
   type TasksDisplay,
   type TasksFilter,
-  withPropertiesOffered,
 } from "@luke/ui/tasks-page-model";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -77,6 +77,7 @@ const storedFilters = Schema.fromJsonString(
     Schema.Struct({
       status: Schema.optionalKey(Schema.Array(Schema.Literals(Object.values(TASK_STATUS)))),
       priority: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PRIORITY_ORDER))),
+      assignee: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
       creator: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
       madeBy: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_MAKER_ORDER))),
       repository: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
@@ -108,7 +109,7 @@ const OFFERED = {
 
 /** The properties each view offered before a kept display said which it offered. */
 const EARLIER_OFFERED = {
-  [TASKS_VIEW.LIST]: TASK_PROPERTY_ORDER,
+  [TASKS_VIEW.LIST]: EARLIER_LIST_PROPERTIES,
   [TASKS_VIEW.BOARD]: EARLIER_BOARD_PROPERTIES,
 } as const satisfies Record<TasksView, readonly TaskProperty[]>;
 
@@ -143,18 +144,8 @@ function ViewSwitch({
 
 /** A view's display as kept, over its own initial one; its own where none was kept. A property the view offered only since it was kept stands as its own display draws it. */
 function readDisplay(view: TasksView): TasksDisplay {
-  const initial = INITIAL_DISPLAY[view];
-  const { offered, ...kept } = readKept(DISPLAY_KEY[view], storedDisplay, {});
-  const display = keptTasksDisplay(kept, initial);
-  const properties =
-    kept.properties === undefined
-      ? initial.properties
-      : withPropertiesOffered(
-          kept.properties,
-          offered ?? EARLIER_OFFERED[view],
-          initial.properties,
-        );
-  return { ...display, properties };
+  const kept = readKept(DISPLAY_KEY[view], storedDisplay, {});
+  return keptTasksDisplay(kept, INITIAL_DISPLAY[view], EARLIER_OFFERED[view]);
 }
 
 /** The Tasks page, in the plan's place: the List or the Board, as the reader last chose, under its Filter and View options. */
@@ -227,7 +218,7 @@ export function TasksPage({
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
     <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
-      {/* A face names its creator, and the Filter offers the creators, against the listed workspace's members. */}
+      {/* A face names its assignee or its creator, and the Filter offers them, against the listed workspace's members. */}
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
         {view === TASKS_VIEW.BOARD ? (
           <TasksBoard tasks={tasks} room={room} title={TASKS} frame={frame} />

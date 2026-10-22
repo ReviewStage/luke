@@ -21,6 +21,7 @@ import {
   creatorActor,
   LUKE_ACTOR,
   memberActor,
+  personActor,
 } from "@luke/ui/actor-model";
 import {
   BOARD_GROUPINGS,
@@ -65,13 +66,18 @@ import {
   Rows3Icon,
   SignalHighIcon,
   SlidersHorizontalIcon,
+  UserCheckIcon,
   UserIcon,
   UserXIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import {
+  NO_ASSIGNEE_WORDS,
+  TASK_PRIORITY_WORDS,
+  TASK_STATUS_WORDS,
+} from "../tasks/task-standing.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 
@@ -79,7 +85,8 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
  * tasks-page-options.tsx -- the Tasks page's Filter and View options, the two buttons at its toolbar's end, and the chips under it saying what the filter keeps.
  *
  * Filter drops a submenu for each field a task can be narrowed by, Status,
- * Priority, Creator in a shared workspace, and Repository, each value led by
+ * Priority, Assignee and Creator in a shared workspace, Made by, and
+ * Repository, each value led by
  * its mark and checked while the filter keeps it; a value toggles where it
  * stands and leaves the menu open, so several are chosen in one visit, as
  * Linear's and Stage's filters are. While the filter keeps anything the
@@ -89,7 +96,8 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
  *
  * View options is the Inbox's and the sidebar's sliders: Group by and Order
  * by, each a submenu with its choice checked, the Board offered only the
- * groupings a dragged card can be sent; then the switches, the pins and
+ * groupings a dragged card can be sent, and by a person only in a shared
+ * workspace; then the switches, the pins and
  * sections leading the List, and empty groups; Show completed, which of the
  * Done and Canceled tasks stand by when each was finished; then the
  * properties a row or a card draws; and Reset view while the view is not the
@@ -116,6 +124,7 @@ const VIEW_OPTIONS = "View options";
 const FIELD_WORDS = {
   [TASKS_FILTER_FIELD.STATUS]: "Status",
   [TASKS_FILTER_FIELD.PRIORITY]: "Priority",
+  [TASKS_FILTER_FIELD.ASSIGNEE]: "Assignee",
   [TASKS_FILTER_FIELD.CREATOR]: "Creator",
   [TASKS_FILTER_FIELD.MADE_BY]: "Made by",
   [TASKS_FILTER_FIELD.REPOSITORY]: "Repository",
@@ -125,6 +134,7 @@ const FIELD_WORDS = {
 const FIELD_ICON = {
   [TASKS_FILTER_FIELD.STATUS]: <CircleDotIcon />,
   [TASKS_FILTER_FIELD.PRIORITY]: <SignalHighIcon />,
+  [TASKS_FILTER_FIELD.ASSIGNEE]: <UserCheckIcon />,
   [TASKS_FILTER_FIELD.CREATOR]: <UserIcon />,
   [TASKS_FILTER_FIELD.MADE_BY]: <BotIcon />,
   [TASKS_FILTER_FIELD.REPOSITORY]: <FolderGitIcon />,
@@ -165,6 +175,7 @@ const GROUPING_WORDS = {
   [TASKS_GROUPING.STATUS]: "Status",
   [TASKS_GROUPING.PRIORITY]: "Priority",
   [TASKS_GROUPING.REPOSITORY]: "Repository",
+  [TASKS_GROUPING.ASSIGNEE]: "Assignee",
   [TASKS_GROUPING.CREATOR]: "Creator",
   [TASKS_GROUPING.NONE]: "None",
 } as const satisfies Record<TasksGrouping, string>;
@@ -173,6 +184,7 @@ const GROUPING_ICON = {
   [TASKS_GROUPING.STATUS]: <CircleDotIcon />,
   [TASKS_GROUPING.PRIORITY]: <SignalHighIcon />,
   [TASKS_GROUPING.REPOSITORY]: <FolderGitIcon />,
+  [TASKS_GROUPING.ASSIGNEE]: <UserCheckIcon />,
   [TASKS_GROUPING.CREATOR]: <UserIcon />,
   [TASKS_GROUPING.NONE]: <ListIcon />,
 } as const satisfies Record<TasksGrouping, React.JSX.Element>;
@@ -199,6 +211,7 @@ const PROPERTY_WORDS = {
   [TASK_PROPERTY.STATUS]: "Status",
   [TASK_PROPERTY.WAITING]: "Needs you",
   [TASK_PROPERTY.REPOSITORY]: "Repository",
+  [TASK_PROPERTY.ASSIGNEE]: "Assignee",
   [TASK_PROPERTY.CREATOR]: "Creator",
   [TASK_PROPERTY.AGENTS]: "Agents",
   [TASK_PROPERTY.UPDATED]: "Last updated",
@@ -244,10 +257,53 @@ export function creatorWords(
   return creatorId === null ? NO_CREATOR : actorName(creatorFor(creatorId, reader, tasks));
 }
 
+/** Who an assignee is, as the directory draws them, else by the name a listed task assigned to them carries. */
+export function assigneeFor(
+  assigneeId: string,
+  reader: ReturnType<typeof useMemberDirectory>,
+  tasks: readonly TaskSummary[],
+): Actor {
+  const member = reader.members?.find((each) => each.userId === assigneeId);
+  if (member !== undefined) return memberActor(member, reader.readerId);
+  const named = tasks.find((task) => task.assignee?.userId === assigneeId)?.assignee;
+  return personActor(
+    named ?? { userId: assigneeId, name: "" },
+    reader.members,
+    reader.readerId,
+    reader.former,
+  );
+}
+
+/** An assignee's name as the page says it, the reader's own as You; No assignee for the tasks with none. */
+export function assigneeWords(
+  assigneeId: string | null,
+  reader: ReturnType<typeof useMemberDirectory>,
+  tasks: readonly TaskSummary[],
+): string {
+  return assigneeId === null
+    ? NO_ASSIGNEE_WORDS
+    : actorName(assigneeFor(assigneeId, reader, tasks));
+}
+
+/** The people a person's field offers, by account id: the reader, then each member, then anyone else a task or the filter names. */
+function peopleOffered(
+  held: ReadonlySet<string | null>,
+  reader: ReturnType<typeof useMemberDirectory>,
+): readonly string[] {
+  const members = (reader.members ?? []).map((member) => member.userId);
+  return [
+    ...new Set([
+      ...(reader.readerId === undefined ? [] : [reader.readerId]),
+      ...members,
+      ...[...held].filter((id): id is string => id !== null),
+    ]),
+  ];
+}
+
 /**
- * The values a field offers: every status and priority, in their order; the
- * reader, then each member, then anyone else a task names, and nobody where
- * a task names no one; and each repository a task is on, by name, then none.
+ * The values a field offers: every status and priority, in their order; for
+ * an assignee or a creator, the reader, then each member, then anyone else a
+ * task names, and nobody where a task names no one; and each repository a task is on, by name, then none.
  * A value the filter keeps is offered though no task holds it now.
  */
 function fieldValues(
@@ -273,24 +329,32 @@ function fieldValues(
         words: TASK_PRIORITY_WORDS[priority],
         icon: <TaskPriorityMark priority={priority} />,
       }));
-    case TASKS_FILTER_FIELD.CREATOR: {
-      const members = (reader.members ?? []).map((member) => member.userId);
-      const ids = [
-        ...new Set([
-          ...(reader.readerId === undefined ? [] : [reader.readerId]),
-          ...members,
-          ...[...held].filter((id): id is string => id !== null),
-        ]),
-      ];
+    case TASKS_FILTER_FIELD.ASSIGNEE:
       return [
-        ...ids.map((id) => ({
+        ...peopleOffered(held, reader).map((id) => ({
+          value: id,
+          words: assigneeWords(id, reader, tasks),
+          icon: <ActorMark actor={assigneeFor(id, reader, tasks)} size={ACTOR_SIZE.INLINE} />,
+        })),
+        ...(held.has(null)
+          ? [
+              {
+                value: null,
+                words: NO_ASSIGNEE_WORDS,
+                icon: <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />,
+              },
+            ]
+          : []),
+      ];
+    case TASKS_FILTER_FIELD.CREATOR:
+      return [
+        ...peopleOffered(held, reader).map((id) => ({
           value: id,
           words: creatorWords(id, reader, tasks),
           icon: <ActorMark actor={creatorFor(id, reader, tasks)} size={ACTOR_SIZE.INLINE} />,
         })),
         ...(held.has(null) ? [{ value: null, words: NO_CREATOR, icon: <UserXIcon /> }] : []),
       ];
-    }
     case TASKS_FILTER_FIELD.MADE_BY:
       return TASK_MAKER_ORDER.map((maker) => ({
         value: maker,
@@ -317,10 +381,22 @@ function fieldValues(
   }
 }
 
-/** The fields the Filter offers: Creator only where the workspace is shared. */
+/** The fields that name a person, which a workspace nobody shares has no use for. */
+const PERSON_FIELDS: readonly TasksFilterField[] = [
+  TASKS_FILTER_FIELD.ASSIGNEE,
+  TASKS_FILTER_FIELD.CREATOR,
+];
+
+/** The groupings by a person, offered on the same terms. */
+const PERSON_GROUPINGS: readonly TasksGrouping[] = [
+  TASKS_GROUPING.ASSIGNEE,
+  TASKS_GROUPING.CREATOR,
+];
+
+/** The fields the Filter offers: Assignee and Creator only where the workspace is shared. */
 function offeredFields(shared: boolean): readonly TasksFilterField[] {
   return Object.values(TASKS_FILTER_FIELD).filter(
-    (field) => shared || field !== TASKS_FILTER_FIELD.CREATOR,
+    (field) => shared || !PERSON_FIELDS.includes(field),
   );
 }
 
@@ -375,7 +451,7 @@ export function TasksFilterButton({
   tasks: readonly TaskSummary[];
   filter: TasksFilter;
   onFilter: (filter: TasksFilter) => void;
-  /** Whether the workspace is shared, which alone filters by creator. */
+  /** Whether the workspace is shared, which alone filters by assignee or creator. */
   shared: boolean;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -450,9 +526,13 @@ export function TasksFilterChips({
   );
 }
 
-/** Whether a grouping draws a group for each of a fixed set of values, which alone may stand empty. */
+/** Whether a grouping draws a group for each of a fixed set of values, the workspace's members among them, which alone may stand empty. */
 function groupsFixed(grouping: TasksGrouping): boolean {
-  return grouping === TASKS_GROUPING.STATUS || grouping === TASKS_GROUPING.PRIORITY;
+  return (
+    grouping === TASKS_GROUPING.STATUS ||
+    grouping === TASKS_GROUPING.PRIORITY ||
+    grouping === TASKS_GROUPING.ASSIGNEE
+  );
 }
 
 /** Whether two displays lay the tasks out alike. */
@@ -484,11 +564,10 @@ function displayEntries({
 }): MenuEntry[][] {
   const set = (change: Partial<TasksDisplay>) => onDisplay({ ...display, ...change });
   const grouping = board ? boardGrouping(display.grouping) : display.grouping;
-  const groupings = board
-    ? BOARD_GROUPINGS
-    : Object.values(TASKS_GROUPING).filter(
-        (each) => shared || each !== TASKS_GROUPING.CREATOR || grouping === each,
-      );
+  // Note that a grouping by a person kept for a workspace nobody shares now stays offered while it is chosen, so it can be chosen away.
+  const groupings = (board ? BOARD_GROUPINGS : Object.values(TASKS_GROUPING)).filter(
+    (each) => shared || !PERSON_GROUPINGS.includes(each) || grouping === each,
+  );
   const toggle = (label: string, checked: boolean, change: Partial<TasksDisplay>): MenuAction => ({
     label,
     checked,
@@ -591,7 +670,7 @@ export function TasksViewOptions({
   /** The view as it started, which Reset view goes back to. */
   initial: TasksDisplay;
   onDisplay: (display: TasksDisplay) => void;
-  /** Whether the workspace is shared, which alone groups by creator. */
+  /** Whether the workspace is shared, which alone groups by assignee or creator. */
   shared: boolean;
 }): React.JSX.Element {
   const menu = useMenu(shown);

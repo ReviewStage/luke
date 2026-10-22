@@ -636,6 +636,93 @@ test("a row dragged into a section is kept there, and one dragged out of its sec
   assert.deepEqual(sent, [["t-42", { status: TASK_STATUS.BACKLOG }]]);
 });
 
+/** A task of `TASKS` assigned to Dean, the reader. */
+function deans(key: number): TaskSummary {
+  const held = TASKS.find((each) => each.number === key) ?? assert.fail(`no ACME-${key}`);
+  return { ...held, assignee: { userId: DEAN, name: "Dean Stratakos" } };
+}
+
+/** The properties a row drew before it drew the assignee, every one of them, as an earlier build kept them. */
+const BEFORE_ASSIGNEE = [
+  "priority",
+  "key",
+  "status",
+  "waiting",
+  "repository",
+  "creator",
+  "agents",
+  "updated",
+];
+
+test("a row draws its assignee and not its creator at first, and a List display kept before rows offered the assignee draws it, its creator as kept", async () => {
+  const cells = (page: HTMLElement) =>
+    [...rowOf(page, "ACME-40").querySelectorAll("[data-cell]")].map((cell) =>
+      cell.getAttribute("data-cell"),
+    );
+  const fresh = await mountPage();
+  assert.ok(cells(fresh).includes("assignee"));
+  assert.ok(!cells(fresh).includes("creator"));
+
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  for (const kept of [
+    { properties: BEFORE_ASSIGNEE, offered: BEFORE_ASSIGNEE },
+    { properties: BEFORE_ASSIGNEE },
+  ]) {
+    window.localStorage.setItem("luke.tasksListDisplay", JSON.stringify(kept));
+    const page = await mountPage();
+    assert.ok(cells(page).includes("assignee"), "the assignee is drawn without turning it on");
+    assert.ok(cells(page).includes("creator"), "the creator stays on, as kept");
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+  }
+});
+
+test("a row's Assignee chip sends the member picked, and No assignee assigns it to no one, opening no task", async () => {
+  const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
+
+  act(() => rowChip(page, "ACME-40", "Assignee").click());
+  choose("Dean Stratakos");
+  act(() => rowChip(page, "ACME-39", "Assignee").click());
+  choose("No assignee");
+
+  assert.deepEqual(sent, [
+    ["t-40", { assigneeId: DEAN }],
+    ["t-39", { assigneeId: null }],
+  ]);
+  assert.deepEqual(opened, [], "a pick opens no task");
+});
+
+test("grouped by assignee, the reader's group leads and No assignee's ends, a row there leaves its assignee's cell empty, and a row dragged onto a group is assigned to its person, onto No assignee's to no one", async () => {
+  window.localStorage.setItem(
+    "luke.tasksListDisplay",
+    JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
+  );
+  const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
+  layRowsOut(page);
+
+  assert.deepEqual(
+    groups(page).map(([name]) => name),
+    ["You", "No assignee"],
+  );
+  const cell = rowOf(page, "ACME-39").querySelector("[data-cell='assignee']");
+  assert.ok(cell, "the row keeps its assignee's column");
+  assert.equal(
+    cell.querySelector("button"),
+    null,
+    "the group's head says who, so the cell is empty",
+  );
+  dragRow(page, "ACME-40", "You");
+  dragRow(page, "ACME-39", "No assignee");
+
+  assert.deepEqual(sent, [
+    ["t-40", { assigneeId: DEAN }],
+    ["t-39", { assigneeId: null }],
+  ]);
+});
+
 test("a Board display kept before its cards offered Agents and Needs you draws them, the rest as kept", async () => {
   window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
   window.localStorage.setItem(
