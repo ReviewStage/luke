@@ -3,12 +3,14 @@
  */
 
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Cause, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { claudeCodeLive } from "./claude-code.js";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
 import { processTable } from "./processes.js";
@@ -568,7 +570,7 @@ it.effect("ends the launch, closing the CLI, when Luke refuses its bearer", () =
 );
 
 it.effect(
-  "starts the CLI with the plan's options, its bearer only in the MCP header, and both secrets denied to commands",
+  "starts the CLI with the plan's options, the MCP server at the runner's loopback with no secret, and both secrets denied to commands",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -592,9 +594,11 @@ it.effect(
       assert.deepEqual(options.settingSources, ["project"]);
       assert.equal(options.permissionMode, "bypassPermissions");
       assert.equal(options.includePartialMessages, true);
-      assert.deepEqual(options.mcpServers, {
-        luke: { type: "http", url: CONFIG.mcpUrl, headers: { Authorization: `Bearer ${BEARER}` } },
-      });
+      const mcp = options.mcpServers?.luke;
+      assert.ok(mcp?.type === "http");
+      assert.match(mcp.url, /^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+      assert.equal(mcp.headers, undefined);
+      assert.ok(!JSON.stringify(options).includes(BEARER));
       assert.equal(options.sandbox?.enabled, true);
       assert.equal(options.sandbox?.failIfUnavailable, true);
       assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
@@ -607,6 +611,122 @@ it.effect(
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
     }),
+);
+
+/** The MCP route of a fake Luke: answers each call with an event stream, and keeps the authorization each carried. */
+function fakeMcpRoute() {
+  const calls: {
+    method: string;
+    authorization: string | null;
+    session: string | null;
+    body: string;
+  }[] = [];
+  const respond = async (_url: string, init: RequestInit) => {
+    const headers = new Headers(init.headers);
+    calls.push({
+      method: init.method ?? "GET",
+      authorization: headers.get("authorization"),
+      session: headers.get("mcp-session-id"),
+      body:
+        init.body === undefined || init.body === null
+          ? ""
+          : new TextDecoder().decode(init.body as Uint8Array),
+    });
+    return new Response('event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n\n', {
+      status: 200,
+      headers: { "content-type": "text/event-stream", "mcp-session-id": "session-1" },
+    });
+  };
+  return { calls, respond };
+}
+
+it.effect("carries the CLI's MCP calls to Luke under the runner's bearer, and nothing else", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const mcp = fakeMcpRoute();
+    const routed: typeof luke = {
+      ...luke,
+      layer: fakeHttpClientLayer((url, init) =>
+        url === CONFIG.mcpUrl ? mcp.respond(url, init) : luke.respond(url, init),
+      ),
+    };
+    const { cli, write, run } = yield* launch(SHORT_TURN, routed);
+    yield* write(CONFIG);
+    for (let step = 0; step < 500 && cli.options === undefined; step += 1) yield* Effect.yieldNow;
+    const server = cli.options?.mcpServers?.luke;
+    assert.ok(server?.type === "http");
+
+    const call = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}';
+    const answer = yield* Effect.promise(async () => {
+      const response = await fetch(server.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-session-id": "session-1",
+          authorization: "Bearer from-the-cli",
+        },
+        body: call,
+      });
+      return {
+        status: response.status,
+        type: response.headers.get("content-type"),
+        session: response.headers.get("mcp-session-id"),
+        body: await response.text(),
+      };
+    });
+    const elsewhere = yield* Effect.promise(async () => {
+      const response = await fetch(new URL("/runner/token", server.url), { method: "POST" });
+      await response.body?.cancel();
+      return response.status;
+    });
+
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    assert.equal(answer.status, 200);
+    assert.equal(answer.type, "text/event-stream");
+    assert.equal(answer.session, "session-1");
+    assert.ok(answer.body.includes('"result":{}'));
+    assert.deepEqual(mcp.calls, [
+      { method: "POST", authorization: `Bearer ${BEARER}`, session: "session-1", body: call },
+    ]);
+    assert.equal(elsewhere, 404);
+  }),
+);
+
+it.effect("starts the claude process with no bearer anywhere in its argv", () =>
+  Effect.gen(function* () {
+    const directory = mkdtempSync(join(tmpdir(), "agent-runner-argv-"));
+    const argvFile = join(directory, "argv");
+    const executable = join(directory, "claude");
+    // A CLI that writes down the argv it was started with and exits.
+    writeFileSync(executable, `#!/bin/sh\nprintf '%s\\0' "$@" > '${argvFile}'\n`);
+    chmodSync(executable, 0o755);
+    const luke = fakeLuke();
+    const stdin = yield* Queue.unbounded<string, Cause.Done>();
+    const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env: ENV }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          claudeCodeLive,
+          luke.layer,
+          fakeAppServer([]).layer,
+          processTable(UNREAD_PROC, RUNNER_PID),
+        ),
+      ),
+      Effect.forkScoped,
+    );
+    yield* Queue.offer(stdin, JSON.stringify({ ...CONFIG, executable, cwd: directory }));
+    yield* Fiber.await(run);
+
+    const argv = readFileSync(argvFile, "utf8").split("\0");
+    rmSync(directory, { recursive: true });
+    const config = argv[argv.indexOf("--mcp-config") + 1];
+    assert.ok(config !== undefined);
+    assert.match(config, /"url":"http:\/\/127\.0\.0\.1:\d+\/mcp"/);
+    assert.ok(argv.every((argument) => !argument.includes(BEARER)));
+  }),
 );
 
 it.effect(
