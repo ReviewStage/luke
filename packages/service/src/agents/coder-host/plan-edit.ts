@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import { workspaceOf } from "@luke/database/models/workspace-store";
+import { sniffImageType } from "@luke/features/image-signature";
 import { PICTURE_BOUNDS, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress, taskPictureMarkdown } from "@luke/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
@@ -158,6 +159,7 @@ export const TASK_PICTURE_FILE_REFUSAL = {
 /** What a picture's file is read under: a plan picture's bound, and the refusals in this tool's words. */
 const TASK_PICTURE_TERMS: SandboxImageTerms = {
   maxBytes: PICTURE_BOUNDS.MAX_BYTES,
+  sniff: sniffImageType,
   refusals: TASK_PICTURE_FILE_REFUSAL,
 };
 /** How many notes a turn has taken, kept in eve's durable session state: the turn and its count. */
