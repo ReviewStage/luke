@@ -108,11 +108,29 @@ interface Held {
   agentId: string;
   failed: Failed | undefined;
   closed: string | undefined;
+  /** What the box held as it closed, newer than every line sent, which Continue carries after them. */
+  behind: Draft;
   sent: readonly SentLine[];
 }
 
 function fresh(agentId: string): Held {
-  return { agentId, failed: undefined, closed: undefined, sent: [] };
+  return { agentId, failed: undefined, closed: undefined, behind: EMPTY_DRAFT, sent: [] };
+}
+
+/**
+ * What a closed box's draft keeps for Continue, which carries it, and for the
+ * tab opened again, whose box draws it: the words and files of every line
+ * that did not go, in the order sent, then what the box held as it closed.
+ */
+function carried(sent: readonly SentLine[], behind: Draft): Draft {
+  const lines = sent.filter((line) => line.state !== SENT_LINE_STATE.PENDING);
+  return {
+    ...EMPTY_DRAFT,
+    text: [...lines.map((line) => line.text), behind.text]
+      .filter((text) => text !== "")
+      .join("\n\n"),
+    attachments: [...lines.flatMap((line) => line.attachments), ...behind.attachments],
+  };
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -189,6 +207,8 @@ export function useAgentComposer(input: {
       const now = heldNow.current;
       // A line behind one refused for good is refused with it, as the service would refuse it.
       if (now.agentId === agentId && now.closed !== undefined) {
+        const sent = marked(now.sent, line.id, SENT_LINE_STATE.UNDELIVERED);
+        update(() => carried(sent, now.behind));
         ours((was) => ({ ...was, sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED) }));
         return;
       }
@@ -206,17 +226,21 @@ export function useAgentComposer(input: {
       if (!heldNow.current.sent.some((each) => each.id === line.id)) return;
       const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);
       // A refusal for good closes the box, and the line stays where it went, marked as not
-      // delivered, its words kept in the agent's draft for Continue where it holds nothing newer.
+      // delivered, its words kept in the agent's draft for Continue with every other line that
+      // did not go, ahead of what the box holds, which is newer.
       if (closesComposer(answer.failure)) {
-        update((draft) =>
-          holdsNothing(draft)
-            ? { ...EMPTY_DRAFT, text: line.text, attachments: line.attachments }
-            : draft,
-        );
+        const sent = marked(heldNow.current.sent, line.id, SENT_LINE_STATE.UNDELIVERED);
+        // Note that the draft store takes a change at once, so the box as the refusal lands is what stands behind.
+        let behind: Draft = EMPTY_DRAFT;
+        update((draft) => {
+          behind = draft;
+          return carried(sent, draft);
+        });
         ours((was) => ({
           ...was,
           failed: { lineId: line.id, clientKey: line.clientKey, inBox: true, note },
           closed: note.text,
+          behind,
           sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED),
         }));
         return;
