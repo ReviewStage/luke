@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useClipped } from "../../use-clipped.js";
 import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
 
 /**
@@ -29,7 +30,17 @@ import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
  * its rows `across`, side by side, as a yes beside a no. A `pill` list
  * draws its options as pills that wrap onto as many lines as they need,
  * the picked one tinted in the accent with a check before its words, for
- * short options with no detail, a form's select.
+ * short options with no detail, a form's select. A `picture` list stands its
+ * options as faces in a grid, four to a line: each option's `mark` a round
+ * picture ringed in the accent once picked, its label under it, faded out at
+ * its end where the face is too narrow to hold it, for a set of people or
+ * places to tell apart by their pictures.
+ * A `card` list draws each option as a bordered card, ringed once picked: the
+ * option's radio and label on its head, its `aside` at the head's end, and its
+ * `below` under them, controls of its own that the card holds. The head alone
+ * is the radio, so a key pressed in the controls under it is theirs. A card
+ * whose option gives a detail steps back whole, as an unavailable one, its
+ * detail saying why.
  *
  * A settled list is the record of a choice made: the same rows as a list a
  * reader cannot press, the picked ones in the checked look with a check and
@@ -58,11 +69,13 @@ export const CHOICE_SELECT = {
 
 export type ChoiceSelect = (typeof CHOICE_SELECT)[keyof typeof CHOICE_SELECT];
 
-/** How an open list's rows are drawn: rows of words alone, rows led by the radio or checkbox each behaves as, or pills that wrap, a check in the picked one. */
+/** How an open list's rows are drawn: rows of words alone, rows led by the radio or checkbox each behaves as, pills that wrap, a check in the picked one, faces in a grid, or cards holding controls of their own. */
 export const CHOICE_LOOK = {
   PLAIN: "plain",
   MARKED: "marked",
   PILL: "pill",
+  PICTURE: "picture",
+  CARD: "card",
 } as const;
 
 export type ChoiceLook = (typeof CHOICE_LOOK)[keyof typeof CHOICE_LOOK];
@@ -109,8 +122,14 @@ export interface ChoiceOption<Value extends string> {
    * what the option is, as a voice's "Feminine" does.
    */
   badgeTone?: BadgeTone | undefined;
-  /** A picture before the words, a workspace's tile. */
+  /** A picture before the words, a workspace's tile; a picture list's face. */
   mark?: ReactNode;
+  /** What hangs after the label on its line, a connected credential's check. */
+  after?: ReactNode;
+  /** A card list's word or link at the head's end, outside the radio. */
+  aside?: ReactNode;
+  /** A card list's controls under its head, which the card holds. */
+  below?: ReactNode;
   /** Whether this option alone cannot be picked. */
   disabled?: boolean | undefined;
   /** What a marked row's control fills with once checked; the accent where none is given. */
@@ -134,6 +153,12 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   /** Hears a press on a pick-one list's checked row that changes nothing, for a row that acts when pressed again. */
   onPressChecked?: ((value: Value) => void) | undefined;
   disabled?: boolean | undefined;
+  /** The id of the words that describe the whole group, a settings row's description. */
+  describedBy?: string | undefined;
+  /** Whether the group's last write was refused. */
+  invalid?: boolean | undefined;
+  /** Whether a write is in flight, which rests the group without disabling it. */
+  busy?: boolean | undefined;
   /** Whether it records a choice made, drawn as it was open and taking nothing. */
   readOnly?: boolean | undefined;
   /** Whether each row leads with its radio or its checkbox. */
@@ -199,12 +224,13 @@ function ChoiceWords({
   after?: ReactNode;
   number?: number | undefined;
 }): React.JSX.Element {
+  const hung = after ?? option.after;
   return (
     <span className="luke-choice-words">
       <span className="luke-choice-head">
         <span className="luke-choice-label">
           {option.label}
-          {after}
+          {hung}
         </span>
         {option.badge === undefined && number === undefined ? null : (
           <span className="luke-choice-end">
@@ -221,6 +247,16 @@ function ChoiceWords({
       {option.detail === undefined ? null : (
         <span className="luke-choice-detail">{option.detail}</span>
       )}
+    </span>
+  );
+}
+
+/** A face's name under its picture, faded where the face is too narrow to hold it. */
+function PictureName({ name }: { name: string }): React.JSX.Element {
+  const [box, clipped] = useClipped(name);
+  return (
+    <span ref={box} className="luke-choice-name" data-overflow={String(clipped)}>
+      {name}
     </span>
   );
 }
@@ -264,7 +300,7 @@ function ChoiceRow({
   const words = (
     <>
       {look === CHOICE_LOOK.PILL ? <PickedCheck /> : null}
-      {look === CHOICE_LOOK.MARKED ? (
+      {look === CHOICE_LOOK.MARKED || look === CHOICE_LOOK.CARD ? (
         <span
           className="luke-choice-control"
           data-shape={radio ? "radio" : "box"}
@@ -272,11 +308,15 @@ function ChoiceRow({
         />
       ) : null}
       {option.mark === undefined ? null : <span className="luke-choice-mark">{option.mark}</span>}
-      <ChoiceWords option={option} tone={option.badgeTone ?? badgeTone} number={number} />
+      {look === CHOICE_LOOK.PICTURE ? (
+        <PictureName name={option.label} />
+      ) : (
+        <ChoiceWords option={option} tone={option.badgeTone ?? badgeTone} number={number} />
+      )}
     </>
   );
   // Note that each role is spelled out, because a role read off a value is one the accessibility lint cannot check.
-  return radio ? (
+  const row = radio ? (
     // biome-ignore lint/a11y/useSemanticElements: a row is drawn as a button holding a label, a detail, and a badge, which a native radio cannot be, and speaks as the radio it behaves as.
     <button role="radio" aria-checked={checked} {...attributes}>
       {words}
@@ -286,6 +326,24 @@ function ChoiceRow({
     <button role="checkbox" aria-checked={checked} {...attributes}>
       {words}
     </button>
+  );
+  if (look !== CHOICE_LOOK.CARD) return row;
+  return (
+    <div
+      className="luke-choice-card"
+      data-checked={checked}
+      data-unavailable={option.detail === undefined ? undefined : true}
+    >
+      <div className="luke-choice-card-head">
+        {row}
+        {option.aside === undefined ? null : (
+          <span className="luke-choice-aside">{option.aside}</span>
+        )}
+      </div>
+      {option.below === undefined || option.below === null ? null : (
+        <div className="luke-choice-card-body">{option.below}</div>
+      )}
+    </div>
   );
 }
 
@@ -297,6 +355,9 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     value,
     disabled = false,
     readOnly = false,
+    describedBy,
+    invalid,
+    busy,
     focusRef,
     select = CHOICE_SELECT.ONE,
     look = CHOICE_LOOK.PLAIN,
@@ -316,6 +377,10 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = STEP_KEYS.get(event.key);
     if (step === undefined || open.length === 0 || still) return;
+    // Note that a key pressed in a card's own controls is theirs, not the group's.
+    if (!(event.target instanceof HTMLElement) || event.target.getAttribute("role") !== "radio") {
+      return;
+    }
     event.preventDefault();
     // Note that the step counts from the focused row, because clearing a pick leaves focus on an unchecked row.
     const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
@@ -360,6 +425,9 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     return (
       <fieldset
         aria-label={legend}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
+        aria-busy={busy}
         className="luke-choice-list"
         data-flow={flow}
         data-look={look}
@@ -374,6 +442,9 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     <div
       role="radiogroup"
       aria-label={legend}
+      aria-describedby={describedBy}
+      aria-invalid={invalid}
+      aria-busy={busy}
       aria-readonly={readOnly || undefined}
       className="luke-choice-list"
       data-flow={flow}

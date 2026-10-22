@@ -201,13 +201,13 @@ async function open(page: HTMLElement, harness: string): Promise<HTMLElement> {
 }
 
 const radio = (dialog: Element, label: string) =>
-  [...dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
-    (each) => each.textContent === label,
+  [...dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((each) =>
+    each.textContent?.startsWith(label),
   ) ?? assert.fail(`no ${label} radio`);
 
 /** The card a radio heads. */
 const card = (dialog: Element, label: string) =>
-  radio(dialog, label).closest<HTMLElement>(".agent-auth-card") ?? assert.fail(`no ${label} card`);
+  radio(dialog, label).closest<HTMLElement>(".luke-choice-card") ?? assert.fail(`no ${label} card`);
 
 /** Types into a field as a paste would, then submits its form. */
 async function pasteAndSave(field: HTMLInputElement, value: string): Promise<void> {

@@ -4,11 +4,14 @@ import {
   CHOICE_LOOK,
   CHOICE_SELECT,
   CHOICE_TONE,
+  CheckIcon,
   type ChoiceFlow,
   ChoiceList,
   type ChoiceLook,
   type ChoiceOption,
   type ChoiceSelect,
+  Text,
+  TextLink,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -17,7 +20,7 @@ import { CatalogSection } from "../section";
 /**
  * choice-list.tsx -- a pick-one list with a recommended option and an
  * unavailable one, a pick-several list, both marked with their radios or
- * checkboxes and numbered, a yes and a no across, toned, pills, rows with a mark before their words, an
+ * checkboxes and numbered, a yes and a no across, toned, pills, faces as pictures, cards holding controls of their own, rows with a mark before their words, an
  * unavailable list, a settled record of what was picked, and a
  * narrow column of long words.
  */
@@ -74,6 +77,46 @@ const LONG: readonly ChoiceOption<string>[] = [
     badge: "Recommended",
   },
   { value: "keep", label: "Leave it where it is" },
+];
+
+const FACES: readonly ChoiceOption<string>[] = ["Atlas", "Caspian", "Celia", "Lyra", "Orion"].map(
+  (name, index) => ({
+    value: name.toLowerCase(),
+    label: name,
+    mark: (
+      <svg viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+        <rect width="40" height="40" fill={`hsl(${index * 62} 45% 55%)`} />
+        <circle cx="20" cy="16" r="7" fill="rgb(255 255 255 / 0.85)" />
+        <ellipse cx="20" cy="36" rx="13" ry="10" fill="rgb(255 255 255 / 0.85)" />
+      </svg>
+    ),
+  }),
+);
+
+const CREDENTIALS: readonly ChoiceOption<string>[] = [
+  {
+    value: "subscription",
+    label: "Subscription",
+    after: (
+      <span style={{ display: "inline-flex", width: 12, height: 12, marginLeft: 8 }}>
+        <CheckIcon />
+      </span>
+    ),
+    below: <Text>Connected as ada@example.com.</Text>,
+  },
+  {
+    value: "key",
+    label: "API key",
+    aside: <TextLink href="https://example.com/keys">Get key</TextLink>,
+    below: <Text>No key saved yet.</Text>,
+    disabled: true,
+  },
+  {
+    value: "desktop",
+    label: "ChatGPT sign-in",
+    detail: "Desktop only",
+    disabled: true,
+  },
 ];
 
 function Held({
@@ -163,6 +206,17 @@ function ChoiceLists(): React.JSX.Element {
           ]}
           start={["high"]}
           look={CHOICE_LOOK.PILL}
+        />
+      </CatalogSection>
+      <CatalogSection id="choice-list-picture" title="Pictures">
+        <Held legend="Avatar" options={FACES} start={["atlas"]} look={CHOICE_LOOK.PICTURE} />
+      </CatalogSection>
+      <CatalogSection id="choice-list-card" title="Cards holding controls">
+        <Held
+          legend="Credential"
+          options={CREDENTIALS}
+          start={["subscription"]}
+          look={CHOICE_LOOK.CARD}
         />
       </CatalogSection>
       <CatalogSection id="choice-list-mark" title="With a mark">
