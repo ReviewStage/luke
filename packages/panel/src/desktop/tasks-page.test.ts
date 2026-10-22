@@ -21,7 +21,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -154,7 +154,10 @@ const WAITING: readonly AppInboxTask[] = [
 ];
 
 /** The Tasks page over Acme's tasks, or `tasks`, read by Dean, once the members have answered. */
-async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLElement> {
+async function mountPage(
+  tasks: readonly TaskSummary[] = TASKS,
+  room: ShellRoom = SHELL_ROOM.WIDE,
+): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -184,7 +187,7 @@ async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLEle
         createElement(
           Fragment,
           null,
-          createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE }),
+          createElement(TasksPage, { tasks: control, room }),
           createElement(ToastHost),
         ),
       ),
@@ -388,6 +391,37 @@ test("the switch beside the title shows the Board, kept on this Mac", async () =
     for (const root of roots.splice(0)) root.unmount();
   });
   assert.ok((await mountPage()).querySelector("[data-task-column]"), "the Board is shown again");
+});
+
+test("on a phone the page is headed by New task and one ⋯, its title centred between them, and the ⋯ chooses the Board and opens the Filter's and View options' own menus, so nothing is lost", async () => {
+  const page = await mountPage(TASKS, SHELL_ROOM.NARROW);
+  assert.deepEqual(
+    [...page.querySelectorAll(".tasks-head button")].map((each) => each.getAttribute("aria-label")),
+    ["New task", "More"],
+  );
+  assert.equal(page.querySelector(".tasks-head h1")?.textContent, "Tasks");
+  assert.equal(page.querySelector('[role="radiogroup"]'), null, "no List | Board bar in the head");
+
+  openOptions(page, "More");
+  choose("Filter");
+  choose("Priority", "High", "Urgent");
+  closeMenus();
+  assert.deepEqual(groups(page), [
+    ["In progress", ["ACME-42"]],
+    ["Todo", ["ACME-40", "ACME-39"]],
+  ]);
+
+  openOptions(page, "More");
+  choose("View options");
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
+    "View options' own menu stands",
+  );
+  closeMenus();
+
+  openOptions(page, "More");
+  choose("Board");
+  assert.ok(page.querySelector("[data-task-column]"), "the Board's columns stand");
 });
 
 test("Escape closes the page from the List as from the Board", async () => {

@@ -1337,7 +1337,8 @@ test("on a phone an open task leads its own row with the way back the window's h
     return container;
   };
   const back = (page: HTMLElement) =>
-    page.querySelector<HTMLButtonElement>(".task-head-back button") ?? assert.fail("a way back");
+    page.querySelector<HTMLButtonElement>(".task-head .phone-head-start button") ??
+    assert.fail("a way back");
 
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
   await settle();

@@ -7,7 +7,6 @@ import {
   BackIcon,
   COLLECTION_STATE,
   CollectionPage,
-  ComposeIcon,
   DetailPage,
   IconButton,
   NavItem,
@@ -63,6 +62,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { useLukeOperator } from "./luke-operator.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
+import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
@@ -445,25 +445,6 @@ function usePlaceCommands(
   );
 }
 
-/**
- * The sidebar's New task, kept in reach while the sidebar is folded: an icon
- * beside the toggle, the way a chat app keeps its compose button beside its
- * own. It asks for exactly what the sidebar's button asks for: the New task
- * dialog, over whatever stands.
- */
-function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element {
-  return (
-    <Tooltip label="New task" command={APP_COMMAND.NEW_TASK}>
-      <IconButton
-        icon={<ComposeIcon />}
-        label="New task"
-        disabled={!tasks.signedIn}
-        onClick={tasks.onNewTask}
-      />
-    </Tooltip>
-  );
-}
-
 /** The voice's notice line, one element for every draw, which reads the line where it is drawn (`WindowVoiceNotice`). */
 const NOTICE_STRIP = <WindowVoiceNotice />;
 
@@ -827,6 +808,8 @@ export function DesktopShell({
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks, chatOn);
+  // A phone's Inbox, Tasks page, and Chat, each on its list, head themselves with one row of their own (`phone-head.tsx`).
+  const placeHeaded = barShown && (inboxOpen || boardOpen || chatOpen);
   return (
     <div
       ref={shell}
@@ -866,7 +849,7 @@ export function DesktopShell({
                 />
               </PageFind>
             ) : inboxOpen ? (
-              <DesktopInbox tasks={tasks} listing={sharedListing} />
+              <DesktopInbox tasks={tasks} listing={sharedListing} room={room} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage
@@ -950,13 +933,14 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      {/* A phone's task heads itself with one row of its own, its way back where these stood (`task-pane-switcher.tsx`). */}
-      {room === SHELL_ROOM.NARROW && taskDrawn ? (
+      {/* A phone's task and its places head themselves with one row of their own (`phone-head.tsx`), the task's way back
+          or the place's one control where these stood; the places bar's More opens the drawer the toggle did. */}
+      {room === SHELL_ROOM.NARROW && (taskDrawn || placeHeaded) ? (
         <SidebarChord sidebar={sidebar} />
       ) : (
         <div className="title-bar-controls" onPointerDown={keepOverlay}>
           <SidebarToggle sidebar={sidebar} />
-          {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
+          {sidebar.collapsed ? <NewTaskButton tasks={tasks} /> : null}
           {sidebar.collapsed ? <OfflineMark /> : null}
         </div>
       )}

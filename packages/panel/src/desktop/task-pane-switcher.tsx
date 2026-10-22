@@ -5,6 +5,7 @@ import type { AwayStep } from "../navigation-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { Tooltip } from "../tooltip.js";
 import type { MenuAction } from "./action-menu.js";
+import { PhoneHead } from "./phone-head.js";
 
 /**
  * task-pane-switcher.tsx -- how a phone heads a task: one row of the way
@@ -103,9 +104,9 @@ function backLabel(back: TaskHeadBack): string {
 }
 
 /**
- * The row heading a task on a phone; see the module's head. Its corners are
- * one control wide each, the way back at its start and the ⋯ at its end, so
- * the title stands centred between them and truncates there.
+ * The row heading a task on a phone; see the module's head. It is a phone's
+ * header (`phone-head.tsx`): the way back at its start, the ⋯ at its end,
+ * and the title centred between them.
  */
 export function TaskHead({
   back,
@@ -122,13 +123,14 @@ export function TaskHead({
   actions: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="desktop-toolbar task-head">
-      <div className="task-head-back">
+    <PhoneHead
+      place="task"
+      start={
         <Tooltip label={backLabel(back)}>
           <IconButton icon={<BackIcon />} label={backLabel(back)} onClick={back.onPress} />
         </Tooltip>
-      </div>
-      <div className="desktop-toolbar-heading">
+      }
+      title={
         <h1 className="desktop-toolbar-title">
           <InlineEdit
             value={title}
@@ -138,8 +140,8 @@ export function TaskHead({
             onEnd={(end) => rename?.onEnd(end)}
           />
         </h1>
-      </div>
-      <div className="desktop-toolbar-actions">{actions}</div>
-    </header>
+      }
+      end={actions}
+    />
   );
 }

@@ -19,15 +19,25 @@ import {
   withPropertiesOffered,
 } from "@luke/ui/tasks-page-model";
 import { Schema } from "effect";
+import { KanbanIcon, ListFilterIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
-import type { ShellRoom } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { readKept, writeKept } from "./folded-groups.js";
+import { NewTaskButton } from "./new-task-button.js";
+import { PhoneHead, PlaceMore, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
-import { TasksFilterButton, TasksFilterChips, TasksViewOptions } from "./tasks-page-options.js";
+import {
+  FILTER,
+  FILTERED,
+  TasksFilterButton,
+  TasksFilterChips,
+  TasksViewOptions,
+  VIEW_OPTIONS,
+} from "./tasks-page-options.js";
 
 /**
  * tasks-page.tsx -- the window's Tasks page: the listed workspace's tasks as a List or as the Board, chosen by a switch beside its title, narrowed by its Filter and laid out by its View options.
@@ -194,7 +204,73 @@ export function TasksPage({
   };
   const shared = (tasks.workspace?.memberCount ?? 1) > 1;
   const listed = tasks.listed.tasks;
-  const toolbar = (
+  const filterAsk = useMenuAsk();
+  const optionsAsk = useMenuAsk();
+  // A phone heads the page as it heads every place (`phone-head.tsx`): New task, the title centred, and a ⋯ holding
+  // the view's switch and opening the Filter's and View options' own menus where it stands.
+  const phone = room === SHELL_ROOM.NARROW;
+  const viewItem = (value: TasksView, label: string, icon: React.JSX.Element) => ({
+    label,
+    icon,
+    checked: view === value,
+    onSelect: () => choose(value),
+  });
+  const filtered = filteredFields(filter).length > 0;
+  const phoneHead = (
+    <>
+      <PhoneHead
+        place="tasks"
+        start={<NewTaskButton tasks={tasks} />}
+        title={<h1 className="desktop-toolbar-title">{TASKS}</h1>}
+        end={
+          <PlaceMore
+            shown={tasks.shown}
+            groups={(opener) => [
+              [
+                viewItem(TASKS_VIEW.LIST, "List", <ListIcon />),
+                viewItem(TASKS_VIEW.BOARD, "Board", <KanbanIcon />),
+              ],
+              [
+                {
+                  label: FILTER,
+                  icon: <ListFilterIcon />,
+                  detail: filtered ? FILTERED : undefined,
+                  opens: true,
+                  onSelect: () => filterAsk.onAsk(opener),
+                },
+                {
+                  label: VIEW_OPTIONS,
+                  icon: <SlidersHorizontalIcon />,
+                  opens: true,
+                  onSelect: () => optionsAsk.onAsk(opener),
+                },
+              ],
+            ]}
+          />
+        }
+      />
+      <TasksFilterButton
+        shown={tasks.shown}
+        tasks={listed}
+        filter={filter}
+        onFilter={onFilter}
+        shared={shared}
+        asked={{ ask: filterAsk.ask }}
+      />
+      <TasksViewOptions
+        shown={tasks.shown}
+        board={view === TASKS_VIEW.BOARD}
+        display={display}
+        initial={INITIAL_DISPLAY[view]}
+        onDisplay={onDisplay}
+        shared={shared}
+        asked={{ ask: optionsAsk.ask }}
+      />
+    </>
+  );
+  const toolbar = phone ? (
+    phoneHead
+  ) : (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
         <h1 className="desktop-toolbar-title">{TASKS}</h1>
