@@ -3643,8 +3643,8 @@ const deleteStartedItem = SqlSchema.void({
  * thread started again under the client's key is the one it started, which
  * writes nothing; nothing where the member does not reach the agent, or its
  * starter is no longer a member of its workspace; one started again with
- * another subject, words, or files is refused as the key reused. The item
- * comes back as the member reads it.
+ * other words or files is refused as the key reused. The item comes back
+ * as the member reads it.
  */
 export function startInboxThread(
   userId: string,
@@ -3673,11 +3673,8 @@ export function startInboxThread(
         if (Option.isSome(started)) {
           const item = yield* itemAsWritten(userId, started.value.id);
           const first = yield* findKeyedMessage({ itemId: item.id, clientKey });
-          // Note that another subject, words, or files under a key taken is refused, so the agent never hears what the thread does not show.
-          const same =
-            item.title === title &&
-            Option.isSome(first) &&
-            sameMessage(first.value, { userId, text, files });
+          // Note that other words or files under a key taken are refused, so the agent never hears what the thread does not show; the subject is not compared, since the agent may retitle the thread and the agent hears it as the thread stands.
+          const same = Option.isSome(first) && sameMessage(first.value, { userId, text, files });
           const outcome = same ? INBOX_MESSAGE_OUTCOME.REPEATED : INBOX_MESSAGE_OUTCOME.KEY_REUSED;
           return Option.some({ item, outcome });
         }

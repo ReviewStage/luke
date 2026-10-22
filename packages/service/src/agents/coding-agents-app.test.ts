@@ -6754,7 +6754,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "a member starts a thread with an agent that stopped: it stands under a key minted from its subject past the agent's own, their words first, and wakes the agent under the message lead naming that key; the agent's post under the key answers on it, a repeat under the client's key reaches the agent once and another start under it is refused, and an outsider, an agent of no workspace of theirs, no subject, and no words are refused",
+    "a member starts a thread with an agent that stopped: it stands under a key minted from its subject past the agent's own, their words first, and wakes the agent under the message lead naming that key; the agent's post under the key answers on it, a repeat under the client's key, even after the agent retitled the thread, reaches the agent once and other words under it are refused, and an outsider, an agent of no workspace of theirs, no subject, and no words are refused",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -6792,13 +6792,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const again = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
         assert.equal(again.item.id, started.item.id);
         assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
-        for (const changed of [{ text: "Something else." }, { title: "Monthly plan copy" }]) {
-          assert.deepEqual(
-            yield* start({ ...body, ...changed }),
-            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-            "another start under a key taken is refused, so the agent never hears what the thread does not show",
-          );
-        }
+        assert.deepEqual(
+          yield* start({ ...body, text: "Something else." }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "other words under a key taken are refused, so the agent never hears what the thread does not show",
+        );
         assert.equal(eve.sent.length, before + 1);
         assert.deepEqual(
           (yield* read()).items
@@ -6825,6 +6823,17 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             [INBOX_MESSAGE_AUTHOR.MEMBER, body.text],
             [INBOX_MESSAGE_AUTHOR.AGENT, reply],
           ],
+        );
+        const retitled = yield* postInboxThread(
+          { userId: owner, taskId: task.id, agentId: agent.id },
+          { key: "annual-plan-copy-2", title: "Final plan copy", body: "Retitled." },
+        );
+        assert.ok(Result.isSuccess(retitled));
+        const late = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
+        assert.deepEqual(
+          [late.item.id, late.item.title, eve.sent.length],
+          [started.item.id, "Final plan copy", before + 1],
+          "a start retried once its agent retitled the thread is the thread it started, heard once",
         );
 
         assert.deepEqual(
