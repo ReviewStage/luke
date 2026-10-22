@@ -55,6 +55,7 @@ import {
   textFields,
   textProblems,
   tickable,
+  withRefusal,
 } from "./skills-model.js";
 
 /**
@@ -298,7 +299,15 @@ export function AddSkillDialog({
         setInstalling(false);
         if (answer === undefined)
           return setRefusal(failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED }));
-        if ("failure" in answer) return setRefusal(failureLine(answer));
+        if ("failure" in answer) {
+          // Note that a skill whose files were refused is marked where it is listed, and can no longer be ticked.
+          setPreviewed((held) =>
+            held === undefined || "failure" in held.view
+              ? held
+              : { ...held, view: withRefusal(held.view, answer) },
+          );
+          return setRefusal(failureLine(answer));
+        }
         onInstalled(answer.skills);
         onClose();
       });

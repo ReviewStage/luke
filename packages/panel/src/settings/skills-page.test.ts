@@ -368,7 +368,7 @@ test("a pasted command is previewed with the skills it asked for ticked, one wit
   );
 });
 
-test("a refused install says which skill and why in words, and keeps the dialog", async () => {
+test("a refused install says which skill and why in words, keeps the dialog, and marks that skill so it can no longer be ticked", async () => {
   refuseInstall = true;
   await mountDialog();
   await paste(COMMAND);
@@ -380,6 +380,9 @@ test("a refused install says which skill and why in words, and keeps the dialog"
     /web-design-guidelines holds more than 64 files\./u,
   );
   assert.ok(document.querySelector("textarea"));
+  assert.equal(checkboxOf("web-design-guidelines").disabled, true);
+  assert.equal(checkboxOf("web-design-guidelines").checked, false);
+  assert.equal(button("Install").disabled, true);
 });
 
 test("text with no description asks for one before Install, and sends it", async () => {

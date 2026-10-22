@@ -345,6 +345,40 @@ export function initialTicks(preview: InstalledSkillPreview): ReadonlySet<string
   );
 }
 
+/** The problem a refused file names, where the preview has a word for it. */
+const REFUSAL_PROBLEM: Partial<Record<InstalledSkillFilesRefusal, InstalledSkillProblem>> = {
+  [INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED]: INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED,
+  [INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES]: INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES,
+  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE,
+  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: INSTALLED_SKILL_PROBLEM.TOO_LARGE,
+};
+
+/**
+ * A source's preview once an install refused one of its skills' files:
+ * that skill carries the problem, so it can no longer be ticked. Note that
+ * the preview reads every skill's `SKILL.md` but only the asked-for skills'
+ * other files, which spares a large repository's read limit; the install
+ * reads them all, so a refusal there is how a problem in a skill nobody
+ * asked for first shows. A refusal the preview has no word for leaves it as
+ * it was.
+ */
+export function withRefusal(
+  preview: InstalledSkillPreview,
+  failed: { readonly skillName?: string; readonly skillRefusal?: InstalledSkillFilesRefusal },
+): InstalledSkillPreview {
+  const problem =
+    failed.skillRefusal === undefined ? undefined : REFUSAL_PROBLEM[failed.skillRefusal];
+  if (preview.kind !== SKILL_PASTE_KIND.SOURCE || problem === undefined) return preview;
+  return {
+    ...preview,
+    skills: preview.skills.map((each) =>
+      each.name === failed.skillName && !each.problems.includes(problem)
+        ? { ...each, problems: [...each.problems, problem] }
+        : each,
+    ),
+  };
+}
+
 /** The scopes the dialog offers: the account's own, and the workspace's for its owners and admins outside a personal workspace. */
 export function installScopes(
   workspace: Workspace,
