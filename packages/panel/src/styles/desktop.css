@@ -6706,6 +6706,54 @@ ul.actor-stack {
   margin-left: auto;
 }
 
+/* A phone's task is headed by its three views (`task-pane-switcher.tsx`):
+   a row of its own clear of the title bar's buttons at its left, the bar
+   taking the rest, each view an even share. The title bar's buttons stand
+   in that row, so the column's bar and the panel's under it start and end
+   at the column's own inset; and the panel draws no strip, its tabs listed
+   by the Activity view in its place. */
+.task-pane-switcher {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: var(--desktop-bar-height);
+  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-8)
+    var(--sidebar-toggle-clearance);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.task-pane-switcher .luke-choice-bar[data-look="segmented"] {
+  width: auto;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+}
+
+.task-pane-switcher .luke-choice-bar-option {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.desktop-shell[data-room="narrow"]
+  .task-pane-switcher
+  ~ .desktop-task
+  :is(.desktop-task-main .desktop-toolbar, .side-panel-bar) {
+  --bar-start: var(--column-inset);
+  --bar-end: var(--column-inset);
+  padding-right: var(--bar-end);
+  padding-left: var(--bar-start);
+}
+
+.side-panel[data-pane-switch] .side-panel-tabs {
+  display: none;
+}
+
+.side-panel-activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-section-gap);
+  padding: var(--luke-space-8) var(--column-inset);
+}
+
 /* The one slot a column's bar keeps for the ⋯ that acts on its chosen tab:
    the plan's on the plan's tab, another tab's own, or none on a tab with no
    action of the kind. It holds a button's width either way, so nothing in

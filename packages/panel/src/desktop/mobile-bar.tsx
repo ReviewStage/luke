@@ -20,7 +20,8 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 /** Whether the bar stands: a narrow room, signed in, on one of the places' lists. */
 export function mobileBarShown(room: ShellRoom, tasks: TasksControl, chatOn: boolean): boolean {
-  if (room !== SHELL_ROOM.NARROW || !tasks.signedIn || tasks.sidePanel.fullScreen) return false;
+  // Note that the open task's side panel is not asked: it is held behind every place, so it says nothing of the one on screen.
+  if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
   const { inboxView, chatView, boardView, automationsView, agentView, personView } = tasks;
   if (chatView.open && chatOn) return chatView.listed;
   if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
@@ -40,6 +41,7 @@ export function MobileBar({
 }: {
   tasks: TasksControl;
   chatOn: boolean;
+  /** The drawer the bar's More opens, whose float while open leaves every other item inert, as the work it covers is. */
   sidebar: SidebarCollapse;
   /** Marks the press on More as the drawer's own, so the press that opens it does not also put it away. */
   onPressMore: () => void;
@@ -48,16 +50,32 @@ export function MobileBar({
   const inChat = chatView.open && chatOn;
   const inInbox = !inChat && inboxView.open;
   const inTasks = !inChat && !inInbox && boardView.open;
+  const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   return (
     <nav className="mobile-bar" aria-label="Places">
-      <MobileBarItem icon={<InboxIcon />} current={inInbox} onPress={inboxView.onOpenList}>
+      <MobileBarItem
+        icon={<InboxIcon />}
+        current={inInbox}
+        inert={drawerOpen}
+        onPress={inboxView.onOpenList}
+      >
         Inbox
       </MobileBarItem>
-      <MobileBarItem icon={<ListTodoIcon />} current={inTasks} onPress={boardView.onOpen}>
+      <MobileBarItem
+        icon={<ListTodoIcon />}
+        current={inTasks}
+        inert={drawerOpen}
+        onPress={boardView.onOpen}
+      >
         Tasks
       </MobileBarItem>
       {chatOn && chatView.available ? (
-        <MobileBarItem icon={<MessagesSquareIcon />} current={inChat} onPress={chatView.onOpen}>
+        <MobileBarItem
+          icon={<MessagesSquareIcon />}
+          current={inChat}
+          inert={drawerOpen}
+          onPress={chatView.onOpen}
+        >
           Chat
         </MobileBarItem>
       ) : null}
@@ -78,12 +96,14 @@ function MobileBarItem({
   icon,
   current,
   expanded,
+  inert = false,
   onPointerDown,
   onPress,
   children,
 }: {
   icon: ReactNode;
   current: boolean;
+  inert?: boolean;
   expanded?: boolean;
   onPointerDown?: () => void;
   onPress: () => void;
@@ -95,6 +115,7 @@ function MobileBarItem({
       className="mobile-bar-item"
       aria-current={current ? "page" : undefined}
       aria-expanded={expanded}
+      inert={inert}
       onPointerDown={onPointerDown}
       onClick={onPress}
     >

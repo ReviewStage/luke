@@ -17,13 +17,17 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BackIcon,
   CloseIcon,
   CollapseIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   ExpandIcon,
+  FoldingButton,
   IconButton,
+  List,
+  ListRow,
   SCROLL_SIZE,
   ScrollArea,
   SidePanelIcon,
@@ -64,6 +68,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -914,6 +919,7 @@ function PanelTabs({
   shownAgent,
   inboxWaiting,
   inboxDrafted,
+  activity,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
@@ -961,6 +967,10 @@ function PanelTabs({
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
   inboxDrafted: boolean;
+  /** Where a phone's Activity lists the tabs in the strip's place, and how a row's press leaves the list; none where the strip is the way between them. */
+  activity?:
+    | { readonly slot: HTMLElement | null; readonly onListed: (listed: boolean) => void }
+    | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -1032,6 +1042,12 @@ function PanelTabs({
   };
   return (
     <div className="side-panel-tabs">
+      {activity?.slot
+        ? createPortal(
+            <ActivityList strip={strip} offers={offers} onListed={activity.onListed} />,
+            activity.slot,
+          )
+        : null}
       <TabStrip
         label="Panel"
         onMove={(from, to) => {
@@ -1059,6 +1075,84 @@ function PanelTabs({
         onAnswered={panel.onNewTabAnswered}
       />
     </div>
+  );
+}
+
+/**
+ * A phone's Activity: every tab the panel holds but the plan's, each a row of
+ * its glyph, its name, and what its tab says after it, newest arrivals in
+ * the strip's own order, a press showing it across the panel; under them,
+ * what the "+" offers, as the empty panel offers it, since a phone draws no
+ * "+". With nothing open past the plan it says so over the offers.
+ */
+function ActivityList({
+  strip,
+  offers,
+  onListed,
+}: {
+  strip: readonly DrawnTab[];
+  offers: readonly AddEntry[];
+  onListed: (listed: boolean) => void;
+}): React.JSX.Element {
+  const open = strip.filter((entry) => entry.tab !== SIDE_PANEL_TAB.PLAN);
+  // Note that a fixed kind already listed above, or the plan, its own view, is not offered again.
+  const more = offers.filter(
+    (entry) =>
+      entry.row.section !== undefined ||
+      (entry.row.id !== SIDE_PANEL_TAB.PLAN && !strip.some((each) => each.tab === entry.row.id)),
+  );
+  return (
+    <ScrollArea size={SCROLL_SIZE.CONTENT}>
+      <div className="side-panel-activity">
+        {open.length === 0 ? (
+          <div className="side-panel-no-tabs-line">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              Nothing open past the plan
+            </Text>
+          </div>
+        ) : (
+          <List label="Activity">
+            {open.map((entry) => (
+              <ListRow
+                key={tabKey(entry.tab)}
+                leading={entry.look.icon}
+                title={entry.look.label}
+                meta={entry.look.detail}
+                unread={entry.look.unread}
+                actions={
+                  <IconButton
+                    icon={<CloseIcon />}
+                    label={`Close ${entry.look.label}`}
+                    onClick={entry.close}
+                  />
+                }
+                onPress={() => {
+                  onListed(false);
+                  entry.look.onSelect();
+                }}
+              />
+            ))}
+          </List>
+        )}
+        {more.length === 0 ? null : (
+          <div className="side-panel-no-tabs-line">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              Open more
+            </Text>
+          </div>
+        )}
+        {more.length === 0 ? null : (
+          <MenuRowList
+            label="Open a tab"
+            rows={more.map((entry) => entry.row)}
+            onPick={(id) => {
+              onListed(false);
+              more.find((entry) => entry.row.id === id)?.onPick();
+            }}
+          />
+        )}
+      </div>
+    </ScrollArea>
   );
 }
 
@@ -1849,6 +1943,7 @@ export function SidePanel({
   inbox,
   chat,
   transcript,
+  activity,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1892,9 +1987,22 @@ export function SidePanel({
   chat?: React.ReactNode;
   /** An agent's transcript and composer, which its transcript tab shows beside the Inbox; none elsewhere, where the agent's column shows them. */
   transcript?: ((agentId: string) => React.ReactNode) | undefined;
+  /**
+   * A phone's Activity (`task-pane-switcher.tsx`): whether the panel lists
+   * its tabs rather than showing one, and the way to ask for the list or
+   * leave it. Where it is handed and the panel stands only full screen, the
+   * strip and its "+" are not drawn, the list standing for both, and a tab
+   * shown but the plan leads the bar with the way back to the list; none
+   * beside anything but a task's page.
+   */
+  activity?: { readonly listed: boolean; readonly onListed: (listed: boolean) => void } | undefined;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  // Where a phone's Activity lists the tabs, drawn there from the strip, which holds how each tab looks.
+  const [activitySlot, setActivitySlot] = useState<HTMLElement | null>(null);
+  const switched = activity !== undefined && panel.fullScreenOnly;
+  const listing = switched && activity.listed;
   // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
   const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
   const handTabActions = useCallback((tab: SidePanelTab, actions: MenuAction[] | undefined) => {
@@ -2079,34 +2187,49 @@ export function SidePanel({
       edge={edge}
       label="Panel"
       banner={banner}
+      switched={switched}
       tabs={
-        <PanelTabs
-          panel={panel}
-          holder={holder}
-          taskId={taskId}
-          keys={keys && focused}
-          unread={unread}
-          agents={agents}
-          subagents={subagents}
-          files={files}
-          changes={changes}
-          pages={pageTabs}
-          terminals={terminals}
-          browsers={browsers}
-          browserPages={browserPages}
-          cloudBrowsers={cloudBrowsers}
-          shown={shownCode ?? []}
-          repository={repository}
-          offers={offers}
-          held={drawnTranscripts}
-          actionsSlot={actionsSlot}
-          handed={handed}
-          onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
-          shownAgent={shownAgent}
-          inboxWaiting={inbox?.waiting ?? 0}
-          inboxDrafted={inbox?.drafted ?? false}
-          task={task}
-        />
+        <>
+          {switched && !listing && tab !== SIDE_PANEL_TAB.PLAN ? (
+            <FoldingButton
+              label="Activity"
+              icon={<BackIcon />}
+              onClick={() => activity.onListed(true)}
+            />
+          ) : null}
+          <PanelTabs
+            panel={panel}
+            holder={holder}
+            taskId={taskId}
+            keys={keys && focused}
+            unread={unread}
+            agents={agents}
+            subagents={subagents}
+            files={files}
+            changes={changes}
+            pages={pageTabs}
+            terminals={terminals}
+            browsers={browsers}
+            browserPages={browserPages}
+            cloudBrowsers={cloudBrowsers}
+            shown={shownCode ?? []}
+            repository={repository}
+            offers={offers}
+            held={drawnTranscripts}
+            actionsSlot={actionsSlot}
+            handed={handed}
+            onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
+            shownAgent={shownAgent}
+            inboxWaiting={inbox?.waiting ?? 0}
+            inboxDrafted={inbox?.drafted ?? false}
+            task={task}
+            activity={
+              switched
+                ? { slot: listing ? activitySlot : null, onListed: activity.onListed }
+                : undefined
+            }
+          />
+        </>
       }
       actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
     >
@@ -2121,14 +2244,16 @@ export function SidePanel({
           className="side-panel-content"
           role="tabpanel"
           aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label}
-          hidden={tab !== SIDE_PANEL_TAB.PLAN}
-          active={keys && focused && tab === SIDE_PANEL_TAB.PLAN}
+          hidden={listing || tab !== SIDE_PANEL_TAB.PLAN}
+          active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
           subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
         >
           {plan}
         </FindScope>
       )}
-      {tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
+      {listing ? (
+        <div ref={setActivitySlot} className="side-panel-content" />
+      ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
         <div className="side-panel-content">
           {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
         </div>
@@ -2224,6 +2349,7 @@ function PanelFrame({
   tabs,
   actions,
   banner,
+  switched = false,
   children,
 }: Omit<SidePanelDrawing, "panel"> & {
   panel: Pick<SidePanelControl, "width" | "fullScreen" | "fullScreenOnly" | "onToggleFullScreen">;
@@ -2235,6 +2361,8 @@ function PanelFrame({
   actions: React.ReactNode;
   /** Drawn under the row while the panel fills the window and covers what draws it otherwise. */
   banner?: React.ReactNode;
+  /** Whether a phone's views of the task stand for the strip, which is then not drawn (`task-pane-switcher.tsx`). */
+  switched?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
@@ -2256,6 +2384,7 @@ function PanelFrame({
         aria-label={label}
         inert={leaving !== PANEL_LEAVING.NONE}
         data-full-screen={String(panel.fullScreen)}
+        data-pane-switch={switched ? "" : undefined}
         data-leaving={leaving === PANEL_LEAVING.NONE ? undefined : leaving}
         data-popover-room=""
         style={panel.fullScreen ? undefined : { width: panel.width }}
