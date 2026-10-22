@@ -9,6 +9,10 @@ import {
   MARK_PROVIDER,
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
+  TEXT_AREA_LOOK,
+  TEXT_FIELD_SIZE,
+  TextArea,
+  TextField,
 } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -176,8 +180,8 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "a plan's task box",
       markup(
-        '<ul class="markdown"><li class="task-list-item"><label class="task-list-box"><input type="checkbox"></label></li></ul>',
-        ".task-list-box",
+        '<ul class="markdown"><li class="task-list-item"><span class="task-list-box"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
+        ".task-list-box > label",
       ),
     ],
     [
@@ -317,8 +321,26 @@ function fields(): ReadonlyMap<string, HTMLInputElement | HTMLTextAreaElement> {
     container.style.fontSize = "14px";
     return container.querySelector("input") ?? assert.fail("the field is drawn");
   };
-  const address = drawn(createElement("input", { type: "url" }), "browser-view-address");
-  const comment = drawn(createElement("textarea", { className: "comment-text" }), "comment-card");
+  const address = drawn(
+    createElement(TextField, {
+      label: "Address",
+      size: TEXT_FIELD_SIZE.COMPACT,
+      value: "",
+      onChange: () => undefined,
+    }),
+    "browser-view-address",
+  );
+  const comment = drawn(
+    createElement(TextArea, {
+      label: "Reply",
+      look: TEXT_AREA_LOOK.BARE,
+      grow: true,
+      rows: 1,
+      value: "",
+      onChange: () => undefined,
+    }),
+    "comment-field",
+  );
   return new Map<string, HTMLInputElement | HTMLTextAreaElement>([
     ["a tab's rename", inline(INLINE_EDIT_LOOK.WELL)],
     ["a workspace's or an integration's rename", inline(INLINE_EDIT_LOOK.INPUT)],

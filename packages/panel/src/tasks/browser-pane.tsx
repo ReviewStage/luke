@@ -6,7 +6,13 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
+import {
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  TEXT_FIELD_SIZE,
+  TextField,
+} from "@luke/ui";
 import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
   type FormEvent,
@@ -461,22 +467,20 @@ export function BrowserPane({
           />
         </div>
         <form className="browser-view-address" onSubmit={go}>
-          <input
+          <TextField
             ref={field}
-            type="text"
-            aria-label="Address"
+            size={TEXT_FIELD_SIZE.COMPACT}
+            label="Address"
             placeholder="Search or type an address, like localhost:3000"
             spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
+            autoCorrect={false}
+            selectOnFocus
             value={typed ?? address}
-            onChange={(event) => setTyped(event.target.value)}
-            onFocus={(event) => event.target.select()}
+            onChange={setTyped}
             onBlur={() => setTyped(undefined)}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
+            onEscape={() => {
               setTyped(undefined);
-              event.currentTarget.blur();
+              field.current?.blur();
             }}
           />
         </form>

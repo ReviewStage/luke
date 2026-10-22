@@ -4888,27 +4888,21 @@ ul.actor-stack {
   margin: var(--luke-space-6) 0 0;
 }
 
-/* The box in the card, at the agent composer's insets (`.agent-composer-input`). */
-.chat-composer-field {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 0;
-  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  resize: none;
-  outline: none; /* no ring: the caret marks the field */
+/* The plain box in the card (`PlainChatComposer`), bare at the agent
+   composer's insets (`.agent-composer-input`). */
+.chat-composer {
+  --luke-text-area-inset-start: var(--luke-space-16);
+  --luke-text-area-inset-inline: var(--luke-space-16);
+  --luke-text-area-inset-end: var(--luke-space-8);
 }
 
 /* A thread's box stands a line high, its field and its placeholder at
    the plain field's compact insets, as a plan comment's field does
    (`.comment-field .agent-composer-input`). */
-.chat-composer[data-compact="true"] .chat-composer-field {
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+.chat-composer[data-compact="true"] {
+  --luke-text-area-inset-start: var(--luke-space-8);
+  --luke-text-area-inset-inline: var(--luke-space-12);
+  --luke-text-area-inset-end: var(--luke-space-4);
 }
 
 .chat-composer[data-compact="true"] .agent-composer-field {

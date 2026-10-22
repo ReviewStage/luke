@@ -142,34 +142,23 @@ blockquote.markdown-quote > * + * {
   accent-color: var(--luke-color-accent);
 }
 
-/* A box the reader can tick stands in a label (`markdown-message.tsx`'s
-   `TaskBox`) in the bullet's gutter, exactly where the box alone stands, so
-   on a coarse pointer the label takes a press a finger's width across and as
-   tall, centred on the box, while the box draws at its own size. The plan's
-   editor gives its own label the same press (`tasks.css`). */
+/* A box the reader can tick (`markdown-message.tsx`'s `TaskBox`, a wordless
+   `Checkbox`) stands in the bullet's gutter, exactly where the box alone
+   stands, at the words' size; on a coarse pointer its label takes a press a
+   finger's width across and as tall, centred on the box (`checkbox.css`).
+   The plan's editor gives its own label the same press (`tasks.css`). */
 .markdown li.task-list-item > .task-list-box {
   position: absolute;
   top: calc((1lh - 0.95em) / 2);
   left: -1.45em;
+  display: flex;
   width: 0.95em;
   height: 0.95em;
 }
 
-.markdown li.task-list-item > .task-list-box > input[type="checkbox"] {
+.markdown li.task-list-item > .task-list-box input[type="checkbox"] {
   position: static;
   display: block;
-}
-
-@media (pointer: coarse) {
-  .markdown li.task-list-item > .task-list-box::before {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: var(--luke-touch-target);
-    height: var(--luke-touch-target);
-    transform: translate(-50%, -50%);
-    content: "";
-  }
 }
 
 /* A table scrolls sideways rather than widening the bubble; a column's
