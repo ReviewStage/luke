@@ -73,7 +73,7 @@ import {
   turnUsagesOf,
 } from "./message-reads.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
-import { TaskAgentUnstopped, TaskArchived, type TaskDeleteGuard } from "./task-store.js";
+import { TaskAgentUnstopped, type TaskDeleteGuard } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
@@ -518,22 +518,14 @@ function reachableAgent(userId: string, agentId: string): SQL | undefined {
   return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
 }
 
-/** The task row under its own lock, where the account is a member of its workspace, with whether it is archived. */
+/** The task row under its own lock, where the account is a member of its workspace. */
 const lockReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
-  Result: Schema.Struct({
-    id: Schema.String,
-    archived: Schema.Boolean,
-    organizationId: Schema.String,
-  }),
+  Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({
-          id: task.id,
-          archived: sql<boolean>`${task.archivedAt} is not null`,
-          organizationId: task.organizationId,
-        })
+        .select({ id: task.id, organizationId: task.organizationId })
         .from(task)
         .where(reachableTask(userId, taskId))
         .for("update"),
@@ -556,11 +548,11 @@ const lockReachableWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspace a Start puts its agent in, locked: the task's, where the task stands archived or not, or the workspace named; nothing where the account reaches neither. */
+/** The workspace a Start puts its agent in, locked: the task's, or the workspace named; nothing where the account reaches neither. */
 const lockedPlace = Effect.fnUntraced(function* (userId: string, place: CodingAgentPlace) {
   if (place.taskId === null) {
     const reached = yield* lockReachableWorkspace({ userId, organizationId: place.organizationId });
-    return Option.map(reached, (workspace) => ({ organizationId: workspace.id, archived: false }));
+    return Option.map(reached, (workspace) => ({ organizationId: workspace.id }));
   }
   return yield* lockReachableTask({ userId, taskId: place.taskId });
 });
@@ -1656,18 +1648,12 @@ const deleteConversationRow = SqlSchema.void({
  * started it with that run, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * Nothing where the account reaches no such task or is no member of the
- * workspace. An archived task starts no
- * agent, read under the same lock, though a retry still answers the agent
- * its Start made before the archive.
+ * workspace.
  */
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
-): Effect.Effect<
-  Option.Option<CodingAgentStarted>,
-  CodingAgentStoreFailure | TaskArchived,
-  DatabaseServices
-> {
+): Effect.Effect<Option.Option<CodingAgentStarted>, CodingAgentStoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -1680,7 +1666,6 @@ export function createCodingAgent(
         if (Option.isSome(existing)) {
           return Option.some({ agent: existing.value, created: false });
         }
-        if (reached.value.archived) return yield* new TaskArchived();
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({
           userId,
@@ -1918,29 +1903,24 @@ export function listTasklessCodingAgents(
   return findTasklessAgents({ userId, includeArchived: options.includeArchived ?? false });
 }
 
-/** The plan an agent stands on, as a list of agents names it: its name, and whether it is archived. */
+/** The plan an agent stands on, as a list of agents names it: its name. */
 export interface AgentTaskName {
   readonly name: string;
-  readonly archived: boolean;
 }
 
 const findTaskNames = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
-  Result: Schema.Struct({ id: Schema.String, name: Schema.String, archived: Schema.Boolean }),
+  Result: Schema.Struct({ id: Schema.String, name: Schema.String }),
   execute: ({ userId, taskIds }) =>
     Database.use((db) =>
       db
-        .select({
-          id: task.id,
-          name: task.name,
-          archived: sql<boolean>`${task.archivedAt} is not null`,
-        })
+        .select({ id: task.id, name: task.name })
         .from(task)
         .where(and(inArray(task.id, [...taskIds]), taskReachableBy(userId))),
     ),
 });
 
-/** The plans named, by id, each with its name and whether it is archived; a plan of a workspace the account is not in names nothing. None asked, none read. */
+/** The plans named, by id, each with its name; a plan of a workspace the account is not in names nothing. None asked, none read. */
 export function taskNamesOf(
   userId: string,
   taskIds: readonly string[],
@@ -1949,7 +1929,7 @@ export function taskNamesOf(
   if (ids.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findTaskNames({ userId, taskIds: ids }),
-    (rows) => new Map(rows.map((row) => [row.id, { name: row.name, archived: row.archived }])),
+    (rows) => new Map(rows.map((row) => [row.id, { name: row.name }])),
   );
 }
 

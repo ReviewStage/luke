@@ -431,19 +431,11 @@ const findAgentWorkspace = SqlSchema.findOneOption({
 /** A plan the account reaches, with its workspace and its name. */
 const findReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
-  Result: Schema.Struct({
-    organizationId: Schema.String,
-    name: Schema.String,
-    archivedAt: Schema.NullOr(InstantColumnSchema),
-  }),
+  Result: Schema.Struct({ organizationId: Schema.String, name: Schema.String }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({
-          organizationId: task.organizationId,
-          name: task.name,
-          archivedAt: task.archivedAt,
-        })
+        .select({ organizationId: task.organizationId, name: task.name })
         .from(task)
         .where(and(eq(task.id, taskId), taskReachableBy(userId))),
     ),
@@ -621,7 +613,6 @@ const insertChannel = SqlSchema.findAll({
     dmBMemberId: Schema.NullOr(Schema.String),
     createdByMemberId: Schema.NullOr(Schema.String),
     purpose: Schema.optionalKey(Schema.NullOr(Schema.String)),
-    archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
     now: Schema.Date,
   }),
   Result: ChatChannelRowSchema,
@@ -630,7 +621,6 @@ const insertChannel = SqlSchema.findAll({
       db
         .insert(chatChannel)
         .values({
-          archivedAt: row.archivedAt ?? null,
           purpose: row.purpose ?? null,
           organizationId: row.organizationId,
           kind: row.kind,
@@ -1509,8 +1499,6 @@ export function ensureTaskChannel(
         dmAMemberId: null,
         dmBMemberId: null,
         createdByMemberId: null,
-        // An archived plan's channel is made archived with it, as its archive would have left it.
-        archivedAt: reached.value.archivedAt,
         now,
       });
       return yield* madeOrStanding(made, findTaskChannel(taskId));
@@ -1705,27 +1693,6 @@ export function findOrMakeDm(
     });
     return yield* madeOrStanding(made, findDm(pair));
   });
-}
-
-const stampTaskChannelArchive = SqlSchema.void({
-  Request: Schema.Struct({ taskId: Schema.String, archivedAt: Schema.NullOr(Schema.Date) }),
-  execute: ({ taskId, archivedAt }) =>
-    Database.use((db) =>
-      db
-        .update(chatChannel)
-        .set({ archivedAt })
-        .where(and(eq(chatChannel.taskId, taskId), eq(chatChannel.kind, CHANNEL_KIND.TASK))),
-    ),
-});
-
-/**
- * Archives a plan's channel as its plan is archived, or opens it again as
- * its plan is brought back: what the plan's own archive calls, under the
- * plan's lock, so an archived plan's channel takes no post until the plan
- * returns. Nothing where the plan has no channel.
- */
-export function followTaskArchive(taskId: string, archivedAt: Date | null): ChatStoreEffect<void> {
-  return stampTaskChannelArchive({ taskId, archivedAt });
 }
 
 /**
@@ -2645,7 +2612,7 @@ const findAsks = SqlSchema.findAll({
 
 /**
  * The open asks that wait on the account across its workspaces: asked by
- * someone else, in a channel neither archived nor of an archived plan, and
+ * someone else, in a channel not archived, and
  * in a DM only where the account is one of its two.
  */
 function waitingOnAccount(userId: string): SQL | undefined {
@@ -2666,7 +2633,6 @@ function waitingOnAccount(userId: string): SQL | undefined {
     ),
     notExists(own(chatMessage.authorMemberId)),
     isNull(chatChannel.archivedAt),
-    isNull(task.archivedAt),
     or(
       ne(chatChannel.kind, CHANNEL_KIND.DM),
       exists(own(chatChannel.dmAMemberId)),
@@ -2684,7 +2650,6 @@ const findWaiting = SqlSchema.findAll({
         .select({ ...MESSAGE_COLUMNS, taskId: chatChannel.taskId })
         .from(chatMessage)
         .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
-        .leftJoin(task, eq(task.id, chatChannel.taskId))
         .where(waitingOnAccount(userId))
         .orderBy(...WAITING_ORDER),
     ),
@@ -2709,7 +2674,6 @@ const findWaitingStamps = SqlSchema.findAll({
         })
         .from(chatMessage)
         .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
-        .leftJoin(task, eq(task.id, chatChannel.taskId))
         .where(waitingOnAccount(userId))
         .orderBy(...WAITING_ORDER),
     ),
@@ -2821,7 +2785,6 @@ export function chatWaitingLiveStatements(
     )
     .from(chatMessage)
     .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
-    .leftJoin(task, eq(task.id, chatChannel.taskId))
     .leftJoin(author, eq(author.id, chatMessage.authorMemberId))
     .leftJoin(authorAccount, eq(authorAccount.id, author.userId))
     .leftJoin(authorAgent, eq(authorAgent.id, author.agentId))

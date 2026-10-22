@@ -182,7 +182,7 @@ import {
  * (`workspace-agents.ts`); an agent of another workspace is none of them,
  * even one the member is also in. A list names each agent's task, narrows
  * to one task or the caller's own where asked, and marks the archived
- * ones; a coding agent's own list leaves itself out. Each tool reads the
+ * agents; a coding agent's own list leaves itself out. Each tool reads the
  * same rows the agent tabs read: the agents and the newest turn each stands
  * on (`coder-host/status.ts`), the branch each row holds, and the
  * transcript's turn journals, rendered as a short tail of what the agent
@@ -309,10 +309,6 @@ export const UPDATE_TASK_REFUSAL = {
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them.`,
-  ARCHIVED:
-    "Not changed: that task is archived, so it takes no new name, repository, status, priority, " +
-    "assignee, section, or issue; bring it back in the same call with archived false, or leave " +
-    "it as it is.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
     `member by the mention link read_chat or ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
@@ -383,7 +379,6 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: the GitHub installation connected to the task's workspace does not reach the task's repository.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
-  ARCHIVED: "Not started: this task is archived; a member unarchives it first.",
   IMAGE_PREPARING:
     "Not started: the agent's sandbox image is still being prepared; start it again in a minute or two.",
   PLAN_SIGNED_OUT:
@@ -435,7 +430,6 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_CODING_AGENT_REFUSAL.NO_BRANCH],
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_CODING_AGENT_REFUSAL.GITHUB_UNANSWERED],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.TASK_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_CODING_AGENT_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_CODING_AGENT_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_CODING_AGENT_REFUSAL.PLAN_UNREACHABLE],
@@ -704,7 +698,7 @@ export const LIST_AGENTS_TOOL = {
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
     "sandbox is on if a turn " +
-    "has ended, one line of what it last did, its task (id, name, and whether archived; null for " +
+    "has ended, one line of what it last did, its task (id and name; null for " +
     "an agent on no task) and whether that is the task you work on, and whether the agent is " +
     "archived, and its mention, the `[@title](link)` to name it by in your words, " +
     `the newest started first and at most ${WORKSPACE_AGENTS_LIST_LIMIT}. Pass thisTask ` +
@@ -1531,14 +1525,13 @@ const sourceLanding = (
   Effect.gen(function* () {
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
-    const { agent: source, task, workspaceId } = found.value;
+    const { agent: source, workspaceId } = found.value;
     if (!controlsAgent(callerUserId(caller), source)) {
       return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
     }
     if (named !== undefined && named !== source.taskId) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_OTHER_TASK);
     }
-    if (task.task?.archived === true) return Result.fail(START_CODING_AGENT_REFUSAL.ARCHIVED);
     // An agent with no task is started from in its own workspace, on the repository it cloned.
     const place = placeOfAgent(source);
     if (place === undefined) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY);
@@ -1813,7 +1806,6 @@ const taskUpdateAnswer = (
         ...taskStandingOf(task, { step, name }),
         name: task.name,
         repository: task.repository,
-        archived: task.archivedAt !== undefined,
         pinned: task.pinnedAt !== undefined,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
         ...(section === undefined
@@ -1861,7 +1853,6 @@ function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
   return (
     (changes.name === undefined || changes.name === task.name) &&
     (changes.repository === undefined || changes.repository === task.repository) &&
-    (changes.archived === undefined || changes.archived === (task.archivedAt !== undefined)) &&
     (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined)) &&
     (changes.status === undefined || changes.status === task.status) &&
     (changes.priority === undefined || changes.priority === task.priority) &&
@@ -2028,14 +2019,6 @@ export function runUpdateTask(
         changesStand(read.value.task, asWritten) &&
         (placing?.success.stands ?? true) &&
         (relinked === undefined || issueChangesStand(relinked.success));
-      // A task archived by an older build, before the migration settled them, is moved into no section.
-      if (
-        placing !== undefined &&
-        !placing.success.stands &&
-        read.value.task.archivedAt !== undefined
-      ) {
-        return agentToolRejected(UPDATE_TASK_REFUSAL.ARCHIVED);
-      }
       // The task's change and its place in the sidebar are one transaction, so a place refused, its
       // section deleted meanwhile, takes the change back with it.
       const writing = Effect.gen(function* () {
@@ -2064,14 +2047,9 @@ export function runUpdateTask(
         Effect.map(
           (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
         ),
-        Effect.catchTag("TaskArchived", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.ARCHIVED)),
-        ),
         Effect.catchTag("TaskAssigneeNotMember", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NOT_MEMBER)),
         ),
-        // No guard is handed, so no agent of the task refuses the change; one that does is the store breaking its contract.
-        Effect.catchTag("TaskAgentUnstopped", (unstopped) => Effect.die(unstopped)),
         Effect.catchTag("TaskPlaceRefused", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
         ),

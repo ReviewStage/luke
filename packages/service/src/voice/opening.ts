@@ -387,17 +387,13 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       }),
     );
 
-  /** The task named as the account holds it, or the reason a call about it is refused: not held, or archived, which no call is about until it is brought back. */
+  /** The task named as the account holds it, or the reason a call about it is refused: not held. */
   const admitTask = (
     userId: string,
     taskId: string,
   ): Effect.Effect<Task | Refusal, SessionFailure, DatabaseServices> =>
     Effect.map(record.heldTask({ userId, taskId }), (task) =>
-      task === undefined
-        ? refused(HOSTED_API_ERROR.NOT_FOUND)
-        : task.archivedAt !== undefined
-          ? refused(HOSTED_API_ERROR.TASK_ARCHIVED)
-          : task,
+      task === undefined ? refused(HOSTED_API_ERROR.NOT_FOUND) : task,
     );
 
   /**
@@ -409,7 +405,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * agent on its own task, or on none where it has none, as an automation's
    * run starts one. A task the account does not hold is refused before the
    * count, so a claim on someone else's task counts nothing and creates
-   * nothing, and so is an archived task. An agent is refused as not found
+   * nothing. An agent is refused as not found
    * where the account does not reach it, where it works on another task than
    * the one named, or where it is archived and so takes nothing; an agent on
    * a native harness (Claude Code or Codex) is refused by name, since a call
@@ -432,8 +428,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (taskId !== undefined && agent.taskId !== taskId) {
         return refused(HOSTED_API_ERROR.NOT_FOUND);
       }
-      // Note that a frame naming no task still binds the call to the agent's own task, so a
-      // call keyed by its agent alone is fenced by that task's archive as a named one is.
+      // Note that a frame naming no task still binds the call to the agent's own task, read as a named one is.
       const task =
         named ?? (agent.taskId === null ? undefined : yield* admitTask(accountId, agent.taskId));
       if (task !== undefined && "refusal" in task) return task;
@@ -531,8 +526,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * bearer's own failure rather than as a hint that the id exists. The task
    * and the agent the call is bound to are read off the same row, so the
    * re-attached exchange lands in the agent the session was created for; a
-   * task archived since takes the call back no more, and neither does a
-   * session that names no agent, a call about a task's own Luke from before
+   * session that names no agent takes the call back no more, nor does a call about a task's own Luke from before
    * every call named one, or one whose agent was deleted since. A row that
    * names an agent and no task is a call into an agent with no task, and is
    * taken back as it was created.
@@ -553,11 +547,6 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // A session no agent was bound to is no call this service still runs.
       if (owned.agentId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
-      const task =
-        owned.taskId === undefined
-          ? undefined
-          : yield* record.heldTask({ userId: accountId, taskId: owned.taskId });
-      if (task?.archivedAt !== undefined) return refused(HOSTED_API_ERROR.TASK_ARCHIVED);
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       // A connection holds the session again, so the orphan sweep leaves it be

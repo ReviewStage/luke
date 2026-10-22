@@ -111,11 +111,14 @@ const archivedAsBefore = (userId: string, taskId: string, agentId: string, archi
     yield* archiveCodingAgent(userId, agentId, true);
   });
 
-/** Where the task stands: its status, when it was finished, and when it was archived. */
+/** Where the task stands: its status and when it was finished as the store reads them, and the archive stamp as the row still holds it, which the store reads no longer. */
 const standingOf = (userId: string, taskId: string) =>
-  Effect.map(readTask(userId, taskId), (read) => {
-    const { status, completedAt, archivedAt } = Option.getOrThrow(read).task;
-    return { status, completedAt, archivedAt };
+  Effect.gen(function* () {
+    const { status, completedAt } = Option.getOrThrow(yield* readTask(userId, taskId)).task;
+    const [row] = yield* Database.use((db) =>
+      db.select({ archivedAt: task.archivedAt }).from(task).where(eq(task.id, taskId)),
+    );
+    return { status, completedAt, archivedAt: row?.archivedAt ?? undefined };
   });
 
 const channelArchivedAt = (channelId: string) =>

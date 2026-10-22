@@ -1,4 +1,3 @@
-import type { TaskArchived } from "@luke/database/models/task-store";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -124,7 +123,7 @@ export const HOSTED_REFUSAL = {
   AGENT_PLAN_LIMIT_REACHED: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED },
   /** The agent runs on its starter's plan, which its provider said is not eligible to run it; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
-  /** The task is archived, so it takes nothing until it is brought back; nothing was written. */
+  /** The chat channel is archived, so it takes no post; nothing was written. Named for the task archive it once answered too, which no task has any more. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
@@ -204,22 +203,6 @@ export function hostedStoreOrUnavailable<A, R>(
   return effect.pipe(
     Effect.tapError(logStoreFailure),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-  );
-}
-
-/**
- * A task write an archive may refuse: the archive answered as its own
- * refusal, and a store failure as `hostedStoreOrUnavailable` answers one.
- */
-export function hostedStoreOrArchived<A, R>(
-  effect: Effect.Effect<A, StoreFailure | TaskArchived, R>,
-): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(
-    effect,
-    (failure): Effect.Effect<never, HostedRefusal> =>
-      "_tag" in failure && failure._tag === "TaskArchived"
-        ? Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED)
-        : hostedStoreOrUnavailable(Effect.fail(failure)),
   );
 }
 

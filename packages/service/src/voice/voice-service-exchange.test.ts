@@ -8,7 +8,6 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { conversations } from "@luke/database/schemas/storage";
-import { task as taskTable } from "@luke/database/schemas/task";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
   insertMessage,
@@ -1054,7 +1053,7 @@ it.effect(
 );
 
 it.effect(
-  "a call naming no task into an agent on one is bound to that task, and refused once it is archived; a call naming a task into an agent with none is refused as not found; each refusal before anything is counted",
+  "a call naming no task into an agent on one is bound to that task; a call naming a task into an agent with none is refused as not found, before anything is counted",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -1080,18 +1079,6 @@ it.effect(
       assert.equal(
         await refusalFor(context, createFrame(context.taskId, taskless.id)),
         HOSTED_API_ERROR.NOT_FOUND,
-      );
-      await database.run(
-        Database.use((db) =>
-          db
-            .update(taskTable)
-            .set({ archivedAt: new Date(NOW) })
-            .where(eq(taskTable.id, context.taskId)),
-        ),
-      );
-      assert.equal(
-        await refusalFor(context, createFrame(undefined, context.agentId)),
-        HOSTED_API_ERROR.TASK_ARCHIVED,
       );
       assert.equal(context.openAi.creates.length, 1);
       assert.deepEqual(context.accounts.spent, [userId]);

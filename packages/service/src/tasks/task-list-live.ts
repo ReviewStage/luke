@@ -49,13 +49,20 @@ export interface TaskListLiveStatements {
   readonly issues: LiveStatement;
 }
 
-/** The plans the account reaches, archived ones among them, each with the reader's own pin and its owner's name. */
+/**
+ * The plans the account reaches, each with the reader's own pin and its
+ * owner's name. Note that `archivedAt` is still answered, as null, because
+ * a desktop build still running decodes a row without it as no row: no
+ * plan is archived any more, and the column is read by nothing. It goes
+ * once no running build requires it.
+ */
 function tasksStatement(userId: string) {
   return queryBuilder
     .select(
       liveSelection(
         {
           id: task.id,
+          archivedAt: sql<null>`null::bigint`,
           workspaceId: task.organizationId,
           name: task.name,
           repository: task.repository,
@@ -72,7 +79,6 @@ function tasksStatement(userId: string) {
         },
         {
           pinnedAt: taskPin.pinnedAt,
-          archivedAt: task.archivedAt,
           completedAt: task.completedAt,
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,

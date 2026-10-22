@@ -787,13 +787,7 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           organizationId: workspace,
           name: "Teammate invitations",
         });
-        const archivedTask = yield* createTask(starter, { organizationId: workspace, name: "Old" });
-        yield* Effect.flatMap(Database, (db) =>
-          db
-            .update(task)
-            .set({ archivedAt: at(14) })
-            .where(eq(task.id, archivedTask.id)),
-        );
+        const oldTask = yield* createTask(starter, { organizationId: workspace, name: "Old" });
         const onTask = yield* tasklessAgent(teammate, workspace, {
           taskId: invitations.id,
           createdAt: at(15),
@@ -818,16 +812,13 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
         });
         const names = yield* taskNamesOf(starter, [
           invitations.id,
-          archivedTask.id,
+          oldTask.id,
           elsewhereTask.id,
           invitations.id,
         ]);
         assert.equal(names.size, 2, "a plan of a workspace the account is not in names nothing");
-        assert.deepEqual(names.get(invitations.id), {
-          name: "Teammate invitations",
-          archived: false,
-        });
-        assert.deepEqual(names.get(archivedTask.id), { name: "Old", archived: true });
+        assert.deepEqual(names.get(invitations.id), { name: "Teammate invitations" });
+        assert.deepEqual(names.get(oldTask.id), { name: "Old" });
         assert.equal((yield* taskNamesOf(outsider, [invitations.id])).size, 0);
         assert.deepEqual(
           yield* listWorkspaceCodingAgents(outsider, workspace, {

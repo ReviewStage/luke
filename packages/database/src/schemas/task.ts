@@ -28,7 +28,7 @@ import { codingAgent } from "./coding-agent.js";
  * task.ts -- a named task and its plan, its one current document.
  *
  * One row per task, keyed by a UUID of the service's own and owned by the
- * account that started it, in the workspace it was started in: its name, whether it is archived (a pin is each member's own, `plan-pin.ts`), its
+ * account that started it, in the workspace it was started in: its name, where it stands (a pin is each member's own, `plan-pin.ts`), its
  * one document, a free Markdown text, and the journal of the saves coding
  * agents made on it. A save replaces the
  * text in one statement, so none is left half-written: a save that failed
@@ -59,7 +59,7 @@ export const task = pgTable(
      * workspace takes the next number there.
      */
     number: integer("number").notNull(),
-    /** Where the task stands (`TASK_STATUS`); apart from whether it is archived. */
+    /** Where the task stands (`TASK_STATUS`). */
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
     /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
     priority: text("priority").$type<TaskPriority>().notNull().default(TASK_PRIORITY.NONE),
@@ -125,7 +125,12 @@ export const task = pgTable(
      * it stood leaves this as it stood too (`task-store.ts`).
      */
     completedAt: timestamptz("completed_at"),
-    /** When the task was archived, which the list leaves out unless asked for it; null while it is not. */
+    /**
+     * @deprecated A task is archived no longer, it stands Done or Canceled
+     * instead (the `task_archive_settle` migration settled every archived
+     * one), and nothing writes or reads this. It stands until no running
+     * build reads it, then a later migration drops it.
+     */
     archivedAt: timestamptz("archived_at"),
     createdAt: createdAt(),
     /** The last save of the document; the start, before any. */

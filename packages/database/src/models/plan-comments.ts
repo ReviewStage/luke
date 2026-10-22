@@ -25,7 +25,7 @@ import {
   type PlanCommentThreadAnswer,
 } from "@luke/features/plan-comment-wire";
 import { planSections } from "@luke/features/plan-document";
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -45,8 +45,7 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * every agent on the task writes as the member whose turn it is; an account
  * outside the workspace reads no plan here, exactly as in `task-store.ts`.
  * Each write takes the plan row's lock first, as the plan's own save does,
- * so a thread started while the text is saved lands on the text as saved,
- * and an archived plan, which no editor is drawn on, takes none. A comment
+ * so a thread started while the text is saved lands on the text as saved. A comment
  * is edited or deleted only by its writer; the rest, resolving and reopening
  * and deleting a whole thread among them, is any member's or agent's.
  *
@@ -158,7 +157,7 @@ const ENTRY_COLUMNS = {
   editedAt: planComment.editedAt,
 };
 
-/** The plan's text and workspace under its row's lock, where the account reaches the plan and it is not archived; nothing otherwise. */
+/** The plan's text and workspace under its row's lock, where the account reaches the plan; nothing otherwise. */
 const lockOpenPlanText = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ text: Schema.String, organizationId: Schema.String }),
@@ -167,7 +166,7 @@ const lockOpenPlanText = SqlSchema.findOneOption({
       db
         .select({ text: task.document, organizationId: task.organizationId })
         .from(task)
-        .where(and(reachableTask(userId, taskId), isNull(task.archivedAt)))
+        .where(reachableTask(userId, taskId))
         .for("update"),
     ),
 });

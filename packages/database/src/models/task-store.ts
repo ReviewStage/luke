@@ -1,5 +1,5 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
-import { CODING_AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
@@ -39,7 +39,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { attachment } from "../schemas/attachment.js";
 import { automation } from "../schemas/automation.js";
-import { codingAgent, type StoredArchive } from "../schemas/coding-agent.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
@@ -48,7 +48,7 @@ import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { readPlanTemplate } from "./account-store.js";
-import { followTaskArchive, moveTaskChat } from "./chat-store.js";
+import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
@@ -76,8 +76,7 @@ import {
  * runs for beside the task and gates on that account's membership
  * (`workspace-store.ts`), so a task of a workspace the account is not in
  * reads, saves, changes, and deletes exactly as an id that names nothing: as
- * no plan. An archive is a stamp on the row, so it is the workspace's and
- * reads alike for every member on every Mac; a pin is the reading member's
+ * no plan. A pin is the reading member's
  * own (`plan-pin.ts`), so a plan of a shared workspace one member pinned
  * reads pinned for them alone, on every Mac they sign in on. A plan's repository is kept here as
  * handed and confirmed nowhere here: whether the account reaches it through
@@ -96,13 +95,10 @@ export type TaskStoreFailure = QueryError | Schema.SchemaError;
 /** What a task store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type TaskStoreEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServices>;
 
-/** The task is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
-export class TaskArchived extends Data.TaggedError("TaskArchived") {}
-
 /** The member a task was to be assigned to is no member of its workspace, or of the one it moves to; nothing was written. */
 export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMember") {}
 
-/** A coding agent stands at work that a delete or an archive was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
+/** A coding agent stands at work that a delete was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
 /** What a delete that stopped the task's agents first tells it. */
@@ -124,8 +120,8 @@ export interface TaskDeleteGuard<R> {
  */
 export type TaskMoveGuard<E, R> = (repository: string | null) => Effect.Effect<void, E, R>;
 
-/** One of the plan's agents as its archive reads it, under its conversation's lock. */
-export interface TaskArchivedAgent {
+/** One of the task's standing agents as a finish reads it, under its conversation's lock. */
+export interface TaskStandingAgent {
   readonly id: string;
   readonly conversationId: string;
   readonly createdAt: Date;
@@ -134,20 +130,13 @@ export interface TaskArchivedAgent {
 }
 
 /**
- * What an archive of a plan whose agents the caller stopped first runs
- * under the plan's lock: whether each agent still stands stopped, read under
- * its conversation's lock, so one handed a message since refuses the archive.
- */
-export type TaskArchiveGuard<R> = (
-  agent: TaskArchivedAgent,
-) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
-
-/**
  * What a finish of a task's work runs under the task's lock: whether each
  * of its standing agents stands idle, neither starting nor running, read
- * under its conversation's lock, the same reading an archive's guard makes.
+ * under its conversation's lock.
  */
-export type TaskFinishGuard<R> = TaskArchiveGuard<R>;
+export type TaskFinishGuard<R> = (
+  agent: TaskStandingAgent,
+) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
 
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
@@ -204,7 +193,7 @@ export interface NewTask {
 
 /**
  * What a change to a task names: a new name, a repository or null to clear
- * it, pinned or not, archived or not, the workspace it moves to, or any of
+ * it, pinned or not, the workspace it moves to, where it stands, or any of
  * them at once. A move is its owner's alone, into a workspace they are a
  * member of, which the caller confirms first.
  */
@@ -217,7 +206,6 @@ export interface TaskChanges {
   readonly pinned?: boolean;
   /** Where the pin stands in the sidebar's Pinned section, which comes only with a pin. */
   readonly pinPosition?: string;
-  readonly archived?: boolean;
   readonly status?: TaskStatus;
   readonly priority?: TaskPriority;
   /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
@@ -254,7 +242,6 @@ const TASK_SUMMARY_COLUMNS = {
   creatorAgentId: task.creatorAgentId,
   repository: task.repository,
   githubAccess: task.githubAccess,
-  archivedAt: task.archivedAt,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -281,7 +268,6 @@ const TaskSummaryRowSchema = Schema.Struct({
   creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
-  archivedAt: Schema.NullOr(InstantColumnSchema),
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -542,10 +528,9 @@ function namedAccountsOf(rows: readonly TaskSummaryRow[]): readonly string[] {
  * `openedAt` is still answered, as the start, because a desktop through
  * v0.7.1 refuses a summary without it. It goes once a release whose decoder
  * treats it as optional has shipped and v0.7.1 is no longer supported. A pin,
- * the reader's own `pinnedAt` and the `pinPosition` they dragged it to,
- * and an archive are answered only where they stand, so a plan that is
- * neither reads as every plan did before them; an owner whose account is
- * gone is named by nothing.
+ * the reader's own `pinnedAt` and the `pinPosition` they dragged it to, is
+ * answered only where it stands, so a plan that is not pinned reads as every
+ * plan did before pins; an owner whose account is gone is named by nothing.
  */
 function summaryOf(
   row: TaskSummaryRow,
@@ -568,7 +553,6 @@ function summaryOf(
     ...originOf(row),
     ...(pin === null ? undefined : { pinnedAt: pin.pinnedAt.getTime() }),
     ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
-    ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
     ...(row.completedAt === null ? undefined : { completedAt: row.completedAt.getTime() }),
     status: row.status,
     priority: row.priority,
@@ -692,9 +676,9 @@ function nextTaskNumber(organizationId: string): TaskStoreEffect<number> {
 }
 
 const findTasks = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
+  Request: Schema.Struct({ userId: Schema.String }),
   Result: TaskListRowSchema,
-  execute: ({ userId, includeArchived }) =>
+  execute: ({ userId }) =>
     Database.use((db) =>
       db
         .select({
@@ -704,7 +688,7 @@ const findTasks = SqlSchema.findAll({
         })
         .from(task)
         .leftJoin(taskPin, readersPin(userId))
-        .where(and(taskReachableBy(userId), includeArchived ? undefined : isNull(task.archivedAt)))
+        .where(taskReachableBy(userId))
         .orderBy(desc(task.createdAt), desc(task.id)),
     ),
 });
@@ -740,7 +724,6 @@ const findTaskHeader = SqlSchema.findOneOption({
     name: Schema.String,
     repository: Schema.NullOr(Schema.String),
     status: taskStatusSchema,
-    archived: Schema.Boolean,
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -751,7 +734,6 @@ const findTaskHeader = SqlSchema.findOneOption({
           name: task.name,
           repository: task.repository,
           status: task.status,
-          archived: sql<boolean>`${task.archivedAt} is not null`,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -803,12 +785,11 @@ const TaskColumnChangesSchema = Schema.Struct({
   completedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
 
-/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, the assignee, and the archive the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, and the assignee the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -872,9 +853,9 @@ const findAgentConversations = SqlSchema.findAll({
 });
 
 /**
- * The name written only where the task still stands untitled and not
- * archived, so the check and the write are one statement and a name a
- * member gave the task meanwhile is never written over.
+ * The name written only where the task still stands untitled, so the check
+ * and the write are one statement and a name a member gave the task
+ * meanwhile is never written over.
  */
 const nameUntitled = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, name: Schema.String }),
@@ -884,13 +865,7 @@ const nameUntitled = SqlSchema.findOneOption({
       db
         .update(task)
         .set({ name })
-        .where(
-          and(
-            reachableTask(userId, taskId),
-            eq(task.name, UNTITLED_TASK_NAME),
-            isNull(task.archivedAt),
-          ),
-        )
+        .where(and(reachableTask(userId, taskId), eq(task.name, UNTITLED_TASK_NAME)))
         .returning({ id: task.id }),
     ),
 });
@@ -990,11 +965,10 @@ export function createTaskCommitted(
         );
         for (const link of started.issueLinks ?? []) {
           yield* linkTaskIssue(userId, row.id, link).pipe(
-            // A new task's links are its starter's few, each named once, on a task not yet archived, so a refusal is the caller breaking its contract.
+            // A new task's links are its starter's few, each named once, so a refusal is the caller breaking its contract.
             Effect.catchTags({
               TaskIssuesFull: Effect.die,
               TaskIssueLinked: Effect.die,
-              TaskArchived: Effect.die,
             }),
           );
         }
@@ -1024,18 +998,14 @@ export function createTaskOnce(
 
 /**
  * Every task of every workspace the account is a member of, newest started first, without their documents,
- * and without the archived ones unless `includeArchived` asks for them; each
- * with the issues it links, read for the whole list at once.
+ * each with the issues it links, read for the whole list at once.
  * Nothing but starting a task moves the order: opening, reading, saving,
- * pinning, and archiving one leave every row where it stood, and the order a
+ * pinning, and settling one leave every row where it stood, and the order a
  * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
  */
-export function listTasks(
-  userId: string,
-  options: { readonly includeArchived?: boolean } = {},
-): TaskStoreEffect<readonly TaskSummary[]> {
+export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[]> {
   return Effect.gen(function* () {
-    const rows = yield* findTasks({ userId, includeArchived: options.includeArchived === true });
+    const rows = yield* findTasks({ userId });
     const names = yield* readAccountNames(namedAccountsOf(rows));
     const tags = yield* listTaskIssueTags(
       userId,
@@ -1090,7 +1060,6 @@ export interface TaskHeader {
   readonly repository: string | null;
   /** Where the task stands. */
   readonly status: TaskStatus;
-  readonly archived: boolean;
 }
 
 /**
@@ -1111,7 +1080,6 @@ export function readTaskHeader(
       name: row.name,
       repository: row.repository,
       status: row.status,
-      archived: row.archived,
     })),
   );
 }
@@ -1158,18 +1126,8 @@ export function savePlanText(
 }
 
 /**
- * The instant an archive stands from after a change: now where it is asked
- * for, the one already standing where it already was, so asking twice moves
- * nothing, and none where it is taken away.
- */
-function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null {
-  if (!asked) return null;
-  return standing ?? now;
-}
-
-/**
- * The columns of the row the change names, its archive stamped from the one
- * standing; none where it names only a pin. A move takes `movedNumber`, the
+ * The columns of the row the change names; none where it names only a pin.
+ * A move takes `movedNumber`, the
  * next number of the workspace it moves to. A status that moves stamps when
  * the task was finished (`completedAtOf`); one asked for as it already stands
  * leaves that stamp where it was.
@@ -1196,16 +1154,13 @@ function columnChangesOf(
       : { status: changes.status, completedAt: completedAtOf(changes.status, now) }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
-    ...(changes.archived === undefined
-      ? undefined
-      : { archivedAt: stampOf(changes.archived, standing.archivedAt, now) }),
   };
 }
 
 /**
  * The reader's own pin of the plan set as asked: from now, or from the
- * instant already standing, as an archive's stamp is, at the position given
- * where one is; or taken away. Every other member's pin stands as it was.
+ * instant already standing, at the position given where one is; or taken
+ * away. Every other member's pin stands as it was.
  */
 function pinAsAsked(
   userId: string,
@@ -1279,31 +1234,10 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   );
 });
 
-/** The instant an archived task's open calls are stamped detached at: before any grace, so the sweep's next run takes them first. */
-export const HANDED_TO_SWEEP_AT = new Date(0);
-
-/**
- * Every open call on the task, whichever member opened it, handed to the
- * voice orphan sweep: stamped detached as of the epoch whether or not a
- * connection holds it, so the sweep's next run ends it on Luke's key and
- * each desktop on it hears `session.closed`; a re-attach is refused once
- * the task is archived, so nothing takes the call back.
- */
-const handTaskCallsToSweep = SqlSchema.void({
-  Request: Schema.Struct({ taskId: Schema.String, detachedAt: Schema.Date }),
-  execute: (row) =>
-    Database.use((db) =>
-      db
-        .update(voiceSessions)
-        .set({ detachedAt: row.detachedAt })
-        .where(and(eq(voiceSessions.taskId, row.taskId), isNull(voiceSessions.closedAt))),
-    ),
-});
-
 /**
  * The task's agents still standing unarchived, each with its conversation
  * locked, the lock every write of its lines and turns takes, in the
- * conversations' order, so two archives of one task never wait on each other.
+ * conversations' order, so two finishes of one task never wait on each other.
  */
 const lockStandingAgents = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String }),
@@ -1331,81 +1265,27 @@ const lockStandingAgents = SqlSchema.findAll({
 });
 
 /**
- * The task's standing agents archived with it, at the task's own stamp and
- * as the member who archived it, once the guard, where one is handed, reads
- * every one of them stopped under its conversation's lock.
- */
-const archivedAgents = Effect.fnUntraced(function* <R>(
-  userId: string,
-  taskId: string,
-  archivedAt: Date,
-  guard: TaskArchiveGuard<R> | undefined,
-) {
-  const agents = yield* lockStandingAgents({ taskId });
-  if (agents.length === 0) return;
-  if (guard !== undefined) {
-    const stopped = yield* Effect.forEach(agents, guard);
-    if (stopped.includes(false)) return yield* new TaskAgentUnstopped();
-  }
-  const archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId, withTask: true };
-  const agentIds = agents.map(({ id }) => id);
-  yield* Database.use((db) =>
-    db
-      .update(codingAgent)
-      .set({ archivedAt, archivedBy })
-      .where(and(inArray(codingAgent.id, agentIds), isNull(codingAgent.archivedAt))),
-  );
-});
-
-/** The agents the task's archive at `archivedAt` archived with it brought back with it; one archived on its own stays archived. */
-const unarchivedAgents = (taskId: string, archivedAt: Date) =>
-  Database.use((db) =>
-    db
-      .update(codingAgent)
-      .set({ archivedAt: null, archivedBy: null })
-      .where(
-        and(
-          eq(codingAgent.taskId, taskId),
-          eq(codingAgent.archivedAt, archivedAt),
-          sql`(${codingAgent.archivedBy} ->> 'withTask') = 'true'`,
-        ),
-      ),
-  );
-
-/**
  * Changes the task, a new name with its document's heading, a repository or
- * none, pinned or not, archived or not, its workspace, and answers it as
+ * none, pinned or not, its workspace, where it stands, and answers it as
  * changed, or nothing where the account reaches no such task. The changes
  * arrive already read under the wire's rules, and a repository already
  * confirmed reachable; a move runs the caller's guard under the row's lock
  * on the repository the task will name once it lands. A change is
  * not a save: the document's `updatedAt` and the list's order stand. The pin
- * is the account's own and no other member's, and a pin
- * and an archive are kept apart, so a pinned task archived and brought back
- * is pinned again. An archived task is neither renamed nor given another
- * repository, read under the same lock, unless the same change brings it
- * back; its pin and its archive still change.
- *
- * A task's archive archives its coding agents with it, under the same stamp
- * and as the member who archived the task (`archivedAgents`), and its
- * unarchive brings back those agents and no other, so one archived on its
- * own before stays archived. Where the caller hands `archiveGuard`, each
- * agent is read under its conversation's lock and the whole change refused
- * with `TaskAgentUnstopped`, nothing written, where any stands at work.
+ * is the account's own and no other member's.
  */
-export function updateTask<E = never, R = never, RA = never>(
+export function updateTask<E = never, R = never>(
   userId: string,
   taskId: string,
   changes: TaskChanges,
   moveGuard?: TaskMoveGuard<E, R>,
-  archiveGuard?: TaskArchiveGuard<RA>,
 ): Effect.Effect<
   Option.Option<Task>,
-  TaskStoreFailure | TaskArchived | TaskAgentUnstopped | TaskAssigneeNotMember | E,
-  DatabaseServices | R | RA
+  TaskStoreFailure | TaskAssigneeNotMember | E,
+  DatabaseServices | R
 > {
   return Effect.map(
-    updateTaskCommitted(userId, taskId, changes, moveGuard, archiveGuard),
+    updateTaskCommitted(userId, taskId, changes, moveGuard),
     Option.map((updated) => updated.task),
   );
 }
@@ -1415,45 +1295,27 @@ export function updateTask<E = never, R = never, RA = never>(
  * committed in, read from the write that changed the row or the reader's pin;
  * none where the change wrote neither.
  */
-export function updateTaskCommitted<E = never, R = never, RA = never>(
+export function updateTaskCommitted<E = never, R = never>(
   userId: string,
   taskId: string,
   changes: TaskChanges,
   moveGuard?: TaskMoveGuard<E, R>,
-  archiveGuard?: TaskArchiveGuard<RA>,
 ): Effect.Effect<
   Option.Option<TaskCommitted<Task>>,
-  TaskStoreFailure | TaskArchived | TaskAgentUnstopped | TaskAssigneeNotMember | E,
-  DatabaseServices | R | RA
+  TaskStoreFailure | TaskAssigneeNotMember | E,
+  DatabaseServices | R
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockTask({ userId, taskId });
         if (Option.isNone(locked)) return Option.none();
-        const stillArchived = locked.value.archivedAt !== null && changes.archived !== false;
-        const reworded =
-          changes.name !== undefined ||
-          changes.repository !== undefined ||
-          changes.organizationId !== undefined ||
-          changes.status !== undefined ||
-          changes.priority !== undefined ||
-          changes.assigneeId !== undefined;
-        if (stillArchived && reworded) return yield* new TaskArchived();
         if (changes.organizationId !== undefined && moveGuard !== undefined) {
           yield* moveGuard(
             changes.repository === undefined ? locked.value.repository : changes.repository,
           );
         }
         const now = yield* DateTime.nowAsDate;
-        const standing = locked.value.archivedAt;
-        // An archive asked again takes in an agent brought back on its own since, under the standing stamp.
-        if (changes.archived === true) {
-          yield* archivedAgents(userId, taskId, standing ?? now, archiveGuard);
-        }
-        if (changes.archived === false && standing !== null) {
-          yield* unarchivedAgents(taskId, standing);
-        }
         const pinned =
           changes.pinned === undefined
             ? Option.none()
@@ -1498,10 +1360,6 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           yield* moveTaskChat(taskId, row.organizationId);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
-        if (changes.archived !== undefined) yield* followTaskArchive(taskId, row.archivedAt);
-        if (changes.archived === true) {
-          yield* handTaskCallsToSweep({ taskId, detachedAt: HANDED_TO_SWEEP_AT });
-        }
         const changed = yield* taskOf(userId, row);
         return Option.some(txid === undefined ? { task: changed } : { task: changed, txid });
       }),
@@ -1512,8 +1370,7 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
 /**
  * Names a task that still stands as `UNTITLED_TASK_NAME`, as its first
  * coding agent's generated title does; false, and nothing written, where
- * the task has a name of its own, is archived, or is no task the account
- * reaches. A rename, like `updateTask`'s, is not a save, so the list's
+ * the task has a name of its own or is no task the account reaches. A rename, like `updateTask`'s, is not a save, so the list's
  * order and the document stand.
  */
 export function nameUntitledTask(
@@ -1669,7 +1526,7 @@ const finishTask = SqlSchema.findOneOption({
  * work is not finished stand as they were, so asking at every moment that
  * may have finished it is safe: a turn's end, a pull request first seen
  * merged, an inbox question settled. Everything is read under the task's
- * row lock, each agent under its conversation's, as an archive reads them,
+ * row lock, each agent under its conversation's,
  * so a start or a turn racing the finish either landed before the read,
  * which then refuses, or waits on the lock and reopens the task after.
  * Like any change it is not a save, so the list's order stands.

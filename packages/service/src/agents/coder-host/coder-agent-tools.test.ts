@@ -639,7 +639,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
-    task: { id: tasks.invitations, name: "Teammate invitations", archived: false },
+    task: { id: tasks.invitations, name: "Teammate invitations" },
     onYourTask: true,
     archived: true,
     mention: `[@${agents.archived.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
@@ -651,7 +651,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
-    task: { id: tasks.billing, name: "Billing", archived: false },
+    task: { id: tasks.billing, name: "Billing" },
     onYourTask: false,
     archived: false,
     mention: `[@${agents.teammates.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
@@ -698,7 +698,7 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
   assert.ok(isRecord(read.agent));
   assert.equal(read.agent.id, agents.teammates.id);
-  assert.deepEqual(read.agent.task, { id: tasks.billing, name: "Billing", archived: false });
+  assert.deepEqual(read.agent.task, { id: tasks.billing, name: "Billing" });
   assert.deepEqual(tailTexts(read), ["Ran: pnpm test", `Said: ${report}`]);
   assert.deepEqual(
     tailTexts(await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 1 })),
@@ -1261,15 +1261,6 @@ test("start_agent from another agent refuses, in words the model acts on and sta
     { from: { agentId: teammates.id }, taskId: tasks.invitations },
     R.SOURCE_OTHER_TASK,
   );
-  await database.run(
-    Effect.flatMap(Database, (db) =>
-      db
-        .update(task)
-        .set({ archivedAt: new Date(NOW) })
-        .where(eq(task.id, tasks.billing)),
-    ),
-  );
-  await refused({ from: { agentId: teammates.id } }, R.ARCHIVED);
   const sweeper = await tasklessAgentOn(teammates.userId, workspaceId);
   await saidTurnOn(sweeper, "Swept.");
   await refused({ from: { agentId: sweeper.id }, taskId: tasks.invitations }, R.SOURCE_OTHER_TASK);
@@ -1931,19 +1922,24 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       assignee: null,
       name: "Billing",
       repository: RELAY_FULL_NAME,
-      archived: false,
       pinned: false,
       mention: `[@Billing](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing})`,
     },
     already,
   });
+  // The archive stamp is read off the row itself, since the store reads it no longer.
   const standing = async () => {
     const read = Option.getOrThrow(
       await database.run(readTask(agents.teammates.userId, tasks.billing)),
     ).task;
+    const [row] = await database.run(
+      Database.use((db) =>
+        db.select({ archivedAt: task.archivedAt }).from(task).where(eq(task.id, tasks.billing)),
+      ),
+    );
     return {
       status: read.status,
-      archivedAt: read.archivedAt,
+      archivedAt: row?.archivedAt ?? undefined,
       finished: read.completedAt !== undefined,
     };
   };
@@ -2085,7 +2081,7 @@ test("update_task refuses a task of another workspace its starter is also in, a 
   ] as const;
   for (const [userId, taskId] of owners) {
     const read = Option.getOrThrow(await database.run(readTask(userId, taskId)));
-    assert.equal(read.task.archivedAt, undefined, taskId);
+    assert.equal(read.task.status, TASK_STATUS.TODO, taskId);
     assert.notEqual(read.task.name, "Mine now", taskId);
   }
 });
@@ -2473,7 +2469,7 @@ test("stop_agent stops a teammate's running agent on another task by eve's cance
       id: agents.teammates.id,
       name: agents.teammates.personaName,
       title: OPUS,
-      task: { id: tasks.billing, name: "Billing", archived: false },
+      task: { id: tasks.billing, name: "Billing" },
       onYourTask: false,
       status: CODING_AGENT_STATUS.CANCELLED,
     },
@@ -2513,7 +2509,7 @@ test("stop_agent answers an idle agent as idle and changes nothing, refuses one 
       id: agents.teammates.id,
       name: agents.teammates.personaName,
       title: OPUS,
-      task: { id: tasks.billing, name: "Billing", archived: false },
+      task: { id: tasks.billing, name: "Billing" },
       onYourTask: false,
       status: CODING_AGENT_STATUS.COMPLETED,
     },
@@ -3145,7 +3141,7 @@ test("a Codex agent lists its GPT models alone with no fast version, and update_
   assert.deepEqual([after.model, after.effort], [SOL, "low"]);
 });
 
-test("read_task reads a teammate's task of the caller's workspace with its plan as saved, an archived one too, cuts a long plan on a line, and reads no task of another workspace", async () => {
+test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, and reads no task of another workspace", async () => {
   const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -3160,8 +3156,8 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
   assert.ok(isRecord(read.task) && isRecord(read.plan));
   assert.deepEqual(
-    [read.task.name, read.task.archived, read.task.isYourTask, read.task.mention],
-    ["Billing", false, false, `[@Billing](${home}/${taskIds.billing})`],
+    [read.task.name, read.task.isYourTask, read.task.mention],
+    ["Billing", false, `[@Billing](${home}/${taskIds.billing})`],
   );
   assert.deepEqual(read.plan, { text: plan, saved: true, leftOutChars: 0 });
   const own = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.invitations });
@@ -3175,10 +3171,6 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   assert.ok(isRecord(cut.plan) && isWireString(cut.plan.text), JSON.stringify(cut).slice(0, 200));
   assert.equal(cut.plan.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.plan.leftOutChars, long.length - (line.length * 40 - 1));
-
-  await database.run(updateTask(teammates.userId, taskIds.billing, { archived: true }));
-  const archived = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
-  assert.equal(isRecord(archived.task) && archived.task.archived, true, JSON.stringify(archived));
 
   const linearIssue = {
     identifier: "REL-7",

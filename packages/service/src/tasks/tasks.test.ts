@@ -22,7 +22,7 @@ import { noDatabase } from "@luke/database/testing/no-database";
 import { planSections } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
-import type { PlanDocument } from "@luke/features/task-wire";
+import { type PlanDocument, TASK_STATUS } from "@luke/features/task-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { INVITATIONS_TEXT, makeDocumentTask } from "../testing/plan-documents.js";
@@ -126,10 +126,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
 
       assert.equal(relay.workspaceId, shared);
       assert.deepEqual(
-        (yield* listTasks(userId, { includeArchived: false })).map((task) => [
-          task.id,
-          task.workspaceId,
-        ]),
+        (yield* listTasks(userId)).map((task) => [task.id, task.workspaceId]),
         [
           [ledger.id, personal],
           [relay.id, shared],
@@ -368,7 +365,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     }),
   );
 
-  it.effect("a second account cannot pin or archive another's plan", () =>
+  it.effect("a second account cannot pin or settle another's plan", () =>
     Effect.gen(function* () {
       const owner = yield* openUser;
       const intruder = yield* openUser;
@@ -376,7 +373,10 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       const before = yield* readTask(owner, taskId);
 
       assert.equal(Option.isNone(yield* updateTask(intruder, taskId, { pinned: true })), true);
-      assert.equal(Option.isNone(yield* updateTask(intruder, taskId, { archived: true })), true);
+      assert.equal(
+        Option.isNone(yield* updateTask(intruder, taskId, { status: TASK_STATUS.DONE })),
+        true,
+      );
       assert.deepEqual(yield* readTask(owner, taskId), before);
       assert.deepEqual(
         (yield* listTasks(owner)).map(({ id }) => id),

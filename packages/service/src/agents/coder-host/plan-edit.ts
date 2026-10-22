@@ -139,8 +139,7 @@ export const PLAN_EDIT_REFUSAL = {
   UNAVAILABLE: "Not saved: the service could not reach its store.",
   NO_TASK: "Not saved: you work on no task, so there is no plan of yours to update.",
   TOO_MANY_PICTURES: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN} pictures, as many as a plan may. Leave the pictures out.`,
-  ARCHIVED:
-    "Not saved: this task is archived, so no picture can be added to its plan. Send the notes again without the pictures.",
+  TASK_GONE: "Not saved: this task no longer exists, so no picture can be added to its plan.",
   CONFLICT:
     "Not saved: none of this call's notes was taken, because one names what the plan does not hold exactly once. The plan as it stands is in current; retry from it.",
 } as const;
@@ -303,7 +302,6 @@ function picturesInSandbox(
     const stored = yield* readTaskHeader(binding.userId, binding.taskId);
     if (Option.isNone(stored)) return Result.fail(PLAN_SAVE_REFUSAL.NO_TASK);
     const task = stored.value;
-    if (task.archived) return Result.fail(PLAN_EDIT_REFUSAL.ARCHIVED);
     const workspace = yield* workspaceOf(binding.userId, task.workspaceId);
     const slug = Option.getOrUndefined(workspace)?.slug ?? task.workspaceId;
     const files = yield* readPictureFiles(pictures, sandbox);
@@ -331,7 +329,7 @@ function keptAsNotes(
         return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES) });
       }
       if (kept.status === PLAN_ATTACHMENT_KEEP.NO_TASK) {
-        return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.ARCHIVED) });
+        return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TASK_GONE) });
       }
       const address = planAttachmentAddress(
         { taskId: binding.taskId, attachmentId: kept.id },

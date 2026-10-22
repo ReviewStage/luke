@@ -68,7 +68,6 @@ import { workspaceRepository } from "../../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
-  hostedStoreOrArchived,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
@@ -942,7 +941,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
   const runtime = yield* hostedStoreOrUnavailable(startRuntimeOf(userId, ask, choice.model));
-  const started = yield* hostedStoreOrArchived(
+  const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
       automationId: ask.automationId,

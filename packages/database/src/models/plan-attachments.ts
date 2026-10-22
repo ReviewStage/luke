@@ -14,8 +14,7 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * plan-attachments.ts -- a plan's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
  *
  * A picture is kept under the plan row's own lock, so the count it is held
- * to cannot be crossed by a second upload, and an archived plan, which no
- * editor is drawn on, keeps none. Every read names the account beside the
+ * to cannot be crossed by a second upload. Every read names the account beside the
  * plan and gates on its membership of the plan's workspace, so a member
  * reads a picture a teammate pasted and a plan of a workspace the account is
  * not in reads as no plan, exactly as in `plan-store.ts`. A save stamps the
@@ -41,7 +40,7 @@ const PURGE_BATCH = 200;
 /** A plan's pictures among every attachment: the ones its task owns alone. */
 const planPicture = ownedByTaskAlone(attachment);
 
-/** The plan's id and workspace under its row's lock, where the account reaches it and it is not archived; nothing otherwise. */
+/** The plan's id and workspace under its row's lock, where the account reaches it; nothing otherwise. */
 const lockOpenTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
@@ -50,7 +49,7 @@ const lockOpenTask = SqlSchema.findOneOption({
       db
         .select({ id: task.id, organizationId: task.organizationId })
         .from(task)
-        .where(and(reachableTask(userId, taskId), isNull(task.archivedAt)))
+        .where(reachableTask(userId, taskId))
         .for("update"),
     ),
 });
@@ -160,7 +159,7 @@ const deletePictures = SqlSchema.void({
 /**
  * Keeps one picture on the plan, uploaded by the account, under a new id;
  * refused where the plan already holds its bound of pictures, and nothing
- * where the account reaches no such plan or the plan is archived.
+ * where the account reaches no such plan.
  */
 export function keepPlanAttachment(
   userId: string,

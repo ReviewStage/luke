@@ -193,11 +193,8 @@ interface ChatAddress {
   readonly threadAuthors: readonly string[];
 }
 
-/** The refusals of a steer that mean the agent is away for now: archived, or on an archived plan, either of which can be undone. */
-const GONE_REFUSALS: ReadonlySet<string> = new Set([
-  HOSTED_REFUSAL.NOT_FOUND.error,
-  HOSTED_REFUSAL.TASK_ARCHIVED.error,
-]);
+/** The refusals of a steer that mean the agent is away for now: archived, which can be undone. */
+const GONE_REFUSALS: ReadonlySet<string> = new Set([HOSTED_REFUSAL.NOT_FOUND.error]);
 
 /**
  * What sent a notice, as the row keeps it: a person by their account, and

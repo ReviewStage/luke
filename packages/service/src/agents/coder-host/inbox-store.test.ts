@@ -62,6 +62,7 @@ import {
   inboxOfLiveRows,
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
+import { TASK_STATUS } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
@@ -259,7 +260,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
             ask: { response: { type: CHAT_ASK.APPROVAL } },
           }),
         );
-        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
         const live = yield* liveAnswerOf(owner, held.readAt);
         assert.deepEqual({ ...live, cursor: held.cursor }, held);
         const fromOf = new Map(held.chat?.map((entry) => [entry.messageId, entry.from]));
@@ -361,7 +362,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
         // Read by the agent's starter and not by the teammate, so the two read it apart.
         assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.success.id));
-        // A second task of the starter's holding an item, archived, which the Inbox's Archived tab lists.
+        // A second task of the starter's holding an item, settled, which the Inbox lists like any other.
         const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
         const shelvedAgent = yield* createCodingAgent(onTask.agent.userId, {
           taskId: shelved.id,
@@ -385,7 +386,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
             ),
           ),
         );
-        yield* updateTask(onTask.agent.userId, shelved.id, { archived: true });
+        yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
 
         // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
         // posts in its channel, a direct message to the teammate they were told of, and the
@@ -444,8 +445,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
 
         for (const reader of [owner, taskless.userId, teammate, outsider]) {
-          // Every desktop that follows live asks for the archived tasks too.
-          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START, { archived: true });
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
           const live = yield* liveAnswerOf(reader, held.readAt);
           // Each read keeps a cursor of its own, which the other never reads.
           assert.deepEqual({ ...live, cursor: held.cursor }, held);
@@ -453,11 +453,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const shelvedRead = yield* liveAnswerOf(onTask.agent.userId, 0);
         assert.ok(
           shelvedRead.plans.some((plan) => plan.planId === shelved.id),
-          "the archived task is listed",
+          "the settled task is listed",
         );
         assert.ok(
-          shelvedRead.items.every((item) => item.planId !== shelved.id),
-          "its item waits nowhere",
+          shelvedRead.items.some((item) => item.planId === shelved.id),
+          "its item waits like any other",
         );
         // The notices name their sender by the human name it was given.
         const [authorRow] = yield* Database.use((db) =>
@@ -468,7 +468,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         const author = authorRow?.personaName;
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
-        assert.equal(read.items.length + (read.planless?.length ?? 0), 3);
+        assert.equal(read.items.length + (read.planless?.length ?? 0), 4);
         const unreadOf = (answer: typeof read) =>
           answer.items.find((item) => item.id === first.success.id)?.unread;
         assert.equal(unreadOf(read), true, "the teammate has not read it");
@@ -574,12 +574,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
 
         for (const reader of [owner, teammate]) {
-          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START, { archived: true });
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
           const live = yield* liveAnswerOf(reader, held.readAt);
           assert.deepEqual({ ...live, cursor: held.cursor }, held);
           assert.notEqual(live.cursor, "", "the live cursor is a digest");
         }
-        const read = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        const read = yield* accountInboxPast(owner, INBOX_CURSOR_START);
         assert.deepEqual(
           read.items.map((item) => item.id).toSorted(),
           [asking.id, notice.id].toSorted(),
@@ -1523,7 +1523,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
   );
 
   it.effect(
-    "each task the account's read lists counts what is the reader's to do, their own open or unread items on a task not archived, alike live and held, its held read waking as a settled one is read or written on again, and no one counts another's",
+    "each task the account's read lists counts what is the reader's to do, their own open or unread items, settled task's among them, alike live and held, its held read waking as a settled one is read or written on again, and no one counts another's",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1570,26 +1570,26 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         }
         yield* TestClock.adjust(Duration.seconds(1));
         assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "One more thing.")));
-        // A teammate's agent asks on the same task, and an archived task holds the owner's unread item.
+        // A teammate's agent asks on the same task, and a settled task holds the owner's open item.
         yield* postedId(teammates, "theirs");
         yield* postedId(shelvedAgent, "shelved");
-        yield* updateTask(owner, shelved.id, { archived: true });
+        yield* updateTask(owner, shelved.id, { status: TASK_STATUS.DONE });
 
         const toDoOf = (answer: { readonly plans: readonly AccountInboxTask[] }) =>
           new Map(answer.plans.map((plan) => [plan.planId, plan.toDo]));
         for (const reader of [owner, teammate, stranger]) {
-          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START, { archived: true });
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
           const live = yield* liveAnswerOf(reader, held.readAt);
           assert.deepEqual({ ...live, cursor: held.cursor }, held);
         }
-        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
         assert.deepEqual(
           toDoOf(held),
           new Map([
             [taskId, 3],
-            [shelved.id, 0],
+            [shelved.id, 1],
           ]),
-          "the ask, the notice, and the thread written on again; never the archived task's",
+          "the ask, the notice, and the thread written on again; and the settled task's open item",
         );
         assert.equal(
           toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
@@ -1600,13 +1600,13 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
 
         // Reading the settled thread wakes the held read, and it is the owner's to do no longer.
         yield* markInboxItemRead(owner, followed);
-        const read = yield* accountInboxPast(owner, held.cursor, { archived: true });
+        const read = yield* accountInboxPast(owner, held.cursor);
         assert.notEqual(read.cursor, held.cursor);
         assert.equal(toDoOf(read).get(taskId), 2);
         // Its agent writing on it again wakes it once more.
         yield* TestClock.adjust(Duration.seconds(1));
         assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "And another.")));
-        const written = yield* accountInboxPast(owner, read.cursor, { archived: true });
+        const written = yield* accountInboxPast(owner, read.cursor);
         assert.notEqual(written.cursor, read.cursor);
         assert.equal(toDoOf(written).get(taskId), 3);
         assert.equal(
@@ -1651,7 +1651,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         );
         yield* postedId(agent, "open");
 
-        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
         const live = yield* liveAnswerOf(owner, held.readAt);
         assert.deepEqual({ ...live, cursor: held.cursor }, held);
         assert.deepEqual(

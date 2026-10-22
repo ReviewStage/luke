@@ -6028,7 +6028,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "the account's inbox answers every open item across its plans with the agent that posted it, and leaves out settled items, an archived plan's, and another account's",
+    "the account's inbox answers every open item across its plans with the agent that posted it, a settled plan's among them, and leaves out settled items and another account's",
     () =>
       Effect.gen(function* () {
         const { owner, other, agent, ask, post, waiting } = yield* openInbox();
@@ -6069,10 +6069,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ].sort(),
         );
 
-        yield* updateTask(owner, second.id, { archived: true });
+        yield* updateTask(owner, second.id, { status: TASK_STATUS.DONE });
         assert.deepEqual(
-          (yield* waiting()).items.map((item) => item.title),
-          [QUESTION.title],
+          (yield* waiting()).items.map((item) => item.title).sort(),
+          [QUESTION.title, "CSV or JSON?"].sort(),
         );
         assert.deepEqual((yield* waiting(undefined, other)).items, []);
         assert.deepEqual(
@@ -6083,7 +6083,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "an archived plan's items are put away with it: its open item waits nowhere, the plan is listed among those holding items only where archived=include asks, an answer to the item is refused as archived, and unarchiving brings the item back as it stood",
+    "an older build's archive of a plan settles it and puts nothing away: its open item still waits and takes an answer, and its archived=include on the account's inbox is taken and changes nothing",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, post, answer, waiting } = yield* openInbox();
@@ -6094,36 +6094,32 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             ask(request(ACCOUNT_INBOX, owner, { archived: ACCOUNT_INBOX_ARCHIVED.INCLUDE })),
             (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
-        assert.deepEqual(
-          (yield* archivedToo()).plans.map((plan) => plan.planId),
-          [task.id],
-        );
 
-        yield* updateTask(owner, task.id, { archived: true });
+        yield* updateTask(owner, task.id, { status: TASK_STATUS.DONE });
         const standing = yield* waiting();
-        assert.deepEqual(standing.items, []);
-        assert.deepEqual(standing.plans, []);
-        const included = yield* archivedToo();
-        assert.deepEqual(included.items, [], "an archived plan's open item still waits on nobody");
         assert.deepEqual(
-          included.plans.map((plan) => [plan.planId, plan.items]),
+          standing.items.map((item) => [item.id, item.revision]),
+          [[posted.success.id, posted.success.revision]],
+        );
+        assert.deepEqual(
+          standing.plans.map((plan) => [plan.planId, plan.items]),
           [[task.id, 1]],
         );
+        const included = yield* archivedToo();
         assert.deepEqual(
-          yield* answer(posted.success.id, {
+          { ...included, cursor: standing.cursor, readAt: standing.readAt },
+          standing,
+        );
+        assert.equal(
+          (yield* answer(posted.success.id, {
             revision: posted.success.revision,
             clientKey: randomUUID(),
             reply: INBOX_REPLY.ANSWERED,
             note: "Keep it short.",
-          }),
-          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+          })).status,
+          HOSTED_HTTP_STATUS.OK,
         );
-
-        yield* updateTask(owner, task.id, { archived: false });
-        assert.deepEqual(
-          (yield* waiting()).items.map((item) => [item.id, item.revision]),
-          [[posted.success.id, posted.success.revision]],
-        );
+        assert.deepEqual((yield* waiting()).items, []);
       }),
   );
 

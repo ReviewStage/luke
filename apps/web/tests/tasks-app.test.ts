@@ -721,7 +721,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
           HOSTED_HTTP_STATUS.OK,
           yield* patch(owner, { archived: true }),
         ).plan;
-        assert.deepEqual([settled.status, settled.archivedAt], [TASK_STATUS.DONE, undefined]);
+        assert.equal(settled.status, TASK_STATUS.DONE);
+        assert.equal("archivedAt" in settled, false, "no archive is answered");
         assert.equal(
           readAnswer(
             taskAnswerSchema,

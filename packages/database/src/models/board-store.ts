@@ -12,7 +12,7 @@ import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { task, taskBoard } from "../schemas/task.js";
-import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./task-store.js";
+import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { reachableTask, taskSeenBy } from "./workspace-store.js";
 
 /**
@@ -93,19 +93,18 @@ const LiveMarkSchema = Schema.Struct({
 type LiveMark = typeof LiveMarkSchema.Type;
 
 /**
- * The task's id, whether it is archived, and where its board's live row
- * stands, under the task row's lock until the transaction ends; nothing
- * where the account reaches no such task.
+ * The task's id and where its board's live row stands, under the task
+ * row's lock until the transaction ends; nothing where the account reaches
+ * no such task.
  */
 const lockTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean, ...LiveMarkSchema.fields }),
+  Result: Schema.Struct({ id: Schema.String, ...LiveMarkSchema.fields }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .select({
           id: task.id,
-          archived: sql<boolean>`${task.archivedAt} is not null`,
           appliedDrawing: taskBoard.appliedDrawing,
           imaged: sql<
             boolean | null
@@ -202,16 +201,13 @@ function boardOf(row: BoardRow): Board {
 }
 
 /**
- * Runs one write under the task row's lock, handed whether the task is
- * archived as the lock read it; nothing where the account reaches no such task.
+ * Runs one write under the task row's lock, handed where the board's live
+ * row stood as the lock read it; nothing where the account reaches no such task.
  */
 function underTaskLock<A, E>(
   userId: string,
   taskId: string,
-  write: (
-    now: Date,
-    locked: { readonly archived: boolean; readonly mark: LiveMark },
-  ) => Effect.Effect<A, E, DatabaseServices>,
+  write: (now: Date, locked: { readonly mark: LiveMark }) => Effect.Effect<A, E, DatabaseServices>,
 ) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -219,8 +215,8 @@ function underTaskLock<A, E>(
         const locked = yield* lockTask({ userId, taskId });
         if (Option.isNone(locked)) return Option.none<A>();
         const now = yield* DateTime.nowAsDate;
-        const { archived, appliedDrawing, imaged } = locked.value;
-        return Option.some(yield* write(now, { archived, mark: { appliedDrawing, imaged } }));
+        const { appliedDrawing, imaged } = locked.value;
+        return Option.some(yield* write(now, { mark: { appliedDrawing, imaged } }));
       }),
     ),
   );
@@ -255,9 +251,7 @@ export function readBoardImage(
  * confirms the save, as Neon's guide to optimistic mutations has it. A save
  * that leaves that row as it stood, such as one moving only the scene's
  * elements, answers none, since no follower would ever see its
- * transaction. An archived task takes no scene of the developer's, read
- * under the same lock, while a drawing of Luke's on a call that stood when
- * it was archived still lands.
+ * transaction.
  */
 export function writeScene(
   userId: string,
@@ -267,23 +261,20 @@ export function writeScene(
   image?: string,
 ): Effect.Effect<
   Option.Option<{ readonly board: Board; readonly txid?: string }>,
-  TaskStoreFailure | TaskArchived,
+  TaskStoreFailure,
   DatabaseServices
 > {
-  return underTaskLock(userId, taskId, (now, { archived, mark }) =>
-    Effect.andThen(
-      archived ? Effect.fail(new TaskArchived()) : Effect.void,
-      upsertScene(
-        elements,
-        image,
-      )({ taskId, appliedDrawing, now }).pipe(
-        Effect.catchTag("NoSuchElementError", Effect.die),
-        Effect.map((row) => {
-          const board = boardOf(row);
-          const moved = mark.appliedDrawing !== row.appliedDrawing || mark.imaged !== row.imaged;
-          return moved ? { board, txid: row.txid } : { board };
-        }),
-      ),
+  return underTaskLock(userId, taskId, (now, { mark }) =>
+    upsertScene(
+      elements,
+      image,
+    )({ taskId, appliedDrawing, now }).pipe(
+      Effect.catchTag("NoSuchElementError", Effect.die),
+      Effect.map((row) => {
+        const board = boardOf(row);
+        const moved = mark.appliedDrawing !== row.appliedDrawing || mark.imaged !== row.imaged;
+        return moved ? { board, txid: row.txid } : { board };
+      }),
     ),
   );
 }

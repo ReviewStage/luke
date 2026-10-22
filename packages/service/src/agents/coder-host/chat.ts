@@ -761,7 +761,7 @@ function postedLine(
 
 /**
  * Whether the agent is away from the chat: archived itself, or on a task
- * that is archived or that its starter no longer reaches. A post from one
+ * its starter no longer reaches. A post from one
  * is refused, since it speaks for work no one is doing; its member is not
  * stamped as having left, because an archive can be undone. Note that an
  * agent gone for good never posts here: deleting its task deletes it, and
@@ -776,7 +776,7 @@ export function agentAway(
     if (agent.archivedAt !== null) return true;
     if (agent.taskId === null) return false;
     const task = yield* readTaskHeader(userId, agent.taskId);
-    return Option.match(task, { onNone: () => true, onSome: (held) => held.archived });
+    return Option.isNone(task);
   });
 }
 
