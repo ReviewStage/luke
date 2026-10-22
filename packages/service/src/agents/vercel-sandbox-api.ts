@@ -409,13 +409,14 @@ export interface VercelSandboxApi {
     commandId: string,
   ) => Effect.Effect<CommandExit, SandboxUnavailable>;
   /**
-   * What a command that exited printed on stderr, the tail kept and every
-   * token-shaped run redacted, for a log; none where Vercel has none or did
-   * not answer in time.
+   * What a command that exited printed on stderr, the tail kept, every value
+   * named in `secrets` and every token-shaped run redacted, for a log; none
+   * where Vercel has none or did not answer in time.
    */
   readonly commandStderrTail: (
     sandboxSessionId: string,
     commandId: string,
+    secrets?: readonly string[],
   ) => Effect.Effect<string | undefined>;
   /** Ends a command with SIGTERM; one already gone counts as ended. */
   readonly kill: (
@@ -606,9 +607,12 @@ function capped(text: string): string {
 /** How much of a dead command's stderr a log keeps: its end, where the reason it died is written. */
 const STDERR_TAIL_CHARS = 600;
 
-/** A stderr's tail as a log keeps it: every token-shaped run redacted, then its last `STDERR_TAIL_CHARS` on one line. */
-function stderrTail(stderr: string): string {
-  const said = stderr.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim();
+/** A stderr's tail as a log keeps it: every value named in `secrets`, whatever its shape, then every token-shaped run redacted, then its last `STDERR_TAIL_CHARS` on one line. */
+function stderrTail(stderr: string, secrets: readonly string[]): string {
+  const named = secrets
+    .filter((secret) => secret.length > 0)
+    .reduce((said, secret) => said.split(secret).join(REDACTED_DETAIL), stderr);
+  const said = named.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim();
   return said.length > STDERR_TAIL_CHARS ? `…${said.slice(-STDERR_TAIL_CHARS)}` : said;
 }
 
@@ -1375,7 +1379,7 @@ export function vercelSandboxApi(
           }
           return read.success.command.exitCode;
         }),
-      commandStderrTail: (sandboxSessionId, commandId) =>
+      commandStderrTail: (sandboxSessionId, commandId, secrets = []) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.LOGS);
           const url = apiUrl(
@@ -1400,7 +1404,7 @@ export function vercelSandboxApi(
               stderr += String(each.success.data);
             }
           }
-          return stderr === "" ? undefined : stderrTail(stderr);
+          return stderr === "" ? undefined : stderrTail(stderr, secrets);
         }).pipe(Effect.orElseSucceed(() => undefined)),
       kill: (sandboxSessionId, commandId) =>
         Effect.gen(function* () {

@@ -257,14 +257,21 @@ const LAUNCH_SCRIPT = [
  * A launch whose stdin was refused, said in the log by how its command
  * ended: its exit code where Vercel has one, and the tail of its stderr,
  * every token-shaped run redacted (`commandStderrTail`), since a runner that
- * dies before it reads its config says why there alone.
+ * dies before it reads its config says why there alone. Every value the
+ * launch handed it in its environment is redacted too, whatever its shape,
+ * so neither its credential nor its bearer can reach the log.
  */
-const diedAtStart = (api: VercelSandboxApi, sandboxSessionId: string, commandId: string) =>
+const diedAtStart = (
+  api: VercelSandboxApi,
+  sandboxSessionId: string,
+  commandId: string,
+  secrets: readonly string[],
+) =>
   Effect.gen(function* () {
     const exit = yield* api
       .commandExit(sandboxSessionId, commandId)
       .pipe(Effect.orElseSucceed(() => undefined));
-    const stderr = yield* api.commandStderrTail(sandboxSessionId, commandId);
+    const stderr = yield* api.commandStderrTail(sandboxSessionId, commandId, secrets);
     yield* Effect.logWarning(
       `A runner's launch took no stdin: exit ${exit === null || exit === undefined ? "unknown" : String(exit)}, stderr: ${stderr ?? "none"}`,
     );
@@ -642,7 +649,14 @@ export const runnerSessions = <
           const config = yield* harness.config(agent, resume, firstSequence);
           yield* api
             .writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`)
-            .pipe(Effect.tapError(() => diedAtStart(api, sandbox.running, commandId)));
+            .pipe(
+              Effect.tapError(() =>
+                diedAtStart(api, sandbox.running, commandId, [
+                  ...Object.values(credential.env),
+                  bearer,
+                ]),
+              ),
+            );
         }).pipe(
           Effect.tapError(() =>
             Effect.ignore(
