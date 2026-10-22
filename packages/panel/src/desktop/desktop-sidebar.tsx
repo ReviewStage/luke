@@ -14,6 +14,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  AVATAR_SIZE,
   BUTTON_SIZE,
   Button,
   ComposeIcon,
@@ -26,6 +27,8 @@ import {
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -715,7 +718,9 @@ function PinnedSection({
       />
       {drawn.length === 0 ? (
         folded ? null : (
-          <p className="sidebar-section-empty">Drag tasks here to pin them</p>
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
+          </div>
         )
       ) : (
         <PinnedRows
@@ -832,6 +837,7 @@ function RepositorySection({
               repository={repository}
               pictures={context.tasks.repositories.pictures}
               fallback={<FolderIcon />}
+              size={AVATAR_SIZE.GLYPH}
             />
           )
         }

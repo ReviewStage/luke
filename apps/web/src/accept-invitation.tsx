@@ -5,12 +5,12 @@ import {
   type InvitationAcceptQuery,
   invitationAcceptQuery,
 } from "@luke/features/workspace-invitation-wire";
-import { AuthPage, BUTTON_VARIANT, Button } from "@luke/ui";
+import { AuthPage, BUTTON_VARIANT, Button, SocialSignInCard } from "@luke/ui";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
+import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 /**
@@ -168,17 +168,20 @@ function descriptionOf(view: View): string | undefined {
 }
 
 /**
- * The card a sign-in is asked for on, with a button for every provider. A
- * sign-in that cannot start is said in the card's alert region. The choices'
- * state is this card's, so it ends with the card: a session that comes and
- * goes in another tab brings the card back without an earlier failure.
+ * The card a sign-in is asked for on. The choices' state is this card's, so it
+ * ends with the card: a session that comes and goes in another tab brings the
+ * card back without an earlier failure.
  */
 function SignInCard({ title, body }: { title: string; body: string }): React.JSX.Element {
   const { pending, failed, begin } = useSocialSignIn(authClient);
   return (
-    <AuthPage title={title} description={body} error={failed ? SIGN_IN_FAILURE : undefined}>
-      <ProviderChoices pending={pending} onPress={begin} />
-    </AuthPage>
+    <SocialSignInCard
+      title={title}
+      description={body}
+      pending={pending}
+      failed={failed}
+      onPress={begin}
+    />
   );
 }
 

@@ -1485,7 +1485,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex, and API key runs on eve on the OpenAI API key, and the Start is refused where none was saved",
+      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex on the plan, and API key on Codex on the OpenAI API key, and the Start is refused where none was saved",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1510,14 +1510,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
               model: "openai/gpt-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
-            },
-            {
-              name: "API key, a fast version on eve",
-              forAgents: false,
-              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
-              model: "openai/gpt-5.5-fast",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["codex", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "the plan off, only an Anthropic API key saved",
@@ -1575,7 +1568,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before",
+      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before, Codex running it on its fast tier",
       () =>
         Effect.gen(function* () {
           for (const forAgents of [true, false]) {

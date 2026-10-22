@@ -105,10 +105,10 @@ function shell(room: string, overlay: string): HTMLElement {
                     className: "desktop-toolbar-heading main-tabs",
                     children: [
                       {
-                        className: "tab-strip",
+                        className: "luke-tabs",
                         children: [
-                          { className: "tab", data: { selected: "true" } },
-                          { className: "tab", data: { selected: "false" } },
+                          { className: "luke-tab", data: { selected: "true" } },
+                          { className: "luke-tab", data: { selected: "false" } },
                         ],
                       },
                       {
@@ -143,8 +143,8 @@ for (const [where, room, overlay, touch] of [
     const sidebar = the(".desktop-sidebar");
     for (const selector of [
       ".desktop-toolbar",
-      ".tab-strip",
-      '.tab[data-selected="true"]',
+      ".luke-tabs",
+      '.luke-tab[data-selected="true"]',
       ".tab-add-menu",
     ]) {
       assert.ok(over(sidebar, the(selector), root), `the sidebar draws over ${selector}`);

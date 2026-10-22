@@ -33,6 +33,7 @@ import {
   IconButton,
   LINE_BUTTON_LOOK,
   LineButton,
+  MenuSurface,
   SCROLL_FADE,
   ScrollArea,
   SUBMIT_STATE,
@@ -1616,8 +1617,8 @@ export function PlanCommentLayer({
     );
   const bubbleDrawn =
     bubble === undefined ? null : (
-      <div
-        className="comment-bubble menu-surface"
+      <MenuSurface
+        className="comment-bubble"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
@@ -1626,7 +1627,7 @@ export function PlanCommentLayer({
             {COMMENT_WORDS.COMMENT}
           </Button>
         </Tooltip>
-      </div>
+      </MenuSurface>
     );
   if (wide) {
     return (

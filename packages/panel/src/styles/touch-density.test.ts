@@ -222,9 +222,9 @@ function closes(): ReadonlyMap<string, Element> {
   const compact = (label: string) =>
     createElement(IconButton, { icon: "×", label, size: BUTTON_SIZE.COMPACT });
   const tab = document.body.appendChild(document.createElement("div"));
-  tab.className = "tab";
+  tab.className = "luke-tab";
   tab.dataset.marked = "false";
-  const close = drawn(compact("Close Plan"), "tab-close");
+  const close = drawn(compact("Close Plan"), "luke-tab-close");
   tab.append(close);
   const toast = document.body.appendChild(document.createElement("li"));
   toast.className = "toast";

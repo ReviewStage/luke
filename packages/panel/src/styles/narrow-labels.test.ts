@@ -12,7 +12,7 @@ import { layContainersAt, shown } from "../testing/container-width.js";
  * keeps its label and the strip scrolls instead. jsdom lays nothing out, so
  * the sheets are laid for a tab container that narrow
  * (`testing/container-width.ts`) and the strip is built in the markup
- * `tab-strip.tsx` draws. An Inbox item's crumbs, squeezed beside its bar's
+ * `@luke/ui`'s Tabs draws, folding as `tab-strip.tsx` tells it for the room. An Inbox item's crumbs, squeezed beside its bar's
  * buttons to a glyph and a letter, take a line of their own there, and Start
  * keeps its word rather than folding to ▶. A sent message's byline, ending
  * at the bubble's right edge, cuts a long sender short rather than pushing
@@ -30,25 +30,27 @@ afterEach(() => {
 
 /** A strip of two tabs in a shell of the room given, the first chosen, each 62px wide, answering the second's label. */
 function unchosenLabel(room: string): HTMLElement {
-  laid = layContainersAt({ tab: 62 }, { touch: room === "narrow" });
+  laid = layContainersAt({ "luke-tab": 62 }, { touch: room === "narrow" });
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
   const strip = shell.appendChild(document.createElement("div"));
-  strip.className = "tab-strip";
+  strip.className = "luke-tabs";
+  // The strip folds as the room says (`tab-strip.tsx`): to labels in a narrow one, to glyphs otherwise.
+  strip.dataset.fold = room === "narrow" ? "label" : "glyph";
   const labels = ["Call", "Refresh tokens before expiry"].map((name, at) => {
     const tab = strip.appendChild(document.createElement("div"));
-    tab.className = "tab";
+    tab.className = "luke-tab";
     tab.dataset.selected = String(at === 0);
     const button = tab.appendChild(document.createElement("span"));
-    button.className = "tab-button";
+    button.className = "luke-tab-button";
     button.setAttribute("role", "tab");
     const label = button.appendChild(document.createElement("span"));
-    label.className = "tab-label";
+    label.className = "luke-tab-label";
     label.textContent = name;
     tab.dataset.closable = "true";
     tab.dataset.marked = "false";
-    tab.appendChild(document.createElement("span")).className = "tab-close";
+    tab.appendChild(document.createElement("span")).className = "luke-tab-close";
     return label;
   });
   return labels[1] ?? assert.fail("the second tab's label");
@@ -57,7 +59,8 @@ function unchosenLabel(room: string): HTMLElement {
 test("in a narrow room a tab other than the chosen one keeps its label however narrow it stands, its × giving the label its place", () => {
   const label = unchosenLabel("narrow");
   assert.ok(shown(label));
-  const close = label.closest(".tab")?.querySelector(".tab-close") ?? assert.fail("its ×");
+  const close =
+    label.closest(".luke-tab")?.querySelector(".luke-tab-close") ?? assert.fail("its ×");
   assert.equal(getComputedStyle(close).visibility, "hidden");
 });
 

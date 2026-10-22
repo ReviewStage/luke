@@ -17,7 +17,10 @@
     gap: var(--luke-space-4);
     max-width: 100%;
     padding: var(--luke-space-2) var(--luke-space-8);
-    border-radius: var(--luke-radius-full);
+    /* Note that the corners are half a one-line badge's height rather than
+       a full round, so a badge that does wrap stands as a rounded box
+       rather than a bubble, while one on a line is the same capsule. */
+    border-radius: calc(var(--luke-type-caption-leading) / 2 + var(--luke-space-2));
     /* Note that the hairline is drawn inside, because a border would make
        the badge a step taller than the compact chip it stands beside. */
     background: var(--luke-color-chip);

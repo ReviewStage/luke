@@ -471,22 +471,6 @@
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
-/* The crumb's glyph stands in a row glyph's column, muted beside its words. */
-.mention-menu-crumb-glyph {
-  display: inline-flex;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.mention-menu-crumb-glyph svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-}
-
 /* A folder's path too long for the crumb is cut short. */
 .mention-menu-crumb-title {
   min-width: 0;
@@ -6093,7 +6077,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .reply-to-selection {
   position: fixed;
   z-index: var(--luke-z-menu);
-  padding: var(--luke-space-2);
   translate: -50% -100%;
 }
 
@@ -6521,15 +6504,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The shells' rows, inside the `ScrollArea` that scrolls them. */
 .terminal-shells-rows {
   padding: var(--luke-space-4);
-}
-
-.terminal-shells-none {
-  flex: 1;
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* The list's room while no read has listed the shells: the blocks standing

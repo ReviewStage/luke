@@ -17,6 +17,7 @@ import {
   Card,
   ConfirmDialog,
   type DialogQuestion,
+  EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
@@ -440,14 +441,14 @@ function TemplateState({
 }): React.JSX.Element {
   if (!signedIn) {
     return (
-      <div className="desktop-empty">
-        <p>{PAGE_LINE.SIGNED_OUT}</p>
+      <div className="desktop-empty-region">
+        <EmptyState>{PAGE_LINE.SIGNED_OUT}</EmptyState>
       </div>
     );
   }
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
-      <div className="desktop-empty">
+      <div className="desktop-empty-region">
         <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {PAGE_LINE.READ_FAILED}
         </ErrorState>

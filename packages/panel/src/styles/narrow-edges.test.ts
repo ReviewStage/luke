@@ -84,7 +84,7 @@ function pixels(element: Element, length: string): number {
 function shell(room: string): void {
   const bar = (className: string, tabs: string, actions: string): Piece => ({
     className,
-    children: [{ className: tabs, children: [{ className: "tab-strip" }] }, { className: actions }],
+    children: [{ className: tabs, children: [{ className: "luke-tabs" }] }, { className: actions }],
   });
   built(document.body, {
     className: "desktop-shell",
@@ -138,7 +138,7 @@ test("in a narrow room a task's tabs take a row of their own under the bar's but
       "auto",
       `${name}'s buttons stand at its end`,
     );
-    assert.equal(getComputedStyle(the(`${tabsSelector} .tab-strip`)).overflowX, "auto");
+    assert.equal(getComputedStyle(the(`${tabsSelector} .luke-tabs`)).overflowX, "auto");
   }
 });
 

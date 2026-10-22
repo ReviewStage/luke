@@ -2148,14 +2148,16 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   const billing = Option.getOrThrow(
     await database.run(readTask(agents.teammates.userId, tasks.billing)),
   );
-  const answered = (status: string, already: boolean) => ({
+  // An unarchive moves the task into progress, which assigns the caller's member a task no one was on.
+  const assignee = `[@Test User](https://tryluke.dev/workspace-${workspaceId}/person/${agents.caller.userId})`;
+  const answered = (status: string, already: boolean, assigned: string | null = null) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
     task: {
       id: tasks.billing,
       key: `TW-${billing.task.number}`,
       status,
       priority: TASK_PRIORITY.NONE,
-      assignee: null,
+      assignee: assigned,
       name: "Billing",
       repository: RELAY_FULL_NAME,
       pinned: false,
@@ -2210,7 +2212,10 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   );
   assert.deepEqual(await archive(true, "call-2"), answered(TASK_STATUS.CANCELED, true));
 
-  assert.deepEqual(await archive(false, "call-3"), answered(TASK_STATUS.IN_PROGRESS, false));
+  assert.deepEqual(
+    await archive(false, "call-3"),
+    answered(TASK_STATUS.IN_PROGRESS, false, assignee),
+  );
   assert.deepEqual(await standing(), {
     status: TASK_STATUS.IN_PROGRESS,
     archivedAt: undefined,
@@ -2230,12 +2235,12 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       mergedAt: NOW,
     }),
   );
-  assert.deepEqual(await archive(true, "call-4"), answered(TASK_STATUS.DONE, false));
+  assert.deepEqual(await archive(true, "call-4"), answered(TASK_STATUS.DONE, false, assignee));
   // A task already settled keeps its status under an archive asked again.
   await database.run(
     updateTask(agents.teammates.userId, tasks.billing, { status: TASK_STATUS.CANCELED }),
   );
-  assert.deepEqual(await archive(true, "call-5"), answered(TASK_STATUS.CANCELED, true));
+  assert.deepEqual(await archive(true, "call-5"), answered(TASK_STATUS.CANCELED, true, assignee));
 });
 
 test("update_task renames a task, pins it for the caller's starter alone, sets its repository only where the workspace's installation reaches it and clears it, and renames the caller's own task, as the member's menu does", async () => {

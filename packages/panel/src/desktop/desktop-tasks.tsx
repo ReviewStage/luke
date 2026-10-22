@@ -5,7 +5,6 @@ import type { TaskStanding } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  Button,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -14,6 +13,7 @@ import {
   Skeleton,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
+import { searchTokens } from "@luke/ui/search-tokens";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
@@ -37,7 +37,13 @@ import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
+import {
+  InboxList,
+  InboxListSkeleton,
+  ItemMark,
+  SearchEmpty,
+  ShowEmpty,
+} from "../tasks/inbox-list.js";
 import {
   firstChoice,
   INBOX_GROUPING,
@@ -272,7 +278,8 @@ const NO_FOLDS = () => false;
  * once its way back is taken, as the window's Inbox does
  * (`inbox-columns.ts`); holding one item, it is that item, with no list to
  * go back to. K and J, and the pager where the item stands alone, step
- * through the list (`inbox-pager.tsx`).
+ * through the list (`inbox-pager.tsx`). Its head's magnifier searches the
+ * list as the window's Inbox's does, the item shown keeping its place.
  */
 function TaskInboxTab({
   tasks,
@@ -308,9 +315,14 @@ function TaskInboxTab({
   });
   const items = groups.flatMap((group) => group.items);
   const counts = inboxCounts(groups, tasks.me);
+  // The list's search, as the window's Inbox holds it, which narrows what it lists, never what it counts.
+  const [query, setQuery] = useState("");
+  const search = searchTokens(query);
+  const searched = search.length > 0 ? query : undefined;
   const filter = {
     grouping: INBOX_GROUPING.NONE,
     show: show.show,
+    search,
     readerId: tasks.me,
   };
   // Note that the tab stands in the side panel, so it is on screen while the panel is.
@@ -322,7 +334,11 @@ function TaskInboxTab({
   const chosen = listedItems(steps).find(({ item }) => item.id === asked) ?? firstChoice(list);
   // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
   if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
-  const filteredOut = show.show !== INBOX_SHOW.ALL && listed.length === 0 && items.length > 0;
+  const filteredOut =
+    searched === undefined &&
+    show.show !== INBOX_SHOW.ALL &&
+    listed.length === 0 &&
+    items.length > 0;
   // Note that the way back counts every item, filtered out or not, since the list holds the view's menu.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
   const choose = ({ item }: InboxListed) => setAsked(item.id);
@@ -376,6 +392,7 @@ function TaskInboxTab({
           shown,
           show,
           view: undefined,
+          search: { query, onQuery: setQuery },
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
@@ -386,6 +403,8 @@ function TaskInboxTab({
             <div className="sidebar-note">
               <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>
             </div>
+          ) : inbox.read && searched !== undefined && listed.length === 0 ? (
+            <SearchEmpty searched={searched} />
           ) : inbox.read && filteredOut ? (
             <ShowEmpty show={show} counts={counts} onList={columns.onList} />
           ) : inbox.read && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
@@ -405,8 +424,8 @@ function TaskInboxTab({
         >
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
           <header className="desktop-toolbar" />
-          {/* Note that the list says what its tab left out, so the pane beside it stands bare. */}
-          {inbox.read && listed.length === 0 && !filteredOut ? (
+          {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
+          {inbox.read && listed.length === 0 && !filteredOut && searched === undefined ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null}
         </section>
@@ -840,17 +859,18 @@ function PlanDocument({
         {region.kind === DOCUMENT_REGION.MISSING ? (
           <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
         ) : (
-          <section className="desktop-empty">
+          <section className="desktop-empty-region">
             {region.kind === DOCUMENT_REGION.FAILED ? (
-              <ErrorState onRetry={tasks.onRetryDocument} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+              <ErrorState
+                onRetry={tasks.onRetryDocument}
+                placement={ERROR_STATE_PLACEMENT.CENTRED}
+                exit={close}
+              >
                 {line}
               </ErrorState>
             ) : (
-              <p role="alert">{line}</p>
+              <EmptyState>{line}</EmptyState>
             )}
-            {region.kind === DOCUMENT_REGION.FAILED ? (
-              <Button onClick={close.onClick}>{close.label}</Button>
-            ) : null}
           </section>
         )}
       </>

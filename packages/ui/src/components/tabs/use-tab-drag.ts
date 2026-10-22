@@ -14,7 +14,7 @@
  * as a click and never moved, nor passed.
  *
  * The drag is drawn on the tabs' own `transform` and nothing else, and the
- * stylesheet (desktop.css) times every slide from the motion tokens, so
+ * stylesheet (tabs.css) times every slide from the motion tokens, so
  * reduced motion and a capture run hold it still as they hold the rest.
  * Only the drop reaches the strip's owner, as one move.
  *
@@ -32,9 +32,9 @@ import { flushSync } from "react-dom";
 const DRAG_THRESHOLD = 4;
 
 /** The strip's tabs that move, each the pill holding the tab and its ×: all but one anchored at its start. */
-const TAB_PILL = ':scope > .tab:not([data-anchored="true"])';
+const TAB_PILL = ':scope > .luke-tab:not([data-anchored="true"])';
 
-/** What a tab and its strip wear while a drag lasts; desktop.css lifts the one and slides the others. */
+/** What a tab and its strip wear while a drag lasts; tabs.css lifts the one and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";
 
 /** How near the strip's edge, in CSS pixels, the pointer runs the strip along: about its faded edge. */
@@ -308,7 +308,7 @@ export function useTabDrag(
     const strip = event.currentTarget;
     const target = event.target instanceof Element ? event.target : null;
     if (event.button !== 0 || release.current !== undefined || target === null) return;
-    if (target.closest(".tab-close, [data-editing]") !== null) return;
+    if (target.closest(".luke-tab-close, [data-editing]") !== null) return;
     const tabs = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)];
     const at = tabs.findIndex((tab) => tab.contains(target));
     if (at < 0 || tabs.length < 2) return;
@@ -318,12 +318,12 @@ export function useTabDrag(
     // Note that each slot is laid from the strip's start by the widths of
     // every tab before it, an anchored one among them, rather than read off
     // where the tab is drawn, because the chosen tab is pinned at the strip's
-    // edge (desktop.css) and drawn where it is stuck.
+    // edge (tabs.css) and drawn where it is stuck.
     const style = getComputedStyle(strip);
     const between = Number.parseFloat(style.columnGap) || 0;
     let left = Number.parseFloat(style.paddingLeft) || 0;
     const placed = new Map<Element, { left: number; width: number }>();
-    for (const pill of strip.querySelectorAll(":scope > .tab")) {
+    for (const pill of strip.querySelectorAll(":scope > .luke-tab")) {
       const width = pill.getBoundingClientRect().width;
       placed.set(pill, { left, width });
       left += width + between;

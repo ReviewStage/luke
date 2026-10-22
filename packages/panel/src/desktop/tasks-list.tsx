@@ -15,6 +15,7 @@ import {
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  AVATAR_SIZE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   CARD_PRESS_SELECTOR,
@@ -382,6 +383,7 @@ function groupHead(
                 repository={head.repository}
                 pictures={tasks.repositories.pictures}
                 fallback={<FolderGitIcon />}
+                size={AVATAR_SIZE.GLYPH}
               />
             ),
             name: repositoryLabel(head.repository, repositories),

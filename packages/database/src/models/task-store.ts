@@ -1303,7 +1303,9 @@ const lockStandingAgentsAfterHandOvers = Effect.fnUntraced(function* (taskId: st
  * confirmed reachable; a move runs the caller's guard under the row's lock
  * on the repository the task will name once it lands. A change is
  * not a save: the document's `updatedAt` and the list's order stand. The pin
- * is the account's own and no other member's.
+ * is the account's own and no other member's. A task no one is assigned to
+ * that the change moves into progress is assigned to the account, unless the
+ * change names an assignee of its own.
  */
 export function updateTask<E = never, R = never>(
   userId: string,
@@ -1364,8 +1366,20 @@ export function updateTaskCommitted<E = never, R = never>(
           changes.assigneeId === undefined &&
           locked.value.assigneeId !== null &&
           !(yield* isWorkspaceMember(locked.value.assigneeId, landsIn));
+        // A task no one is on is its mover's once it moves into progress, as Linear's start assigns;
+        // an assignee the change names wins, and one taken off a task already in progress stays off.
+        const startedBy =
+          changes.assigneeId === undefined &&
+          changes.status === TASK_STATUS.IN_PROGRESS &&
+          locked.value.status !== TASK_STATUS.IN_PROGRESS &&
+          locked.value.assigneeId === null &&
+          (!moved || (yield* isWorkspaceMember(userId, landsIn)));
         const columns = columnChangesOf(
-          unassigned ? { ...changes, assigneeId: null } : changes,
+          unassigned
+            ? { ...changes, assigneeId: null }
+            : startedBy
+              ? { ...changes, assigneeId: userId }
+              : changes,
           locked.value,
           now,
           movedNumber,

@@ -290,7 +290,7 @@ test("on a 390px screen, the repository menu opened from Home's chip stands insi
 /** The `@` list's foot, which names the keys it hears. */
 function mentionFoot(): HTMLElement {
   const menu = document.body.appendChild(document.createElement("div"));
-  menu.className = "menu-surface searchable-menu mention-menu";
+  menu.className = "luke-menu-surface searchable-menu mention-menu";
   const foot = menu.appendChild(document.createElement("div"));
   foot.className = "task-compose-menu-foot mention-menu-foot";
   return foot;

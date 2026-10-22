@@ -1075,13 +1075,14 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
     <SettingsRow
       indent={SETTINGS_ROW_INDENT.MARK}
       leading={
-        <span className="settings-row-mark workspace-github-account-mark">
+        <span className="settings-row-mark">
           <WorkspaceTile
             workspace={{
               id: `github:${connection.login}`,
               name: connection.login,
               pictureUrl: githubAccountPictureUrl(connection.login),
             }}
+            size={TILE_SIZE.NESTED}
           />
         </span>
       }

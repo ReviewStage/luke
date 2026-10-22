@@ -9,7 +9,9 @@ import {
   List,
   ListRow,
   MENU_ITEM_MARK,
+  MENU_SURFACE_INSET,
   MenuItem,
+  MenuSurface,
   SEARCH_FIELD_LOOK,
   SearchField,
   TEXT_ELEMENT,
@@ -543,18 +545,16 @@ export function SearchableMenu(props: {
   };
 
   const root =
-    props.className === undefined
-      ? "menu-surface searchable-menu"
-      : `menu-surface searchable-menu ${props.className}`;
+    props.className === undefined ? "searchable-menu" : `searchable-menu ${props.className}`;
   return (
-    <div
+    <MenuSurface
       ref={props.ref}
       id={props.id}
       className={root}
+      inset={MENU_SURFACE_INSET.NONE}
       role="dialog"
       aria-label={props.label}
-      data-leaving={leaving ? "true" : undefined}
-      inert={leaving}
+      leaving={leaving}
       onKeyDown={onKey}
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >
@@ -618,10 +618,10 @@ export function SearchableMenu(props: {
                 {item}
                 {index === footAt && open !== undefined ? (
                   // Note that a press anywhere on the submenu, its note too, keeps the focus in the field.
-                  // biome-ignore lint/a11y/noStaticElementInteractions: the press is its options'; the box only keeps the focus where it is.
-                  <div
+                  <MenuSurface
                     ref={panel}
-                    className="menu-surface task-compose-submenu"
+                    className="task-compose-submenu"
+                    inset={MENU_SURFACE_INSET.NONE}
                     data-side={place.side}
                     data-stand={place.stand}
                     style={cssCustomProperties({ "--submenu-shift": `${place.shift}px` })}
@@ -636,7 +636,7 @@ export function SearchableMenu(props: {
                       onChoose={(_index, option) => open.onPick(option.id)}
                     />
                     {open.note === undefined ? null : <FootNote words={open.note} />}
-                  </div>
+                  </MenuSurface>
                 ) : null}
               </div>
             );
@@ -654,6 +654,6 @@ export function SearchableMenu(props: {
           {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
         </div>
       ) : null}
-    </div>
+    </MenuSurface>
   );
 }

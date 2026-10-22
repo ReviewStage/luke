@@ -199,8 +199,8 @@ interface Look {
 function tabLooks(column: Element): Map<string, Look> {
   return new Map(
     [...column.querySelectorAll('[role="tab"]')].map((tab) => {
-      const label = tab.querySelector(".tab-label")?.textContent ?? "";
-      return [label, { glyph: tab.querySelector(".tab-icon")?.innerHTML, label }];
+      const label = tab.querySelector(".luke-tab-label")?.textContent ?? "";
+      return [label, { glyph: tab.querySelector(".luke-tab-icon")?.innerHTML, label }];
     }),
   );
 }
@@ -278,11 +278,11 @@ test("the side panel's Plan tab is named for the task and wears its status's mar
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".tab-label")?.firstChild?.textContent === "Terminal",
+    (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === "Terminal",
   );
   assert.ok(tab, "the strip has a Terminal tab");
-  assert.equal(tab.querySelector(".tab-detail")?.textContent, WORKING.title);
-  assert.match(tab.querySelector(".tab-icon")?.innerHTML ?? "", /data-state="working"/u);
+  assert.equal(tab.querySelector(".luke-tab-detail")?.textContent, WORKING.title);
+  assert.match(tab.querySelector(".luke-tab-icon")?.innerHTML ?? "", /data-state="working"/u);
   restOn(tab);
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
@@ -298,7 +298,7 @@ test("a page's tab hangs the page's card: its title and version over its newest 
   fakeAppPlatform({ pageFrameUrl });
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".tab-label")?.textContent === FUNNEL.title,
+    (each) => each.querySelector(".luke-tab-label")?.textContent === FUNNEL.title,
   );
   assert.ok(tab, "the strip has the page's tab");
   restOn(tab);

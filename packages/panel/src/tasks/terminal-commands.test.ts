@@ -436,7 +436,7 @@ test("while the plan's agents are still being read, the picker says so and offer
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, []);
   assert.equal(
-    document.querySelector(".terminal-picker .command-palette-empty")?.textContent,
+    document.querySelector(".terminal-picker .luke-note-line")?.textContent,
     "Reading the task’s agents…",
   );
   assert.deepEqual(task.shown, []);

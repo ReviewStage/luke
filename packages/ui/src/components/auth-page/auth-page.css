@@ -82,6 +82,11 @@
     color: var(--luke-color-text-muted);
   }
 
+  /* A footnote of several notes stands them one under another. */
+  .luke-auth-footnote > * {
+    display: block;
+  }
+
   .luke-auth-footnote {
     margin-top: var(--luke-space-16);
     font-size: var(--luke-type-caption-size);
@@ -98,6 +103,11 @@
     gap: var(--luke-space-12);
     margin-top: var(--luke-space-32);
     text-align: start;
+  }
+
+  /* The footnote can hold a press (a wait's Cancel), which is no part of a window drag. */
+  [data-luke-profile="desktop"] .luke-auth-footnote {
+    -webkit-app-region: no-drag;
   }
 
   .luke-auth-error {

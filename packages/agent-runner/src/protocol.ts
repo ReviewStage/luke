@@ -41,6 +41,13 @@ export const RUNNER_ENV = {
    * (https://code.claude.com/docs/en/agent-sdk/quickstart), on the same terms.
    */
   API_KEY: "ANTHROPIC_API_KEY",
+  /**
+   * The account's OpenAI API key, for a Codex launch its key pays for: the
+   * variable app-server's provider names as its `env_key`
+   * (https://developers.openai.com/codex/config-advanced/), which no command
+   * Codex runs inherits.
+   */
+  OPENAI_API_KEY: "OPENAI_API_KEY",
 } as const;
 
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
@@ -159,6 +166,12 @@ export const CodexConfigSchema = Schema.Struct({
   executable: Schema.String,
   model: Schema.String,
   effort: Schema.optionalKey(CodexEffortSchema),
+  /**
+   * Whether the agent runs its model's fast version: Codex's documented
+   * `fast` service tier (the API's `priority`), which a launch on an OpenAI
+   * API key alone asks for; the plan's launch runs none.
+   */
+  fast: Schema.optionalKey(Schema.Boolean),
   /** Luke's coder instructions, as the thread's `developer_instructions`. */
   developerInstructions: Schema.String,
   threadId: Schema.optionalKey(Schema.String),
@@ -170,7 +183,8 @@ export const CodexConfigSchema = Schema.Struct({
    * (`/api/agents/runner-token`). App-server takes its token from the
    * runner's `codex-token` command (Codex's provider `auth`), which Codex runs
    * again as its cached token ages and after a 401, so a turn outlives any
-   * one token.
+   * one token. Not asked where the launch's environment holds
+   * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it.
    */
   tokenUrl: Schema.String,
 });
@@ -222,8 +236,9 @@ const StopLineSchema = Schema.Struct({
 /**
  * A model or effort change, applied from the next model call on Claude Code
  * and from the next turn on Codex. An effort the launch's harness does not
- * take is skipped. `fast` turns Claude Code's own fast mode on or off; Codex
- * has none and skips it.
+ * take is skipped. `fast` turns Claude Code's own fast mode on or off, and
+ * Codex's `fast` service tier on an API key from its next turn; Codex on the
+ * plan skips it.
  */
 const ModelLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MODEL),

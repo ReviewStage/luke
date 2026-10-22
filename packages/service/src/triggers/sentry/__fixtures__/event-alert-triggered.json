@@ -1,0 +1,97 @@
+{
+  "action": "triggered",
+  "actor": { "id": "sentry", "name": "Sentry", "type": "application" },
+  "data": {
+    "event": {
+      "_ref": 4508123456789012,
+      "_ref_version": 2,
+      "contexts": {
+        "browser": { "name": "Chrome", "type": "browser", "version": "131.0.0" },
+        "os": { "name": "Mac OS X", "type": "os", "version": "15.1.0" }
+      },
+      "culprit": "applyDiscount(src/cart/checkout)",
+      "datetime": "2026-10-18T21:06:17.677000Z",
+      "dist": null,
+      "environment": "production",
+      "event_id": "e4874d664c3540c1a32eab185f12c5ab",
+      "exception": {
+        "values": [
+          {
+            "mechanism": { "handled": false, "type": "onunhandledrejection" },
+            "stacktrace": {
+              "frames": [
+                {
+                  "abs_path": "app:///node_modules/react-dom/cjs/react-dom.production.js",
+                  "colno": 10866,
+                  "filename": "node_modules/react-dom/cjs/react-dom.production.js",
+                  "function": "commitRoot",
+                  "in_app": false,
+                  "lineno": 1,
+                  "module": "react-dom"
+                },
+                {
+                  "abs_path": "app:///src/cart/checkout.tsx",
+                  "colno": 21,
+                  "filename": "src/cart/checkout.tsx",
+                  "function": "submitOrder",
+                  "in_app": true,
+                  "lineno": 88,
+                  "module": "cart/checkout"
+                },
+                {
+                  "abs_path": "app:///src/cart/discount.ts",
+                  "colno": 14,
+                  "filename": "src/cart/discount.ts",
+                  "function": "applyDiscount",
+                  "in_app": true,
+                  "lineno": 42,
+                  "module": "cart/discount"
+                }
+              ]
+            },
+            "type": "TypeError",
+            "value": "Cannot read properties of undefined (reading 'percent')"
+          }
+        ]
+      },
+      "fingerprint": ["{{ default }}"],
+      "issue_id": "1117540176",
+      "issue_url": "https://sentry.io/api/0/issues/1117540176/",
+      "key_id": "667532",
+      "level": "error",
+      "location": "src/cart/discount.ts",
+      "logger": "",
+      "message": "",
+      "metadata": {
+        "filename": "src/cart/discount.ts",
+        "type": "TypeError",
+        "value": "Cannot read properties of undefined (reading 'percent')"
+      },
+      "platform": "javascript",
+      "project": 4508000000000001,
+      "received": 1792357577.677,
+      "release": "web@2026.10.18",
+      "sdk": { "name": "sentry.javascript.react", "version": "9.1.0" },
+      "tags": [
+        ["browser", "Chrome 131.0.0"],
+        ["environment", "production"],
+        ["handled", "no"],
+        ["level", "error"],
+        ["release", "web@2026.10.18"]
+      ],
+      "timestamp": 1792357577.677,
+      "title": "TypeError: Cannot read properties of undefined (reading 'percent')",
+      "type": "error",
+      "url": "https://sentry.io/api/0/projects/acme/storefront/events/e4874d664c3540c1a32eab185f12c5ab/",
+      "user": { "id": "[scrubbed]" },
+      "version": "7",
+      "web_url": "https://sentry.io/organizations/acme/issues/1117540176/events/e4874d664c3540c1a32eab185f12c5ab/"
+    },
+    "triggered_rule": "Checkout errors in production",
+    "issue_alert": {
+      "title": "Checkout errors in production",
+      "settings": []
+    }
+  },
+  "installation": { "uuid": "a8e5d37a-696c-4c54-adb5-b3f28d64c7de" }
+}

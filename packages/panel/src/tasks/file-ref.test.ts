@@ -123,12 +123,12 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   const panel = mount([]).querySelector(".side-panel");
   assert.ok(panel, "the side panel");
   const tab = [...panel.querySelectorAll('[role="tab"]')].find(
-    (each) => each.querySelector(".tab-label")?.textContent === "accept.ts",
+    (each) => each.querySelector(".luke-tab-label")?.textContent === "accept.ts",
   );
   assert.ok(tab, "the file's tab");
   const head = panel.querySelector(".code-card [data-file-ref]");
   assert.ok(head, "the code card names the file");
-  const icon = tab.querySelector(".tab-icon")?.innerHTML;
+  const icon = tab.querySelector(".luke-tab-icon")?.innerHTML;
   assert.equal(head.querySelector("svg")?.outerHTML, icon, "the head wears the tab's icon");
 
   const add = panel.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
@@ -172,7 +172,7 @@ test("a file's tab read at a commit hangs Luke's note on the lines he showed at 
     ".side-panel",
   );
   const tab = [...(panel?.querySelectorAll('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".tab-label")?.textContent === "accept.ts",
+    (each) => each.querySelector(".luke-tab-label")?.textContent === "accept.ts",
   );
   assert.deepEqual(cardOn(tab), [PATH, NOTE]);
 });

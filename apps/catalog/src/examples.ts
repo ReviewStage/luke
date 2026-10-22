@@ -36,6 +36,7 @@ import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
+import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
@@ -56,6 +57,7 @@ import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
+import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
@@ -119,9 +121,11 @@ export const EXAMPLES: readonly Example[] = [
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
+  NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
   PICTURE_TILES_EXAMPLE,

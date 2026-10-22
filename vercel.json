@@ -86,6 +86,10 @@
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
         },
         {
+          "src": "/api/triggers/sentry",
+          "dest": "/api/default.js?route=triggers/sentry"
+        },
+        {
           "src": "/api/workspaces/chat/attachment",
           "dest": "/api/default.js?route=workspaces/chat/attachment"
         },
