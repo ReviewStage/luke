@@ -26,6 +26,7 @@ import {
 } from "effect";
 import { ASK_ORIGIN, type AskOrigin, TURN_STATUS, type TurnStatus } from "../../core.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
+import { nativeRuntimeOfSession } from "../coder-host/native-runtime.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 import {
   type AgentSessions,
@@ -253,10 +254,13 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
     queuedAt: ask.createdAt.getTime(),
   });
   if (ask.sessionId !== undefined) return accepted;
+  // Note that the ask's own id names its line to a native harness's runner, which answers it back as
+  // the line is taken (`native-events/`), so the turn it ran in is bound to it; eve is never handed it.
   const message = {
     conversationId,
     turn: HOST_TURN_OF_ASK_ORIGIN[origin],
     message: question,
+    lineId: ask.id,
     ...(input.timeZone === undefined ? undefined : { timeZone: input.timeZone }),
   };
 
@@ -298,10 +302,11 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
         failed = Result.fail({ refusal: ASK_REFUSAL.UPSTREAM, status: opened.status });
         return undefined;
       }
-      return {
-        sessionId: opened.sessionId,
-        turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID),
-      };
+      // A session eve opened runs the ask as its first turn; a native harness's names its turns as its
+      // runner takes lines, so the ask is bound by its line as a follow-up is.
+      return nativeRuntimeOfSession(opened.sessionId) === undefined
+        ? { sessionId: opened.sessionId, turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID) }
+        : { sessionId: opened.sessionId, deliveryId: ask.id };
     }),
   );
   const within = yield* dispatchedWithinDeadline(dispatch);
