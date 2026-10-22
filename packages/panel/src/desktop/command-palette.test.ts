@@ -123,6 +123,7 @@ function openPalette(
     Promise.reject(new Error("no repository is open")),
   page?: { agentId: string; workspaceId: string },
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
+  tab: PanelTab = PANEL_TAB.TASKS,
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
@@ -133,7 +134,7 @@ function openPalette(
     root.render(
       createElement(WindowPalette, {
         available: true,
-        tab: PANEL_TAB.TASKS,
+        tab,
         onTabChange: (tab) => sent.tabs.push(tab),
         tasks,
         settings: {
@@ -1049,6 +1050,56 @@ test("a task's row hangs the task's card beside it while the pointer rests on it
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.ok(card, "the task's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Billing usage alerts");
+});
+
+test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
+  const shown: [string, string][] = [];
+  const sent = openPalette(
+    tasksControl({
+      tasks: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: null,
+          agents: {
+            total: 1,
+            working: 1,
+            agents: [
+              {
+                id: "agent-7",
+                title: "Invoice export",
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                status: CODING_AGENT_STATUS.RUNNING,
+              },
+            ],
+            pullRequestTotal: 0,
+            pullRequests: [],
+          },
+        },
+      ],
+      onShowAgent: (taskId, agentId) => shown.push([taskId, agentId]),
+    }),
+    undefined,
+    undefined,
+    DESKTOP_CAPABILITIES,
+    PANEL_TAB.SETTINGS,
+  );
+  chooseFilter("Tasks");
+  const row = document.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "the task is listed");
+  restOn(row);
+  const agent = document.querySelector<HTMLElement>(
+    ".luke-tooltip-card [data-task-card-agent] button",
+  );
+  assert.ok(agent, "the task's card names its agent");
+  act(() => agent.click());
+  assert.deepEqual(shown, [["plan-1", "agent-7"]]);
+  assert.deepEqual(sent.tabs, [PANEL_TAB.TASKS], "the window leaves Settings for the tasks");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "the palette is put away");
 });
 
 test("Search lists the listed workspace's plans first, then every other workspace's, each naming its workspace by its tile and name and found by it", () => {

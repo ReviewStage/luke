@@ -585,16 +585,19 @@ function taskDetail(task: TaskSummary): string | undefined {
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. An agent opens on its own page, as its
- * sidebar row does.
+ * sidebar row does. An agent's line on a task's card opens the task on
+ * its tab through `showAgent`, which leaves the palette as a row does.
  */
 function taskRows(
   tasks: TasksControl,
   members: readonly WorkspaceMember[] | undefined,
   open: (taskId: string) => void,
   openAgent: (agentId: string) => void,
+  showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
+  const carded = { ...tasks, onShowAgent: showAgent };
   // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
   const listedMembers = (task: TaskSummary) =>
     task.workspaceId === listedId ? members : undefined;
@@ -619,7 +622,7 @@ function taskRows(
           ? detail
           : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
-      card: <PaletteTaskCard tasks={tasks} task={task} />,
+      card: <PaletteTaskCard tasks={carded} task={task} />,
       endMark:
         origin !== undefined ? (
           <>
@@ -1511,6 +1514,7 @@ export function CommandPalette({
             members,
             (id) => onTasks(() => tasks.onSelect(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
+            (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
             originOf,
           )
         : [],
