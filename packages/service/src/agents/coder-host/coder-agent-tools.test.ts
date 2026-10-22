@@ -29,6 +29,7 @@ import {
 } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { inboxItem } from "@luke/database/schemas/inbox";
 import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -47,11 +48,13 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
   CODING_AGENT_PAYER,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_ASK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
@@ -83,6 +86,7 @@ import {
 } from "../../core.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
+import { postInboxThread } from "../../inbox/inbox-store.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
   ModelCatalog,
@@ -109,6 +113,8 @@ import {
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
+import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
+import { STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { TASK_ISSUE_REFUSAL } from "../task-issue-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
@@ -124,7 +130,7 @@ import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, kindToolsOf } from "./tool-set.js";
 
 /**
  * A coding agent's tools about the other agents of its workspace, through
@@ -3378,4 +3384,161 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
     Option.getOrThrow(await database.run(readTask(caller.userId, filed.id))).task.assignee,
     undefined,
   );
+});
+
+/** The member's operator in the workspace, blank with no task and no repository, its session recorded. */
+async function operatorOn(userId: string, workspaceId: string): Promise<StartedAgent> {
+  return claimed(userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: null,
+    organizationId: workspaceId,
+    planSnapshot: null,
+    prompt: null,
+    repository: null,
+    kind: CODING_AGENT_KIND.OPERATOR,
+  });
+}
+
+/** Whether a call was refused for acting on a teammate's agent, as Steward refuses an operator. */
+function stewardRefused(answer: WireRecord): boolean {
+  return (
+    answer.status === ACTION_RESULT_STATUS.REJECTED &&
+    typeof answer.reason === "string" &&
+    answer.reason.includes("that agent is a teammate's")
+  );
+}
+
+test("an operator stops, renames, archives, and continues its member's own agents, refuses each of those on a teammate's agent, which a coder may still act on, and deletes no section", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const operator = await operatorOn(agents.caller.userId, workspaceId);
+  const call = await peerCaller(hostOf(true), operator, eve.services);
+  await turnOn(agents.teammates, true);
+  await turnOn(agents.caller, true);
+  const helper = await agentOn(agents.caller.userId, tasks.invitations);
+  await turnOn(helper, true);
+
+  // A teammate's agent: read, never acted on.
+  const teammates = agents.teammates.id;
+  assert.equal(
+    (await call(CODER_TOOL.READ_AGENT, { agentId: teammates })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+  for (const refused of [
+    await call(CODER_TOOL.STOP_AGENT, { agentId: teammates }, "stop-teammate"),
+    await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates, title: "Mine now" }, "rename"),
+    await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates, archived: true }, "archive"),
+    await call(CODER_TOOL.START_AGENT, { from: { agentId: teammates } }, "continue"),
+  ]) {
+    assert.ok(stewardRefused(refused), JSON.stringify(refused));
+  }
+  const untouched = Option.getOrThrow(
+    await database.run(readCodingAgent(agents.teammates.userId, teammates)),
+  );
+  assert.deepEqual([untouched.title, untouched.archivedAt], [null, null]);
+
+  // The member's own agents: acted on as any caller acts.
+  const stopped = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.caller.id }, "stop-own");
+  assert.equal(stopped.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(stopped));
+  const archived = await call(
+    CODER_TOOL.UPDATE_AGENT,
+    { agentId: helper.id, archived: true, reason: "Its work is done." },
+    "archive-own",
+  );
+  assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
+  const continued = await call(
+    CODER_TOOL.START_AGENT,
+    { from: { agentId: agents.caller.id } },
+    "continue-own",
+  );
+  assert.equal(continued.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(continued));
+
+  // An operator deletes nothing, and is not offered the delete; a coder is, and may still stop a teammate's agent.
+  assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: randomUUID() }, "delete"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: STEWARD_DELETE_REFUSAL,
+  });
+  assert.ok(!kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }).has(CODER_TOOL.DELETE_SECTION));
+  assert.ok(kindToolsOf({ kind: CODING_AGENT_KIND.CODER }).has(CODER_TOOL.DELETE_SECTION));
+  const coder = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const byCoder = await coder(
+    CODER_TOOL.UPDATE_AGENT,
+    { agentId: teammates, title: "Billing" },
+    "coder",
+  );
+  assert.equal(byCoder.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(byCoder));
+});
+
+test("list_open_asks lists every ask waiting on the operator's member across their own agents, and nothing a teammate's agent asked; it is offered to an operator alone, and a coder's call is refused", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const member = agents.caller.userId;
+  const second = await agentOn(member, tasks.invitations);
+  const ask = (agent: StartedAgent, taskId: string, key: string, title: string) =>
+    database.run(
+      postInboxThread(
+        { userId: agent.userId, taskId, agentId: agent.id },
+        {
+          key,
+          title,
+          body: "Two regions are free.",
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "sfo1" }] },
+        },
+      ),
+    );
+  await ask(agents.caller, tasks.invitations, "deploy-region", "Where should the preview deploy?");
+  await ask(second, tasks.invitations, "token-expiry", "How long should invites last?");
+  await ask(agents.teammates, tasks.billing, "billing-plan", "Which plan do we bill?");
+  // A notice asks nothing, and is read with its words.
+  await database.run(
+    postInboxThread(
+      { userId: member, taskId: tasks.invitations, agentId: agents.caller.id },
+      { key: "preview-live", title: "The preview is live", body: "It deployed to iad1." },
+    ),
+  );
+  // An item from before version 5 holds its ask as its response, with no ask message.
+  const legacy = await ask(second, tasks.invitations, "legacy-approval", "Ship it?");
+  assert.ok(Result.isSuccess(legacy));
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db
+        .update(inboxItem)
+        .set({ version: 4, openAskMessageId: null, response: { type: INBOX_RESPONSE.APPROVAL } })
+        .where(eq(inboxItem.id, legacy.success.id)),
+    ),
+  );
+  const operator = await operatorOn(member, workspaceId);
+  const call = await peerCaller(hostOf(true), operator, eve.services);
+
+  const listed = await call(CODER_TOOL.LIST_OPEN_ASKS, {});
+  assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
+  const asks = Array.isArray(listed.asks) ? listed.asks : [];
+  const byKey = new Map(asks.flatMap((each) => (isRecord(each) ? [[each.key, each]] : [])));
+  assert.deepEqual([...byKey.keys()].sort(), [
+    "deploy-region",
+    "legacy-approval",
+    "preview-live",
+    "token-expiry",
+  ]);
+  const notice = byKey.get("preview-live");
+  assert.ok(isRecord(notice));
+  assert.deepEqual([notice.ask, notice.words], [null, "It deployed to iad1."]);
+  const approval = byKey.get("legacy-approval");
+  assert.ok(isRecord(approval));
+  assert.equal(approval.ask, INBOX_ASK.DECIDE);
+  assert.equal(approval.words, "Two regions are free.");
+  const deploy = byKey.get("deploy-region");
+  assert.ok(isRecord(deploy) && isRecord(deploy.agent));
+  assert.equal(deploy.agent.id, agents.caller.id);
+  assert.equal(deploy.ask, INBOX_ASK.DECIDE);
+  assert.deepEqual(deploy.task, { id: tasks.invitations, name: "Teammate invitations" });
+
+  assert.ok(kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }).has(CODER_TOOL.LIST_OPEN_ASKS));
+  assert.ok(!kindToolsOf({ kind: CODING_AGENT_KIND.CODER }).has(CODER_TOOL.LIST_OPEN_ASKS));
+  const coder = await peerCaller(hostOf(true), agents.caller, eve.services);
+  assert.deepEqual(await coder(CODER_TOOL.LIST_OPEN_ASKS, {}), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: LIST_OPEN_ASKS_REFUSAL.NOT_OPERATOR,
+  });
 });

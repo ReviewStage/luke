@@ -118,6 +118,7 @@ import {
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
+import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
@@ -390,6 +391,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(CODER_READ_AGENT_TOOL),
   agentTool(UPDATE_AGENT_TOOL),
   agentTool(LIST_MODELS_TOOL),
+  agentTool(LIST_OPEN_ASKS_TOOL),
   // Tasks, sections, and issues.
   agentTool(LIST_TASKS_TOOL),
   agentTool(READ_TASK_TOOL),

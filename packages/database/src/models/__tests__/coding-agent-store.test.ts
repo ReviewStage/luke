@@ -724,7 +724,7 @@ it.layer(getTestDB())("the coding-agent store's record of who archived an agent"
 
 it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => {
   it.effect(
-    "a workspace's agents are listed newest first for any member, an archived one left out unless asked for, narrowed to a repository whatever its case, held to the limit, and none for an account outside it",
+    "a workspace's agents are listed newest first for any member, an archived one left out unless asked for, narrowed to a repository whatever its case or to the account's own, held to the limit, and none for an account outside it",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -785,6 +785,15 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           web.agentId,
         ]);
         assert.deepEqual(yield* listWorkspaceCodingAgents(outsider, workspace, { limit: 10 }), []);
+        // Only the account's own, where asked, held to the limit after the narrowing.
+        assert.deepEqual(
+          ids(yield* listWorkspaceCodingAgents(starter, workspace, { ownOnly: true, limit: 2 })),
+          [newest.agentId, oldest.agentId],
+        );
+        assert.deepEqual(
+          ids(yield* listWorkspaceCodingAgents(teammate, workspace, { ownOnly: true, limit: 10 })),
+          [web.agentId],
+        );
 
         // An agent on a plan is listed with the rest, and alone where its plan is named.
         const invitations = yield* createTask(teammate, {

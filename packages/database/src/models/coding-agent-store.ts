@@ -1357,15 +1357,17 @@ const AgentsOfWorkspaceSchema = Schema.Struct({
   taskId: Schema.NullOr(Schema.String),
   words: Schema.NullOr(Schema.String),
   includeArchived: Schema.Boolean,
+  ownOnly: Schema.Boolean,
   limit: Schema.Number,
 });
 
 /** The condition that an agent is one of the workspace's the account reaches, narrowed as the request asks. */
 function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
-  const { userId, organizationId, repository, taskId, words, includeArchived } = request;
+  const { userId, organizationId, repository, taskId, words, includeArchived, ownOnly } = request;
   return and(
     agentReachableBy(userId),
     eq(AGENT_WORKSPACE, organizationId),
+    ownOnly ? eq(codingAgent.userId, userId) : undefined,
     includeArchived ? undefined : isNull(codingAgent.archivedAt),
     taskId === null ? undefined : eq(codingAgent.taskId, taskId),
     words === null ? undefined : agentNamed(words),
@@ -1980,6 +1982,8 @@ interface WorkspaceAgentsAsked {
   readonly taskId?: string;
   readonly words?: string;
   readonly includeArchived?: boolean;
+  /** Only the agents the account started, by hand or through any of its agents; every member's where unsaid. */
+  readonly ownOnly?: boolean;
   readonly limit: number;
 }
 
@@ -1992,13 +1996,15 @@ function workspaceRequest(userId: string, organizationId: string, options: Works
     taskId: options.taskId ?? null,
     words: options.words ?? null,
     includeArchived: options.includeArchived ?? false,
+    ownOnly: options.ownOnly ?? false,
     limit: options.limit,
   };
 }
 
 /**
- * The workspace's agents, on a task or with none, by any member, newest
- * started first, an archived one left out unless `includeArchived` asks,
+ * The workspace's agents, on a task or with none, by any member or only the
+ * account's own where `ownOnly` asks, newest started first, an archived one
+ * left out unless `includeArchived` asks,
  * only those on the repository named where one is, on the plan named
  * where one is, and whose title or task's name holds the words where some
  * are given, and at most `limit`; a workspace the account is not in has

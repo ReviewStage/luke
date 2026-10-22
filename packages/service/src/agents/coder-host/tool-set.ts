@@ -1,6 +1,7 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { ACTION_RESULT_STATUS, type WireRecord, WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
@@ -62,6 +63,7 @@ export const CODER_TOOL = {
   POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
   WITHDRAW_ASK: AGENT_TOOL.WITHDRAW_ASK,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
+  LIST_OPEN_ASKS: AGENT_TOOL.LIST_OPEN_ASKS,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
@@ -195,6 +197,26 @@ export function repositoryToolsOf(
     CODER_TOOL.APPLY_PATCH,
     CODER_TOOL.SHOW_CODE,
   ]);
+}
+
+/** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` to every agent but an operator. */
+export type KindTool = typeof CODER_TOOL.LIST_OPEN_ASKS | typeof CODER_TOOL.DELETE_SECTION;
+
+/**
+ * The tools an agent is offered by its kind, on every turn: an operator
+ * reads every open ask to its member across their agents, and deletes
+ * nothing, under Dean's Steward policy (`../steward.ts`), so it is offered
+ * `list_open_asks` and never `delete_section`; every other agent the reverse.
+ * Note that each tool withheld is one its call would only be refused by,
+ * since a native harness is offered every tool: an operator's delete by its
+ * door (`agent-doors.ts`'s `runAgentTools`), and another agent's read of the
+ * member's asks by the tool itself (`../operator-desk.ts`); and that the
+ * instructions leave out the same words (`instructions.ts`).
+ */
+export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindTool> {
+  return agent.kind === CODING_AGENT_KIND.OPERATOR
+    ? new Set([CODER_TOOL.LIST_OPEN_ASKS])
+    : new Set([CODER_TOOL.DELETE_SECTION]);
 }
 
 /**

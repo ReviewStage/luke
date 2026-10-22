@@ -65,6 +65,8 @@ export const AGENT_TOOL = {
   POST_TO_INBOX: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_INBOX: INBOX_TOOL.READ,
+  // Every open inbox ask to an operator's member, across all their agents, the operator's alone.
+  LIST_OPEN_ASKS: "list_open_asks",
   OPEN_PULL_REQUEST: "open_pull_request",
   // The workspace's chat, every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,

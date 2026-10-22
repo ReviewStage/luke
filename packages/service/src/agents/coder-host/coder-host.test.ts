@@ -41,6 +41,7 @@ import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   PULL_REQUEST_STATE,
@@ -111,6 +112,7 @@ import {
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
+import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
@@ -296,6 +298,32 @@ const openAgent = (
       starting: starting.success,
       admitted: admitted.success,
     };
+  });
+
+/** The member's operator in the workspace, blank with no task and no repository, its session claimed as the hook claims it. */
+const openOperator = (host: CoderHost, userId: string, workspaceId: string) =>
+  Effect.gen(function* () {
+    const started = yield* createCodingAgent(userId, {
+      taskId: null,
+      organizationId: workspaceId,
+      idempotencyKey: `operator-${randomUUID()}`,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: null,
+      prompt: null,
+      repository: null,
+      kind: CODING_AGENT_KIND.OPERATOR,
+    });
+    assert.ok(Option.isSome(started));
+    const { agent } = started.value;
+    const auth = ownSeat(userId, agent.conversationId);
+    const sessionId = mintSession();
+    const starting = yield* host.admitStarting(auth, sessionId);
+    assert.ok(Result.isSuccess(starting));
+    assert.equal(yield* host.sessionStarted(starting.success, sessionId), true);
+    const admitted = yield* host.admit(auth, sessionId);
+    assert.ok(Result.isSuccess(admitted));
+    return { agent, admitted: admitted.success };
   });
 
 /** Chat turned on for the account, as Settings › Experimental turns it on. */
@@ -2146,6 +2174,111 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         // The same unread chat is not handed twice: the history already holds it.
         const again = yield* typed(on.handed);
         assert.ok(!again.text?.includes(CHAT_DIGEST_HEADING), again.text ?? "");
+      }),
+  );
+
+  it.effect(
+    "an operator's turn opens on its desk the first time, not again while nothing on it changed, and again once one of its member's agents opened a pull request or failed; no other agent's turn carries a desk",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted: coderAdmitted, auth, sessionId } = yield* openAgent(host);
+        const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+        const operator = yield* openOperator(host, userId, workspace);
+        const typed = (handed: TurnHanded) =>
+          host.turnMessage(
+            operator.admitted,
+            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            handed,
+          );
+        const desked = (text: string | undefined) => text?.includes(DESK_LEAD) === true;
+
+        const first = yield* typed({});
+        assert.ok(desked(first.text), first.text ?? "");
+        assert.ok(first.text?.includes(agent.personaName ?? ""), first.text ?? "");
+        const unchanged = yield* typed(first.handed);
+        assert.ok(!desked(unchanged.text), unchanged.text ?? "");
+
+        // One of the member's agents opens a pull request: the desk changed, so it is handed again, once.
+        yield* recordCodingAgentPublished(userId, agent.id, {
+          number: 42,
+          title: "Fix the refresh",
+          url: "https://github.com/acme/relay/pull/42",
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 12,
+          deletions: 3,
+          changedFiles: 2,
+        });
+        const opened = yield* typed(unchanged.handed);
+        assert.ok(opened.text?.includes("[@#42 Fix the refresh]"), opened.text ?? "");
+        assert.ok(!desked((yield* typed(opened.handed)).text));
+
+        // Its turn fails: the desk names it among the failed.
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const state = memoryRelayState();
+        for (const event of codingTurn("turn_0", "turn.failed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, coderAdmitted, session as never, state, {});
+        }
+        const failed = yield* typed(opened.handed);
+        assert.ok(desked(failed.text), failed.text ?? "");
+        assert.ok(failed.text?.includes("Failed (1):"), failed.text ?? "");
+
+        // A coder's turn carries no desk.
+        const coderTurn = yield* host.turnMessage(
+          coderAdmitted,
+          { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+          {},
+        );
+        assert.ok(!desked(coderTurn.text), coderTurn.text ?? "");
+      }),
+  );
+
+  it.effect(
+    "an operator's desk shows a section's newest rows and counts the rest, and leaves out a teammate's agents",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const userId = yield* openGithubUser();
+        const teammate = yield* openGithubUser();
+        const task = yield* startTask(userId, {
+          name: "Teammate invitations",
+          repository: "acme/relay",
+        });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        const started = (starter: string) =>
+          Effect.gen(function* () {
+            // Each a second after the last, so newest first is one order, and none yet reads as never started.
+            yield* TestClock.adjust("1 second");
+            const made = yield* createCodingAgent(starter, {
+              taskId: task.id,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              planSnapshot: PLAN_TEXT,
+              prompt: null,
+              repository: "acme/relay",
+            });
+            return Option.getOrThrow(made).agent;
+          });
+        const own = [];
+        for (let index = 0; index < 9; index += 1) own.push(yield* started(userId));
+        const teammates = yield* started(teammate);
+        const operator = yield* openOperator(host, userId, task.workspaceId);
+
+        const desk =
+          (yield* host.turnMessage(
+            operator.admitted,
+            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            {},
+          )).text ?? "";
+        const named = (agent: { readonly personaName: string | null }) =>
+          desk.includes(`[@${agent.personaName ?? ""}]`);
+        assert.ok(desk.includes("and 1 more"), desk);
+        assert.ok(own.slice(1).every(named), desk);
+        assert.ok(!named(own[0] ?? teammates), "the oldest is the one counted");
+        assert.ok(!named(teammates), "a teammate's agent is no row of the desk");
       }),
   );
 

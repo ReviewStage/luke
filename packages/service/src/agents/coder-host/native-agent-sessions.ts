@@ -78,6 +78,7 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       agent.startBranch,
       agent.githubAccess === GITHUB_ACCESS.TOKEN,
       harness,
+      agent.kind,
     );
   });
 
