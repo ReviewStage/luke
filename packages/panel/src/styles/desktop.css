@@ -7930,8 +7930,9 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
    for each status, each a quiet well under its heading holding its cards,
    as Linear's board stands them. The board fills the page's height, so it
    never scrolls down and each column scrolls its own cards; its columns
-   share the page's width, each at least a card's, past which the page
-   scrolls sideways. */
+   stand one fixed width whatever the page's width or how many there are,
+   so a card reads the same on any screen, and past the page's width the
+   board scrolls sideways. */
 .tasks-board {
   --carried-ground: var(--luke-color-surface);
   position: relative;
@@ -7945,9 +7946,9 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 
 .tasks-board-column {
   display: flex;
-  min-width: 240px; /* off-scale: a card's least readable width */
+  width: 320px; /* off-scale: a card's width, as Linear's board stands it */
   min-height: 0;
-  flex: 1 0 240px; /* off-scale: as above */
+  flex: 0 0 auto;
   flex-direction: column;
   padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-6);
   border: 1px solid transparent;
@@ -8244,6 +8245,11 @@ button.tasks-board-card-press:focus-visible::after {
   min-width: 0;
   flex: 1 1 100%;
   flex-direction: column;
+}
+
+.desktop-shell[data-room="narrow"] .tasks-board-column {
+  width: auto;
+  flex: 1 1 auto;
 }
 
 .desktop-shell[data-room="narrow"] .tasks-board-column-scroll {
