@@ -169,7 +169,7 @@ function mount(
     title: container.querySelector(".task-head h1")?.textContent,
   });
   const back = () => {
-    const found = container.querySelector<HTMLButtonElement>(".task-head-back button");
+    const found = container.querySelector<HTMLButtonElement>(".task-head .phone-head-start button");
     assert.ok(found, "the row leads with its way back");
     act(() => found.click());
   };

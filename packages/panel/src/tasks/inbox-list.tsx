@@ -91,6 +91,13 @@ import {
   type InboxWhoseChoice,
   useInboxListWidth,
 } from "../desktop/folded-groups.js";
+import {
+  type MenuAsk,
+  PhoneHead,
+  PlaceMore,
+  useAskedMenu,
+  useMenuAsk,
+} from "../desktop/phone-head.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
@@ -1173,6 +1180,7 @@ function ViewOptions({
   choices,
   readerId,
   readAll,
+  asked,
 }: {
   shown: boolean;
   show: InboxShowChoice;
@@ -1180,8 +1188,11 @@ function ViewOptions({
   choices: InboxViewChoices | undefined;
   readerId: string | undefined;
   readAll: InboxReadAll | undefined;
+  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
+  asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   const reader = useMemberDirectory();
   const scope: MenuEntry[] = INBOX_SCOPES.map((value) => ({
     ...SCOPE_WORDS[value],
@@ -1190,9 +1201,11 @@ function ViewOptions({
   }));
   return (
     <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-      </Tooltip>
+      {asked === undefined ? (
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+        </Tooltip>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}
@@ -1492,7 +1505,11 @@ function useListSearch(search: InboxSearchHead | undefined) {
         />
       </search>
     );
-  return { button, field: fieldDrawn };
+  return {
+    button,
+    field: fieldDrawn,
+    onOpen: search === undefined ? undefined : () => setAsked(true),
+  };
 }
 
 /**
@@ -1519,6 +1536,46 @@ function ListHead({
   const { shown, show, view } = head;
   const title = inboxTitle(show.show);
   const search = useListSearch(head.search);
+  const asked = useMenuAsk();
+  if (head.phone !== undefined && placement === INBOX_LIST_PLACEMENT.PAGE) {
+    const { onOpen } = search;
+    return (
+      <>
+        <PhoneHead
+          place="inbox"
+          start={head.phone.start}
+          title={search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
+          end={
+            <PlaceMore
+              shown={shown}
+              groups={(opener) => [
+                [
+                  ...(onOpen === undefined
+                    ? []
+                    : [{ label: SEARCH_INBOX, icon: <SearchIcon />, onSelect: onOpen }]),
+                  {
+                    label: VIEW_OPTIONS,
+                    icon: <SlidersHorizontalIcon />,
+                    opens: true,
+                    onSelect: () => asked.onAsk(opener),
+                  },
+                ],
+              ]}
+            />
+          }
+        />
+        <ViewOptions
+          shown={shown}
+          show={show}
+          choices={view?.choices}
+          readerId={readerId}
+          readAll={head.readAll}
+          asked={{ ask: asked.ask }}
+        />
+        {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+      </>
+    );
+  }
   const options = (
     <>
       {search.button}
@@ -1654,6 +1711,12 @@ export interface InboxListHead {
   readonly readAll?: InboxReadAll | undefined;
   /** The list's search, which its head's magnifier opens; none where the list offers none, as a task's own Inbox does. */
   readonly search?: InboxSearchHead | undefined;
+  /**
+   * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
+   * phone's places: its one start control, New task, the title centred, and
+   * the ⋯ holding the search and View options; none elsewhere.
+   */
+  readonly phone?: { readonly start: React.ReactNode } | undefined;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */

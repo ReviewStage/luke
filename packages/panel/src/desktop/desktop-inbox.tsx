@@ -14,6 +14,7 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxList, InboxListNote, ItemMark, newTaskAction } from "../tasks/inbox-list.js";
@@ -46,6 +47,7 @@ import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-pane
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAgentCallDoors } from "./agent-actions.js";
 import { AgentPane } from "./main-tabs.js";
+import { NewTaskButton } from "./new-task-button.js";
 import {
   COLUMN,
   changesTabOf,
@@ -132,22 +134,25 @@ const NO_OPEN_AGENTS: readonly string[] = [];
 export function DesktopInbox({
   tasks,
   listing,
+  room = SHELL_ROOM.WIDE,
 }: {
   tasks: TasksControl;
   /** The Inbox as the inbox-first sidebar lists it, where the sidebar holds the list and the page shows the chosen item alone; none where the page reads and lists it itself. */
   listing?: InboxListing | undefined;
+  /** The room the stage gives; narrow, a phone's, the list is headed as a phone's page is (`phone-head.tsx`). */
+  room?: ShellRoom;
 }): React.JSX.Element {
   return listing === undefined ? (
-    <ListedInbox tasks={tasks} />
+    <ListedInbox tasks={tasks} room={room} />
   ) : (
-    <InboxShown tasks={tasks} listing={listing} paneOnly />
+    <InboxShown tasks={tasks} listing={listing} paneOnly room={room} />
   );
 }
 
 /** The Inbox page reading its own items, its list and the chosen item side by side. */
-function ListedInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+function ListedInbox({ tasks, room }: { tasks: TasksControl; room: ShellRoom }): React.JSX.Element {
   const listing = useInboxListing(tasks);
-  return <InboxShown tasks={tasks} listing={listing} paneOnly={false} />;
+  return <InboxShown tasks={tasks} listing={listing} paneOnly={false} room={room} />;
 }
 
 /**
@@ -159,10 +164,12 @@ function InboxShown({
   tasks,
   listing,
   paneOnly,
+  room,
 }: {
   tasks: TasksControl;
   listing: InboxListing;
   paneOnly: boolean;
+  room: ShellRoom;
 }): React.JSX.Element {
   const {
     view,
@@ -395,6 +402,10 @@ function InboxShown({
                         onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
                       },
                       search,
+                      phone:
+                        room === SHELL_ROOM.NARROW
+                          ? { start: <NewTaskButton tasks={tasks} /> }
+                          : undefined,
                     }}
                     models={named.models}
                     readerId={tasks.me}
