@@ -11224,6 +11224,31 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a native source, whose steps estimate no instructions of their own, is fitted with the fallback's room for them, as a source that measured nothing is",
+    () =>
+      Effect.gen(function* () {
+        const { owner, first, continueFrom } = yield* longSource();
+        const unmeasured = yield* continueFrom(first.id, {
+          model: SMALL_WINDOW.model,
+          effort: "low",
+        });
+        // The runner's events record what Claude Code read, and nothing of instructions the CLI composed.
+        yield* recordCodingAgentStep(owner, first.id, {
+          inputTokens: LONG_TURNS * 2_600,
+          outputTokens: 500,
+          systemPromptTokens: 0,
+          toolDefinitionTokens: 0,
+          briefTokens: 100,
+          at: 1_000,
+        });
+        const native = yield* continueFrom(first.id, { model: SMALL_WINDOW.model, effort: "low" });
+
+        assert.ok((unmeasured.from?.steps ?? LONG_TURNS) < LONG_TURNS);
+        assert.equal(native.from?.steps, unmeasured.from?.steps);
+      }),
+  );
+
+  it.effect(
     "a continue of a continue carries the first source's kept steps ahead of its own within the new agent's window",
     () =>
       Effect.gen(function* () {
