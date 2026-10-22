@@ -1920,8 +1920,10 @@ const deleteAgentCallWords = SqlSchema.void({
  * task's delete does; none where the account reaches no such agent.
  *
  * Everything runs under the agent's conversation lock, the one every write
- * of its lines and turns takes, and the agent is read again under it, so a
- * message handed over after the caller stopped it either landed first, and
+ * of its lines and turns takes, taken once any hand-over to eve under way
+ * has been waited out (`dispatch-lock.ts`), and the agent is read again
+ * under it, so a message handed over after the caller stopped it either
+ * landed first, and
  * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
  * waits on the lock and finds no agent.
  */
@@ -1939,6 +1941,8 @@ export function deleteCodingAgent<R = never>(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return Option.none();
+        // A hand-over to eve under way is waited out first, so its line stands awaiting when the guard reads.
+        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });

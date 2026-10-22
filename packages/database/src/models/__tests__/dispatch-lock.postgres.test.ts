@@ -7,7 +7,8 @@ import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { Deferred, Effect, Fiber, Layer, Option, Ref, Result } from "effect";
+import { eq } from "drizzle-orm";
+import { Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { Database, type DatabaseServices } from "../../core/query.js";
 import { sqlClientOverUrl } from "../../core/sql-client.js";
@@ -17,7 +18,7 @@ import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace, STORE_TEST_DATABASE_ENVIRONMENT } from "../../testing/index.js";
 import { askRecord } from "../asks.js";
-import { recordCodingAgentPublished } from "../coding-agent-store.js";
+import { deleteCodingAgent, recordCodingAgentPublished } from "../coding-agent-store.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { createTask, finishTaskWork } from "../task-store.js";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -344,6 +345,70 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
         yield* Fiber.join(sending);
 
         assert.equal(yield* Fiber.join(finishing), false);
+      }),
+  );
+
+  it.effect(
+    "an agent's delete waits out a hand-over to it, so the line eve took refuses the delete",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const onAnother = yield* anotherConnection;
+        const writer = yield* storeWriter({ tools: {} });
+        const db = yield* Database;
+        const workspace = yield* openWorkspace(target.userId);
+        const agentId = randomUUID();
+        yield* db.insert(codingAgent).values({
+          id: agentId,
+          organizationId: workspace,
+          userId: target.userId,
+          taskId: null,
+          conversationId: target.conversationId,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/api",
+          repositories: ["acme/api"],
+          idempotencyKey: randomUUID(),
+        });
+        // Stopped where no line of the conversation awaits a turn, as `standsStopped` reads it.
+        const stoppedUnlessAwaiting = () =>
+          Effect.map(
+            readMessageByClientId(target.userId, target.conversationId, {}, sentLineId("tests")),
+            (read) => read.ok && read.value.length === 0,
+          );
+        const held = yield* heldDispatch(true);
+
+        const sending = yield* Effect.forkChild(
+          onAnother(
+            writer.writeAwaitingLine(
+              target,
+              { text: "Check the tests.", clientKey: "tests", sender: SENDER },
+              held.dispatch,
+            ),
+          ),
+        );
+        yield* untilBegan(held.began, sending);
+        const deleting = yield* Effect.forkChild(
+          onAnother(
+            deleteCodingAgent(target.userId, agentId, {
+              standsStopped: stoppedUnlessAwaiting,
+              beforeDelete: () => Effect.void,
+            }),
+          ),
+        );
+        yield* parkedOrDone(deleting);
+        yield* Deferred.succeed(held.release, undefined);
+        yield* Fiber.join(sending);
+        const deleted = yield* Fiber.await(deleting);
+
+        assert.ok(Exit.isFailure(deleted));
+        assert.equal(
+          (yield* db
+            .select({ id: codingAgent.id })
+            .from(codingAgent)
+            .where(eq(codingAgent.id, agentId))).length,
+          1,
+        );
       }),
   );
 });
