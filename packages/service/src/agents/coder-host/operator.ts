@@ -20,6 +20,16 @@
  * its member's open work and says what stands; one the ensure found runs
  * none, so a repeat ensure opens nothing.
  *
+ * The ensure that made an operator also aims its heartbeat at it
+ * (`aimedItsHeartbeat`): an ordinary personal automation of its member's,
+ * in the workspace, with no repository, that hands every run to the
+ * operator on weekdays at nine and five in the member's time zone, the zone
+ * the client sent with the ensure where it reads, and UTC otherwise, since
+ * the service keeps none for an account. A Reset re-aims every automation of
+ * the member's aimed at the operator it retired, the heartbeat among them,
+ * rather than making a second, and makes one only where none was aimed. A
+ * repeat ensure makes none, so a heartbeat the member deleted stays deleted.
+ *
  * Only a member of the workspace who turned the operator experiment on
  * (`EXPERIMENT.OPERATOR`) ensures one; anyone else is answered as though
  * the workspace named nothing, as Chat's gate answers.
@@ -28,14 +38,24 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { accountExperimentOn } from "@luke/database/models/account-store";
+import { aimOperatorHeartbeat } from "@luke/database/models/automation-store";
 import {
   archiveOperatorAgent,
   type CodingAgent,
   readStandingOperator,
 } from "@luke/database/models/coding-agent-store";
+import { nextScheduledRun } from "@luke/features/automation-schedule";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationTrigger,
+} from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { failureKind } from "@luke/runtime/effect";
 import { EXPERIMENT } from "@luke/settings";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   HOSTED_REFUSAL,
@@ -49,7 +69,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
-import { OPERATOR_OPENING } from "./instructions.js";
+import { OPERATOR_HEARTBEAT, OPERATOR_OPENING } from "./instructions.js";
 import {
   acceptedAgentChoice,
   type CodingAgentStart,
@@ -60,6 +80,8 @@ import {
 /** What an ensure asks beyond the member and the workspace: whether the standing operator is archived first, and how its turn is stopped before it is. */
 export interface OperatorEnsure<R> {
   readonly reset: boolean;
+  /** The IANA zone the member's client runs in, which the heartbeat an ensure makes is read in; UTC where it names none or one that does not read. */
+  readonly timeZone: string | undefined;
   /** Stops the turn the standing operator runs, refusing where it cannot, as an archive by hand stops one first (`coder-host/stop.ts`'s `stoppedForGood`). */
   readonly stopStanding: (agent: CodingAgent) => Effect.Effect<void, HostedRefusal, R>;
 }
@@ -68,6 +90,73 @@ export interface OperatorEnsure<R> {
 export interface OperatorEnsured extends CodingAgentStart {
   readonly retired: CodingAgent | undefined;
 }
+
+const OPERATOR_HEARTBEAT_SCHEDULE = {
+  /** What the member's Automations lists it as. */
+  NAME: "Luke's heartbeat",
+  /** Weekdays at nine and five, read in the member's zone. */
+  CRON: "0 9,17 * * 1-5",
+  /** The zone it is read in where the client named none that reads. */
+  FALLBACK_ZONE: "UTC",
+} as const;
+
+/** The heartbeat's schedule in the zone given, or in UTC where that zone does not read. */
+function heartbeatTrigger(
+  timeZone: string | undefined,
+  now: Date,
+): Extract<AutomationTrigger, { readonly kind: typeof AUTOMATION_TRIGGER.SCHEDULE }> {
+  const inZone = {
+    kind: AUTOMATION_TRIGGER.SCHEDULE,
+    cron: OPERATOR_HEARTBEAT_SCHEDULE.CRON,
+    timezone: timeZone ?? OPERATOR_HEARTBEAT_SCHEDULE.FALLBACK_ZONE,
+  } as const;
+  return nextScheduledRun(inZone, now) === undefined
+    ? { ...inZone, timezone: OPERATOR_HEARTBEAT_SCHEDULE.FALLBACK_ZONE }
+    : inZone;
+}
+
+/**
+ * The heartbeat aimed at the operator this ensure made, as above. Note that
+ * a store that fails is logged and leaves the operator standing without
+ * one, rather than failing the ensure, because a Reset has archived the
+ * operator before; the member can make the automation by hand.
+ */
+const aimedItsHeartbeat = (
+  userId: string,
+  workspaceId: string,
+  operator: CodingAgent,
+  retired: CodingAgent | undefined,
+  timeZone: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const now = new Date(yield* Clock.currentTimeMillis);
+    const trigger = heartbeatTrigger(timeZone, now);
+    const aimed = yield* aimOperatorHeartbeat(userId, {
+      operatorId: operator.id,
+      retiredId: retired?.id,
+      heartbeat: {
+        taskId: null,
+        organizationId: workspaceId,
+        repositories: [],
+        name: OPERATOR_HEARTBEAT_SCHEDULE.NAME,
+        trigger,
+        action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: OPERATOR_HEARTBEAT },
+        guards: AUTOMATION_DEFAULT_GUARDS,
+        nextRunAt: nextScheduledRun(trigger, now) ?? null,
+        webhookSecretHash: null,
+        scope: AUTOMATION_SCOPE.PERSONAL,
+      },
+    });
+    if (Option.isNone(aimed)) {
+      yield* Effect.logWarning(`operator ${operator.id}'s heartbeat had no workspace to stand in`);
+    }
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(
+        `operator ${operator.id}'s heartbeat could not be aimed: ${failureKind(failure)}`,
+      ),
+    ),
+  );
 
 /**
  * The operator's session opened on its opening turn (`instructions.ts`'s
@@ -155,7 +244,10 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
     idempotencyKey: randomUUID(),
     choice,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
-  // Only the ensure that made the operator opens it, so a repeat ensure runs no second opening.
-  if (started.created) yield* openedOnItsOpening(eve, started.agent);
+  // Only the ensure that made the operator aims its heartbeat and opens it, so a repeat ensure does neither again.
+  if (started.created) {
+    yield* aimedItsHeartbeat(userId, workspaceId, started.agent, retired, ensure.timeZone);
+    yield* openedOnItsOpening(eve, started.agent);
+  }
   return { ...started, retired };
 });

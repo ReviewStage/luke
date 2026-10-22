@@ -18,7 +18,12 @@ import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
-import { awaitingLineAtIn, latestTurnOf, sessionEndedOf } from "../live/agent-standing.js";
+import {
+  awaitingLineAtIn,
+  latestTurnOf,
+  quietTurnOf,
+  sessionEndedOf,
+} from "../live/agent-standing.js";
 
 /**
  * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, every agent of them and with no plan, with what the list reads each agent's status from, and the issues the plans link.
@@ -155,6 +160,7 @@ function agentsStatement(userId: string) {
           turnStatus: latest.status,
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
+          quietTurn: quietTurnOf(codingAgent.kind, codingAgent.conversationId, latest),
         },
         {
           archivedAt: codingAgent.archivedAt,

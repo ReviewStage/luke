@@ -7,6 +7,7 @@ import {
   CODING_AGENT_KIND,
   type CodingAgentBrief,
   type CodingAgentKind,
+  OPERATOR_QUIET_REPLY,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
@@ -652,6 +653,15 @@ Where the ${words.brief} is unclear, say so plainly in your final message rather
  */
 export const OPERATOR_OPENING =
   "Your opening turn: you were just made, and the developer has not written to you yet. Read their open work and say in a few lines what stands.";
+
+/**
+ * What the operator's heartbeat hands it twice each weekday, as the prompt of
+ * the automation an ensure makes for it (`operator.ts`): read the desk, act
+ * on what Steward lets it do unasked, tell the member only what needs them,
+ * in their inbox, and answer the quiet reply alone where nothing did, which
+ * leaves the member nothing to read (`OPERATOR_QUIET_REPLY`).
+ */
+export const OPERATOR_HEARTBEAT = `Your heartbeat: look over the developer's open work. Read your desk, which this turn opens with where it changed since your last turn, and read further only where something on it may need you. Act on what your rules for acting unasked let you do, and report each thing you did as a line of its own. Tell the developer only what needs them, in their inbox with \`${INBOX_TOOLS.POST.name}\`, never a summary of what stands. Where you did nothing and nothing needs the developer, answer with exactly ${OPERATOR_QUIET_REPLY} and nothing else, so they are left nothing to read.`;
 
 /**
  * Where the member's operator works, in place of an agent's job and how it

@@ -3,14 +3,27 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
+  deleteAutomation,
+  listAutomationRuns,
+  listAutomations,
+} from "@luke/database/models/automation-store";
+import {
   listWorkspaceCodingAgentLines,
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import {
+  AUTOMATION_FIRING,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Layer, Option, Result, Stream } from "effect";
+import { TestClock } from "effect/testing";
+import { sweepAutomations } from "../../automations/automation-sweep.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
@@ -23,6 +36,7 @@ import {
   type EveMessage,
   type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
+import { OPERATOR_HEARTBEAT } from "./instructions.js";
 import { ensureOperator } from "./operator.js";
 import { type StartAsk, startCodingAgent } from "./start.js";
 
@@ -102,8 +116,20 @@ const ensure = (
   reset = false,
   stopStanding: () => Effect.Effect<void, HostedRefusal> = nothingToStop,
   eve = EVE.eve,
+  timeZone: string | undefined = undefined,
 ) =>
-  ensureOperator(eve, userId, workspaceId, { reset, stopStanding }).pipe(Effect.provide(services));
+  ensureOperator(eve, userId, workspaceId, { reset, stopStanding, timeZone }).pipe(
+    Effect.provide(services),
+  );
+
+/** The member's automations in the workspace. */
+const automationsOf = (userId: string, workspaceId: string) =>
+  listAutomations(userId, { organizationId: workspaceId });
+
+/** Friday 23 October 2026, eight in the morning in New York. */
+const FRIDAY_MORNING_NY = Date.parse("2026-10-23T12:00:00Z");
+
+const HOUR_MS = 3_600_000;
 
 /** The member's operators in the workspace, archived ones included, newest first. */
 const operatorsOf = (userId: string, workspaceId: string) =>
@@ -335,6 +361,155 @@ it.layer(getTestDB())("the member's operator", (it) => {
           assert.equal(each.failure, HOSTED_REFUSAL.INVALID_REQUEST);
         }
         assert.deepEqual(yield* operatorsOf(member, workspaceId), []);
+      }),
+  );
+
+  it.effect(
+    "the ensure that makes the operator makes its one heartbeat, a personal automation of the member's with no repository aimed at it on weekdays at nine and five in their zone, and repeat or racing ensures make no second",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(FRIDAY_MORNING_NY);
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+
+        const [first, second] = yield* Effect.all(
+          [
+            ensure(member, workspaceId, false, nothingToStop, EVE.eve, "America/New_York"),
+            ensure(member, workspaceId, false, nothingToStop, EVE.eve, "America/New_York"),
+          ],
+          { concurrency: "unbounded" },
+        );
+        yield* ensure(member, workspaceId, false, nothingToStop, EVE.eve, "Europe/Paris");
+
+        assert.equal(first.agent.id, second.agent.id);
+        const automations = yield* automationsOf(member, workspaceId);
+        assert.equal(automations.length, 1, "one heartbeat, whichever ensure made the operator");
+        const [heartbeat] = automations;
+        assert.ok(heartbeat);
+        assert.deepEqual(
+          {
+            userId: heartbeat.userId,
+            taskId: heartbeat.taskId,
+            organizationId: heartbeat.organizationId,
+            repositories: heartbeat.repositories,
+            scope: heartbeat.scope,
+            target: [heartbeat.targetKind, heartbeat.targetAgentId],
+            trigger: heartbeat.trigger,
+            prompt: heartbeat.action.prompt,
+            enabled: heartbeat.enabled,
+            nextRunAt: heartbeat.nextRunAt?.toISOString(),
+          },
+          {
+            userId: member,
+            taskId: null,
+            organizationId: workspaceId,
+            repositories: [],
+            scope: AUTOMATION_SCOPE.PERSONAL,
+            target: [AUTOMATION_TARGET.SAME_AGENT, first.agent.id],
+            trigger: {
+              kind: AUTOMATION_TRIGGER.SCHEDULE,
+              cron: "0 9,17 * * 1-5",
+              timezone: "America/New_York",
+            },
+            prompt: OPERATOR_HEARTBEAT,
+            enabled: true,
+            nextRunAt: "2026-10-23T13:00:00.000Z",
+          },
+        );
+      }),
+  );
+
+  it.effect(
+    "a Reset re-aims the heartbeat at the fresh operator rather than making a second, and one the member deleted is not made again by a repeat ensure",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        const before = yield* ensure(member, workspaceId);
+        const [made] = yield* automationsOf(member, workspaceId);
+        assert.ok(made);
+
+        const reset = yield* ensure(member, workspaceId, true);
+        const reaimed = yield* automationsOf(member, workspaceId);
+
+        assert.notEqual(reset.agent.id, before.agent.id);
+        assert.deepEqual(
+          reaimed.map((each) => [each.id, each.targetAgentId]),
+          [[made.id, reset.agent.id]],
+        );
+
+        assert.ok(yield* deleteAutomation(member, made.id));
+        yield* ensure(member, workspaceId);
+        assert.deepEqual(
+          yield* automationsOf(member, workspaceId),
+          [],
+          "a deleted heartbeat stays deleted",
+        );
+      }),
+  );
+
+  it.effect(
+    "the heartbeat is read in UTC where the client named no zone, or one that does not read",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const unnamed = yield* openWorkspace(member);
+        const unread = yield* openWorkspace(member);
+
+        yield* ensure(member, unnamed);
+        yield* ensure(member, unread, false, nothingToStop, EVE.eve, "Mars/Olympus_Mons");
+
+        for (const workspaceId of [unnamed, unread]) {
+          const [heartbeat] = yield* automationsOf(member, workspaceId);
+          assert.equal(
+            heartbeat?.trigger.kind === AUTOMATION_TRIGGER.SCHEDULE && heartbeat.trigger.timezone,
+            "UTC",
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "the heartbeat fires on weekdays at nine and five in the member's zone, and not on the weekend",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(FRIDAY_MORNING_NY);
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        yield* ensure(member, workspaceId, false, nothingToStop, EVE.eve, "America/New_York");
+        const [heartbeat] = yield* automationsOf(member, workspaceId);
+        assert.ok(heartbeat);
+
+        // The minute sweep, read once an hour on the hour for a week.
+        for (let hour = 1; hour <= 7 * 24; hour += 1) {
+          yield* sweepAutomations(() => EVE.eve, FRIDAY_MORNING_NY + hour * HOUR_MS).pipe(
+            Effect.provide(services),
+          );
+        }
+
+        const runs = yield* listAutomationRuns(member, heartbeat.id, 100);
+        assert.deepEqual(
+          runs
+            .map((run) =>
+              run.firing.kind === AUTOMATION_FIRING.SCHEDULE
+                ? new Date(run.firing.dueAt).toISOString()
+                : run.firing.kind,
+            )
+            .toSorted(),
+          [
+            "2026-10-23T13:00:00.000Z",
+            "2026-10-23T21:00:00.000Z",
+            "2026-10-26T13:00:00.000Z",
+            "2026-10-26T21:00:00.000Z",
+            "2026-10-27T13:00:00.000Z",
+            "2026-10-27T21:00:00.000Z",
+            "2026-10-28T13:00:00.000Z",
+            "2026-10-28T21:00:00.000Z",
+            "2026-10-29T13:00:00.000Z",
+            "2026-10-29T21:00:00.000Z",
+          ],
+          "Friday, then Monday to Thursday, at nine and five New York time, and nothing on Saturday or Sunday",
+        );
       }),
   );
 });

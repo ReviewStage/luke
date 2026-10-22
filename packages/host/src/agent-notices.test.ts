@@ -14,6 +14,7 @@ import {
   type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -562,6 +563,59 @@ it.effect(
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
       f.posted[0]?.onClick();
       assert.deepEqual(f.opened, [{ taskId: null, agentId: AGENT_ID }]);
+    }),
+);
+it.effect(
+  "an operator's heartbeat that ended quiet leaves no dot and no notice, and one that said something leaves both",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const luke = (status: CodingAgentStatus, patch: Partial<TasklessAgent> = {}) =>
+        tasklessAgent(status, {
+          kind: CODING_AGENT_KIND.OPERATOR,
+          automationId: null,
+          repository: null,
+          title: null,
+          personaName: "Luke",
+          ...patch,
+        });
+      const said = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+
+      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
+      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
+      yield* settled;
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.unseen, [], "a quiet end dots nothing");
+
+      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { turnId: said })]);
+      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { turnId: said })]);
+      yield* settled;
+      assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: "Luke finished" }]);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+    }),
+);
+it.effect(
+  "a heartbeat whose end the agent's page saw first has its dot taken back, and its notice let go, once the list says it was quiet",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const luke = (status: CodingAgentStatus, patch: Partial<TasklessAgent> = {}) =>
+        tasklessAgent(status, { kind: CODING_AGENT_KIND.OPERATOR, ...patch });
+
+      // A quiet mark read mid-turn is not the end's: the page ends the turn, which reads as news.
+      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
+      yield* settled;
+
+      assert.deepEqual(f.unseen.at(-1), []);
+      assert.deepEqual(f.posted, []);
     }),
 );
 it.effect(

@@ -481,6 +481,48 @@ const writeAutomation = SqlSchema.findAll({
     ),
 });
 
+const reaimAutomations = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    fromAgentId: Schema.String,
+    toAgentId: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, fromAgentId, toAgentId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({ targetAgentId: toAgentId, updatedAt: now })
+        .where(
+          and(
+            eq(automation.userId, userId),
+            eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
+            eq(automation.targetAgentId, fromAgentId),
+          ),
+        )
+        .returning({ id: automation.id }),
+    ),
+});
+
+const findAimedAt = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id })
+        .from(automation)
+        .where(
+          and(
+            eq(automation.userId, userId),
+            eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
+            eq(automation.targetAgentId, agentId),
+          ),
+        ),
+    ),
+});
+
 const removeAutomation = SqlSchema.findAll({
   Request: AutomationKeySchema,
   Result: WrittenSchema,
@@ -1149,6 +1191,51 @@ export function createAutomationCommitted(
       txid,
     }));
   });
+}
+
+/** What aiming a member's operator its heartbeat takes: the operator, the one it replaced where a Reset retired one, and the heartbeat to make where none is aimed at it. */
+export interface OperatorHeartbeat {
+  readonly operatorId: string;
+  readonly retiredId: string | undefined;
+  readonly heartbeat: NewAutomation;
+}
+
+/**
+ * The member's automations aimed at the operator a Reset retired re-aimed
+ * at the fresh one, and the heartbeat made where none is then aimed at it,
+ * in one transaction: answers the automations aimed at the operator after,
+ * by id, or nothing where the heartbeat's place is one the account does not
+ * reach. Note that its caller runs it only for the ensure that made the
+ * operator, which one ensure alone is, so a heartbeat the member deleted
+ * is never made again by a repeat ensure.
+ */
+export function aimOperatorHeartbeat(
+  userId: string,
+  aimed: OperatorHeartbeat,
+): TaskStoreEffect<Option.Option<readonly string[]>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        if (aimed.retiredId !== undefined) {
+          yield* reaimAutomations({
+            userId,
+            fromAgentId: aimed.retiredId,
+            toAgentId: aimed.operatorId,
+            now,
+          });
+        }
+        const standing = yield* findAimedAt({ userId, agentId: aimed.operatorId });
+        if (standing.length > 0) return Option.some(standing.map((row) => row.id));
+        const made = yield* createAutomationCommitted(userId, {
+          ...aimed.heartbeat,
+          targetKind: AUTOMATION_TARGET.SAME_AGENT,
+          targetAgentId: aimed.operatorId,
+        });
+        return Option.map(made, (written) => [written.automation.id]);
+      }),
+    ),
+  );
 }
 
 /** Which automations a list reads: one task's, one workspace's, or every one the account may read where it names neither. */

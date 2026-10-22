@@ -1,8 +1,13 @@
 import { queryBuilder } from "@luke/database/core/query";
 import { newestAwaitingLineAt } from "@luke/database/models/message-reads";
-import { turns } from "@luke/database/schemas/storage";
-import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
-import { desc, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
+import { messages, turns } from "@luke/database/schemas/storage";
+import { UI_PART_TYPE } from "@luke/features/brain";
+import {
+  CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
+  OPERATOR_QUIET_REPLY,
+} from "@luke/features/coding-agent-wire";
+import { and, desc, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { FAILURE_WORDS } from "../agents/coder-host/status.js";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
 
@@ -44,6 +49,43 @@ type LatestTurn = ReturnType<typeof latestTurnOf>;
 /** When the newest line of the developer's awaiting its turn in the conversation named was written, or null, as `awaitingLinesOfReached` reads it. */
 export function awaitingLineAtIn(conversationId: SQLWrapper): SQL<Date | null> {
   return newestAwaitingLineAt(sql`${conversationId}`);
+}
+
+/** What a reply may stand between, which is no word of it. */
+const REPLY_SPACE = " \t\r\n";
+
+/** The text parts of a message's parts, as a JSON path picks them. */
+const TEXT_PARTS_PATH = `$[*] ? (@.type == "${UI_PART_TYPE.TEXT}")`;
+
+/**
+ * Whether the agent is a member's operator whose newest turn's reply is its
+ * quiet reply alone (`OPERATOR_QUIET_REPLY`), as a heartbeat that found
+ * nothing answers: the turn's journal, the assistant row its id names as
+ * its client id, holds one text part, its last, which spells exactly that.
+ * A reply that says anything more, or only mentions it, is no quiet one.
+ * Note that the turn's id is cast to text to meet the journal's client id,
+ * so the read is the unique `(conversation_id, client_id)` index's point
+ * lookup, and that the cast and every function here are immutable, as a
+ * live statement must hold to.
+ */
+export function quietTurnOf(
+  kind: SQLWrapper,
+  conversationId: SQLWrapper,
+  latest: LatestTurn,
+): SQL<boolean> {
+  const journal = queryBuilder
+    .select({ one: sql`1` })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.clientId, sql`${latest.id}::text`),
+        sql`${messages.parts} -> -1 ->> 'type' = ${UI_PART_TYPE.TEXT}`,
+        sql`btrim(${messages.parts} -> -1 ->> 'text', ${REPLY_SPACE}) = ${OPERATOR_QUIET_REPLY}`,
+        sql`jsonb_array_length(jsonb_path_query_array(${messages.parts}, ${TEXT_PARTS_PATH}::jsonpath)) = 1`,
+      ),
+    );
+  return sql<boolean>`(${kind} = ${CODING_AGENT_KIND.OPERATOR} and exists (${journal}))`;
 }
 
 /** Whether the newest turn failed because its session ended for good, which leaves every line awaiting nothing; null where no turn stands. */

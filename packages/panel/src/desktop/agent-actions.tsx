@@ -1,7 +1,8 @@
-import type {
-  CodingAgentAttachment,
-  CodingAgentBrief,
-  CodingAgentSummary,
+import {
+  CODING_AGENT_KIND,
+  type CodingAgentAttachment,
+  type CodingAgentBrief,
+  type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -76,10 +77,13 @@ export function agentTranscriptRead(
   title: string,
   brief: CodingAgentBrief | undefined,
   chatOn: boolean,
+  quiet = false,
 ): TranscriptRead {
   return () =>
     readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      messages === undefined ? undefined : agentTranscript({ title, messages, brief, chatOn }),
+      messages === undefined
+        ? undefined
+        : agentTranscript({ title, messages, brief, chatOn, quiet }),
     );
 }
 
@@ -189,6 +193,7 @@ export function useAgentActions(
     label,
     agent.brief,
     agents.chatOn,
+    agent.kind === CODING_AGENT_KIND.OPERATOR,
   );
   return {
     doors: {

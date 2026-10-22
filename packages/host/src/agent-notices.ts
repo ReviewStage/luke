@@ -55,7 +55,11 @@ import type { ChatShown } from "./contract/agents.js";
  * a new one: the ledger keeps the end it announced until the new turn's id
  * arrives, whose own end is the next notice. A list that landed late, describing a turn
  * the agent has left behind, says nothing newer. A Stop is the developer's
- * own and announces nothing. The ledger
+ * own and announces nothing, and so is a quiet turn, a member's operator's
+ * heartbeat whose reply is its quiet reply alone, as the plan list says
+ * (`quietTurn`): it leaves no dot, and one the agent's page saw end first has
+ * its dot taken back, and its notice let go where it still waits, once the
+ * list says it was quiet. The ledger
  * is this launch's and this account's, so an agent that ended before Luke
  * watched it, or while Luke was not running, is not announced, a reload of
  * the window announces nothing twice, and an account that signs out takes
@@ -373,6 +377,8 @@ interface HeldAgent {
   status: CodingAgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
+  /** Whether that turn's reply is a member's operator's quiet reply alone, a heartbeat that found nothing, whose end is announced nowhere. */
+  quietTurn?: boolean | undefined;
   /** The turns the agent has left behind, which a list that landed late may still describe. */
   pastTurns: ReadonlySet<string>;
 }
@@ -623,6 +629,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** How many pushes in a row have left out each agent the list has not named yet, as one only a Start answered. */
     const unnamedPushes = new Map<string, number>();
     const ends = yield* Queue.unbounded<TurnEnd>();
+    /** The turns a read said were quiet after their end was already seen, whose announcement still queued is let go. */
+    const quietedTurns = new Set<string>();
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
     let focused = false;
@@ -656,9 +664,22 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (focused && shownAgent === agentId) return;
+      // A heartbeat that found nothing leaves its member nothing to read, so its end is no news.
+      if (agent.quietTurn === true && agent.status === CODING_AGENT_STATUS.COMPLETED) return;
       unseen.add(agentId);
       publishUnseen();
       Queue.offerUnsafe(ends, { agentId, agent, focused });
+    }
+
+    /**
+     * A turn whose end was seen before a read said it was quiet: its dot
+     * taken back, and its announcement let go where it still waits, since an
+     * answer that is not the list's, such as the agent's page, says nothing
+     * of quiet and may end the turn first.
+     */
+    function quieted(agentId: string, turnId: string): void {
+      quietedTurns.add(turnId);
+      seen(agentId);
     }
 
     /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
@@ -691,6 +712,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const announce = Effect.gen(function* () {
       const end = yield* Queue.take(ends);
       const pullRequest = yield* pullRequestOf(end);
+      if (end.agent.turnId !== null && quietedTurns.has(end.agent.turnId)) return;
       const text = noticeText({
         subject:
           end.agent.taskId === null
@@ -977,8 +999,20 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was.turnId === next.turnId) {
         // A turn that ended stays ended, so an end is never a second turn's,
         // and running again under the ended turn's id is a late read or a
-        // message awaiting the next turn, which its own answer says.
-        if (!stillWriting(was.status)) return;
+        // message awaiting the next turn, which its own answer says. A read
+        // saying the ended turn was quiet still takes back what its end left.
+        if (!stillWriting(was.status)) {
+          if (
+            next.quietTurn === true &&
+            was.quietTurn !== true &&
+            was.status === CODING_AGENT_STATUS.COMPLETED &&
+            next.turnId !== null
+          ) {
+            ledger.set(agentId, { ...was, quietTurn: true });
+            quieted(agentId, next.turnId);
+          }
+          return;
+        }
         ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
         if (stillWriting(next.status)) return;
         ended(agentId, next);
@@ -1012,7 +1046,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function heldOf(
       agent: Pick<
         CodingAgentSummary,
-        "planId" | "model" | "title" | "personaName" | "automationName" | "status" | "turnId"
+        | "planId"
+        | "model"
+        | "title"
+        | "personaName"
+        | "automationName"
+        | "status"
+        | "turnId"
+        | "quietTurn"
       >,
     ): HeldAgent {
       return {
@@ -1023,6 +1064,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         automationName: agent.automationName,
         status: agent.status,
         turnId: agent.turnId,
+        quietTurn: agent.quietTurn,
         pastTurns: new Set(),
       };
     }
@@ -1074,7 +1116,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       },
       observeStatus: (agentId, status) => {
         const held = ledger.get(agentId);
-        if (held !== undefined) observe(agentId, { ...held, status });
+        // The page's answer says nothing of quiet, so a quiet mark read while the turn ran is not taken as its end's.
+        if (held !== undefined) observe(agentId, { ...held, status, quietTurn: undefined });
       },
       observeTitle: (agentId, title) => {
         const held = ledger.get(agentId);

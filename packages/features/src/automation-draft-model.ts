@@ -376,16 +376,33 @@ export function automationDraft(
 }
 
 /**
+ * Whether the automation a draft opened as needs no repository chosen: one
+ * on a task, whose repository is its task's, and one the service took with
+ * none, which only one aimed at its owner's operator is, such as the
+ * operator's heartbeat, for as long as its runs still go to that agent.
+ */
+export function repositoryHeld(
+  draft: AutomationDraft,
+  automation: AutomationSummary | undefined,
+): boolean {
+  if (automation === undefined) return false;
+  if (automation.planId !== null) return true;
+  const target = automation.target;
+  return (
+    (automation.repositories ?? []).length === 0 &&
+    target?.kind === AUTOMATION_TARGET.SAME_AGENT &&
+    target.agentId !== null &&
+    draft.target === AUTOMATION_TARGET.SAME_AGENT &&
+    draft.agentId === target.agentId
+  );
+}
+
+/**
  * What stops a draft saving, at the field it is about: a name and a task
  * written, a schedule Luke reads and that fires no more often than its
- * floor, and a repository chosen where the automation is not on a task,
- * whose repository is its task's.
+ * floor, and a repository chosen where none is held (`repositoryHeld`).
  */
-export function draftProblems(
-  draft: AutomationDraft,
-  taskBacked: boolean,
-  now: Date,
-): DraftProblems {
+export function draftProblems(draft: AutomationDraft, held: boolean, now: Date): DraftProblems {
   const name = textProblem(
     draft.name,
     AUTOMATION_BOUNDS.MAX_NAME_CHARS,
@@ -406,7 +423,7 @@ export function draftProblems(
         ? githubSettingsProblem(draft)
         : undefined;
   const repository =
-    !taskBacked && draft.repository === null ? "Choose the repository it works in." : undefined;
+    !held && draft.repository === null ? "Choose the repository it works in." : undefined;
   const agent =
     draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId === null
       ? "Choose the agent its runs go to."

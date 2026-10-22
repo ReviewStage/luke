@@ -418,6 +418,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         input.params.id,
         {
           reset: input.body.reset === true,
+          timeZone: input.body.timeZone,
           stopStanding: (standing) =>
             stoppedForGood(seams, writer, context.request, context.userId, standing),
         },

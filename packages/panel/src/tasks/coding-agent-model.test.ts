@@ -8,6 +8,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
+  OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
@@ -34,6 +35,7 @@ import {
   messageWords,
   modelLabel,
   offeredModels,
+  placedMessages,
   planPayerOf,
   publishedUrl,
   pullRequestPillLabel,
@@ -128,6 +130,47 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
 function developer(id: string, text: string): CodingAgentMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
 }
+
+test("an operator's heartbeat that found nothing draws no reply, a line it took in stands in order, and a reply that says more, or any other agent's, is drawn", () => {
+  const heartbeat = developer("m-1", "Your heartbeat: look over the developer's open work.");
+  const quiet: CodingAgentMessage = {
+    id: "m-2",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "step-start" }, { type: "text", text: `${OPERATOR_QUIET_REPLY}\n` }],
+  };
+  const typed: CodingAgentMessage = {
+    ...developer("m-3", "Anything new?"),
+    arrivedIn: { journalId: "m-2", afterStep: 1 },
+  };
+  const said: CodingAgentMessage = {
+    id: "m-4",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "text", text: `Stopped Ana. ${OPERATOR_QUIET_REPLY}` }],
+  };
+  assert.deepEqual(
+    placedMessages([heartbeat, quiet, typed, said], true).map((each) => [
+      each.message.id,
+      each.arrived.map((line) => line.id),
+    ]),
+    [
+      ["m-1", []],
+      ["m-3", []],
+      ["m-4", []],
+    ],
+  );
+  // Any other agent's reply is drawn whatever it says.
+  assert.deepEqual(
+    placedMessages([heartbeat, quiet, typed, said]).map((each) => [
+      each.message.id,
+      each.arrived.map((line) => line.id),
+    ]),
+    [
+      ["m-1", []],
+      ["m-2", ["m-3"]],
+      ["m-4", []],
+    ],
+  );
+});
 
 test("a sent line is read back by a developer's row it did not know holding its words, one row answering one line in order", () => {
   const task = developer("m-plan", "Go on.");
