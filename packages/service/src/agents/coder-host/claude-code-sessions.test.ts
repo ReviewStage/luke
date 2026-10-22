@@ -431,6 +431,74 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect(
+    "a PDF attached to the first message or a later one is written into the sandbox and named by its path, where an image goes as a block",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const pdf = "%PDF-1.7 the spec";
+        const png = Buffer.from("png bytes").toString("base64");
+        const withFiles = (text: string, lineId: string, filename: string) => ({
+          ...message(agent, text, lineId),
+          message: [
+            { type: "text" as const, text },
+            {
+              type: "file" as const,
+              data: `data:application/pdf;base64,${Buffer.from(pdf).toString("base64")}`,
+              mediaType: "application/pdf",
+              filename,
+            },
+            { type: "file" as const, data: png, mediaType: "image/png", filename: "shot.png" },
+          ],
+        });
+        const firstId = randomUUID();
+        const laterId = randomUUID();
+
+        const opened = yield* sessions.open(withFiles("Read the spec.", firstId, "Spec v2.pdf"));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const sent = yield* sessions.send(
+          opened.sessionId,
+          withFiles("And this one.", laterId, "../../etc/notes.pdf"),
+        );
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+
+        const firstPath = `/tmp/luke-attachments/${firstId}/2-Spec-v2.pdf`;
+        const laterPath = `/tmp/luke-attachments/${laterId}/2-etc-notes.pdf`;
+        const written = new Map(api.uploads.flatMap((upload) => [...upload]));
+        assert.equal(written.get(firstPath), pdf);
+        assert.equal(written.get(laterPath), pdf);
+        const messages = (linesOf(api.commands[0]) as InputLine[]).filter(
+          (each) => each.type === INPUT_LINE.MESSAGE,
+        );
+        assert.deepEqual(
+          messages.map((each) => ("content" in each ? each.content : undefined)),
+          [
+            [
+              { type: "text", text: "Read the spec." },
+              {
+                type: "text",
+                text: `[Spec v2.pdf (application/pdf) was attached: it is at ${firstPath} in your sandbox, read it from there]`,
+              },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: png } },
+            ],
+            [
+              { type: "text", text: "And this one." },
+              {
+                type: "text",
+                text: `[../../etc/notes.pdf (application/pdf) was attached: it is at ${laterPath} in your sandbox, read it from there]`,
+              },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: png } },
+            ],
+          ],
+        );
+      }),
+  );
+
   it.effect("send writes a message line to the running runner, and cancel writes stop", () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
