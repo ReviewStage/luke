@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cloneElement, createElement, Fragment, useState } from "react";
+import { act, cloneElement, createElement, Fragment, Profiler, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
@@ -1355,29 +1355,29 @@ test("a row that swipes still opens its menu on a touch held still, and the touc
   }
 });
 
-test("a row whose metadata stands on the title's line keeps on the row how wide its acts stand, so its title is cut where they begin", () => {
-  const resized = standInResizeObserver();
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(56);
-  const container = draw(
-    createElement(List, {
-      label: "Inbox",
-      children: createElement(ListRow, {
-        title: "Invite links expire after 7 days or 14, as password resets do?",
-        description: "Pick one · Agent: the plan leaves this open",
-        meta: "3m",
-        metaAt: LIST_ROW_META.TITLE,
-        onPress: () => undefined,
-        actionsAt: LIST_ROW_ACTIONS.HOVER,
-        actions: createElement(IconButton, { icon: null, label: "Mark as read" }),
+test("a row in a dense list is drawn once as it mounts, knowing it is dense in that render, and drawn again by nothing of its own", () => {
+  let commits = 0;
+  const list = (title: string) =>
+    createElement(
+      Profiler,
+      { id: "row", onRender: () => (commits += 1) },
+      createElement(List, {
+        label: "Sidebar",
+        density: LIST_DENSITY.DENSE,
+        children: createElement(ListRow, {
+          title,
+          description: "acme/relay",
+          meta: "3m",
+          onPress: () => undefined,
+          actionsAt: LIST_ROW_ACTIONS.HOVER,
+          actions: createElement(IconButton, { icon: null, label: "Pin" }),
+        }),
       }),
-    }),
+    );
+  const container = draw(list("Fix the refresh"));
+  expect(commits).toBe(1);
+  expect(container.querySelector(".luke-list-row-description")?.getAttribute("data-overflow")).toBe(
+    "false",
   );
-  act(() => resized());
-  expect(container.querySelector(".luke-list-row-title")?.getAttribute("data-overflow")).toBe(
-    "true",
-  );
-  const row = container.querySelector<HTMLElement>(".luke-list-row");
-  expect(row?.style.getPropertyValue("--luke-list-row-acts")).toBe("56px");
+  expect(container.querySelector<HTMLElement>(".luke-list-row")?.getAttribute("style")).toBeNull();
 });
