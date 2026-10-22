@@ -1821,6 +1821,28 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   );
 
   it.effect(
+    "a runner's bearer digest finds nothing while its agent is archived, and finds it again once it is brought back",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-archived");
+
+        yield* archiveCodingAgent(starter, agent.id, true);
+        const archived = yield* readRunnerTokenConversation("digest-archived");
+        yield* archiveCodingAgent(starter, agent.id, false);
+        const restored = yield* readRunnerTokenConversation("digest-archived");
+
+        assert.ok(Option.isNone(archived));
+        assert.ok(Option.isSome(restored));
+      }),
+  );
+
+  it.effect(
     "a runner's bearer digest finds nothing once its starter left the agent's workspace",
     () =>
       Effect.gen(function* () {

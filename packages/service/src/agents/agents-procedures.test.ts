@@ -428,7 +428,7 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
   );
 
   it.effect(
-    "an archive retires its runner's bearer once the sandbox stopped, and leaves it where the stop failed",
+    "an archive retires its runner's bearer once the sandbox stopped, and where the stop failed refuses it only while archived",
     () =>
       Effect.gen(function* () {
         const stopped = yield* openAgent;
@@ -472,9 +472,16 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         });
         for (const work of held) yield* Effect.provideContext(work, context);
 
+        const failingWhileArchived = yield* admitRunnerBearer(failingBearer);
+        yield* down(agentOf(failing.agent.id), "Bearer failing", {
+          method: "PATCH",
+          body: { archived: false },
+        });
+
         assert.equal(held.length, 2);
         assert.ok(Option.isNone(yield* admitRunnerBearer(stoppedBearer)));
-        // A runner whose sandbox would not stop keeps its bearer, since a message after an unarchive reaches it.
+        // A runner whose sandbox would not stop is refused while its agent is archived, and keeps its bearer for after.
+        assert.ok(Option.isNone(failingWhileArchived));
         assert.ok(Option.isSome(yield* admitRunnerBearer(failingBearer)));
       }),
   );

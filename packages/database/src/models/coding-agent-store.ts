@@ -2768,8 +2768,10 @@ export interface RunnerTokenConversation {
  * The coding agent's conversation whose runner was handed the bearer of this
  * digest (`recordCodingAgentRunnerToken`), where its starter still reaches the
  * agent; nothing for a digest no standing conversation holds, a retired
- * bearer's among them, and nothing once the starter left the agent's
- * workspace, since the runner acts as them.
+ * bearer's among them, nothing once the starter left the agent's
+ * workspace, since the runner acts as them, and nothing while the agent is
+ * archived, so a runner its archive's stop did not reach acts on nothing,
+ * and admits again once the agent is brought back.
  */
 export function readRunnerTokenConversation(
   runnerTokenHash: string,
@@ -2779,7 +2781,7 @@ export function readRunnerTokenConversation(
     if (Option.isNone(found)) return found;
     const { userId, conversationId } = found.value;
     const agent = yield* findAgentHeaderOfConversation({ userId, conversationId });
-    return Option.isSome(agent) ? found : Option.none();
+    return Option.isSome(agent) && agent.value.archivedAt === null ? found : Option.none();
   });
 }
 
