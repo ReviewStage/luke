@@ -7,7 +7,9 @@
  * Node detached from the command that starts it, attaches to every page the
  * browser holds and every page it opens, has each cast its frames
  * (`Page.startScreencast`), as the live view does (`browser-live/relay.ts`),
- * and writes each frame to disk with the time the browser drew it. Only a
+ * and writes to disk the latest frame of each tenth of a second, with the
+ * time the browser drew it, so a page that redraws fast costs no more than
+ * the video's own rate; the frames go once encoded. Only a
  * page on screen draws, so the frames follow the tab the browser shows. It
  * stops when the stop file appears or its time runs out, whichever comes
  * first, then re-times the frames to a steady rate, holding each until the
@@ -74,6 +76,7 @@ let ended = false;
 let next = 0;
 const write = (name, value) => fs.writeFileSync(path.join(dir, name), JSON.stringify(value));
 const end = (word) => {
+  fs.rmSync(path.join(dir, "frames"), { recursive: true, force: true });
   write("done.json", word);
   process.exit(0);
 };
@@ -142,9 +145,15 @@ fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json
     } else if (message.method === "Page.screencastFrame") {
       send("Page.screencastFrameAck", { sessionId: message.params.sessionId }, message.sessionId);
       if (ended) return;
-      const file = path.join(dir, "frames", String(frames.length).padStart(6, "0") + ".jpg");
+      const at = message.params.metadata.timestamp;
+      const tick = Math.floor(at * FPS);
+      const last = frames[frames.length - 1];
+      // Only the latest frame of each tick of the output's rate is kept, so a page that redraws fast costs no more disk than the video's own rate.
+      const held = last !== undefined && last.tick === tick ? last : undefined;
+      const file = held ? held.file : path.join(dir, "frames", String(frames.length).padStart(6, "0") + ".jpg");
       fs.writeFileSync(file, Buffer.from(message.params.data, "base64"));
-      frames.push({ at: message.params.metadata.timestamp, file });
+      if (held) held.at = at;
+      else frames.push({ at, tick, file });
     }
   };
   socket.onclose = () => finish(socket, send);
@@ -208,7 +217,10 @@ const START_SCRIPT = [
 /**
  * The stop, as positional parameters take it: the browser's state directory
  * under the home, and how long to wait on the encoding. It prints what came
- * of the recording as JSON, once: a recording read is not read again.
+ * of the recording as JSON, as often as it is asked until the next
+ * recording starts, so a video the service could not read or keep is read
+ * again on the next stop, and kept once, since the transcript keeps a video
+ * once by its bytes.
  */
 const STOP_SCRIPT = [
   "set -u",
@@ -223,9 +235,8 @@ const STOP_SCRIPT = [
   "    sleep 0.1",
   "  done",
   "fi",
+  // Note that what came of it is left in place, so a stop whose video could not be read or kept just then reads it again; the next recording clears it.
   'cat "$dir/done.json"',
-  'mv "$dir/done.json" "$dir/read.json"',
-  'rm -f "$dir/pid"',
 ].join("\n");
 
 /** Starts a recording of the browser, where none runs; read its run with `recordingStartOf`. */

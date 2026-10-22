@@ -995,6 +995,20 @@ it.layer(getTestDB())("the browser tool", (it) => {
           Option.some(["video/webm", [...RECORDED_WEBM]]),
         );
         assert.doesNotMatch(JSON.stringify(storedBrowserOutput(unparsedWire(stopped))), /GkXfo/u);
+
+        // A stop asked again, as after a read that failed, keeps the same video once.
+        const again = ran(
+          yield* call(
+            conversationId,
+            { actions: [{ action: BROWSER_AGENT_ACTION.STOP_RECORDING }] },
+            layer,
+          ),
+        );
+        const [repeated] = again.steps;
+        assert.ok(
+          repeated !== undefined && "picture" in repeated && repeated.picture !== undefined,
+        );
+        assert.equal(repeated.picture.id, step.picture.id);
       }),
   );
 
